@@ -87,9 +87,6 @@ describe("DefaultNodeLayout projection authority", () => {
         multiline: false,
         value: 42,
         configuration: null,
-        inheritedValue: null,
-        valueSource: null,
-        options: null,
       },
     ];
 
@@ -113,9 +110,6 @@ describe("DefaultNodeLayout projection authority", () => {
         multiline: false,
         value: 42,
         configuration: null,
-        inheritedValue: null,
-        valueSource: null,
-        options: null,
       },
     ];
 

@@ -109,9 +109,6 @@ describe("NodeDetailPanel projection selection", () => {
         multiline: false,
         value: 42,
         configuration: null,
-        inheritedValue: null,
-        valueSource: null,
-        options: null,
       },
     ];
     useGraphProjectionStore.setState({ graphEntities: { [graphPath]: graphBucket } });

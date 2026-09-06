@@ -1,5 +1,7 @@
-import { isEditorGraphProjectionDto } from "@/shared/types/domain/editorProjectionGuards";
-import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
+import {
+  isEditorGraphProjectionDto,
+  isParameterEditor,
+} from "@/shared/types/domain/editorProjectionGuards";
 import type {
   EditorGraphProjectionDto,
   PortAddressDto,
@@ -75,10 +77,7 @@ function validateNode(
     );
   }
   for (const parameter of node.parameterEditors) {
-    if (
-      parameter.configuration !== null &&
-      !isSchemaAwareParameterEditorDto(parameter.configuration)
-    ) {
+    if (!isParameterEditor(parameter)) {
       throw new Error(`projection parameter editor '${parameter.key}' is invalid`);
     }
   }

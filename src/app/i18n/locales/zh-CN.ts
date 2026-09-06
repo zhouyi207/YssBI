@@ -1378,6 +1378,9 @@ export const zhCN = {
         ui: "UI",
       },
     },
+    configuration: {
+      updateFailed: "无法更新配置，请检查字段值。",
+    },
     nodeDoc: {
       inputs: "输入",
       outputs: "输出",

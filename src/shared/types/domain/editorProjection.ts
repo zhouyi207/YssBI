@@ -194,9 +194,6 @@ export interface ParameterEditorDto {
   multiline: boolean;
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;
-  inheritedValue: unknown | null;
-  valueSource: "project" | "node" | null;
-  options: string[] | null;
 }
 
 export interface DataframeColumnOptionDto {
@@ -227,6 +224,8 @@ export interface FilterPredicateDto {
 }
 
 export type SchemaAwareParameterEditorDto =
+  | { kind: "configuration"; fields: ParameterEditorDto[] }
+  | { kind: "selectOptions"; options: string[] }
   | {
       kind: "projectColumns";
       available: boolean;
@@ -251,7 +250,14 @@ export interface ParameterDisplayDto {
   title: string;
   description: string | null;
 }
-export type ParameterEditorKindDto = "auto" | "text" | "number" | "toggle" | "select" | "resource";
+export type ParameterEditorKindDto =
+  | "auto"
+  | "text"
+  | "number"
+  | "toggle"
+  | "select"
+  | "configuration"
+  | "resource";
 
 export interface DiagnosticDto {
   code: string;

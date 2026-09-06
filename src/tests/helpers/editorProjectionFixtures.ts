@@ -42,7 +42,11 @@ export function makeProjectedPinData(
     },
     input:
       overrides.direction === "input"
-        ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
+        ? {
+            literalOverride: null,
+            protocolDefault: null,
+            effective: "unbound",
+          }
         : null,
     acceptedType: overrides.acceptedType ?? {
       display: dataType?.kind ?? "unknown",

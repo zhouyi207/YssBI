@@ -12,6 +12,7 @@ import {
 import { isNodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
 import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
+import { isParameterEditor } from "@/shared/types/domain/editorProjectionGuards";
 import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import { parseProjectEvent } from "@/services/project/projectEventParser";
 import { parseProjectGraphIndexRow } from "@/services/project/projectService";
@@ -321,6 +322,17 @@ describe("Rust-generated node-system golden contracts", () => {
     const variants = [
       {
         value: {
+          kind: "configuration",
+          fields: [clone(editorProjection.nodes[0].parameterEditors[0])],
+        },
+        missing: "fields",
+      },
+      {
+        value: { kind: "selectOptions", options: ["nonrobust", "HC1"] },
+        missing: "options",
+      },
+      {
+        value: {
           kind: "projectColumns",
           available: true,
           unavailableReason: null,
@@ -355,18 +367,18 @@ describe("Rust-generated node-system golden contracts", () => {
       const projection = clone(editorProjection) as unknown as Record<string, unknown>;
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       (node.parameterEditors as Array<Record<string, unknown>>)[0].configuration = value;
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(true);
+      expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(true);
       expect(isEditorGraphProjectionDto(projection)).toBe(true);
 
       Object.assign(value, { compatibility: true });
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
       deleteKey(value, "compatibility");
       deleteKey(value, missing);
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
       value.kind = "unsupported";
-      expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
+      expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
   });

@@ -113,9 +113,6 @@ function validProjection(): EditorGraphProjectionDto {
             multiline: true,
             value: "y ~ x",
             configuration: null,
-            inheritedValue: null,
-            valueSource: null,
-            options: null,
           },
         ],
         capabilities: {
@@ -199,36 +196,6 @@ describe("validateEditorGraphProjection", () => {
   });
 
   it.each([
-    [
-      "missing inheritedValue",
-      (editor: Record<string, unknown>) => {
-        delete editor.inheritedValue;
-      },
-    ],
-    [
-      "missing valueSource",
-      (editor: Record<string, unknown>) => {
-        delete editor.valueSource;
-      },
-    ],
-    [
-      "missing options",
-      (editor: Record<string, unknown>) => {
-        delete editor.options;
-      },
-    ],
-    [
-      "invalid valueSource casing",
-      (editor: Record<string, unknown>) => {
-        editor.valueSource = "Project";
-      },
-    ],
-    [
-      "non-string options",
-      (editor: Record<string, unknown>) => {
-        editor.options = [1];
-      },
-    ],
     [
       "missing valueType",
       (editor: Record<string, unknown>) => {

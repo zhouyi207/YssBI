@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyGraphDraftMutation } from "@/features/application/graphDraft/graphDraftCoordinator";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft/graphDraftStore";
 import { setNodeParameters } from "./setNodeParameters";
 
 vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
@@ -41,24 +41,28 @@ describe("setNodeParameters", () => {
     });
   });
 
-  it("removes a null override while preserving the complete atomic parameter map", async () => {
+  it("preserves draft parameters outside the edited field", async () => {
     const outcome = { status: "applied" as const, result: {} as never, insertedNodeIds: [] };
     vi.mocked(applyGraphDraftMutation).mockResolvedValue(outcome);
-    vi.spyOn(useGraphProjectionStore, "getState").mockReturnValue({
-      getGraphNode: () => ({
-        parameterEditors: [
-          { key: "constant", value: true },
-          { key: "convergence_tolerance", value: 1e-7 },
-          { key: "missing_value_policy", value: "Reject" },
-        ],
-      }),
+    vi.spyOn(useGraphDraftStore, "getState").mockReturnValue({
+      sessions: {
+        "events/Main.yssbi-event": {
+          document: {
+            nodes: {
+              "node-1": {
+                parameters: { constant: true, tolerance: 1e-7, max_iterations: 100 },
+              },
+            },
+          },
+        },
+      },
     } as never);
 
     await setNodeParameters({
       graphPath: "events/Main.yssbi-event",
       nodeId: "node-1",
       locale: "en-US",
-      parameters: { convergence_tolerance: null },
+      parameters: { tolerance: 1e-6 },
     });
 
     expect(applyGraphDraftMutation).toHaveBeenCalledWith(
@@ -67,7 +71,7 @@ describe("setNodeParameters", () => {
           type: "setParameters",
           payload: {
             nodeId: "node-1",
-            parameters: { constant: true, missing_value_policy: "Reject" },
+            parameters: { constant: true, tolerance: 1e-6, max_iterations: 100 },
           },
         },
       }),

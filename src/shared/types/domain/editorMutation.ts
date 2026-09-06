@@ -61,6 +61,10 @@ export type EditorGraphMutationDto =
     }
   | { type: "setLiteral"; payload: { address: PortAddressDto; literal: unknown | null } }
   | {
+      type: "setConfiguration";
+      payload: { nodeId: string; key: string; values: Record<string, unknown> };
+    }
+  | {
       type: "addPortInstance";
       payload: { nodeId: string; templateKey: string; placement: PortPlacementDto };
     }

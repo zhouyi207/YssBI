@@ -41,32 +41,6 @@ function parameter(
     multiline,
     value,
     configuration: null,
-    inheritedValue: null,
-    valueSource: null,
-    options: null,
-  };
-}
-
-function inheritedParameter(
-  key: "convergence_tolerance" | "missing_value_policy",
-  value: unknown,
-  inheritedValue: unknown,
-): ParameterEditorDto {
-  return {
-    key,
-    display: {
-      title: key === "convergence_tolerance" ? "Convergence tolerance" : "Missing-value policy",
-      description: null,
-    },
-    editor: key === "convergence_tolerance" ? "number" : "select",
-    presentation: "detailPanel",
-    valueType: key === "convergence_tolerance" ? { kind: "Float64" } : { kind: "String" },
-    multiline: false,
-    value,
-    configuration: null,
-    inheritedValue,
-    valueSource: value === null ? "project" : "node",
-    options: key === "missing_value_policy" ? ["Listwise", "Reject"] : null,
   };
 }
 
@@ -123,50 +97,25 @@ afterEach(() => {
   container.remove();
 });
 
-describe("NodeParameterEditor projected setting overrides", () => {
-  it.each([
-    inheritedParameter("convergence_tolerance", null, 1e-8),
-    inheritedParameter("missing_value_policy", null, "Listwise"),
-  ])("clears $key to inherit and presents an explicit node override", async (projected) => {
-    renderEditor(projected);
-
-    expect(container.textContent).toContain("Inherit project setting");
-    expect(container.textContent).toContain(String(projected.inheritedValue));
-
-    const mode = container.querySelector('[aria-label="Setting source"]');
-    if (!(mode instanceof HTMLSelectElement)) throw new Error("missing setting source control");
-    act(() => {
-      mode.value = "node";
-      mode.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await flushPromises();
-
-    renderEditor({ ...projected, value: projected.inheritedValue, valueSource: "node" });
-    expect(container.textContent).toContain("Node override");
-    const effectiveControl = container.querySelector(
-      '[aria-label="Convergence tolerance"], [aria-label="Missing-value policy"]',
-    );
-    expect(effectiveControl).toHaveProperty("value", String(projected.inheritedValue));
-
-    const overrideMode = container.querySelector('[aria-label="Setting source"]');
-    if (!(overrideMode instanceof HTMLSelectElement))
-      throw new Error("missing setting source control");
-    act(() => {
-      overrideMode.value = "project";
-      overrideMode.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await flushPromises();
-
-    expect(setNodeParameters).toHaveBeenLastCalledWith({
-      graphPath,
-      nodeId,
-      locale: "en-US",
-      parameters: { [projected.key]: null },
-    });
-  });
-});
-
 describe("NodeParameterEditor ordinary controls", () => {
+  it("can choose the first schema option when a required parameter is unset", async () => {
+    renderEditor({
+      ...parameter("select", null, { kind: "String" }),
+      configuration: { kind: "selectOptions", options: ["amount", "quantity"] },
+    });
+    const select = container.querySelector("select");
+    if (!(select instanceof HTMLSelectElement)) throw new Error("missing select");
+    expect(select.value).toBe("");
+    act(() => {
+      select.value = "amount";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushPromises();
+    expect(setNodeParameters).toHaveBeenCalledWith(
+      expect.objectContaining({ parameters: { value: "amount" } }),
+    );
+  });
+
   it("commits a toggle immediately through setNodeParameters", async () => {
     renderEditor(parameter("toggle", false, { kind: "Boolean" }));
 
@@ -202,6 +151,7 @@ describe("NodeParameterEditor ordinary controls", () => {
     "uses projected %s semantics for numeric commits",
     async (valueType, draft, shouldCommit) => {
       renderEditor(parameter("number", 1, valueType));
+      expect(container.querySelector("select")).toBeNull();
       const input = container.querySelector("input");
       if (!(input instanceof HTMLInputElement)) throw new Error("missing input");
 
@@ -222,22 +172,27 @@ describe("NodeParameterEditor ordinary controls", () => {
     },
   );
 
-  it("commits single-line text on Enter and restores it on Escape", async () => {
-    renderEditor(parameter("text", "old", { kind: "String" }));
-    const input = container.querySelector("input");
-    if (!(input instanceof HTMLInputElement)) throw new Error("missing input");
+  it.each(["text", "select"] as const)(
+    "edits %s without an option list as text",
+    async (editor) => {
+      renderEditor(parameter(editor, "old", { kind: "String" }));
+      const input = container.querySelector("input");
+      if (!(input instanceof HTMLInputElement)) throw new Error("missing input");
 
-    setControlValue(input, "new");
-    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-    await flushPromises();
-    expect(setNodeParameters).toHaveBeenLastCalledWith(
-      expect.objectContaining({ parameters: { value: "new" } }),
-    );
+      setControlValue(input, "new");
+      act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+      await flushPromises();
+      expect(setNodeParameters).toHaveBeenLastCalledWith(
+        expect.objectContaining({ parameters: { value: "new" } }),
+      );
 
-    setControlValue(input, "draft");
-    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-    expect(input.value).toBe("old");
-  });
+      setControlValue(input, "draft");
+      act(() =>
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+      );
+      expect(input.value).toBe("old");
+    },
+  );
 
   it("does not write a text draft per keystroke", () => {
     renderEditor(parameter("text", "old", { kind: "String" }));

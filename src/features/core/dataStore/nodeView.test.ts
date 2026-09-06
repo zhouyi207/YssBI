@@ -47,7 +47,11 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
     },
     input:
       direction === "input"
-        ? { literalOverride: null, protocolDefault: null, effective: "unbound" }
+        ? {
+            literalOverride: null,
+            protocolDefault: null,
+            effective: "unbound",
+          }
         : null,
     acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
     typeState: { status: "exact", display: "Float64", dataType: { kind: "Float64" } },

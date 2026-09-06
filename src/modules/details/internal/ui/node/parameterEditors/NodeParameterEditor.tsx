@@ -84,7 +84,6 @@ export function NodeParameterEditor({
   const { t } = useTranslation();
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const fieldErrorId = useId();
   const pendingRef = useRef(false);
   const errors = diagnostics
     .filter(
@@ -135,17 +134,26 @@ export function NodeParameterEditor({
     }
   };
 
+  return (
+    <ParameterValueEditor
+      parameter={parameter}
+      pending={pending}
+      errors={errors}
+      onCommit={commit}
+      formatFallback={formatFallback}
+    />
+  );
+}
+
+export function ParameterValueEditor({
+  parameter,
+  pending,
+  errors,
+  onCommit: commit,
+  formatFallback,
+}: OrdinaryValueEditorProps & { formatFallback(value: unknown): string }) {
+  const fieldErrorId = useId();
   const configuration = parameter.configuration;
-  if (parameter.valueSource && parameter.inheritedValue !== undefined) {
-    return (
-      <ProjectedOverrideEditor
-        parameter={parameter}
-        pending={pending}
-        errors={errors}
-        onCommit={commit}
-      />
-    );
-  }
   if (configuration?.kind === "projectColumns") {
     return (
       <div className="space-y-2">
@@ -172,6 +180,35 @@ export function NodeParameterEditor({
       </div>
     );
   }
+  if (configuration?.kind === "selectOptions") {
+    return (
+      <DetailFieldRow label={parameter.display.title}>
+        <div className="space-y-1">
+          <select
+            aria-label={parameter.display.title}
+            className={detailInlineInputClass}
+            value={String(parameter.value ?? "")}
+            disabled={pending}
+            aria-invalid={errors.length > 0}
+            aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
+            onChange={(event) => commit(event.target.value)}
+          >
+            {!configuration.options.includes(String(parameter.value ?? "")) && (
+              <option value={String(parameter.value ?? "")} disabled>
+                {parameter.value == null ? "—" : String(parameter.value)}
+              </option>
+            )}
+            {configuration.options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <ParameterErrorList id={fieldErrorId} errors={errors} />
+        </div>
+      </DetailFieldRow>
+    );
+  }
   if (parameter.editor === "toggle") {
     return (
       <DetailFieldRow label={parameter.display.title}>
@@ -189,7 +226,11 @@ export function NodeParameterEditor({
       </DetailFieldRow>
     );
   }
-  if (parameter.editor === "number" || parameter.editor === "text") {
+  if (
+    parameter.editor === "number" ||
+    parameter.editor === "text" ||
+    (parameter.editor === "select" && parameter.valueType?.kind === "String")
+  ) {
     return (
       <OrdinaryValueEditor
         parameter={parameter}
@@ -206,90 +247,16 @@ export function NodeParameterEditor({
   );
 }
 
-function ProjectedOverrideEditor({
-  parameter,
-  pending,
-  errors,
-  onCommit,
-}: OrdinaryValueEditorProps) {
-  const inherited = parameter.inheritedValue;
-  const errorId = useId();
-  const source = parameter.valueSource ?? (parameter.value == null ? "project" : "node");
-  const effectiveValue = source === "project" ? inherited : parameter.value;
-  const setSource = (next: "project" | "node") => {
-    onCommit(next === "project" ? null : inherited);
-  };
-
-  return (
-    <div className="space-y-2">
-      <DetailFieldRow label={parameter.display.title}>
-        <select
-          aria-label="Setting source"
-          className={detailInlineInputClass}
-          value={source}
-          disabled={pending}
-          aria-invalid={errors.length > 0}
-          aria-describedby={errors.length > 0 ? errorId : undefined}
-          onChange={(event) => setSource(event.target.value as "project" | "node")}
-        >
-          <option value="project">Inherit project setting</option>
-          <option value="node">Node override</option>
-        </select>
-      </DetailFieldRow>
-      {source === "project" ? (
-        <DetailReadonlyField label="Effective value">{String(effectiveValue)}</DetailReadonlyField>
-      ) : parameter.options?.length ? (
-        <DetailFieldRow label="Effective value">
-          <select
-            aria-label={parameter.display.title}
-            className={detailInlineInputClass}
-            value={String(parameter.value ?? inherited)}
-            disabled={pending}
-            aria-invalid={errors.length > 0}
-            aria-describedby={errors.length > 0 ? errorId : undefined}
-            onChange={(event) => onCommit(event.target.value)}
-          >
-            {parameter.options.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </DetailFieldRow>
-      ) : (
-        <OrdinaryValueEditor
-          parameter={parameter}
-          pending={pending}
-          errors={errors}
-          errorId={errorId}
-          onCommit={onCommit}
-        />
-      )}
-      {source === "project" || parameter.options?.length ? (
-        <ParameterErrorList id={errorId} errors={errors} />
-      ) : null}
-    </div>
-  );
-}
-
 interface OrdinaryValueEditorProps {
   parameter: ParameterEditorDto;
   pending: boolean;
   errors: readonly string[];
-  errorId?: string;
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;
 }
 
-function OrdinaryValueEditor({
-  parameter,
-  pending,
-  errors,
-  errorId: providedErrorId,
-  onCommit,
-}: OrdinaryValueEditorProps) {
+function OrdinaryValueEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {
   const { t } = useTranslation();
-  const generatedErrorId = useId();
-  const errorId = providedErrorId ?? generatedErrorId;
+  const errorId = useId();
   const [draft, setDraft] = useState(() => projectedDraft(parameter));
   const [draftProjection, setDraftProjection] = useState(parameter.value);
   const [parseError, setParseError] = useState<string | null>(null);

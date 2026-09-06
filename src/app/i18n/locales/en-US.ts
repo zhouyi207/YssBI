@@ -1441,6 +1441,9 @@ export const enUS = {
         ui: "UI",
       },
     },
+    configuration: {
+      updateFailed: "Could not update the configuration. Check the field values.",
+    },
     nodeDoc: {
       inputs: "Inputs",
       outputs: "Outputs",

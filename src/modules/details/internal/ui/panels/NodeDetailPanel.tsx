@@ -16,6 +16,7 @@ import { NodeParameterEditor } from "../node/parameterEditors/NodeParameterEdito
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { NodeDocumentationPanel } from "../node/NodeDocumentationPanel";
 import { NodePinInterfacePanel } from "../node/NodePinInterfacePanel";
+import { NodeConfigurationPanel } from "../node/NodeConfigurationPanel";
 import type { NodePinViewModel } from "../node/NodePinViewModel";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 import { DetailBadge, DetailText } from "../shared/DetailText";
@@ -91,6 +92,9 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
 
   const catalogItem = catalog?.items.find((item) => item.nodeTypeId === node.nodeType);
   const documentation = catalogItem?.documentation;
+  const parameters = node.parameterEditors.filter(
+    (parameter) => parameter.editor !== "configuration",
+  );
 
   return (
     <DetailPanelShell>
@@ -105,10 +109,10 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         </DetailReadonlyField>
       </DetailForm>
 
-      {node.parameterEditors?.length > 0 && (
+      {parameters.length > 0 && (
         <DetailCollapsibleSection title={t("detail.parameters")} defaultOpen>
           <DetailForm>
-            {node.parameterEditors.map((parameter) => (
+            {parameters.map((parameter) => (
               <div
                 key={parameter.key}
                 tabIndex={-1}
@@ -131,6 +135,8 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
           </DetailForm>
         </DetailCollapsibleSection>
       )}
+
+      <NodeConfigurationPanel graphPath={graphPath} nodeId={nodeId} />
 
       <DetailCollapsibleSection title={t("detail.sections.capabilities")}>
         <div className="flex flex-wrap gap-1.5 px-1 py-2">

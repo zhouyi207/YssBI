@@ -2,7 +2,7 @@ import {
   applyGraphDraftMutation,
   type ApplyGraphDraftMutationOutcome,
 } from "@/features/application/graphDraft/graphDraftCoordinator";
-import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft/graphDraftStore";
 
 export interface SetNodeParametersInput {
   graphPath: string;
@@ -14,13 +14,8 @@ export interface SetNodeParametersInput {
 export function setNodeParameters(
   input: SetNodeParametersInput,
 ): Promise<ApplyGraphDraftMutationOutcome> {
-  const projected = useGraphProjectionStore.getState().getGraphNode(input.graphPath, input.nodeId);
-  const merged = Object.fromEntries([
-    ...(projected?.parameterEditors ?? []).map(
-      (parameter) => [parameter.key, parameter.value] as const,
-    ),
-    ...Object.entries(input.parameters),
-  ]);
+  const document = useGraphDraftStore.getState().sessions[input.graphPath]?.document;
+  const merged = { ...document?.nodes[input.nodeId]?.parameters, ...input.parameters };
   const parameters = Object.fromEntries(
     Object.entries(merged).filter(([, value]) => value !== null && value !== undefined),
   );

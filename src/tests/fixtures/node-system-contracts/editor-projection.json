@@ -38,13 +38,10 @@
             "title": "Value"
           },
           "editor": "toggle",
-          "inheritedValue": null,
           "key": "value",
           "multiline": false,
-          "options": null,
           "presentation": "inlineAndDetail",
           "value": true,
-          "valueSource": null,
           "valueType": {
             "kind": "Boolean"
           }

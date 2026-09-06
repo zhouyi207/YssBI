@@ -23,7 +23,15 @@ const scalarTypes = new Set([
 ]);
 const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
-const parameterEditorKinds = new Set(["auto", "text", "number", "toggle", "select", "resource"]);
+const parameterEditorKinds = new Set([
+  "auto",
+  "text",
+  "number",
+  "toggle",
+  "select",
+  "configuration",
+  "resource",
+]);
 const parameterPresentations = new Set(["detailPanel", "inlineAndDetail"]);
 const diagnosticSeverities = new Set(["error", "warning", "information"]);
 
@@ -308,7 +316,7 @@ function isPortInstanceAddition(value: unknown): boolean {
   );
 }
 
-function isParameterEditor(value: unknown): boolean {
+export function isParameterEditor(value: unknown): boolean {
   return (
     hasExactKeys(value, [
       "key",
@@ -319,9 +327,6 @@ function isParameterEditor(value: unknown): boolean {
       "multiline",
       "value",
       "configuration",
-      "inheritedValue",
-      "valueSource",
-      "options",
     ]) &&
     typeof value.key === "string" &&
     hasExactKeys(value.display, ["title", "description"]) &&
@@ -332,13 +337,8 @@ function isParameterEditor(value: unknown): boolean {
     (value.valueType === null || isBackendDataType(value.valueType)) &&
     typeof value.multiline === "boolean" &&
     isJsonValue(value.value) &&
-    (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration)) &&
-    isJsonValue(value.inheritedValue) &&
-    (value.valueSource === null ||
-      value.valueSource === "project" ||
-      value.valueSource === "node") &&
-    (value.options === null ||
-      (Array.isArray(value.options) && value.options.every((option) => typeof option === "string")))
+    (value.configuration === null ||
+      isSchemaAwareParameterEditorDto(value.configuration, isParameterEditor))
   );
 }
 
