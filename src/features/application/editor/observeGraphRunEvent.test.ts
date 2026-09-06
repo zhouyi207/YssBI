@@ -76,7 +76,7 @@ describe("observeGraphRunEvent", () => {
     const outcome: GraphRunOutcomeState = { outcome: "success" };
     useExecutionStore.getState().startExecution(graphPath);
 
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome);
 
     expect(useExecutionStore.getState().getGraph(graphPath).runId).toBe("9007199254740993");
   });
@@ -91,7 +91,7 @@ describe("observeGraphRunEvent", () => {
     const generation = lease.generation;
     const preview = previewObservation(lease, port);
 
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome, preview);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome, preview);
     observeGraphRunEvent(
       graphPath,
       event({
@@ -122,8 +122,8 @@ describe("observeGraphRunEvent", () => {
     const stale = previewObservation(staleLease);
     const current = previewObservation(currentLease);
 
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome, stale);
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome, current);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome, stale);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome, current);
     observeGraphRunEvent(
       graphPath,
       event({
@@ -186,7 +186,7 @@ describe("observeGraphRunEvent", () => {
     const failPinPreview = vi.spyOn(store, "failPinPreview");
     const getExecutionState = vi.spyOn(useExecutionStore, "getState");
 
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome, stale);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome, stale);
     observeGraphRunEvent(
       graphPath,
       event({
@@ -223,7 +223,7 @@ describe("observeGraphRunEvent", () => {
     const generation = lease.generation;
     const preview = previewObservation(lease);
 
-    const previewStarted = event({ type: "runStarted" });
+    const previewStarted = event({ type: "runStarted", outputs: [] });
     previewStarted.run.runId = "preview-run";
     observeGraphRunEvent(graphPath, previewStarted, ordinaryOutcome, preview);
     const previewResultReady = event({
@@ -260,7 +260,7 @@ describe("observeGraphRunEvent", () => {
     store.setActiveRunId(graphPath, "ordinary-run");
     const lease = beginPreview(graphPath, declaredOutput, 1);
     const preview = previewObservation(lease);
-    const previewStarted = event({ type: "runStarted" });
+    const previewStarted = event({ type: "runStarted", outputs: [] });
     previewStarted.run.runId = "preview-run";
 
     observeGraphRunEvent(graphPath, previewStarted, ordinaryOutcome, preview);
@@ -278,7 +278,7 @@ describe("observeGraphRunEvent", () => {
     const outcome: GraphRunOutcomeState = { outcome: "success" };
     const graphPath = "events/Main.yssbi-event";
     useExecutionStore.getState().startExecution(graphPath);
-    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted", outputs: [] }), outcome);
 
     observeGraphRunEvent(
       "events/Main.yssbi-event",

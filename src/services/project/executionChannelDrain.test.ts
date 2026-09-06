@@ -22,7 +22,7 @@ describe("createExecutionStreamDrain", () => {
 
     const wait = drain.waitForStreamEnd();
 
-    drain.onmessage(runEvent({ type: "runStarted" }));
+    drain.onmessage(runEvent({ type: "runStarted", outputs: [] }));
     drain.onmessage(
       runEvent({
         type: "resultInspectionRequested",

@@ -25,7 +25,9 @@ function MainLogsDockPanel() {
 
 const ResultDockPanel: RootDockviewPanelComponent = ({ params }) => {
   const { metadata } = params;
-  return metadata.role === "result" ? <ResultPanel resultId={metadata.resultId} /> : null;
+  return metadata.role === "result" ? (
+    <ResultPanel resultId={metadata.resultId} source={metadata.source} />
+  ) : null;
 };
 
 export const rootPanelRegistry = {

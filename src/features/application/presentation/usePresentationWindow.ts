@@ -16,7 +16,7 @@ export function usePresentationWindow(windowKind: WindowKind) {
     resultId ? { status: "loading" } : { status: "missing_result_id" },
   );
 
-  usePresentationWindowLifecycle(resultId);
+  const isCurrent = usePresentationWindowLifecycle(resultId);
   usePersistedWindow(windowKind);
   const windowActions = useCurrentWindowActions();
 
@@ -27,6 +27,11 @@ export function usePresentationWindow(windowKind: WindowKind) {
       if (title) await windowActions.setTitle(title);
       await windowActions.show();
     };
+
+    if (!isCurrent) {
+      setState({ status: "not_found" });
+      return;
+    }
 
     if (!resultId) {
       void revealWindow();
@@ -47,7 +52,7 @@ export function usePresentationWindow(windowKind: WindowKind) {
     return () => {
       cancelled = true;
     };
-  }, [resultId, windowActions]);
+  }, [resultId, windowActions, isCurrent]);
 
   return {
     resultId,

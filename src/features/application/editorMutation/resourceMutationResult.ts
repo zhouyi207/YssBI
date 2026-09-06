@@ -1,3 +1,4 @@
+import { invalidateGraphResults } from "@/features/application/results";
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
@@ -821,6 +822,7 @@ export function prepareSynchronousPublicationCommit(
 
 export function commitPreparedPublication(plan: PreparedProjectPublication): void | Promise<void> {
   return commitEditorDockviewPublication(plan.moves, plan.storeState.resources, () => {
+    for (const graphPath of plan.affectedGraphPaths) invalidateGraphResults(graphPath);
     if (plan.graphProjectionPlan) {
       commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
     }

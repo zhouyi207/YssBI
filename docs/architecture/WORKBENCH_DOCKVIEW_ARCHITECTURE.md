@@ -137,6 +137,8 @@ Singleton 与 multi-instance contract：
 - Result 按 `resultKey` upsert，同 key 更新 metadata 并 reveal，多个不同 `resultKey` 同时存在；
 - `resultId` 可以在同一个 `resultKey` panel 上更新，而不改变其 `panelInstanceId`。
 
+Result panel 通过 `source` 的 output address 订阅当前结果；重算时卸载旧内容并显示运行状态，成功后在原 panel 渲染新 ResultId，失败或取消只显示状态。菜单不提供历史值选择。独立展示窗口收到结果失效或 Project replacement 通知后释放本地 payload。
+
 ## 5. Module seams 与布局 mutation
 
 ### 5.1 Public seam

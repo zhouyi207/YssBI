@@ -1,3 +1,4 @@
+import { observeResultRunEvent } from "@/features/application/results";
 import {
   pinPreviewCacheKey,
   useExecutionStore,
@@ -85,6 +86,7 @@ export function observeGraphRunEvent(
   state: GraphRunOutcomeState,
   preview?: PinPreviewObservation,
 ): void {
+  if (event.run.graphPath === graphPath) observeResultRunEvent(event);
   if (preview) {
     observePinPreviewEvent(graphPath, event, preview);
     return;

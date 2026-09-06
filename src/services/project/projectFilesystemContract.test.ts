@@ -159,7 +159,7 @@ const capabilityCommandExemptions = [
   "get_result_descriptor",
   "get_result_value",
   "get_result_page",
-  "get_pin_result_history",
+  "get_pin_result",
 
   "submit_bayes_inference",
   "get_bayes_inference_status",

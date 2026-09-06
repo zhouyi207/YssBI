@@ -115,7 +115,7 @@ describe("execution wire parsers", () => {
       parseRunEvent({
         correlation: {},
         basis: {},
-        kind: { type: "runStarted" },
+        kind: { type: "runStarted", outputs: [] },
       }),
     ).toThrow("Invalid run event");
 

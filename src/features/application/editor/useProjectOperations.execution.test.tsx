@@ -32,7 +32,7 @@ function runStartedEvent(): RunEvent {
       graphPath,
       runId: "run-stale",
     },
-    kind: { type: "runStarted" },
+    kind: { type: "runStarted", outputs: [] },
   };
 }
 

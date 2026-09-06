@@ -80,7 +80,7 @@ function emitSuccessfulPreview(
   resultId = "result-1",
 ): void {
   if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
-  onEvent?.(runEvent({ type: "runStarted" }));
+  onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
   onEvent?.(
     runEvent({
       type: "pinPreviewResultReady",
@@ -349,7 +349,7 @@ describe("requestPinPreview", () => {
     vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
       async ({ demand, onEvent }) => {
         if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
-        onEvent?.(runEvent({ type: "runStarted" }));
+        onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
         const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
         useGraphProjectionStore.setState({
           graphEntities: {
@@ -443,7 +443,7 @@ describe("requestPinPreview", () => {
       const getExecutionState = vi.spyOn(useExecutionStore, "getState");
 
       if (settlement === "resolution") {
-        emit(runEvent({ type: "runStarted" }));
+        emit(runEvent({ type: "runStarted", outputs: [] }));
         emit(
           runEvent({
             type: "pinPreviewResultReady",
@@ -569,7 +569,7 @@ describe("requestPinPreview", () => {
     failPinPreview.mockClear();
     removePinPreview.mockClear();
 
-    callbacks[0](runEvent({ type: "runStarted" }, "run-old"));
+    callbacks[0](runEvent({ type: "runStarted", outputs: [] }, "run-old"));
     callbacks[0](
       runEvent(
         {
@@ -593,7 +593,7 @@ describe("requestPinPreview", () => {
     expect(failPinPreview).not.toHaveBeenCalled();
     expect(removePinPreview).not.toHaveBeenCalled();
 
-    callbacks[1](runEvent({ type: "runStarted" }, "run-new"));
+    callbacks[1](runEvent({ type: "runStarted", outputs: [] }, "run-new"));
     callbacks[1](
       runEvent(
         {
@@ -622,7 +622,7 @@ describe("requestPinPreview", () => {
     vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
       async ({ demand, onEvent }) => {
         if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
-        onEvent?.(runEvent({ type: "runStarted" }));
+        onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
         onEvent?.(
           runEvent({
             type: "pinPreviewResultReady",
