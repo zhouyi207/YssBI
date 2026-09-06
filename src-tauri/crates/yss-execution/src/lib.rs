@@ -16,4 +16,5 @@ pub mod run_output;
 pub mod run_registry;
 pub mod settings;
 pub mod state;
+mod statistics;
 pub mod value;

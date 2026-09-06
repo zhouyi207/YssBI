@@ -75,6 +75,7 @@ sqlx.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
+yss-execution-sci-adapter = { path = "../yss-execution-sci-adapter" }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

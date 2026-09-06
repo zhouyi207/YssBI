@@ -58,6 +58,34 @@ pub struct AcfPacfResult {
     pub n: usize,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum OlsCovariance {
+    NonRobust,
+    Hc0,
+    Hc1,
+    Hc2,
+    Hc3,
+    FixedScale { scale: f64 },
+    Hac { kernel: Box<str>, bandwidth: usize },
+    Newey { lag: usize },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OlsRequest {
+    pub response: Vec<f64>,
+    pub predictors: Vec<Vec<f64>>,
+    pub constant: bool,
+    pub covariance: OlsCovariance,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OlsResult {
+    pub coefficients: Vec<f64>,
+    pub fitted: Vec<f64>,
+    pub residuals: Vec<f64>,
+    pub report: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScientificInputViolation {
     EmptyInput,
@@ -86,6 +114,11 @@ pub enum ScientificBackendError {
 /// backend may add real cooperative checkpoints, but callers cannot infer them
 /// from this synchronous port.
 pub trait ScientificBackend: Send + Sync {
+    fn ols(
+        &self,
+        request: OlsRequest,
+        control: &BackendExecutionControl,
+    ) -> Result<OlsResult, ScientificBackendError>;
     fn acf_pacf(
         &self,
         request: AcfPacfRequest,

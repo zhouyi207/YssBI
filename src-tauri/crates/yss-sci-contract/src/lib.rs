@@ -7,7 +7,7 @@ mod error;
 pub use computation::{
     CategoricalRole, MissingValuePolicy, NumericTolerance, SciComputationSettings,
     StatisticalInput, StatisticalInputValidationError, StatisticalObservationMetadata,
-    StatisticalScalar, StatisticalSettingSource,
+    StatisticalScalar,
 };
 pub use control::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,

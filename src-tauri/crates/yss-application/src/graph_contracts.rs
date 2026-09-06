@@ -586,6 +586,7 @@ fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::Re
 
 #[cfg(test)]
 mod tests {
+    mod ols_configuration;
     use super::*;
     use std::num::NonZeroU64;
     use std::sync::Arc;

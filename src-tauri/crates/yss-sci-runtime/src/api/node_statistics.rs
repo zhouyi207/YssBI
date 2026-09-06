@@ -1,6 +1,7 @@
 use crate::models::regression::{
-    BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, PraisInfo,
-    PraisRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
+    BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, OLSConfigure,
+    OLSCovarianceConfig, PraisInfo, PraisRegressionStatistics, RegressionCoefficientStatistics,
+    RegressionStatistics,
 };
 use ndarray::{Array1, Array2};
 use serde::Serialize;
@@ -32,6 +33,7 @@ pub enum RegressionKind {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegressionFit {
+    pub constant: bool,
     pub family: &'static str,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
@@ -50,53 +52,7 @@ pub fn fit_regression(
     let y = Array1::from_vec(response);
     let x = design_matrix(&predictors, y.len(), true, SciOperationCode::Regression)?;
     match kind {
-        RegressionKind::Ols => {
-            let result = OLS {
-                endog: y.clone(),
-                exog: x.clone(),
-                config: OLSConfig {
-                    constant: true,
-                    cov_type: "nonrobust".into(),
-                    cov_params: None,
-                },
-            }
-            .fit()
-            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-            linear_fit(
-                "ols",
-                &y,
-                &x,
-                result.betas.to_vec(),
-                RegressionStatistics::Linear {
-                    coefficients: RegressionCoefficientStatistics {
-                        covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.tvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
-                    },
-                    model: LinearRegressionStatistics {
-                        r2: result.r2,
-                        adjusted_r2: result.r2_adjusted,
-                        f_statistic: result.fvalue,
-                        f_p_value: result.f_p_value,
-                        df_model: result.df_model,
-                        df_residual: result.df_residual,
-                        df_total: result.df_total,
-                        ss_model: result.ss_model,
-                        ss_residual: result.ss_residual,
-                        ss_total: result.ss_total,
-                        ms_model: result.ms_model,
-                        ms_residual: result.ms_residual,
-                        ms_total: result.ms_total,
-                        covariance_type: result.covariance_type,
-                        condition_number: result.cond_no,
-                    },
-                },
-                metadata,
-            )
-        }
+        RegressionKind::Ols => fit_ols_design(&y, &x, &OLSConfigure::default(), metadata),
         RegressionKind::Gls => {
             let result = GLS {
                 endog: y.clone(),
@@ -263,6 +219,7 @@ pub fn fit_regression(
             let adjusted_pseudo_r2 =
                 1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
             Ok(RegressionFit {
+                constant: true,
                 family: "logit",
                 residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
                 fitted,
@@ -312,6 +269,7 @@ pub fn fit_regression(
             let adjusted_pseudo_r2 =
                 1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
             Ok(RegressionFit {
+                constant: true,
                 family: "probit",
                 residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
                 fitted,
@@ -344,6 +302,101 @@ pub fn fit_regression(
             })
         }
     }
+}
+
+pub fn fit_ols(
+    response: Vec<f64>,
+    predictors: Vec<Vec<f64>>,
+    config: OLSConfigure,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    if response.len() <= predictors.len() + usize::from(config.constant)
+        || response
+            .iter()
+            .chain(predictors.iter().flatten())
+            .any(|value| !value.is_finite())
+    {
+        return Err(invalid_input(
+            SciOperationCode::Regression,
+            SciInputViolation::ParameterOutOfRange,
+        ));
+    }
+    let y = Array1::from_vec(response);
+    let x = design_matrix(
+        &predictors,
+        y.len(),
+        config.constant,
+        SciOperationCode::Regression,
+    )?;
+    let mut fit = fit_ols_design(&y, &x, &config, metadata)?;
+    fit.constant = config.constant;
+    Ok(fit)
+}
+
+fn fit_ols_design(
+    y: &Array1<f64>,
+    x: &Array2<f64>,
+    config: &OLSConfigure,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    use yss_sci::regression::covariance::CovParams;
+    let cov_params = config.cov_config.as_ref().map(|value| match value {
+        OLSCovarianceConfig::FixedScale { scale } => CovParams::FixedScale { scale: *scale },
+        OLSCovarianceConfig::Cluster { cluster_id } => CovParams::Cluster {
+            cluster_id: cluster_id.clone(),
+            xtreg_fe_style: false,
+        },
+        OLSCovarianceConfig::HAC { kernel, bandwidth } => CovParams::HAC {
+            kernel: kernel.clone(),
+            bandwidth: *bandwidth,
+        },
+        OLSCovarianceConfig::Newey { lag } => CovParams::Newey { lag: *lag },
+    });
+    let result = OLS {
+        endog: y.clone(),
+        exog: x.clone(),
+        config: OLSConfig {
+            constant: config.constant,
+            cov_type: config.cov_type.clone(),
+            cov_params,
+        },
+    }
+    .fit()
+    .map_err(|_| computation_failed(SciOperationCode::Regression))?;
+    linear_fit(
+        "ols",
+        y,
+        x,
+        result.betas.to_vec(),
+        RegressionStatistics::Linear {
+            coefficients: RegressionCoefficientStatistics {
+                covariance: covariance_rows(&result.cov_beta),
+                standard_errors: result.stds.to_vec(),
+                statistic_values: result.tvalues.to_vec(),
+                p_values: result.pvalues.to_vec(),
+                confidence_interval_lower: result.conf_int_left.to_vec(),
+                confidence_interval_upper: result.conf_int_right.to_vec(),
+            },
+            model: LinearRegressionStatistics {
+                r2: result.r2,
+                adjusted_r2: result.r2_adjusted,
+                f_statistic: result.fvalue,
+                f_p_value: result.f_p_value,
+                df_model: result.df_model,
+                df_residual: result.df_residual,
+                df_total: result.df_total,
+                ss_model: result.ss_model,
+                ss_residual: result.ss_residual,
+                ss_total: result.ss_total,
+                ms_model: result.ms_model,
+                ms_residual: result.ms_residual,
+                ms_total: result.ms_total,
+                covariance_type: result.covariance_type,
+                condition_number: result.cond_no,
+            },
+        },
+        metadata,
+    )
 }
 
 fn stable_report_number(value: f64) -> f64 {
@@ -387,7 +440,7 @@ fn report_coefficients(fit: &RegressionFit) -> Vec<serde_json::Value> {
         .map(|(index, coefficient)| {
             let p_value = statistics.p_values[index];
             serde_json::json!({
-                "variable": if index == 0 { "_cons".to_string() } else { format!("x{index}") },
+                "variable": if fit.constant && index == 0 { "_cons".to_string() } else { format!("x{}", index + usize::from(!fit.constant)) },
                 "coef": coefficient,
                 "std_err": statistics.standard_errors[index],
                 "t_value": statistics.statistic_values[index],
@@ -565,6 +618,7 @@ fn linear_fit(
 ) -> Result<RegressionFit, SciError> {
     let fitted = x.dot(&Array1::from_vec(coefficients.clone())).to_vec();
     Ok(RegressionFit {
+        constant: true,
         family,
         residuals: y.iter().zip(&fitted).map(|(a, b)| a - b).collect(),
         fitted,
@@ -932,9 +986,7 @@ fn computation_failed(operation: SciOperationCode) -> SciError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_sci_contract::{
-        MissingValuePolicy, StatisticalObservationMetadata, StatisticalSettingSource,
-    };
+    use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
     use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 
     fn regression_metadata(observations: usize) -> StatisticalObservationMetadata {
@@ -944,10 +996,6 @@ mod tests {
             dropped_null_count: 0,
             dropped_nan_count: 0,
             missing_value_policy: MissingValuePolicy::Listwise,
-            missing_value_policy_source: StatisticalSettingSource::ProjectDefault,
-            effective_convergence_tolerance: 1e-12,
-            convergence_tolerance_source: StatisticalSettingSource::ProjectDefault,
-            convergence_tolerance_consumed: false,
         }
     }
 

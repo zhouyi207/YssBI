@@ -9460,6 +9460,7 @@ dependencies = [
  "yss-display-naming",
  "yss-duckdb",
  "yss-execution",
+ "yss-execution-sci-adapter",
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",

@@ -27,6 +27,13 @@ struct RecordingScientificBackend {
 }
 
 impl ScientificBackend for RecordingScientificBackend {
+    fn ols(
+        &self,
+        _: super::OlsRequest,
+        _: &BackendExecutionControl,
+    ) -> Result<super::OlsResult, ScientificBackendError> {
+        Err(ScientificBackendError::Unavailable)
+    }
     fn acf_pacf(
         &self,
         request: AcfPacfRequest,

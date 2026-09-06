@@ -29,8 +29,8 @@ use crate::value::RuntimeValue;
 
 #[derive(Clone)]
 pub struct RunExecutionControl {
-    cancellation: Arc<AtomicBool>,
-    deadline: Instant,
+    pub(crate) cancellation: Arc<AtomicBool>,
+    pub(crate) deadline: Instant,
 }
 
 impl RunExecutionControl {
@@ -223,6 +223,14 @@ struct UnavailableScientificBackend;
 
 #[cfg(any(test, feature = "test-support"))]
 impl ScientificBackend for UnavailableScientificBackend {
+    fn ols(
+        &self,
+        _: crate::ports::scientific::OlsRequest,
+        _: &crate::ports::scientific::BackendExecutionControl,
+    ) -> Result<crate::ports::scientific::OlsResult, crate::ports::scientific::ScientificBackendError>
+    {
+        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
+    }
     fn acf_pacf(
         &self,
         _request: crate::ports::scientific::AcfPacfRequest,
@@ -235,9 +243,9 @@ impl ScientificBackend for UnavailableScientificBackend {
     }
 }
 
-#[derive(Default)]
 struct NeutralPlanExecutor {
     kernels: KernelRegistry,
+    scientific_backend: Arc<dyn ScientificBackend>,
 }
 
 impl PreparedPlanExecutor for NeutralPlanExecutor {
@@ -335,6 +343,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .kernels
                 .execute(
                     operation.kernel_id(),
+                    self.scientific_backend.as_ref(),
                     &PreparedKernelInvocation {
                         inputs: &inputs,
                         input_slots: operation.inputs(),
@@ -557,7 +566,7 @@ fn check_kernel_control(control: &RunExecutionControl) -> Result<(), KernelExecu
     Ok(())
 }
 
-fn parameter_value(
+pub(crate) fn parameter_value(
     value: &crate::plan::PlanParameterValue,
     resources: &PreparedRunResources,
 ) -> Result<RuntimeValue, KernelExecutionError> {
@@ -634,6 +643,7 @@ impl PreparedKernelInvocation<'_> {
 
 #[derive(Clone, Copy)]
 enum BuiltinKernel {
+    Statistical(crate::statistics::StatisticalKernel),
     Constant,
     Variable,
     Add,
@@ -659,9 +669,12 @@ struct KernelRegistry {
 
 impl Default for KernelRegistry {
     fn default() -> Self {
+        use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
         use BuiltinKernel::*;
         Self {
             kernels: [
+                ("yssbi.statistics.ols.fit", Statistical(OlsFit)),
+                ("yssbi.statistics.ols.summary", Statistical(OlsSummary)),
                 ("yssbi.constant.bool", Constant),
                 ("yssbi.constant.int64", Constant),
                 ("yssbi.constant.float64", Constant),
@@ -695,6 +708,7 @@ impl KernelRegistry {
     fn execute(
         &self,
         id: &crate::plan::KernelId,
+        backend: &dyn ScientificBackend,
         invocation: &PreparedKernelInvocation<'_>,
     ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
         execute_kernel(
@@ -703,6 +717,7 @@ impl KernelRegistry {
                 .get(id)
                 .ok_or(KernelExecutionError::KernelNotFound)?,
             invocation,
+            backend,
         )
     }
 }
@@ -710,6 +725,7 @@ impl KernelRegistry {
 fn execute_kernel(
     kind: BuiltinKernel,
     invocation: &PreparedKernelInvocation<'_>,
+    backend: &dyn ScientificBackend,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let PreparedKernelInvocation {
         inputs,
@@ -724,6 +740,9 @@ fn execute_kernel(
         return Err(KernelExecutionError::Failed);
     }
     let value = match kind {
+        BuiltinKernel::Statistical(kind) => {
+            return crate::statistics::execute(kind, invocation, backend);
+        }
         BuiltinKernel::Constant => invocation
             .parameter("value")
             .map(|value| parameter_value(value, resources))
@@ -786,7 +805,7 @@ fn execute_kernel(
     Ok(BTreeMap::from([(output.output().clone(), value)]))
 }
 
-fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionError> {
+pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionError> {
     match value {
         Some(RuntimeValue::Integer(value)) => Ok(*value as f64),
         Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
@@ -1084,8 +1103,11 @@ impl ExecutionRuntimeState {
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
             results: ResultStore::new(),
             runs: RunRegistry::new(),
-            scientific_backend,
-            executor: Arc::new(NeutralPlanExecutor::default()),
+            scientific_backend: scientific_backend.clone(),
+            executor: Arc::new(NeutralPlanExecutor {
+                kernels: KernelRegistry::default(),
+                scientific_backend,
+            }),
             active_controls: Mutex::new(BTreeMap::new()),
             next_result_id: AtomicU64::new(1),
         }

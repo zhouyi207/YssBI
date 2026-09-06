@@ -27,14 +27,6 @@ pub struct SciComputationSettings {
     pub missing_values: MissingValuePolicy,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum StatisticalSettingSource {
-    #[serde(rename = "project")]
-    ProjectDefault,
-    #[serde(rename = "node")]
-    NodeOverride,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticalObservationMetadata {
@@ -43,10 +35,6 @@ pub struct StatisticalObservationMetadata {
     pub dropped_null_count: usize,
     pub dropped_nan_count: usize,
     pub missing_value_policy: MissingValuePolicy,
-    pub missing_value_policy_source: StatisticalSettingSource,
-    pub effective_convergence_tolerance: f64,
-    pub convergence_tolerance_source: StatisticalSettingSource,
-    pub convergence_tolerance_consumed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,22 +96,18 @@ impl StatisticalInput {
 mod tests {
     use super::{
         CategoricalRole, MissingValuePolicy, StatisticalInput, StatisticalInputValidationError,
-        StatisticalObservationMetadata, StatisticalScalar, StatisticalSettingSource,
+        StatisticalObservationMetadata, StatisticalScalar,
     };
     use serde_json::json;
 
     #[test]
-    fn observation_metadata_preserves_the_existing_nine_field_wire() {
+    fn observation_metadata_describes_row_selection_and_missing_value_policy() {
         let metadata = StatisticalObservationMetadata {
             original_observation_count: 10,
             used_observation_count: 7,
             dropped_null_count: 2,
             dropped_nan_count: 1,
             missing_value_policy: MissingValuePolicy::Reject,
-            missing_value_policy_source: StatisticalSettingSource::NodeOverride,
-            effective_convergence_tolerance: 1e-7,
-            convergence_tolerance_source: StatisticalSettingSource::ProjectDefault,
-            convergence_tolerance_consumed: true,
         };
 
         assert_eq!(
@@ -134,11 +118,7 @@ mod tests {
                 "usedObservationCount": 7,
                 "droppedNullCount": 2,
                 "droppedNanCount": 1,
-                "missingValuePolicy": "reject",
-                "missingValuePolicySource": "node",
-                "effectiveConvergenceTolerance": 1e-7,
-                "convergenceToleranceSource": "project",
-                "convergenceToleranceConsumed": true
+                "missingValuePolicy": "reject"
             })
         );
     }

@@ -127,8 +127,6 @@ pub struct OLSConfigure {
     pub constant: bool,
     pub cov_type: String,
     pub cov_config: Option<OLSCovarianceConfig>,
-    pub time_series_id: Option<String>,
-    pub small: bool,
 }
 
 impl Default for OLSConfigure {
@@ -137,8 +135,6 @@ impl Default for OLSConfigure {
             constant: true,
             cov_type: "nonrobust".to_string(),
             cov_config: None,
-            time_series_id: None,
-            small: true,
         }
     }
 }

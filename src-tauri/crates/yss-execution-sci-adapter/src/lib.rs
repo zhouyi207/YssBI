@@ -21,6 +21,97 @@ impl SciRuntimeBackend {
 }
 
 impl ScientificBackend for SciRuntimeBackend {
+    fn ols(
+        &self,
+        request: yss_execution::ports::scientific::OlsRequest,
+        control: &BackendExecutionControl,
+    ) -> Result<yss_execution::ports::scientific::OlsResult, ScientificBackendError> {
+        use yss_execution::ports::scientific::{OlsCovariance, OlsResult};
+        use yss_sci_runtime::models::regression::{OLSConfigure, OLSCovarianceConfig};
+        admit(control)?;
+        let observations = request.response.len();
+        if request.predictors.is_empty()
+            || observations <= request.predictors.len() + usize::from(request.constant)
+        {
+            return Err(invalid(ScientificInputViolation::EmptyInput));
+        }
+        if request
+            .predictors
+            .iter()
+            .any(|column| column.len() != observations)
+        {
+            return Err(invalid(ScientificInputViolation::ShapeMismatch));
+        }
+        if request
+            .response
+            .iter()
+            .chain(request.predictors.iter().flatten())
+            .any(|value| !value.is_finite())
+        {
+            return Err(invalid(ScientificInputViolation::NonFiniteInput));
+        }
+        let (cov_type, cov_config) = match request.covariance {
+            OlsCovariance::NonRobust => ("nonrobust", None),
+            OlsCovariance::Hc0 => ("HC0", None),
+            OlsCovariance::Hc1 => ("HC1", None),
+            OlsCovariance::Hc2 => ("HC2", None),
+            OlsCovariance::Hc3 => ("HC3", None),
+            OlsCovariance::FixedScale { scale } if scale.is_finite() && scale > 0.0 => (
+                "fixed scale",
+                Some(OLSCovarianceConfig::FixedScale { scale }),
+            ),
+            OlsCovariance::Hac { kernel, bandwidth }
+                if bandwidth > 0
+                    && matches!(
+                        kernel.as_ref(),
+                        "bartlett" | "parzen" | "quadratic spectral"
+                    ) =>
+            {
+                let bandwidth = i64::try_from(bandwidth)
+                    .map_err(|_| invalid(ScientificInputViolation::ParameterOutOfRange))?;
+                (
+                    "HAC",
+                    Some(OLSCovarianceConfig::HAC {
+                        kernel: kernel.into_string(),
+                        bandwidth: Some(bandwidth),
+                    }),
+                )
+            }
+            OlsCovariance::Newey { lag } => {
+                let lag = i64::try_from(lag)
+                    .map_err(|_| invalid(ScientificInputViolation::ParameterOutOfRange))?;
+                ("newey", Some(OLSCovarianceConfig::Newey { lag: Some(lag) }))
+            }
+            _ => return Err(invalid(ScientificInputViolation::ParameterOutOfRange)),
+        };
+        let metadata = yss_sci_contract::StatisticalObservationMetadata {
+            original_observation_count: observations,
+            used_observation_count: observations,
+            dropped_null_count: 0,
+            dropped_nan_count: 0,
+            missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
+        };
+        let fit = yss_sci_runtime::api::node_statistics::fit_ols(
+            request.response,
+            request.predictors,
+            OLSConfigure {
+                constant: request.constant,
+                cov_type: cov_type.into(),
+                cov_config,
+            },
+            metadata,
+        )
+        .map_err(|_| ScientificBackendError::ComputationFailed)?;
+        let report = yss_sci_runtime::api::node_statistics::regression_report(&fit)
+            .map_err(|_| ScientificBackendError::ComputationFailed)?;
+        admit(control)?;
+        Ok(OlsResult {
+            coefficients: fit.coefficients,
+            fitted: fit.fitted,
+            residuals: fit.residuals,
+            report,
+        })
+    }
     fn acf_pacf(
         &self,
         request: AcfPacfRequest,
