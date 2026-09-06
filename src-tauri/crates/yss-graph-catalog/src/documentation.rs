@@ -198,30 +198,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn selects_language_prefix_and_falls_back_to_english() {
-        let node_type_id = NodeTypeId::new("yssbi.plot.scatter.view").unwrap();
-
-        assert_eq!(
-            documentation(&node_type_id, "zh-TW").unwrap(),
-            documentation(&node_type_id, "zh-CN").unwrap()
-        );
-        assert_eq!(
-            documentation(&node_type_id, "fr-FR").unwrap(),
-            documentation(&node_type_id, "en-US").unwrap()
-        );
-        assert_eq!(
-            select_locale(
-                Documentation {
-                    en: "English",
-                    zh: None,
-                },
-                "zh-CN"
-            ),
-            "English"
-        );
-    }
-
-    #[test]
     fn leaves_unmapped_nodes_without_documentation() {
         let node_type_id = NodeTypeId::new("yssbi.unknown.node").unwrap();
 

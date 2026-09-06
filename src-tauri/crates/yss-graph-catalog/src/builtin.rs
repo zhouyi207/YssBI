@@ -374,21 +374,6 @@ fn validate_builtin_bundle(
     })
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn builtin_bundle_parts_for_test()
--> Result<(ProviderRegistration, BuiltinCatalog, BTreeSet<I18nKey>), BuiltinInitializationError> {
-    assemble_builtin_parts().map_err(Into::into)
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn validate_builtin_bundle_for_test(
-    provider: ProviderRegistration,
-    catalog: BuiltinCatalog,
-    alias_keys: BTreeSet<I18nKey>,
-) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
-    validate_builtin_bundle(provider, catalog, alias_keys)
-}
-
 fn register_builtin_nominal_validators(
     builder: &mut NodeRegistryBuilder,
 ) -> Result<(), BuiltinAssemblyError> {

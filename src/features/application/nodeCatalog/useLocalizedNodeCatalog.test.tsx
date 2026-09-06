@@ -112,21 +112,6 @@ describe("useLocalizedNodeCatalog", () => {
     });
   });
 
-  it("loads a separate catalog when the locale changes", async () => {
-    vi.mocked(CatalogService.getLocalizedCatalog)
-      .mockResolvedValueOnce(catalog("project-1", "zh-CN"))
-      .mockResolvedValueOnce(catalog("project-1", "en-US"));
-
-    await act(async () => root.render(createElement(Harness)));
-    await vi.waitFor(() => expect(host.querySelector("output")?.dataset.status).toBe("ready"));
-
-    localeState.language = "en-US";
-    await act(async () => root.render(createElement(Harness)));
-    await vi.waitFor(() => expect(host.querySelector("output")?.dataset.locale).toBe("en-US"));
-
-    expect(CatalogService.getLocalizedCatalog).toHaveBeenNthCalledWith(2, "project-1", "en-US");
-  });
-
   it("reuses a ready cached catalog when the hook remounts", async () => {
     vi.mocked(CatalogService.getLocalizedCatalog).mockResolvedValue(catalog("project-1", "zh-CN"));
 

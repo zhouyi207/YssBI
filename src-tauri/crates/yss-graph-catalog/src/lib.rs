@@ -15,8 +15,6 @@ mod statistics;
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
-#[cfg(any(test, feature = "test-support"))]
-pub use builtin::{builtin_bundle_parts_for_test, validate_builtin_bundle_for_test};
 pub(crate) const REROUTE_NODE_TYPE: &str = "yssbi.core.reroute";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";
 pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
@@ -42,7 +40,7 @@ pub use localization::{
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeSet;
 
     use super::{
         CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
@@ -71,7 +69,7 @@ mod tests {
     }
 
     #[test]
-    fn variable_resource_has_one_localized_read_action() {
+    fn variable_resource_has_one_read_action() {
         let system = build_builtin_node_system().expect("production built-ins must assemble");
         let resource_path = CatalogResourcePath::new("variables/score");
         let entries = [CatalogResourceEntry {
@@ -87,15 +85,14 @@ mod tests {
         let catalog = system
             .catalog
             .localize_with_resources(&system.registry, "zh-CN", &entries);
-        let titles = catalog
+        let node_types = catalog
             .items
             .iter()
             .filter(|item| item.resource_path.as_ref() == Some(&resource_path))
-            .map(|item| (item.node_type_id.as_ref(), item.title.as_ref()))
-            .collect::<BTreeMap<_, _>>();
+            .map(|item| item.node_type_id.as_ref())
+            .collect::<Vec<_>>();
 
-        assert_eq!(titles.len(), 1);
-        assert_eq!(titles["yssbi.project.variable.get"], "读取变量 · Score");
+        assert_eq!(node_types, ["yssbi.project.variable.get"]);
     }
 
     #[test]

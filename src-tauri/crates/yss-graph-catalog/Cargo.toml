@@ -5,10 +5,6 @@ edition = "2024"
 rust-version.workspace = true
 publish = false
 
-[features]
-default = []
-test-support = []
-
 [dependencies]
 serde.workspace = true
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }

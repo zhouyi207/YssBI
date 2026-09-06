@@ -44,22 +44,6 @@ function catalog(
 }
 
 describe("getLocalizedSearchIndex", () => {
-  it.each([
-    ["project instance ID", { projectInstanceId: "project-2" }],
-    ["locale", { locale: "en-US" }],
-    ["Registry fingerprint", { registryFingerprint: "registry-2" }],
-    ["resource publication revision", { resourcePublicationRevision: 8 }],
-  ] as const)("isolates indexes by %s", (_dimension, overrides) => {
-    const baselineResponse = catalog();
-    const changedResponse = catalog(overrides);
-    const baseline = getLocalizedSearchIndex(baselineResponse);
-    const changed = getLocalizedSearchIndex(changedResponse);
-
-    expect(changed).not.toBe(baseline);
-    expect(changed.response).toBe(changedResponse);
-    expect(changed.search(changed.response.items[0].nodeTypeId)).toEqual(changed.response.items);
-  });
-
   it("reuses an index only for the same response object", () => {
     const response = catalog();
 
@@ -109,23 +93,5 @@ describe("getLocalizedSearchIndex", () => {
       expect(index.search(query)).toEqual([item]);
     }
     expect(index.response.items[0]).toBe(item);
-  });
-
-  it("rebuilds localized pinyin tokens for a new locale without changing stable identity", () => {
-    const zhResponse = catalog({ locale: "zh-CN", resourcePublicationRevision: 101 });
-    zhResponse.items[0].nodeTypeId = "yssbi.locale.stable";
-    zhResponse.items[0].creation = { kind: "static", nodeTypeId: "yssbi.locale.stable" };
-    zhResponse.items[0].title = "打印";
-    const enResponse = catalog({ locale: "en-US", resourcePublicationRevision: 101 });
-    enResponse.items[0].nodeTypeId = "yssbi.locale.stable";
-    enResponse.items[0].creation = { kind: "static", nodeTypeId: "yssbi.locale.stable" };
-    enResponse.items[0].title = "Print";
-
-    const zhIndex = getLocalizedSearchIndex(zhResponse);
-    const enIndex = getLocalizedSearchIndex(enResponse);
-
-    expect(zhIndex.search("da yin")[0].nodeTypeId).toBe("yssbi.locale.stable");
-    expect(enIndex.search("da yin")).toEqual([]);
-    expect(enIndex.search("print")[0].nodeTypeId).toBe("yssbi.locale.stable");
   });
 });

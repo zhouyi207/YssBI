@@ -56,7 +56,6 @@ yss-application = { path = "../yss-application", features = ["test-support"] }
 yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-duckdb = { path = "../yss-duckdb" }
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
-yss-graph-catalog = { path = "../yss-graph-catalog", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

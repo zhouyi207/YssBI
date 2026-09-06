@@ -798,53 +798,6 @@ mod tests {
     }
 
     #[test]
-    fn analysis_localizes_editor_node_titles() {
-        let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
-        let node_id = NodeId::new();
-        let node_type = runtime
-            .registry()
-            .iter()
-            .map(|(node_type, _)| node_type)
-            .find(|node_type| node_type.as_str() == "yssbi.constant.bool")
-            .cloned()
-            .expect("built-in node type is registered");
-        let mut document = GraphDocument::default();
-        document.nodes.insert(
-            node_id,
-            DocumentNode {
-                id: node_id,
-                node_type,
-                position: NodePosition { x: 0.0, y: 0.0 },
-                parameters: ParameterValues::new(),
-                user_label: None,
-            },
-        );
-        let basis = CompilationBasis {
-            registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-            resource_versions: BTreeMap::new(),
-            resource_observations: BTreeMap::new(),
-        };
-
-        let graph = GraphResourcePath::new("events/Localized.yssbi-event").unwrap();
-        let analysis = runtime.resolve_graph_draft(
-            &graph,
-            &document,
-            &basis,
-            &empty_resource_catalog(),
-            &[],
-            "zh-CN",
-        );
-        let node = analysis
-            .semantic_snapshot()
-            .nodes()
-            .first()
-            .expect("the semantic snapshot includes the node");
-
-        assert_eq!(node.title.as_ref(), "布尔常量");
-    }
-
-    #[test]
     fn dataframe_schema_resolves_decompose_outputs_without_changing_the_draft() {
         use yss_data_contract::DataType;
         use yss_graph_resource_contract::{

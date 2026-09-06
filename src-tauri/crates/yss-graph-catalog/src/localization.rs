@@ -163,14 +163,6 @@ pub struct CatalogResourceEntry {
     pub technical_terms: Vec<Box<str>>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct I18nBundleInventory {
-    pub default_locale_missing: Vec<Box<str>>,
-    pub missing_by_locale: BTreeMap<Box<str>, Vec<Box<str>>>,
-    pub unused_by_locale: BTreeMap<Box<str>, Vec<Box<str>>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum I18nBundleValidationError {
     MissingDefaultLocale { keys: Vec<Box<str>> },
@@ -319,56 +311,20 @@ impl BuiltinCatalog {
         }
     }
 
-    pub fn audit(
-        &self,
-        required: &I18nManifest,
-        _alias_keys: &BTreeSet<I18nKey>,
-    ) -> I18nBundleInventory {
-        let required_keys = &required.keys;
-        let default_keys = match self.bundles.get(DEFAULT_LOCALE) {
-            Some(bundle) => bundle.keys().cloned().collect::<BTreeSet<_>>(),
-            None => BTreeSet::new(),
-        };
-        let default_locale_missing = required_keys
-            .difference(&default_keys)
-            .map(|key| key.as_str().into())
-            .collect();
-        let mut missing_by_locale = BTreeMap::new();
-        let mut unused_by_locale = BTreeMap::new();
-        for (locale, bundle) in &self.bundles {
-            let present = bundle.keys().cloned().collect::<BTreeSet<_>>();
-            missing_by_locale.insert(
-                locale.clone(),
-                required_keys
-                    .difference(&present)
-                    .map(|key| key.as_str().into())
-                    .collect(),
-            );
-            unused_by_locale.insert(
-                locale.clone(),
-                present
-                    .difference(required_keys)
-                    .map(|key| key.as_str().into())
-                    .collect(),
-            );
-        }
-        I18nBundleInventory {
-            default_locale_missing,
-            missing_by_locale,
-            unused_by_locale,
-        }
-    }
-
-    pub fn validate(
+    pub(crate) fn validate(
         &self,
         required: &I18nManifest,
         alias_keys: &BTreeSet<I18nKey>,
-    ) -> Result<I18nBundleInventory, I18nBundleValidationError> {
-        let inventory = self.audit(required, alias_keys);
-        if !inventory.default_locale_missing.is_empty() {
-            return Err(I18nBundleValidationError::MissingDefaultLocale {
-                keys: inventory.default_locale_missing.clone(),
-            });
+    ) -> Result<(), I18nBundleValidationError> {
+        let default_bundle = self.bundles.get(DEFAULT_LOCALE);
+        let keys: Vec<_> = required
+            .keys
+            .iter()
+            .filter(|key| default_bundle.is_none_or(|bundle| !bundle.contains_key(*key)))
+            .map(|key| key.as_str().into())
+            .collect();
+        if !keys.is_empty() {
+            return Err(I18nBundleValidationError::MissingDefaultLocale { keys });
         }
         for (locale, bundle) in &self.bundles {
             for key in alias_keys {
@@ -380,7 +336,7 @@ impl BuiltinCatalog {
                 }
             }
         }
-        Ok(inventory)
+        Ok(())
     }
 
     fn static_item(

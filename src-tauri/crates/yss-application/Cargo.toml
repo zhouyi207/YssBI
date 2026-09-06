@@ -8,7 +8,6 @@ publish = false
 [features]
 test-support = [
   "yss-execution/test-support",
-  "yss-graph-catalog/test-support",
   "yss-graph-runtime/test-support",
   "yss-project/test-support",
   "yss-project-filesystem/test-support",
@@ -76,7 +75,6 @@ sqlx.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
-yss-graph-catalog = { path = "../yss-graph-catalog", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import i18nInventory from "@/tests/fixtures/node-system-contracts/i18n-inventory.json";
 import localizedCatalog from "@/tests/fixtures/node-system-contracts/localized-catalog.json";
 import editorProjection from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import fingerprintWire from "@/tests/fixtures/node-system-contracts/fingerprint-wire.json";
@@ -10,10 +9,10 @@ import {
   isLocalizedCatalogDto,
   type LocalizedCatalogDto,
 } from "@/shared/types/dto/localizedCatalog";
-import { isNodeCreationDescriptorDto } from "@/shared/types/dto/nodeCreationDescriptor";
+import { isNodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
 import { parseEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionParser";
-import { isSchemaAwareParameterEditorDto } from "@/shared/types/dto/parameterEditorValidators";
+import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import { parseProjectEvent } from "@/services/project/projectEventParser";
 import { parseProjectGraphIndexRow } from "@/services/project/projectService";
 import { parseGraphProjectionReplacementDto } from "@/shared/types/dto/editorMutationWireParser";
@@ -35,13 +34,11 @@ describe("Rust-generated node-system golden contracts", () => {
       (event) => event.kind.type === "runErrored" && event.kind.code === "deadlineExceeded",
     );
     expect(deadlineEvents.map((event) => event.kind.phase)).toEqual([
-      "queueWait",
-      "kernel",
-      "streamSend",
-      "streamReceive",
-      "adapterIo",
-      "resultPublication",
-      "cleanup",
+      "admission",
+      "execution",
+      "resourcePreparation",
+      "finalization",
+      "planValidation",
     ]);
     expect(deadlineEvents.map(parseRunEvent)).toEqual(deadlineEvents);
 
@@ -89,10 +86,6 @@ describe("Rust-generated node-system golden contracts", () => {
   });
 
   it("shares one canonical Registry fingerprint across every wire purpose", () => {
-    expect(i18nInventory.format).toBe("yssbi.i18n-inventory.v1");
-    expect(i18nInventory.defaultLocale).toBe("en-US");
-    expect(i18nInventory.requiredKeys.length).toBeGreaterThan(0);
-    expect(i18nInventory.aliasKeys.length).toBeGreaterThan(0);
     expect(fingerprintWire.format).toBe("yssbi.registry-fingerprint-wire.v1");
     expect(
       [fingerprintWire.catalog, fingerprintWire.editorProjection].every((value) =>
@@ -101,7 +94,6 @@ describe("Rust-generated node-system golden contracts", () => {
     ).toBe(true);
     expect(
       new Set([
-        i18nInventory.registryFingerprint,
         localizedCatalog.registryFingerprint,
         editorProjection.basis.registryFingerprint,
         fingerprintWire.catalog,

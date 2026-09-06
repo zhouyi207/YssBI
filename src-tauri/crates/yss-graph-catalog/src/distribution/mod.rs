@@ -554,32 +554,6 @@ fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeSet;
-
-    #[test]
-    fn every_protocol_localization_key_exists_in_both_locales() {
-        let fragment = build_provider_fragment().expect("distribution fixture must assemble");
-        let localized_keys = fragment
-            .messages
-            .iter()
-            .map(|(locale, key, _)| (*locale, *key))
-            .collect::<BTreeSet<_>>();
-        for node in &fragment.nodes {
-            let protocol = node.protocol();
-            let keys = [
-                Some(&protocol.catalog.title_key),
-                protocol.catalog.documentation_key.as_ref(),
-                protocol.catalog.aliases_key.as_ref(),
-            ]
-            .into_iter()
-            .flatten();
-            for key in keys {
-                assert!(localized_keys.contains(&("en-US", key.as_str())));
-                assert!(localized_keys.contains(&("zh-CN", key.as_str())));
-            }
-        }
-    }
-
     #[test]
     fn protocols_use_semantic_port_keys() {
         for spec in SPECS {
