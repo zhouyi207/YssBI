@@ -243,7 +243,6 @@ export const enUS = {
       history: "Result history",
       historyLoading: "Loading history…",
       historyEmpty: "No result history",
-      historyLatest: "Latest",
       viewDisabledNoRun: "Run the graph first to generate viewable results",
       viewDisabledNoUpstream: "No upstream result available",
     },

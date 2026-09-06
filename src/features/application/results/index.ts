@@ -24,6 +24,9 @@ export {
   resultQueryRead,
   resetResultQuery,
   resetResultQueryProject,
+  invalidateGraphResults,
+  observeResultRunEvent,
+  readPinResultStatus,
 } from "./runtime";
 export { useResultValue } from "./useResultValue";
 export { usePagedResultRows } from "./usePagedResultRows";

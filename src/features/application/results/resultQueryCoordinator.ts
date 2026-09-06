@@ -1,7 +1,7 @@
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import type { PinResultEntry, ResultDescriptor, ResultPage, ResultValue } from "./types";
+import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
 export interface ResultIdentityRequest {
@@ -13,7 +13,7 @@ export interface ResultPageRequest extends ResultIdentityRequest {
   readonly limit: number;
 }
 
-export interface ResultPinHistoryRequest {
+export interface ResultPinRequest {
   readonly graphPath: string;
   readonly output: PortAddressDto;
 }
@@ -21,7 +21,7 @@ export interface ResultPinHistoryRequest {
 export type ResultQueryScope =
   | ({ readonly kind: "descriptor" | "value" } & ResultIdentityRequest)
   | ({ readonly kind: "page" } & ResultPageRequest)
-  | ({ readonly kind: "pinHistory" } & ResultPinHistoryRequest);
+  | ({ readonly kind: "pinResult" } & ResultPinRequest);
 
 export type ResultQueryOutcome =
   | { readonly status: "published" }
@@ -33,7 +33,7 @@ export interface ResultQueryCoordinator {
   loadDescriptor(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadValue(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadPage(request: ResultPageRequest): Promise<ResultQueryOutcome>;
-  loadPinHistory(request: ResultPinHistoryRequest): Promise<ResultQueryOutcome>;
+  loadPinResult(request: ResultPinRequest): Promise<ResultQueryOutcome>;
   resetProject(): void;
   resetResult(resultId: string): void;
 }
@@ -42,10 +42,10 @@ export interface ResultQueryServicePort {
   readonly getDescriptor: (resultId: string) => Promise<ResultDescriptor | null>;
   readonly getValue: (resultId: string) => Promise<ResultValue | null>;
   readonly getPage: (resultId: string, offset: number, limit: number) => Promise<ResultPage | null>;
-  readonly getPinHistory: (
+  readonly getPinResult: (
     graphPath: string,
     output: PortAddressDto,
-  ) => Promise<readonly PinResultEntry[]>;
+  ) => Promise<ResultDescriptor | null>;
 }
 
 export interface ResultQueryPublication {
@@ -64,10 +64,10 @@ export interface ResultQueryPublication {
     request: ResultPageRequest,
     page: DeepReadonly<ResultPage | null>,
   ) => void;
-  readonly publishPinHistory: (
+  readonly publishPinResult: (
     projectInstanceId: string,
-    request: ResultPinHistoryRequest,
-    entries: DeepReadonly<readonly PinResultEntry[]>,
+    request: ResultPinRequest,
+    result: DeepReadonly<ResultDescriptor | null>,
   ) => void;
   readonly publishFailure: (
     projectInstanceId: string,
@@ -82,9 +82,9 @@ export interface ResultQueryReadCapability {
   readonly getDescriptor: (resultId: string) => DeepReadonly<ResultDescriptor | null>;
   readonly getValue: (resultId: string) => DeepReadonly<ResultValue | null>;
   readonly getPage: (request: ResultPageRequest) => DeepReadonly<ResultPage | null>;
-  readonly getPinHistory: (
-    request: ResultPinHistoryRequest,
-  ) => DeepReadonly<readonly PinResultEntry[]> | null;
+  readonly getPinResult: (
+    request: ResultPinRequest,
+  ) => DeepReadonly<ResultDescriptor | null> | null;
   readonly getFailure: (scope: ResultQueryScope) => DeepReadonly<ErrorReference> | null;
 }
 
@@ -98,13 +98,11 @@ export interface ResultQueryDependencies {
 interface RequestOwner {
   readonly projectInstanceId: string;
   readonly projectEpoch: number;
-  readonly resultEpoch: number | null;
   readonly queryKey: string;
-  readonly queryGeneration: number;
   readonly scope: ResultQueryScope;
 }
 
-type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage | readonly PinResultEntry[];
+type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage;
 
 function queryPart(value: string): string {
   return `${value.length}:${value}`;
@@ -117,13 +115,13 @@ function queryKey(scope: ResultQueryScope): string {
       return `${scope.kind}:${queryPart(scope.resultId)}`;
     case "page":
       return `${scope.kind}:${queryPart(scope.resultId)}:${scope.offset}:${scope.limit}`;
-    case "pinHistory":
+    case "pinResult":
       return `${scope.kind}:${queryPart(scope.graphPath)}:${portAddressKey(scope.output)}`;
   }
 }
 
 function resultIdFor(scope: ResultQueryScope): string | null {
-  return scope.kind === "pinHistory" ? null : scope.resultId;
+  return scope.kind === "pinResult" ? null : scope.resultId;
 }
 
 function validIdentity(value: string | null): value is string {
@@ -144,7 +142,7 @@ function validPageRequest(request: ResultPageRequest): boolean {
   );
 }
 
-function validPinHistoryRequest(request: ResultPinHistoryRequest): boolean {
+function validPinRequest(request: ResultPinRequest): boolean {
   return (
     request.graphPath.length > 0 && typeof request.output === "object" && request.output !== null
   );
@@ -168,8 +166,7 @@ export function createResultQueryCoordinator(
   dependencies: ResultQueryDependencies,
 ): ResultQueryCoordinator {
   let projectEpoch = 0;
-  const resultEpochs = new Map<string, number>();
-  const queryGenerations = new Map<string, number>();
+  const requests = new Map<string, RequestOwner>();
 
   const captureProject = (): string | null => {
     try {
@@ -180,30 +177,10 @@ export function createResultQueryCoordinator(
     }
   };
 
-  const nextResultEpoch = (resultId: string): number => {
-    const next = (resultEpochs.get(resultId) ?? 0) + 1;
-    resultEpochs.set(resultId, next);
-    return next;
-  };
-
-  const nextQueryGeneration = (key: string): number => {
-    const next = (queryGenerations.get(key) ?? 0) + 1;
-    queryGenerations.set(key, next);
-    return next;
-  };
-
-  const isCurrent = (owner: RequestOwner): boolean => {
-    if (
-      owner.projectEpoch !== projectEpoch ||
-      queryGenerations.get(owner.queryKey) !== owner.queryGeneration
-    ) {
-      return false;
-    }
-    const currentProject = captureProject();
-    if (currentProject !== owner.projectInstanceId) return false;
-    const resultId = resultIdFor(owner.scope);
-    return resultId === null || (resultEpochs.get(resultId) ?? 0) === owner.resultEpoch;
-  };
+  const isCurrent = (owner: RequestOwner): boolean =>
+    owner.projectEpoch === projectEpoch &&
+    requests.get(owner.queryKey) === owner &&
+    captureProject() === owner.projectInstanceId;
 
   const issueFor = (error: unknown, fallbackCode: string): ErrorReference => {
     try {
@@ -220,32 +197,29 @@ export function createResultQueryCoordinator(
   const load = async <T extends ResultQueryValue>(
     scope: ResultQueryScope,
     read: () => Promise<T | null>,
-    publish: (projectInstanceId: string, value: DeepReadonly<T>) => void,
+    publish: (projectInstanceId: string, value: DeepReadonly<T | null>) => void,
     fallbackCode: string,
   ): Promise<ResultQueryOutcome> => {
     const projectInstanceId = captureProject();
     if (!projectInstanceId) return { status: "notReady" };
 
     const key = queryKey(scope);
-    const resultId = resultIdFor(scope);
     const owner: RequestOwner = {
       projectInstanceId,
       projectEpoch,
-      resultEpoch: resultId === null ? null : (resultEpochs.get(resultId) ?? 0),
       queryKey: key,
-      queryGeneration: nextQueryGeneration(key),
       scope,
     };
+    requests.set(key, owner);
 
     try {
       const value = await read();
       if (!isCurrent(owner)) return { status: "stale" };
-      if (value === null) return { status: "notReady" };
 
       const snapshot = freezeProjectionSnapshot(value);
       if (!isCurrent(owner)) return { status: "stale" };
       publish(owner.projectInstanceId, snapshot);
-      return { status: "published" };
+      return { status: value === null ? "notReady" : "published" };
     } catch (error) {
       if (!isCurrent(owner)) return { status: "stale" };
       try {
@@ -258,6 +232,8 @@ export function createResultQueryCoordinator(
         // A failure publication cannot reopen the rejected query.
       }
       return { status: "failed" };
+    } finally {
+      if (requests.get(key) === owner) requests.delete(key);
     }
   };
 
@@ -302,19 +278,19 @@ export function createResultQueryCoordinator(
     );
   };
 
-  const loadPinHistory = (request: ResultPinHistoryRequest): Promise<ResultQueryOutcome> => {
-    if (!validPinHistoryRequest(request)) return Promise.resolve({ status: "notReady" });
+  const loadPinResult = (request: ResultPinRequest): Promise<ResultQueryOutcome> => {
+    if (!validPinRequest(request)) return Promise.resolve({ status: "notReady" });
     const scope: ResultQueryScope = {
-      kind: "pinHistory",
+      kind: "pinResult",
       graphPath: request.graphPath,
       output: request.output,
     };
     return load(
       scope,
-      async () => dependencies.service.getPinHistory(request.graphPath, request.output),
+      async () => dependencies.service.getPinResult(request.graphPath, request.output),
       (projectInstanceId, value) =>
-        dependencies.publication.publishPinHistory(projectInstanceId, request, value),
-      "result_pin_history_read_failed",
+        dependencies.publication.publishPinResult(projectInstanceId, request, value),
+      "result_pin_read_failed",
     );
   };
 
@@ -322,14 +298,15 @@ export function createResultQueryCoordinator(
     loadDescriptor,
     loadValue,
     loadPage,
-    loadPinHistory,
+    loadPinResult,
     resetProject: () => {
       projectEpoch += 1;
-      resultEpochs.clear();
-      queryGenerations.clear();
+      requests.clear();
     },
     resetResult: (resultId) => {
-      if (validIdentity(resultId)) nextResultEpoch(resultId);
+      for (const [key, owner] of requests) {
+        if (resultIdFor(owner.scope) === resultId) requests.delete(key);
+      }
     },
   };
 }

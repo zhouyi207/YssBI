@@ -25,12 +25,7 @@ export {
   type PinViewUiState,
   type ResolvePinViewTargetParams,
 } from "./pinViewTarget";
-export {
-  lookupPinHistory,
-  lookupPinPreview,
-  pinHistoryCacheKey,
-  pinPreviewCacheKey,
-} from "./pinResultIndex";
+export { lookupPinPreview, pinResultCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
 
 export {
   RUN_OUTPUT_PROJECTION_MAX_ENTRIES,

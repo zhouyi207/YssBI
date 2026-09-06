@@ -82,7 +82,7 @@ describe("Pin preview production path", () => {
       isPlaying: false,
     });
     vi.spyOn(PinPreviewGenerationService, "allocate").mockResolvedValue(1);
-    vi.spyOn(ResultService, "getPinHistory").mockResolvedValue([]);
+    vi.spyOn(ResultService, "getPinResult").mockResolvedValue(null);
     vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(null);
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -145,7 +145,7 @@ describe("Pin preview production path", () => {
     expect(() => structuredClone(emittedPin)).not.toThrow();
   });
 
-  it("routes output View through authoritative structured Pin history", async () => {
+  it("routes output View through the current Pin result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
       useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
@@ -187,35 +187,36 @@ describe("Pin preview production path", () => {
       await Promise.resolve();
     });
 
-    expect(ResultService.getPinHistory).toHaveBeenCalledWith(graphPath, fixture.outputAddress);
+    expect(ResultService.getPinResult).toHaveBeenCalledWith(graphPath, fixture.outputAddress);
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("opens an exact historical occurrence from the compact Pin context menu", async () => {
+  it("keeps the Pin context menu limited to actions after viewing a result", async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
       useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
     ).toBe(true);
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error("expected projected output pin");
-    vi.mocked(ResultService.getPinHistory).mockResolvedValue([
-      {
-        resultId: "17",
-        runId: "7",
-        activationId: "70",
+
+    const current = {
+      resultId: "17",
+      state: { kind: "ready" as const },
+      provenance: {
+        runId: "1",
+        activationId: "17",
         createdAtMs: "1000",
-        usage: { kind: "produced" },
-        state: { kind: "ready" },
+        graphPath,
+        nodeId: fixture.outputAddress.nodeId,
+        output: { graphPath, port: fixture.outputAddress },
       },
-      {
-        resultId: "18",
-        runId: "8",
-        activationId: "80",
-        createdAtMs: "2000",
-        usage: { kind: "produced" },
-        state: { kind: "cancelled" },
-      },
-    ]);
+      presentation: { kind: "inspector" as const },
+      valueKind: "scalar" as const,
+      metadata: null,
+      totalCount: 1,
+      title: "Result",
+    };
+    vi.mocked(ResultService.getPinResult).mockResolvedValue(current);
 
     act(() =>
       root.render(
@@ -249,23 +250,15 @@ describe("Pin preview production path", () => {
     });
 
     openContext();
-    const historical = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
-      (item) => item.textContent?.includes("17 · ready"),
-    );
-    expect(historical).toBeDefined();
-    await act(async () => {
-      historical?.click();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(ResultService.getDescriptor).toHaveBeenCalledWith("17");
-    expect(
-      useExecutionStore.getState().getGraph(graphPath).pinHistories.values().next().value,
-    ).toMatchObject({ selectedResultId: "17" });
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("contextMenu.pin.breakLinks"),
+      expect.stringContaining("contextMenu.pin.resetValue"),
+      expect.stringContaining("contextMenu.pin.view"),
+    ]);
   });
 
-  it("enables authoritative history View for a Function output", async () => {
+  it("enables current result View for a Function output", async () => {
     const functionPath = "functions/Helper.yssbi-function";
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
     expect(
@@ -306,7 +299,7 @@ describe("Pin preview production path", () => {
       viewItem?.click();
       await Promise.resolve();
     });
-    expect(ResultService.getPinHistory).toHaveBeenCalledWith(functionPath, fixture.outputAddress);
+    expect(ResultService.getPinResult).toHaveBeenCalledWith(functionPath, fixture.outputAddress);
     expect(execute).not.toHaveBeenCalled();
   });
 });

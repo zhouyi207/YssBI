@@ -229,7 +229,6 @@ export const zhCN = {
       history: "结果历史",
       historyLoading: "正在加载历史…",
       historyEmpty: "暂无结果历史",
-      historyLatest: "最新",
       viewDisabledNoRun: "请先运行图以生成可查看结果",
       viewDisabledNoUpstream: "无可用上游结果",
     },

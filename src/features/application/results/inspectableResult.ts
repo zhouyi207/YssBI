@@ -6,8 +6,7 @@ import {
 } from "@/features/domain/result/inspectableResultRef";
 export { outputPinRef, resultRef };
 export type { InspectableResultRef };
-import type { PinResultEntry, ResultDescriptor } from "./types";
-import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
+import type { ResultDescriptor } from "./types";
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,
@@ -21,51 +20,35 @@ export interface InspectableResultQueryDependencies {
 
 export interface ResolvedInspectableResultRef {
   readonly ref: Extract<InspectableResultRef, { kind: "result" }> | null;
-  readonly history: DeepReadonly<PinHistoryProjection> | null;
   readonly status: ResultQueryOutcome["status"];
 }
 
 export async function resolveInspectableResultRef(
   ref: InspectableResultRef,
   dependencies: InspectableResultQueryDependencies,
-  selectedResultId?: string | null,
 ): Promise<ResolvedInspectableResultRef> {
   if (ref.kind === "result") {
-    return { ref, history: null, status: "published" };
+    return { ref, status: "published" };
   }
 
   const request = { graphPath: ref.graphPath, output: ref.output };
-  const status = await dependencies.coordinator.loadPinHistory(request);
+  const status = await dependencies.coordinator.loadPinResult(request);
   if (status.status !== "published") {
-    return { ref: null, history: null, status: status.status };
+    return { ref: null, status: status.status };
   }
 
-  const entries = dependencies.read.getPinHistory(request);
-  if (!entries) return { ref: null, history: null, status: "notReady" };
-  const selected =
-    selectedResultId == null
-      ? entries[entries.length - 1]
-      : entries.find((entry) => entry.resultId === selectedResultId);
+  const result = dependencies.read.getPinResult(request);
   return {
-    ref: selected
-      ? (resultRef(selected.resultId) as Extract<InspectableResultRef, { kind: "result" }>)
-      : null,
-    history: {
-      graphPath: ref.graphPath,
-      output: ref.output,
-      entries,
-      selectedResultId: selected?.resultId ?? null,
-    },
-    status: "published",
+    ref: result ? { kind: "result", resultId: result.resultId } : null,
+    status: result ? "published" : "notReady",
   };
 }
 
 export async function resolveInspectableResult(
   ref: InspectableResultRef,
   dependencies: InspectableResultQueryDependencies,
-  selectedResultId?: string | null,
 ): Promise<DeepReadonly<ResultDescriptor> | null> {
-  const resolved = await resolveInspectableResultRef(ref, dependencies, selectedResultId);
+  const resolved = await resolveInspectableResultRef(ref, dependencies);
   if (!resolved.ref) return null;
 
   const status = await dependencies.coordinator.loadDescriptor({
@@ -74,5 +57,3 @@ export async function resolveInspectableResult(
   if (status.status !== "published") return null;
   return dependencies.read.getDescriptor(resolved.ref.resultId);
 }
-
-export type InspectableResultHistory = DeepReadonly<readonly PinResultEntry[]>;

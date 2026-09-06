@@ -6,7 +6,6 @@ import {
   requestAndOpenPinPreview,
 } from "@/features/application/editor/requestPinPreview";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
-import { executionResultUi } from "@/features/core/execution";
 import {
   buildPinViewParams,
   evaluatePinViewState,
@@ -25,7 +24,6 @@ import {
 import { dataValueFromBackend, dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { PRIMITIVE_SCALAR_INPUT_KEYS, scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
-import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import { PinContextMenu } from "../ContextMenu";
 import { GraphPinView, type GraphPinConnectionFeedbackViewModel } from "./GraphPinView";
 import { PinInput } from "./PinInput";
@@ -100,7 +98,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [historyProjection, setHistoryProjection] = useState<PinHistoryProjection>();
 
   const connectionFeedback = useGraphInteractionUi((state) => {
     if (!graphPath || !groupId) return null;
@@ -177,36 +174,16 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const showViewMenu = (viewState?.showMenu ?? false) || previewActionAvailable;
   const viewEnabled = (viewState?.enabled ?? false) || previewActionAvailable;
   const viewDisabledReason = previewActionAvailable ? null : (viewState?.disabledReason ?? null);
-  const historyOutputs = useMemo(
-    () => viewState?.refs.flatMap((ref) => (ref.kind === "outputPin" ? [ref.output] : [])) ?? [],
-    [viewState],
-  );
-  const firstHistoryOutput = historyOutputs[0];
-
   const handleView = useCallback(() => {
     if (!viewParams || !graphPath) return;
     if (viewState?.enabled) {
-      void openPinInspectableView(viewParams, t).then(() => {
-        if (!firstHistoryOutput) return;
-        const history = executionResultUi.getPinHistory(graphPath, firstHistoryOutput);
-        setHistoryProjection(
-          history ? (structuredClone(history) as unknown as PinHistoryProjection) : undefined,
-        );
-      });
+      void openPinInspectableView(viewParams, t);
       return;
     }
     if (previewActionAvailable) {
       void requestAndOpenPinPreview(graphPath, id, t);
     }
-  }, [
-    firstHistoryOutput,
-    graphPath,
-    id,
-    previewActionAvailable,
-    t,
-    viewParams,
-    viewState?.enabled,
-  ]);
+  }, [graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
 
   const hasLinks = linkCount > 0 || connectionIds.length > 0;
   const scalarInputKey = scalarPinInputKey(dataType);
@@ -268,15 +245,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
       viewEnabled={viewEnabled}
       viewDisabledTitle={pinViewDisabledTitle(viewDisabledReason, t)}
       onView={handleView}
-      historyEntries={historyProjection?.entries}
-      onViewHistory={(resultId) => {
-        if (!historyProjection || !viewParams) return;
-        executionResultUi.recordPinHistory({
-          ...historyProjection,
-          selectedResultId: resultId,
-        });
-        void openPinInspectableView(viewParams, t, { selectedResultId: resultId });
-      }}
       onClose={() => setContextMenu(null)}
     />
   ) : null;

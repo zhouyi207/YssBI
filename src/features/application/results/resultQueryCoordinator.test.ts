@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import type {
-  ResultDescriptor,
-  ResultPage,
-  ResultValue,
-  PinResultEntry,
-} from "@/shared/types/domain/result";
+import type { ResultDescriptor, ResultPage, ResultValue } from "@/shared/types/domain/result";
 import {
   createResultQueryCoordinator,
   type ResultQueryDependencies,
@@ -67,24 +62,11 @@ function page(resultId: string, offset: number, value: number): ResultPage {
   };
 }
 
-function history(resultId: string): PinResultEntry[] {
-  return [
-    {
-      resultId,
-      runId: "1",
-      activationId: "2",
-      createdAtMs: "4",
-      usage: { kind: "produced" },
-      state: { kind: "ready" },
-    },
-  ];
-}
-
 interface TestService {
   getDescriptor: (resultId: string) => Promise<ResultDescriptor | null>;
   getValue: (resultId: string) => Promise<ResultValue | null>;
   getPage: (resultId: string, offset: number, limit: number) => Promise<ResultPage | null>;
-  getPinHistory: (graphPath: string, output: PortAddressDto) => Promise<readonly PinResultEntry[]>;
+  getPinResult: (graphPath: string, output: PortAddressDto) => Promise<ResultDescriptor | null>;
 }
 
 function setup(): {
@@ -96,7 +78,7 @@ function setup(): {
     readonly descriptors: ResultDescriptor[];
     readonly values: ResultValue[];
     readonly pages: ResultPage[];
-    readonly histories: PinResultEntry[][];
+    readonly pinResults: (ResultDescriptor | null)[];
     readonly failures: Array<{ readonly scopeKind: string; readonly issueCode: string }>;
   };
 } {
@@ -104,19 +86,19 @@ function setup(): {
   const descriptors: ResultDescriptor[] = [];
   const values: ResultValue[] = [];
   const pages: ResultPage[] = [];
-  const histories: PinResultEntry[][] = [];
+  const pinResults: (ResultDescriptor | null)[] = [];
   const failures: Array<{ readonly scopeKind: string; readonly issueCode: string }> = [];
   const publication: ResultQueryPublication & {
     readonly descriptors: ResultDescriptor[];
     readonly values: ResultValue[];
     readonly pages: ResultPage[];
-    readonly histories: PinResultEntry[][];
+    readonly pinResults: (ResultDescriptor | null)[];
     readonly failures: Array<{ readonly scopeKind: string; readonly issueCode: string }>;
   } = {
     descriptors,
     values,
     pages,
-    histories,
+    pinResults,
     failures,
     publishDescriptor: (_projectId, _resultId, value) => {
       if (value) descriptors.push(value as ResultDescriptor);
@@ -127,8 +109,8 @@ function setup(): {
     publishPage: (_projectId, _request, value) => {
       if (value) pages.push(value as ResultPage);
     },
-    publishPinHistory: (_projectId, _request, entries) => {
-      histories.push(entries as PinResultEntry[]);
+    publishPinResult: (_projectId, _request, entries) => {
+      pinResults.push(entries as ResultDescriptor | null);
     },
     publishFailure: (_projectId, scope, issue) => {
       failures.push({ scopeKind: scope.kind, issueCode: issue.code });
@@ -138,7 +120,7 @@ function setup(): {
     getDescriptor: async () => descriptor,
     getValue: async () => ({ kind: "value", value: 4 }) as ResultValue,
     getPage: async (_resultId: string, offset: number) => page("17", offset, offset),
-    getPinHistory: async () => history("17"),
+    getPinResult: async () => descriptor,
   };
   const dependencies: ResultQueryDependencies = {
     readCurrentProjectInstanceId: () => currentProject.id,
@@ -211,7 +193,7 @@ describe("ResultQueryCoordinator", () => {
       status: "published",
     });
     await expect(
-      fixture.coordinator.loadPinHistory({
+      fixture.coordinator.loadPinResult({
         graphPath: "events/contract.yssbi-event",
         output,
       }),
@@ -225,7 +207,7 @@ describe("ResultQueryCoordinator", () => {
     });
     expect(fixture.publication.descriptors).toHaveLength(1);
     expect(fixture.publication.values).toHaveLength(1);
-    expect(fixture.publication.histories).toHaveLength(1);
+    expect(fixture.publication.pinResults).toHaveLength(1);
     expect(fixture.publication.failures).toEqual([
       { scopeKind: "value", issueCode: "result_value_read_failed" },
     ]);

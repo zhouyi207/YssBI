@@ -9,7 +9,6 @@ import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,
 } from "@/features/core/execution/pinViewTarget";
-import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -20,7 +19,6 @@ import {
   type InspectableResultRef,
 } from "@/features/application/results";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
-import type { PinHistoryProjection } from "@/features/core/execution/executionTypes";
 import { resultQueryCoordinator, resultQueryRead } from "@/features/application/results";
 import { resultPanelKey } from "@/features/domain/result";
 
@@ -37,7 +35,6 @@ export async function launchInspectablePresentation(
 export async function openInspectableResult(
   ref: InspectableResultRef,
   _t: TFunction,
-  options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
   let descriptor: ResultDescriptor | null;
   try {
@@ -46,20 +43,11 @@ export async function openInspectableResult(
       coordinator: resultQueryCoordinator,
       read: resultQueryRead,
     };
-    const resolved = await resolveInspectableResultRef(
-      ref,
-      dependencies,
-      options?.selectedResultId,
-    );
+    const resolved = await resolveInspectableResultRef(ref, dependencies);
     if (!isCurrentProjectIdentity(project)) return false;
-    if (resolved.history) {
-      useExecutionStore
-        .getState()
-        .recordPinHistory(structuredClone(resolved.history) as PinHistoryProjection);
-    }
     descriptor = resolved.ref
       ? (structuredClone(
-          await resolveInspectableResult(resolved.ref, dependencies, options?.selectedResultId),
+          await resolveInspectableResult(resolved.ref, dependencies),
         ) as ResultDescriptor | null)
       : null;
     if (!isCurrentProjectIdentity(project) || !descriptor) return false;
@@ -86,15 +74,10 @@ export async function openInspectableResult(
 export async function openPinInspectableView(
   params: ResolvePinViewTargetParams,
   t: TFunction,
-  options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
   const { refs } = evaluatePinViewState(params);
   for (const ref of refs) {
-    if (
-      await openInspectableResult(ref, t, {
-        selectedResultId: options?.selectedResultId,
-      })
-    ) {
+    if (await openInspectableResult(ref, t)) {
       return true;
     }
   }

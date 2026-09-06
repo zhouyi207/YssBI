@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type {
   ExecutionState,
   GraphExecutionState,
-  PinHistoryProjection,
+  PinResultProjection,
   RecordedEvent,
   RunFailureProjection,
 } from "./executionTypes";
@@ -16,7 +16,7 @@ import {
   snapshotToGraphPatch,
 } from "./executionVisualSession";
 import { clearedRunProjectionsPatch } from "./graphRunArtifacts";
-import { pinHistoryCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
+import { pinResultCacheKey, pinPreviewCacheKey } from "./pinResultIndex";
 import { appendRunOutput, emptyRunOutputProjection } from "./runOutputProjection";
 
 const emptyGraphState = (): GraphExecutionState => ({
@@ -29,7 +29,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   graphDirty: false,
   runOutput: emptyRunOutputProjection(),
   runFailure: null,
-  pinHistories: new Map(),
+  pinResults: new Map(),
   pinPreviews: new Map(),
 });
 
@@ -101,7 +101,7 @@ interface ExecutionStore extends ExecutionState {
   clearGraphRunProjections: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
-  recordPinHistory: (projection: PinHistoryProjection) => void;
+  recordPinResult: (projection: PinResultProjection) => void;
   recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
   recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
   clearRunOutput: (graphPath: string) => void;
@@ -230,12 +230,14 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     commitVisualSnapshot(graphPath, set);
   },
 
-  recordPinHistory: (projection) =>
+  recordPinResult: (projection) =>
     set((state) => {
       const graph = state.graphs[projection.graphPath] ?? emptyGraphState();
-      const pinHistories = new Map(graph.pinHistories);
-      pinHistories.set(pinHistoryCacheKey(projection.graphPath, projection.output), projection);
-      return updateGraph(state, projection.graphPath, { pinHistories });
+      const pinResults = new Map(graph.pinResults);
+      const key = pinResultCacheKey(projection.graphPath, projection.output);
+      if (projection.result) pinResults.set(key, projection);
+      else pinResults.delete(key);
+      return updateGraph(state, projection.graphPath, { pinResults });
     }),
 
   recordRunOutput: (graphPath, event) =>

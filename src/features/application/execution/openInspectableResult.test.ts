@@ -7,14 +7,14 @@ import {
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useExecutionStore } from "@/features/core/execution";
-import type { PinResultEntry, ResultDescriptor } from "@/shared/types/domain/result";
+import type { ResultDescriptor } from "@/shared/types/domain/result";
 
 const mocks = vi.hoisted(() => ({
   upsertResult: vi.fn(),
   showWorkbenchLayoutError: vi.fn(),
-  loadPinHistory: vi.fn(),
+  loadPinResult: vi.fn(),
   loadDescriptor: vi.fn(),
-  getPinHistory: vi.fn(),
+  getPinResult: vi.fn(),
   getDescriptor: vi.fn(),
 }));
 
@@ -33,11 +33,11 @@ vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback",
 
 vi.mock("@/features/application/results/runtime", () => ({
   resultQueryCoordinator: {
-    loadPinHistory: mocks.loadPinHistory,
+    loadPinResult: mocks.loadPinResult,
     loadDescriptor: mocks.loadDescriptor,
   },
   resultQueryRead: {
-    getPinHistory: mocks.getPinHistory,
+    getPinResult: mocks.getPinResult,
     getDescriptor: mocks.getDescriptor,
   },
 }));
@@ -79,12 +79,12 @@ beforeEach(() => {
   mocks.upsertResult.mockReset();
   mocks.upsertResult.mockResolvedValue({ panelInstanceId: "result-panel" });
   mocks.showWorkbenchLayoutError.mockReset();
-  mocks.loadPinHistory.mockReset();
-  mocks.loadPinHistory.mockResolvedValue({ status: "published" });
+  mocks.loadPinResult.mockReset();
+  mocks.loadPinResult.mockResolvedValue({ status: "published" });
   mocks.loadDescriptor.mockReset();
   mocks.loadDescriptor.mockResolvedValue({ status: "published" });
-  mocks.getPinHistory.mockReset();
-  mocks.getPinHistory.mockReturnValue([]);
+  mocks.getPinResult.mockReset();
+  mocks.getPinResult.mockReturnValue(null);
   mocks.getDescriptor.mockReset();
   mocks.getDescriptor.mockImplementation((resultId: string) =>
     resultId === plotDescriptor.resultId ? plotDescriptor : descriptor,
@@ -122,22 +122,22 @@ describe("openInspectableResult", () => {
     expect(openPresentationWindow).not.toHaveBeenCalled();
   });
 
-  it("drops Pin history that settles after the project identity changes", async () => {
-    let settleHistory!: (value: PinResultEntry[]) => void;
-    let markHistoryStarted!: () => void;
-    const historyStarted = new Promise<void>((resolve) => {
-      markHistoryStarted = resolve;
+  it("drops current Pin result that settles after the project identity changes", async () => {
+    let settlePinResult!: (value: ResultDescriptor | null) => void;
+    let markQueryStarted!: () => void;
+    const queryStarted = new Promise<void>((resolve) => {
+      markQueryStarted = resolve;
     });
-    mocks.loadPinHistory.mockImplementationOnce(() => {
-      markHistoryStarted();
+    mocks.loadPinResult.mockImplementationOnce(() => {
+      markQueryStarted();
       return new Promise<{ status: "published" }>((resolve) => {
-        settleHistory = (value) => {
-          mocks.getPinHistory.mockReturnValue(value);
+        settlePinResult = (value) => {
+          mocks.getPinResult.mockReturnValue(value);
           resolve({ status: "published" });
         };
       });
     });
-    const recordPinHistory = vi.spyOn(useExecutionStore.getState(), "recordPinHistory");
+    const recordPinResult = vi.spyOn(useExecutionStore.getState(), "recordPinResult");
 
     const pending = openInspectableResult(
       {
@@ -147,22 +147,13 @@ describe("openInspectableResult", () => {
       },
       t,
     );
-    await historyStarted;
+    await queryStarted;
     clearProjectLifecycle();
     startProjectLifecycle("project-2");
-    settleHistory([
-      {
-        resultId: "17",
-        runId: "run-1",
-        activationId: "activation-1",
-        createdAtMs: "1787270400000",
-        usage: { kind: "produced" },
-        state: { kind: "ready" },
-      },
-    ]);
+    settlePinResult(descriptor);
 
     await expect(pending).resolves.toBe(false);
-    expect(recordPinHistory).not.toHaveBeenCalled();
+    expect(recordPinResult).not.toHaveBeenCalled();
     expect(mocks.loadDescriptor).not.toHaveBeenCalled();
     expect(mocks.upsertResult).not.toHaveBeenCalled();
   });

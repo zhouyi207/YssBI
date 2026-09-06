@@ -1,9 +1,9 @@
 import {
-  resultRef,
+  outputPinRef,
   type InspectableResultRef,
 } from "@/features/domain/result/inspectableResultRef";
-import type { PinHistoryProjection } from "./executionTypes";
-import { pinHistoryCacheKey } from "./pinResultIndex";
+import type { PinResultProjection } from "./executionTypes";
+import { pinResultCacheKey } from "./pinResultIndex";
 
 export interface PinResultSearchEntry {
   id: string;
@@ -20,24 +20,28 @@ export interface PinResultSearchLabels {
 }
 
 export function buildPinResultSearchEntry(
-  history: PinHistoryProjection,
+  projection: PinResultProjection,
   labels: PinResultSearchLabels,
 ): PinResultSearchEntry | null {
-  const selected =
-    history.entries.find((entry) => entry.resultId === history.selectedResultId) ??
-    history.entries[history.entries.length - 1];
+  const selected = projection.result;
   if (!selected) return null;
 
   const nodeTitle = labels.nodeTitle.trim();
   const pinName = labels.pinName.trim();
   const sourceTitle = `${selected.state.kind} · ${selected.resultId}`;
-  const searchText = [nodeTitle, pinName, sourceTitle, history.graphPath, selected.runId]
+  const searchText = [
+    nodeTitle,
+    pinName,
+    sourceTitle,
+    projection.graphPath,
+    selected.provenance.runId,
+  ]
     .join(" ")
     .toLowerCase();
 
   return {
-    id: pinHistoryCacheKey(history.graphPath, history.output),
-    ref: resultRef(selected.resultId),
+    id: pinResultCacheKey(projection.graphPath, projection.output),
+    ref: outputPinRef(projection.graphPath, projection.output),
     nodeTitle,
     pinName,
     sourceTitle,
@@ -46,12 +50,12 @@ export function buildPinResultSearchEntry(
 }
 
 export function collectPinResultSearchEntries(
-  histories: ReadonlyMap<string, PinHistoryProjection>,
-  resolveLabels: (history: PinHistoryProjection) => PinResultSearchLabels,
+  results: ReadonlyMap<string, PinResultProjection>,
+  resolveLabels: (projection: PinResultProjection) => PinResultSearchLabels,
 ): PinResultSearchEntry[] {
-  return [...histories.values()]
-    .flatMap((history) => {
-      const entry = buildPinResultSearchEntry(history, resolveLabels(history));
+  return [...results.values()]
+    .flatMap((projection) => {
+      const entry = buildPinResultSearchEntry(projection, resolveLabels(projection));
       return entry ? [entry] : [];
     })
     .sort((left, right) => left.searchText.localeCompare(right.searchText));

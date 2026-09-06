@@ -1,74 +1,74 @@
 import { describe, expect, it } from "vitest";
-import type { PinHistoryProjection } from "./executionTypes";
-import { pinHistoryCacheKey } from "./pinResultIndex";
+import type { PinResultProjection } from "./executionTypes";
+import { pinResultCacheKey } from "./pinResultIndex";
 import {
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
 } from "./pinResultSearch";
 
-function history(
+function currentResult(
   portKey: string,
   resultId: string,
   state: "ready" | "cancelled" = "ready",
-): PinHistoryProjection {
+): PinResultProjection {
   const output = { kind: "declared" as const, nodeId: `node-${portKey}`, portKey };
   return {
     graphPath: "events/Main.yssbi-event",
     output,
-    selectedResultId: resultId,
-    entries: [
-      {
-        resultId,
+    result: {
+      resultId,
+      state: { kind: state },
+      provenance: {
         runId: `run-${resultId}`,
-        activationId: `activation-${resultId}`,
+        activationId: resultId,
         createdAtMs: "1000",
-        usage: { kind: "produced" },
-        state: { kind: state },
+        graphPath: "events/Main.yssbi-event",
+        nodeId: output.nodeId,
+        output: { graphPath: "events/Main.yssbi-event", port: output },
       },
-    ],
+      presentation: { kind: "inspector" },
+      valueKind: "scalar",
+      metadata: null,
+      totalCount: 1,
+      title: "Result",
+    },
   };
 }
 
 describe("pinResultSearch", () => {
-  it("builds searchable exact-result entries from history projections", () => {
-    const projection = history("result", "17");
+  it("builds searchable exact-result entries from current result projections", () => {
+    const projection = currentResult("result", "17");
     const entry = buildPinResultSearchEntry(projection, {
       nodeTitle: "OLS Regression",
       pinName: "Result",
     });
 
     expect(entry).toMatchObject({
-      id: pinHistoryCacheKey(projection.graphPath, projection.output),
+      id: pinResultCacheKey(projection.graphPath, projection.output),
       nodeTitle: "OLS Regression",
       pinName: "Result",
       sourceTitle: "ready · 17",
-      ref: { kind: "result", resultId: "17" },
+      ref: { kind: "outputPin", graphPath: projection.graphPath, output: projection.output },
     });
   });
 
-  it("uses selected historical result instead of silently replacing it with latest", () => {
-    const projection = history("result", "17");
-    projection.entries.push({
-      ...projection.entries[0],
-      resultId: "18",
-      runId: "run-18",
-      state: { kind: "cancelled" },
-    });
-
+  it("omits outputs without a current result", () => {
+    const projection = currentResult("result", "17");
+    projection.result = null;
     expect(
-      buildPinResultSearchEntry(projection, { nodeTitle: "Node", pinName: "Result" })?.ref,
-    ).toEqual({ kind: "result", resultId: "17" });
+      buildPinResultSearchEntry(projection, { nodeTitle: "Node", pinName: "Result" }),
+    ).toBeNull();
   });
 
-  it("collects and filters cached history projections", () => {
-    const first = history("alpha", "17");
-    const second = history("beta", "18", "cancelled");
-    const histories = new Map([
-      [pinHistoryCacheKey(first.graphPath, first.output), first],
-      [pinHistoryCacheKey(second.graphPath, second.output), second],
+  it("collects and filters cached current result projections", () => {
+    const first = currentResult("alpha", "17");
+    const second = currentResult("beta", "18", "cancelled");
+    const results = new Map([
+      [pinResultCacheKey(first.graphPath, first.output), first],
+      [pinResultCacheKey(second.graphPath, second.output), second],
     ]);
-    const entries = collectPinResultSearchEntries(histories, (projection) => ({
+    const entries = collectPinResultSearchEntries(results, (projection) => ({
       nodeTitle: projection.output.nodeId,
       pinName:
         projection.output.kind === "declared"
@@ -82,7 +82,7 @@ describe("pinResultSearch", () => {
   });
 
   it("does not fall back to opaque identities when semantic labels are unavailable", () => {
-    const projection = history("result", "17");
+    const projection = currentResult("result", "17");
 
     expect(buildPinResultSearchEntry(projection, { nodeTitle: "", pinName: "" })).toMatchObject({
       nodeTitle: "",

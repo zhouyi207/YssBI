@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PinHistoryProjection } from "./executionTypes";
+import type { PinResultProjection } from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { pinPreviewCacheKey } from "./pinResultIndex";
 import {
@@ -19,6 +19,24 @@ const instanceOutput: PortAddressDto = {
   nodeId: "node-1",
   templateKey: "result",
   instanceId: "instance-7",
+};
+
+const currentResult: NonNullable<PinResultProjection["result"]> = {
+  resultId: "1",
+  state: { kind: "ready" },
+  provenance: {
+    runId: "1",
+    activationId: "1",
+    createdAtMs: "1000",
+    graphPath: "events/Main.yssbi-event",
+    nodeId: declaredOutput.nodeId,
+    output: { graphPath: "events/Main.yssbi-event", port: declaredOutput },
+  },
+  presentation: { kind: "inspector" },
+  valueKind: "scalar",
+  metadata: null,
+  totalCount: 1,
+  title: "Result",
 };
 
 function beginPreview(
@@ -184,14 +202,13 @@ describe("useExecutionStore pin result lifecycle", () => {
       projectionDropped: false,
     });
 
-    store.recordPinHistory({
+    store.recordPinResult({
       graphPath,
       output: declaredOutput,
-      entries: [],
-      selectedResultId: null,
+      result: currentResult,
     });
     store.clearRunOutput(graphPath);
-    expect(useExecutionStore.getState().getGraph(graphPath).pinHistories.size).toBe(1);
+    expect(useExecutionStore.getState().getGraph(graphPath).pinResults.size).toBe(1);
 
     store.clearGraphRunProjections(graphPath);
     expect(useExecutionStore.getState().getGraph(graphPath).runOutput).toEqual({
@@ -201,14 +218,13 @@ describe("useExecutionStore pin result lifecycle", () => {
     });
   });
 
-  it("keeps history projections across graph-dirty visual invalidation", () => {
+  it("keeps current result projections across graph-dirty visual invalidation", () => {
     const graphPath = "events/Main.yssbi-event";
     const store = useExecutionStore.getState();
-    store.recordPinHistory({
+    store.recordPinResult({
       graphPath,
       output: declaredOutput,
-      entries: [],
-      selectedResultId: null,
+      result: currentResult,
     });
     store.completeExecution(graphPath);
 
@@ -216,34 +232,32 @@ describe("useExecutionStore pin result lifecycle", () => {
 
     const graph = useExecutionStore.getState().graphs[graphPath];
     expect(graph?.graphDirty).toBe(true);
-    expect(graph?.pinHistories.size).toBe(1);
+    expect(graph?.pinResults.size).toBe(1);
   });
 
-  it("clear action removes frontend history projections only", () => {
+  it("clear action removes frontend current result projections only", () => {
     const graphPath = "events/Main.yssbi-event";
     const store = useExecutionStore.getState();
-    store.recordPinHistory({
+    store.recordPinResult({
       graphPath,
       output: declaredOutput,
-      entries: [],
-      selectedResultId: null,
+      result: currentResult,
     });
 
     store.clearGraphRunProjections(graphPath);
 
-    expect(useExecutionStore.getState().graphs[graphPath]?.pinHistories.size).toBe(0);
+    expect(useExecutionStore.getState().graphs[graphPath]?.pinResults.size).toBe(0);
   });
 
   it("releases only frontend result projections when a graph tab is fully closed", () => {
     const graphPath = "events/Main.yssbi-event";
-    const projection: PinHistoryProjection = {
+    const projection: PinResultProjection = {
       graphPath,
       output: declaredOutput,
-      entries: [],
-      selectedResultId: null,
+      result: currentResult,
     };
     const store = useExecutionStore.getState();
-    store.recordPinHistory(projection);
+    store.recordPinResult(projection);
 
     store.releaseGraphExecutionState(graphPath);
 

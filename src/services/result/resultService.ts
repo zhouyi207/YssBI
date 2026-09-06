@@ -1,13 +1,7 @@
 import { invokeCommand } from "@/services/ipc";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
-import type {
-  PinResultEntry,
-  ResultDescriptor,
-  ResultPage,
-  ResultValue,
-} from "@/shared/types/dto/result";
+import type { ResultDescriptor, ResultPage, ResultValue } from "@/shared/types/dto/result";
 import {
-  parsePinResultHistory,
   parseResultDescriptor,
   parseResultPage,
   parseResultValue,
@@ -37,8 +31,11 @@ export class ResultService {
     return nullable(value, parseResultPage);
   }
 
-  static async getPinHistory(graphPath: string, output: PortAddressDto): Promise<PinResultEntry[]> {
-    const value = await invokeCommand<unknown>("get_pin_result_history", { graphPath, output });
-    return parsePinResultHistory(value);
+  static async getPinResult(
+    graphPath: string,
+    output: PortAddressDto,
+  ): Promise<ResultDescriptor | null> {
+    const value = await invokeCommand<unknown>("get_pin_result", { graphPath, output });
+    return nullable(value, parseResultDescriptor);
   }
 }

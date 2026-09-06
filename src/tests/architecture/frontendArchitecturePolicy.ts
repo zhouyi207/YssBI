@@ -153,10 +153,7 @@ const VIEW_CORE_CAPABILITIES = [
   }),
   viewCoreCapability("src/features/core/editor/ui.ts", ["useEditorUi"]),
   viewCoreCapability("src/features/core/editor/detail/detailTypes.ts", ["DetailTarget"]),
-  viewCoreCapability("src/features/core/execution/executionTypes.ts", [
-    "PinHistoryProjection",
-    "RunOutputProjection",
-  ]),
+  viewCoreCapability("src/features/core/execution/executionTypes.ts", ["RunOutputProjection"]),
   viewCoreCapability("src/features/core/execution/executionVisualSession.ts", [
     "connectionKey",
     "getExecutionVisual",
@@ -165,7 +162,6 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/execution/graphRunArtifacts.ts", [
     "graphHasClearableArtifacts",
   ]),
-  viewCoreCapability("src/features/core/execution/pinResultIndex.ts", ["pinHistoryCacheKey"]),
   viewCoreCapability("src/features/core/execution/pinResultSearch.ts", ["PinResultSearchEntry"]),
   viewCoreCapability("src/features/core/execution/pinViewTarget.ts", [
     "buildPinViewParams",
@@ -174,7 +170,7 @@ const VIEW_CORE_CAPABILITIES = [
   ]),
   viewCoreCapability("src/features/core/execution/read.ts", ["useExecutionRead"]),
   viewCoreCapability("src/features/core/execution/ui.ts", ["executionResultUi"], {
-    executionResultUi: ["recordPinHistory", "getPinHistory", "clearRunOutput"],
+    executionResultUi: ["clearRunOutput"],
   }),
   viewCoreCapability("src/features/core/execution/useExecutionPlayback.ts", [
     "useExecutionPlayback",

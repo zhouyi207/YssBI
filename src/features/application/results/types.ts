@@ -3,7 +3,6 @@ import type { ErrorReference } from "@/shared/types/domain/diagnostics";
 export type {
   ResultPlotKind as PlotChart,
   ResultPresentation as Presentation,
-  PinResultEntry,
   ResultReportKind as ReportKind,
   ResultDescriptor,
   ResultPage,

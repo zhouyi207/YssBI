@@ -28,7 +28,7 @@ const connection: EditorConnectionProjectionDto = {
 };
 
 describe("pinViewTarget", () => {
-  it("builds an authoritative output-pin history ref from a structured address", () => {
+  it("builds an authoritative output-pin result ref from a structured address", () => {
     const state = evaluatePinViewState({
       graphPath,
       address: output,
@@ -51,7 +51,7 @@ describe("pinViewTarget", () => {
     expect(state.refs).toEqual([{ kind: "outputPin", graphPath, output }]);
   });
 
-  it("never creates input history when the connection does not target that input", () => {
+  it("never creates input result when the connection does not target that input", () => {
     const otherInput: PortAddressDto = { ...input, portKey: "other" };
     expect(
       inspectableRefsFromPinView({
@@ -74,7 +74,7 @@ describe("pinViewTarget", () => {
     ).toBe(false);
   });
 
-  it("keeps output history lookup enabled before any run", () => {
+  it("keeps output result lookup enabled before any run", () => {
     expect(
       evaluatePinViewState({
         graphPath,

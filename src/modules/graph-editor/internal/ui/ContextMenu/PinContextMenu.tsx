@@ -7,7 +7,6 @@ import {
   type ActionMenuSection,
   type ActionMenuItem,
 } from "@/shared/ui/actionMenu";
-import type { PinResultEntry } from "@/shared/types/domain/result";
 
 export interface PinContextMenuProps {
   position: ActionMenuPosition;
@@ -19,8 +18,6 @@ export interface PinContextMenuProps {
   viewEnabled?: boolean;
   viewDisabledTitle?: string;
   onView?: () => void;
-  historyEntries?: readonly PinResultEntry[];
-  onViewHistory?: (resultId: string) => void;
   onClose: () => void;
 }
 
@@ -34,8 +31,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   viewEnabled = false,
   viewDisabledTitle,
   onView,
-  historyEntries,
-  onViewHistory,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -70,19 +65,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
       });
     }
 
-    [...(historyEntries ?? [])].reverse().forEach((entry, index) => {
-      const createdAt = Number(entry.createdAtMs);
-      const time = Number.isFinite(createdAt)
-        ? new Date(createdAt).toLocaleString()
-        : entry.createdAtMs;
-      primaryItems.push({
-        id: `view-history-${entry.activationId}`,
-        label: `${entry.resultId} · ${entry.state.kind}${index === 0 ? ` · ${p("historyLatest")}` : ""}`,
-        shortcut: `${time} · ${entry.runId}`,
-        onClick: () => onViewHistory?.(entry.resultId),
-      });
-    });
-
     return [{ items: primaryItems }];
   }, [
     t,
@@ -94,8 +76,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
     viewEnabled,
     viewDisabledTitle,
     onView,
-    historyEntries,
-    onViewHistory,
   ]);
 
   return <ActionMenu position={position} sections={sections} onClose={onClose} />;

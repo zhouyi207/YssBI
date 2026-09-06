@@ -6,7 +6,7 @@ import type {
   ExecutionStatus,
   GraphExecutionState,
   NodeExecutionState,
-  PinHistoryProjection,
+  PinResultProjection,
   PinPreviewState,
   RunOutputProjection,
   RunFailureProjection,
@@ -22,7 +22,7 @@ export interface GraphExecutionProjection {
   readonly graphDirty: boolean;
   readonly runOutput: DeepReadonly<RunOutputProjection>;
   readonly runFailure: DeepReadonly<RunFailureProjection> | null;
-  readonly pinHistories: ReadonlyMap<string, DeepReadonly<PinHistoryProjection>>;
+  readonly pinResults: ReadonlyMap<string, DeepReadonly<PinResultProjection>>;
   readonly pinPreviews: ReadonlyMap<string, DeepReadonly<PinPreviewState>>;
 }
 
@@ -48,7 +48,7 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
     graphDirty: graph.graphDirty,
     runOutput: graph.runOutput,
     runFailure: graph.runFailure,
-    pinHistories: graph.pinHistories,
+    pinResults: graph.pinResults,
     pinPreviews: graph.pinPreviews,
   };
 }

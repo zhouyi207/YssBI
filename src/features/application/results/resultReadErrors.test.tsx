@@ -9,7 +9,7 @@ import { useResultValue } from "./useResultValue";
 import {
   createResultQueryCoordinator,
   type ResultPageRequest,
-  type ResultPinHistoryRequest,
+  type ResultPinRequest,
   type ResultQueryReadCapability,
   type ResultQueryScope,
   type ResultQueryServicePort,
@@ -48,8 +48,8 @@ function scopeKey(scope: ResultQueryScope): string {
       return `${scope.kind}:${scope.resultId}`;
     case "page":
       return `page:${pageKey(scope)}`;
-    case "pinHistory":
-      return `pinHistory:${scope.graphPath}:${JSON.stringify(scope.output)}`;
+    case "pinResult":
+      return `pinResult:${scope.graphPath}:${JSON.stringify(scope.output)}`;
   }
 }
 
@@ -68,9 +68,7 @@ function createTestRuntime(): TestRuntime {
       async (_resultId: string, _offset: number, _limit: number): Promise<ResultPage | null> =>
         null,
     ),
-    getPinHistory: vi.fn(
-      async (_graphPath: string, _output: ResultPinHistoryRequest["output"]) => [],
-    ),
+    getPinResult: vi.fn(async (_graphPath: string, _output: ResultPinRequest["output"]) => null),
   };
 
   const read: ResultQueryReadCapability = {
@@ -81,7 +79,7 @@ function createTestRuntime(): TestRuntime {
     getDescriptor: () => null,
     getValue: (resultId) => values.get(resultId) ?? null,
     getPage: (request) => pages.get(pageKey(request)) ?? null,
-    getPinHistory: () => null,
+    getPinResult: () => null,
     getFailure: (scope) => failures.get(scopeKey(scope)) ?? null,
   };
 
@@ -98,7 +96,7 @@ function createTestRuntime(): TestRuntime {
         pages.set(pageKey(request), page);
         notify();
       },
-      publishPinHistory: () => undefined,
+      publishPinResult: () => undefined,
       publishFailure: (_project, scope, issue) => {
         failures.set(scopeKey(scope), issue);
         notify();
