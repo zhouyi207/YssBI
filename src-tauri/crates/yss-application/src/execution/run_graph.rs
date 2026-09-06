@@ -153,7 +153,7 @@ pub enum RunApplicationEventKind {
     RunCompleted,
     RunCancelled,
     RunErrored {
-        phase: RunPhase,
+        failure: yss_execution::error::RunFailure,
     },
     PinPreviewResultReady {
         output: PlanOutputRef,
@@ -415,7 +415,7 @@ where
                     RunApplicationEventKind::RunCancelled
                 } else {
                     RunApplicationEventKind::RunErrored {
-                        phase: RunPhase::Execution,
+                        failure: error.failure(),
                     }
                 };
                 let _ = deliver(RunApplicationEvent::new(identity, kind));
@@ -478,7 +478,7 @@ where
                 &identity,
                 &mut deliver,
                 RunApplicationEventKind::RunErrored {
-                    phase: RunPhase::Finalization,
+                    failure: finalization_failure(),
                 },
             );
             return Err(ExecutionApplicationError::Finalization(error));
@@ -494,7 +494,7 @@ where
             &identity,
             &mut deliver,
             RunApplicationEventKind::RunErrored {
-                phase: RunPhase::Finalization,
+                failure: finalization_failure(),
             },
         );
         return Err(ExecutionApplicationError::RunFinalization(error));
@@ -568,8 +568,16 @@ fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplic
     match error {
         ProjectEffectCommitError::Cancelled => RunApplicationEventKind::RunCancelled,
         _ => RunApplicationEventKind::RunErrored {
-            phase: RunPhase::Finalization,
+            failure: finalization_failure(),
         },
+    }
+}
+
+fn finalization_failure() -> yss_execution::error::RunFailure {
+    yss_execution::error::RunFailure {
+        code: yss_execution::error::RunFailureCode::FinalizationFailed,
+        phase: RunPhase::Finalization,
+        source: None,
     }
 }
 

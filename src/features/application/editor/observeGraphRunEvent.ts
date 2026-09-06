@@ -89,9 +89,21 @@ export function observeGraphRunEvent(
     observePinPreviewEvent(graphPath, event, preview);
     return;
   }
+  if (event.run.graphPath !== graphPath) return;
   if (event.kind.type === "runStarted") {
     useExecutionStore.getState().setActiveRunId(graphPath, event.run.runId);
   }
-  if (event.kind.type === "runErrored") state.outcome = "error";
+  if (event.kind.type === "runErrored") {
+    const execution = useExecutionStore.getState();
+    if (execution.getGraph(graphPath).runId !== event.run.runId) return;
+    state.outcome = "error";
+    execution.recordRunFailure(graphPath, {
+      runId: event.run.runId,
+      code: event.kind.code,
+      phase: event.kind.phase,
+      source: event.kind.source,
+      incidentId: null,
+    });
+  }
   if (event.kind.type === "runCancelled") state.outcome = "cancelled";
 }

@@ -64,8 +64,9 @@
     {
       "kind": {
         "code": "kernelFailed",
-        "phase": null,
-        "type": "runErrored"
+        "phase": "execution",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -76,8 +77,9 @@
     {
       "kind": {
         "code": "deadlineExceeded",
-        "phase": "queueWait",
-        "type": "runErrored"
+        "phase": "admission",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -88,8 +90,9 @@
     {
       "kind": {
         "code": "deadlineExceeded",
-        "phase": "kernel",
-        "type": "runErrored"
+        "phase": "execution",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -100,8 +103,9 @@
     {
       "kind": {
         "code": "deadlineExceeded",
-        "phase": "streamSend",
-        "type": "runErrored"
+        "phase": "resourcePreparation",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -112,8 +116,9 @@
     {
       "kind": {
         "code": "deadlineExceeded",
-        "phase": "streamReceive",
-        "type": "runErrored"
+        "phase": "finalization",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -124,32 +129,9 @@
     {
       "kind": {
         "code": "deadlineExceeded",
-        "phase": "adapterIo",
-        "type": "runErrored"
-      },
-      "run": {
-        "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
-    },
-    {
-      "kind": {
-        "code": "deadlineExceeded",
-        "phase": "resultPublication",
-        "type": "runErrored"
-      },
-      "run": {
-        "graphPath": "events/contract.yssbi-event",
-        "projectSessionId": "contract-session",
-        "runId": "9007199254740993"
-      }
-    },
-    {
-      "kind": {
-        "code": "deadlineExceeded",
-        "phase": "cleanup",
-        "type": "runErrored"
+        "phase": "planValidation",
+        "type": "runErrored",
+        "source": null
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",
@@ -196,6 +178,23 @@
           "portAddress": null
         },
         "type": "resultInspectionRequested"
+      },
+      "run": {
+        "graphPath": "events/contract.yssbi-event",
+        "projectSessionId": "contract-session",
+        "runId": "9007199254740993"
+      }
+    },
+    {
+      "kind": {
+        "type": "runErrored",
+        "code": "divisionByZero",
+        "phase": "execution",
+        "source": {
+          "graphPath": "events/contract.yssbi-event",
+          "nodeId": "00000000-0000-0000-0000-000000000002",
+          "portAddress": null
+        }
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",

@@ -108,35 +108,7 @@ export function parseExecutionDemandDto(value: unknown): ExecutionDemandDto {
 }
 
 function parseRunErrorCode(value: unknown): RunErrorCode {
-  const code = parseDiscriminant(value, RUN_ERROR_CODES, "run error code");
-  switch (code) {
-    case "invalidPlan":
-    case "cancelled":
-    case "activationIdExhausted":
-    case "runtimeIdExhausted":
-    case "deadlineExceeded":
-    case "kernelNotFound":
-    case "kernelFailed":
-    case "relationalBackendNotFound":
-    case "relationalOperatorInvalid":
-    case "relationalColumnMissing":
-    case "relationalTypeMismatch":
-    case "relationalInputShapeInvalid":
-    case "relationalHintInvalid":
-    case "stream":
-    case "missingValue":
-    case "outputCount":
-    case "operationAlreadyExecuted":
-    case "functionPlanNotFound":
-    case "functionPlanFailed":
-    case "recursionLimitExceeded":
-    case "projectDraining":
-    case "resourceSnapshotMismatch":
-    case "resourceAcquire":
-      return code;
-    default:
-      return assertNever(code);
-  }
+  return parseDiscriminant(value, RUN_ERROR_CODES, "run error code");
 }
 
 function parseRunPhase(value: unknown): RunPhase {
@@ -144,12 +116,11 @@ function parseRunPhase(value: unknown): RunPhase {
 }
 
 function parseErrorOutcome(value: UnknownRecord): RunErrorOutcome {
-  const code = parseRunErrorCode(value.code);
-  if (code === "deadlineExceeded") {
-    return { code, phase: parseRunPhase(value.phase) };
-  }
-  if (value.phase !== null) return fail("run error phase");
-  return { code, phase: null };
+  return {
+    code: parseRunErrorCode(value.code),
+    phase: parseRunPhase(value.phase),
+    source: value.source === null ? null : parseResultInspectionSource(value.source),
+  };
 }
 
 function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
@@ -198,7 +169,7 @@ function parseRunEventKind(value: unknown): RunEventKind {
       if (!hasExactKeys(value, ["type"])) return fail("runCompleted");
       return { type: "runCompleted" };
     case "runErrored":
-      if (!hasExactKeys(value, ["type", "code", "phase"])) return fail("runErrored");
+      if (!hasExactKeys(value, ["type", "code", "phase", "source"])) return fail("runErrored");
       return { type: "runErrored", ...parseErrorOutcome(value) };
     case "runCancelled":
       if (!hasExactKeys(value, ["type"])) return fail("runCancelled");

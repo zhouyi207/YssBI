@@ -48,6 +48,8 @@ import {
 import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
 import { compileGraphDraft } from "@/features/application/graphDraft/compileGraphDraft";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { normalizeApplicationIpcError } from "@/features/application/errorReference";
+import { revealWorkbenchView } from "@/modules/workbench/public";
 
 function projectParentDirectory(metadataOrRootPath: string): string {
   const normalized = metadataOrRootPath.replace(/\\/g, "/");
@@ -315,6 +317,7 @@ export function useProjectOperations() {
 
         if (!isCurrentProjectIdentity(project)) return;
         finalizeExecutionRun(graphPath, recording, runState.outcome);
+        if (runState.outcome === "error") void revealWorkbenchView("output");
       } catch (e) {
         if (!isCurrentProjectIdentity(project)) return;
         if (isExecutionCancelledError(e)) {
@@ -323,8 +326,23 @@ export function useProjectOperations() {
           return;
         }
 
-        logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
+        const error = normalizeApplicationIpcError("execute_compiled_graph", e);
+        const execution = useExecutionStore.getState();
+        const graph = execution.getGraph(graphPath);
+        execution.recordRunFailure(graphPath, {
+          ...(graph.runFailure ?? {
+            runId: graph.runId,
+            code: error.code,
+            phase: null,
+            source: null,
+          }),
+          incidentId: error.incidentId,
+        });
+        logger.exec.error(
+          `执行失败: ${error.code}${error.incidentId ? ` (incident: ${error.incidentId})` : ""}`,
+        );
         finalizeExecutionRun(graphPath, [], "error");
+        void revealWorkbenchView("output");
       }
     },
     [finalizeExecutionRun, t],

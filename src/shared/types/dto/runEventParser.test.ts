@@ -209,7 +209,7 @@ describe("execution wire parsers", () => {
     const valid = executionWire.runEvents[0];
     const deadline = {
       ...valid,
-      kind: { type: "runErrored", code: "deadlineExceeded", phase: "queueWait" },
+      kind: { type: "runErrored", code: "deadlineExceeded", phase: "admission", source: null },
     };
 
     expect(parseRunEvent(deadline)).toEqual(deadline);

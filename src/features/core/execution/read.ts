@@ -9,6 +9,7 @@ import type {
   PinHistoryProjection,
   PinPreviewState,
   RunOutputProjection,
+  RunFailureProjection,
 } from "@/features/core/execution/executionTypes";
 
 export interface GraphExecutionProjection {
@@ -20,6 +21,7 @@ export interface GraphExecutionProjection {
   readonly recording: readonly import("@/features/core/execution/executionTypes").RecordedEvent[];
   readonly graphDirty: boolean;
   readonly runOutput: DeepReadonly<RunOutputProjection>;
+  readonly runFailure: DeepReadonly<RunFailureProjection> | null;
   readonly pinHistories: ReadonlyMap<string, DeepReadonly<PinHistoryProjection>>;
   readonly pinPreviews: ReadonlyMap<string, DeepReadonly<PinPreviewState>>;
 }
@@ -45,6 +47,7 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
     recording: graph.recording,
     graphDirty: graph.graphDirty,
     runOutput: graph.runOutput,
+    runFailure: graph.runFailure,
     pinHistories: graph.pinHistories,
     pinPreviews: graph.pinPreviews,
   };

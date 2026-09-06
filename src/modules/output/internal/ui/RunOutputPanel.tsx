@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { executionResultUi } from "@/features/core/execution";
 import { useExecutionRead } from "@/features/core/execution/read";
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
+import { revealGraphProblem } from "@/features/application/editor/revealGraphProblem";
 import type { RunOutputProjection } from "@/features/core/execution/executionTypes";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 
@@ -23,11 +24,16 @@ function formatRunOutputSource(entry: RunOutputProjection["entries"][number]): s
 
 export function RunOutputPanel() {
   const { t } = useTranslation();
-  const graphPath = useGraphSessionUi((snapshot) => snapshot.focusedSession?.graphPath ?? null);
+  const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
+  const graphPath = focusedSession?.graphPath ?? null;
   const runOutput = useExecutionRead((snapshot) =>
     graphPath ? (snapshot.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT) : EMPTY_RUN_OUTPUT,
   );
   const clearRunOutput = executionResultUi.clearRunOutput;
+  const failure = useExecutionRead((snapshot) =>
+    graphPath ? (snapshot.graphs[graphPath]?.runFailure ?? null) : null,
+  );
+  const failureSource = failure?.source;
   const hasOutput = runOutput.entries.length > 0 || runOutput.projectionDropped;
 
   return (
@@ -43,7 +49,7 @@ export function RunOutputPanel() {
           type="button"
           variant="ghost"
           size="icon-sm"
-          disabled={!graphPath || !hasOutput}
+          disabled={!graphPath || (!hasOutput && !failure)}
           onClick={() => {
             if (graphPath) clearRunOutput(graphPath);
           }}
@@ -58,12 +64,52 @@ export function RunOutputPanel() {
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
           {t("panel.outputNoGraph")}
         </div>
-      ) : !hasOutput ? (
+      ) : !hasOutput && !failure ? (
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
           {t("panel.outputEmpty")}
         </div>
       ) : (
         <ScrollArea orientation="both" className="min-h-0 flex-1">
+          {failure ? (
+            <section
+              role="alert"
+              className="space-y-2 border-b border-destructive/30 bg-destructive/5 p-3 text-xs"
+            >
+              <p className="font-medium text-destructive">{t("runFailure.title")}</p>
+              <p>
+                {t(`runFailure.causes.${failure.code}`, { defaultValue: t("runFailure.unknown") })}
+              </p>
+              {failureSource?.nodeId ? (
+                <button
+                  type="button"
+                  className="block text-left text-primary underline-offset-2 enabled:hover:underline disabled:text-muted-foreground"
+                  disabled={!focusedSession}
+                  title={failureSource.nodeId}
+                  onClick={() => {
+                    if (focusedSession && failureSource.nodeId) {
+                      void revealGraphProblem(
+                        failureSource.graphPath,
+                        { kind: "node", nodeId: failureSource.nodeId },
+                        focusedSession.groupId,
+                      );
+                    }
+                  }}
+                >
+                  {t("runFailure.node", {
+                    name: failureSource.nodeId,
+                  })}
+                </button>
+              ) : null}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                {failure.phase ? <span>{t(`runFailure.phases.${failure.phase}`)}</span> : null}
+                {failure.runId ? <span>{t("runFailure.run", { id: failure.runId })}</span> : null}
+                <span>{t("runFailure.code", { code: failure.code })}</span>
+                {failure.incidentId ? (
+                  <span>{t("runFailure.incident", { id: failure.incidentId })}</span>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           <div className="min-w-max py-1 font-mono text-xs" role="log" aria-live="polite">
             {runOutput.projectionDropped ? (
               <div className="px-3 py-1.5 text-amber-500">{t("panel.outputProjectionDropped")}</div>

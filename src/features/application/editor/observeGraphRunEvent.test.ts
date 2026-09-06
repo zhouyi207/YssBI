@@ -208,7 +208,10 @@ describe("observeGraphRunEvent", () => {
 
   it.each([
     [{ type: "runCompleted" } as const, "completed"],
-    [{ type: "runErrored", code: "kernelFailed", phase: null } as const, "error"],
+    [
+      { type: "runErrored", code: "kernelFailed", phase: "execution", source: null } as const,
+      "error",
+    ],
     [{ type: "runCancelled" } as const, "cancelled"],
   ])("keeps preview $type isolated from an active ordinary run", (terminal, expectedTerminal) => {
     const graphPath = "events/Main.yssbi-event";
@@ -273,13 +276,21 @@ describe("observeGraphRunEvent", () => {
 
   it("classifies canonical terminal events", () => {
     const outcome: GraphRunOutcomeState = { outcome: "success" };
+    const graphPath = "events/Main.yssbi-event";
+    useExecutionStore.getState().startExecution(graphPath);
+    observeGraphRunEvent(graphPath, event({ type: "runStarted" }), outcome);
 
     observeGraphRunEvent(
       "events/Main.yssbi-event",
-      event({ type: "runErrored", code: "kernelFailed", phase: null }),
+      event({ type: "runErrored", code: "kernelFailed", phase: "execution", source: null }),
       outcome,
     );
     expect(outcome.outcome).toBe("error");
+    expect(useExecutionStore.getState().getGraph(graphPath).runFailure).toMatchObject({
+      code: "kernelFailed",
+      phase: "execution",
+      runId: "9007199254740993",
+    });
 
     observeGraphRunEvent("events/Main.yssbi-event", event({ type: "runCancelled" }), outcome);
     expect(outcome.outcome).toBe("cancelled");

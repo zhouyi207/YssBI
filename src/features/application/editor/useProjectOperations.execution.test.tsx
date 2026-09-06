@@ -17,6 +17,9 @@ import {
   makeGraphEditorSession,
 } from "@/tests/helpers/editorProjectionFixtures";
 import { useProjectOperations } from "./useProjectOperations";
+import { revealWorkbenchView } from "@/modules/workbench/public";
+import { normalizeIpcError } from "@/services/ipc/ipcError";
+import { ensureGraphExecutionTerminal } from "@/features/core/execution/executionRecording";
 
 const projectInstanceId = "project-instance-1";
 const graphPath = "events/Main.yssbi-event";
@@ -41,6 +44,7 @@ const executionState = {
   setRecording: vi.fn(),
   completeExecution: vi.fn(),
   failExecution: vi.fn(),
+  recordRunFailure: vi.fn(),
   interruptExecution: vi.fn(),
   getGraph: vi.fn(() => ({ status: "completed" })),
   clearGraphRunProjections: vi.fn(),
@@ -48,6 +52,10 @@ const executionState = {
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock("@/modules/workbench/public", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/workbench/public")>()),
+  revealWorkbenchView: vi.fn().mockResolvedValue(null),
 }));
 vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => executionState },
@@ -224,6 +232,27 @@ describe("useProjectOperations execution demand", () => {
 
     expect(executionState.clearGraphRunProjections).toHaveBeenCalledWith(graphPath);
     expect("clearGraphExecutionArtifacts" in ProjectService).toBe(false);
+  });
+
+  it("shows command failures in Output when no run event was delivered", async () => {
+    executionState.getGraph.mockReturnValueOnce({ status: "running", runId: null } as never);
+    vi.mocked(ProjectService.executeCompiledGraph).mockRejectedValueOnce(
+      normalizeIpcError("execute_compiled_graph", {
+        code: "graph_compile_required",
+        details: null,
+        incidentId: null,
+      }),
+    );
+    await act(async () => operations.executeGraph());
+    expect(executionState.recordRunFailure).toHaveBeenCalledWith(graphPath, {
+      runId: null,
+      code: "graph_compile_required",
+      phase: null,
+      source: null,
+      incidentId: null,
+    });
+    expect(ensureGraphExecutionTerminal).toHaveBeenCalledWith(graphPath, "error");
+    expect(revealWorkbenchView).toHaveBeenCalledWith("output");
   });
 
   it("ignores delayed events and completion after project lifecycle replacement", async () => {

@@ -6,7 +6,11 @@
 
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { PinResultEntry } from "@/shared/types/domain/result";
-import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
+import type {
+  RunOutputChannelEvent,
+  RunPhase,
+  ResultInspectionSource,
+} from "@/shared/types/domain/runEvent";
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
@@ -50,6 +54,14 @@ export interface RunOutputProjection {
   projectionDropped: boolean;
 }
 
+export interface RunFailureProjection {
+  runId: string | null;
+  code: string;
+  phase: RunPhase | null;
+  source: ResultInspectionSource | null;
+  incidentId: string | null;
+}
+
 export interface PinPreviewState {
   graphPath: string;
   port: PortAddressDto;
@@ -71,6 +83,7 @@ export interface GraphExecutionState {
   recording: RecordedEvent[];
   graphDirty: boolean;
   runOutput: RunOutputProjection;
+  runFailure: RunFailureProjection | null;
 
   /** Backend output-Pin history projections keyed by exact graph path and address. */
   pinHistories: Map<string, PinHistoryProjection>;

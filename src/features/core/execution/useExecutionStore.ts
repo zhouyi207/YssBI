@@ -4,6 +4,7 @@ import type {
   GraphExecutionState,
   PinHistoryProjection,
   RecordedEvent,
+  RunFailureProjection,
 } from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
@@ -27,6 +28,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   recording: [],
   graphDirty: false,
   runOutput: emptyRunOutputProjection(),
+  runFailure: null,
   pinHistories: new Map(),
   pinPreviews: new Map(),
 });
@@ -101,6 +103,7 @@ interface ExecutionStore extends ExecutionState {
   commitExecutionVisual: (graphPath: string) => void;
   recordPinHistory: (projection: PinHistoryProjection) => void;
   recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
+  recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
   clearRunOutput: (graphPath: string) => void;
   beginPinPreview: (graphPath: string, port: PortAddressDto, generation: number) => PinPreviewLease;
   completePinPreview: (
@@ -168,6 +171,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
         runOutput: emptyRunOutputProjection(),
+        runFailure: null,
         status: "running",
       }),
     );
@@ -202,6 +206,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
+        runFailure: null,
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
@@ -214,6 +219,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
         runOutput: emptyRunOutputProjection(),
+        runFailure: null,
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
@@ -242,10 +248,20 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       return updateGraph(state, graphPath, { runOutput });
     }),
 
+  recordRunFailure: (graphPath, failure) =>
+    set((state) => {
+      const graph = state.graphs[graphPath];
+      if (!graph || graph.status !== "running" || graph.runId !== failure.runId) return state;
+      return updateGraph(state, graphPath, { runFailure: failure });
+    }),
+
   clearRunOutput: (graphPath) =>
     set((state) => {
       if (!state.graphs[graphPath]) return state;
-      return updateGraph(state, graphPath, { runOutput: emptyRunOutputProjection() });
+      return updateGraph(state, graphPath, {
+        runOutput: emptyRunOutputProjection(),
+        runFailure: null,
+      });
     }),
 
   beginPinPreview: (graphPath, port, generation) => {

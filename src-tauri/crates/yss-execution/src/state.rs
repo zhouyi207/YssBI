@@ -5,7 +5,7 @@ use std::time::{Instant, SystemTime, SystemTimeError, UNIX_EPOCH};
 
 use thiserror::Error;
 
-use crate::error::RunPhase;
+use crate::error::{RunFailure, RunFailureCode, RunPhase};
 use crate::finalization::{
     ExecutionFinalizationHandoff, ReadyPinResult, ReadyResult, ResultObservationIntent,
     SuccessfulExecutionCandidate,
@@ -95,6 +95,76 @@ pub enum KernelExecutionError {
     Failed,
     #[error("requested graph output is unavailable in the compiled plan")]
     DemandOutputUnavailable,
+    #[error("numeric input has an incompatible runtime type")]
+    InvalidNumericInput,
+    #[error("division by zero")]
+    DivisionByZero,
+    #[error("numeric result is not finite")]
+    NonFiniteResult,
+    #[error("execution kernel is not registered")]
+    KernelNotFound,
+    #[error("node execution failed")]
+    AtNode {
+        source: crate::plan::PlanSourceIdentity,
+        #[source]
+        error: Box<KernelExecutionError>,
+    },
+}
+
+impl KernelExecutionError {
+    fn at_node(self, source: &crate::plan::PlanSourceIdentity) -> Self {
+        match self {
+            Self::Cancelled | Self::DeadlineExceeded | Self::AtNode { .. } => self,
+            error => Self::AtNode {
+                source: source.clone(),
+                error: Box::new(error),
+            },
+        }
+    }
+
+    fn failure(&self) -> RunFailure {
+        let code = match self {
+            Self::AtNode { source, error } => {
+                return RunFailure {
+                    source: Some(source.clone()),
+                    ..error.failure()
+                };
+            }
+            Self::DivisionByZero => RunFailureCode::DivisionByZero,
+            Self::NonFiniteResult => RunFailureCode::NonFiniteResult,
+            Self::InvalidNumericInput => RunFailureCode::InvalidNumericInput,
+            Self::KernelNotFound => RunFailureCode::KernelNotFound,
+            Self::DeadlineExceeded => RunFailureCode::DeadlineExceeded,
+            _ => RunFailureCode::KernelFailed,
+        };
+        RunFailure {
+            code,
+            phase: RunPhase::Execution,
+            source: None,
+        }
+    }
+}
+
+impl ExecutePreparedError {
+    pub fn failure(&self) -> RunFailure {
+        let (code, phase) = match self {
+            Self::Kernel(error) => return error.failure(),
+            Self::DeadlineExceeded { phase } => (RunFailureCode::DeadlineExceeded, *phase),
+            Self::ResourcePreparation(_) => (
+                RunFailureCode::ResourceUnavailable,
+                RunPhase::ResourcePreparation,
+            ),
+            Self::ResultIdentityExhausted | Self::ResultTimestamp(_) => {
+                (RunFailureCode::FinalizationFailed, RunPhase::Finalization)
+            }
+            _ => (RunFailureCode::KernelFailed, RunPhase::Execution),
+        };
+        RunFailure {
+            code,
+            phase,
+            source: None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -258,31 +328,36 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     }?;
                     apply_input_coercions(value, &binding.contract().coercions)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.at_node(operation.source()))?;
 
-            let mut output_values = self.kernels.execute(
-                operation.kernel_id(),
-                &PreparedKernelInvocation {
-                    inputs: &inputs,
-                    input_slots: operation.inputs(),
-                    parameters: operation
-                        .parameters()
-                        .iter()
-                        .map(|(key, handle)| {
-                            package
-                                .parameters()
-                                .entries()
-                                .get(handle)
-                                .map(|payload| (key.clone(), payload.value()))
-                                .ok_or(KernelExecutionError::Failed)
-                        })
-                        .collect::<Result<BTreeMap<_, _>, _>>()?,
-                    resources,
-                    outputs: operation.outputs(),
-                    specialization: operation.specialization(),
-                    control,
-                },
-            )?;
+            let mut output_values = self
+                .kernels
+                .execute(
+                    operation.kernel_id(),
+                    &PreparedKernelInvocation {
+                        inputs: &inputs,
+                        input_slots: operation.inputs(),
+                        parameters: operation
+                            .parameters()
+                            .iter()
+                            .map(|(key, handle)| {
+                                package
+                                    .parameters()
+                                    .entries()
+                                    .get(handle)
+                                    .map(|payload| (key.clone(), payload.value()))
+                                    .ok_or(KernelExecutionError::Failed)
+                            })
+                            .collect::<Result<BTreeMap<_, _>, _>>()
+                            .map_err(|error| error.at_node(operation.source()))?,
+                        resources,
+                        outputs: operation.outputs(),
+                        specialization: operation.specialization(),
+                        control,
+                    },
+                )
+                .map_err(|error| error.at_node(operation.source()))?;
             for output in operation.outputs() {
                 let value = output_values
                     .remove(output.output())
@@ -527,7 +602,7 @@ fn apply_input_coercions(
         value = match coercion {
             crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => value
                 .coerce_to(&yss_data_contract::DataType::Float64)
-                .map_err(|_| KernelExecutionError::Failed)?,
+                .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
             // Broadcast is a kernel-owned shape operation. Keeping the scalar
             // value here makes the coercion explicit without fabricating a
             // DataSeries length in the scheduler.
@@ -623,7 +698,10 @@ impl KernelRegistry {
         invocation: &PreparedKernelInvocation<'_>,
     ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
         execute_kernel(
-            *self.kernels.get(id).ok_or(KernelExecutionError::Failed)?,
+            *self
+                .kernels
+                .get(id)
+                .ok_or(KernelExecutionError::KernelNotFound)?,
             invocation,
         )
     }
@@ -669,7 +747,15 @@ fn execute_kernel(
         BuiltinKernel::Multiply => {
             binary_numeric(inputs, specialization, |left, right| left * right)
         }
-        BuiltinKernel::Divide => binary_numeric(inputs, specialization, |left, right| left / right),
+        BuiltinKernel::Divide => {
+            let left = numeric_input(inputs.first())?;
+            let right = numeric_input(inputs.get(1))?;
+            if right == 0.0 {
+                Err(KernelExecutionError::DivisionByZero)
+            } else {
+                numeric_result(left / right, specialization)
+            }
+        }
         BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
         BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
         BuiltinKernel::Not => unary_bool(inputs, |value| !value),
@@ -705,7 +791,7 @@ fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionErr
         Some(RuntimeValue::Integer(value)) => Ok(*value as f64),
         Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
         Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
-        _ => Err(KernelExecutionError::Failed),
+        _ => Err(KernelExecutionError::InvalidNumericInput),
     }
 }
 
@@ -739,7 +825,7 @@ fn numeric_result(
     specialization: &crate::plan::PlanKernelSpecialization,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     if !value.is_finite() {
-        return Err(KernelExecutionError::Failed);
+        return Err(KernelExecutionError::NonFiniteResult);
     }
     match specialization
         .output_types()

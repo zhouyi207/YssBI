@@ -1,6 +1,5 @@
 use crate::schema::graph_mutation::PortAddressDto;
-use serde::ser::SerializeMap;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use yss_application::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunDemand,
 };
@@ -104,24 +103,44 @@ pub(crate) fn execution_demand_to_application(demand: ExecutionDemandDto) -> Res
     }
 }
 
-#[derive(Debug)]
-pub(crate) enum RunErrorOutcomeDto {
-    Failed,
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RunErrorOutcomeDto {
+    code: &'static str,
+    phase: &'static str,
+    source: Option<ResultInspectionSourceDto>,
 }
 
-impl Serialize for RunErrorOutcomeDto {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(2))?;
-        match self {
-            Self::Failed => {
-                map.serialize_entry("code", "kernelFailed")?;
-                map.serialize_entry("phase", &Option::<&str>::None)?;
-            }
+impl From<&yss_execution::error::RunFailure> for RunErrorOutcomeDto {
+    fn from(failure: &yss_execution::error::RunFailure) -> Self {
+        use yss_execution::error::{RunFailureCode, RunPhase};
+        Self {
+            code: match failure.code {
+                RunFailureCode::KernelFailed => "kernelFailed",
+                RunFailureCode::KernelNotFound => "kernelNotFound",
+                RunFailureCode::InvalidNumericInput => "invalidNumericInput",
+                RunFailureCode::DivisionByZero => "divisionByZero",
+                RunFailureCode::NonFiniteResult => "nonFiniteResult",
+                RunFailureCode::DeadlineExceeded => "deadlineExceeded",
+                RunFailureCode::ResourceUnavailable => "resourceUnavailable",
+                RunFailureCode::FinalizationFailed => "finalizationFailed",
+            },
+            phase: match failure.phase {
+                RunPhase::Admission => "admission",
+                RunPhase::PlanValidation => "planValidation",
+                RunPhase::ResourcePreparation => "resourcePreparation",
+                RunPhase::Execution => "execution",
+                RunPhase::Finalization => "finalization",
+            },
+            source: failure
+                .source
+                .as_ref()
+                .map(|source| ResultInspectionSourceDto {
+                    graph_path: source.graph().as_str().to_owned(),
+                    node_id: source.node().map(|node| node.as_str().to_owned()),
+                    port_address: source.port().map(|port| port.as_str().to_owned()),
+                }),
         }
-        map.end()
     }
 }
 
@@ -193,8 +212,8 @@ impl TryFrom<RunApplicationEvent> for RunEventDto {
             RunApplicationEventKind::RunStarted => RunEventKindDto::RunStarted,
             RunApplicationEventKind::RunCompleted => RunEventKindDto::RunCompleted,
             RunApplicationEventKind::RunCancelled => RunEventKindDto::RunCancelled,
-            RunApplicationEventKind::RunErrored { phase: _ } => RunEventKindDto::RunErrored {
-                outcome: RunErrorOutcomeDto::Failed,
+            RunApplicationEventKind::RunErrored { failure } => RunEventKindDto::RunErrored {
+                outcome: failure.into(),
             },
             RunApplicationEventKind::PinPreviewResultReady {
                 output,
@@ -630,6 +649,36 @@ mod tests {
     use yss_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
     use yss_execution::run_output::test_support;
     use yss_execution::run_registry::RunId;
+
+    #[test]
+    fn run_failure_wire_preserves_the_cause_phase_and_node() {
+        let failure = yss_execution::error::RunFailure {
+            code: yss_execution::error::RunFailureCode::DivisionByZero,
+            phase: yss_execution::error::RunPhase::Execution,
+            source: Some(PlanSourceIdentity::new(
+                PlanGraphId::from_existing("events/contract.yssbi-event".into()),
+                Some(PlanNodeId::from_existing(
+                    "00000000-0000-0000-0000-000000000002".into(),
+                )),
+                None,
+            )),
+        };
+        let actual = serde_json::to_value(RunEventKindDto::RunErrored {
+            outcome: (&failure).into(),
+        })
+        .unwrap();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../../src/tests/fixtures/node-system-contracts/execution-wire.json"
+        ))
+        .unwrap();
+        let expected = fixture["runEvents"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|event| event["kind"]["code"] == "divisionByZero")
+            .unwrap();
+        assert_eq!(actual, expected["kind"]);
+    }
 
     #[test]
     fn run_output_uses_the_existing_flat_channel_wire_with_source_port() {

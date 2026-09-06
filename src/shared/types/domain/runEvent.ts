@@ -1,82 +1,34 @@
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 
-export type RunErrorCode =
-  | "invalidPlan"
-  | "cancelled"
-  | "activationIdExhausted"
-  | "runtimeIdExhausted"
-  | "deadlineExceeded"
-  | "kernelNotFound"
-  | "kernelFailed"
-  | "relationalBackendNotFound"
-  | "relationalOperatorInvalid"
-  | "relationalColumnMissing"
-  | "relationalTypeMismatch"
-  | "relationalInputShapeInvalid"
-  | "relationalHintInvalid"
-  | "stream"
-  | "missingValue"
-  | "outputCount"
-  | "operationAlreadyExecuted"
-  | "functionPlanNotFound"
-  | "functionPlanFailed"
-  | "recursionLimitExceeded"
-  | "projectDraining"
-  | "resourceSnapshotMismatch"
-  | "resourceAcquire";
-
 export const RUN_ERROR_CODES = {
-  invalidPlan: true,
-  cancelled: true,
-  activationIdExhausted: true,
-  runtimeIdExhausted: true,
   deadlineExceeded: true,
   kernelNotFound: true,
   kernelFailed: true,
-  relationalBackendNotFound: true,
-  relationalOperatorInvalid: true,
-  relationalColumnMissing: true,
-  relationalTypeMismatch: true,
-  relationalInputShapeInvalid: true,
-  relationalHintInvalid: true,
-  stream: true,
-  missingValue: true,
-  outputCount: true,
-  operationAlreadyExecuted: true,
-  functionPlanNotFound: true,
-  functionPlanFailed: true,
-  recursionLimitExceeded: true,
-  projectDraining: true,
-  resourceSnapshotMismatch: true,
-  resourceAcquire: true,
-} as const satisfies Record<RunErrorCode, true>;
+  invalidNumericInput: true,
+  divisionByZero: true,
+  nonFiniteResult: true,
+  resourceUnavailable: true,
+  finalizationFailed: true,
+} as const;
 
-export type RunPhase =
-  | "queueWait"
-  | "kernel"
-  | "streamSend"
-  | "streamReceive"
-  | "adapterIo"
-  | "resultPublication"
-  | "cleanup";
+export type RunErrorCode = keyof typeof RUN_ERROR_CODES;
 
 export const RUN_PHASES = {
-  queueWait: true,
-  kernel: true,
-  streamSend: true,
-  streamReceive: true,
-  adapterIo: true,
-  resultPublication: true,
-  cleanup: true,
-} as const satisfies Record<RunPhase, true>;
+  admission: true,
+  planValidation: true,
+  resourcePreparation: true,
+  execution: true,
+  finalization: true,
+} as const;
 
-export type RunErrorOutcome =
-  | { code: "deadlineExceeded"; phase: RunPhase }
-  | {
-      code: Exclude<RunErrorCode, "deadlineExceeded">;
-      phase: null;
-    };
+export type RunPhase = keyof typeof RUN_PHASES;
+
+export interface RunErrorOutcome {
+  code: RunErrorCode;
+  phase: RunPhase;
+  source: ResultInspectionSource | null;
+}
 
 export interface GraphRunIdentityDto {
   projectSessionId: string;

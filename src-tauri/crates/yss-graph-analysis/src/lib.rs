@@ -155,6 +155,7 @@ impl<'a> ReadyGraphSemanticSnapshot<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphResolvedParameterValue {
     Literal(serde_json::Value),
+    DefaultLiteral(yss_graph_protocol::Value),
     Resource(GraphResourceId),
 }
 
@@ -736,6 +737,9 @@ fn resolve_graph_semantics_inner(
                         value_type: parameter.value_type.clone(),
                         effective_value: effective_parameter_value(node, parameter).map(|value| match (&parameter.editor, value.as_str()) {
                             (ParameterEditorSpec::Resource { .. }, Some(identity)) => GraphResolvedParameterValue::Resource(GraphResourceId::new(identity)),
+                            _ if !node.parameters.contains_key(&parameter.key) => GraphResolvedParameterValue::DefaultLiteral(
+                                parameter.default_value.as_ref().expect("effective default exists").value.clone(),
+                            ),
                             _ => GraphResolvedParameterValue::Literal(value),
                         }),
                         inherited_value: parameter.default_value.as_ref().map(|value| yss_graph_protocol::protocol_value_to_json(&value.value)),

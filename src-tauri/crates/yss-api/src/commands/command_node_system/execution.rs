@@ -151,7 +151,15 @@ fn prepared_execution_command_code(
         ExecutePreparedError::RunRegistry(_) => "execution_run_registry_failed",
         ExecutePreparedError::Cancelled { .. } => "run_cancelled",
         ExecutePreparedError::DeadlineExceeded { .. } => "run_deadline_exceeded",
-        ExecutePreparedError::Kernel(_) => "run_failed",
+        ExecutePreparedError::Kernel(_) => match error.failure().code {
+            yss_execution::error::RunFailureCode::DivisionByZero => "run_division_by_zero",
+            yss_execution::error::RunFailureCode::NonFiniteResult => "run_non_finite_result",
+            yss_execution::error::RunFailureCode::InvalidNumericInput => {
+                "run_invalid_numeric_input"
+            }
+            yss_execution::error::RunFailureCode::KernelNotFound => "run_kernel_not_found",
+            _ => "run_failed",
+        },
         ExecutePreparedError::ResultIdentityExhausted
         | ExecutePreparedError::ResultTimestamp(_) => "execution_result_publication_failed",
     }
@@ -204,10 +212,18 @@ pub async fn execute_compiled_graph(
     tauri::async_runtime::spawn_blocking(move || {
         let channel = TauriExecutionChannelAdapter { channel: on_event };
         let mut delivery_failed = false;
+        let mut terminal_run_event_sent = false;
         let request = RunGraphRequest::new(project_instance_id, graph_path, compiled_artifact_id)
             .with_demand(demand);
         let execution = run_graph_with_sink(&state, request, |event| {
+            let terminal = matches!(
+                event.kind(),
+                yss_application::execution::run_graph::RunApplicationEventKind::RunCompleted
+                    | yss_application::execution::run_graph::RunApplicationEventKind::RunErrored { .. }
+                    | yss_application::execution::run_graph::RunApplicationEventKind::RunCancelled
+            );
             let delivered = channel.deliver(event);
+            terminal_run_event_sent |= terminal && delivered;
             if !delivered {
                 delivery_failed = true;
             }
@@ -218,7 +234,14 @@ pub async fn execute_compiled_graph(
         } else {
             match execution {
                 Ok(_) => Ok(()),
-                Err(error) => Err(map_application_execution_error(error)),
+                Err(error) => {
+                    let error = map_application_execution_error(error);
+                    Err(if terminal_run_event_sent {
+                        error.with_details(serde_json::json!({ "terminalRunEventSent": true }))
+                    } else {
+                        error
+                    })
+                }
             }
         }
     })

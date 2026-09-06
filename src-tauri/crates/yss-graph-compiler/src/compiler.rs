@@ -183,6 +183,9 @@ fn lower_parameters(
                 GraphResolvedParameterValue::Literal(value) => {
                     lower_parameter_value(value).map_err(|_| lowering_error(graph_path))?
                 }
+                GraphResolvedParameterValue::DefaultLiteral(value) => {
+                    lower_protocol_value(value).map_err(|_| lowering_error(graph_path))?
+                }
             };
             parameters.insert(handle, GraphParameterPayload::new(schema, value));
         }

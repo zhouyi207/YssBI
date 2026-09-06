@@ -299,7 +299,12 @@ describe("ProjectService execution contract", () => {
 
   it.each([
     {
-      terminal: { type: "runErrored", code: "kernelFailed", phase: null } as const,
+      terminal: {
+        type: "runErrored",
+        code: "kernelFailed",
+        phase: "execution",
+        source: null,
+      } as const,
       commandError: {
         code: "run_failed",
         details: { terminalRunEventSent: true },
@@ -403,7 +408,12 @@ describe("ProjectService execution contract", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(settled).toBe(false);
 
-    const errored = runEvent({ type: "runErrored", code: "kernelFailed", phase: null });
+    const errored = runEvent({
+      type: "runErrored",
+      code: "kernelFailed",
+      phase: "execution",
+      source: null,
+    });
     args.onEvent.onmessage?.(errored);
 
     await expect(execution).rejects.toMatchObject({

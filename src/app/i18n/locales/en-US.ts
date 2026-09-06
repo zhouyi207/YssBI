@@ -154,6 +154,48 @@ export const enUS = {
   resultSource: {
     readFailed: "The result could not be read",
   },
+  runFailure: {
+    title: "Execution failed",
+    unknown:
+      "The run could not finish. Check the logs using the error code and diagnostic reference.",
+    node: "Locate node: {{name}}",
+    run: "Run #{{id}}",
+    code: "Error code: {{code}}",
+    incident: "Diagnostic reference: {{id}}",
+    causes: {
+      divisionByZero:
+        "The divisor is zero. Check the division node's right input and its upstream value.",
+      nonFiniteResult:
+        "The calculation produced a non-finite result (NaN or infinity). Check input ranges and numeric overflow.",
+      invalidNumericInput:
+        "A numeric operation received an incompatible input type. Check the node's inputs and upstream constants.",
+      kernelNotFound:
+        "This runtime does not yet provide a computation implementation for this node.",
+      kernelFailed:
+        "The node could not complete its calculation. Check its configuration and use the diagnostic reference for technical details.",
+      deadlineExceeded:
+        "The run exceeded its time limit. Reduce the scope of the calculation and try again.",
+      resourceUnavailable:
+        "A required runtime resource is unavailable. Check the data sources and project resources.",
+      finalizationFailed:
+        "The calculation results could not be committed. Check the project state and try again.",
+      graph_compile_required:
+        "The graph changed or its compiled artifact expired. Compile it again before executing.",
+      stale_project_lifecycle:
+        "The project state changed. Compile the graph again in the current project.",
+      execution_channel_failed:
+        "Run event delivery failed, so complete results could not be confirmed. Try again and check the logs.",
+      ipc_transport_failure:
+        "Communication with the execution backend failed. Check the application state and try again.",
+    },
+    phases: {
+      admission: "Phase: starting run",
+      planValidation: "Phase: plan validation",
+      resourcePreparation: "Phase: resource preparation",
+      execution: "Phase: node computation",
+      finalization: "Phase: result commit",
+    },
+  },
   nodeCatalog: {
     loadError: "The node catalog is unavailable",
     invalidDraft: "The current graph draft cannot be used to filter nodes",

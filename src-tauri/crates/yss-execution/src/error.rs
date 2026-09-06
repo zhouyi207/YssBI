@@ -9,6 +9,25 @@ pub enum RunPhase {
     Finalization,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RunFailureCode {
+    KernelFailed,
+    KernelNotFound,
+    InvalidNumericInput,
+    DivisionByZero,
+    NonFiniteResult,
+    DeadlineExceeded,
+    ResourceUnavailable,
+    FinalizationFailed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunFailure {
+    pub code: RunFailureCode,
+    pub phase: RunPhase,
+    pub source: Option<crate::plan::PlanSourceIdentity>,
+}
+
 #[derive(Debug, Error)]
 pub enum ExecutionError {
     #[error("execution admission failed")]
