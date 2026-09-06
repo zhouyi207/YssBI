@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Wire **Lambda** and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of non-negative integers. Use for event counts per unit time or space, queue arrivals, and rare-event simulation.

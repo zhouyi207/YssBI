@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **K**, **Rate**, and **N**, then run the graph. **Samples** is a non-negative `DataSeries<Float64>`. Use for total waiting time in $K$-stage queues, telephony systems, and service-process modeling.

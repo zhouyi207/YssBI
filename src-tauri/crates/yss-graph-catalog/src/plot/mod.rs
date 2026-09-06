@@ -1,5 +1,6 @@
 use super::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, leaf, sid,
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
+    configuration_parameter, leaf, sid,
 };
 use crate::Message;
 use yss_graph_protocol::*;
@@ -107,6 +108,16 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     let mut messages = vec![
         ("en-US", "categories.plot.title", Message::Text("Plots")),
         ("zh-CN", "categories.plot.title", Message::Text("绘图")),
+        (
+            "en-US",
+            "parameters.plot.maximum_lag.title",
+            Message::Text("Maximum lag"),
+        ),
+        (
+            "zh-CN",
+            "parameters.plot.maximum_lag.title",
+            Message::Text("最大滞后阶数"),
+        ),
     ];
     let categories = vec![CategoryRegistration {
         id: category_id(CATEGORY)?,
@@ -172,17 +183,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 PortCardinality::Declared,
                 None,
             )?);
-            ports.push(data_port(
-                "maximum_lag",
-                "Lags",
-                PortDirection::Input,
-                concrete("core.int64")?,
-                PortCardinality::Declared,
-                Some(TypedValue {
-                    value_type: concrete("core.int64")?,
-                    value: Value::Integer(20),
-                }),
-            )?);
         }
     }
     ports.push(data_port(
@@ -205,7 +205,38 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             hidden: false,
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![])?,
-        parameters: assembled_parameters(spec.id, vec![])?,
+        parameters: assembled_parameters(
+            spec.id,
+            if matches!(spec.inputs, PlotInputs::Correlogram) {
+                vec![configuration_parameter(
+                    "parameters.configuration.title",
+                    ConfigurationSchema {
+                        fields: vec![ConfigurationFieldSpec {
+                            parameter: ParameterSpec {
+                                key: sid("maximum_lag", ParameterKey::new)?,
+                                title_key: i18n_key("parameters.plot.maximum_lag.title")?,
+                                description_key: None,
+                                value_type: concrete("core.int64")?,
+                                default_value: Some(ParameterValue {
+                                    value_type: concrete("core.int64")?,
+                                    value: Value::Integer(20),
+                                }),
+                                constraints: vec![ParameterConstraint::IntegerRange {
+                                    min: Some(1),
+                                    max: None,
+                                }],
+                                editor: ParameterEditorSpec::Number,
+                                presentation: ParameterPresentation::DetailPanel,
+                            },
+                            visible_when: None,
+                        }]
+                        .into_boxed_slice(),
+                    },
+                )?]
+            } else {
+                vec![]
+            },
+        )?,
         instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,

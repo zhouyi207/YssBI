@@ -69,6 +69,28 @@ mod tests {
     }
 
     #[test]
+    fn statistics_configuration_has_no_catalog_nodes_or_data_ports() {
+        let system = build_builtin_node_system().unwrap();
+        for (node_type, _) in system
+            .registry
+            .iter()
+            .filter(|(node_type, _)| node_type.as_str().starts_with("yssbi.statistics."))
+        {
+            assert!(!node_type.as_str().ends_with(".configure"));
+            assert!(!node_type.as_str().contains(".vce."));
+            let protocol = system.registry.protocol(node_type).unwrap();
+            assert!(
+                protocol
+                    .interface
+                    .ports
+                    .iter()
+                    .all(|port| !matches!(port.key.as_str(), "configuration" | "covariance")),
+                "{node_type}"
+            );
+        }
+    }
+
+    #[test]
     fn variable_resource_has_one_read_action() {
         let system = build_builtin_node_system().expect("production built-ins must assemble");
         let resource_path = CatalogResourcePath::new("variables/score");

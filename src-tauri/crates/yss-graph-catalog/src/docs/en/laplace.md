@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Location**, **Scale**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>`. Use for peaked, heavy-tailed error terms, robust statistics demos, and comparisons with the normal distribution.

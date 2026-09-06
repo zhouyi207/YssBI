@@ -184,6 +184,43 @@ pub(crate) fn assembled_interface(
         })
 }
 
+pub(crate) fn configuration_parameter(
+    title_key: &'static str,
+    schema: ConfigurationSchema,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    let value_type = TypeExpr::Concrete(sid("core.object", TypeId::new)?);
+    let defaults = schema
+        .fields
+        .iter()
+        .filter(|field| field.visible_when.is_none())
+        .map(|field| {
+            (
+                field.parameter.key.as_str().into(),
+                field
+                    .parameter
+                    .default_value
+                    .as_ref()
+                    .expect("configuration fields have defaults")
+                    .value
+                    .clone(),
+            )
+        })
+        .collect();
+    Ok(ParameterSpec {
+        key: sid("configuration", ParameterKey::new)?,
+        title_key: iid(title_key)?,
+        description_key: None,
+        default_value: Some(ParameterValue {
+            value_type: value_type.clone(),
+            value: Value::Object(defaults),
+        }),
+        value_type,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Configuration(schema),
+        presentation: ParameterPresentation::DetailPanel,
+    })
+}
+
 pub(crate) fn assembled_parameters(
     node_type: &str,
     parameters: Vec<ParameterSpec>,
@@ -494,7 +531,7 @@ fn assemble_builtin_parts()
     project::register(nodes, messages)?;
 
     fragment.types.extend(
-        ["bool", "string", "int64", "float64"]
+        ["bool", "string", "int64", "float64", "object"]
             .into_iter()
             .map(|name| {
                 Ok(TypeRegistration {
@@ -779,6 +816,12 @@ fn i18n_requirements(
         for parameter in &protocol.parameters.parameters {
             keys.insert(parameter.title_key.clone());
             keys.extend(parameter.description_key.iter().cloned());
+            if let ParameterEditorSpec::Configuration(schema) = &parameter.editor {
+                for field in &schema.fields {
+                    keys.insert(field.parameter.title_key.clone());
+                    keys.extend(field.parameter.description_key.iter().cloned());
+                }
+            }
         }
     }
     for definition in COMPILER_DIAGNOSTIC_DEFINITIONS {
@@ -807,6 +850,8 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
         ("types.bool.title", "Boolean", "布尔"),
         ("types.string.title", "String", "字符串"),
+        ("types.object.title", "Object", "对象"),
+        ("parameters.configuration.title", "Configuration", "配置"),
         ("types.int64.title", "Int64", "64 位整数"),
         ("types.float64.title", "Float64", "64 位浮点数"),
         ("categories.constants.title", "Constants", "常量"),

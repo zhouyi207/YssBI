@@ -8,4 +8,6 @@ $$
 
 ## 用法
 
+在 **Detail → 配置** 中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
+
 设置 **Shape**、**Rate** 与 **N** 后执行图。**Samples** 输出正的 `DataSeries<Float64>`。适用于等待时间总和、Bayesian 共轭先验及作为 **Erlang** 的连续推广。

@@ -8,7 +8,7 @@ mod families;
 
 use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_decimal, assembled_interface,
-    assembled_parameters, iid, leaf, sid,
+    assembled_parameters, configuration_parameter, iid, leaf, sid,
 };
 use crate::{Aliases, Message, Text};
 use yss_graph_protocol::*;
@@ -59,31 +59,11 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
 
 fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     match spec.stage {
-        Stage::Constant => Ok(vec![data_output(
-            "covariance",
-            "Covariance",
-            config_type()?,
-        )?]),
-        Stage::Configure => configure_ports(spec.family),
         Stage::Fit => fit_ports(spec),
         Stage::Summary => summary_ports(spec),
         Stage::Predict => prediction_ports(spec.family),
         Stage::Test => test_ports(spec.family),
     }
-}
-
-fn configure_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    if family == Family::Ols {
-        return Ok(vec![
-            optional_data_input("covariance", "Covariance", config_type()?)?,
-            data_output("configuration", "Config", config_type()?)?,
-        ]);
-    }
-    Ok(vec![data_output(
-        "configuration",
-        "Config",
-        config_type()?,
-    )?])
 }
 
 fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
@@ -101,11 +81,6 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     if spec.id == "yssbi.statistics.wls.fit" {
         ports.push(data_input("weights", "Weights", series_type()?)?);
     }
-    ports.push(optional_data_input(
-        "configuration",
-        "Config",
-        config_type()?,
-    )?);
     ports.push(data_output("model", "Model", model_type(spec)?)?);
     ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
     ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
@@ -150,11 +125,6 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
         }
         _ => ports.extend(regression_inputs(family)?),
     }
-    ports.push(optional_data_input(
-        "configuration",
-        "Config",
-        config_type()?,
-    )?);
     ports.push(data_output("result", "Result", summary_result_type(spec)?)?);
     ports.push(data_output("report", "Report", report_type()?)?);
     Ok(ports)
@@ -198,22 +168,6 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
 
 fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyError> {
     let mut parameters = match spec.stage {
-        Stage::Constant => vec![],
-        Stage::Predict | Stage::Fit | Stage::Summary if spec.family == Family::Prediction => vec![],
-        _ if spec.id == "yssbi.statistics.ols.vce.fixed_scale" => {
-            vec![decimal_parameter("scale", "1")?]
-        }
-        _ if spec.id == "yssbi.statistics.ols.vce.cluster" => {
-            vec![text_parameter("cluster", false, true)?]
-        }
-        _ if spec.id == "yssbi.statistics.ols.vce.hac" => vec![
-            select_parameter("kernel", "bartlett")?,
-            positive_integer_parameter("bandwidth", 1)?,
-        ],
-        _ if spec.id == "yssbi.statistics.ols.vce.newey_west" => {
-            vec![positive_integer_parameter("lag", 1)?]
-        }
-        Stage::Configure => return configure_parameters(spec.family),
         Stage::Test if spec.family == Family::Adf => vec![
             positive_integer_parameter("lags", 1)?,
             select_parameter("regression", "constant")?,
@@ -237,12 +191,36 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyErro
         ],
         _ => vec![],
     };
-    if matches!(
-        spec.stage,
-        Stage::Fit | Stage::Summary | Stage::Predict | Stage::Test
-    ) {
-        parameters.push(inherited_decimal_parameter("convergence_tolerance")?);
-        parameters.push(inherited_select_parameter("missing_value_policy")?);
+    if matches!(spec.stage, Stage::Fit | Stage::Summary)
+        && matches!(
+            spec.family,
+            Family::Ols
+                | Family::Gls
+                | Family::Iv2sls
+                | Family::IvLiml
+                | Family::Logit
+                | Family::Probit
+                | Family::Panel
+                | Family::Prais
+        )
+    {
+        let schema = if spec.family == Family::Ols {
+            ols_configuration_schema()?
+        } else {
+            ConfigurationSchema {
+                fields: configure_parameters(spec.family)?
+                    .into_iter()
+                    .map(|parameter| ConfigurationFieldSpec {
+                        parameter,
+                        visible_when: None,
+                    })
+                    .collect(),
+            }
+        };
+        parameters.push(configuration_parameter(
+            "parameters.statistics.configuration.title",
+            schema,
+        )?);
     }
     Ok(parameters)
 }
@@ -268,6 +246,67 @@ fn configure_parameters(family: Family) -> Result<Vec<ParameterSpec>, BuiltinAss
     Ok(parameters)
 }
 
+fn ols_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyError> {
+    let choice = |key, default, choices: &[&'static str]| {
+        let mut parameter = select_parameter(key, default)?;
+        parameter.constraints.push(ParameterConstraint::OneOf(
+            choices
+                .iter()
+                .map(|value| Value::String((*value).into()))
+                .collect(),
+        ));
+        Ok::<_, BuiltinAssemblyError>(parameter)
+    };
+    let conditional = |parameter, covariance: &'static str| -> Result<_, BuiltinAssemblyError> {
+        Ok(ConfigurationFieldSpec {
+            parameter,
+            visible_when: Some(ConfigurationCondition {
+                key: sid("covariance", ParameterKey::new)?,
+                values: vec![Value::String(covariance.into())].into_boxed_slice(),
+            }),
+        })
+    };
+    let mut scale = decimal_parameter("scale", "1")?;
+    scale.constraints.push(ParameterConstraint::Positive);
+    Ok(ConfigurationSchema {
+        fields: vec![
+            ConfigurationFieldSpec {
+                parameter: toggle_parameter("constant", true)?,
+                visible_when: None,
+            },
+            ConfigurationFieldSpec {
+                parameter: choice(
+                    "covariance",
+                    "nonrobust",
+                    &[
+                        "nonrobust",
+                        "HC0",
+                        "HC1",
+                        "HC2",
+                        "HC3",
+                        "HAC",
+                        "newey",
+                        "fixed scale",
+                    ],
+                )?,
+                visible_when: None,
+            },
+            conditional(
+                choice(
+                    "kernel",
+                    "bartlett",
+                    &["bartlett", "parzen", "quadratic spectral"],
+                )?,
+                "HAC",
+            )?,
+            conditional(positive_integer_parameter("bandwidth", 1)?, "HAC")?,
+            conditional(positive_integer_parameter("lag", 1)?, "newey")?,
+            conditional(scale, "fixed scale")?,
+        ]
+        .into_boxed_slice(),
+    })
+}
+
 fn execution(_stage: Stage) -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
@@ -285,21 +324,6 @@ fn data_input(
         PortDirection::Input,
         value_type,
         PortCardinality::Declared,
-        false,
-    )
-}
-fn optional_data_input(
-    key: &'static str,
-    title: &'static str,
-    value_type: TypeExpr,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port(
-        key,
-        title,
-        PortDirection::Input,
-        value_type,
-        PortCardinality::Declared,
-        true,
     )
 }
 fn user_data_input(
@@ -323,7 +347,6 @@ fn bounded_user_data_input(
         PortDirection::Input,
         value_type,
         PortCardinality::UserCreated { min, max },
-        false,
     )
 }
 fn data_output(
@@ -337,34 +360,26 @@ fn data_output(
         PortDirection::Output,
         value_type,
         PortCardinality::Declared,
-        false,
     )
 }
+
 fn data_port(
     key: &'static str,
     title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     cardinality: PortCardinality,
-    optional: bool,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
         title: title.into(),
         direction,
-        value_type: value_type.clone(),
+        value_type,
         cardinality,
         connections: ConnectionsPerPort::Single,
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
-            literal_policy: if optional {
-                LiteralPolicy::Allowed
-            } else {
-                LiteralPolicy::Forbidden
-            },
-            default_value: optional.then(|| TypedValue {
-                value_type: value_type.clone(),
-                value: Value::Null,
-            }),
+            literal_policy: LiteralPolicy::Forbidden,
+            default_value: None,
         }),
         consumption: (direction == PortDirection::Input)
             .then_some(InputConsumption::FullyMaterialized),
@@ -402,44 +417,6 @@ fn decimal_parameter(
         vec![],
     )
 }
-fn inherited_decimal_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    optional_parameter(
-        key,
-        concrete("core.float64")?,
-        ParameterEditorSpec::Number,
-        vec![],
-    )
-}
-fn inherited_select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    optional_parameter(
-        key,
-        concrete("core.string")?,
-        ParameterEditorSpec::Select,
-        vec![ParameterConstraint::OneOf(vec![
-            Value::String("Listwise".into()),
-            Value::String("Reject".into()),
-        ])],
-    )
-}
-fn optional_parameter(
-    key: &'static str,
-    value_type: TypeExpr,
-    editor: ParameterEditorSpec,
-    constraints: Vec<ParameterConstraint>,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    Ok(ParameterSpec {
-        key: sid(key, ParameterKey::new)?,
-        title_key: iid(leak(format!("parameters.statistics.{key}.title")))?,
-        description_key: Some(iid(leak(format!(
-            "parameters.statistics.{key}.description"
-        )))?),
-        default_value: None,
-        value_type,
-        constraints,
-        editor,
-        presentation: ParameterPresentation::DetailPanel,
-    })
-}
 fn toggle_parameter(
     key: &'static str,
     default: bool,
@@ -462,22 +439,6 @@ fn select_parameter(
         ParameterEditorSpec::Select,
         Value::String(default.into()),
         vec![ParameterConstraint::Required],
-    )
-}
-fn text_parameter(
-    key: &'static str,
-    multiline: bool,
-    required: bool,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    parameter(
-        key,
-        concrete("core.string")?,
-        ParameterEditorSpec::Text { multiline },
-        Value::String("".into()),
-        required
-            .then_some(ParameterConstraint::Required)
-            .into_iter()
-            .collect(),
     )
 }
 fn parameter(
@@ -506,10 +467,6 @@ fn parameter(
 
 fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     [
-        (
-            "statistics.configuration",
-            "types.statistics_configuration.title",
-        ),
         ("statistics.model.ols", "types.statistics_model_ols.title"),
         ("statistics.model.gls", "types.statistics_model_gls.title"),
         (
@@ -598,9 +555,6 @@ fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(numeric_data_series_type())
-}
-fn config_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("statistics.configuration")
 }
 fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
     let id = if spec.id == "yssbi.statistics.wls.fit" {
@@ -717,11 +671,6 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
 
 fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
-        (
-            "types.statistics_configuration.title",
-            "Statistical Configuration",
-            "统计配置",
-        ),
         ("types.statistics_model_ols.title", "OLS Model", "OLS 模型"),
         ("types.statistics_model_gls.title", "GLS Model", "GLS 模型"),
         (
@@ -800,7 +749,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     }
     for key in [
         "scale",
-        "cluster",
+        "configuration",
         "kernel",
         "bandwidth",
         "lag",
@@ -819,13 +768,21 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         "rank",
         "event_study",
         "placebo_repetitions",
-        "convergence_tolerance",
-        "missing_value_policy",
     ] {
         let title = leak(format!("parameters.statistics.{key}.title"));
         let description = leak(format!("parameters.statistics.{key}.description"));
-        out.push(("en-US", title, Text(key)));
-        out.push(("zh-CN", title, Text(key)));
+        let (en, zh) = match key {
+            "configuration" => ("Model configuration", "模型配置"),
+            "constant" => ("Include intercept", "包含常数项"),
+            "covariance" => ("Covariance estimator", "协方差估计"),
+            "kernel" => ("Kernel", "核函数"),
+            "bandwidth" => ("Bandwidth", "带宽"),
+            "lag" => ("Lag order", "滞后阶数"),
+            "scale" => ("Variance scale", "方差尺度"),
+            _ => (key, key),
+        };
+        out.push(("en-US", title, Text(en)));
+        out.push(("zh-CN", title, Text(zh)));
         out.push(("en-US", description, Text("Typed statistical parameter.")));
         out.push(("zh-CN", description, Text("类型化统计参数。")));
     }

@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **D1**, **D2**, and **N**, then run the graph. **Samples** is a non-negative `DataSeries<Float64>`. Use for variance-ratio tests, F statistics in ANOVA, and overall regression significance simulation.

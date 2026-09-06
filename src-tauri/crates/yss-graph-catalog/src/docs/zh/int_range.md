@@ -1,11 +1,7 @@
-# Int Range
+# 整数范围
 
-生成 **Int64** `DataSeries`，元素为等差整数序列：
-
-$$
-\text{start},\ \text{start}+1,\ \ldots,\ \text{start}+\text{length}-1
-$$
+生成 **Int64** `DataSeries`，从 **起点** 开始，每次增加 **步长**，直至 **终点**（不包含）。
 
 ## 用法
 
-常用于构造行号、索引或面板 ID。**Length** 为 0 时输出空序列。
+在 **Detail → 配置** 中设置 **起点**、**终点** 和 **步长**，默认分别为 0、10 和 1。画布保留 **DataSeries** 输出，可用于行号、索引或面板 ID。

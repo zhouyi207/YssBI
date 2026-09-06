@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Shape**, **Scale**, and **N**, then run the graph. **Samples** is a positive `DataSeries<Float64>`. Use for variance or precision priors in Bayesian models and simulation of positive reciprocals.

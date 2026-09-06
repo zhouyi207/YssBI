@@ -10,4 +10,6 @@ Draw **N** independent samples from $\mathrm{Bernoulli}(p)$.
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Wire **P** and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of length **N** containing 0/1 values. Use for Monte Carlo simulation, binary outcome generation, or as building blocks alongside **Binomial** and other random nodes.

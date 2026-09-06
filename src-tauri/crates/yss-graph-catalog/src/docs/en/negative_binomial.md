@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **R**, **P**, and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of non-negative integers. Use for overdispersed count data and modeling failures before a fixed number of successes.

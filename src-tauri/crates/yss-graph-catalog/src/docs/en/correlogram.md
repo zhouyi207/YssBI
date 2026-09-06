@@ -1,5 +1,7 @@
 # Correlogram (ACF & PACF)
 
+Connect the series input, then set **Maximum lag** in **Detail → Configuration**.
+
 Plots sample ACF and PACF of a **Float64** **DataSeries** up to **Lags** (default 20; capped at $n/2$).
 
 Includes cumulative Ljung–Box $Q$ statistics and p-values (hover bars). 95% band half-width $1.96/\sqrt{n}$.

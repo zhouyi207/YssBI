@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Alpha**, **Beta**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>` with values in $(0,1)$. Use for probability priors, proportion uncertainty, and random weights on the unit interval.

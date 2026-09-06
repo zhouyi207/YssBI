@@ -1,11 +1,7 @@
 # Int Range
 
-Builds an **Int64** `DataSeries` of consecutive integers:
-
-$$
-\text{start},\ \text{start}+1,\ \ldots,\ \text{start}+\text{length}-1
-$$
+Builds an **Int64** `DataSeries` from **Start** to **End** (exclusive), advancing by **Step**.
 
 ## Usage
 
-Useful for row indices, counters, or panel IDs. **Length** 0 yields an empty series.
+Set **Start**, **End**, and **Step** in **Detail → Configuration**. Defaults are 0, 10, and 1. The canvas exposes the **DataSeries** output for row indices, counters, or panel IDs.

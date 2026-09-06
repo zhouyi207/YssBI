@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Wire **DF** and **N**, then run the graph. **Samples** is a `DataSeries<Float64>`. Use for heavy-tailed random errors, small-sample $t$-statistic simulation, and tail comparisons with the normal distribution.

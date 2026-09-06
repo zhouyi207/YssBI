@@ -1,5 +1,7 @@
 # Correlogram (ACF & PACF)
 
+连接序列输入后，在 **Detail → 配置** 中设置 **最大滞后阶数**。
+
 绘制 **Float64** **DataSeries** 的样本 ACF 与 PACF（至 **Lags** 阶，默认 20，实际上限为 $n/2$）。
 
 含累积 Ljung–Box $Q$ 统计量与 p 值（悬停柱条查看）。95% 置信带半宽 $1.96/\sqrt{n}$。

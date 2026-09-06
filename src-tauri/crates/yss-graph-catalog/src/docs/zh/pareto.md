@@ -8,4 +8,6 @@ $$
 
 ## 用法
 
+在 **Detail → 配置** 中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
+
 设置 **Shape**、**Scale** 与 **N** 后执行图。**Samples** 输出 $\ge x_m$ 的 `DataSeries<Float64>`。适用于财富/城市规模等重尾现象及极端值建模。

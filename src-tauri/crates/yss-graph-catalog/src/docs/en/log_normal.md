@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Mu**, **Sigma**, and **N**, then run the graph. **Samples** is a positive `DataSeries<Float64>`. Use for right-skewed positive data such as income or prices, multiplicative processes, and non-negative random variables.

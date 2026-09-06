@@ -10,4 +10,6 @@ Mean $\mathbb{E}[X]=1/\lambda$ and variance $\mathrm{Var}(X)=1/\lambda^2$.
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Wire **Rate** and **N**, then run the graph. **Samples** is a non-negative `DataSeries<Float64>`. Use for survival analysis, inter-arrival times, and event gaps in Poisson processes.

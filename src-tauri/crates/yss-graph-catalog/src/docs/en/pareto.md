@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Shape**, **Scale**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>` with values $\ge x_m$. Use for wealth, city-size, and other heavy-tail phenomena and extreme-value modeling.

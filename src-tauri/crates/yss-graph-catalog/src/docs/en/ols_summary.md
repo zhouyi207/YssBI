@@ -1,5 +1,7 @@
 # OLS Summary
 
+Set the intercept and covariance estimator directly in **Detail → Model configuration**.
+
 Uses the same inputs as the **OLS** node. After estimation it:
 
 1. Emits a full **OLSResult** struct

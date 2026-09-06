@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Low**, **High**, and **N**, then run the graph. **Samples** is a `DataSeries<Int64>`. Use for fair random integers, dice-style simulation, and uniform discrete sampling baselines.

@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **Mean**, **Std**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>`. Use for measurement error, central limit theorem demos, random noise, and as a baseline continuous distribution.

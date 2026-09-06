@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **N**, **K**, **n**, and **N Samples**, then run the graph. **Samples** is a `DataSeries<Int64>` where each element is the success count from one without-replacement draw. Use for QC sampling, finite-population proportion studies, and comparisons with the binomial model.

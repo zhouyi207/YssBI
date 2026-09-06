@@ -11,4 +11,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **A**, **B**, **C**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>` on $[A,B]$. Use for expert elicitation, project duration uncertainty, and bounded but non-uniform random inputs.

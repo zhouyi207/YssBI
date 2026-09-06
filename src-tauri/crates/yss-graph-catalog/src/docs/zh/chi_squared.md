@@ -8,4 +8,6 @@ $$
 
 ## 用法
 
+在 **Detail → 配置** 中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
+
 连接 **DF** 与 **N** 后执行图。**Samples** 输出非负的 `DataSeries<Float64>`。适用于方差检验、拟合优度统计量及作为 **FisherSnedecor** 分布的组成部分。

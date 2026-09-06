@@ -8,4 +8,6 @@ $$
 
 ## Usage
 
+Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
+
 Set **N Trials**, **P**, and **N Samples**, then run the graph. **Samples** is a `DataSeries<Int64>` where each element is the success count from one batch of $n$ trials. Common for repeated experiments, defect counts, and binomial proportion simulation.

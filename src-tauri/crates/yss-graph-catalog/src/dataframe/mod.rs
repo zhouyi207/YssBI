@@ -6,8 +6,8 @@
 mod families;
 
 use super::builtin::{
-    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, iid, leaf,
-    sid,
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
+    configuration_parameter, iid, leaf, sid,
 };
 use crate::{Aliases, Message, Text};
 use yss_graph_protocol::*;
@@ -217,13 +217,35 @@ fn interface(
             vec![column_parameter("column")?],
         )),
         IntRange => Ok((
-            vec![
-                scalar_input("start", "Start", "core.int64")?,
-                scalar_input("end", "End", "core.int64")?,
-                scalar_input("step", "Step", "core.int64")?,
-                data_output("series", "DataSeries", int_series_type()?, None)?,
-            ],
-            vec![],
+            vec![data_output(
+                "series",
+                "DataSeries",
+                int_series_type()?,
+                None,
+            )?],
+            vec![configuration_parameter(
+                "parameters.configuration.title",
+                ConfigurationSchema {
+                    fields: [("start", 0), ("end", 10), ("step", 1)]
+                        .into_iter()
+                        .map(|(key, default)| {
+                            Ok(ConfigurationFieldSpec {
+                                parameter: parameter(
+                                    key,
+                                    concrete("core.int64")?,
+                                    ParameterEditorSpec::Number,
+                                    Some(ParameterValue {
+                                        value_type: concrete("core.int64")?,
+                                        value: Value::Integer(default),
+                                    }),
+                                    vec![],
+                                )?,
+                                visible_when: None,
+                            })
+                        })
+                        .collect::<Result<_, BuiltinAssemblyError>>()?,
+                },
+            )?],
         )),
         SeriesLength | SeriesCount => Ok((
             vec![
@@ -841,6 +863,27 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", description, Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "start",
+            "Start",
+            "起点",
+            "First value in the integer range.",
+            "整数范围的起始值。",
+        ),
+        (
+            "end",
+            "End",
+            "终点",
+            "Exclusive end of the integer range.",
+            "整数范围的终止值（不包含）。",
+        ),
+        (
+            "step",
+            "Step",
+            "步长",
+            "Increment between consecutive values.",
+            "相邻整数之间的增量。",
+        ),
         (
             "columns",
             "Columns",
