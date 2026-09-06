@@ -84,6 +84,16 @@ Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识�
 
 Analysis Graph 只含数据依赖。Print、Control/Effect、Variable Set 等副作用仍属于 Workflow。
 
+节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 Draft document 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。节点参数没有项目设置继承/覆盖模式；应用级 computation settings 由 Rust settings service 独立管理。
+
+节点通过 `ParameterEditorSpec::Configuration(ConfigurationSchema)` 声明 Detail 配置表单。Schema 复用标量 `ParameterSpec`，提供默认值、选项、约束和基于选择项的条件字段；Rust 只投影当前适用字段，React 复用参数控件。配置对象属于当前节点，保存在节点参数中。`SetConfiguration { node_id, key, values }` 在当前候选文档上合并部分字段、补齐默认值、移除不适用字段，并通过已有 Draft history 和 Save 路径支持撤销、重做与持久化。导入的配置参数必须包含完整且适用的字段，验证不会暗中补写文档。
+
+Detail 直接编辑节点配置，不提供配置来源选择；静态配置不声明 Canvas 引脚。统计目录中的独立 Configure/VCE 节点和 Config 输入已移除，原有模型配置字段归各自 Fit/Summary 节点所有。OLS/WLS 使用常数项和协方差表单，GLS、IV、Logit、Probit、Prais、Panel 使用各自已有配置字段；其他统计节点保留原有参数。Y、X、权重等数据输入仍通过连线表达依赖。0.x 文档中已保存的旧 Configure/VCE 节点不作兼容转换，应在目标模型的 Detail 中重新设置。
+
+同一配置约定覆盖整个内置目录：分布采样节点将分布参数与样本数放入配置表单，整数范围将起点、终点和步长放入配置表单，相关图将最大滞后阶数放入配置表单；常量值、数据转换和其他既有节点参数继续在 Detail 直接编辑。数学操作数、标准化结果、数据列等实际数据依赖保留为数据引脚。旧文档中的这些静态配置引脚及其连线不再有效，需要在对应节点的 Detail 中重新设置。
+
+数据框的列投影、筛选谓词和列选择控件从 semantic snapshot 获取当前输入 Schema 的列、兼容操作符和字面量类型，输入变化时刷新，断开输入后停止提供过期列。没有封闭选项集的字符串参数使用文本编辑。配置能力不代表新增执行 kernel；分布采样、整数范围及绘图等尚未注册的 kernel 仍受已有执行能力边界限制。
+
 ## 5. Draft, Compile, Save, and Execute
 
 | 操作           | 改变 committed Project            | 结果                                              |
@@ -126,6 +136,8 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 协议默认参数在 semantic snapshot 中保留 typed literal，Compiler 按协议类型 lowering；用于显示的 Decimal 字符串不作为运行时 String。节点计算失败保留稳定原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）及 source identity，RunErrored 传递实际阶段、原因和节点；不传递原始输入值或后端错误文案。
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
+
+OLS Fit/Summary 从节点参数读取配置，通过 `ScientificBackend::ols` 和 `yss-execution-sci-adapter` 调用 SCI runtime，支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。计算使用已物化的数值序列；当前接入不包含数据库/序列 handle 的物化、Cluster VCE、WLS 或其他统计模型的执行 kernel。配置编辑、编译与这些尚未接入的计算能力是独立边界。
 
 ## 6. Results
 
