@@ -2,9 +2,7 @@ use thiserror::Error;
 
 use super::session_slot::{ApplicationState, SessionCaptureError};
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{
-    ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResultSnapshot,
-};
+use yss_execution::result::{ResultId, StoredResultSnapshot};
 use yss_graph_document::{GraphResourcePath, PortAddress};
 
 pub struct ResultPinQuery {
@@ -22,8 +20,6 @@ impl ResultPinQuery {
 pub enum ResultQueryApplicationError {
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
-    #[error(transparent)]
-    Execution(#[from] ExecutionResultQueryError),
 }
 
 impl ApplicationState {
@@ -35,19 +31,16 @@ impl ApplicationState {
         Ok(captured.execution().query_result(result_id))
     }
 
-    pub fn query_pin_result_history(
+    pub fn query_pin_result(
         &self,
         query: ResultPinQuery,
-    ) -> Result<Box<[PinResultHistorySnapshot]>, ResultQueryApplicationError> {
+    ) -> Result<Option<StoredResultSnapshot>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         let output = PlanOutputRef::new(
             PlanGraphId::from_existing(query.graph_path.as_str().to_owned().into_boxed_str()),
             PlanPortAddress::from_existing(query.output.to_string().into_boxed_str()),
         );
-        captured
-            .execution()
-            .query_pin_result_history(&output)
-            .map_err(ResultQueryApplicationError::Execution)
+        Ok(captured.execution().query_pin_result(&output))
     }
 }
 

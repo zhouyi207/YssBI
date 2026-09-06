@@ -2,7 +2,6 @@ import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectio
 import { isResultPlotKind } from "./result";
 import type {
   GraphOutputRefDto,
-  PinResultEntry,
   ResultDataSeriesMetadata,
   ResultDescriptor,
   ResultFailure,
@@ -11,7 +10,6 @@ import type {
   ResultProvenance,
   ResultReportKind,
   ResultState,
-  ResultUsage,
   ResultValue,
   ResultValueKind,
 } from "./result";
@@ -296,42 +294,4 @@ export function parseResultPage(value: unknown): ResultPage {
     metadata: parseMetadata(value.metadata),
     values: value.values,
   };
-}
-
-function parseUsage(value: unknown): ResultUsage {
-  if (!isRecord(value) || typeof value.kind !== "string") return fail("result usage");
-  if (value.kind === "produced" && hasExactKeys(value, ["kind"])) return { kind: "produced" };
-  if (
-    value.kind === "reused" &&
-    hasExactKeys(value, ["kind", "originalActivationId"]) &&
-    isDecimalId(value.originalActivationId)
-  ) {
-    return { kind: "reused", originalActivationId: value.originalActivationId };
-  }
-  return fail("result usage variant");
-}
-
-export function parsePinResultEntry(value: unknown): PinResultEntry {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["resultId", "runId", "activationId", "createdAtMs", "usage", "state"]) ||
-    !isDecimalId(value.resultId) ||
-    !isDecimalId(value.runId) ||
-    !isDecimalId(value.activationId) ||
-    !isDecimalId(value.createdAtMs)
-  )
-    return fail("pin result entry");
-  return {
-    resultId: value.resultId,
-    runId: value.runId,
-    activationId: value.activationId,
-    createdAtMs: value.createdAtMs,
-    usage: parseUsage(value.usage),
-    state: parseResultState(value.state),
-  };
-}
-
-export function parsePinResultHistory(value: unknown): PinResultEntry[] {
-  if (!Array.isArray(value)) return fail("pin result history");
-  return value.map(parsePinResultEntry);
 }

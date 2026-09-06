@@ -85,6 +85,8 @@ Frontend application code localizes `code + safe details`; `IpcError.message` is
 
 Execution terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire.
 
+`get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null. Descriptor/value/page commands resolve only current ResultIds. There is no history query or result-retention setting. `RunStarted { outputs }` carries the exact output addresses invalidated at admission; completion prompts clients to query current results again. Failed or cancelled runs never expose an older successful payload as current.
+
 ## Frontend adapter
 
 Ordinary frontend invocation goes through `src/services/ipc/invokeCommand.ts`, which validates the common error wire. Domain services under `src/services/` own command-specific request/result parsing. Views and presentation modules do not call Tauri `invoke` directly.

@@ -17,6 +17,4 @@ pub use resources::{
     create_event, create_function, duplicate_graph, remove_graph, rename_graph_resource,
     save_project_graph, unload_project_graph, update_function_signature,
 };
-pub use results::{
-    get_pin_result_history, get_result_descriptor, get_result_page, get_result_value,
-};
+pub use results::{get_pin_result, get_result_descriptor, get_result_page, get_result_value};

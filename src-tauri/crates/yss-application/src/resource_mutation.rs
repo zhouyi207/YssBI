@@ -329,6 +329,9 @@ fn build_graph_projection_replacement(
                 },
             )
         })?;
+    captured
+        .execution()
+        .observe_graph_result_inputs(graph_path.as_str(), model.basis.semantic_input_hash);
     Ok(GraphProjectionReplacement {
         graph_path: graph_path.as_str().into(),
         projection: model,
@@ -627,6 +630,9 @@ impl ApplicationState {
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        captured
+            .execution()
+            .invalidate_graph_results(graph_path.as_str());
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -650,6 +656,9 @@ impl ApplicationState {
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        captured
+            .execution()
+            .invalidate_graph_results(graph_path.as_str());
         Ok(committed_resource_mutation_from_project(result))
     }
 
@@ -667,6 +676,9 @@ impl ApplicationState {
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        captured
+            .execution()
+            .invalidate_graph_results(graph_path.as_str());
         Ok(())
     }
 

@@ -37,7 +37,7 @@ export interface GraphRunIdentityDto {
 }
 
 export type RunEventKind =
-  | { type: "runStarted" }
+  | { type: "runStarted"; outputs: GraphOutputRefDto[] }
   | { type: "runCompleted" }
   | ({ type: "runErrored" } & RunErrorOutcome)
   | { type: "runCancelled" }

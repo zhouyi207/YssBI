@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use thiserror::Error;
-
 use crate::plan::{PlanOutputRef, ResultCategory};
 use crate::value::RuntimeValue;
 
@@ -58,7 +56,7 @@ impl StoredResult {
     }
 }
 
-/// Neutral activation identity retained by pin history.
+/// Neutral activation identity for the current result.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ActivationId(u64);
 
@@ -72,24 +70,15 @@ impl ActivationId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ResultUsage {
-    Produced,
-    Reused {
-        original_activation_id: ActivationId,
-    },
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PinResultEntry {
+pub struct ResultProvenance {
     result_id: ResultId,
     run_id: RunId,
     activation_id: ActivationId,
     created_at_ms: u64,
-    usage: ResultUsage,
 }
 
-impl PinResultEntry {
+impl ResultProvenance {
     pub(crate) fn produced(
         result_id: ResultId,
         run_id: RunId,
@@ -101,7 +90,6 @@ impl PinResultEntry {
             run_id,
             activation_id,
             created_at_ms,
-            usage: ResultUsage::Produced,
         }
     }
 
@@ -120,49 +108,21 @@ impl PinResultEntry {
     pub const fn created_at_ms(&self) -> u64 {
         self.created_at_ms
     }
-
-    pub const fn usage(&self) -> ResultUsage {
-        self.usage
-    }
 }
 
-/// A result and its pin-history entry captured from one Execution store view.
-#[derive(Clone, Debug)]
-pub struct PinResultHistorySnapshot {
-    entry: PinResultEntry,
-    result: Arc<StoredResult>,
-}
-
-impl PinResultHistorySnapshot {
-    pub(crate) fn new(entry: PinResultEntry, result: Arc<StoredResult>) -> Self {
-        Self { entry, result }
-    }
-
-    pub fn into_parts(self) -> (PinResultEntry, Arc<StoredResult>) {
-        (self.entry, self.result)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub enum ExecutionResultQueryError {
-    #[error("pin history references a missing result")]
-    ResultSourceReadFailed { result_id: ResultId },
-}
-
-/// One coherent view of a cached output value and the same provenance entry
-/// used by pin history lookup.
+/// One coherent view of the current output value and its provenance.
 #[derive(Clone, Debug)]
 pub struct StoredResultSnapshot {
     value: Arc<StoredResult>,
     output: PlanOutputRef,
-    entry: PinResultEntry,
+    entry: ResultProvenance,
 }
 
 impl StoredResultSnapshot {
     pub(crate) fn new(
         value: Arc<StoredResult>,
         output: PlanOutputRef,
-        entry: PinResultEntry,
+        entry: ResultProvenance,
     ) -> Self {
         Self {
             value,
@@ -179,7 +139,7 @@ impl StoredResultSnapshot {
         &self.output
     }
 
-    pub fn entry(&self) -> &PinResultEntry {
+    pub fn entry(&self) -> &ResultProvenance {
         &self.entry
     }
 }

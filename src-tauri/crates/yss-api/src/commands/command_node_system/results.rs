@@ -1,6 +1,6 @@
 use super::common::parse_opaque_u64;
 use crate::commands::execution_dto::{
-    PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
+    ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
 };
 use crate::error::CommandError;
 use serde::Serialize;
@@ -22,9 +22,6 @@ struct ResultPagingErrorDetails {
 fn result_query_command_error(error: ResultQueryApplicationError) -> CommandError {
     match error {
         ResultQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
-        ResultQueryApplicationError::Execution(
-            yss_execution::result::ExecutionResultQueryError::ResultSourceReadFailed { result_id },
-        ) => CommandError::diagnosed("result_source_read_failed", result_id.get().to_string()),
     }
 }
 
@@ -49,20 +46,12 @@ pub fn get_result_descriptor(
     let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
     state
         .query_result(result_id)
-        .and_then(|result| {
-            result
-                .as_ref()
-                .map(|result| ResultDescriptorDto::from_execution(result_id, result))
-                .transpose()
-                .map_err(|_| {
-                    ResultQueryApplicationError::Execution(
-                        yss_execution::result::ExecutionResultQueryError::ResultSourceReadFailed {
-                            result_id,
-                        },
-                    )
-                })
+        .map_err(result_query_command_error)?
+        .map(|snapshot| ResultDescriptorDto::from_execution(result_id, &snapshot))
+        .transpose()
+        .map_err(|_| {
+            CommandError::diagnosed("result_source_read_failed", result_id.get().to_string())
         })
-        .map_err(result_query_command_error)
 }
 
 #[tauri::command]
@@ -125,30 +114,25 @@ pub fn get_result_page(
 }
 
 #[tauri::command]
-pub fn get_pin_result_history(
+pub fn get_pin_result(
     state: State<'_, ApplicationState>,
     graph_path: String,
     output: crate::schema::graph_mutation::PortAddressDto,
-) -> Result<Box<[PinResultEntryDto]>, CommandError> {
+) -> Result<Option<ResultDescriptorDto>, CommandError> {
     let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?;
     let output = output
         .try_into()
         .map_err(|_| CommandError::expected("invalid_output"))?;
-    state
-        .query_pin_result_history(ResultPinQuery::new(graph_path, output))
-        .map(|history| {
-            history
-                .into_vec()
-                .into_iter()
-                .map(|snapshot| {
-                    let (entry, result) = snapshot.into_parts();
-                    PinResultEntryDto::from_execution(entry, result.as_ref())
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice()
+    let result = state
+        .query_pin_result(ResultPinQuery::new(graph_path, output))
+        .map_err(result_query_command_error)?;
+    result
+        .map(|snapshot| {
+            ResultDescriptorDto::from_execution(snapshot.entry().result_id(), &snapshot)
         })
-        .map_err(result_query_command_error)
+        .transpose()
+        .map_err(|error| CommandError::diagnosed("result_source_read_failed", format!("{error:?}")))
 }
 
 fn result_requires_paging(result_id: ResultId, value_kind: &'static str) -> CommandError {

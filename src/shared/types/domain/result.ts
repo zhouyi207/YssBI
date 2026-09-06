@@ -119,14 +119,3 @@ export interface ResultPage {
   metadata: ResultDataSeriesMetadata | null;
   values: unknown[];
 }
-
-export type ResultUsage = { kind: "produced" } | { kind: "reused"; originalActivationId: string };
-
-export interface PinResultEntry {
-  resultId: ResultId;
-  runId: string;
-  activationId: string;
-  createdAtMs: string;
-  usage: ResultUsage;
-  state: ResultState;
-}

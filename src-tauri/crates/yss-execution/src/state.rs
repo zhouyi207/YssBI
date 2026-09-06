@@ -17,10 +17,7 @@ use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
-use crate::result::{
-    ActivationId, ExecutionResultQueryError, PinResultEntry, PinResultHistorySnapshot, ResultId,
-    StoredResult, StoredResultSnapshot,
-};
+use crate::result::{ActivationId, ResultId, ResultProvenance, StoredResult, StoredResultSnapshot};
 use crate::result_store::ResultStore;
 use crate::run_output::RunOutputMessage;
 use crate::run_registry::RunRegistry;
@@ -270,17 +267,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
             .max()
             .map_or(0, |maximum| maximum.saturating_add(1));
         let mut values: Vec<Option<RuntimeValue>> = vec![None; value_count];
-        let mut producers = vec![None; value_count];
-        for (operation_index, operation) in operations.iter().enumerate() {
-            for output in operation.outputs() {
-                let Some(producer) = producers.get_mut(output.value().index() as usize) else {
-                    return Err(KernelExecutionError::Failed);
-                };
-                if producer.replace(operation_index).is_some() {
-                    return Err(KernelExecutionError::Failed);
-                }
-            }
-        }
+        let producers = execution_producers(package)?;
         let selection = select_execution(package, demand, &producers)?;
         let mut remaining_dependencies = vec![0usize; operations.len()];
         let mut dependents = vec![Vec::new(); operations.len()];
@@ -443,6 +430,30 @@ struct SelectedObservation {
 struct ExecutionSelection {
     required_operations: Vec<bool>,
     observations: Vec<SelectedObservation>,
+}
+
+fn execution_producers(
+    package: &crate::plan::CompiledExecutionPackage,
+) -> Result<Vec<Option<usize>>, KernelExecutionError> {
+    let operations = package.plan().operations();
+    let value_count = operations
+        .iter()
+        .flat_map(|operation| operation.outputs())
+        .map(|output| output.value().index() as usize)
+        .max()
+        .map_or(0, |max| max + 1);
+    let mut producers = vec![None; value_count];
+    for (operation_index, operation) in operations.iter().enumerate() {
+        for output in operation.outputs() {
+            let Some(producer) = producers.get_mut(output.value().index() as usize) else {
+                return Err(KernelExecutionError::Failed);
+            };
+            if producer.replace(operation_index).is_some() {
+                return Err(KernelExecutionError::Failed);
+            }
+        }
+    }
+    Ok(producers)
 }
 
 fn select_execution(
@@ -948,7 +959,10 @@ pub struct ExecutedPreparedRun {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PreparedExecutionEvent {
-    RunStarted(crate::run_registry::RunId),
+    RunStarted {
+        run_id: crate::run_registry::RunId,
+        outputs: Box<[crate::plan::PlanOutputRef]>,
+    },
     RunOutput(RunOutputMessage),
 }
 
@@ -1144,11 +1158,11 @@ impl ExecutionRuntimeState {
         self.results.get(result_id)
     }
 
-    pub fn query_pin_result_history(
+    pub fn query_pin_result(
         &self,
         output: &crate::plan::PlanOutputRef,
-    ) -> Result<Box<[PinResultHistorySnapshot]>, ExecutionResultQueryError> {
-        self.results.query_pin_result_history(output)
+    ) -> Option<StoredResultSnapshot> {
+        self.results.query_pin_result(output)
     }
 
     pub fn runs(&self) -> &RunRegistry {
@@ -1234,12 +1248,24 @@ impl ExecutionRuntimeState {
         let _work = self.admit().map_err(ExecutePreparedError::Admission)?;
         control.check(RunPhase::Admission)?;
 
-        let request = RunResourceRequest::new(plan, &bindings);
-        let prepared_resources = resources
-            .prepare(&request)
-            .map_err(ExecutePreparedError::ResourcePreparation)?;
-        control.check(RunPhase::ResourcePreparation)?;
-
+        let producers =
+            execution_producers(plan.package()).map_err(ExecutePreparedError::Kernel)?;
+        let selection = select_execution(plan.package(), demand, &producers)
+            .map_err(ExecutePreparedError::Kernel)?;
+        let outputs = plan
+            .package()
+            .plan()
+            .operations()
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| selection.required_operations[*index])
+            .flat_map(|(_, operation)| {
+                operation
+                    .outputs()
+                    .iter()
+                    .map(|output| output.output().clone())
+            })
+            .collect::<Box<[_]>>();
         let run_id = self
             .runs
             .admit_next()
@@ -1250,9 +1276,33 @@ impl ExecutionRuntimeState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(run_id, Arc::clone(&control.cancellation));
-        if let Some(on_event) = on_event.as_mut() {
-            on_event(PreparedExecutionEvent::RunStarted(run_id));
+        if !self.results.begin_run(run_id, &outputs) {
+            let result = terminate_run(
+                &mut lifecycle,
+                run_id,
+                ExecutePreparedError::Cancelled {
+                    phase: RunPhase::Admission,
+                },
+            );
+            self.remove_active_control(run_id);
+            return result;
         }
+        if let Some(on_event) = on_event.as_mut() {
+            on_event(PreparedExecutionEvent::RunStarted { run_id, outputs });
+        }
+        let request = RunResourceRequest::new(plan, &bindings);
+        let prepared_resources = match resources.prepare(&request) {
+            Ok(resources) => resources,
+            Err(error) => {
+                let result = terminate_run(
+                    &mut lifecycle,
+                    run_id,
+                    ExecutePreparedError::ResourcePreparation(error),
+                );
+                self.remove_active_control(run_id);
+                return result;
+            }
+        };
         if let Err(error) = control.check(RunPhase::Execution) {
             let result = terminate_run(&mut lifecycle, run_id, error);
             self.remove_active_control(run_id);
@@ -1326,7 +1376,7 @@ impl ExecutionRuntimeState {
             result_ids_by_output.insert(scheduled.output.clone(), result_id);
             let pin = ReadyPinResult::new(
                 scheduled.output,
-                PinResultEntry::produced(
+                ResultProvenance::produced(
                     result_id,
                     run_id,
                     ActivationId::from_existing(result_id.get()),
@@ -1429,15 +1479,16 @@ impl ExecutionRuntimeState {
         }
     }
 
-    pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) {
-        for result in handoff.results() {
-            let pin = result.pin();
-            self.results.publish_for_output(
-                pin.output().clone(),
-                pin.entry().clone(),
-                result.value().clone(),
-            );
-        }
+    pub fn observe_graph_result_inputs(&self, graph: &str, inputs: [u8; 32]) {
+        self.results.observe_graph_inputs(graph, inputs);
+    }
+
+    pub fn invalidate_graph_results(&self, graph: &str) {
+        self.results.invalidate_graph(graph);
+    }
+
+    pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) -> bool {
+        self.results.publish(handoff.results())
     }
 
     pub fn finalize_run_success(
@@ -1852,11 +1903,50 @@ mod tests {
             .collect::<Vec<_>>();
         let handoff = candidate.into_finalization_handoff();
         state.publish_committed_results(&handoff);
-        assert!(outputs.iter().all(|output| {
-            state
-                .query_pin_result_history(output)
-                .is_ok_and(|history| history.len() == 1)
-        }));
+        assert!(
+            outputs
+                .iter()
+                .all(|output| { state.query_pin_result(output).is_some() })
+        );
+        drop(handoff);
+        for _ in 0..100 {
+            let previous = outputs
+                .iter()
+                .map(|output| state.query_pin_result(output).unwrap())
+                .collect::<Vec<_>>();
+            let weak = previous
+                .iter()
+                .map(|result| Arc::downgrade(result.value()))
+                .collect::<Vec<_>>();
+            let ids = previous
+                .iter()
+                .map(|result| result.entry().result_id())
+                .collect::<Vec<_>>();
+            drop(previous);
+            let candidate = state
+                .execute_prepared(
+                    &plan,
+                    empty_bindings(),
+                    &ResourceProviderFactory::new("session".into()),
+                    &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
+                )
+                .unwrap();
+            assert!(weak.iter().all(|result| result.upgrade().is_none()));
+            assert!(ids.iter().all(|id| state.query_result(*id).is_none()));
+            assert!(state.publish_committed_results(&candidate.into_finalization_handoff()));
+        }
+        let failed = state.execute_prepared(
+            &plan,
+            empty_bindings(),
+            &ResourceProviderFactory::new("another-session".into()),
+            &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
+        );
+        assert!(failed.is_err());
+        assert!(
+            outputs
+                .iter()
+                .all(|output| state.query_pin_result(output).is_none())
+        );
     }
 
     #[test]

@@ -163,8 +163,9 @@ function parseRunEventKind(value: unknown): RunEventKind {
   const type = parseDiscriminant(value.type, RUN_EVENT_KIND_TYPES, "run event kind variant");
   switch (type) {
     case "runStarted":
-      if (!hasExactKeys(value, ["type"])) return fail("runStarted");
-      return { type: "runStarted" };
+      if (!hasExactKeys(value, ["type", "outputs"]) || !Array.isArray(value.outputs))
+        return fail("runStarted");
+      return { type: "runStarted", outputs: value.outputs.map(parseGraphOutputRefDto) };
     case "runCompleted":
       if (!hasExactKeys(value, ["type"])) return fail("runCompleted");
       return { type: "runCompleted" };

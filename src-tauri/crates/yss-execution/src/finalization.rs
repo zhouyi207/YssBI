@@ -8,16 +8,16 @@ use crate::plan::{
     PlanCompileId, PlanOutputRef, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
     ResourceAccess, ResourceKind,
 };
-use crate::result::{PinResultEntry, ResultId, StoredResult};
+use crate::result::{ResultId, ResultProvenance, StoredResult};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct ReadyPinResult {
     output: PlanOutputRef,
-    entry: PinResultEntry,
+    entry: ResultProvenance,
 }
 
 impl ReadyPinResult {
-    pub(crate) fn new(output: PlanOutputRef, entry: PinResultEntry) -> Self {
+    pub(crate) fn new(output: PlanOutputRef, entry: ResultProvenance) -> Self {
         Self { output, entry }
     }
 
@@ -25,7 +25,7 @@ impl ReadyPinResult {
         &self.output
     }
 
-    pub(crate) fn entry(&self) -> &PinResultEntry {
+    pub(crate) fn entry(&self) -> &ResultProvenance {
         &self.entry
     }
 }
@@ -204,7 +204,7 @@ pub mod test_support {
     use crate::plan::{
         PlanGraphId, PlanNodeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
     };
-    use crate::result::{ActivationId, PinResultEntry};
+    use crate::result::{ActivationId, ResultProvenance};
     use crate::run_registry::RunId;
 
     /// Test-only owner fixture. Production code has no equivalent constructor.
@@ -237,7 +237,7 @@ pub mod test_support {
         );
         let pin = ReadyPinResult::new(
             output,
-            PinResultEntry::produced(
+            ResultProvenance::produced(
                 result_id,
                 RunId::from_existing(1),
                 ActivationId::from_existing(result_id.get()),

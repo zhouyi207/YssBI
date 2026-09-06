@@ -132,6 +132,10 @@ pub fn compile_graph_draft(
         .revalidate_captured_session(&captured)
         .map_err(CompileGraphDraftError::SessionChanged)?;
 
+    captured
+        .execution()
+        .observe_graph_result_inputs(graph_path.as_str(), projection.basis.semantic_input_hash);
+
     Ok(match compilation.artifact_id() {
         Some(artifact_id) => CompileGraphDraftReceipt::Ready {
             artifact_id: *artifact_id,

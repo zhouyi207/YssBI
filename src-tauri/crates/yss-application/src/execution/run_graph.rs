@@ -149,7 +149,9 @@ impl RunIdentity {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RunApplicationEventKind {
-    RunStarted,
+    RunStarted {
+        outputs: Box<[PlanOutputRef]>,
+    },
     RunCompleted,
     RunCancelled,
     RunErrored {
@@ -379,7 +381,7 @@ where
         &control,
         &plan_demand,
         |event| match event {
-            PreparedExecutionEvent::RunStarted(run_id) => {
+            PreparedExecutionEvent::RunStarted { run_id, outputs } => {
                 let identity = RunIdentity::new(
                     PlanProjectSessionId::from_existing(
                         captured.project_session_id().as_str().into(),
@@ -390,7 +392,7 @@ where
                 started_identity = Some(identity.clone());
                 let _ = deliver(RunApplicationEvent::new(
                     identity,
-                    RunApplicationEventKind::RunStarted,
+                    RunApplicationEventKind::RunStarted { outputs },
                 ));
             }
             PreparedExecutionEvent::RunOutput(message) => {
@@ -484,9 +486,19 @@ where
             return Err(ExecutionApplicationError::Finalization(error));
         }
     };
-    captured
+    if !captured
         .execution()
-        .publish_committed_results(outcome.handoff());
+        .publish_committed_results(outcome.handoff())
+    {
+        publish_run_failure(
+            captured.execution(),
+            run_id,
+            &identity,
+            &mut deliver,
+            RunApplicationEventKind::RunCancelled,
+        );
+        return Err(ExecutionApplicationError::Cancelled);
+    }
     if let Err(error) = captured.execution().finalize_run_success(run_id) {
         publish_run_failure(
             captured.execution(),

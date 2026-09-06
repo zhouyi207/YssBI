@@ -43,7 +43,8 @@
   "runEvents": [
     {
       "kind": {
-        "type": "runStarted"
+        "type": "runStarted",
+        "outputs": []
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",

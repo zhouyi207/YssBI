@@ -4,9 +4,7 @@ use yss_application::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunDemand,
 };
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{
-    PinResultEntry, ResultId, ResultUsage, StoredResult, StoredResultSnapshot,
-};
+use yss_execution::result::{ResultId, StoredResult, StoredResultSnapshot};
 use yss_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_execution::value::RuntimeValue;
 use yss_graph_document::GraphResourcePath;
@@ -151,7 +149,9 @@ impl From<&yss_execution::error::RunFailure> for RunErrorOutcomeDto {
     rename_all_fields = "camelCase"
 )]
 pub(crate) enum RunEventKindDto {
-    RunStarted,
+    RunStarted {
+        outputs: Box<[GraphOutputRefDto]>,
+    },
     RunCompleted,
     RunErrored {
         #[serde(flatten)]
@@ -209,7 +209,9 @@ impl TryFrom<RunApplicationEvent> for RunEventDto {
             run_id: identity.run_id().get().to_string(),
         };
         let kind = match event.kind() {
-            RunApplicationEventKind::RunStarted => RunEventKindDto::RunStarted,
+            RunApplicationEventKind::RunStarted { outputs } => RunEventKindDto::RunStarted {
+                outputs: outputs.iter().map(output_dto).collect::<Result<_, _>>()?,
+            },
             RunApplicationEventKind::RunCompleted => RunEventKindDto::RunCompleted,
             RunApplicationEventKind::RunCancelled => RunEventKindDto::RunCancelled,
             RunApplicationEventKind::RunErrored { failure } => RunEventKindDto::RunErrored {
@@ -601,44 +603,6 @@ impl ResultPageDto {
             value_kind,
             metadata: None,
             values,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ResultUsageDto {
-    Produced,
-    Reused { original_activation_id: String },
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PinResultEntryDto {
-    result_id: String,
-    run_id: String,
-    activation_id: String,
-    created_at_ms: String,
-    usage: ResultUsageDto,
-    state: ResultStateDto,
-}
-
-impl PinResultEntryDto {
-    pub(crate) fn from_execution(entry: PinResultEntry, _result: &StoredResult) -> Self {
-        Self {
-            result_id: entry.result_id().get().to_string(),
-            run_id: entry.run_id().get().to_string(),
-            activation_id: entry.activation_id().get().to_string(),
-            created_at_ms: entry.created_at_ms().to_string(),
-            usage: match entry.usage() {
-                ResultUsage::Produced => ResultUsageDto::Produced,
-                ResultUsage::Reused {
-                    original_activation_id,
-                } => ResultUsageDto::Reused {
-                    original_activation_id: original_activation_id.get().to_string(),
-                },
-            },
-            state: ResultStateDto::Ready,
         }
     }
 }

@@ -15,7 +15,7 @@
 | 未保存编辑与 undo/redo                 | frontend GraphDraftSession           | document、保存基线、历史      |
 | 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection        |
 | 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId             |
-| run、result、Pin history               | Rust Execution / ResultStore         | typed query 与 UI projection  |
+| run、当前 output result               | Rust Execution / ResultStore         | typed query 与 UI projection  |
 | 程序文本输出                           | Execution RunOutputEmitter / channel | bounded Run Output projection |
 
 `graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
@@ -141,9 +141,13 @@ OLS Fit/Summary 从节点参数读取配置，通过 `ScientificBackend::ols` �
 
 ## 6. Results
 
-`ResultStore` 是 session-scoped result authority。一个 node activation 的 outputs 原子进入 Ready、Failed 或 Cancelled；每个 output 分别拥有 ResultId、type/presentation、payload 和 provenance。一个 node evaluation 仍是共同的失效单位，不创建按 Pin 的独立求值 authority。
+`ResultStore` 是 session-scoped result authority，每个 output address 只保存当前结果。每个当前结果拥有 ResultId、type/presentation、payload 和 provenance；不存在结果历史列表、历史选择或结果保留设置。
 
-Frontend 通过 typed descriptor/value/page/history queries 读取；event 只公告 identity。Project replacement 更换 ResultStore，旧 ID 不 alias 新 session。Output clear 不清空 Results 或 Pin history。
+Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前释放这些输出的旧 payload 与 ResultId 索引。一个 operation 的所有 outputs 同时失效；未参与本次 demand 的输出保留当前结果。成功 finalization 在同一写锁内发布整批结果，并验证每个输出仍属于该 run；被后续运行或图失效淘汰的 run 不能重新发布。失败、取消不恢复上次成功的 payload。
+
+Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。已打开的 Result panel 绑定 output address，在原位置清空并更新；独立展示窗口收到失效通知后释放旧内容。
+
+语义输入改变会清除该图的当前结果；变量等资源的已提交变更按 Rust 公告的受影响图清除结果和前端缓存；移动节点等不改变语义输入的操作可保留结果。删除、重命名、卸载图和 Project session replacement 释放对应结果。Project replacement 更换 ResultStore 并清空前端投影，旧查询不能写入新 session。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除当前 Results。
 
 ## 7. Graph Problems
 
