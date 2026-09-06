@@ -251,7 +251,7 @@ export const FRONTEND_STATE_AUTHORITY: readonly FrontendStateAuthorityEntry[] = 
     memberKind: "field",
     authority: "local-draft",
     writes: ["documents.*.dirty"],
-    writerModule: "@/features/core/resource/ui",
+    writerModule: "@/features/core/resource/documentStateActions",
     writerLayer: "CoreUi",
     readerLayers: ["Views", "Application", "Core"],
   },

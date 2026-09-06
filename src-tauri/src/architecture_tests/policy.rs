@@ -933,7 +933,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_variable/mod.rs",
         fully_qualified_owner: "yss_api::commands::command_variable",
         canonical_origin_targets: &[
-            "yss_application::events::ApplicationEvent",
+            "yss_application::variable_mutation::CommittedVariableMutation",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::SessionCaptureError",
             "yss_application::execution::session_slot::SessionCaptureError::Inactive",
@@ -957,7 +957,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::variable_mutation::VariableQueryApplicationError::VariableNotFound",
             "yss_api::error::CommandError",
             "yss_api::event::Event",
-            "yss_api::schema::application_event::application_event_to_transport",
+            "yss_api::schema::application_event::resource_mutation_to_transport",
             "yss_api::event::emit_project_event_result",
             "yss_api::event::emit_project_event",
             "yss_api::event::event_project::EventProject",
@@ -1066,7 +1066,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-api/src/schema/application_event.rs",
         fully_qualified_owner: "yss_api::schema::application_event",
         canonical_origin_targets: &[
-            "yss_application::events::ApplicationEvent",
             "yss_application::events::CommittedResourceMutation",
             "yss_application::events::GraphProjectionReplacement",
             "yss_application::events::HistoryStatus",
@@ -1373,8 +1372,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_catalog::builtin::BuiltinInitializationError",
             "yss_graph_catalog::builtin::BuiltinNodeSystem",
             "yss_graph_catalog::builtin::build_builtin_node_system",
-            "yss_graph_catalog::builtin::builtin_bundle_parts_for_test",
-            "yss_graph_catalog::builtin::validate_builtin_bundle_for_test",
         ],
     },
     InternalDependencyCapability {
