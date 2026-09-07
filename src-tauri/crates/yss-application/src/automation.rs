@@ -325,12 +325,8 @@ fn inspect_project(
         .project()
         .get_data()
         .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ProjectSessionUnavailable))?;
-    let mut resources = Vec::with_capacity(
-        project.graphs.len()
-            + project.databases.len()
-            + project.charts.len()
-            + project.variables.len(),
-    );
+    let mut resources =
+        Vec::with_capacity(project.graphs.len() + project.databases.len() + project.charts.len());
     resources.extend(
         project
             .graphs
@@ -362,17 +358,6 @@ fn inspect_project(
                 resource_id: path.as_str().to_owned(),
                 display_name: path.display_name().as_str().to_owned(),
                 revision: Some(chart.revision.get()),
-            }),
-    );
-    resources.extend(
-        project
-            .variables
-            .values()
-            .map(|variable| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::Variable,
-                resource_id: variable.id.to_string(),
-                display_name: variable.name.clone(),
-                revision: None,
             }),
     );
     enforce_result_bound(CapabilityId::InspectProject, resources.len())?;

@@ -1,7 +1,7 @@
 use crate::error::CommandError;
 use crate::schema::application_event::ProjectActivationResultDto;
 use crate::schema::graph_draft::GraphEditorSessionDto;
-use crate::schema::{DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
+use crate::schema::{DatabaseDeclDTO, ProjectDatabasesDTO};
 use serde::Serialize;
 use tauri::State;
 use yss_application::execution::{ApplicationState, SessionCaptureError};
@@ -15,27 +15,27 @@ struct RecoveryRequiredDetails {
     recovery_required: bool,
 }
 
-/// 分阶段加载第一步：获取 databases + variables（含 schema）
+/// 分阶段加载第一步：获取 databases（含 schema）
 #[tauri::command]
-pub fn get_project_databases_variables(
+pub fn get_project_databases(
     application: State<ApplicationState>,
-) -> Result<DatabasesVariablesDTO, CommandError> {
+) -> Result<ProjectDatabasesDTO, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
         diagnostic_domain = "data",
         diagnostic_event = "getProjectDataResources",
-        "Loading project databases and variables"
+        "Loading project databases"
     );
 
     application
-        .query_project_databases_variables()
+        .query_project_databases()
         .map_err(map_project_query_error)
-        .and_then(project_databases_variables_to_transport)
+        .and_then(project_databases_to_transport)
 }
 
-fn project_databases_variables_to_transport(
-    snapshot: yss_application::project_query::ProjectDatabasesVariablesSnapshot,
-) -> Result<DatabasesVariablesDTO, CommandError> {
+fn project_databases_to_transport(
+    snapshot: yss_application::project_query::ProjectDatabasesSnapshot,
+) -> Result<ProjectDatabasesDTO, CommandError> {
     let databases = snapshot
         .databases()
         .iter()
@@ -47,19 +47,7 @@ fn project_databases_variables_to_transport(
             (database.declaration.id.as_str().to_owned(), dto)
         })
         .collect();
-    let variables = snapshot
-        .variables()
-        .iter()
-        .map(|variable| {
-            VariableInstanceDTO::try_from(variable)
-                .map(|dto| (variable.id.to_string(), dto))
-                .map_err(|error| CommandError::diagnosed("project_variable_mapping_failed", error))
-        })
-        .collect::<Result<_, _>>()?;
-    Ok(DatabasesVariablesDTO {
-        databases,
-        variables,
-    })
+    Ok(ProjectDatabasesDTO { databases })
 }
 
 /// 获取当前项目 activation，供项目加载后创建的独立 WebView 建立 lifecycle identity。

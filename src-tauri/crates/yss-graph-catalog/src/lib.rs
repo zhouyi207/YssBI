@@ -42,10 +42,7 @@ pub use localization::{
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::{
-        CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgs,
-        build_builtin_node_system,
-    };
+    use super::build_builtin_node_system;
     use yss_graph_protocol::{NodeTypeId, PortCardinality};
 
     #[test]
@@ -91,33 +88,6 @@ mod tests {
     }
 
     #[test]
-    fn variable_resource_has_one_read_action() {
-        let system = build_builtin_node_system().expect("production built-ins must assemble");
-        let resource_path = CatalogResourcePath::new("variables/score");
-        let entries = [CatalogResourceEntry {
-            name: "Score".into(),
-            node_type_id: NodeTypeId::new("yssbi.project.variable.get")
-                .expect("built-in node type is valid"),
-            resource_path: resource_path.clone(),
-            resource_revision: 3,
-            create_args: ResourceBoundCreateArgs::Variable,
-            technical_terms: vec!["variable".into()],
-        }];
-
-        let catalog = system
-            .catalog
-            .localize_with_resources(&system.registry, "zh-CN", &entries);
-        let node_types = catalog
-            .items
-            .iter()
-            .filter(|item| item.resource_path.as_ref() == Some(&resource_path))
-            .map(|item| item.node_type_id.as_ref())
-            .collect::<Vec<_>>();
-
-        assert_eq!(node_types, ["yssbi.project.variable.get"]);
-    }
-
-    #[test]
     fn analysis_catalog_excludes_retired_flow_and_split_numeric_nodes() {
         let registry = build_builtin_node_system()
             .expect("production built-ins must assemble")
@@ -128,6 +98,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
 
         for current in [
+            "yssbi.constant.get",
             "yssbi.core.reroute",
             "yssbi.numeric.add",
             "yssbi.numeric.subtract",

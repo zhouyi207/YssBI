@@ -8,26 +8,20 @@ use yss_execution::{
     identity::{ExecutionSessionId, RuntimeGeneration},
     plan::{
         PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
-        PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-        ResourceAccess, ResourceKind,
     },
-    resource_preparation::{ResourceProviderFactory, RunResourceBinding, RunResourceBindings},
+    resource_preparation::{ResourceProviderFactory, RunResourceBindings},
     result::StoredResult,
     state::{ExecutionRuntimeState, RunExecutionControl},
     value::RuntimeValue,
 };
-use yss_graph_analysis_contract::{
-    CompilationBasis, ResourceKey, ResourceObservedState, ResourceVersion,
-};
+use yss_graph_analysis_contract::CompilationBasis;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues,
     PortAddress,
 };
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_editor::{EditorGraphMutation, PortPlacement};
-use yss_graph_resource_contract::{
-    GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
-};
+use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 
 #[test]
@@ -44,8 +38,8 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
     let mut document = GraphDocument::default();
     let [response, predictor, fit, summary] = std::array::from_fn(|_| NodeId::new());
     for (id, node_type) in [
-        (response, "yssbi.project.variable.get"),
-        (predictor, "yssbi.project.variable.get"),
+        (response, "yssbi.constant.get"),
+        (predictor, "yssbi.constant.get"),
         (fit, "yssbi.statistics.ols.fit"),
         (summary, "yssbi.statistics.ols.summary"),
     ] {
@@ -61,16 +55,33 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         );
     }
     let series = [
-        (response, "variables/y", vec![2., 4., 5., 4., 7., 8.]),
-        (predictor, "variables/x", vec![1., 2., 3., 4., 5., 6.]),
+        (response, "Response", vec![2., 4., 5., 4., 7., 8.]),
+        (predictor, "Predictor", vec![1., 2., 3., 4., 5., 6.]),
     ];
-    for (node, resource, _) in &series {
+    for (node, name, values) in &series {
+        let id = yss_graph_document::ConstantId::new();
+        let mut constant = yss_graph_document::GraphConstant {
+            id,
+            name: (*name).into(),
+            data_type: DataType::DataSeries(Box::new(DataType::Float64)),
+            data_value: yss_data_contract::DataValue::DataSeries(
+                yss_data_contract::DataSeriesValue::with_element_type(
+                    serde_json::json!({"value": values}).to_string(),
+                    DataType::Float64,
+                ),
+            ),
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        };
+        yss_graph_document::normalize_constant_value(&mut constant).unwrap();
+        document.constants.insert(id, constant);
         document
             .nodes
             .get_mut(node)
             .unwrap()
             .parameters
-            .insert("variable".parse().unwrap(), (*resource).into());
+            .insert("constant".parse().unwrap(), id.to_string().into());
     }
     let port = |node, key: &str| PortAddress::declared(node, key.parse().unwrap());
     let apply = |document: &mut GraphDocument, mutation: EditorGraphMutation| {
@@ -94,7 +105,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
             .find(|address| address.node_id == target)
             .unwrap()
             .clone();
-        // Catalog-bound series have their types resolved by compilation below.
+        // Graph constants supply both the declared series type and its values.
         for (source, input) in [(response, port(target, "response")), (predictor, input)] {
             let source = if target == summary {
                 let mut node = document.nodes[&source].clone();
@@ -120,15 +131,6 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
     }
     let catalog = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
-        series
-            .iter()
-            .map(|(_, resource, _)| {
-                (
-                    GraphResourceId::new(*resource),
-                    VariableValueContract::new(DataType::DataSeries(Box::new(DataType::Float64))),
-                )
-            })
-            .collect(),
         BTreeMap::new(),
         ResourceCatalogFingerprint::from_bytes([1; 32]),
     );
@@ -136,19 +138,8 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
             runtime.registry_fingerprint(),
         ),
-        resource_versions: series
-            .iter()
-            .map(|(_, resource, _)| (ResourceKey::new(*resource), ResourceVersion::new("1")))
-            .collect(),
-        resource_observations: series
-            .iter()
-            .map(|(_, resource, _)| {
-                (
-                    ResourceKey::new(*resource),
-                    ResourceObservedState::Present(ResourceVersion::new("1")),
-                )
-            })
-            .collect(),
+        resource_versions: BTreeMap::new(),
+        resource_observations: BTreeMap::new(),
     };
     let execute = |document: &GraphDocument| {
         let compiled = runtime
@@ -222,26 +213,8 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         let execution_basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-            series
-                .iter()
-                .map(|(_, resource, _)| {
-                    (
-                        PlanResourceId::from_existing((*resource).into()),
-                        PlanResourceVersion::from_existing("1".into()),
-                    )
-                })
-                .collect(),
-            series
-                .iter()
-                .map(|(_, resource, _)| {
-                    (
-                        PlanResourceId::from_existing((*resource).into()),
-                        PlanResourceObservedState::Present(PlanResourceVersion::from_existing(
-                            "1".into(),
-                        )),
-                    )
-                })
-                .collect(),
+            BTreeMap::new(),
+            BTreeMap::new(),
         );
         let package =
             crate::graph_contracts::execution_package_from_graph(package, execution_basis).unwrap();
@@ -253,34 +226,13 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         let plan = execution
             .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
             .unwrap();
-        let requirements: Vec<_> = series
-            .iter()
-            .map(|(_, resource, _)| {
-                PlanResourceRequirement::new(
-                    PlanResourceId::from_existing((*resource).into()),
-                    ResourceKind::Variable,
-                    ResourceAccess::Shared,
-                    false,
-                )
-            })
-            .collect();
-        let bindings = requirements
-            .iter()
-            .zip(&series)
-            .map(|(requirement, (_, _, values))| {
-                RunResourceBinding::new(
-                    requirement.clone(),
-                    PlanResourceVersion::from_existing("1".into()),
-                    RuntimeValue::List(values.iter().copied().map(RuntimeValue::Decimal).collect()),
-                )
-            });
         let run = execution
             .execute_prepared_handoff(
                 &plan,
                 RunResourceBindings::new(
                     PlanProjectSessionId::from_existing("session".into()),
-                    requirements.clone(),
-                    bindings,
+                    [],
+                    [],
                 ),
                 &ResourceProviderFactory::new("session".into()),
                 &RunExecutionControl::with_cancellation(

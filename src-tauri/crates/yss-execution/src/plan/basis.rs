@@ -9,7 +9,6 @@ pub enum ResourceKind {
     DatabaseConnection,
     DataFrame,
     File,
-    Variable,
     Plot,
 }
 

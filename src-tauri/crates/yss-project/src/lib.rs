@@ -18,7 +18,6 @@ pub mod project_session;
 pub mod project_state;
 pub mod project_writers;
 
-pub mod project_state_variable;
 pub mod project_store;
 
 pub mod chart_io;
@@ -165,3 +164,4 @@ pub mod fixtures {
         )
     }
 }
+mod constant_migration;

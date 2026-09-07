@@ -81,7 +81,6 @@ impl ProjectState {
             let mut lifecycle = self.resource_lifecycle.boundary();
             let mut data = self.project_data.write().unwrap();
             let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
-            let mut variable_revisions = self.variable_revisions.write().unwrap();
             let mut chart_revisions = self.chart_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
             self.ensure_project_operational()?;
@@ -89,7 +88,6 @@ impl ProjectState {
                 context,
                 &data,
                 &graph_resource_revisions,
-                &variable_revisions,
                 &chart_revisions,
             )?;
             normalize_function_patch_revisions(&mut patch, &data, &graph_resource_revisions)?;
@@ -133,8 +131,6 @@ impl ProjectState {
                     moved,
                     referenced_graphs_before,
                     referenced_graphs,
-                    referenced_variables_before,
-                    referenced_variables,
                     ..
                 } => Some(yss_project_history::ProjectHistoryTransaction::graph_move(
                     context.operation_id,
@@ -145,8 +141,6 @@ impl ProjectState {
                         moved_after: moved.clone(),
                         referenced_graphs_before: referenced_graphs_before.clone(),
                         referenced_graphs_after: referenced_graphs.clone(),
-                        referenced_variables_before: referenced_variables_before.clone(),
-                        referenced_variables_after: referenced_variables.clone(),
                     })
                     .map_err(|error| {
                         ProjectFilesystemError::TransactionPrepareFailed {
@@ -200,42 +194,15 @@ impl ProjectState {
                     } else {
                         None
                     };
-                    let removed_ids = data
-                        .variables
-                        .iter()
-                        .filter(|(_, variable)| {
-                            variable_scope_references_path(&variable.scope, path.as_str())
-                        })
-                        .map(|(id, _)| *id)
-                        .collect::<Vec<_>>();
-                    let removed_revisions = removed_ids
-                        .iter()
-                        .map(|id| {
-                            let retained = variable_revisions
-                                .get(id)
-                                .map(|entry| entry.revision)
-                                .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
-                            checked_resource_revision(format!("variables/{id}"), retained)
-                                .map(|revision| (*id, revision))
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-
                     data.graphs.remove(&path);
                     if let Some(revision) = retained_function_revision {
                         graph_resource_revisions.insert(path.clone(), revision);
                     } else {
                         graph_resource_revisions.remove(&path);
                     }
-                    for (id, revision) in removed_revisions {
-                        data.variables.remove(&id);
-                        variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
-                    }
                 }
                 ProjectDataPatch::UnloadGraph { path } => {
                     data.graphs.remove(&path);
-                    data.variables.retain(|_, variable| {
-                        !variable_scope_references_path(&variable.scope, path.as_str())
-                    });
                 }
                 ProjectDataPatch::MoveGraph {
                     from,
@@ -243,7 +210,6 @@ impl ProjectState {
                     moved,
                     referenced_graphs,
                     loaded_referenced_graphs,
-                    referenced_variables,
                     ..
                 } => {
                     let existing = data.graphs.get(&from);
@@ -258,18 +224,6 @@ impl ProjectState {
                         } else {
                             None
                         };
-                    let referenced_variable_revisions = referenced_variables
-                        .keys()
-                        .map(|id| {
-                            let retained = variable_revisions
-                                .get(id)
-                                .map(|entry| entry.revision)
-                                .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
-                            checked_resource_revision(format!("variables/{id}"), retained)
-                                .map(|revision| (*id, revision))
-                        })
-                        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
-
                     let source_revision = graph_resource_revisions
                         .get(&from)
                         .copied()
@@ -299,48 +253,6 @@ impl ProjectState {
                             Self::install_validated_resident_graph(&mut data, path, resource);
                         }
                     }
-                    for (id, variable) in referenced_variables {
-                        let revision =
-                            referenced_variable_revisions
-                                .get(&id)
-                                .copied()
-                                .ok_or_else(|| {
-                                    ProjectFilesystemError::ResourceRevisionConflict {
-                                        message: format!(
-                                            "moved Variable '{id}' is missing its prepared revision"
-                                        ),
-                                    }
-                                })?;
-                        data.variables.insert(id, variable);
-                        variable_revisions.insert(id, VariableRevisionEntry::present(revision));
-                    }
-                }
-                ProjectDataPatch::PatchVariables { updates, removals } => {
-                    let mut next_revisions = variable_revisions.clone();
-                    for id in &removals {
-                        let retained = next_revisions
-                            .get(id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
-                        let revision =
-                            checked_resource_revision(format!("variables/{id}"), retained)?;
-                        next_revisions.insert(*id, VariableRevisionEntry::deleted(revision));
-                    }
-                    for id in updates.keys() {
-                        let retained = next_revisions
-                            .get(id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(yss_project_identity::ResourceRevision::INITIAL);
-                        let revision =
-                            checked_resource_revision(format!("variables/{id}"), retained)?;
-                        next_revisions.insert(*id, VariableRevisionEntry::present(revision));
-                    }
-
-                    for id in removals {
-                        data.variables.remove(&id);
-                    }
-                    data.variables.extend(updates);
-                    *variable_revisions = next_revisions;
                 }
                 ProjectDataPatch::UpsertChart { path, mut document } => {
                     validate_chart_path_insertion(&data, &path)?;

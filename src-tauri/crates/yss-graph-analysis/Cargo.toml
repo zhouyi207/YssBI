@@ -19,5 +19,7 @@ yss-graph-registry = { path = "../yss-graph-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 
+yss-tabular-contract = { path = "../yss-tabular-contract" }
+
 [dev-dependencies]
 yss-graph-catalog = { path = "../yss-graph-catalog" }

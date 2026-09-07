@@ -8,8 +8,6 @@ struct ActivationGarbage {
     _store: ProjectStore,
     _graph_resource_revisions:
         std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
-    _variable_revisions:
-        std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>,
     _chart_revisions:
         std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
@@ -93,7 +91,6 @@ impl ProjectState {
             data,
             store,
             graph_resource_revisions,
-            variable_revisions,
             chart_revisions,
             authority_basis,
             requires_final_rebuild: _,
@@ -147,11 +144,6 @@ impl ProjectState {
                     Ok(guard) => (guard, false),
                     Err(error) => (error.into_inner(), true),
                 };
-            let (mut current_variable_revisions, variable_revisions_recovered) =
-                match self.variable_revisions.write() {
-                    Ok(guard) => (guard, false),
-                    Err(error) => (error.into_inner(), true),
-                };
             let (mut current_chart_revisions, chart_revisions_recovered) =
                 match self.chart_revisions.write() {
                     Ok(guard) => (guard, false),
@@ -200,10 +192,6 @@ impl ProjectState {
                     &mut *current_graph_resource_revisions,
                     graph_resource_revisions,
                 ),
-                _variable_revisions: std::mem::replace(
-                    &mut *current_variable_revisions,
-                    variable_revisions,
-                ),
                 _chart_revisions: std::mem::replace(&mut *current_chart_revisions, chart_revisions),
                 _identity: std::mem::replace(&mut *current_identity, next_identity),
                 _recovery_message: std::mem::take(&mut *recovery),
@@ -237,9 +225,6 @@ impl ProjectState {
             }
             if graph_resource_revisions_recovered {
                 self.graph_resource_revisions.clear_poison();
-            }
-            if variable_revisions_recovered {
-                self.variable_revisions.clear_poison();
             }
             if chart_revisions_recovered {
                 self.chart_revisions.clear_poison();

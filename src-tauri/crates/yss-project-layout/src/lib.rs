@@ -6,7 +6,6 @@
 use std::path::{Component, Path};
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
-pub const GLOBAL_VARIABLES_FILE: &str = "variables.yssbi-vars";
 
 pub const EVENTS_DIR: &str = "events";
 pub const EVENT_EXTENSION: &str = "yssbi-event";
@@ -39,7 +38,6 @@ pub fn is_project_index_input_path(path: &Path) -> bool {
 
     let normalized = path.to_string_lossy().replace('\\', "/");
     normalized == PROJECT_METADATA_FILE
-        || normalized == GLOBAL_VARIABLES_FILE
         || [EVENTS_DIR, FUNCTIONS_DIR, CHARTS_DIR, DATABASE_DIR]
             .into_iter()
             .any(|directory| is_descendant(&normalized, directory))
@@ -58,7 +56,6 @@ mod tests {
     #[test]
     fn canonical_layout_names_remain_stable() {
         assert_eq!(PROJECT_METADATA_FILE, "metadata.yssbi");
-        assert_eq!(GLOBAL_VARIABLES_FILE, "variables.yssbi-vars");
         assert_eq!(EVENTS_DIR, "events");
         assert_eq!(EVENT_EXTENSION, "yssbi-event");
         assert_eq!(FUNCTIONS_DIR, "functions");

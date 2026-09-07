@@ -30,14 +30,12 @@ mod history;
 mod lifecycle;
 mod resource_history;
 mod resource_patch;
-mod variable_effects;
 #[allow(unused_imports)]
 pub(super) use activation::PublishedProjectActivation;
 pub(super) use authority::{
     ActivationGenerationTransition, MutationPublication, PreparedPublicationAdvance,
-    ProjectAuthorityExpectation, ProjectAuthoritySnapshot, VariableStagingBasis,
+    ProjectAuthorityExpectation, ProjectAuthoritySnapshot,
 };
-pub(crate) use authority::{VariablePresence, VariableRevisionEntry};
 pub use graph_operation::{
     GraphCommitReceipt, GraphInvalidationSet, GraphOperationAuthority, GraphOperationCapture,
     ProjectGraphCommitError, ProjectGraphOperationError, ProjectGraphOperationSource,
@@ -49,14 +47,10 @@ use resource_history::{
     affected_projection_paths, authoritative_function_revision,
     canonical_resource_lifecycle_events, chart_history_publication,
     normalize_function_patch_revisions, patch_projection_paths, preflight_resource_patch_graphs,
-    validate_chart_path_insertion, variable_scope_references_path,
+    validate_chart_path_insertion,
 };
 pub(super) use resource_history::{checked_resource_revision, validate_context_revisions};
 use resource_patch::CommittedResourceMutation;
-pub(super) use variable_effects::{
-    install_variable_effect_snapshots, validate_variable_effect_document,
-    variable_effect_filesystem_mutations, variable_history_scope, variable_scope_graph_path,
-};
 
 mod state;
 pub use state::ProjectState;
@@ -65,65 +59,19 @@ pub use state::ProjectState;
 mod test_support;
 #[cfg(any(test, feature = "test-support"))]
 use test_support::ActivationPublicationTestHook;
+#[cfg(test)]
+use test_support::GraphLoadAfterReadTestHook;
 #[cfg(any(test, feature = "test-support"))]
 pub use test_support::ProjectActivationTestHook;
 #[cfg(any(test, feature = "test-support"))]
 use test_support::ProjectStateTestHooks;
-#[cfg(test)]
-use test_support::{GraphLoadAfterReadTestHook, VariableStagingTestHook};
 
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
-
-#[cfg(any(test, feature = "test-support"))]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct VariableRevisionTestSnapshot {
-    pub revision: ResourceRevision,
-    pub present: bool,
-}
 
 impl ProjectState {
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
-    }
-
-    pub(super) fn capture_variable_staging_basis(
-        &self,
-        publication: &MutationPublication,
-    ) -> Result<VariableStagingBasis, ProjectFilesystemError> {
-        let identity = self.activation_identity.read().unwrap();
-        let root = identity.project_root.clone().ok_or_else(|| {
-            ProjectFilesystemError::StaleProjectLifecycle {
-                message: "no project is active while staging variable mutation".into(),
-            }
-        })?;
-        Ok(VariableStagingBasis {
-            session: ProjectSession {
-                instance_id: identity.project_instance_id.clone(),
-                root,
-            },
-            authority_generation: publication.authority_generation(),
-        })
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn validate_variable_staging_basis(
-        &self,
-        publication: &MutationPublication,
-        basis: &VariableStagingBasis,
-    ) -> Result<(), ProjectFilesystemError> {
-        let identity = self.activation_identity.read().unwrap();
-        if publication.authority_generation() != basis.authority_generation
-            || publication.project_instance_id != basis.session.instance_id.as_str()
-            || identity.project_instance_id != basis.session.instance_id
-            || identity.project_root.as_ref() != Some(&basis.session.root)
-        {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "project session or authority changed while staging variable mutation"
-                    .into(),
-            });
-        }
-        Ok(())
     }
 
     pub fn project_instance_id(&self) -> String {
@@ -195,19 +143,6 @@ impl ProjectState {
         None
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn run_variable_staging_test_hook(&self) {
-        if let Some(hook) = self
-            .test_hooks
-            .variable_staging_test_hook
-            .read()
-            .unwrap()
-            .clone()
-        {
-            hook();
-        }
-    }
-
     #[cfg(test)]
     pub(crate) fn set_graph_load_after_read_test_hook(&self, hook: GraphLoadAfterReadTestHook) {
         *self
@@ -232,11 +167,6 @@ impl ProjectState {
 
     #[cfg(not(test))]
     pub(super) fn run_graph_load_after_read_test_hook(&self) {}
-
-    #[cfg(test)]
-    pub(crate) fn set_variable_staging_test_hook(&self, hook: VariableStagingTestHook) {
-        *self.test_hooks.variable_staging_test_hook.write().unwrap() = Some(hook);
-    }
 
     #[cfg(any(test, feature = "test-support"))]
     pub fn set_project_activation_test_hook(&self, hook: ProjectActivationTestHook) {
@@ -275,37 +205,12 @@ impl ProjectState {
         &self,
     ) -> (
         std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
-        std::collections::HashMap<
-            yss_variable_contract::VariableId,
-            yss_project_identity::ResourceRevision,
-        >,
         std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
     ) {
         (
             self.graph_resource_revisions.read().unwrap().clone(),
-            self.variable_revisions
-                .read()
-                .unwrap()
-                .iter()
-                .map(|(id, entry)| (*id, entry.revision))
-                .collect(),
             self.chart_revisions.read().unwrap().clone(),
         )
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn variable_revision_snapshot_for_test(
-        &self,
-        id: &yss_variable_contract::VariableId,
-    ) -> Option<VariableRevisionTestSnapshot> {
-        self.variable_revisions
-            .read()
-            .unwrap()
-            .get(id)
-            .map(|entry| VariableRevisionTestSnapshot {
-                revision: entry.revision,
-                present: entry.is_present(),
-            })
     }
 
     pub fn chart_creation_snapshot(

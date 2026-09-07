@@ -453,12 +453,11 @@ impl GraphRuntimeState {
 
     pub fn export_subgraph(
         &self,
-        graph_path: &GraphResourcePath,
         document: &GraphDocument,
         catalog: &CatalogMutationValidationSnapshot,
         node_ids: Vec<NodeId>,
     ) -> Result<ClipboardSubgraph, MutationConflict> {
-        export_subgraph(graph_path, document, self.registry(), catalog, node_ids)
+        export_subgraph(document, self.registry(), catalog, node_ids)
     }
 
     pub fn registry_fingerprint(&self) -> [u8; 32] {
@@ -753,6 +752,33 @@ impl GraphMaterializationError {
 
 #[cfg(test)]
 mod tests {
+    pub(super) fn set_constant(
+        document: &mut GraphDocument,
+        node: NodeId,
+        data_type: yss_data_contract::DataType,
+        data_value: yss_data_contract::DataValue,
+    ) {
+        let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
+        document.constants.insert(
+            id,
+            yss_graph_document::GraphConstant {
+                id,
+                name: id.to_string(),
+                data_type,
+                data_value,
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            },
+        );
+        let node = document.nodes.get_mut(&node).unwrap();
+        node.node_type = "yssbi.constant.get".parse().unwrap();
+        node.parameters = ParameterValues::from([(
+            "constant".parse().unwrap(),
+            serde_json::json!(id.to_string()),
+        )]);
+    }
+
     use super::*;
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
@@ -770,7 +796,6 @@ mod tests {
 
     fn empty_resource_catalog() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
             yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
@@ -1011,7 +1036,6 @@ mod tests {
         );
         let resources = ResourceCatalogSnapshot::new(
             BTreeMap::new(),
-            BTreeMap::new(),
             BTreeMap::from([(
                 GraphResourceId::new("databases/sales"),
                 DataSchema {
@@ -1132,7 +1156,6 @@ mod tests {
         assert!(document.port_bindings.contains_key(&claimed_address));
         let changed_resources = ResourceCatalogSnapshot::new(
             BTreeMap::new(),
-            BTreeMap::new(),
             BTreeMap::from([(
                 GraphResourceId::new("databases/sales"),
                 DataSchema {
@@ -1238,7 +1261,6 @@ mod tests {
                 )),
             )]),
             BTreeMap::new(),
-            BTreeMap::new(),
             ResourceCatalogFingerprint::from_bytes([8; 32]),
         );
 
@@ -1285,7 +1307,7 @@ mod tests {
             node_id,
             DocumentNode {
                 id: node_id,
-                node_type: "yssbi.constant.int64"
+                node_type: "yssbi.constant.get"
                     .parse()
                     .expect("built-in node type is valid"),
                 position: NodePosition { x: 0.0, y: 0.0 },
@@ -1295,6 +1317,12 @@ mod tests {
                 )]),
                 user_label: None,
             },
+        );
+        set_constant(
+            &mut document,
+            node_id,
+            yss_data_contract::DataType::Int64,
+            yss_data_contract::DataValue::Int64(7),
         );
         let resources = empty_resource_catalog();
         let compile_basis = basis(&runtime);
@@ -1312,9 +1340,11 @@ mod tests {
         assert!(layout_only.cache_hit());
         assert_eq!(layout_only.artifact_id(), first.artifact_id());
 
-        document.nodes.get_mut(&node_id).unwrap().parameters.insert(
-            "value".parse().expect("built-in parameter key is valid"),
-            serde_json::json!(8),
+        set_constant(
+            &mut document,
+            node_id,
+            yss_data_contract::DataType::Int64,
+            yss_data_contract::DataValue::Int64(8),
         );
         let semantic_change = runtime
             .compile_draft(&document, graph, &resources, &compile_basis)
@@ -1339,7 +1369,6 @@ mod tests {
                         ),
                     ),
                 )]),
-                BTreeMap::new(),
                 BTreeMap::new(),
                 yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
             )

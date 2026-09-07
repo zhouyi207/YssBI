@@ -86,6 +86,7 @@ pub enum PlanParameterScalar {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlanParameterValue {
+    Literal(std::sync::Arc<crate::value::RuntimeValue>),
     Scalar(PlanParameterScalar),
     Resource(PlanResourceId),
     List(Box<[PlanParameterValue]>),

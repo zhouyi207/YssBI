@@ -45,3 +45,11 @@ macro_rules! uuid_id {
 uuid_id!(NodeId);
 uuid_id!(ConnectionId);
 uuid_id!(PortInstanceId);
+uuid_id!(ConstantId);
+
+impl std::str::FromStr for ConstantId {
+    type Err = uuid::Error;
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        uuid::Uuid::parse_str(value).map(Self)
+    }
+}

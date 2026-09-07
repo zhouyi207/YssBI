@@ -7,9 +7,7 @@ use super::{
     GraphResourceIndex, GraphResourcePath, ProjectChartIndexEntry, ProjectError,
     load_charts_from_root, read_chart_index_entries, scan_graph_resource_index,
 };
-use crate::manifest::{
-    CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest, deserialize_current_project_schema_version,
-};
+use crate::manifest::{CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yss_duckdb::{list_data_tables, read_display_name};
 use yss_function_editor_projection::FunctionEditorProjection;
@@ -20,18 +18,9 @@ use yss_project_identity::ProjectResourcePath;
 use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
 use yss_project_layout::{
     DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
-    GLOBAL_VARIABLES_FILE, PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
+    PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
 };
 use yss_project_model::{GraphResourceDocument, ProjectData};
-use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GlobalVariablesDocument {
-    #[serde(deserialize_with = "deserialize_current_project_schema_version")]
-    pub schema_version: u32,
-    pub variables: HashMap<VariableId, VariableInstance>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,7 +29,6 @@ pub struct GraphResourceFile {
     pub name: String,
     pub document: NodeGraphDocument,
     pub function: Option<yss_project_history::FunctionDocument>,
-    pub local_variables: HashMap<VariableId, VariableInstance>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,43 +45,6 @@ pub struct ProjectGraphIndexEntry {
     pub function_signature: Option<yss_project_history::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_editor_projection: Option<FunctionEditorProjection>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectVariableIndexEntry {
-    pub id: String,
-    pub resource_path: ProjectResourcePath,
-    pub revision: yss_project_identity::ResourceRevision,
-    pub name: String,
-    pub data_type: yss_data_contract::DataType,
-    pub data_value: yss_data_contract::DataValue,
-    pub description: String,
-    pub scope: VariableScope,
-    pub tags: Vec<String>,
-    pub owner_graph_path: Option<String>,
-    pub owner_graph_name: Option<String>,
-    #[serde(rename = "ownerGraphKind", skip_serializing_if = "Option::is_none")]
-    pub owner_graph_kind: Option<GraphResourceKind>,
-}
-
-impl From<VariableInstance> for ProjectVariableIndexEntry {
-    fn from(value: VariableInstance) -> Self {
-        Self {
-            id: value.id.to_string(),
-            resource_path: ProjectResourcePath::new(format!("variables/{}", value.id)),
-            revision: yss_project_identity::ResourceRevision::INITIAL,
-            name: value.name,
-            data_type: value.data_type,
-            data_value: value.data_value,
-            description: value.description,
-            scope: value.scope,
-            tags: value.tags,
-            owner_graph_path: None,
-            owner_graph_name: None,
-            owner_graph_kind: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -123,8 +74,6 @@ pub struct ProjectIndex {
     #[serde(default)]
     pub charts: Vec<ProjectChartIndexEntry>,
     #[serde(default)]
-    pub variables: Vec<ProjectVariableIndexEntry>,
-    #[serde(default)]
     pub databases: Vec<ProjectDatabaseIndexEntry>,
 }
 
@@ -145,29 +94,6 @@ fn project_manifest_from_data(data: &ProjectData) -> Result<ProjectManifest, Pro
     ))
 }
 
-pub fn serialize_global_variables(data: &ProjectData) -> Result<Vec<u8>, ProjectError> {
-    let variables = data
-        .variables
-        .iter()
-        .filter(|(_, variable)| matches!(variable.scope, VariableScope::Global))
-        .map(|(id, variable)| (*id, variable.clone()))
-        .collect();
-    serialize_global_variable_map(variables)
-}
-
-pub(crate) fn serialize_global_variable_map(
-    variables: std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        yss_variable_contract::VariableInstance,
-    >,
-) -> Result<Vec<u8>, ProjectError> {
-    serde_json::to_vec_pretty(&GlobalVariablesDocument {
-        schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
-        variables,
-    })
-    .map_err(ProjectError::Serialize)
-}
-
 pub fn serialize_graph_document(
     data: &ProjectData,
     graph_path: &GraphResourcePath,
@@ -185,8 +111,7 @@ pub(crate) fn snapshot_graph_document(
     let graph = data.graphs.get(graph_path).ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
     })?;
-    let local_variables = local_variables_for_graph(&data.variables, graph_path, graph.kind);
-    Ok(graph_document_from_resource(graph, local_variables))
+    Ok(graph_document_from_resource(graph))
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -199,22 +124,16 @@ pub(crate) fn initialize_project_directory(
 
 pub(crate) fn serialize_graph_resource_document(
     graph: &GraphResourceDocument,
-    local_variables: HashMap<VariableId, VariableInstance>,
 ) -> Result<Vec<u8>, ProjectError> {
-    serde_json::to_vec_pretty(&graph_document_from_resource(graph, local_variables))
-        .map_err(ProjectError::Serialize)
+    serde_json::to_vec_pretty(&graph_document_from_resource(graph)).map_err(ProjectError::Serialize)
 }
 
-fn graph_document_from_resource(
-    graph: &GraphResourceDocument,
-    local_variables: HashMap<VariableId, VariableInstance>,
-) -> GraphResourceFile {
+fn graph_document_from_resource(graph: &GraphResourceDocument) -> GraphResourceFile {
     GraphResourceFile {
         kind: graph.kind,
         name: graph.name.clone(),
         document: graph.document.clone(),
         function: graph.function.clone(),
-        local_variables,
     }
 }
 
@@ -227,8 +146,6 @@ fn write_loaded_graph_document(
     let graph = project_data.graphs.get(graph_path).ok_or_else(|| {
         ProjectError::InvalidProjectFormat(format!("graph '{}' not loaded", graph_path))
     })?;
-    let local_variables =
-        local_variables_for_graph(&project_data.variables, graph_path, graph.kind);
     let (dir, extension) = match graph.kind {
         GraphResourceKind::Event => (EVENTS_DIR, EVENT_EXTENSION),
         GraphResourceKind::Function => (FUNCTIONS_DIR, FUNCTION_EXTENSION),
@@ -242,7 +159,6 @@ fn write_loaded_graph_document(
             name: graph.name.clone(),
             document: graph.document.clone(),
             function: graph.function.clone(),
-            local_variables,
         },
     )?;
     Ok(relative_path)
@@ -256,20 +172,6 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     }
 
     scan_graph_resource_index(root)?;
-
-    let global_variables = project_data
-        .variables
-        .iter()
-        .filter(|(_, variable)| matches!(variable.scope, VariableScope::Global))
-        .map(|(id, variable)| (*id, variable.clone()))
-        .collect();
-    write_json(
-        root.join(GLOBAL_VARIABLES_FILE).as_path(),
-        &GlobalVariablesDocument {
-            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
-            variables: global_variables,
-        },
-    )?;
 
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
@@ -299,13 +201,6 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.charts = load_charts_from_root(root.as_path())?;
 
-    let variables_path = root.join(GLOBAL_VARIABLES_FILE);
-    if variables_path.exists() {
-        let contents = std::fs::read(&variables_path)?;
-        let document = parse_global_variables_document(&contents)?;
-        project_data.variables.extend(document.variables);
-    }
-
     Ok(project_data)
 }
 
@@ -333,7 +228,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         &graph_resources,
     )?);
     let charts = read_chart_index_entries(root)?;
-    let variables = read_variable_index_entries(root)?;
 
     let (project_name, export_time) = manifest.into_parts();
     Ok(ProjectIndex {
@@ -344,7 +238,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
         export_time,
         graphs,
         charts,
-        variables,
         databases: Vec::new(),
     })
 }
@@ -358,11 +251,7 @@ pub(crate) fn load_project_graph_document_from_file(
     if let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) {
         let document =
             read_graph_document(root.join(resource.path.as_str()).as_path(), resource.kind)?;
-        return Ok(bind_graph_document_scope_by_path(
-            document,
-            resource.kind,
-            resource.path.as_str(),
-        ));
+        return Ok(document);
     }
 
     Err(ProjectError::InvalidProjectFormat(format!(
@@ -392,33 +281,6 @@ fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectE
     scan_graph_resource_index(root)
 }
 
-fn local_variables_for_graph(
-    variables: &HashMap<VariableId, VariableInstance>,
-    graph_path: &GraphResourcePath,
-    graph_kind: GraphResourceKind,
-) -> HashMap<VariableId, VariableInstance> {
-    let graph_path = graph_path.as_str();
-    variables
-        .iter()
-        .filter(|(_, variable)| match (&variable.scope, graph_kind) {
-            (VariableScope::Event { event_path }, GraphResourceKind::Event) => {
-                event_path == graph_path
-            }
-            (VariableScope::Function { function_path }, GraphResourceKind::Function) => {
-                function_path == graph_path
-            }
-            _ => false,
-        })
-        .map(|(id, variable)| (*id, variable.clone()))
-        .collect()
-}
-
-pub(crate) fn parse_global_variables_document(
-    contents: &[u8],
-) -> Result<GlobalVariablesDocument, ProjectError> {
-    serde_json::from_slice(contents).map_err(ProjectError::Deserialize)
-}
-
 pub(crate) fn parse_graph_resource_document(
     contents: &[u8],
     path: &Path,
@@ -433,6 +295,8 @@ pub(crate) fn parse_graph_resource_document(
         )));
     }
     validate_function_shape(path, document.kind, document.function.as_ref())?;
+    yss_graph_document::validate_constant_definitions(&document.document.constants)
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
     Ok(document)
 }
 
@@ -446,42 +310,6 @@ fn read_graph_document(
         document.name = name;
     }
     Ok(document)
-}
-
-fn read_graph_document_for_resource(
-    root: &Path,
-    path: &Path,
-    expected_kind: GraphResourceKind,
-) -> Result<GraphResourceFile, ProjectError> {
-    let document = read_graph_document(path, expected_kind)?;
-    let graph_resources = load_graph_resource_index(root)?;
-    let relative_path = path_to_slash_string(
-        path.strip_prefix(root)
-            .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?,
-    );
-    let resource = graph_resources.get_by_path(&relative_path).ok_or_else(|| {
-        ProjectError::InvalidProjectFormat(format!(
-            "graph resource '{}' not indexed",
-            relative_path
-        ))
-    })?;
-    Ok(bind_graph_document_scope_by_path(
-        document,
-        expected_kind,
-        resource.path.as_str(),
-    ))
-}
-
-fn bind_graph_document_scope_by_path(
-    mut document: GraphResourceFile,
-    kind: GraphResourceKind,
-    resource_path: &str,
-) -> GraphResourceFile {
-    let scope = scoped_variable_scope(kind, resource_path);
-    for variable in document.local_variables.values_mut() {
-        variable.scope = scope.clone();
-    }
-    document
 }
 
 #[derive(Deserialize)]
@@ -575,85 +403,6 @@ fn read_graph_index_entries(
     Ok(entries)
 }
 
-fn scoped_variable_scope(kind: GraphResourceKind, graph_path: &str) -> VariableScope {
-    match kind {
-        GraphResourceKind::Event => VariableScope::Event {
-            event_path: graph_path.to_string(),
-        },
-        GraphResourceKind::Function => VariableScope::Function {
-            function_path: graph_path.to_string(),
-        },
-    }
-}
-
-pub(crate) fn read_global_variable_index_entries(
-    root: &Path,
-) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
-    let variables_path = root.join(GLOBAL_VARIABLES_FILE);
-    if !variables_path.exists() {
-        return Ok(Vec::new());
-    }
-    let document: GlobalVariablesDocument = read_json(variables_path.as_path())?;
-    Ok(document
-        .variables
-        .into_values()
-        .map(ProjectVariableIndexEntry::from)
-        .collect())
-}
-
-fn read_graph_local_variable_index_entries(
-    root: &Path,
-    dir: &str,
-    extension: &str,
-    expected_kind: GraphResourceKind,
-) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
-    let mut entries = Vec::new();
-    for path in list_graph_files(root, dir, extension)? {
-        let document = read_graph_document_for_resource(root, path.as_path(), expected_kind)?;
-        let graph_name = graph_name_from_file_path(path.as_path()).unwrap_or(document.name);
-        let owner_graph_path = path_to_slash_string(
-            path.strip_prefix(root)
-                .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?,
-        );
-        for variable in document.local_variables.into_values() {
-            entries.push(ProjectVariableIndexEntry {
-                id: variable.id.to_string(),
-                resource_path: ProjectResourcePath::new(format!("variables/{}", variable.id)),
-                revision: yss_project_identity::ResourceRevision::INITIAL,
-                name: variable.name,
-                data_type: variable.data_type,
-                data_value: variable.data_value,
-                description: variable.description,
-                scope: variable.scope,
-                tags: variable.tags,
-                owner_graph_path: Some(owner_graph_path.clone()),
-                owner_graph_name: Some(graph_name.clone()),
-                owner_graph_kind: Some(expected_kind),
-            });
-        }
-    }
-    Ok(entries)
-}
-
-fn read_variable_index_entries(
-    root: &Path,
-) -> Result<Vec<ProjectVariableIndexEntry>, ProjectError> {
-    let mut entries = read_global_variable_index_entries(root)?;
-    entries.extend(read_graph_local_variable_index_entries(
-        root,
-        EVENTS_DIR,
-        EVENT_EXTENSION,
-        GraphResourceKind::Event,
-    )?);
-    entries.extend(read_graph_local_variable_index_entries(
-        root,
-        FUNCTIONS_DIR,
-        FUNCTION_EXTENSION,
-        GraphResourceKind::Function,
-    )?);
-    Ok(entries)
-}
-
 fn list_graph_files(root: &Path, dir: &str, extension: &str) -> Result<Vec<PathBuf>, ProjectError> {
     let graph_dir = root.join(dir);
     if !graph_dir.exists() {
@@ -738,11 +487,7 @@ pub(crate) fn find_graph_document_path(
 ) -> Result<Option<(PathBuf, GraphResourceKind, GraphResourceFile)>, ProjectError> {
     if let Some(resource) = load_graph_resource_index(root)?.get_by_path(graph_path.as_str()) {
         let path = root.join(resource.path.as_str());
-        let document = bind_graph_document_scope_by_path(
-            read_graph_document(path.as_path(), resource.kind)?,
-            resource.kind,
-            resource.path.as_str(),
-        );
+        let document = read_graph_document(path.as_path(), resource.kind)?;
         return Ok(Some((path, resource.kind, document)));
     }
     Ok(None)

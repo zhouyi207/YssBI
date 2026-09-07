@@ -25,7 +25,7 @@ use yss_graph_compiler::{
 use yss_graph_document::GraphResourcePath;
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
-    ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
+    ResourceCatalogFingerprint, ResourceCatalogSnapshot,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -33,7 +33,6 @@ pub struct ProjectGraphResourceSnapshot {
     project_instance_id: yss_project_identity::ProjectInstanceId,
     authority_generation: u64,
     functions: BTreeMap<GraphResourcePath, FunctionSignature>,
-    variables: BTreeMap<GraphResourceId, VariableValueContract>,
     databases: BTreeMap<DatabaseId, DatabaseDecl>,
 }
 
@@ -42,14 +41,12 @@ impl ProjectGraphResourceSnapshot {
         project_instance_id: yss_project_identity::ProjectInstanceId,
         authority_generation: u64,
         functions: BTreeMap<GraphResourcePath, FunctionSignature>,
-        variables: BTreeMap<GraphResourceId, VariableValueContract>,
         databases: BTreeMap<DatabaseId, DatabaseDecl>,
     ) -> Self {
         Self {
             project_instance_id,
             authority_generation,
             functions,
-            variables,
             databases,
         }
     }
@@ -128,7 +125,6 @@ pub fn build_resource_catalog(
         functions.insert(path.clone(), FunctionCatalogEntry::new(signature.clone()));
     }
 
-    let variables = project.variables.clone();
     let declared_database_ids = project.databases.keys().cloned().collect::<BTreeSet<_>>();
     let mut schemas = BTreeSet::new();
     let mut database_catalog = BTreeMap::new();
@@ -165,7 +161,6 @@ pub fn build_resource_catalog(
         ResourceCatalogFingerprint::from_bytes(catalog_fingerprint(project, databases));
     Ok(ResourceCatalogSnapshot::new(
         functions,
-        variables,
         database_catalog,
         fingerprint,
     ))
@@ -185,10 +180,6 @@ fn catalog_fingerprint(
             path.as_str().hash(&mut hasher);
             signature.parameters().hash(&mut hasher);
             signature.result().hash(&mut hasher);
-        }
-        for (resource, contract) in &project.variables {
-            resource.as_str().hash(&mut hasher);
-            contract.data_type().hash(&mut hasher);
         }
         for schema in databases.schemas() {
             schema.database().as_str().hash(&mut hasher);
@@ -262,6 +253,8 @@ pub enum GraphPackageMappingError {
     DuplicateParameter(#[source] yss_execution::plan::CompiledParameterBundleError),
     #[error("graph package contains a resolved type unsupported by execution")]
     UnsupportedResolvedType,
+    #[error("graph constant cannot be represented at runtime")]
+    ConstantValue(#[source] yss_execution::value::RuntimeValueError),
 }
 
 /// Map the Graph-owned lowered package into the Execution-owned immutable
@@ -514,6 +507,9 @@ fn map_parameter_value(
     value: &GraphParameterValue,
 ) -> Result<PlanParameterValue, GraphPackageMappingError> {
     Ok(match value {
+        GraphParameterValue::Constant(constant) => {
+            PlanParameterValue::Literal(std::sync::Arc::new(constant_runtime_value(constant)?))
+        }
         GraphParameterValue::Scalar(scalar) => PlanParameterValue::Scalar(match scalar {
             GraphParameterScalar::Null => PlanParameterScalar::Null,
             GraphParameterScalar::Bool(value) => PlanParameterScalar::Bool(*value),
@@ -546,6 +542,50 @@ fn map_parameter_value(
                 .collect::<Result<_, GraphPackageMappingError>>()?,
         ),
     })
+}
+
+fn constant_runtime_value(
+    constant: &yss_graph_document::GraphConstant,
+) -> Result<yss_execution::value::RuntimeValue, GraphPackageMappingError> {
+    use yss_execution::value::RuntimeValue;
+    use yss_tabular_contract::TabularScalar;
+    let Some(snapshot) = &constant.tabular else {
+        return RuntimeValue::try_from(&constant.data_value)
+            .map_err(GraphPackageMappingError::ConstantValue);
+    };
+    let column_value = |column: &yss_tabular_contract::TabularColumn| {
+        RuntimeValue::List(
+            column
+                .values()
+                .iter()
+                .map(|value| match value {
+                    TabularScalar::Null => RuntimeValue::Null,
+                    TabularScalar::Bool(value) => RuntimeValue::Bool(*value),
+                    TabularScalar::Integer(value) => RuntimeValue::Integer(*value),
+                    TabularScalar::Unsigned(value) => RuntimeValue::Unsigned(*value),
+                    TabularScalar::Decimal(value) => RuntimeValue::Decimal(value.as_f64()),
+                    TabularScalar::String(value) => RuntimeValue::String(value.clone()),
+                })
+                .collect(),
+        )
+    };
+    if matches!(
+        constant.data_type,
+        yss_data_contract::DataType::DataSeries(_)
+    ) {
+        return snapshot
+            .columns()
+            .first()
+            .map(column_value)
+            .ok_or(GraphPackageMappingError::UnsupportedResolvedType);
+    }
+    Ok(RuntimeValue::Record(
+        snapshot
+            .columns()
+            .iter()
+            .map(|column| (column.name().as_str().into(), column_value(column)))
+            .collect(),
+    ))
 }
 
 fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::ResultCategory {
@@ -599,7 +639,7 @@ mod tests {
     use yss_database_edit::EditHistory;
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
     use yss_database_runtime::{DatabaseInstance, DatabaseState};
-    use yss_graph_resource_contract::{FunctionParameterContract, VariableValueContract};
+    use yss_graph_resource_contract::FunctionParameterContract;
 
     #[test]
     fn package_mapping_preserves_named_parameters_group_order_and_each_output_contract() {
@@ -810,9 +850,6 @@ mod tests {
                 Some(DataType::Float64),
             ),
         );
-        let variable_id = GraphResourceId::new("variables/input");
-        let mut variables = BTreeMap::new();
-        variables.insert(variable_id, VariableValueContract::new(DataType::Float64));
         let mut databases = BTreeMap::new();
         databases.insert(database.id.clone(), database);
 
@@ -820,7 +857,6 @@ mod tests {
             yss_project_identity::ProjectInstanceId::from_existing("project".into()),
             7,
             functions,
-            variables,
             databases,
         );
         let catalog = build_resource_catalog(&project, &schema).unwrap();

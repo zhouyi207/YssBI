@@ -12,8 +12,7 @@ use yss_project_filesystem::{
 };
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
-    CHART_EXTENSION, CHARTS_DIR, GLOBAL_VARIABLES_FILE, PROJECT_CONTENT_DIRECTORIES,
-    PROJECT_METADATA_FILE,
+    CHART_EXTENSION, CHARTS_DIR, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE,
 };
 use yss_project_model::ProjectData;
 
@@ -368,16 +367,10 @@ fn new_project_mutations(
         .into_iter()
         .map(create_directory)
         .collect::<Vec<_>>();
-    mutations.extend([
-        write_mutation(
-            PROJECT_METADATA_FILE,
-            crate::serialize_project_manifest(data).map_err(prepare_error)?,
-        ),
-        write_mutation(
-            GLOBAL_VARIABLES_FILE,
-            crate::serialize_global_variables(data).map_err(prepare_error)?,
-        ),
-    ]);
+    mutations.extend([write_mutation(
+        PROJECT_METADATA_FILE,
+        crate::serialize_project_manifest(data).map_err(prepare_error)?,
+    )]);
     Ok(mutations)
 }
 
@@ -390,15 +383,10 @@ fn copy_mutations(
     directories.extend(PROJECT_CONTENT_DIRECTORIES.map(PathBuf::from));
     let mut files = source_tree.files;
     files.remove(Path::new(PROJECT_METADATA_FILE));
-    files.remove(Path::new(GLOBAL_VARIABLES_FILE));
     files.retain(|path, _| !path.starts_with(CHARTS_DIR));
     files.insert(
         PathBuf::from(PROJECT_METADATA_FILE),
         crate::serialize_project_manifest(authority).map_err(prepare_error)?,
-    );
-    files.insert(
-        PathBuf::from(GLOBAL_VARIABLES_FILE),
-        crate::serialize_global_variables(authority).map_err(prepare_error)?,
     );
     for graph_path in authority.graphs.keys() {
         let (path, contents) =
@@ -434,9 +422,6 @@ fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
-        Some("yssbi-vars") => serde_json::from_slice::<crate::GlobalVariablesDocument>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
         Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),

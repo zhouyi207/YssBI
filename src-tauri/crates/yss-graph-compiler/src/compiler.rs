@@ -17,6 +17,10 @@ use yss_graph_protocol::{PortDirection, TypedValue, Value};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
+fn constant_parameter_handle(id: yss_graph_document::ConstantId) -> GraphParameterHandle {
+    GraphParameterHandle::new(format!("constant/{id}"))
+}
+
 pub struct GraphCompilationInput<'a> {
     semantics: &'a GraphSemanticSnapshot,
     graph: GraphResourcePath,
@@ -75,17 +79,21 @@ fn lower_package(
                     code: GraphCompileErrorCode::SemanticTypeUnresolved,
                 }
             })?;
-            let parameters = semantic_node
-                .parameters
-                .iter()
-                .filter(|parameter| parameter.effective_value.is_some())
-                .map(|parameter| {
-                    (
-                        parameter.key.as_str().into(),
-                        node_parameter_handle(node.node_id, parameter.key.as_str()),
-                    )
-                })
-                .collect::<BTreeMap<_, _>>();
+            let parameters = if let Some(constant) = &semantic_node.constant {
+                BTreeMap::from([("value".into(), constant_parameter_handle(constant.id))])
+            } else {
+                semantic_node
+                    .parameters
+                    .iter()
+                    .filter(|parameter| parameter.effective_value.is_some())
+                    .map(|parameter| {
+                        (
+                            parameter.key.as_str().into(),
+                            node_parameter_handle(node.node_id, parameter.key.as_str()),
+                        )
+                    })
+                    .collect::<BTreeMap<_, _>>()
+            };
             let inputs = lower_input_bindings(node, &output_contracts.value_refs, &graph)?;
             let observation_intents: Box<[GraphObservationIntent]> =
                 if node.node_type.as_str() == DEBUG_VIEW_NODE_TYPE {
@@ -166,6 +174,17 @@ fn lower_parameters(
 ) -> Result<BTreeMap<GraphParameterHandle, GraphParameterPayload>, GraphCompileError> {
     let mut parameters = BTreeMap::new();
     for node in semantics.nodes() {
+        if let Some(constant) = &node.constant {
+            parameters
+                .entry(constant_parameter_handle(constant.id))
+                .or_insert_with(|| {
+                    GraphParameterPayload::new(
+                        "graph.constant",
+                        GraphParameterValue::Constant(constant.clone()),
+                    )
+                });
+            continue;
+        }
         for parameter in &node.parameters {
             let Some(value) = &parameter.effective_value else {
                 continue;
@@ -414,6 +433,33 @@ fn lowering_error(graph: &GraphResourcePath) -> GraphCompileError {
 
 #[cfg(test)]
 mod tests {
+    pub(super) fn set_constant(
+        document: &mut GraphDocument,
+        node: NodeId,
+        data_type: yss_data_contract::DataType,
+        data_value: yss_data_contract::DataValue,
+    ) {
+        let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
+        document.constants.insert(
+            id,
+            yss_graph_document::GraphConstant {
+                id,
+                name: id.to_string(),
+                data_type,
+                data_value,
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            },
+        );
+        let node = document.nodes.get_mut(&node).unwrap();
+        node.node_type = "yssbi.constant.get".parse().unwrap();
+        node.parameters = ParameterValues::from([(
+            "constant".parse().unwrap(),
+            yss_graph_document::JsonValue::String(id.to_string()),
+        )]);
+    }
+
     use super::*;
     use yss_graph_document::GraphDocument;
     fn compilation_input<'a>(
@@ -449,7 +495,6 @@ mod tests {
             document,
             registry,
             &ResourceCatalogSnapshot::new(
-                BTreeMap::new(),
                 BTreeMap::new(),
                 BTreeMap::new(),
                 ResourceCatalogFingerprint::from_bytes([0; 32]),
@@ -531,17 +576,13 @@ mod tests {
         );
 
         let source = NodeId::new();
-        let resource_id = "variables/00000000-0000-0000-0000-000000000123";
         document.nodes.insert(
             source,
             DocumentNode {
                 id: source,
-                node_type: "yssbi.project.variable.get".parse().unwrap(),
+                node_type: "yssbi.dataframe.series.int_range".parse().unwrap(),
                 position: NodePosition { x: -200.0, y: 0.0 },
-                parameters: ParameterValues::from([(
-                    "variable".parse().unwrap(),
-                    yss_graph_document::JsonValue::String(resource_id.into()),
-                )]),
+                parameters: ParameterValues::new(),
                 user_label: None,
             },
         );
@@ -577,7 +618,7 @@ mod tests {
             let mut value_node = document.nodes[&source].clone();
             value_node.id = NodeId::new();
             let source_output =
-                PortAddress::declared(value_node.id, PortKey::new("value").unwrap());
+                PortAddress::declared(value_node.id, PortKey::new("series").unwrap());
             document.nodes.insert(value_node.id, value_node);
             document.connections.insert(
                 id,
@@ -592,14 +633,6 @@ mod tests {
         document.nodes.remove(&source);
         let resources = ResourceCatalogSnapshot::new(
             BTreeMap::new(),
-            BTreeMap::from([(
-                yss_graph_resource_contract::GraphResourceId::new(resource_id),
-                yss_graph_resource_contract::VariableValueContract::new(
-                    yss_data_contract::DataType::DataSeries(Box::new(
-                        yss_data_contract::DataType::Float64,
-                    )),
-                ),
-            )]),
             BTreeMap::new(),
             ResourceCatalogFingerprint::from_bytes([0; 32]),
         );
@@ -645,8 +678,8 @@ mod tests {
         let add = NodeId::new();
         let mut document = GraphDocument::default();
         for (node_id, node_type) in [
-            (integer, "yssbi.constant.int64"),
-            (float, "yssbi.constant.float64"),
+            (integer, "yssbi.constant.get"),
+            (float, "yssbi.constant.get"),
             (add, "yssbi.numeric.add"),
         ] {
             document.nodes.insert(
@@ -660,6 +693,18 @@ mod tests {
                 },
             );
         }
+        set_constant(
+            &mut document,
+            integer,
+            yss_data_contract::DataType::Int64,
+            yss_data_contract::DataValue::Int64(0),
+        );
+        set_constant(
+            &mut document,
+            float,
+            yss_data_contract::DataType::Float64,
+            yss_data_contract::DataValue::Float64(0.0),
+        );
         let mut operands = Vec::new();
         for (index, source) in [integer, float].into_iter().enumerate() {
             let operand = PortAddress::instance(

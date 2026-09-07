@@ -297,6 +297,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         ParameterEditorSpec::Toggle => (ParameterEditorKind::Toggle, false),
         ParameterEditorSpec::Configuration(_) => (ParameterEditorKind::Configuration, false),
         ParameterEditorSpec::Select => (ParameterEditorKind::Select, false),
+        ParameterEditorSpec::GraphConstant => (ParameterEditorKind::GraphConstant, false),
         ParameterEditorSpec::Resource { .. } => (ParameterEditorKind::Resource, false),
     };
     Some(EditorParameterModel {

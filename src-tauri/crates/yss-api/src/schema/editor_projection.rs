@@ -203,6 +203,7 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
         },
         editor: match parameter.editor {
             ParameterEditorKind::Auto => ParameterEditorKindDto::Auto,
+            ParameterEditorKind::GraphConstant => ParameterEditorKindDto::GraphConstant,
             ParameterEditorKind::Text => ParameterEditorKindDto::Text,
             ParameterEditorKind::Number => ParameterEditorKindDto::Number,
             ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,
@@ -420,7 +421,7 @@ mod tests {
             node_id,
             PortKey::new("value").expect("test port key is valid"),
         );
-        let node_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+        let node_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
         let diagnostic = EditorDiagnosticModel {
             code: "graph.invalid".into(),
             message_key: "diagnostics.graph.invalid".into(),

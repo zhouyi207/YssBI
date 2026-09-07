@@ -257,6 +257,8 @@ pub struct ClipboardConnection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClipboardSubgraph {
     pub schema_version: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<GraphConstant>,
     pub nodes: Vec<ClipboardNode>,
     pub port_bindings: Vec<ClipboardPortBinding>,
     pub input_states: Vec<ClipboardInputState>,
@@ -267,6 +269,8 @@ pub struct ClipboardSubgraph {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ClipboardSubgraphWire {
     schema_version: u32,
+    #[serde(default, deserialize_with = "deserialize_constants")]
+    constants: Vec<GraphConstant>,
     #[serde(deserialize_with = "deserialize_nodes")]
     nodes: Vec<ClipboardNode>,
     #[serde(deserialize_with = "deserialize_port_bindings")]
@@ -281,6 +285,7 @@ impl From<ClipboardSubgraphWire> for ClipboardSubgraph {
     fn from(wire: ClipboardSubgraphWire) -> Self {
         Self {
             schema_version: wire.schema_version,
+            constants: wire.constants,
             nodes: wire.nodes,
             port_bindings: wire.port_bindings,
             input_states: wire.input_states,
@@ -304,6 +309,13 @@ pub fn deserialize_clipboard_subgraph(bytes: &[u8]) -> Result<ClipboardSubgraph,
     serde_json::from_slice::<ClipboardSubgraphWire>(bytes)
         .map(Into::into)
         .map_err(|error| invalid_clipboard(format!("clipboard payload is invalid: {error}")))
+}
+
+fn deserialize_constants<'de, D>(deserializer: D) -> Result<Vec<GraphConstant>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_bounded_vec(deserializer, MAX_CLIPBOARD_NODES, "clipboard constants")
 }
 
 fn deserialize_nodes<'de, D>(deserializer: D) -> Result<Vec<ClipboardNode>, D::Error>

@@ -13,10 +13,10 @@ use yss_graph_catalog::{
     CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };
 use yss_graph_document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, LastKnownPortMetadata,
-    NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef,
-    SchemaFieldIdentity, SchemaSourceIdentity,
+    ConnectionId, ConstantId, DocumentConnection, DocumentNode, DynamicMemberLocator,
+    DynamicPortBinding, FunctionParameterId, GraphConstant, GraphDocument, GraphResourcePath,
+    InputState, LastKnownPortMetadata, NodeId, NodePosition, OrderKey, ParameterValues,
+    PortAddress, PortInstanceId, PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
 };
 use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_protocol::{
@@ -43,7 +43,6 @@ mod instantiate;
 pub(crate) use instantiate::instantiate_subgraph;
 
 pub fn export_subgraph(
-    graph_path: &GraphResourcePath,
     document: &GraphDocument,
     registry: &NodeRegistry,
     catalog: &CatalogMutationValidationSnapshot,
@@ -113,10 +112,21 @@ pub fn export_subgraph(
 
     let mut parameter_bytes = 0usize;
     let mut nodes = Vec::with_capacity(node_ids.len());
+    let mut constants = BTreeMap::new();
     for node_id in node_ids {
         let node = &document.nodes[&node_id];
+        if node.node_type.as_str() == "yssbi.constant.get"
+            && let Some(constant) = node
+                .parameters
+                .get(&ParameterKey::new("constant").unwrap())
+                .and_then(|value| value.as_str())
+                .and_then(|id| id.parse::<ConstantId>().ok())
+                .and_then(|id| document.constants.get(&id))
+        {
+            constants.insert(constant.id, constant.clone());
+        }
         validate_parameter_values(&node.parameters, &mut parameter_bytes)?;
-        let creation = authoritative_creation(graph_path, node, registry, catalog)?;
+        let creation = authoritative_creation(node, registry, catalog)?;
         nodes.push(ClipboardNode {
             local_id: local_nodes[&node_id].clone(),
             creation,
@@ -167,6 +177,7 @@ pub fn export_subgraph(
 
     let snapshot = ClipboardSubgraph {
         schema_version: CLIPBOARD_SUBGRAPH_SCHEMA_VERSION,
+        constants: constants.into_values().collect(),
         nodes,
         port_bindings,
         input_states,
@@ -191,7 +202,7 @@ pub(crate) fn duplicate_subgraph(
     node_ids: Vec<NodeId>,
     offset: NodePosition,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
-    let snapshot = export_subgraph(graph_path, document, registry, catalog, node_ids.clone())?;
+    let snapshot = export_subgraph(document, registry, catalog, node_ids.clone())?;
     let origin_x = node_ids
         .iter()
         .map(|node_id| document.nodes[node_id].position.x)
@@ -248,7 +259,6 @@ fn validate_targets(
 }
 
 fn authoritative_creation(
-    graph_path: &GraphResourcePath,
     node: &DocumentNode,
     registry: &NodeRegistry,
     catalog: &CatalogMutationValidationSnapshot,
@@ -266,9 +276,7 @@ fn authoritative_creation(
         )));
     }
 
-    if let Some((resource_path, create_args)) =
-        matching_resource(graph_path, node, protocol, catalog)?
-    {
+    if let Some((resource_path, create_args)) = matching_resource(node, protocol, catalog)? {
         return Ok(ClipboardNodeCreation::ResourceBound {
             node_type_id: node.node_type.clone(),
             resource_path,
@@ -298,7 +306,6 @@ fn authoritative_creation(
 }
 
 fn matching_resource(
-    graph_path: &GraphResourcePath,
     node: &DocumentNode,
     protocol: &yss_graph_protocol::NodeProtocol,
     catalog: &CatalogMutationValidationSnapshot,
@@ -309,12 +316,6 @@ fn matching_resource(
     else {
         return Ok(None);
     };
-    if resource
-        .variable_scope()
-        .is_some_and(|scope| !crate::compatibility::variable_in_scope(graph_path, scope))
-    {
-        return Ok(None);
-    }
     Ok(Some((resource_path.clone(), resource.create_args())))
 }
 

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::ProjectSession;
@@ -496,23 +495,12 @@ impl ProjectState {
             }
         })?;
         resource.document = candidate_document.as_ref().clone();
-        let local_variables = data
-            .variables
-            .iter()
-            .filter(|(_, variable)| match &variable.scope {
-                yss_variable_contract::VariableScope::Global => false,
-                yss_variable_contract::VariableScope::Event { event_path }
-                | yss_variable_contract::VariableScope::Function {
-                    function_path: event_path,
-                } => event_path == graph_path.as_str(),
-            })
-            .map(|(id, variable)| (*id, variable.clone()))
-            .collect::<HashMap<_, _>>();
         let contents =
-            crate::project_io::serialize_graph_resource_document(&resource, local_variables)
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
+                ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
-                })?;
+                }
+            })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let prepared = ProjectFilesystemTransaction::prepare(

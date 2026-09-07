@@ -566,20 +566,17 @@ fn validate_typing(
             }
             output(output_key)
         }
-        NodeTypingSpec::VariableOutput {
+        NodeTypingSpec::ConstantOutput {
             parameter,
             output: output_key,
         } => {
             let Some(parameter) = parameters.get(parameter) else {
-                return Err("variable typing rule references an unknown parameter".into());
+                return Err("constant typing rule references an unknown parameter".into());
             };
-            if !matches!(
-                parameter.editor,
-                ParameterEditorSpec::Resource {
-                    kind: ResourceDisplayKind::Variable
-                }
-            ) {
-                return Err("variable typing rule parameter is not a variable resource".into());
+            if !matches!(parameter.editor, ParameterEditorSpec::GraphConstant) {
+                return Err(
+                    "constant typing rule parameter is not a graph constant reference".into(),
+                );
             }
             output(output_key)
         }

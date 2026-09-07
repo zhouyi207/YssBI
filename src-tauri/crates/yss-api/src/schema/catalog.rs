@@ -101,7 +101,6 @@ pub enum NodeCreationDescriptorDto {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ResourceBoundCreateArgsDto {
     Function,
-    Variable,
     Database,
 }
 
@@ -233,7 +232,6 @@ impl From<DomainCreateArgs> for ResourceBoundCreateArgsDto {
     fn from(value: DomainCreateArgs) -> Self {
         match value {
             DomainCreateArgs::Function => Self::Function,
-            DomainCreateArgs::Variable => Self::Variable,
             DomainCreateArgs::Database => Self::Database,
         }
     }
@@ -289,9 +287,6 @@ impl TryFrom<NodeCreationDescriptorDto> for yss_graph_catalog::NodeCreation {
                 create_args: match create_args {
                     ResourceBoundCreateArgsDto::Function => {
                         yss_graph_catalog::ResourceBoundCreateArgs::Function
-                    }
-                    ResourceBoundCreateArgsDto::Variable => {
-                        yss_graph_catalog::ResourceBoundCreateArgs::Variable
                     }
                     ResourceBoundCreateArgsDto::Database => {
                         yss_graph_catalog::ResourceBoundCreateArgs::Database

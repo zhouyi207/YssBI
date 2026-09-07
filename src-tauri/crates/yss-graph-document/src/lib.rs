@@ -1,14 +1,20 @@
+mod constant_value;
 mod identity;
+pub use constant_value::{
+    ConstantValueError, InvalidConstantDefinition, constant_handle, default_value_for,
+    normalize_constant_value, validate_constant_definitions,
+};
 mod model;
 mod resource_path;
 mod semantic_hash;
 pub use semantic_hash::semantic_document_fingerprint;
 
-pub use identity::{ConnectionId, NodeId, PortInstanceId};
+pub use identity::{ConnectionId, ConstantId, NodeId, PortInstanceId};
 pub use model::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionParameterId, GraphDocument, InputState, JsonValue, LastKnownPortMetadata, NodePosition,
-    OrderKey, ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
+    FunctionParameterId, GraphConstant, GraphDocument, InputState, JsonValue,
+    LastKnownPortMetadata, NodePosition, OrderKey, ParameterValues, PortAddress, PortRef,
+    SchemaFieldIdentity, SchemaSourceIdentity,
 };
 pub use resource_path::{
     GraphResourceKind, GraphResourcePath, GraphResourcePathError, normalize_graph_resource_path,

@@ -47,7 +47,6 @@ yss-project-watcher = { path = "../yss-project-watcher" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-statistical-harness = { path = "../yss-statistical-harness" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
-yss-variable-contract = { path = "../yss-variable-contract" }
 yss-window-state = { path = "../yss-window-state" }
 yss-chart-document = { path = "../yss-chart-document" }
 

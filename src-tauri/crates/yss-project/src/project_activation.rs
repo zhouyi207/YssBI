@@ -8,8 +8,6 @@ use yss_project_filesystem::{NormalizedProjectRoot, ProjectFilesystemError};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
-use yss_variable_contract::VariableId;
-use yss_variable_value::normalize_variable_tabular;
 
 #[derive(Clone, Default)]
 pub(crate) struct ProjectActivationCoordinator {
@@ -72,7 +70,6 @@ pub struct PreparedProjectActivation {
     pub session_root: Option<NormalizedProjectRoot>,
     pub data: ProjectData,
     pub store: ProjectStore,
-    pub(crate) variable_revisions: HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     pub(crate) graph_resource_revisions: HashMap<GraphResourcePath, ResourceRevision>,
     pub(crate) chart_revisions: HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
@@ -82,34 +79,22 @@ pub struct PreparedProjectActivation {
 impl PreparedProjectActivation {
     pub(super) fn from_data(
         session_root: Option<NormalizedProjectRoot>,
-        mut data: ProjectData,
+        data: ProjectData,
         authority_basis: Option<PreparedAuthorityBasis>,
         requires_final_rebuild: bool,
     ) -> Result<Self, ProjectFilesystemError> {
-        let store = ProjectStore::new();
-        for variable in data.variables.values_mut() {
-            let variable_id = variable.id;
-            normalize_variable_tabular(variable).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
-                    message: format!("variable '{variable_id}' is invalid: {error}"),
-                }
-            })?;
+        for (path, graph) in &data.graphs {
+            yss_graph_document::validate_constant_definitions(&graph.document.constants).map_err(
+                |error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: format!("graph '{path}' is invalid: {error}"),
+                },
+            )?;
         }
+        let store = ProjectStore::new();
         let graph_resource_revisions = data
             .graphs
             .keys()
             .map(|path| (path.clone(), ResourceRevision::INITIAL))
-            .collect();
-        let variable_revisions = data
-            .variables
-            .keys()
-            .copied()
-            .map(|id| {
-                (
-                    id,
-                    crate::project_state::VariableRevisionEntry::present(ResourceRevision::INITIAL),
-                )
-            })
             .collect();
         let chart_revisions = data
             .charts
@@ -120,7 +105,6 @@ impl PreparedProjectActivation {
             session_root,
             data,
             store,
-            variable_revisions,
             graph_resource_revisions,
             chart_revisions,
             authority_basis,
@@ -138,7 +122,22 @@ impl ProjectState {
             return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false);
         };
         let root = NormalizedProjectRoot::from_project_path(path)?;
-        let lease = self.filesystem().acquire(root.clone())?;
+        let mut lease = self.filesystem().acquire(root.clone())?;
+        let migration = crate::constant_migration::prepare_constant_migration(root.as_path())?;
+        if !migration.is_empty() {
+            yss_project_filesystem::ProjectFilesystemTransaction::prepare(
+                yss_project_filesystem::ProjectFilesystemTransactionContext {
+                    root: root.clone(),
+                    operation_id: yss_project_identity::OperationId::new(),
+                    recovery_marker: Some(self.project_recovery_marker()),
+                },
+                lease,
+                migration,
+            )?
+            .commit()?
+            .finalize();
+            lease = self.filesystem().acquire(root.clone())?;
+        }
         let authority_before = self.capture_prepared_authority_basis(&root)?;
         let data = self.read_activation_data(&root)?;
         let authority_after = self.capture_prepared_authority_basis(&root)?;
@@ -215,31 +214,35 @@ impl ProjectState {
 mod tests {
     use super::*;
     use yss_data_contract::{DataType, DataValue};
-    use yss_variable_contract::{VariableInstance, VariableScope};
 
     #[test]
     fn activation_rejects_invalid_tabular_value_instead_of_silently_publishing_it() {
         let mut data = ProjectData::new();
-        let variable_id = VariableId::new();
-        data.variables.insert(
-            variable_id,
-            VariableInstance {
-                id: variable_id,
+        let id = yss_graph_document::ConstantId::new();
+        let mut graph = yss_project_model::GraphResourceDocument::new(
+            "Main",
+            yss_graph_document::GraphResourceKind::Event,
+        );
+        graph.document.constants.insert(
+            id,
+            yss_graph_document::GraphConstant {
+                id,
                 name: "invalid table".into(),
                 data_type: DataType::DataFrame,
                 data_value: DataValue::DataFrame("not-json".into()),
                 tabular: None,
                 description: String::new(),
-                scope: VariableScope::Global,
-                tags: Vec::new(),
+                tags: vec![],
             },
         );
+        data.graphs
+            .insert("events/Main.yssbi-event".parse().unwrap(), graph);
 
         let result = PreparedProjectActivation::from_data(None, data, None, false);
         let Err(error) = result else {
             panic!("invalid tabular state must fail activation preparation");
         };
         assert_eq!(error.code(), "transaction_prepare_failed");
-        assert!(error.to_string().contains(&variable_id.to_string()));
+        assert!(error.to_string().contains(&id.to_string()));
     }
 }

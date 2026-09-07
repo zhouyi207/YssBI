@@ -167,8 +167,26 @@ pub struct InputState {
     pub literal_override: Option<TypedValue>,
 }
 
+/// A named, immutable input owned by the containing graph document.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphConstant {
+    pub id: crate::ConstantId,
+    pub name: String,
+    pub data_type: yss_data_contract::DataType,
+    pub data_value: yss_data_contract::DataValue,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tabular: Option<yss_tabular_contract::TabularSnapshot>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct GraphDocument {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub constants: BTreeMap<crate::ConstantId, GraphConstant>,
     pub nodes: BTreeMap<NodeId, DocumentNode>,
     #[serde(with = "port_address_map")]
     pub port_bindings: BTreeMap<PortAddress, DynamicPortBinding>,

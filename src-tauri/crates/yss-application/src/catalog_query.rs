@@ -15,9 +15,7 @@ use yss_graph_catalog::{
 use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
 use yss_graph_registry::RegistryFingerprint;
-use yss_graph_resource_contract::{
-    FunctionParameterContract, FunctionSignature, GraphResourceId, VariableValueContract,
-};
+use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
 use yss_project::ProjectIndex;
 use yss_project_filesystem::ProjectFilesystemError;
@@ -260,7 +258,6 @@ impl ProjectCatalogResources {
     fn from_index(index: ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
         let authority_generation = index.authority_generation();
         let mut functions = BTreeMap::new();
-        let mut variables = BTreeMap::new();
         let mut databases = BTreeMap::new();
         let mut entries = Vec::new();
 
@@ -282,25 +279,6 @@ impl ProjectCatalogResources {
                 resource_revision: graph.function_revision.unwrap_or(graph.revision).get(),
                 create_args: ResourceBoundCreateArgs::Function,
                 technical_terms: vec!["call".into(), "function".into()],
-            });
-        }
-
-        for variable in index.variables {
-            let resource = GraphResourceId::new(variable.resource_path.as_str());
-            if variables
-                .insert(resource, VariableValueContract::new(variable.data_type))
-                .is_some()
-            {
-                return Err(ProjectCatalogReadSource::invalid_declaration_facts());
-            }
-            let get_node_type = node_type("yssbi.project.variable.get")?;
-            entries.push(CatalogResourceEntry {
-                name: variable.name.into_boxed_str(),
-                node_type_id: get_node_type,
-                resource_path: CatalogResourcePath::new(variable.resource_path.as_str()),
-                resource_revision: variable.revision.get(),
-                create_args: ResourceBoundCreateArgs::Variable,
-                technical_terms: vec!["variable".into()],
             });
         }
 
@@ -344,7 +322,6 @@ impl ProjectCatalogResources {
             ProjectInstanceId::from_existing(index.project_instance_id),
             authority_generation,
             functions,
-            variables,
             databases,
         );
         Ok(Self {

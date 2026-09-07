@@ -77,6 +77,8 @@ pub fn user_created_port_instance_count<'a>(
 }
 
 pub fn validate_graph_document(document: &GraphDocument) -> Result<(), DocumentError> {
+    yss_graph_document::validate_constant_definitions(&document.constants)
+        .map_err(|error| DocumentError::InvalidConstant(error.id))?;
     for (id, node) in &document.nodes {
         if id != &node.id {
             return Err(DocumentError::DuplicateNode(node.id));

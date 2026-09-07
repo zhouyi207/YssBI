@@ -15,7 +15,6 @@ use yss_project_model::GraphResourceDocument;
 use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
-use super::VariableRevisionEntry;
 use crate::project_writers::{
     ProjectHistoryStatus, ProjectProjectionStatus, ProjectResourceMove,
     ProjectResourceMutationFacts,
@@ -85,10 +84,11 @@ impl ProjectState {
             function.revision = ResourceRevision::INITIAL;
         }
         let contents =
-            crate::project_io::serialize_graph_resource_document(&resource, HashMap::new())
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
+                ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
-                })?;
+                }
+            })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let context = crate::ProjectTransactionContext {
@@ -151,14 +151,8 @@ impl ProjectState {
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let current = self.get_data()?;
-        let (source, source_variables) = if let Some(resource) = current.graphs.get(source_path) {
-            let local_variables = current
-                .variables
-                .iter()
-                .filter(|(_, variable)| variable_scope_matches(variable, source_path))
-                .map(|(id, variable)| (*id, variable.clone()))
-                .collect::<HashMap<_, _>>();
-            (resource.clone(), local_variables)
+        let source = if let Some(resource) = current.graphs.get(source_path) {
+            resource.clone()
         } else {
             let persisted = crate::project_io::load_project_graph_document_from_file(
                 session.root.as_path().to_string_lossy().as_ref(),
@@ -167,15 +161,12 @@ impl ProjectState {
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
-            (
-                GraphResourceDocument {
-                    name: persisted.name,
-                    kind: persisted.kind,
-                    document: persisted.document,
-                    function: persisted.function,
-                },
-                persisted.local_variables,
-            )
+            GraphResourceDocument {
+                name: persisted.name,
+                kind: persisted.kind,
+                document: persisted.document,
+                function: persisted.function,
+            }
         };
         let source_revision = self
             .graph_resource_revisions
@@ -202,19 +193,11 @@ impl ProjectState {
         if let Some(function) = duplicate.function.as_mut() {
             function.revision = ResourceRevision::INITIAL;
         }
-        let duplicate_variables = source_variables
-            .into_values()
-            .map(|mut variable| {
-                let id = yss_variable_contract::VariableId::new();
-                variable.id = id;
-                let _ = remap_variable_scope(&mut variable, source_path.as_str(), target.as_str());
-                (id, variable)
-            })
-            .collect::<HashMap<_, _>>();
         let contents =
-            crate::project_io::serialize_graph_resource_document(&duplicate, duplicate_variables)
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
-                message: error.to_string(),
+            crate::project_io::serialize_graph_resource_document(&duplicate).map_err(|error| {
+                ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                }
             })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
@@ -356,17 +339,12 @@ impl ProjectState {
                 message: format!("graph '{}' revision changed", graph_path),
             });
         }
-        let local_variables = data
-            .variables
-            .iter()
-            .filter(|(_, variable)| variable_scope_matches(variable, graph_path))
-            .map(|(id, variable)| (*id, variable.clone()))
-            .collect::<HashMap<_, _>>();
         let contents =
-            crate::project_io::serialize_graph_resource_document(resource, local_variables)
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            crate::project_io::serialize_graph_resource_document(resource).map_err(|error| {
+                ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
-                })?;
+                }
+            })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let prepared = ProjectFilesystemTransaction::prepare(
@@ -472,14 +450,6 @@ impl ProjectState {
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         data.graphs.remove(path);
-        let path_text = path.as_str();
-        data.variables.retain(|_, variable| match &variable.scope {
-            yss_variable_contract::VariableScope::Global => true,
-            yss_variable_contract::VariableScope::Event { event_path }
-            | yss_variable_contract::VariableScope::Function {
-                function_path: event_path,
-            } => event_path != path_text,
-        });
         publication.commit_prepared(advance);
         drop(data);
         drop(publication);
@@ -541,7 +511,6 @@ impl ProjectState {
             document: loaded.document,
             function: loaded.function,
         };
-        let local_variables = loaded.local_variables;
 
         let mut publication = self
             .mutation_publication
@@ -561,23 +530,12 @@ impl ProjectState {
             .graph_resource_revisions
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut variable_revisions = self
-            .variable_revisions
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let publication_advance = publication.prepare_authority_generation()?;
         lifecycle.commit_guard(&mut lifecycle_guard, ResourceLifecycleIntent::Load)?;
         Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
         graph_resource_revisions.insert(graph_path.clone(), ResourceRevision::INITIAL);
-        for (id, variable) in local_variables {
-            data.variables.insert(id, variable);
-            variable_revisions
-                .entry(id)
-                .or_insert_with(|| VariableRevisionEntry::present(ResourceRevision::INITIAL));
-        }
         publication.commit_prepared(publication_advance);
-        drop(variable_revisions);
         drop(graph_resource_revisions);
         drop(data);
         drop(lifecycle);
@@ -630,24 +588,14 @@ impl ProjectState {
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let graph_removed = data.graphs.remove(graph_path).is_some();
-        let graph_path_text = graph_path.as_str();
-        let variables_before = data.variables.len();
-        data.variables.retain(|_, variable| match &variable.scope {
-            yss_variable_contract::VariableScope::Global => true,
-            yss_variable_contract::VariableScope::Event { event_path }
-            | yss_variable_contract::VariableScope::Function {
-                function_path: event_path,
-            } => event_path != graph_path_text,
-        });
-        let changed = graph_removed || variables_before != data.variables.len();
-        let publication_advance = changed
+        let publication_advance = graph_removed
             .then(|| publication.prepare_authority_generation())
             .transpose()?;
         lifecycle.commit_guard(&mut guard, ResourceLifecycleIntent::Unload)?;
         if let Some(publication_advance) = publication_advance {
             publication.commit_prepared(publication_advance);
         }
-        Ok(changed)
+        Ok(graph_removed)
     }
 
     pub(super) fn install_validated_resident_graph(
@@ -876,21 +824,10 @@ impl ProjectState {
             function.revision = next_revision;
         }
 
-        let source_variables = current_data
-            .variables
-            .iter()
-            .filter(|(_, variable)| variable_scope_matches(variable, graph_path))
-            .map(|(id, variable)| (*id, variable.clone()))
-            .collect::<HashMap<_, _>>();
-        let mut moved_variables = source_variables.clone();
-        for variable in moved_variables.values_mut() {
-            let _ = remap_variable_scope(variable, graph_path.as_str(), target.as_str());
-        }
-        let target_contents =
-            crate::project_io::serialize_graph_resource_document(&source, moved_variables.clone())
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                })?;
+        let target_contents = crate::project_io::serialize_graph_resource_document(&source)
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?;
 
         let mut referenced = Vec::new();
         for (path, resource) in &current_data.graphs {
@@ -905,17 +842,11 @@ impl ProjectState {
             ) {
                 continue;
             }
-            let local_variables = current_data
-                .variables
-                .iter()
-                .filter(|(_, variable)| variable_scope_matches(variable, path))
-                .map(|(id, variable)| (*id, variable.clone()))
-                .collect::<HashMap<_, _>>();
-            let contents =
-                crate::project_io::serialize_graph_resource_document(&changed, local_variables)
-                    .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
-                        message: error.to_string(),
-                    })?;
+            let contents = crate::project_io::serialize_graph_resource_document(&changed).map_err(
+                |error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                },
+            )?;
             referenced.push((path.clone(), changed, contents));
         }
 
@@ -981,10 +912,6 @@ impl ProjectState {
                     message: "graph changed before rename publication".into(),
                 });
             }
-            let mut variable_revisions = self
-                .variable_revisions
-                .write()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut lifecycle = self.resource_lifecycle.boundary();
             lifecycle.validate(&lifecycle_operation.owner)?;
             let advance = publication.prepare_authority_generation()?;
@@ -1006,12 +933,6 @@ impl ProjectState {
                     }
                 })?;
                 graph_resource_revisions.insert(path.clone(), revision);
-            }
-            for (id, variable) in moved_variables {
-                data.variables.insert(id, variable);
-                variable_revisions
-                    .entry(id)
-                    .or_insert_with(|| VariableRevisionEntry::present(ResourceRevision::INITIAL));
             }
             graph_resource_revisions.remove(graph_path);
             graph_resource_revisions.insert(target.clone(), next_revision);
@@ -1083,10 +1004,6 @@ impl ProjectState {
         source: &GraphResourcePath,
         target: &GraphResourcePath,
         moved: &GraphResourceDocument,
-        moved_local_variables: HashMap<
-            yss_variable_contract::VariableId,
-            yss_variable_contract::VariableInstance,
-        >,
         excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
     ) -> Result<GraphRenameDiskPlan, ProjectFilesystemError> {
         let mut plan = GraphRenameDiskPlan {
@@ -1107,12 +1024,8 @@ impl ProjectState {
             let before: crate::project_io::GraphResourceFile =
                 serde_json::from_slice(&contents).map_err(graph_rename_plan_error)?;
             let mut after = before.clone();
-            let mut changed =
+            let changed =
                 remap_document_references(&mut after.document, source.as_str(), target.as_str());
-            for variable in after.local_variables.values_mut() {
-                changed =
-                    remap_variable_scope(variable, source.as_str(), target.as_str()) || changed;
-            }
             if !changed {
                 continue;
             }
@@ -1140,32 +1053,10 @@ impl ProjectState {
             });
         }
 
-        let variables = std::path::PathBuf::from(yss_project_layout::GLOBAL_VARIABLES_FILE);
-        match yss_project_filesystem::read_secure_project_file(root, &variables) {
-            Ok(contents) => {
-                let mut document: crate::project_io::GlobalVariablesDocument =
-                    serde_json::from_slice(&contents).map_err(graph_rename_plan_error)?;
-                let changed = document.variables.values_mut().any(|variable| {
-                    remap_variable_scope(variable, source.as_str(), target.as_str())
-                });
-                if changed {
-                    plan.mutations.push(StagedFilesystemMutation::Write {
-                        relative_path: variables,
-                        contents: serde_json::to_vec_pretty(&document)
-                            .map_err(graph_rename_plan_error)?,
-                    });
-                }
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(graph_rename_plan_error(error)),
-        }
         plan.mutations.push(StagedFilesystemMutation::Write {
             relative_path: target.as_str().into(),
-            contents: crate::project_io::serialize_graph_resource_document(
-                moved,
-                moved_local_variables,
-            )
-            .map_err(graph_rename_plan_error)?,
+            contents: crate::project_io::serialize_graph_resource_document(moved)
+                .map_err(graph_rename_plan_error)?,
         });
         plan.mutations.push(StagedFilesystemMutation::RemoveFile {
             relative_path: source.as_str().into(),
@@ -1232,12 +1123,40 @@ fn duplicate_document(
     }
 
     let mut duplicate = document.clone();
+    let constant_ids = document
+        .constants
+        .keys()
+        .map(|id| (*id, yss_graph_document::ConstantId::new()))
+        .collect::<BTreeMap<_, _>>();
+    duplicate.constants = document
+        .constants
+        .values()
+        .map(|constant| {
+            let constant = constant.copy_with_id(constant_ids[&constant.id]);
+            (constant.id, constant)
+        })
+        .collect();
     duplicate.nodes = document
         .nodes
         .values()
         .map(|node| {
             let mut node = node.clone();
             node.id = node_ids.get(&node.id).copied().unwrap_or(node.id);
+            if node.node_type.as_str() == "yssbi.constant.get"
+                && let Some(id) = node
+                    .parameters
+                    .iter()
+                    .find(|(key, _)| key.as_str() == "constant")
+                    .map(|(_, value)| value)
+                    .and_then(|value| value.as_str())
+                    .and_then(|id| id.parse::<yss_graph_document::ConstantId>().ok())
+                    .and_then(|id| constant_ids.get(&id))
+            {
+                node.parameters.insert(
+                    "constant".parse().expect("constant parameter key"),
+                    serde_json::Value::String(id.to_string()),
+                );
+            }
             for value in node.parameters.values_mut() {
                 if value.as_str().is_some_and(|value| {
                     crate::graph_resource_index::normalize_resource_path(value) == source.as_str()
@@ -1430,38 +1349,6 @@ fn resource_removal_result(
     )
 }
 
-fn variable_scope_matches(
-    variable: &yss_variable_contract::VariableInstance,
-    graph_path: &GraphResourcePath,
-) -> bool {
-    match &variable.scope {
-        yss_variable_contract::VariableScope::Global => false,
-        yss_variable_contract::VariableScope::Event { event_path }
-        | yss_variable_contract::VariableScope::Function {
-            function_path: event_path,
-        } => event_path == graph_path.as_str(),
-    }
-}
-
-fn remap_variable_scope(
-    variable: &mut yss_variable_contract::VariableInstance,
-    from: &str,
-    to: &str,
-) -> bool {
-    match &mut variable.scope {
-        yss_variable_contract::VariableScope::Global => false,
-        yss_variable_contract::VariableScope::Event { event_path }
-        | yss_variable_contract::VariableScope::Function {
-            function_path: event_path,
-        } if event_path == from => {
-            *event_path = to.to_owned();
-            true
-        }
-        yss_variable_contract::VariableScope::Event { .. }
-        | yss_variable_contract::VariableScope::Function { .. } => false,
-    }
-}
-
 fn remap_document_references(document: &mut GraphDocument, from: &str, to: &str) -> bool {
     let mut changed = false;
     for node in document.nodes.values_mut() {
@@ -1535,7 +1422,6 @@ mod tests {
             &source,
             &target,
             &GraphResourceDocument::new("Target", GraphResourceKind::Event),
-            HashMap::new(),
             &std::collections::BTreeSet::new(),
         )
         .unwrap();

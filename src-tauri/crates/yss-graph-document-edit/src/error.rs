@@ -1,8 +1,10 @@
 use std::fmt;
-use yss_graph_document::{ConnectionId, NodeId, PortAddress};
+use yss_graph_document::{ConnectionId, ConstantId, NodeId, PortAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentError {
+    InvalidConstant(ConstantId),
+    ConstantContentMismatch(ConstantId),
     DuplicateNode(NodeId),
     NodeNotFound(NodeId),
     DuplicateConnection(ConnectionId),
@@ -22,6 +24,11 @@ pub enum DocumentError {
 impl fmt::Display for DocumentError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidConstant(id) => write!(formatter, "constant '{id}' is invalid"),
+            Self::ConstantContentMismatch(id) => write!(
+                formatter,
+                "constant '{id}' does not match patch precondition"
+            ),
             Self::DuplicateNode(id) => write!(formatter, "node '{id}' already exists"),
             Self::NodeNotFound(id) => write!(formatter, "node '{id}' does not exist"),
             Self::DuplicateConnection(id) => {

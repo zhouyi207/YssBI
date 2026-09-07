@@ -5,7 +5,6 @@ pub mod graph_draft;
 pub mod graph_mutation;
 pub mod harness;
 pub mod project;
-pub mod variables;
 
 pub mod application_event;
 pub mod catalog;
@@ -17,4 +16,3 @@ pub mod statistics;
 pub use database::*;
 pub use harness::*;
 pub use project::*;
-pub use variables::*;

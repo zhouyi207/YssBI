@@ -19,9 +19,6 @@ pub struct ProjectState {
             std::collections::HashMap<GraphResourcePath, yss_project_identity::ResourceRevision>,
         >,
     >,
-    pub(crate) variable_revisions: Arc<
-        RwLock<std::collections::HashMap<yss_variable_contract::VariableId, VariableRevisionEntry>>,
-    >,
     pub(crate) chart_revisions: Arc<
         RwLock<
             std::collections::HashMap<ChartResourcePath, yss_project_identity::ResourceRevision>,
@@ -78,7 +75,6 @@ impl ProjectState {
             activation_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activation_identity: Arc::new(RwLock::new(activation_identity)),
             graph_resource_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            variable_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             chart_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
             database_authority_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),
 

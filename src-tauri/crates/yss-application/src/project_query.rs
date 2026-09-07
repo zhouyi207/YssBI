@@ -12,7 +12,6 @@ use yss_project::{ProjectError, ProjectIndex, RevealProjectResourceRequest, reso
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::normalize_existing_path;
-use yss_variable_contract::VariableInstance;
 
 #[derive(Debug, Error)]
 pub enum ProjectQueryApplicationError {
@@ -48,25 +47,20 @@ pub struct ProjectDatabaseQueryFact {
 }
 
 #[derive(Debug, Clone)]
-pub struct ProjectDatabasesVariablesSnapshot {
+pub struct ProjectDatabasesSnapshot {
     databases: Box<[ProjectDatabaseQueryFact]>,
-    variables: Box<[VariableInstance]>,
 }
 
-impl ProjectDatabasesVariablesSnapshot {
+impl ProjectDatabasesSnapshot {
     pub fn databases(&self) -> &[ProjectDatabaseQueryFact] {
         &self.databases
-    }
-
-    pub fn variables(&self) -> &[VariableInstance] {
-        &self.variables
     }
 }
 
 impl ApplicationState {
-    pub fn query_project_databases_variables(
+    pub fn query_project_databases(
         &self,
-    ) -> Result<ProjectDatabasesVariablesSnapshot, ProjectQueryApplicationError> {
+    ) -> Result<ProjectDatabasesSnapshot, ProjectQueryApplicationError> {
         let captured = self.capture_session()?;
         let data = captured.project().get_data()?;
         let catalog = yss_database_runtime::session_api::catalog_snapshot(captured.database())?;
@@ -87,21 +81,13 @@ impl ApplicationState {
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let variables = data
-            .variables
-            .into_values()
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
         yss_database_runtime::session_api::revalidate_catalog_snapshot(
             captured.database(),
             &catalog,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(ProjectDatabasesVariablesSnapshot {
-            databases,
-            variables,
-        })
+        Ok(ProjectDatabasesSnapshot { databases })
     }
 
     pub fn query_current_project_activation(

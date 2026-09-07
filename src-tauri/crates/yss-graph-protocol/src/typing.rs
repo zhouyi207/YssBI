@@ -112,7 +112,7 @@ pub enum NodeTypingSpec {
         parameter: ParameterKey,
         output: PortKey,
     },
-    VariableOutput {
+    ConstantOutput {
         parameter: ParameterKey,
         output: PortKey,
     },

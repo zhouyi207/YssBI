@@ -34,7 +34,7 @@ pub struct GraphFunctionAbi {
     pub result: Option<GraphFunctionResult>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GraphFunctionSemanticFact {
     pub abi: GraphFunctionAbi,
     pub semantics: GraphSemanticSnapshot,
@@ -308,7 +308,6 @@ mod tests {
                     (path.clone(), FunctionCatalogEntry::new(signature.clone()))
                 })
                 .collect(),
-            BTreeMap::new(),
             BTreeMap::new(),
             ResourceCatalogFingerprint::from_bytes([0; 32]),
         );

@@ -78,6 +78,7 @@ fn node_facts(
     ports: Box<[GraphPortSemanticFact]>,
 ) -> GraphNodeSemanticFact {
     GraphNodeSemanticFact {
+        constant: None,
         node_id,
         node_type,
         instance_title: None,
@@ -125,8 +126,8 @@ fn analysis_with_facts(
 fn application_projection_closes_resource_node_port_and_connection_facts() {
     let source = node_id(2);
     let target = node_id(3);
-    let source_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
-    let target_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+    let source_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
+    let target_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
     let output = PortAddress::declared(
         source,
         PortKey::new("value").expect("test port key is valid"),
@@ -248,8 +249,8 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
 fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
     let source = node_id(12);
     let target = node_id(13);
-    let source_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
-    let target_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+    let source_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
+    let target_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
     let output = PortAddress::declared(
         source,
         PortKey::new("value").expect("test port key is valid"),
@@ -379,7 +380,7 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
 #[test]
 fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     let node = node_id(8);
-    let node_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+    let node_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
     let mut document = GraphDocument::default();
     document.nodes.insert(
         node,

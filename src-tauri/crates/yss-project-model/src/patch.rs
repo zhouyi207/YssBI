@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_graph_document::GraphResourcePath;
 use yss_project_identity::ResourceRevision;
-use yss_variable_contract::{VariableId, VariableInstance};
 
 /// An atomic candidate change to the in-memory [`crate::ProjectData`] aggregate.
 ///
@@ -36,12 +35,6 @@ pub enum ProjectDataPatch {
         referenced_graphs_before: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         referenced_graphs: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         loaded_referenced_graphs: BTreeSet<GraphResourcePath>,
-        referenced_variables_before: BTreeMap<VariableId, VariableInstance>,
-        referenced_variables: BTreeMap<VariableId, VariableInstance>,
-    },
-    PatchVariables {
-        updates: BTreeMap<VariableId, VariableInstance>,
-        removals: BTreeSet<VariableId>,
     },
     UpsertChart {
         path: ChartResourcePath,

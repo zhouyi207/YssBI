@@ -331,14 +331,14 @@ mod tests {
     use std::sync::Arc;
 
     fn prepared_plan() -> PreparedExecutionPlan {
-        let resource = PlanResourceId::from_existing("variables/answer".into());
+        let resource = PlanResourceId::from_existing("databases/answer".into());
         let version = PlanResourceVersion::from_existing("v1".into());
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([3; 32]),
             BTreeMap::from([(resource, version)]),
             BTreeMap::from([(
-                PlanResourceId::from_existing("variables/answer".into()),
+                PlanResourceId::from_existing("databases/answer".into()),
                 PlanResourceObservedState::Present(PlanResourceVersion::from_existing("v1".into())),
             )]),
         );
@@ -368,8 +368,8 @@ mod tests {
 
     fn request<'a>(plan: &'a PreparedExecutionPlan) -> RunResourceRequest<'a> {
         let requirement = PlanResourceRequirement::new(
-            PlanResourceId::from_existing("variables/answer".into()),
-            ResourceKind::Variable,
+            PlanResourceId::from_existing("databases/answer".into()),
+            ResourceKind::DataFrame,
             ResourceAccess::Shared,
             false,
         );
@@ -393,7 +393,7 @@ mod tests {
             .prepare(&request(&plan))
             .expect("matching neutral binding must prepare");
         assert_eq!(
-            prepared.value(&PlanResourceId::from_existing("variables/answer".into())),
+            prepared.value(&PlanResourceId::from_existing("databases/answer".into())),
             Some(&RuntimeValue::Integer(4))
         );
     }

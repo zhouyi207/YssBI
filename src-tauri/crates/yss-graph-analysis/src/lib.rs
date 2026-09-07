@@ -62,7 +62,7 @@ pub use result_category::{
 };
 pub use type_resolution::GraphSemanticCache;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GraphSemanticSnapshot {
     nodes: Box<[GraphNodeSemanticFact]>,
     diagnostics: Box<[GraphDiagnosticFact]>,
@@ -172,8 +172,18 @@ pub enum GraphResolvedParameterValue {
     Resource(GraphResourceId),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+fn referenced_constant<'a>(
+    document: &'a GraphDocument,
+    node: &yss_graph_document::DocumentNode,
+    parameter: &yss_graph_protocol::ParameterKey,
+) -> Option<&'a yss_graph_document::GraphConstant> {
+    let id = node.parameters.get(parameter)?.as_str()?.parse().ok()?;
+    document.constants.get(&id)
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct GraphNodeSemanticFact {
+    pub constant: Option<std::sync::Arc<yss_graph_document::GraphConstant>>,
     pub node_id: NodeId,
     pub node_type: yss_graph_protocol::NodeTypeId,
     pub instance_title: Option<Box<str>>,
@@ -379,7 +389,7 @@ pub enum GraphCompilationStage {
     Lowering,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
     resource_versions: ResourceVersionSet,
@@ -464,6 +474,7 @@ fn resolve_graph_semantics_inner(
     let mut internal_interface_node = None;
     let mut diagnostics = Vec::new();
     let resolved_schemas = resolve_graph_schemas(document, registry, resources);
+    let mut constants = std::collections::BTreeMap::new();
     let mut nodes = document
         .nodes
         .values()
@@ -476,6 +487,7 @@ fn resolve_graph_semantics_inner(
                     [("node_type", node.node_type.as_str().into())],
                 ));
                 return GraphNodeSemanticFact {
+                    constant: None,
                     node_id: node.id,
                     node_type: node.node_type.clone(),
                     instance_title: None,
@@ -724,9 +736,18 @@ fn resolve_graph_semantics_inner(
             }
 
             GraphNodeSemanticFact {
+                constant: match &protocol.typing {
+                    yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| {
+                        constants.entry(constant.id).or_insert_with(|| std::sync::Arc::new(constant.clone())).clone()
+                    }),
+                    _ => None,
+                },
                 node_id: node.id,
                 node_type: node.node_type.clone(),
-                instance_title: None,
+                instance_title: match &protocol.typing {
+                    yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| constant.name.clone().into_boxed_str()),
+                    _ => None,
+                },
                 title: protocol.catalog.title_key.as_str().into(),
                 icon_id: Some(protocol.catalog.icon_id.as_str().into()),
                 style_id: Some(protocol.catalog.style_id.as_str().into()),
@@ -755,7 +776,7 @@ fn resolve_graph_semantics_inner(
         .collect::<Vec<_>>();
     include_referenced_orphan_ports(document, &mut nodes, &mut diagnostics);
     let type_diagnostics =
-        type_resolution::resolve_node_types(document, registry, resources, &mut nodes, cache);
+        type_resolution::resolve_node_types(document, registry, &mut nodes, cache);
     if type_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.blocking)
@@ -874,6 +895,33 @@ fn resolve_graph_semantics_inner(
 
 #[cfg(test)]
 mod tests {
+    pub(super) fn set_constant(
+        document: &mut GraphDocument,
+        node: NodeId,
+        data_type: yss_data_contract::DataType,
+        data_value: yss_data_contract::DataValue,
+    ) {
+        let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
+        document.constants.insert(
+            id,
+            yss_graph_document::GraphConstant {
+                id,
+                name: id.to_string(),
+                data_type,
+                data_value,
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            },
+        );
+        let node = document.nodes.get_mut(&node).unwrap();
+        node.node_type = "yssbi.constant.get".parse().unwrap();
+        node.parameters = ParameterValues::from([(
+            "constant".parse().unwrap(),
+            serde_json::json!(id.to_string()),
+        )]);
+    }
+
     use super::*;
     use std::collections::BTreeMap;
     use yss_data_contract::DataType;
@@ -882,13 +930,10 @@ mod tests {
     use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
     use yss_graph_protocol::{NodeTypeId, ParameterConstraint};
     use yss_graph_registry::RegistryFingerprint;
-    use yss_graph_resource_contract::{
-        ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
-    };
+    use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
     fn empty_resources() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
             ResourceCatalogFingerprint::from_bytes([0; 32]),
@@ -930,8 +975,12 @@ mod tests {
                 source_id,
                 DocumentNode {
                     id: source_id,
-                    node_type: NodeTypeId::new(*node_type)
-                        .expect("fixture source node type is valid"),
+                    node_type: NodeTypeId::new(if node_type.starts_with("core.") {
+                        "yssbi.constant.get"
+                    } else {
+                        node_type
+                    })
+                    .expect("fixture source node type is valid"),
                     position: NodePosition {
                         x: 0.0,
                         y: index as f64 * 100.0,
@@ -940,6 +989,21 @@ mod tests {
                     user_label: None,
                 },
             );
+            match *node_type {
+                "core.int64" => set_constant(
+                    &mut document,
+                    source_id,
+                    DataType::Int64,
+                    yss_data_contract::DataValue::Int64(0),
+                ),
+                "core.float64" => set_constant(
+                    &mut document,
+                    source_id,
+                    DataType::Float64,
+                    yss_data_contract::DataValue::Float64(0.0),
+                ),
+                _ => {}
+            }
             let instance = PortAddress::instance(
                 add_id,
                 PortKey::new("operands").unwrap(),
@@ -985,10 +1049,7 @@ mod tests {
 
     #[test]
     fn add_resolver_promotes_shape_and_element_independently_of_operand_order() {
-        let scalar_int_float = [
-            ("yssbi.constant.int64", "value"),
-            ("yssbi.constant.float64", "value"),
-        ];
+        let scalar_int_float = [("core.int64", "value"), ("core.float64", "value")];
         assert_eq!(
             add_result_type(&scalar_int_float, false),
             TypeState::Exact(resolved_scalar("core.float64"))
@@ -998,20 +1059,14 @@ mod tests {
             TypeState::Exact(resolved_scalar("core.float64"))
         );
         assert_eq!(
-            add_result_type(
-                &[
-                    ("yssbi.constant.int64", "value"),
-                    ("yssbi.constant.int64", "value"),
-                ],
-                false,
-            ),
+            add_result_type(&[("core.int64", "value"), ("core.int64", "value"),], false,),
             TypeState::Exact(resolved_scalar("core.int64"))
         );
         assert_eq!(
             add_result_type(
                 &[
                     ("yssbi.data_series.convert.string_to_int64", "output"),
-                    ("yssbi.constant.float64", "value"),
+                    ("core.float64", "value"),
                 ],
                 false,
             ),
@@ -1077,7 +1132,7 @@ mod tests {
             source,
             DocumentNode {
                 id: source,
-                node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+                node_type: NodeTypeId::new("yssbi.constant.get").unwrap(),
                 position: NodePosition { x: 0.0, y: 0.0 },
                 parameters: ParameterValues::from([(
                     ParameterKey::new("value").unwrap(),
@@ -1106,17 +1161,23 @@ mod tests {
                 order: None,
             },
         );
+        set_constant(
+            &mut document,
+            source,
+            DataType::Int64,
+            yss_data_contract::DataValue::Int64(1),
+        );
         let resources = empty_resources();
         let mut cache = GraphSemanticCache::default();
         resolve_graph_semantics_with_cache(&document, &builtin.registry, &resources, &mut cache);
         assert_eq!(cache.reused_nodes(), 0);
 
-        document
-            .nodes
-            .get_mut(&source)
-            .unwrap()
-            .parameters
-            .insert(ParameterKey::new("value").unwrap(), serde_json::json!(2));
+        set_constant(
+            &mut document,
+            source,
+            DataType::Int64,
+            yss_data_contract::DataValue::Int64(2),
+        );
         let incremental = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
@@ -1125,48 +1186,56 @@ mod tests {
         );
         let full = resolve_graph_semantics(&document, &builtin.registry, &resources);
 
-        assert_eq!(cache.reused_nodes(), 1);
+        assert_eq!(cache.reused_nodes(), 2);
         assert_eq!(incremental, full);
     }
 
     #[test]
-    fn semantic_cache_invalidates_a_variable_when_its_resource_type_changes() {
+    fn semantic_cache_invalidates_a_constant_when_its_type_changes() {
         let builtin = build_builtin_node_system().expect("built-in node system is valid");
         let variable = NodeId::new();
-        let resource = GraphResourceId::new("variables/cache-type");
+        let id = yss_graph_document::ConstantId::new();
         let mut document = GraphDocument::default();
+        document.constants.insert(
+            id,
+            yss_graph_document::GraphConstant {
+                id,
+                name: "Threshold".into(),
+                data_type: DataType::Int64,
+                data_value: yss_data_contract::DataValue::Int64(42),
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            },
+        );
         document.nodes.insert(
             variable,
             DocumentNode {
                 id: variable,
-                node_type: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
+                node_type: NodeTypeId::new("yssbi.constant.get").unwrap(),
                 position: NodePosition { x: 0.0, y: 0.0 },
                 parameters: ParameterValues::from([(
-                    ParameterKey::new("variable").unwrap(),
-                    serde_json::json!(resource.as_str()),
+                    ParameterKey::new("constant").unwrap(),
+                    serde_json::json!(id.to_string()),
                 )]),
                 user_label: None,
             },
         );
-        let catalog = |data_type, fingerprint| {
-            ResourceCatalogSnapshot::new(
-                BTreeMap::new(),
-                BTreeMap::from([(resource.clone(), VariableValueContract::new(data_type))]),
-                BTreeMap::new(),
-                ResourceCatalogFingerprint::from_bytes([fingerprint; 32]),
-            )
-        };
+        let resources = empty_resources();
         let mut cache = GraphSemanticCache::default();
         let integer = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
-            &catalog(DataType::Int64, 1),
+            &resources,
             &mut cache,
         );
+        document.constants.get_mut(&id).unwrap().data_type = DataType::Float64;
+        document.constants.get_mut(&id).unwrap().data_value =
+            yss_data_contract::DataValue::Float64(42.0);
         let float = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
-            &catalog(DataType::Float64, 2),
+            &resources,
             &mut cache,
         );
         let output_type = |snapshot: &GraphSemanticSnapshot| {
@@ -1204,7 +1273,7 @@ mod tests {
         let mut document = GraphDocument::default();
         for (node_id, node_type, x) in [
             (left, "yssbi.dataframe.series.int_range", 0.0),
-            (right, "yssbi.constant.int64", 0.0),
+            (right, "yssbi.constant.get", 0.0),
             (add, "yssbi.numeric.add", 200.0),
             (consumer, "yssbi.data_series.convert.int64_to_string", 400.0),
         ] {
@@ -1220,6 +1289,12 @@ mod tests {
             );
         }
 
+        set_constant(
+            &mut document,
+            right,
+            DataType::Int64,
+            yss_data_contract::DataValue::Int64(0),
+        );
         for (index, source) in [left, right].into_iter().enumerate() {
             let operand = PortAddress::instance(
                 add,
@@ -1263,8 +1338,12 @@ mod tests {
                 && diagnostic.primary == GraphDiagnosticLocation::Connection(downstream_connection)
         }));
 
-        document.nodes.get_mut(&right).unwrap().node_type =
-            NodeTypeId::new("yssbi.constant.float64").unwrap();
+        set_constant(
+            &mut document,
+            right,
+            DataType::Float64,
+            yss_data_contract::DataValue::Float64(0.0),
+        );
         let widened = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
 
         assert!(document.connections.contains_key(&downstream_connection));
@@ -1292,7 +1371,7 @@ mod tests {
         let target = NodeId::new();
         let mut document = GraphDocument::default();
         for (node_id, node_type) in [
-            (source, "yssbi.constant.int64"),
+            (source, "yssbi.constant.get"),
             (target, "yssbi.dataframe.series.inverse_standardize"),
         ] {
             document.nodes.insert(
@@ -1306,6 +1385,12 @@ mod tests {
                 },
             );
         }
+        set_constant(
+            &mut document,
+            source,
+            DataType::Int64,
+            yss_data_contract::DataValue::Int64(0),
+        );
         let mean = PortAddress::declared(target, PortKey::new("mean").unwrap());
         let connection_id = ConnectionId::new();
         document.connections.insert(
@@ -1447,7 +1532,6 @@ mod tests {
             .expect("built-ins include a resource parameter");
         let identity = match resource_kind {
             ResourceDisplayKind::Function => "functions/missing.yssbi-function",
-            ResourceDisplayKind::Variable => "variables/missing",
             ResourceDisplayKind::Database => "databases/missing",
         };
         let node_id = NodeId::new();

@@ -221,7 +221,7 @@ fn validate_parameter_value(
     value: &PlanParameterValue,
 ) -> Result<(), PackagePreparationError> {
     match value {
-        PlanParameterValue::Scalar(_) => Ok(()),
+        PlanParameterValue::Scalar(_) | PlanParameterValue::Literal(_) => Ok(()),
         PlanParameterValue::Resource(resource) => {
             if resource.as_str().is_empty() {
                 Err(PackagePreparationError::Parameters(

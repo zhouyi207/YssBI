@@ -123,6 +123,14 @@ fn parse_node_id(value: &str) -> Result<NodeId, PortAddressMappingError> {
     deny_unknown_fields
 )]
 pub enum EditorGraphMutationDto {
+    InsertConstantReference {
+        id: yss_graph_document::ConstantId,
+        position: NodePosition,
+    },
+    SetConstant {
+        id: yss_graph_document::ConstantId,
+        constant: Option<yss_graph_document::GraphConstant>,
+    },
     CreateNode {
         descriptor: crate::schema::catalog::NodeCreationDescriptorDto,
         position: NodePosition,
@@ -218,6 +226,12 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             PortAddress::try_from(value).map_err(|_| EditorMutationMappingError::InvalidPortAddress)
         };
         Ok(match value {
+            EditorGraphMutationDto::InsertConstantReference { id, position } => {
+                yss_graph_editor::EditorGraphMutation::InsertConstantReference { id, position }
+            }
+            EditorGraphMutationDto::SetConstant { id, constant } => {
+                yss_graph_editor::EditorGraphMutation::SetConstant { id, constant }
+            }
             EditorGraphMutationDto::CreateNode {
                 descriptor,
                 position,

@@ -99,9 +99,6 @@ pub(super) fn resource_exists(
         ResourceDisplayKind::Function => GraphResourcePath::new(identity)
             .ok()
             .is_some_and(|path| resources.function_signature(&path).is_some()),
-        ResourceDisplayKind::Variable => resources
-            .variable_contract(&GraphResourceId::new(identity))
-            .is_some(),
         ResourceDisplayKind::Database => resources
             .database_schema(&GraphResourceId::new(identity))
             .is_some(),

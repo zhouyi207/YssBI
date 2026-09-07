@@ -124,17 +124,6 @@ pub(crate) fn build_catalog_mutation_validation_snapshot(
         );
     }
 
-    for variable in index.variables {
-        resources.insert(
-            CatalogResourcePath::new(variable.resource_path.as_str()),
-            CatalogMutationResource::Variable {
-                revision: variable.revision.get(),
-                scope: variable.scope,
-                data_type: variable.data_type,
-            },
-        );
-    }
-
     for database in index.databases {
         resources.insert(
             CatalogResourcePath::new(database.resource_path.as_str()),
@@ -388,7 +377,7 @@ impl ApplicationState {
         })?;
         let result = captured
             .graph()
-            .export_subgraph(&graph_path, &document, &catalog, node_ids)
+            .export_subgraph(&document, &catalog, node_ids)
             .map_err(ResourceMutationApplicationError::Mutation)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;

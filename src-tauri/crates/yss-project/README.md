@@ -18,6 +18,12 @@
 
 ## Graph resource revisions
 
+项目格式版本为 4。命名常量随 Event/Function 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。
+
+打开格式版本 3 的项目时，`constant_migration` 在文件事务中一次性转换：局部变量进入所属图；全局变量复制到引用它的图；未被引用的全局值保存在第一张 Event 中，没有 Event 时创建 `Constants`。旧变量 Get 和四种标量常量节点转换为 `yssbi.constant.get`，保留节点身份、位置与连线。全部候选文件验证成功后才批量写入、移除旧变量文件并更新版本；转换失败保留原文件。
+
+常量增删改使用 Graph Draft、Save 与图历史，项目查询不再发布独立变量集合。复制图时常量及 Get 引用同时生成新身份。格式、类型和执行语义由 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md) 维护。
+
 `graph_resource_revisions` 是 Project-owned `GraphResourcePath → ResourceRevision` 索引，不是 editor projection 的请求计数器。它仍有生产读写方：
 
 | 使用方                                                                                                     | 作用                                                                                       |

@@ -1,6 +1,6 @@
 //! Canonical in-memory project aggregate.
 //!
-//! Persisted manifest, graph, chart, database, and variable wire formats
+//! Persisted manifest, graph, chart, and database wire formats
 //! remain owned by their dedicated crates and Project I/O adapters. This model
 //! deliberately does not read the clock or expose monolithic JSON persistence.
 
@@ -14,7 +14,6 @@ use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_project_history::{FunctionDocument, FunctionSignature};
-use yss_variable_contract::{VariableId, VariableInstance};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -55,7 +54,6 @@ impl Default for ProjectMetadata {
 
 #[derive(Debug, Default, Clone)]
 pub struct ProjectData {
-    pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     pub charts: HashMap<ChartResourcePath, ChartDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
@@ -100,7 +98,6 @@ mod tests {
 
         assert_eq!(project.metadata.project_name, "未命名项目");
         assert!(project.metadata.export_time.is_empty());
-        assert!(project.variables.is_empty());
         assert!(project.graphs.is_empty());
         assert!(project.charts.is_empty());
         assert!(project.databases.is_empty());

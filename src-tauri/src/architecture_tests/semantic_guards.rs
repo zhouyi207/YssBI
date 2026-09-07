@@ -134,11 +134,26 @@ pub(super) fn pure_leaf_graph_document_json_violations(
         let allowed = if dependency.source_file == GRAPH_DOCUMENT_MODEL {
             dependency.kind == RustDependencyKind::Path
                 && dependency.canonical_origin_target == "external:serde_json::Value"
+        } else if dependency.source_file
+            == "src-tauri/crates/yss-graph-document/src/constant_value.rs"
+        {
+            matches!(
+                (dependency.kind, dependency.canonical_origin_target.as_str()),
+                (RustDependencyKind::Use, "external:serde_json::Value")
+                    | (
+                        RustDependencyKind::Path,
+                        "external:serde_json::from_str"
+                            | "external:serde_json::Deserializer::from_str"
+                            | "external:serde_json::Error"
+                    )
+            )
         } else {
             false
         };
         if allowed {
-            graph_document_allowed_dependencies += 1;
+            if dependency.source_file == GRAPH_DOCUMENT_MODEL {
+                graph_document_allowed_dependencies += 1;
+            }
         } else {
             violations.push(SemanticGuardViolation {
                 rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
@@ -199,10 +214,10 @@ pub(super) fn pure_leaf_graph_document_json_violations(
 
 pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<String> {
     const TABULAR_CONTRACT_SOURCE: &str = "src-tauri/crates/yss-tabular-contract/src/lib.rs";
-    const VARIABLE_VALUE_SOURCE: &str = "src-tauri/crates/yss-variable-value/src/lib.rs";
+    const CONSTANT_VALUE_SOURCE: &str = "src-tauri/crates/yss-graph-document/src/constant_value.rs";
     let files = [
         TABULAR_CONTRACT_SOURCE,
-        VARIABLE_VALUE_SOURCE,
+        CONSTANT_VALUE_SOURCE,
         "src-tauri/crates/yss-tabular-polars/src/lib.rs",
         "src-tauri/crates/yss-tabular-io/src/lib.rs",
     ];
@@ -219,9 +234,9 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
             for forbidden in [
                 "serde_json",
                 "polars",
-                "VariableInstance",
+                "GraphConstant",
                 "dataframe_io",
-                "normalize_variable",
+                "normalize_constant_value",
                 "BTreeMap",
                 "pub columns",
                 "#[derive(Serialize, Deserialize)]",
@@ -243,9 +258,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
                 }
             }
         }
-        if relative == VARIABLE_VALUE_SOURCE
-            && !source.contains("VariableTabularNormalizationError")
-        {
+        if relative == CONSTANT_VALUE_SOURCE && !source.contains("ConstantValueError") {
             violations.push(format!("{relative}: missing typed normalization error"));
         }
         if relative == "src-tauri/crates/yss-tabular-polars/src/lib.rs"

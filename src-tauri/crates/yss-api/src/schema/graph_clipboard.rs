@@ -40,7 +40,6 @@ pub enum ClipboardNodeCreationDto {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ClipboardResourceBoundCreateArgsDto {
     Function,
-    Variable,
     Database,
 }
 
@@ -159,6 +158,8 @@ pub struct ClipboardConnectionDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClipboardSubgraphDto {
     pub schema_version: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<yss_graph_document::GraphConstant>,
     pub nodes: Vec<ClipboardNodeDto>,
     pub port_bindings: Vec<ClipboardPortBindingDto>,
     pub input_states: Vec<ClipboardInputStateDto>,
@@ -169,6 +170,7 @@ impl From<ClipboardSubgraph> for ClipboardSubgraphDto {
     fn from(value: ClipboardSubgraph) -> Self {
         Self {
             schema_version: value.schema_version,
+            constants: value.constants,
             nodes: value
                 .nodes
                 .into_iter()
@@ -228,7 +230,6 @@ impl From<yss_graph_catalog::ResourceBoundCreateArgs> for ClipboardResourceBound
     fn from(value: yss_graph_catalog::ResourceBoundCreateArgs) -> Self {
         match value {
             yss_graph_catalog::ResourceBoundCreateArgs::Function => Self::Function,
-            yss_graph_catalog::ResourceBoundCreateArgs::Variable => Self::Variable,
             yss_graph_catalog::ResourceBoundCreateArgs::Database => Self::Database,
         }
     }

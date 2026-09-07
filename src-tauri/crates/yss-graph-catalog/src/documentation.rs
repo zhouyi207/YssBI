@@ -22,11 +22,6 @@ pub(crate) fn documentation(node_type_id: &NodeTypeId, locale: &str) -> Option<&
 
 fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
     Some(match node_type_id {
-        "yssbi.constant.bool" => markdown!("boolean_const"),
-        "yssbi.constant.int64" => markdown!("int64_const"),
-        "yssbi.constant.float64" => markdown!("float64_const"),
-        "yssbi.constant.string" => markdown!("string_const"),
-
         "yssbi.numeric.add" => markdown!("add"),
         "yssbi.numeric.subtract" => markdown!("subtract"),
         "yssbi.numeric.multiply" => markdown!("multiply"),
@@ -73,7 +68,7 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         }
 
         "yssbi.project.function.call" => markdown!("call_function"),
-        "yssbi.project.variable.get" => markdown!("get_variable"),
+        "yssbi.constant.get" => markdown!("get_constant"),
         "yssbi.debug.view" => markdown!("view"),
 
         "yssbi.dataframe.source.get" => markdown!("get_dataframe"),

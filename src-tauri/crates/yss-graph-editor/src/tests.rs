@@ -1,12 +1,9 @@
 use crate::{
-    CatalogMutationResource, CatalogMutationValidationSnapshot, EditorGraphMutation,
-    EditorMutationErrorCode, PortPlacement,
+    CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode, PortPlacement,
 };
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
-use yss_graph_catalog::{
-    CatalogResourcePath, authoritative_static_descriptor, build_builtin_node_system,
-};
+use yss_graph_catalog::{authoritative_static_descriptor, build_builtin_node_system};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     FunctionParameterId, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId,
@@ -170,10 +167,7 @@ fn port_placement_appends_moves_and_undoes_without_uuid_ordering() {
     apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
     assert_eq!(document, before_move);
 }
-use yss_graph_resource_contract::{
-    GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
-};
-use yss_variable_contract::VariableScope;
+use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
@@ -232,7 +226,13 @@ fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
         .expect("built-in registry must assemble")
         .registry;
     let mut document = GraphDocument::default();
-    let source = insert_node(&mut document, document_node("yssbi.constant.string", 0.0));
+    let source = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    set_constant(
+        &mut document,
+        source,
+        DataType::String,
+        yss_data_contract::DataValue::String(String::new()),
+    );
     let target = insert_node(
         &mut document,
         document_node("yssbi.numeric.subtract", 100.0),
@@ -280,7 +280,13 @@ fn move_connections_uses_current_document_authority() {
         .expect("built-in registry must assemble")
         .registry;
     let mut document = GraphDocument::default();
-    let source = insert_node(&mut document, document_node("yssbi.constant.int64", 0.0));
+    let source = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    set_constant(
+        &mut document,
+        source,
+        DataType::Int64,
+        yss_data_contract::DataValue::Int64(0),
+    );
     let target = insert_node(
         &mut document,
         document_node("yssbi.numeric.subtract", 100.0),
@@ -325,7 +331,13 @@ fn create_and_connect_plans_one_atomic_patch() {
         .expect("built-in registry must assemble")
         .registry;
     let mut document = GraphDocument::default();
-    let source = insert_node(&mut document, document_node("yssbi.constant.int64", 0.0));
+    let source = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    set_constant(
+        &mut document,
+        source,
+        DataType::Int64,
+        yss_data_contract::DataValue::Int64(0),
+    );
     let source_output = declared(source, "value");
     let catalog = CatalogMutationValidationSnapshot {
         resources: BTreeMap::new(),
@@ -431,70 +443,36 @@ fn remove_port_instance_cleans_up_an_orphaned_derived_port() {
 }
 
 #[test]
-fn resource_type_refinement_uses_the_protocol_binding_parameter() {
-    let registry = build_builtin_node_system()
-        .expect("built-in registry must assemble")
-        .registry;
-    let resource_path = CatalogResourcePath::new("variables/00000000-0000-0000-0000-000000000001");
-    let mut node = document_node("yssbi.project.variable.get", 0.0);
-    node.parameters.insert(
-        ParameterKey::new("aaa").expect("fixture key must be valid"),
-        serde_json::Value::String("functions/Wrong.yssbi-function".into()),
-    );
-    node.parameters.insert(
-        ParameterKey::new("variable").expect("fixture key must be valid"),
-        serde_json::Value::String(resource_path.as_str().into()),
-    );
-    let mut document = GraphDocument::default();
-    let node_id = insert_node(&mut document, node);
-    let catalog = CatalogMutationValidationSnapshot {
-        resources: BTreeMap::from([(
-            resource_path,
-            CatalogMutationResource::Variable {
-                revision: 1,
-                scope: VariableScope::Global,
-                data_type: DataType::Int64,
-            },
-        )]),
-    };
-
-    let source = crate::compatibility::source_port(
-        &document,
-        registry.as_ref(),
-        &catalog,
-        declared(node_id, "value"),
-    )
-    .expect("type refinement must use the protocol-owned 'variable' binding");
-
-    assert_eq!(
-        source.value_type,
-        TypeExpr::Concrete("core.int64".parse().expect("fixture type ID must be valid"))
-    );
-}
-
-#[test]
 fn compatible_catalog_source_uses_the_protocol_binding_parameter() {
     let registry = build_builtin_node_system()
         .expect("built-in registry must assemble")
         .registry;
-    let resource_path = "variables/00000000-0000-0000-0000-000000000002";
-    let mut node = document_node("yssbi.project.variable.get", 0.0);
+    let constant_id = yss_graph_document::ConstantId::new();
+    let mut node = document_node("yssbi.constant.get", 0.0);
     node.parameters.insert(
         ParameterKey::new("aaa").expect("fixture key must be valid"),
         serde_json::Value::String("databases/wrong".into()),
     );
     node.parameters.insert(
-        ParameterKey::new("variable").expect("fixture key must be valid"),
-        serde_json::Value::String(resource_path.into()),
+        ParameterKey::new("constant").expect("fixture key must be valid"),
+        serde_json::Value::String(constant_id.to_string()),
     );
     let mut document = GraphDocument::default();
+    document.constants.insert(
+        constant_id,
+        yss_graph_document::GraphConstant {
+            id: constant_id,
+            name: "Threshold".into(),
+            data_type: DataType::Int64,
+            data_value: yss_data_contract::DataValue::Int64(42),
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        },
+    );
     let node_id = insert_node(&mut document, node);
     let catalog = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
-        BTreeMap::from([(
-            GraphResourceId::new(resource_path),
-            VariableValueContract::new(DataType::Int64),
-        )]),
         BTreeMap::new(),
         ResourceCatalogFingerprint::from_bytes([7; 32]),
     );
@@ -511,4 +489,159 @@ fn compatible_catalog_source_uses_the_protocol_binding_parameter() {
         source.value_type,
         TypeExpr::Concrete("core.int64".parse().expect("fixture type ID must be valid"))
     );
+}
+
+#[test]
+fn constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomically() {
+    use yss_graph_document::{ConstantId, GraphConstant};
+    let registry = build_builtin_node_system().unwrap().registry;
+    let mut document = GraphDocument::default();
+    let apply = |document: &mut GraphDocument, mutation: EditorGraphMutation| {
+        let patch = mutation
+            .into_patch(&graph_path(), document, &registry)
+            .unwrap();
+        apply_graph_document_patch(document, &patch).unwrap();
+        patch
+    };
+    let id = ConstantId::new();
+    apply(
+        &mut document,
+        EditorGraphMutation::SetConstant {
+            id,
+            constant: Some(GraphConstant {
+                id,
+                name: " Count ".into(),
+                data_type: DataType::Int64,
+                data_value: yss_data_contract::DataValue::Int64(42),
+                tabular: None,
+                description: String::new(),
+                tags: vec![],
+            }),
+        },
+    );
+    assert_eq!(document.constants[&id].name, "Count");
+    apply(
+        &mut document,
+        EditorGraphMutation::InsertConstantReference {
+            id,
+            position: NodePosition { x: 10.0, y: 20.0 },
+        },
+    );
+    let references = document.nodes.clone();
+    let mut renamed = document.constants[&id].clone();
+    renamed.name = "Renamed".into();
+    apply(
+        &mut document,
+        EditorGraphMutation::SetConstant {
+            id,
+            constant: Some(renamed.clone()),
+        },
+    );
+    assert_eq!(document.nodes, references);
+    let before = document.clone();
+    let duplicate = renamed.copy_with_id(ConstantId::new());
+    let invalid = EditorGraphMutation::SetConstant {
+        id: duplicate.id,
+        constant: Some(duplicate),
+    }
+    .into_patch(&graph_path(), &document, &registry)
+    .unwrap();
+    assert!(apply_graph_document_patch(&mut document, &invalid).is_err());
+    assert_eq!(document, before);
+    let delete = apply(
+        &mut document,
+        EditorGraphMutation::SetConstant { id, constant: None },
+    );
+    assert!(document.constants.is_empty());
+    assert_eq!(document.nodes, references);
+    apply_graph_document_patch(&mut document, &delete.inverse()).unwrap();
+    assert_eq!(document, before);
+}
+
+fn set_constant(
+    document: &mut GraphDocument,
+    node: NodeId,
+    data_type: yss_data_contract::DataType,
+    data_value: yss_data_contract::DataValue,
+) {
+    let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
+    document.constants.insert(
+        id,
+        yss_graph_document::GraphConstant {
+            id,
+            name: id.to_string(),
+            data_type,
+            data_value,
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        },
+    );
+    let node = document.nodes.get_mut(&node).unwrap();
+    node.node_type = "yssbi.constant.get".parse().unwrap();
+    node.parameters = ParameterValues::from([(
+        "constant".parse().unwrap(),
+        serde_json::json!(id.to_string()),
+    )]);
+}
+
+#[test]
+fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() {
+    let registry = build_builtin_node_system().unwrap().registry;
+    let catalog = CatalogMutationValidationSnapshot {
+        resources: BTreeMap::new(),
+    };
+    let mut source = GraphDocument::default();
+    let node = insert_node(&mut source, document_node("yssbi.constant.get", 0.0));
+    set_constant(
+        &mut source,
+        node,
+        DataType::Int64,
+        yss_data_contract::DataValue::Int64(42),
+    );
+    let snapshot = crate::export_subgraph(&source, &registry, &catalog, vec![node]).unwrap();
+    let bytes = serde_json::to_vec(&snapshot).unwrap();
+    let snapshot = crate::deserialize_clipboard_subgraph(&bytes).unwrap();
+    assert_eq!(snapshot.constants.len(), 1);
+    let mut target = source.clone();
+    target.constants.values_mut().next().unwrap().data_value =
+        yss_data_contract::DataValue::Int64(99);
+    let before = target.clone();
+    let patch = EditorGraphMutation::InsertSubgraph {
+        snapshot,
+        anchor: NodePosition { x: 200.0, y: 0.0 },
+    }
+    .into_patch_with_catalog_snapshot(&graph_path(), &target, &registry, Some(&catalog))
+    .unwrap();
+    apply_graph_document_patch(&mut target, &patch).unwrap();
+    assert_eq!(target.constants.len(), 2);
+    let pasted = target
+        .nodes
+        .values()
+        .find(|candidate| candidate.id != node)
+        .unwrap();
+    let id: yss_graph_document::ConstantId = pasted.parameters
+        [&ParameterKey::new("constant").unwrap()]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        target.constants[&id].data_value,
+        yss_data_contract::DataValue::Int64(42)
+    );
+    assert_ne!(
+        target.constants[&id].name,
+        source.constants.values().next().unwrap().name
+    );
+    apply_graph_document_patch(&mut target, &patch.inverse()).unwrap();
+    assert_eq!(target, before);
+    let patch = EditorGraphMutation::DuplicateSubgraph {
+        node_ids: vec![node],
+        offset: NodePosition { x: 200.0, y: 0.0 },
+    }
+    .into_patch_with_catalog_snapshot(&graph_path(), &source, &registry, Some(&catalog))
+    .unwrap();
+    apply_graph_document_patch(&mut source, &patch).unwrap();
+    assert_eq!(source.constants.len(), 1);
 }

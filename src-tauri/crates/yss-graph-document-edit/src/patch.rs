@@ -48,6 +48,11 @@ impl From<Vec<GraphDocumentOperation>> for GraphDocumentPatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum GraphDocumentOperation {
+    SetConstant {
+        id: yss_graph_document::ConstantId,
+        before: Option<Box<yss_graph_document::GraphConstant>>,
+        after: Option<Box<yss_graph_document::GraphConstant>>,
+    },
     InsertNode {
         node: DocumentNode,
     },
@@ -82,6 +87,11 @@ pub enum GraphDocumentOperation {
 impl GraphDocumentOperation {
     pub fn inverse(&self) -> Self {
         match self {
+            Self::SetConstant { id, before, after } => Self::SetConstant {
+                id: *id,
+                before: after.clone(),
+                after: before.clone(),
+            },
             Self::InsertNode { node } => Self::RemoveNode { node: node.clone() },
             Self::RemoveNode { node } => Self::InsertNode { node: node.clone() },
             Self::UpdateNode { before, after } => Self::UpdateNode {
@@ -116,6 +126,20 @@ impl GraphDocumentOperation {
 
     fn apply(&self, document: &mut GraphDocument) -> Result<(), DocumentError> {
         match self {
+            Self::SetConstant { id, before, after } => {
+                if document.constants.get(id) != before.as_deref() {
+                    return Err(DocumentError::ConstantContentMismatch(*id));
+                }
+                if let Some(constant) = after {
+                    if constant.id != *id {
+                        return Err(DocumentError::InvalidConstant(*id));
+                    }
+                    document.constants.insert(*id, constant.as_ref().clone());
+                } else {
+                    document.constants.remove(id);
+                }
+                Ok(())
+            }
             Self::InsertNode { node } => insert_node(document, node),
             Self::RemoveNode { node } => remove_node(document, node),
             Self::UpdateNode { before, after } => update_node(document, before, after),

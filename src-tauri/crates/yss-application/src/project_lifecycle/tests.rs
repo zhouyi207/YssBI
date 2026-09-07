@@ -2,7 +2,6 @@ use super::*;
 use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use yss_data_contract::{DataType, DataValue};
 use yss_project::{ProjectState, fixtures};
 use yss_project_filesystem::ProjectRootBinding;
 use yss_project_model::ProjectData;
@@ -11,7 +10,6 @@ use yss_project_registry_contract::{
     ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
     ProjectRootIdentityState,
 };
-use yss_variable_contract::VariableScope;
 
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -215,13 +213,14 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
                 let hook_state = state.clone();
                 state.set_project_activation_test_hook(Arc::new(move || {
                     hook_state
-                        .add_variable(
+                        .create_graph_resource(
+                            &hook_state.capture_project_session().unwrap().instance_id,
                             "authority drift",
-                            DataType::Int64,
-                            DataValue::Int64(1),
-                            "",
-                            VariableScope::Global,
-                            Vec::new(),
+                            yss_project_model::GraphResourceDocument::new(
+                                "authority drift",
+                                yss_graph_document::GraphResourceKind::Event,
+                            ),
+                            OperationId::new(),
                         )
                         .unwrap();
                 }));

@@ -1,4 +1,4 @@
-use super::{DatabaseDeclDTO, VariableInstanceDTO};
+use super::DatabaseDeclDTO;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use yss_project::project_writers::ProjectSaveResult;
@@ -33,10 +33,9 @@ impl From<ProjectSaveResult> for ProjectSaveResultDto {
     }
 }
 
-/// 分阶段加载：databases + variables（第一步）
+/// 分阶段加载：databases（第一步）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DatabasesVariablesDTO {
+pub struct ProjectDatabasesDTO {
     pub databases: HashMap<String, DatabaseDeclDTO>,
-    pub variables: HashMap<String, VariableInstanceDTO>,
 }

@@ -12,6 +12,6 @@ pub use dependencies::{GraphDependencyKey, GraphDependencyManifest};
 
 pub use catalog::{
     FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,
-    ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
+    ResourceCatalogFingerprint, ResourceCatalogSnapshot,
 };
 pub use schema::{ColumnSchema, DataSchema};

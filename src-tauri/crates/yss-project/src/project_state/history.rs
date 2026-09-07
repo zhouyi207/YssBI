@@ -35,10 +35,6 @@ pub(super) struct GraphMoveHistoryPayload {
         BTreeMap<GraphResourcePath, GraphResourceDocument>,
     pub(in crate::project_state) referenced_graphs_after:
         BTreeMap<GraphResourcePath, GraphResourceDocument>,
-    pub(in crate::project_state) referenced_variables_before:
-        BTreeMap<yss_variable_contract::VariableId, yss_variable_contract::VariableInstance>,
-    pub(in crate::project_state) referenced_variables_after:
-        BTreeMap<yss_variable_contract::VariableId, yss_variable_contract::VariableInstance>,
 }
 
 impl ProjectState {
@@ -130,8 +126,7 @@ impl ProjectState {
             .map_err(|error| ProjectHistoryMutationError::Projection(error.to_string().into()))?;
         let from_revision = function.revision;
         let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
-        let mut revisions = self.variable_revisions.write().unwrap();
-        let mut documents = project_documents(&data, &revisions)?;
+        let mut documents = project_documents(&data)?;
         let transaction = yss_project_history::ProjectHistoryTransaction::new(
             request.operation_id,
             vec![yss_project_history::ResourcePatch::function(
@@ -156,9 +151,8 @@ impl ProjectState {
             })?
             .revision;
         let mut next_data = data.clone();
-        let mut next_revisions = revisions.clone();
         let mut next_graph_resource_revisions = graph_resource_revisions.clone();
-        replace_project_documents(&mut next_data, &mut next_revisions, documents)?;
+        replace_project_documents(&mut next_data, documents)?;
         next_data.graphs.get(graph_path).ok_or_else(|| {
             ProjectHistoryMutationError::History(
                 format!("Function owner graph '{graph_path}' is not loaded").into(),
@@ -175,7 +169,6 @@ impl ProjectState {
         let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
         let history_status = next_history.status();
         *data = next_data;
-        *revisions = next_revisions;
         *graph_resource_revisions = next_graph_resource_revisions;
         *history = next_history;
         let publication_revision = publication.commit_prepared(publication_advance);
@@ -231,12 +224,11 @@ impl ProjectState {
     ) -> Result<crate::history_hydration::PreparedHistoryDocuments, ProjectHistoryMutationError>
     {
         self.ensure_mutation_operational()?;
+        let session = self
+            .capture_project_session()
+            .map_err(history_project_error)?;
         let snapshot = {
             let publication = self.mutation_publication.lock().unwrap();
-            let staging_basis = self
-                .capture_variable_staging_basis(&publication)
-                .map_err(history_project_error)?;
-            let session = staging_basis.session;
             if publication.project_instance_id != project_instance_id.as_str()
                 || session.instance_id != *project_instance_id
             {
@@ -246,7 +238,6 @@ impl ProjectState {
             }
             let data = self.project_data.read().unwrap().clone();
             let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
-            let variable_revisions = self.variable_revisions.read().unwrap().clone();
             let chart_revisions = self.chart_revisions.read().unwrap().clone();
             let history = self.history.read().unwrap().clone();
             let transaction = if undo {
@@ -276,13 +267,12 @@ impl ProjectState {
             }
             crate::history_hydration::capture_history_preparation_snapshot(
                 session.clone(),
-                staging_basis.authority_generation,
+                publication.authority_generation(),
                 undo,
                 transaction,
                 &request.resource,
                 data,
                 graph_resource_revisions,
-                variable_revisions,
                 chart_revisions,
                 history,
             )?
@@ -371,14 +361,6 @@ impl ProjectState {
                     )),
                 };
             }
-            yss_project_history::HistoryPersistencePolicy::DurableVariableEffects => {
-                return self.commit_variable_effect_history_direction(
-                    project_instance_id,
-                    undo,
-                    request,
-                    transaction,
-                );
-            }
             yss_project_history::HistoryPersistencePolicy::InMemoryUntilSave => {
                 let touches_chart = transaction
                     .resource_lifecycle
@@ -427,9 +409,8 @@ impl ProjectState {
         }
         let mut data = self.project_data.write().unwrap();
         let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
-        let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_mutation_operational()?;
-        let mut documents = project_documents(&data, &revisions)?;
+        let mut documents = project_documents(&data)?;
         let current_revision = try_project_document_revision(&documents, &request.resource)
             .ok_or_else(|| {
                 ProjectHistoryMutationError::History(
@@ -492,9 +473,8 @@ impl ProjectState {
             })
             .collect::<Result<Vec<_>, ProjectHistoryMutationError>>()?;
         let mut next_data = data.clone();
-        let mut next_revisions = revisions.clone();
         let mut next_graph_resource_revisions = graph_resource_revisions.clone();
-        replace_project_documents(&mut next_data, &mut next_revisions, documents)?;
+        replace_project_documents(&mut next_data, documents)?;
         crate::history_hydration::synchronize_function_owner_revisions(
             &mut next_data,
             &transaction,
@@ -507,7 +487,6 @@ impl ProjectState {
         let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
         let history_status = next_history.status();
         *data = next_data;
-        *revisions = next_revisions;
         *graph_resource_revisions = next_graph_resource_revisions;
         *history = next_history;
         let publication_revision = publication.commit_prepared(publication_advance);
@@ -683,7 +662,6 @@ impl ProjectState {
             self.ensure_mutation_operational()?;
             let mut data = self.project_data.write().unwrap();
             let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
-            let mut variable_revisions = self.variable_revisions.write().unwrap();
             let mut chart_revisions = self.chart_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
             let current_head = if prepared.basis.undo {
@@ -739,20 +717,6 @@ impl ProjectState {
                                         .map(|function| function.revision)
                                 })
                         }),
-                    ResourceKey::Variable(path) => path
-                        .0
-                        .strip_prefix("variables/")
-                        .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                        .map(yss_variable_contract::VariableId::from)
-                        .and_then(|id| variable_revisions.get(&id))
-                        .and_then(|entry| {
-                            let expected_present = prepared
-                                .before
-                                .variables
-                                .get(path)
-                                .is_some_and(|document| document.value.is_some());
-                            (entry.is_present() == expected_present).then_some(entry.revision)
-                        }),
                     ResourceKey::Chart(key) => {
                         let path = ChartResourcePath::parse(key.0.as_ref()).ok();
                         let revision = path
@@ -802,7 +766,6 @@ impl ProjectState {
             for (path, revision) in graph_resource_revision_updates {
                 graph_resource_revisions.insert(path, revision);
             }
-            *variable_revisions = prepared.after_variable_revisions;
             *chart_revisions = prepared.after_chart_revisions;
             *history = prepared.proposed_history;
             let publication_revision = publication.commit_prepared(publication_advance);
@@ -839,40 +802,7 @@ impl ProjectState {
 
 pub(crate) fn project_documents(
     data: &ProjectData,
-    variable_revisions: &std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        VariableRevisionEntry,
-    >,
 ) -> Result<ProjectDocumentState, ProjectHistoryMutationError> {
-    let variables = variable_revisions
-        .iter()
-        .map(|(id, entry)| {
-            let value = if entry.is_present() {
-                let variable = data.variables.get(id).ok_or_else(|| {
-                    ProjectHistoryMutationError::History(
-                        format!(
-                            "Variable '{id}' is present in revision authority but missing from project data"
-                        )
-                        .into(),
-                    )
-                })?;
-                Some(serde_json::to_value(variable).map_err(|error| {
-                    ProjectHistoryMutationError::History(
-                        format!("Variable '{id}' is not serializable: {error}").into(),
-                    )
-                })?)
-            } else {
-                None
-            };
-            Ok((
-                yss_project_history::VariableResourceKey(format!("variables/{id}").into()),
-                yss_project_history::VariableDocument {
-                    revision: entry.revision,
-                    value,
-                },
-            ))
-        })
-        .collect::<Result<_, ProjectHistoryMutationError>>()?;
     let mut documents = ProjectDocumentState::new(
         data.graphs
             .iter()
@@ -889,7 +819,6 @@ pub(crate) fn project_documents(
                 })
             })
             .collect(),
-        variables,
     );
     documents.charts = data
         .charts
@@ -919,10 +848,6 @@ pub(super) fn try_project_document_revision(
             .functions
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Variable(key) => documents
-            .variables
-            .get(key)
-            .map(|document| document.revision),
         ResourceKey::Chart(key) => documents.charts.get(key).map(|document| document.revision),
         ResourceKey::Database(_) => None,
     }
@@ -941,10 +866,6 @@ pub(super) fn project_document_revision(
 
 pub(crate) fn replace_project_documents(
     data: &mut ProjectData,
-    variable_revisions: &mut std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        VariableRevisionEntry,
-    >,
     mut documents: ProjectDocumentState,
 ) -> Result<(), ProjectHistoryMutationError> {
     let charts = documents
@@ -959,36 +880,6 @@ pub(crate) fn replace_project_documents(
             Ok((path, document))
         })
         .collect::<Result<_, ProjectHistoryMutationError>>()?;
-    let variables = documents
-        .variables
-        .into_iter()
-        .map(|(key, document)| {
-            let id = key.0.strip_prefix("variables/").ok_or_else(|| {
-                ProjectHistoryMutationError::History(
-                    format!("invalid Variable history key '{}'", key.0).into(),
-                )
-            })?;
-            let uuid = uuid::Uuid::parse_str(id).map_err(|error| {
-                ProjectHistoryMutationError::History(
-                    format!("invalid Variable history key '{}': {error}", key.0).into(),
-                )
-            })?;
-            let variable_id = yss_variable_contract::VariableId::from(uuid);
-            let value = document
-                .value
-                .map(|value| {
-                    serde_json::from_value(value).map_err(|error| {
-                        ProjectHistoryMutationError::History(
-                            format!("invalid Variable '{variable_id}' history document: {error}")
-                                .into(),
-                        )
-                    })
-                })
-                .transpose()?;
-            Ok((variable_id, document.revision, value))
-        })
-        .collect::<Result<Vec<_>, ProjectHistoryMutationError>>()?;
-
     for (path, graph) in &mut data.graphs {
         let key = path.clone();
         if let Some(document) = documents.graphs.remove(&key) {
@@ -1000,38 +891,5 @@ pub(crate) fn replace_project_documents(
         }
     }
     data.charts = charts;
-    for (variable_id, revision, value) in variables {
-        let presence = match value {
-            Some(variable) => {
-                data.variables.insert(variable_id, variable);
-                VariablePresence::Present
-            }
-            None => {
-                data.variables.remove(&variable_id);
-                VariablePresence::Deleted
-            }
-        };
-        variable_revisions.insert(variable_id, VariableRevisionEntry { revision, presence });
-    }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn history_snapshot_rejects_present_variable_missing_from_project_data() {
-        let id = yss_variable_contract::VariableId::new();
-        let revisions = std::collections::HashMap::from([(
-            id,
-            VariableRevisionEntry::present(ResourceRevision::INITIAL),
-        )]);
-
-        let error = project_documents(&ProjectData::new(), &revisions)
-            .expect_err("inconsistent Variable authority must be rejected");
-
-        assert!(matches!(error, ProjectHistoryMutationError::History(_)));
-        assert!(error.to_string().contains(&id.to_string()));
-    }
 }

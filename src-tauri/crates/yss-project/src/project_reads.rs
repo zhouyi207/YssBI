@@ -70,10 +70,6 @@ struct ProjectIndexAuthorityCapture {
     data: ProjectData,
     graph_resource_revisions:
         std::collections::HashMap<yss_graph_document::GraphResourcePath, ResourceRevision>,
-    variable_revisions: std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        crate::project_state::VariableRevisionEntry,
-    >,
     database_revisions: std::collections::HashMap<String, u64>,
 }
 
@@ -91,7 +87,6 @@ fn read_project_index_with(
     overlay_authoritative_project_index(
         &capture.data,
         &capture.graph_resource_revisions,
-        &capture.variable_revisions,
         &capture.database_revisions,
         &mut index,
     )?;
@@ -123,17 +118,7 @@ fn capture_project_index_authority_with(
     let data = state.project_data.read().unwrap().clone();
     let graph_resource_revisions = state.graph_resource_revisions.read().unwrap().clone();
     after_declaration_capture();
-    let variable_revisions = state.variable_revisions.read().unwrap().clone();
     let database_revisions = state.database_authority_revisions.read().unwrap().clone();
-    if data.variables.keys().any(|id| {
-        !variable_revisions
-            .get(id)
-            .is_some_and(|entry| entry.is_present())
-    }) {
-        return Err(stale_catalog(
-            "loaded variable is missing its present revision authority",
-        ));
-    }
     if data
         .databases
         .keys()
@@ -149,7 +134,6 @@ fn capture_project_index_authority_with(
         authority_generation: publication.authority_generation(),
         data,
         graph_resource_revisions,
-        variable_revisions,
         database_revisions,
     })
 }
@@ -176,80 +160,15 @@ fn validate_project_index_authority(
     Ok(())
 }
 
-fn variable_owner_graph_path(
-    scope: &yss_variable_contract::VariableScope,
-) -> Option<yss_graph_document::GraphResourcePath> {
-    match scope {
-        yss_variable_contract::VariableScope::Global => None,
-        yss_variable_contract::VariableScope::Event { event_path } => {
-            yss_graph_document::GraphResourcePath::new(event_path).ok()
-        }
-        yss_variable_contract::VariableScope::Function { function_path } => {
-            yss_graph_document::GraphResourcePath::new(function_path).ok()
-        }
-    }
-}
-
 fn overlay_authoritative_project_index(
     data: &ProjectData,
     graph_resource_revisions: &std::collections::HashMap<
         yss_graph_document::GraphResourcePath,
         ResourceRevision,
     >,
-    variable_revisions: &std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        crate::project_state::VariableRevisionEntry,
-    >,
     database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
 ) -> Result<(), ProjectFilesystemError> {
-    let mut variables = std::collections::BTreeMap::new();
-    for mut variable in std::mem::take(&mut index.variables) {
-        if matches!(variable.scope, yss_variable_contract::VariableScope::Global) {
-            continue;
-        }
-        let retained = uuid::Uuid::parse_str(&variable.id)
-            .ok()
-            .map(yss_variable_contract::VariableId::from)
-            .and_then(|id| variable_revisions.get(&id).copied());
-        match retained {
-            Some(entry) if entry.is_present() => variable.revision = entry.revision,
-            Some(_) => continue,
-            None => {}
-        }
-        variables.insert(variable.id.clone(), variable);
-    }
-    for variable in data.variables.values() {
-        let authority = variable_revisions.get(&variable.id).ok_or_else(|| {
-            ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!(
-                    "Variable '{}' is present in project data but missing revision authority",
-                    variable.id
-                ),
-            }
-        })?;
-        let mut entry = crate::ProjectVariableIndexEntry::from(variable.clone());
-        entry.revision = authority.revision;
-        if let Some(persisted) = variables.get(&entry.id) {
-            entry.owner_graph_path = persisted.owner_graph_path.clone();
-            entry.owner_graph_name = persisted.owner_graph_name.clone();
-            entry.owner_graph_kind = persisted.owner_graph_kind;
-        } else if let Some(path) = variable_owner_graph_path(&variable.scope) {
-            entry.owner_graph_path = Some(path.as_str().to_string());
-            if let Some(graph) = data.graphs.get(&path) {
-                entry.owner_graph_name = Some(graph.name.clone());
-                entry.owner_graph_kind = Some(graph.kind);
-            }
-        }
-        variables.insert(entry.id.clone(), entry);
-    }
-    index.variables = variables.into_values().collect();
-    index.variables.sort_by(|left, right| {
-        left.name
-            .to_lowercase()
-            .cmp(&right.name.to_lowercase())
-            .then_with(|| left.id.cmp(&right.id))
-    });
     index.databases = data
         .databases
         .iter()

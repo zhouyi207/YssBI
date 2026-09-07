@@ -5,17 +5,15 @@ use std::collections::BTreeMap;
 pub enum GraphDependencyKey {
     Function(Box<str>),
     FunctionBody(Box<str>),
-    Variable(Box<str>),
     Database(Box<str>),
 }
 
 impl GraphDependencyKey {
     pub fn identity(&self) -> &str {
         match self {
-            Self::Function(identity)
-            | Self::FunctionBody(identity)
-            | Self::Variable(identity)
-            | Self::Database(identity) => identity,
+            Self::Function(identity) | Self::FunctionBody(identity) | Self::Database(identity) => {
+                identity
+            }
         }
     }
 

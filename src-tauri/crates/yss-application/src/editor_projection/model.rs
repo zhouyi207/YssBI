@@ -173,6 +173,7 @@ pub struct EditorParameterDisplay {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParameterEditorKind {
+    GraphConstant,
     Auto,
     Text,
     Number,

@@ -60,6 +60,7 @@ pub enum ParameterEditorSpec {
     Number,
     Toggle,
     Select,
+    GraphConstant,
     Configuration(super::ConfigurationSchema),
     Resource { kind: ResourceDisplayKind },
 }

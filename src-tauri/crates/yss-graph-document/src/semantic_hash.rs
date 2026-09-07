@@ -41,6 +41,18 @@ pub fn semantic_document_fingerprint(
     yss_canonical_hash::hash_canonical(
         "yssbi.graph-semantic-document.v1",
         &(
+            document
+                .constants
+                .iter()
+                .map(|(id, constant)| {
+                    (
+                        id,
+                        &constant.data_type,
+                        &constant.data_value,
+                        &constant.tabular,
+                    )
+                })
+                .collect::<Vec<_>>(),
             nodes,
             bindings,
             connections,

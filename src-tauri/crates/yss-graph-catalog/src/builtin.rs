@@ -445,44 +445,6 @@ fn assemble_builtin_parts()
     add_shared_messages(messages);
     add_diagnostic_messages(messages);
 
-    let zero = assembled_decimal("yssbi.constant.float64", "0")?;
-    for (kind, title, zh, value) in [
-        ("bool", "Boolean Constant", "布尔常量", Value::Bool(false)),
-        (
-            "string",
-            "String Constant",
-            "字符串常量",
-            Value::String("".into()),
-        ),
-        (
-            "int64",
-            "Int64 Constant",
-            "64 位整数常量",
-            Value::Integer(0),
-        ),
-        (
-            "float64",
-            "Float64 Constant",
-            "64 位浮点数常量",
-            Value::Decimal(zero),
-        ),
-    ] {
-        let id = leak(format!("yssbi.constant.{kind}"));
-        add_node_messages(
-            messages,
-            id,
-            title,
-            zh,
-            &["constant", "literal", "value"],
-            &["常量", "字面量", "值"],
-        );
-        let ty = leak(format!("core.{kind}"));
-        nodes.push(leaf(
-            constant_protocol(id, ty, value)?,
-            leak(format!("constant.{kind}")),
-        ));
-    }
-
     for spec in COMPARISONS {
         let id = leak(format!("yssbi.logic.{}", spec.id));
         add_node_messages(
@@ -605,43 +567,6 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     RegisteredNode::leaf(
         Arc::new(protocol),
         LeafImplementation::new(identity.into_boxed_str()),
-    )
-}
-
-fn constant_protocol(
-    id: &'static str,
-    ty: &'static str,
-    value: Value,
-) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let editor = match ty {
-        "core.bool" => ParameterEditorSpec::Toggle,
-        "core.int64" | "core.float64" => ParameterEditorSpec::Number,
-        "core.string" => ParameterEditorSpec::Text { multiline: false },
-        _ => {
-            return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
-                context: "constant type",
-                value: ty.into(),
-            });
-        }
-    };
-    protocol(
-        id,
-        "constants",
-        vec![data_port("value", "Value", PortDirection::Output, ty)?],
-        vec![ParameterSpec {
-            key: sid("value", ParameterKey::new)?,
-            title_key: iid("parameters.value.title")?,
-            description_key: Some(iid("parameters.value.description")?),
-            value_type: concrete(ty)?,
-            default_value: Some(ParameterValue {
-                value_type: concrete(ty)?,
-                value,
-            }),
-            constraints: vec![],
-            editor,
-            presentation: ParameterPresentation::InlineAndDetail,
-        }],
-        pure(),
     )
 }
 

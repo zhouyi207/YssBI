@@ -15,7 +15,6 @@ fn checked_document_revision(revision: ResourceRevision) -> Result<ResourceRevis
 pub enum ResourceKind {
     Graph,
     Function,
-    Variable,
     Database,
     Chart,
 }
@@ -25,7 +24,6 @@ pub enum ResourceKind {
 pub enum ResourceKey {
     Graph(GraphResourcePath),
     Function(FunctionResourceKey),
-    Variable(VariableResourceKey),
     Database(DatabaseResourceKey),
     Chart(ChartResourceKey),
 }
@@ -35,7 +33,6 @@ impl ResourceKey {
         match self {
             Self::Graph(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
-            Self::Variable(_) => ResourceKind::Variable,
             Self::Database(_) => ResourceKind::Database,
             Self::Chart(_) => ResourceKind::Chart,
         }
@@ -79,7 +76,6 @@ macro_rules! opaque_resource_type {
 }
 
 opaque_resource_type!(FunctionResourceKey);
-opaque_resource_type!(VariableResourceKey);
 opaque_resource_type!(DatabaseResourceKey);
 opaque_resource_type!(ChartResourceKey);
 
@@ -126,44 +122,6 @@ pub struct FunctionDocumentPatch {
 
 impl FunctionDocumentPatch {
     pub fn new(before: FunctionSignature, after: FunctionSignature) -> Self {
-        Self { before, after }
-    }
-
-    pub fn inverse(&self) -> Self {
-        Self::new(self.after.clone(), self.before.clone())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VariableDocument {
-    pub revision: ResourceRevision,
-    pub value: Option<Value>,
-}
-
-impl VariableDocument {
-    pub fn new(value: Value) -> Self {
-        Self {
-            revision: ResourceRevision::INITIAL,
-            value: Some(value),
-        }
-    }
-
-    fn apply_patch(&mut self, patch: &VariableDocumentPatch) -> Result<(), u64> {
-        let next_revision = checked_document_revision(self.revision)?;
-        self.value = patch.after.clone();
-        self.revision = next_revision;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VariableDocumentPatch {
-    pub before: Option<Value>,
-    pub after: Option<Value>,
-}
-
-impl VariableDocumentPatch {
-    pub fn new(before: Option<Value>, after: Option<Value>) -> Self {
         Self { before, after }
     }
 
@@ -263,8 +221,6 @@ pub enum ResourceDocumentPatch {
     Chart(ChartDocumentPatch),
     ResourceLifecycle(ResourceLifecyclePatch),
     ResourceMove(ResourcePathMovePatch),
-    Variable(VariableDocumentPatch),
-    VariableScopeMove(ResourcePathMovePatch),
     Database(DatabaseDocumentPatch),
 }
 
@@ -274,7 +230,6 @@ impl ResourceDocumentPatch {
             Self::ResourceLifecycle(_) | Self::ResourceMove(_) => ResourceKind::Graph,
             Self::Function(_) => ResourceKind::Function,
             Self::Chart(_) => ResourceKind::Chart,
-            Self::Variable(_) | Self::VariableScopeMove(_) => ResourceKind::Variable,
             Self::Database(_) => ResourceKind::Database,
         }
     }
@@ -285,8 +240,6 @@ impl ResourceDocumentPatch {
             Self::Chart(patch) => Self::Chart(patch.inverse()),
             Self::ResourceLifecycle(patch) => Self::ResourceLifecycle(patch.inverse()),
             Self::ResourceMove(patch) => Self::ResourceMove(patch.inverse()),
-            Self::Variable(patch) => Self::Variable(patch.inverse()),
-            Self::VariableScopeMove(patch) => Self::VariableScopeMove(patch.inverse()),
             Self::Database(patch) => Self::Database(patch.inverse()),
         }
     }
@@ -318,21 +271,6 @@ impl ResourcePatch {
             after_revision: candidate_after_revision(before_revision),
             forward: ResourceDocumentPatch::Function(forward),
             inverse: ResourceDocumentPatch::Function(inverse),
-        }
-    }
-
-    pub fn variable(
-        variable_key: VariableResourceKey,
-        before_revision: ResourceRevision,
-        forward: VariableDocumentPatch,
-    ) -> Self {
-        let inverse = forward.inverse();
-        Self {
-            resource: ResourceKey::Variable(variable_key),
-            before_revision,
-            after_revision: candidate_after_revision(before_revision),
-            forward: ResourceDocumentPatch::Variable(forward),
-            inverse: ResourceDocumentPatch::Variable(inverse),
         }
     }
 
@@ -395,14 +333,7 @@ pub struct ResourceMoveHistoryPatch {
 pub enum HistoryPersistencePolicy {
     #[default]
     InMemoryUntilSave,
-    DurableVariableEffects,
     DurableResourceMove,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct VariableEffectHistorySnapshots {
-    pub before: BTreeMap<VariableResourceKey, Option<Value>>,
-    pub after: BTreeMap<VariableResourceKey, Option<Value>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -413,8 +344,6 @@ pub struct ProjectHistoryTransaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub graph_change: Option<ProjectGraphHistoryChange>,
     pub persistence: HistoryPersistencePolicy,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub variable_effect_snapshots: Option<VariableEffectHistorySnapshots>,
     pub resource_lifecycle: Option<ResourceLifecycleHistoryPatch>,
     pub resource_move: Option<ResourceMoveHistoryPatch>,
 }
@@ -437,7 +366,6 @@ impl ProjectHistoryTransaction {
             changes: changes.into(),
             graph_change: None,
             persistence: HistoryPersistencePolicy::InMemoryUntilSave,
-            variable_effect_snapshots: None,
             resource_lifecycle: None,
             resource_move: None,
         }
@@ -450,24 +378,6 @@ impl ProjectHistoryTransaction {
             changes: Vec::new(),
             graph_change: Some(change),
             persistence: HistoryPersistencePolicy::InMemoryUntilSave,
-            variable_effect_snapshots: None,
-            resource_lifecycle: None,
-            resource_move: None,
-        }
-    }
-
-    pub fn durable_variable_effects(
-        caused_by: OperationId,
-        changes: impl Into<Vec<ResourcePatch>>,
-        snapshots: VariableEffectHistorySnapshots,
-    ) -> Self {
-        Self {
-            history_id: HistoryEntryId::new(),
-            caused_by,
-            changes: changes.into(),
-            graph_change: None,
-            persistence: HistoryPersistencePolicy::DurableVariableEffects,
-            variable_effect_snapshots: Some(snapshots),
             resource_lifecycle: None,
             resource_move: None,
         }
@@ -484,7 +394,6 @@ impl ProjectHistoryTransaction {
             changes: Vec::new(),
             graph_change: None,
             persistence: HistoryPersistencePolicy::InMemoryUntilSave,
-            variable_effect_snapshots: None,
             resource_lifecycle: Some(ResourceLifecycleHistoryPatch { forward, payload }),
             resource_move: None,
         }
@@ -502,7 +411,6 @@ impl ProjectHistoryTransaction {
             changes: Vec::new(),
             graph_change: None,
             persistence: HistoryPersistencePolicy::DurableResourceMove,
-            variable_effect_snapshots: None,
             resource_lifecycle: None,
             resource_move: Some(ResourceMoveHistoryPatch {
                 from: from.into(),
@@ -530,7 +438,6 @@ impl ProjectHistoryTransaction {
             changes: Vec::new(),
             graph_change: None,
             persistence: HistoryPersistencePolicy::DurableResourceMove,
-            variable_effect_snapshots: None,
             resource_lifecycle: None,
             resource_move: Some(ResourceMoveHistoryPatch {
                 from: from.as_str().into(),
@@ -549,7 +456,6 @@ pub struct ProjectDocumentState {
     pub revision: ProjectRevision,
     pub graphs: BTreeMap<GraphResourcePath, GraphDocument>,
     pub functions: BTreeMap<FunctionResourceKey, FunctionDocument>,
-    pub variables: BTreeMap<VariableResourceKey, VariableDocument>,
     pub charts: BTreeMap<ChartResourceKey, ChartDocument>,
     pub chart_revisions: BTreeMap<ChartResourceKey, ResourceRevision>,
 }
@@ -560,7 +466,6 @@ impl Default for ProjectDocumentState {
             revision: ProjectRevision::INITIAL,
             graphs: BTreeMap::new(),
             functions: BTreeMap::new(),
-            variables: BTreeMap::new(),
             charts: BTreeMap::new(),
             chart_revisions: BTreeMap::new(),
         }
@@ -571,13 +476,11 @@ impl ProjectDocumentState {
     pub fn new(
         graphs: BTreeMap<GraphResourcePath, GraphDocument>,
         functions: BTreeMap<FunctionResourceKey, FunctionDocument>,
-        variables: BTreeMap<VariableResourceKey, VariableDocument>,
     ) -> Self {
         Self {
             revision: ProjectRevision::INITIAL,
             graphs,
             functions,
-            variables,
             charts: BTreeMap::new(),
             chart_revisions: BTreeMap::new(),
         }
@@ -1085,15 +988,6 @@ fn apply_resource_patch(
                 resource: Some(resource.clone()),
                 retained,
             }),
-        (ResourceKey::Variable(key), ResourceDocumentPatch::Variable(patch)) => state
-            .variables
-            .get_mut(key)
-            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
-            .apply_patch(patch)
-            .map_err(|retained| HistoryError::RevisionExhausted {
-                resource: Some(resource.clone()),
-                retained,
-            }),
         (ResourceKey::Chart(key), ResourceDocumentPatch::Chart(patch)) => {
             let revision = state
                 .chart_revisions
@@ -1136,11 +1030,6 @@ fn resource_revision(
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
         ResourceKey::Function(key) => state
             .functions
-            .get(key)
-            .map(|document| document.revision)
-            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
-        ResourceKey::Variable(key) => state
-            .variables
             .get(key)
             .map(|document| document.revision)
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
@@ -1194,26 +1083,26 @@ mod wire_tests {
     fn resource_delta_wire_is_camel_case() {
         let caused_by = OperationId::from_uuid(Uuid::from_u128(905));
         let delta = ResourceDeltaEvent {
-            resource: ResourceKey::Variable(VariableResourceKey("variables/main".into())),
+            resource: ResourceKey::Function(FunctionResourceKey("functions/main".into())),
             from_revision: ResourceRevision::new(4),
             to_revision: ResourceRevision::new(5),
             caused_by: Some(caused_by),
-            payload: ResourceDocumentPatch::Variable(VariableDocumentPatch::default()),
+            payload: ResourceDocumentPatch::Function(FunctionDocumentPatch::default()),
         };
 
         assert_eq!(
             serde_json::to_value(delta).unwrap(),
             json!({
                 "resource": {
-                    "kind": "variable",
-                    "key": "variables/main"
+                    "kind": "function",
+                    "key": "functions/main"
                 },
                 "fromRevision": 4,
                 "toRevision": 5,
                 "causedBy": "00000000-0000-0000-0000-000000000389",
                 "payload": {
-                    "kind": "variable",
-                    "patch": { "before": null, "after": null }
+                    "kind": "function",
+                    "patch": { "before": {"parameters": [], "return_type": null}, "after": {"parameters": [], "return_type": null} }
                 }
             })
         );

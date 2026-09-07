@@ -23,33 +23,36 @@ pub(crate) fn instantiate_subgraph(
         (&left.output, &left.input, &left.order).cmp(&(&right.output, &right.input, &right.order))
     });
 
+    let constant_operations = import_constants(document, &mut snapshot)?;
     let node_types = validate_insert_nodes(graph_path, registry, catalog, &snapshot, anchor)?;
     let instance_keys = validate_portable_references(registry, catalog, &snapshot, &node_types)?;
 
-    let temporary_nodes = temporary_node_ids(document, node_types.keys());
-    let temporary_instances = temporary_port_instance_ids(document, instance_keys.iter());
-    let temporary_connections = temporary_connection_ids(document, snapshot.connections.len());
+    let temporary_ids = InstantiationIds {
+        nodes: temporary_node_ids(document, node_types.keys()),
+        instances: temporary_port_instance_ids(document, instance_keys.iter()),
+        connections: temporary_connection_ids(document, snapshot.connections.len()),
+    };
     plan_instantiation(
         document,
         registry,
         &snapshot,
+        &constant_operations,
         anchor,
-        &temporary_nodes,
-        &temporary_instances,
-        &temporary_connections,
+        &temporary_ids,
     )?;
 
-    let node_ids = fresh_node_ids(document, node_types.keys());
-    let instance_ids = fresh_port_instance_ids(document, instance_keys.iter());
-    let connection_ids = fresh_connection_ids(document, snapshot.connections.len());
+    let ids = InstantiationIds {
+        nodes: fresh_node_ids(document, node_types.keys()),
+        instances: fresh_port_instance_ids(document, instance_keys.iter()),
+        connections: fresh_connection_ids(document, snapshot.connections.len()),
+    };
     let patch = plan_instantiation(
         document,
         registry,
         &snapshot,
+        &constant_operations,
         anchor,
-        &node_ids,
-        &instance_ids,
-        &connection_ids,
+        &ids,
     )?;
     let mut staged = document.clone();
     yss_graph_document_edit::apply_graph_document_patch(&mut staged, &patch)
@@ -57,11 +60,96 @@ pub(crate) fn instantiate_subgraph(
     Ok(patch)
 }
 
+fn import_constants(
+    document: &GraphDocument,
+    snapshot: &mut ClipboardSubgraph,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    enforce_insert_limit("constants", snapshot.constants.len(), MAX_CLIPBOARD_NODES)?;
+    let source = GraphDocument {
+        constants: snapshot
+            .constants
+            .iter()
+            .map(|value| (value.id, value.clone()))
+            .collect(),
+        ..GraphDocument::default()
+    };
+    yss_graph_document_edit::validate_graph_document(&source)
+        .map_err(|error| invalid_clipboard(format!("invalid clipboard constants: {error}")))?;
+    let key = ParameterKey::new("constant").unwrap();
+    let referenced = snapshot
+        .nodes
+        .iter()
+        .filter(|node| creation_node_type(&node.creation).as_str() == "yssbi.constant.get")
+        .filter_map(|node| {
+            node.parameters
+                .get(&key)?
+                .as_str()?
+                .parse::<ConstantId>()
+                .ok()
+        })
+        .collect::<BTreeSet<_>>();
+    let mut imported = BTreeSet::new();
+    let mut ids = document.constants.keys().copied().collect::<BTreeSet<_>>();
+    let mut names = document
+        .constants
+        .values()
+        .map(|value| value.name.clone())
+        .collect::<BTreeSet<_>>();
+    let mut remapped = BTreeMap::new();
+    let mut operations = Vec::new();
+    for constant in &snapshot.constants {
+        if !referenced.contains(&constant.id) || !imported.insert(constant.id) {
+            return Err(invalid_clipboard(
+                "clipboard constant is duplicate or unreferenced",
+            ));
+        }
+        if document.constants.get(&constant.id) == Some(constant) {
+            continue;
+        }
+        let mut id = constant.id;
+        while !ids.insert(id) {
+            id = ConstantId::new();
+        }
+        let mut copy = constant.copy_with_id(id);
+        let mut suffix = 2;
+        while !names.insert(copy.name.clone()) {
+            copy.name = format!("{} ({suffix})", constant.name);
+            suffix += 1;
+        }
+        remapped.insert(constant.id, id);
+        operations.push(GraphDocumentOperation::SetConstant {
+            id,
+            before: None,
+            after: Some(Box::new(copy)),
+        });
+    }
+    for node in &mut snapshot.nodes {
+        if creation_node_type(&node.creation).as_str() == "yssbi.constant.get"
+            && let Some(id) = node
+                .parameters
+                .get(&key)
+                .and_then(|value| value.as_str())
+                .and_then(|id| id.parse::<ConstantId>().ok())
+                .and_then(|id| remapped.get(&id))
+        {
+            node.parameters
+                .insert(key.clone(), serde_json::Value::String(id.to_string()));
+        }
+    }
+    Ok(operations)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct LocalInstanceKey {
     node_id: ClipboardNodeId,
     scope: PortKey,
     local_instance_id: ClipboardPortInstanceId,
+}
+
+struct InstantiationIds {
+    nodes: BTreeMap<ClipboardNodeId, NodeId>,
+    instances: BTreeMap<LocalInstanceKey, PortInstanceId>,
+    connections: Vec<ConnectionId>,
 }
 
 fn validate_insert_budget(snapshot: &ClipboardSubgraph) -> Result<(), MutationConflict> {
@@ -212,7 +300,6 @@ fn validate_node_creation(
             create_args,
             ..
         } => validate_resource_creation(
-            graph_path,
             protocol,
             resource_path,
             *create_args,
@@ -225,7 +312,6 @@ fn validate_node_creation(
 }
 
 fn validate_resource_creation(
-    graph_path: &GraphResourcePath,
     protocol: &yss_graph_protocol::NodeProtocol,
     resource_path: &CatalogResourcePath,
     create_args: ResourceBoundCreateArgs,
@@ -242,15 +328,6 @@ fn validate_resource_creation(
     if resource.create_args() != create_args {
         return Err(invalid_clipboard(format!(
             "resource '{}' kind does not match clipboard creation arguments",
-            resource_path.as_str()
-        )));
-    }
-    let in_scope = resource
-        .variable_scope()
-        .is_none_or(|scope| crate::compatibility::variable_in_scope(graph_path, scope));
-    if !in_scope {
-        return Err(unavailable_resource(format!(
-            "resource '{}' is unavailable for this graph and node type",
             resource_path.as_str()
         )));
     }
@@ -589,11 +666,15 @@ fn plan_instantiation(
     document: &GraphDocument,
     registry: &NodeRegistry,
     snapshot: &ClipboardSubgraph,
+    constant_operations: &[GraphDocumentOperation],
     anchor: NodePosition,
-    node_ids: &BTreeMap<ClipboardNodeId, NodeId>,
-    instance_ids: &BTreeMap<LocalInstanceKey, PortInstanceId>,
-    connection_ids: &[ConnectionId],
+    ids: &InstantiationIds,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
+    let InstantiationIds {
+        nodes: node_ids,
+        instances: instance_ids,
+        connections: connection_ids,
+    } = ids;
     let node_types = snapshot
         .nodes
         .iter()
@@ -604,22 +685,25 @@ fn plan_instantiation(
             )
         })
         .collect::<BTreeMap<_, _>>();
-    let mut operations = snapshot
-        .nodes
-        .iter()
-        .map(|node| GraphDocumentOperation::InsertNode {
-            node: DocumentNode {
-                id: node_ids[&node.local_id],
-                node_type: creation_node_type(&node.creation).clone(),
-                position: NodePosition {
-                    x: anchor.x + node.relative_position.x,
-                    y: anchor.y + node.relative_position.y,
+    let mut operations = constant_operations.to_vec();
+    operations.extend(
+        snapshot
+            .nodes
+            .iter()
+            .map(|node| GraphDocumentOperation::InsertNode {
+                node: DocumentNode {
+                    id: node_ids[&node.local_id],
+                    node_type: creation_node_type(&node.creation).clone(),
+                    position: NodePosition {
+                        x: anchor.x + node.relative_position.x,
+                        y: anchor.y + node.relative_position.y,
+                    },
+                    parameters: node.parameters.clone(),
+                    user_label: node.user_label.clone(),
                 },
-                parameters: node.parameters.clone(),
-                user_label: node.user_label.clone(),
-            },
-        })
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>(),
+    );
     for entry in &snapshot.port_bindings {
         operations.push(GraphDocumentOperation::InsertPortBinding {
             address: instantiate_address(

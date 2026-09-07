@@ -8,30 +8,10 @@ impl ProjectState {
     ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let mut expected = BTreeMap::new();
-        let mut mutations = vec![
-            StagedFilesystemMutation::Write {
-                relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),
-                contents: crate::serialize_project_manifest(&snapshot.data)
-                    .map_err(prepare_error)?,
-            },
-            StagedFilesystemMutation::Write {
-                relative_path: yss_project_layout::GLOBAL_VARIABLES_FILE.into(),
-                contents: crate::serialize_global_variables(&snapshot.data)
-                    .map_err(prepare_error)?,
-            },
-        ];
-        for (id, variable) in &snapshot.data.variables {
-            if matches!(variable.scope, VariableScope::Global) {
-                expected.insert(
-                    variable_key(id),
-                    snapshot
-                        .variable_revisions
-                        .get(id)
-                        .map(|entry| entry.revision)
-                        .unwrap_or(ResourceRevision::INITIAL),
-                );
-            }
-        }
+        let mut mutations = vec![StagedFilesystemMutation::Write {
+            relative_path: yss_project_layout::PROJECT_METADATA_FILE.into(),
+            contents: crate::serialize_project_manifest(&snapshot.data).map_err(prepare_error)?,
+        }];
         let mut graph_paths = snapshot.data.graphs.keys().cloned().collect::<Vec<_>>();
         graph_paths.sort();
         for path in graph_paths {

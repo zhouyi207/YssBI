@@ -46,7 +46,7 @@ pub(crate) fn resolve_graph_schemas(
                                 && (port.schema.is_some()
                                     || matches!(
                                         protocol.typing,
-                                        yss_graph_protocol::NodeTypingSpec::Identity { .. }
+                                        yss_graph_protocol::NodeTypingSpec::Identity { .. } | yss_graph_protocol::NodeTypingSpec::ConstantOutput { .. }
                                     ))
                                 && matches!(
                                     port.cardinality,
@@ -228,6 +228,17 @@ impl EditorSchemaResolver<'_> {
             yss_graph_protocol::NodeTypingSpec::Identity { input, output } if output == key => {
                 Some(SchemaExpr::Input(input.clone()))
             }
+            yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, output }
+                if output == key =>
+            {
+                let constant = super::referenced_constant(self.document, node, parameter)?;
+                matches!(constant.data_type, DataType::DataFrame).then(|| SchemaExpr::Derived {
+                    resolver: "yssbi.constant.schema"
+                        .parse()
+                        .expect("constant schema resolver ID"),
+                    dependencies: vec![],
+                })
+            }
             _ => None,
         })
     }
@@ -303,6 +314,11 @@ impl EditorSchemaResolver<'_> {
             {
                 self.resolve_database_schema(node_id)
             }
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.constant.schema" =>
+            {
+                self.resolve_constant_schema(node_id)
+            }
             SchemaExpr::Derived { .. } => Err(GraphSchemaIssue::UnsupportedResolver),
         }
     }
@@ -342,6 +358,72 @@ impl EditorSchemaResolver<'_> {
             }),
         );
         Ok(fields)
+    }
+
+    fn resolve_constant_schema(
+        &self,
+        node_id: NodeId,
+    ) -> Result<Vec<SchemaField>, GraphSchemaIssue> {
+        use yss_tabular_contract::TabularScalar;
+        let node = self
+            .document
+            .nodes
+            .get(&node_id)
+            .ok_or(GraphSchemaIssue::MissingResource)?;
+        let protocol = self
+            .registry
+            .protocol(&node.node_type)
+            .ok_or(GraphSchemaIssue::MissingResource)?;
+        let yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing
+        else {
+            return Err(GraphSchemaIssue::UnsupportedResolver);
+        };
+        let constant = super::referenced_constant(self.document, node, parameter)
+            .ok_or(GraphSchemaIssue::MissingResource)?;
+        Ok(constant
+            .tabular
+            .iter()
+            .flat_map(|snapshot| snapshot.columns())
+            .map(|column| {
+                let scalar_type = column
+                    .values()
+                    .iter()
+                    .filter_map(|value| match value {
+                        TabularScalar::Null => None,
+                        TabularScalar::Bool(_) => Some(RelationalScalarType::Boolean),
+                        TabularScalar::Integer(_) => Some(RelationalScalarType::Int64),
+                        TabularScalar::Unsigned(value) if i64::try_from(*value).is_ok() => {
+                            Some(RelationalScalarType::Int64)
+                        }
+                        TabularScalar::Unsigned(_) | TabularScalar::Decimal(_) => {
+                            Some(RelationalScalarType::Float64)
+                        }
+                        TabularScalar::String(_) => Some(RelationalScalarType::String),
+                    })
+                    .reduce(|left, right| {
+                        if left == right {
+                            left
+                        } else if matches!(
+                            (left, right),
+                            (RelationalScalarType::Int64, RelationalScalarType::Float64)
+                                | (RelationalScalarType::Float64, RelationalScalarType::Int64)
+                        ) {
+                            RelationalScalarType::Float64
+                        } else {
+                            RelationalScalarType::Unknown
+                        }
+                    })
+                    .unwrap_or(RelationalScalarType::Unknown);
+                SchemaField {
+                    name: SchemaColumnRef(column.name().as_str().into()),
+                    scalar_type,
+                    lineage: Some(SchemaFieldLineage {
+                        source: format!("constant:{}", constant.id).into(),
+                        field: column.name().as_str().into(),
+                    }),
+                }
+            })
+            .collect())
     }
 
     fn resolve_database_schema(

@@ -15,7 +15,6 @@ use yss_graph_protocol::{
 };
 use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
-use yss_variable_contract::VariableScope;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Editor-facing catalog authority used to validate creation descriptors and dynamic ports.
@@ -51,11 +50,6 @@ pub enum CatalogMutationResource {
         revision: u64,
         signature: CatalogFunctionSignature,
     },
-    Variable {
-        revision: u64,
-        scope: VariableScope,
-        data_type: DataType,
-    },
     Database {
         authority_revision: u64,
     },
@@ -65,7 +59,6 @@ impl CatalogMutationResource {
     pub(crate) fn create_args(&self) -> ResourceBoundCreateArgs {
         match self {
             Self::Function { .. } => ResourceBoundCreateArgs::Function,
-            Self::Variable { .. } => ResourceBoundCreateArgs::Variable,
             Self::Database { .. } => ResourceBoundCreateArgs::Database,
         }
     }
@@ -76,17 +69,10 @@ impl CatalogMutationResource {
 
     pub(crate) fn revision(&self) -> u64 {
         match self {
-            Self::Function { revision, .. } | Self::Variable { revision, .. } => *revision,
+            Self::Function { revision, .. } => *revision,
             Self::Database {
                 authority_revision, ..
             } => *authority_revision,
-        }
-    }
-
-    pub(crate) fn variable_scope(&self) -> Option<&VariableScope> {
-        match self {
-            Self::Variable { scope, .. } => Some(scope),
-            Self::Function { .. } | Self::Database { .. } => None,
         }
     }
 }
@@ -94,7 +80,6 @@ impl CatalogMutationResource {
 fn resource_display_kind(create_args: ResourceBoundCreateArgs) -> ResourceDisplayKind {
     match create_args {
         ResourceBoundCreateArgs::Function => ResourceDisplayKind::Function,
-        ResourceBoundCreateArgs::Variable => ResourceDisplayKind::Variable,
         ResourceBoundCreateArgs::Database => ResourceDisplayKind::Database,
     }
 }
@@ -108,21 +93,9 @@ pub(crate) fn resource_path_is_valid(
         ResourceBoundCreateArgs::Function => GraphResourcePath::new(path).is_ok_and(|canonical| {
             canonical.as_str() == path && canonical.as_str().starts_with("functions/")
         }),
-        ResourceBoundCreateArgs::Variable => path
-            .strip_prefix("variables/")
-            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-            .is_some_and(|id| format!("variables/{id}") == path),
         ResourceBoundCreateArgs::Database => path
             .strip_prefix("databases/")
             .is_some_and(|id| !id.is_empty()),
-    }
-}
-
-pub(crate) fn variable_in_scope(graph_path: &GraphResourcePath, scope: &VariableScope) -> bool {
-    match scope {
-        VariableScope::Global => true,
-        VariableScope::Event { event_path } => event_path.as_str() == graph_path.as_str(),
-        VariableScope::Function { function_path } => function_path.as_str() == graph_path.as_str(),
     }
 }
 
@@ -319,6 +292,7 @@ fn source_port_with_optional_catalog(
         value_type: spec.value_type.clone(),
         type_parameters: protocol.interface.type_parameters.clone(),
     };
+    refine_constant_type(&mut source.value_type, &source.address, document, protocol);
     if let Some(resources) = resources {
         refine_source_type(&mut source, document, protocol, resources)?;
     }
@@ -355,14 +329,6 @@ pub(crate) fn refine_source_type(
         return Ok(());
     };
     match resource {
-        CatalogMutationResource::Variable { data_type, .. } => {
-            source.value_type = editor_type_expr(data_type).map_err(|error| {
-                connection_type_unavailable(format!(
-                    "variable resource '{}' has an invalid authoritative type: {error}",
-                    resource_path.as_str()
-                ))
-            })?;
-        }
         CatalogMutationResource::Function { signature, .. } => {
             let binding = document.port_bindings.get(&source.address).ok_or_else(|| {
                 connection_type_unavailable(format!(
@@ -522,6 +488,7 @@ pub(crate) fn catalog_query_source_port(
         return Err(CatalogCompatibilityError::SourceInvalid);
     }
     let mut value_type = resolved.spec.value_type.clone();
+    refine_constant_type(&mut value_type, address, document, resolved.protocol);
     refine_catalog_query_resource_type(
         &mut value_type,
         &document.nodes[&address.node_id],
@@ -534,6 +501,33 @@ pub(crate) fn catalog_query_source_port(
         value_type,
         type_parameters: resolved.protocol.interface.type_parameters.clone(),
     })
+}
+
+fn refine_constant_type(
+    value_type: &mut TypeExpr,
+    address: &PortAddress,
+    document: &GraphDocument,
+    protocol: &NodeProtocol,
+) {
+    let yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, output } = &protocol.typing
+    else {
+        return;
+    };
+    if address != &PortAddress::declared(address.node_id, output.clone()) {
+        return;
+    }
+    let constant = document
+        .nodes
+        .get(&address.node_id)
+        .and_then(|node| node.parameters.get(parameter))
+        .and_then(|value| value.as_str())
+        .and_then(|id| id.parse::<yss_graph_document::ConstantId>().ok())
+        .and_then(|id| document.constants.get(&id));
+    if let Some(resolved) = constant.and_then(|constant| {
+        yss_graph_type_mapping::type_expr_from_data_type(&constant.data_type).ok()
+    }) {
+        *value_type = resolved;
+    }
 }
 
 fn refine_catalog_query_resource_type(
@@ -553,13 +547,6 @@ fn refine_catalog_query_resource_type(
         .ok_or(CatalogCompatibilityError::SourceInvalid)?;
     let resource = GraphResourceId::new(resource);
     match kind {
-        ResourceDisplayKind::Variable => {
-            let variable = catalog
-                .variable_contract(&resource)
-                .ok_or(CatalogCompatibilityError::SourceInvalid)?;
-            *value_type = yss_graph_type_mapping::type_expr_from_data_type(variable.data_type())
-                .map_err(|_| CatalogCompatibilityError::SourceInvalid)?;
-        }
         ResourceDisplayKind::Database => {
             catalog
                 .database_schema(&resource)
@@ -608,13 +595,6 @@ fn catalog_query_candidate_ports(
         return None;
     }
     match resource.create_args {
-        ResourceBoundCreateArgs::Variable => {
-            let variable = catalog
-                .variable_contract(&GraphResourceId::new(resource.resource_path.as_str()))?;
-            let value_type =
-                yss_graph_type_mapping::type_expr_from_data_type(variable.data_type()).ok()?;
-            override_data_candidate_types(&mut candidates, value_type);
-        }
         ResourceBoundCreateArgs::Database => {
             catalog.database_schema(&GraphResourceId::new(resource.resource_path.as_str()))?;
             let value_type =
@@ -729,11 +709,6 @@ fn candidate_ports(
         .ok_or_else(|| format!("unknown node type '{node_type}'"))?;
     validate_scope(graph_path, protocol)?;
     let resource = descriptor_resource(descriptor, protocol, resources)?;
-    if let Some(CatalogMutationResource::Variable { scope, .. }) = resource
-        && !variable_in_scope(graph_path, scope)
-    {
-        return Err("variable resource is out of graph scope".into());
-    }
     let mut ports = protocol
         .interface
         .ports
@@ -860,9 +835,6 @@ fn resource_type_override(
     resource: Option<&CatalogMutationResource>,
 ) -> Result<Option<TypeExpr>, String> {
     match resource {
-        Some(CatalogMutationResource::Variable { data_type, .. }) => {
-            editor_type_expr(data_type).map(Some)
-        }
         Some(CatalogMutationResource::Database { .. }) => {
             editor_type_expr(&DataType::DataFrame).map(Some)
         }

@@ -696,7 +696,6 @@ pub enum ProjectResourceKindInspection {
     Graph,
     Database,
     Chart,
-    Variable,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]

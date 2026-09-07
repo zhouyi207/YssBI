@@ -594,6 +594,7 @@ pub(crate) fn parameter_value(
             }
             crate::plan::PlanParameterScalar::String(value) => RuntimeValue::String(value.clone()),
         }),
+        crate::plan::PlanParameterValue::Literal(value) => Ok(value.as_ref().clone()),
         crate::plan::PlanParameterValue::Resource(resource) => resources
             .value(resource)
             .cloned()
@@ -658,7 +659,6 @@ impl PreparedKernelInvocation<'_> {
 enum BuiltinKernel {
     Statistical(crate::statistics::StatisticalKernel),
     Constant,
-    Variable,
     Add,
     Subtract,
     Multiply,
@@ -688,11 +688,7 @@ impl Default for KernelRegistry {
             kernels: [
                 ("yssbi.statistics.ols.fit", Statistical(OlsFit)),
                 ("yssbi.statistics.ols.summary", Statistical(OlsSummary)),
-                ("yssbi.constant.bool", Constant),
-                ("yssbi.constant.int64", Constant),
-                ("yssbi.constant.float64", Constant),
-                ("yssbi.constant.string", Constant),
-                ("yssbi.project.variable.get", Variable),
+                ("yssbi.constant.get", Constant),
                 ("yssbi.numeric.add", Add),
                 ("yssbi.numeric.subtract", Subtract),
                 ("yssbi.numeric.multiply", Multiply),
@@ -761,17 +757,6 @@ fn execute_kernel(
             .map(|value| parameter_value(value, resources))
             .transpose()?
             .ok_or(KernelExecutionError::Failed),
-        BuiltinKernel::Variable => {
-            let Some(crate::plan::PlanParameterValue::Resource(resource)) =
-                invocation.parameter("variable")
-            else {
-                return Err(KernelExecutionError::Failed);
-            };
-            resources
-                .value(resource)
-                .cloned()
-                .ok_or(KernelExecutionError::Failed)
-        }
         BuiltinKernel::Add => numeric_fold(inputs, specialization, |left, right| left + right),
         BuiltinKernel::Subtract => {
             binary_numeric(inputs, specialization, |left, right| left - right)
@@ -1604,7 +1589,7 @@ mod tests {
     use std::time::Duration;
 
     fn prepared_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
-        let resource = PlanResourceId::from_existing("variables/answer".into());
+        let resource = PlanResourceId::from_existing("databases/answer".into());
         let version = PlanResourceVersion::from_existing("v1".into());
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
@@ -1635,8 +1620,8 @@ mod tests {
 
     fn bindings() -> RunResourceBindings {
         let requirement = PlanResourceRequirement::new(
-            PlanResourceId::from_existing("variables/answer".into()),
-            ResourceKind::Variable,
+            PlanResourceId::from_existing("databases/answer".into()),
+            ResourceKind::DataFrame,
             ResourceAccess::Shared,
             false,
         );
@@ -1754,7 +1739,7 @@ mod tests {
             let resources = execution.resources;
             assert_eq!(bindings.len(), 1);
             assert_eq!(
-                resources.value(&PlanResourceId::from_existing("variables/answer".into())),
+                resources.value(&PlanResourceId::from_existing("databases/answer".into())),
                 Some(&crate::value::RuntimeValue::Integer(4))
             );
             Ok(SchedulerOutput::new(
@@ -1858,7 +1843,7 @@ mod tests {
         );
         let producer = PlanOperation::new(
             operation_source("producer"),
-            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.get".into()),
             BTreeMap::from([(
                 crate::plan::PlanParameterFieldId::from_existing("value".into()),
                 parameter_handle.clone(),
@@ -1866,7 +1851,7 @@ mod tests {
             Box::new([]),
             Box::new([]),
             Box::new([operation_output("producer", ValueRef::new(1))]),
-            operation_specialization("yssbi.constant.int64", "producer"),
+            operation_specialization("yssbi.constant.get", "producer"),
         );
         let plan = prepared_operation_plan(
             &state,
@@ -1874,7 +1859,7 @@ mod tests {
             [(
                 parameter_handle,
                 PlanParameterPayload::new(
-                    PlanParameterSchemaId::from_existing("constant/int64".into()),
+                    PlanParameterSchemaId::from_existing("graph.constant".into()),
                     PlanParameterValue::Scalar(PlanParameterScalar::Integer(7)),
                 ),
             )],
@@ -1954,7 +1939,7 @@ mod tests {
         let requested = selected_output.output().clone();
         let selected = PlanOperation::new(
             operation_source("selected"),
-            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.get".into()),
             BTreeMap::from([(
                 crate::plan::PlanParameterFieldId::from_existing("value".into()),
                 parameter_handle.clone(),
@@ -1962,11 +1947,11 @@ mod tests {
             Box::new([]),
             Box::new([]),
             Box::new([selected_output]),
-            operation_specialization("yssbi.constant.int64", "selected"),
+            operation_specialization("yssbi.constant.get", "selected"),
         );
         let unrelated = PlanOperation::new(
             operation_source("unrelated"),
-            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.int64".into()),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.get".into()),
             BTreeMap::new(),
             Box::new([]),
             Box::new([]),
@@ -1979,7 +1964,7 @@ mod tests {
             [(
                 parameter_handle,
                 PlanParameterPayload::new(
-                    PlanParameterSchemaId::from_existing("constant/int64".into()),
+                    PlanParameterSchemaId::from_existing("graph.constant".into()),
                     PlanParameterValue::Scalar(PlanParameterScalar::Integer(7)),
                 ),
             )],

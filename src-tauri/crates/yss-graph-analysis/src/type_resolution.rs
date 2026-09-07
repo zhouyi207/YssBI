@@ -8,7 +8,6 @@ use yss_graph_protocol::{
     TypeUnknownReason,
 };
 use yss_graph_registry::{NodeRegistry, TypeRegistry};
-use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
 
 use super::{
     GraphDiagnosticFact, GraphDiagnosticLocation, GraphInputCoercion, GraphKernelSpecialization,
@@ -40,7 +39,6 @@ struct CachedNodeResolution {
 pub(crate) fn resolve_node_types(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    resources: &ResourceCatalogSnapshot,
     nodes: &mut [GraphNodeSemanticFact],
     cache: &mut GraphSemanticCache,
 ) -> Vec<GraphDiagnosticFact> {
@@ -111,8 +109,10 @@ pub(crate) fn resolve_node_types(
                 .get(&document_node.node_type),
             &port_snapshot,
             &states,
-            matches!(protocol.typing, NodeTypingSpec::VariableOutput { .. })
-                .then_some(resources.fingerprint().as_bytes()),
+            nodes[index]
+                .constant
+                .as_ref()
+                .map(|constant| &constant.data_type),
         );
         if let Some(cached) = cache
             .nodes
@@ -136,7 +136,7 @@ pub(crate) fn resolve_node_types(
                 &port_snapshot,
                 &mut states,
                 registry,
-                resources,
+                document,
                 &mut coercions,
             );
             cache.nodes.insert(
@@ -546,7 +546,7 @@ fn apply_node_rule(
     ports: &[GraphPortSemanticFact],
     states: &mut BTreeMap<PortAddress, TypeState>,
     registry: &NodeRegistry,
-    resources: &ResourceCatalogSnapshot,
+    document: &GraphDocument,
     coercions: &mut Vec<GraphInputCoercion>,
 ) {
     match rule {
@@ -598,16 +598,14 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
-        NodeTypingSpec::VariableOutput { parameter, output } => {
+        NodeTypingSpec::ConstantOutput { parameter, output } => {
             let state = match node.parameters.get(parameter) {
                 None => TypeState::Conflict(TypeConflict::MissingParameter),
                 Some(value) => value
                     .as_str()
-                    .and_then(|identity| {
-                        resources.variable_contract(&GraphResourceId::new(identity))
-                    })
+                    .and_then(|identity| document.constants.get(&identity.parse().ok()?))
                     .and_then(|contract| {
-                        yss_graph_type_mapping::type_expr_from_data_type(contract.data_type()).ok()
+                        yss_graph_type_mapping::type_expr_from_data_type(&contract.data_type).ok()
                     })
                     .and_then(|value| exact_type_expr(&value))
                     .map(TypeState::Exact)
@@ -977,7 +975,7 @@ fn node_input_fingerprint(
     protocol_fingerprint: Option<&yss_graph_registry::ProtocolFingerprint>,
     ports: &[GraphPortSemanticFact],
     states: &BTreeMap<PortAddress, TypeState>,
-    resource_catalog_fingerprint: Option<&[u8; 32]>,
+    constant_type: Option<&yss_data_contract::DataType>,
 ) -> [u8; 32] {
     let ports = ports
         .iter()
@@ -998,7 +996,7 @@ fn node_input_fingerprint(
             &document_node.node_type,
             &document_node.parameters,
             protocol_fingerprint,
-            resource_catalog_fingerprint,
+            constant_type,
             ports,
         ),
     )
@@ -1023,7 +1021,14 @@ fn semantic_fingerprint(
         .collect::<Vec<_>>();
     yss_canonical_hash::hash_canonical(
         "yssbi.graph-node-semantics.v1",
-        &(&document_node.node_type, &document_node.parameters, ports),
+        &(
+            &document_node.node_type,
+            &document_node.parameters,
+            node.constant
+                .as_ref()
+                .map(|constant| (&constant.data_type, &constant.data_value, &constant.tabular)),
+            ports,
+        ),
     )
     .expect("node semantic facts are canonically serializable")
 }

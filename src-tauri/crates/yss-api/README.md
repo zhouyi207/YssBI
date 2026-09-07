@@ -35,7 +35,9 @@ Wire DTOs are explicit transport types. Internal structs are not exposed merely 
 
 Use stable camelCase fields and strict frontend parsers for public DTOs. A contract change updates the Rust mapper, TypeScript parser/types, representative boundary tests, and the owning architecture document together. YssBI 0.x contracts are migrated directly unless compatibility is an explicit product requirement.
 
-Variable create/update/delete commands return `{ variableId, mutation }`. `mutation` is required and is the same resource publication delivered by `ResourceMutationCommitted`; the frontend submits both paths to the publication coordinator for revision ordering and deduplication. Variable values come from the publication deltas, and are not returned as a second snapshot in the receipt.
+Graph documents carry an optional `constants` map keyed by stable UUID. Each constant contains `id`, `name`, `dataType`, Rust-tagged `dataValue`, and optional tabular snapshot, description and tags. `setConstant { id, constant }` replaces a definition or deletes it with `null`; `insertConstantReference { id, position }` inserts its Get node. These are Graph draft mutations and use the existing Transform, Resolve, Save and history contracts. Node parameter editor `graphConstant` selects a definition in the current graph. Clipboard snapshots optionally carry referenced constant definitions in `constants`.
+
+Project queries use `get_project_databases` for database declarations. Variable commands, variable resource deltas and variable collections are removed; Project index contains graph, chart and database resources.
 
 Node parameter editors carry one effective `value`, display/editor metadata, and optional schema-aware `configuration`. Rust resolves that value from the node document or its protocol default. The wire has no project-setting inheritance source or override options; parameter edits update the Graph draft document directly.
 

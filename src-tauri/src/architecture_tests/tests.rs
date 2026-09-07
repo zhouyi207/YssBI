@@ -434,14 +434,6 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-variable-contract"
-                && root.target == "yss_variable_contract"
-                && root.kind == ProductionRootKind::Library)
-    );
-    assert!(
-        workspace
-            .roots
-            .iter()
             .any(|root| root.package == "yss-window-state"
                 && root.target == "yss_window_state"
                 && root.kind == ProductionRootKind::Library)
@@ -1084,20 +1076,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
     };
-    let variable_contract_root = ProductionRoot {
-        package_id: "variable-contract-package".to_owned(),
-        package: "yss-variable-contract".to_owned(),
-        target: "yss_variable_contract".to_owned(),
-        kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-variable-contract/src/lib.rs"),
-    };
-    let variable_value_root = ProductionRoot {
-        package_id: "variable-value-package".to_owned(),
-        package: "yss-variable-value".to_owned(),
-        target: "yss_variable_value".to_owned(),
-        kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-variable-value/src/lib.rs"),
-    };
     let window_state_root = ProductionRoot {
         package_id: "window-state-package".to_owned(),
         package: "yss-window-state".to_owned(),
@@ -1138,8 +1116,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         project_manifest_root.clone(),
         project_model_root.clone(),
         tabular_contract_root.clone(),
-        variable_contract_root.clone(),
-        variable_value_root.clone(),
         window_state_root.clone(),
         build_root.clone(),
     ];
@@ -1285,16 +1261,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_tabular_contract",
             ),
             module(
-                &variable_contract_root,
-                "src-tauri/crates/yss-variable-contract/src/lib.rs",
-                "yss_variable_contract",
-            ),
-            module(
-                &variable_value_root,
-                "src-tauri/crates/yss-variable-value/src/lib.rs",
-                "yss_variable_value",
-            ),
-            module(
                 &window_state_root,
                 "src-tauri/crates/yss-window-state/src/lib.rs",
                 "yss_window_state",
@@ -1415,14 +1381,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
-        RustLayer::PureLeaf
-    );
-    assert_eq!(
-        classified["src-tauri/crates/yss-variable-contract/src/lib.rs"],
-        RustLayer::PureLeaf
-    );
-    assert_eq!(
-        classified["src-tauri/crates/yss-variable-value/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1794,7 +1752,7 @@ fn rust_pure_leaf_graph_document_json_is_serialization_only() {
 }
 
 #[test]
-fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
+fn rust_pure_leaf_json_guard_scopes_constant_literal_decoding() {
     const PREFIX: &str = "yssbi-pure-leaf-json-guard-";
 
     struct Fixture {
@@ -1823,7 +1781,7 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
     std::fs::create_dir_all(&graph_document).expect("fixture graph_document must be created");
     std::fs::write(
         graph_document.join("lib.rs"),
-        "mod model;\n#[cfg(test)] mod tests {}\npub type RuntimeEscape = serde_json::Value;\n",
+        "mod model;\nmod constant_value;\n#[cfg(test)] mod tests {}\npub type RuntimeEscape = serde_json::Value;\n",
     )
     .expect("fixture graph_document lib must be written");
     std::fs::write(
@@ -1831,6 +1789,10 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
         "pub type JsonValue = serde_json::Value;\n",
     )
     .expect("fixture graph_document model must be written");
+    std::fs::write(
+        graph_document.join("constant_value.rs"),
+        "use serde_json::Value;\npub fn decode(text: &str) -> Value { serde_json::from_str(text).unwrap() }\npub fn escape(value: &Value) { serde_json::to_string(value); }\n",
+    ).expect("fixture constant literal owner must be written");
     let roots = vec![ProductionRoot {
         package_id: "graph-document-package".to_owned(),
         package: "yss-graph-document".to_owned(),
@@ -1851,7 +1813,7 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
     }));
     let dependencies = raw
         .iter()
-        .filter(|dependency| dependency.written_target == "serde_json::Value")
+        .filter(|dependency| dependency.written_target.starts_with("serde_json::"))
         .map(|dependency| CanonicalDependency {
             owning_package: dependency.owning_package.clone(),
             source_file: dependency.repository_relative_source_file.clone(),
@@ -1863,9 +1825,12 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
                 package_name: "serde_json".to_owned(),
                 declaration_scope: CargoDependencyScope::Runtime,
                 target_condition: None,
-                canonical_subpath: Some("Value".to_owned()),
+                canonical_subpath: dependency
+                    .written_target
+                    .strip_prefix("serde_json::")
+                    .map(str::to_owned),
             }),
-            canonical_origin_target: "external:serde_json::Value".to_owned(),
+            canonical_origin_target: format!("external:{}", dependency.written_target),
             line: dependency.line,
             column: dependency.column,
         })
@@ -1879,6 +1844,15 @@ fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
                 && violation.source_file == "src-tauri/crates/yss-graph-document/src/lib.rs"
         ),
         "production serde_json after a test module must be rejected: {violations:#?}"
+    );
+    let constant_violations = violations
+        .iter()
+        .filter(|violation| violation.source_file.ends_with("/constant_value.rs"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        constant_violations.len(),
+        1,
+        "only serialization escapes the literal decoder capability: {constant_violations:#?}"
     );
 }
 
@@ -3413,142 +3387,6 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
 }
 
 #[test]
-fn variable_value_has_one_pure_owner_without_project_mirrors_or_silent_activation_errors() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-variable-value/Cargo.toml",
-        "src-tauri/crates/yss-variable-value/src/lib.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "variable-value owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/crates/yss-project/src/variable_defaults.rs",
-        "src-tauri/crates/yss-project/src/variable_tabular.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "Project must not retain removed variable-value owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in ["\"crates/yss-variable-value\""] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace must declare {declaration}"
-        );
-    }
-
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-variable-value/Cargo.toml"))
-            .expect("variable-value crate manifest must be readable");
-    for dependency in [
-        "yss-data-contract = { path = \"../yss-data-contract\" }",
-        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
-        "yss-variable-contract = { path = \"../yss-variable-contract\" }",
-    ] {
-        assert!(
-            manifest.contains(dependency),
-            "variable-value must consume canonical dependency {dependency}"
-        );
-    }
-    for forbidden in ["tauri", "sqlx", "polars", "chrono"] {
-        assert!(
-            !manifest.contains(forbidden),
-            "variable-value must not absorb runtime dependency '{forbidden}'"
-        );
-    }
-
-    let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-variable-value/src/lib.rs"))
-            .expect("variable-value owner must be readable");
-    for invariant in [
-        "pub fn default_value_for",
-        "DataType::Array(_) => DataValue::Array(Vec::new())",
-        "pub enum VariableTabularNormalizationError",
-        "MissingSnapshot",
-        "pub fn variable_handle",
-        "pub fn normalize_variable_tabular",
-        "value.id = variable_handle(&variable.id)",
-    ] {
-        assert!(
-            owner.contains(invariant),
-            "variable-value crate must own invariant '{invariant}'"
-        );
-    }
-    for misplaced_concern in [
-        "std::fs",
-        "ProjectState",
-        "ProjectData",
-        "tauri::",
-        "sqlx::",
-        "polars::",
-    ] {
-        assert!(
-            !owner.contains(misplaced_concern),
-            "variable-value must not absorb runtime concern '{misplaced_concern}'"
-        );
-    }
-
-    let project_module =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
-            .expect("the root project module must be readable");
-    for facade in [
-        "mod variable_defaults",
-        "mod variable_tabular",
-        "pub use yss_variable_value",
-    ] {
-        assert!(
-            !project_module.contains(facade),
-            "the root project module must not restore compatibility facade '{facade}'"
-        );
-    }
-
-    for relative in [
-        "src-tauri/crates/yss-project/src/project_activation.rs",
-        "src-tauri/crates/yss-project/src/project_state_variable.rs",
-        "src-tauri/crates/yss-project/src/project_writers.rs",
-    ] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_variable_value"),
-            "{relative} must consume the canonical variable-value owner directly"
-        );
-        assert!(
-            !consumer.contains("crate::project::variable_defaults")
-                && !consumer.contains("crate::project::variable_tabular"),
-            "{relative} must not restore removed Project variable-value paths"
-        );
-    }
-
-    let activation = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-project/src/project_activation.rs"),
-    )
-    .expect("project activation must be readable");
-    assert!(
-        !activation.contains("let _ = normalize_variable_tabular"),
-        "project activation must not silently discard variable normalization failures"
-    );
-    assert!(
-        activation.contains("ProjectFilesystemError::TransactionPrepareFailed"),
-        "project activation must fail closed during invalid variable preparation"
-    );
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("Rust architecture policy must be readable");
-    assert!(
-        policy.contains("| \"yss-variable-value\"")
-            && policy.contains("layers.insert(RustLayer::PureLeaf)"),
-        "variable-value must remain a Pure Leaf"
-    );
-}
-
-#[test]
 fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
     let root = repository_root();
     for relative in [
@@ -4196,11 +4034,7 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
         "strict resource naming must not duplicate loose display-name allocation"
     );
 
-    for consumer in [
-        "src-tauri/crates/yss-application/src/database.rs",
-        "src-tauri/crates/yss-project/src/project_state_variable.rs",
-        "src-tauri/crates/yss-project/src/project_writers/variables.rs",
-    ] {
+    for consumer in ["src-tauri/crates/yss-application/src/database.rs"] {
         let source = std::fs::read_to_string(root.join(consumer)).unwrap_or_else(|error| {
             panic!("display-name consumer {consumer} must be readable: {error}")
         });
@@ -4891,7 +4725,6 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
             .expect("project layout owner must be readable");
     for contract in [
         "pub const PROJECT_METADATA_FILE",
-        "pub const GLOBAL_VARIABLES_FILE",
         "pub const EVENTS_DIR",
         "pub const EVENT_EXTENSION",
         "pub const FUNCTIONS_DIR",
@@ -4950,10 +4783,6 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         (
             "src-tauri/crates/yss-project-registry/src/lib.rs",
             "pub const PROJECT_METADATA_FILE",
-        ),
-        (
-            "src-tauri/crates/yss-project/src/project_io.rs",
-            "pub const GLOBAL_VARIABLES_FILE",
         ),
         (
             "src-tauri/crates/yss-project-change/src/lib.rs",
@@ -5431,7 +5260,6 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "yss-project-manifest = { path = \"./crates/yss-project-manifest\" }",
         "yss-project-operation = { path = \"./crates/yss-project-operation\" }",
         "yss-resource-lifecycle = { path = \"./crates/yss-resource-lifecycle\" }",
-        "yss-variable-value = { path = \"./crates/yss-variable-value\" }",
         "unicode-normalization.workspace = true",
         "unicode-casefold.workspace = true",
         "trash = \"5.2\"",
@@ -5452,7 +5280,6 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "yss-project-model = { path = \"../yss-project-model\" }",
         "yss-project-operation = { path = \"../yss-project-operation\" }",
         "yss-resource-lifecycle = { path = \"../yss-resource-lifecycle\" }",
-        "yss-variable-value = { path = \"../yss-variable-value\" }",
     ] {
         assert!(
             manifest.contains(dependency),
@@ -5540,7 +5367,6 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "yss-graph-document = { path = \"../yss-graph-document\" }",
         "yss-project-history = { path = \"../yss-project-history\" }",
         "yss-project-identity = { path = \"../yss-project-identity\" }",
-        "yss-variable-contract = { path = \"../yss-variable-contract\" }",
         "yss-chart-document = { path = \"../yss-chart-document\" }",
     ] {
         assert!(
@@ -5692,7 +5518,6 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
         "InsertGraph",
         "MoveGraph",
         "moved_before: Box<GraphResourceDocument>",
-        "PatchVariables",
         "UpsertChart",
     ] {
         assert!(
@@ -6793,27 +6618,6 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
     assert!(
         command_adapter.contains("pub enum ProjectProgressDto"),
         "the Tauri wire projection must remain command-owned"
-    );
-}
-
-#[test]
-fn variable_contract_has_one_pure_crate_owner_without_compatibility_module() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-variable-contract/src/lib.rs",
-        "src-tauri/crates/yss-variable-contract/src/variable_id.rs",
-        "src-tauri/crates/yss-variable-contract/src/variable_instance.rs",
-        "src-tauri/crates/yss-variable-contract/src/variable_scope.rs",
-        "src-tauri/crates/yss-variable-contract/tests/wire_contract.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "variable contract owner must exist at {relative}"
-        );
-    }
-    assert!(
-        !root.join("src-tauri/src/variable").exists(),
-        "the root crate must not retain a variable compatibility module"
     );
 }
 

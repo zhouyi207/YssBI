@@ -138,6 +138,14 @@ pub enum PortPlacement {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EditorGraphMutation {
+    InsertConstantReference {
+        id: yss_graph_document::ConstantId,
+        position: NodePosition,
+    },
+    SetConstant {
+        id: yss_graph_document::ConstantId,
+        constant: Option<yss_graph_document::GraphConstant>,
+    },
     CreateNode {
         descriptor: NodeCreation,
         position: NodePosition,
@@ -247,6 +255,53 @@ impl EditorGraphMutation {
         catalog_validation: Option<&crate::compatibility::CatalogMutationValidationSnapshot>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
+            Self::InsertConstantReference { id, position } => {
+                validate_position(position)?;
+                if !document.constants.contains_key(&id) {
+                    return Err(DocumentError::InvalidConstant(id).into());
+                }
+                let node_type = yss_graph_protocol::NodeTypeId::new("yssbi.constant.get")
+                    .expect("constant node type is valid");
+                let protocol = registry.protocol(&node_type).ok_or_else(|| {
+                    MutationConflict::RegistryInvariant("constant protocol is missing".into())
+                })?;
+                let parameters = BTreeMap::from([(
+                    "constant".parse().expect("constant key is valid"),
+                    JsonValue::String(id.to_string()),
+                )]);
+                validate_parameters_with_registry(registry, protocol, &parameters)?;
+                vec![GraphDocumentOperation::InsertNode {
+                    node: DocumentNode {
+                        id: NodeId::new(),
+                        node_type,
+                        position,
+                        parameters,
+                        user_label: None,
+                    },
+                }]
+            }
+            Self::SetConstant { id, constant } => {
+                let before = document.constants.get(&id).cloned();
+                let after = constant
+                    .map(|mut constant| {
+                        if constant.id != id {
+                            return Err(MutationConflict::Document(
+                                DocumentError::InvalidConstant(id),
+                            ));
+                        }
+                        constant.name = constant.name.trim().to_owned();
+                        yss_graph_document::normalize_constant_value(&mut constant).map_err(
+                            |_| MutationConflict::Document(DocumentError::InvalidConstant(id)),
+                        )?;
+                        Ok(constant)
+                    })
+                    .transpose()?;
+                vec![GraphDocumentOperation::SetConstant {
+                    id,
+                    before: before.map(Box::new),
+                    after: after.map(Box::new),
+                }]
+            }
             Self::CreateNode {
                 descriptor,
                 position,
@@ -301,7 +356,6 @@ impl EditorGraphMutation {
                                 ))
                             })?;
                             let parameters = materialize_resource_descriptor(
-                                graph_path,
                                 protocol,
                                 &resource_path,
                                 resource_revision,
@@ -609,7 +663,6 @@ fn catalog_descriptor_validation_error(error: MutationConflict) -> MutationConfl
 }
 
 fn materialize_resource_descriptor(
-    graph_path: &GraphResourcePath,
     protocol: &NodeProtocol,
     resource_path: &CatalogResourcePath,
     resource_revision: u64,
@@ -634,9 +687,6 @@ fn materialize_resource_descriptor(
             resource_path.as_str()
         )));
     }
-    if let Some(scope) = resource.variable_scope() {
-        validate_variable_scope(graph_path, scope)?;
-    }
     let binding = crate::compatibility::resource_parameter(protocol, create_args)
         .map_err(catalog_descriptor_invalid)?;
     Ok(BTreeMap::from([(
@@ -655,20 +705,6 @@ fn validate_resource_path(
     } else {
         Err(catalog_descriptor_invalid(format!(
             "catalog resource path '{path}' is malformed for its create arguments"
-        )))
-    }
-}
-
-fn validate_variable_scope(
-    graph_path: &GraphResourcePath,
-    scope: &yss_variable_contract::VariableScope,
-) -> Result<(), MutationConflict> {
-    if crate::compatibility::variable_in_scope(graph_path, scope) {
-        Ok(())
-    } else {
-        Err(catalog_descriptor_invalid(format!(
-            "variable resource is out of scope for graph '{}'",
-            graph_path.as_str()
         )))
     }
 }
@@ -1050,7 +1086,17 @@ fn validate_shared_parameters(
 ) -> Result<(), MutationConflict> {
     let Some(issue) = yss_graph_protocol::validate_parameter_values(protocol, parameters, nominal)
         .into_iter()
-        .next()
+        .find(|issue| {
+            // Constant selection may be incomplete in a draft; Compile still requires it.
+            !(matches!(issue.kind, yss_graph_protocol::ParameterIssueKind::Required)
+                && protocol.parameters.parameters.iter().any(|spec| {
+                    spec.key == issue.key
+                        && matches!(
+                            spec.editor,
+                            yss_graph_protocol::ParameterEditorSpec::GraphConstant
+                        )
+                }))
+        })
     else {
         return Ok(());
     };

@@ -45,7 +45,7 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         ExecutionApplicationError::ProjectSnapshot(error) => {
             crate::commands::project_failure::application_project_command_error(error)
         }
-        ExecutionApplicationError::VariableBindings(error) => {
+        ExecutionApplicationError::ResourceBindings(error) => {
             CommandError::diagnosed("execution_resource_binding_failed", error)
         }
         ExecutionApplicationError::ProjectFacts(error) => {

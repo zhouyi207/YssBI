@@ -34,7 +34,6 @@ pub enum NodeInstanceDisplaySpec {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResourceDisplayKind {
     Function,
-    Variable,
     Database,
 }
 

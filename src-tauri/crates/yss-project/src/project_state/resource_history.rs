@@ -1,29 +1,10 @@
 use super::*;
 use yss_project_model::ProjectDataPatch;
 
-pub(super) fn variable_scope_references_path(
-    scope: &yss_variable_contract::VariableScope,
-    target: &str,
-) -> bool {
-    match scope {
-        yss_variable_contract::VariableScope::Global => false,
-        yss_variable_contract::VariableScope::Event { event_path } => {
-            crate::graph_resource_index::normalize_resource_path(event_path) == target
-        }
-        yss_variable_contract::VariableScope::Function { function_path } => {
-            crate::graph_resource_index::normalize_resource_path(function_path) == target
-        }
-    }
-}
-
 pub(crate) fn validate_context_revisions(
     context: &ProjectTransactionContext,
     data: &ProjectData,
     graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-    variable_revisions: &std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        VariableRevisionEntry,
-    >,
     chart_revisions: &std::collections::HashMap<
         ChartResourcePath,
         yss_project_identity::ResourceRevision,
@@ -49,13 +30,6 @@ pub(crate) fn validate_context_revisions(
                 .and_then(|path| data.graphs.get(&path))
                 .and_then(|resource| resource.function.as_ref())
                 .map(|function| function.revision),
-            ResourceKey::Variable(path) => path
-                .0
-                .strip_prefix("variables/")
-                .or(Some(path.0.as_ref()))
-                .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                .map(yss_variable_contract::VariableId::from)
-                .and_then(|id| variable_revisions.get(&id).map(|entry| entry.revision)),
             ResourceKey::Database(_) => None,
             ResourceKey::Chart(path) => ChartResourcePath::parse(path.0.as_ref())
                 .ok()
@@ -82,13 +56,6 @@ pub(crate) fn validate_context_revisions(
                 .ok()
                 .and_then(|path| data.graphs.get(&path))
                 .is_some_and(|resource| resource.function.is_some()),
-            ResourceKey::Variable(path) => path
-                .0
-                .strip_prefix("variables/")
-                .or(Some(path.0.as_ref()))
-                .and_then(|id| uuid::Uuid::parse_str(id).ok())
-                .map(yss_variable_contract::VariableId::from)
-                .is_some_and(|id| data.variables.contains_key(&id)),
             ResourceKey::Database(path) => path
                 .0
                 .strip_prefix("databases/")
@@ -242,7 +209,6 @@ pub(super) fn normalize_function_patch_revisions(
             }
         }
         ProjectDataPatch::UnloadGraph { .. }
-        | ProjectDataPatch::PatchVariables { .. }
         | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
@@ -483,8 +449,7 @@ pub(super) fn canonical_resource_lifecycle_events(
             )]);
         }
         ProjectDataPatch::MoveGraph { .. } => {}
-        ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => return Ok(Vec::new()),
     }
@@ -493,7 +458,6 @@ pub(super) fn canonical_resource_lifecycle_events(
         to,
         moved: _,
         referenced_graphs,
-        referenced_variables,
         ..
     } = patch
     else {
@@ -531,29 +495,6 @@ pub(super) fn canonical_resource_lifecycle_events(
         })
         .collect::<Result<Vec<_>, ProjectFilesystemError>>()?;
     deltas.extend(referenced_graph_deltas);
-    let variable_deltas = referenced_variables
-        .keys()
-        .map(|id| {
-            let resource_path = format!("variables/{id}");
-            let key = ResourceKey::Variable(yss_project_history::VariableResourceKey(
-                resource_path.clone().into(),
-            ));
-            let from_revision = expected_revision(&key)?;
-            Ok(yss_project_history::ResourceDeltaEvent {
-                resource: key,
-                from_revision,
-                to_revision: checked_resource_revision(resource_path, from_revision)?,
-                caused_by: Some(context.operation_id),
-                payload: yss_project_history::ResourceDocumentPatch::VariableScopeMove(
-                    yss_project_history::ResourcePathMovePatch {
-                        from: from.as_str().into(),
-                        to: to.as_str().into(),
-                    },
-                ),
-            })
-        })
-        .collect::<Result<Vec<_>, ProjectFilesystemError>>()?;
-    deltas.extend(variable_deltas);
     Ok(deltas)
 }
 
@@ -581,8 +522,7 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
                     .map(|path| path.as_str().to_string()),
             );
         }
-        ProjectDataPatch::PatchVariables { .. }
-        | ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
     }
@@ -617,7 +557,6 @@ pub(super) fn preflight_resource_patch_graphs(
         ProjectDataPatch::DeclareGraph { .. }
         | ProjectDataPatch::RemoveGraph { .. }
         | ProjectDataPatch::UnloadGraph { .. }
-        | ProjectDataPatch::PatchVariables { .. }
         | ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
@@ -641,8 +580,7 @@ pub(super) fn affected_projection_paths(
         .filter_map(|delta| match &delta.resource {
             yss_project_history::ResourceKey::Graph(path) => Some(path.as_str().to_owned()),
             yss_project_history::ResourceKey::Function(path) => Some(path.0.to_string()),
-            yss_project_history::ResourceKey::Variable(_)
-            | yss_project_history::ResourceKey::Database(_)
+            yss_project_history::ResourceKey::Database(_)
             | yss_project_history::ResourceKey::Chart(_) => None,
         })
         .collect::<std::collections::BTreeSet<_>>();

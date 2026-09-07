@@ -250,7 +250,6 @@ mod tests {
     fn resources(columns: Vec<ColumnSchema>) -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(
             BTreeMap::new(),
-            BTreeMap::new(),
             BTreeMap::from([(
                 GraphResourceId::new("databases/sales"),
                 DataSchema { columns },
@@ -265,7 +264,13 @@ mod tests {
             .unwrap()
             .registry;
         let mut document = GraphDocument::default();
-        let source = node(&mut document, "yssbi.constant.int64");
+        let source = node(&mut document, "yssbi.constant.get");
+        crate::tests::set_constant(
+            &mut document,
+            source,
+            yss_data_contract::DataType::Int64,
+            yss_data_contract::DataValue::Int64(0),
+        );
         let consumer = node(&mut document, "yssbi.numeric.subtract");
         connect(
             &mut document,

@@ -145,11 +145,17 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
         source_node,
         DocumentNode {
             id: source_node,
-            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            node_type: NodeTypeId::new("yssbi.constant.get").unwrap(),
             position: NodePosition { x: 0.0, y: 0.0 },
             parameters: ParameterValues::new(),
             user_label: None,
         },
+    );
+    set_constant(
+        &mut graph.document,
+        source_node,
+        yss_data_contract::DataType::Int64,
+        yss_data_contract::DataValue::Int64(0),
     );
     graph.document
 }
@@ -317,4 +323,31 @@ fn localized_catalog_rejects_a_project_database_schema_mismatch() {
         CatalogQueryApplicationError::Database(error)
             if error.code() == yss_database_runtime::error::DatabaseErrorCode::Conflict
     ));
+}
+
+fn set_constant(
+    document: &mut GraphDocument,
+    node: NodeId,
+    data_type: yss_data_contract::DataType,
+    data_value: yss_data_contract::DataValue,
+) {
+    let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
+    document.constants.insert(
+        id,
+        yss_graph_document::GraphConstant {
+            id,
+            name: id.to_string(),
+            data_type,
+            data_value,
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        },
+    );
+    let node = document.nodes.get_mut(&node).unwrap();
+    node.node_type = "yssbi.constant.get".parse().unwrap();
+    node.parameters = ParameterValues::from([(
+        "constant".parse().unwrap(),
+        serde_json::json!(id.to_string()),
+    )]);
 }

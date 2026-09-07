@@ -13,7 +13,6 @@ use yss_project_filesystem::NormalizedProjectRoot;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::ProjectData;
-use yss_variable_contract::{VariableId, VariableInstance};
 
 /// Project-owned identity used when a plan names a resource.
 ///
@@ -47,10 +46,6 @@ impl ProjectResourceId {
         Ok(Self(value))
     }
 
-    pub fn variable(id: VariableId) -> Self {
-        Self::from_existing(format!("variables/{id}").into_boxed_str())
-    }
-
     pub fn database(id: impl AsRef<str>) -> Result<Self, ProjectResourceIdError> {
         Self::new(format!("databases/{}", id.as_ref()).into_boxed_str())
     }
@@ -80,7 +75,6 @@ pub enum ProjectResourceKind {
     DatabaseConnection,
     DataFrame,
     File,
-    Variable,
     Plot,
 }
 
@@ -308,47 +302,19 @@ impl PreparedProjectExecution {
 }
 
 #[derive(Debug)]
-pub struct CandidateVariableWrite {
-    grant: ProjectResourceGrant,
-    value: VariableInstance,
-}
-
-impl CandidateVariableWrite {
-    pub fn new(grant: ProjectResourceGrant, value: VariableInstance) -> Self {
-        Self { grant, value }
-    }
-
-    pub fn grant(&self) -> &ProjectResourceGrant {
-        &self.grant
-    }
-
-    pub fn value(&self) -> &VariableInstance {
-        &self.value
-    }
-}
-
-#[derive(Debug)]
 pub struct CandidateProjectEffects {
     grants: Box<[ProjectResourceGrant]>,
-    variable_writes: Box<[CandidateVariableWrite]>,
 }
 
 impl CandidateProjectEffects {
-    pub fn new(
-        grants: impl IntoIterator<Item = ProjectResourceGrant>,
-        variable_writes: impl IntoIterator<Item = CandidateVariableWrite>,
-    ) -> Self {
+    pub fn new(grants: impl IntoIterator<Item = ProjectResourceGrant>) -> Self {
         Self {
             grants: grants.into_iter().collect::<Vec<_>>().into_boxed_slice(),
-            variable_writes: variable_writes
-                .into_iter()
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
         }
     }
 
     pub fn empty() -> Self {
-        Self::new([], [])
+        Self::new([])
     }
 }
 
@@ -368,7 +334,6 @@ pub struct CommittedProjectEffects {
     authority_generation: u64,
     publication_revision: u64,
     resource_grants: Box<[ProjectResourceGrant]>,
-    variable_ids: Box<[VariableId]>,
 }
 
 impl CommittedProjectEffects {
@@ -386,10 +351,6 @@ impl CommittedProjectEffects {
 
     pub fn resource_grants(&self) -> &[ProjectResourceGrant] {
         &self.resource_grants
-    }
-
-    pub fn variable_ids(&self) -> &[VariableId] {
-        &self.variable_ids
     }
 }
 
@@ -476,14 +437,6 @@ pub enum ProjectEffectCommitError {
     CandidatePresenceMismatch { resource: ProjectResourceId },
     #[error("candidate grant version does not match")]
     CandidateVersionMismatch { resource: ProjectResourceId },
-    #[error("candidate variable effect is duplicated")]
-    DuplicateCandidateEffect { resource: ProjectResourceId },
-    #[error("candidate variable effect has no matching grant")]
-    CandidateEffectWithoutGrant { resource: ProjectResourceId },
-    #[error("candidate variable effect is invalid")]
-    InvalidVariableEffect { resource: ProjectResourceId },
-    #[error("variable effect revision is exhausted")]
-    VariableRevisionExhausted { resource: ProjectResourceId },
     #[error("project effect commit was cancelled")]
     Cancelled,
     #[error("project effect commit deadline was exceeded")]
@@ -494,13 +447,11 @@ pub enum ProjectEffectCommitError {
 enum ResourceFamilyKind {
     Database,
     File,
-    Variable,
 }
 
 enum ResourceIdentity {
     Database(Box<str>),
     File(GraphResourcePath),
-    Variable(VariableId),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -517,12 +468,6 @@ fn identify_resource(
     resource: &ProjectResourceId,
 ) -> Result<ResourceIdentity, ResourceResolutionFailure> {
     let raw = resource.as_str();
-    if let Some(value) = raw.strip_prefix("variables/") {
-        let id = uuid::Uuid::parse_str(value)
-            .map(VariableId::from)
-            .map_err(|_| ResourceResolutionFailure::InvalidIdentity)?;
-        return Ok(ResourceIdentity::Variable(id));
-    }
     if let Some(value) = raw.strip_prefix("databases/") {
         if value.is_empty() {
             return Err(ResourceResolutionFailure::InvalidIdentity);
@@ -541,7 +486,6 @@ fn resource_family_kind(identity: &ResourceIdentity) -> ResourceFamilyKind {
     match identity {
         ResourceIdentity::Database(_) => ResourceFamilyKind::Database,
         ResourceIdentity::File(_) => ResourceFamilyKind::File,
-        ResourceIdentity::Variable(_) => ResourceFamilyKind::Variable,
     }
 }
 
@@ -561,7 +505,6 @@ fn validate_requested_kind(
             )
         }
         ResourceFamilyKind::File => requested == ProjectResourceKind::File,
-        ResourceFamilyKind::Variable => requested == ProjectResourceKind::Variable,
     };
     if valid {
         return Ok(());
@@ -569,7 +512,6 @@ fn validate_requested_kind(
     let actual = match family {
         ResourceFamilyKind::Database => ProjectResourceKind::DatabaseConnection,
         ResourceFamilyKind::File => ProjectResourceKind::File,
-        ResourceFamilyKind::Variable => ProjectResourceKind::Variable,
     };
     Err(ResourceResolutionFailure::KindMismatch { actual })
 }
@@ -578,7 +520,6 @@ fn resource_grant_from_requirement(
     requirement: &ProjectResourceRequirement,
     data: &ProjectData,
     graph_resource_revisions: &HashMap<GraphResourcePath, ResourceRevision>,
-    variable_revisions: &HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     database_revisions: &HashMap<String, u64>,
 ) -> Result<ProjectResourceGrant, ResourceResolutionFailure> {
     let identity = identify_resource(&requirement.resource)?;
@@ -616,44 +557,6 @@ fn resource_grant_from_requirement(
                     return Err(ResourceResolutionFailure::Unavailable);
                 }
                 (ProjectResourcePresence::Absent, version)
-            }
-        }
-        ResourceIdentity::Variable(id) => {
-            let Some(entry) = variable_revisions.get(&id).copied() else {
-                return if data.variables.contains_key(&id) {
-                    Err(ResourceResolutionFailure::RevisionUnavailable)
-                } else if requirement.optional {
-                    Ok(ProjectResourceGrant::new(
-                        requirement.resource.clone(),
-                        requirement.kind,
-                        requirement.access,
-                        requirement.optional,
-                        ProjectResourcePresence::Absent,
-                        None,
-                    ))
-                } else {
-                    Err(ResourceResolutionFailure::Unavailable)
-                };
-            };
-            if data.variables.contains_key(&id) {
-                if !entry.is_present() {
-                    return Err(ResourceResolutionFailure::RevisionUnavailable);
-                }
-                (
-                    ProjectResourcePresence::Present,
-                    Some(ProjectResourceVersion::from_revision(entry.revision)),
-                )
-            } else {
-                if entry.is_present() {
-                    return Err(ResourceResolutionFailure::RevisionUnavailable);
-                }
-                if !requirement.optional {
-                    return Err(ResourceResolutionFailure::Unavailable);
-                }
-                (
-                    ProjectResourcePresence::Absent,
-                    Some(ProjectResourceVersion::from_revision(entry.revision)),
-                )
             }
         }
     };
@@ -823,35 +726,6 @@ fn validate_candidate_effects(
         }
     }
 
-    let mut effect_resources = BTreeSet::new();
-    for effect in &effects.variable_writes {
-        let resource = effect.grant.resource.clone();
-        if !effect_resources.insert(resource.clone()) {
-            return Err(ProjectEffectCommitError::DuplicateCandidateEffect { resource });
-        }
-        let Some(grant) = effects
-            .grants
-            .iter()
-            .find(|grant| grant.resource == effect.grant.resource)
-        else {
-            return Err(ProjectEffectCommitError::CandidateEffectWithoutGrant { resource });
-        };
-        compare_candidate_grant(grant, &effect.grant)?;
-        if effect.grant.kind != ProjectResourceKind::Variable
-            || effect.grant.access != ProjectResourceAccess::Exclusive
-            || effect.grant.presence != ProjectResourcePresence::Present
-            || effect.grant.version.is_none()
-        {
-            return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-        }
-        let Ok(ResourceIdentity::Variable(variable_id)) = identify_resource(&effect.grant.resource)
-        else {
-            return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-        };
-        if effect.value.id != variable_id {
-            return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-        }
-    }
     Ok(())
 }
 
@@ -861,7 +735,6 @@ struct CurrentAuthorityContents<'a> {
     identity: &'a crate::project_state::ProjectAuthorityExpectation,
     data: &'a ProjectData,
     graph_resource_revisions: &'a HashMap<GraphResourcePath, ResourceRevision>,
-    variable_revisions: &'a HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
     database_revisions: &'a HashMap<String, u64>,
 }
 
@@ -875,7 +748,7 @@ fn validate_current_authority_contents(
         identity,
         data,
         graph_resource_revisions,
-        variable_revisions,
+
         database_revisions,
     } = current;
     let session = current_project_session(publication, project_path)
@@ -907,39 +780,10 @@ fn validate_current_authority_contents(
             &requirement,
             data,
             graph_resource_revisions,
-            variable_revisions,
             database_revisions,
         )
         .map_err(|failure| current_resolution_error(&expected.resource, failure))?;
         compare_current_grant(expected, &current)?;
-    }
-    Ok(())
-}
-
-fn validate_variable_effect_state(
-    effects: &CandidateProjectEffects,
-    data: &ProjectData,
-    variable_revisions: &HashMap<VariableId, crate::project_state::VariableRevisionEntry>,
-) -> Result<(), ProjectEffectCommitError> {
-    for effect in &effects.variable_writes {
-        let resource = effect.grant.resource.clone();
-        let Ok(ResourceIdentity::Variable(variable_id)) = identify_resource(&resource) else {
-            return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-        };
-        let Some(current) = data.variables.get(&variable_id) else {
-            return Err(ProjectEffectCommitError::ResourceUnavailable { resource });
-        };
-        if current.id != effect.value.id {
-            return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-        }
-        let Some(entry) = variable_revisions.get(&variable_id).copied() else {
-            return Err(ProjectEffectCommitError::ResourceRevisionUnavailable { resource });
-        };
-        if !entry.is_present()
-            || Some(ProjectResourceVersion::from_revision(entry.revision)) != effect.grant.version
-        {
-            return Err(ProjectEffectCommitError::ResourceVersionChanged { resource });
-        }
     }
     Ok(())
 }
@@ -994,10 +838,6 @@ impl ProjectState {
             .graph_resource_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let variable_revisions = self
-            .variable_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let database_revisions = self
             .database_authority_revisions
             .read()
@@ -1018,7 +858,6 @@ impl ProjectState {
                     requirement,
                     &data,
                     &graph_resource_revisions,
-                    &variable_revisions,
                     &database_revisions,
                 )
                 .map_err(|failure| {
@@ -1080,10 +919,6 @@ impl ProjectState {
             .graph_resource_revisions
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let variable_revisions = self
-            .variable_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let database_revisions = self
             .database_authority_revisions
             .read()
@@ -1096,12 +931,10 @@ impl ProjectState {
                 identity: &identity,
                 data: &data,
                 graph_resource_revisions: &graph_resource_revisions,
-                variable_revisions: &variable_revisions,
                 database_revisions: &database_revisions,
             },
         )?;
         validate_candidate_effects(authority, &effects)?;
-        validate_variable_effect_state(&effects, &data, &variable_revisions)?;
         let lifecycle_after = self.activation_generation.load(Ordering::Acquire);
         if lifecycle_before != lifecycle_after || !lifecycle_after.is_multiple_of(2) {
             return Err(ProjectEffectCommitError::StaleProjectSession);
@@ -1126,7 +959,7 @@ impl ProjectState {
         }
 
         let PreparedEffectCommit { authority, effects } = prepared;
-        let mut publication = self
+        let publication = self
             .mutation_publication
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -1138,17 +971,13 @@ impl ProjectState {
             .activation_identity
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut data = self
+        let data = self
             .project_data
-            .write()
+            .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let graph_resource_revisions = self
             .graph_resource_revisions
             .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut variable_revisions = self
-            .variable_revisions
-            .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let database_revisions = self
             .database_authority_revisions
@@ -1164,59 +993,20 @@ impl ProjectState {
                 identity: &identity,
                 data: &data,
                 graph_resource_revisions: &graph_resource_revisions,
-                variable_revisions: &variable_revisions,
                 database_revisions: &database_revisions,
             },
         )?;
         validate_candidate_effects(&authority, &effects)?;
-        validate_variable_effect_state(&effects, &data, &variable_revisions)?;
-
-        let mut next_data = data.clone();
-        let mut next_variable_revisions = variable_revisions.clone();
-        let mut variable_ids = Vec::with_capacity(effects.variable_writes.len());
-        for effect in &effects.variable_writes {
-            let resource = effect.grant.resource.clone();
-            let Ok(ResourceIdentity::Variable(variable_id)) = identify_resource(&resource) else {
-                return Err(ProjectEffectCommitError::InvalidVariableEffect { resource });
-            };
-            let Some(current) = variable_revisions.get(&variable_id).copied() else {
-                return Err(ProjectEffectCommitError::ResourceRevisionUnavailable { resource });
-            };
-            let next_revision = current.revision.checked_next().map_err(|_| {
-                ProjectEffectCommitError::VariableRevisionExhausted {
-                    resource: resource.clone(),
-                }
-            })?;
-            next_data
-                .variables
-                .insert(variable_id, effect.value.clone());
-            next_variable_revisions.insert(
-                variable_id,
-                crate::project_state::VariableRevisionEntry::present(next_revision),
-            );
-            variable_ids.push(variable_id);
-        }
 
         let lifecycle_at_gate = self.activation_generation.load(Ordering::Acquire);
         if lifecycle_before != lifecycle_at_gate || !lifecycle_at_gate.is_multiple_of(2) {
             return Err(ProjectEffectCommitError::StaleProjectSession);
         }
-        let publication_revision = if effects.variable_writes.is_empty() {
-            publication.resource_revision
-        } else {
-            let advance = publication
-                .prepare_resource_revision()
-                .map_err(|_| ProjectEffectCommitError::ProjectUnavailable)?;
-            *data = next_data;
-            *variable_revisions = next_variable_revisions;
-            publication.commit_prepared(advance)
-        };
         Ok(CommittedProjectEffects {
             project_instance_id: authority.session.instance_id,
             authority_generation: publication.authority_generation(),
-            publication_revision,
+            publication_revision: publication.resource_revision,
             resource_grants: effects.grants,
-            variable_ids: variable_ids.into_boxed_slice(),
         })
     }
 }

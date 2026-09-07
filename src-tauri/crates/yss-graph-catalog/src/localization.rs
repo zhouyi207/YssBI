@@ -126,7 +126,6 @@ pub enum NodeCreation {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ResourceBoundCreateArgs {
     Function,
-    Variable,
     Database,
 }
 
@@ -143,7 +142,6 @@ impl<'de> Deserialize<'de> for ResourceBoundCreateArgs {
 
         match Wire::deserialize(deserializer)?.kind.as_ref() {
             "function" => Ok(Self::Function),
-            "variable" => Ok(Self::Variable),
             "database" => Ok(Self::Database),
             kind => Err(serde::de::Error::unknown_variant(
                 kind,
@@ -203,6 +201,10 @@ pub fn authoritative_static_descriptor(
         .iter()
         .filter(|parameter| {
             parameter.default_value.is_none()
+                && !matches!(
+                    parameter.editor,
+                    yss_graph_protocol::ParameterEditorSpec::GraphConstant
+                )
                 && parameter
                     .constraints
                     .contains(&yss_graph_protocol::ParameterConstraint::Required)
@@ -382,17 +384,7 @@ impl BuiltinCatalog {
         protocol: &yss_graph_protocol::NodeProtocol,
         locale: &str,
     ) -> LocalizedCatalogItem {
-        let title = match entry.create_args {
-            ResourceBoundCreateArgs::Variable => format!(
-                "{} · {}",
-                self.text(locale, &protocol.catalog.title_key),
-                entry.name
-            )
-            .into(),
-            ResourceBoundCreateArgs::Function | ResourceBoundCreateArgs::Database => {
-                entry.name.clone()
-            }
-        };
+        let title = entry.name.clone();
         let documentation =
             super::documentation::documentation(&protocol.type_id, locale).map(Into::into);
         let aliases = match protocol.catalog.aliases_key.as_ref() {

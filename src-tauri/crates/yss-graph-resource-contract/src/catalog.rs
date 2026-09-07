@@ -96,21 +96,6 @@ impl FunctionCatalogEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VariableValueContract {
-    data_type: DataType,
-}
-
-impl VariableValueContract {
-    pub fn new(data_type: DataType) -> Self {
-        Self { data_type }
-    }
-
-    pub fn data_type(&self) -> &DataType {
-        &self.data_type
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceCatalogFingerprint([u8; 32]);
 
@@ -127,7 +112,6 @@ impl ResourceCatalogFingerprint {
 #[derive(Debug, Clone)]
 pub struct ResourceCatalogSnapshot {
     functions: Arc<BTreeMap<GraphResourcePath, FunctionCatalogEntry>>,
-    variables: Arc<BTreeMap<GraphResourceId, VariableValueContract>>,
     databases: Arc<BTreeMap<GraphResourceId, DataSchema>>,
     fingerprint: ResourceCatalogFingerprint,
     reads: Option<Arc<Mutex<BTreeSet<GraphDependencyKey>>>>,
@@ -136,13 +120,11 @@ pub struct ResourceCatalogSnapshot {
 impl ResourceCatalogSnapshot {
     pub fn new(
         functions: BTreeMap<GraphResourcePath, FunctionCatalogEntry>,
-        variables: BTreeMap<GraphResourceId, VariableValueContract>,
         databases: BTreeMap<GraphResourceId, DataSchema>,
         fingerprint: ResourceCatalogFingerprint,
     ) -> Self {
         Self {
             functions: Arc::new(functions),
-            variables: Arc::new(variables),
             databases: Arc::new(databases),
             fingerprint,
             reads: None,
@@ -173,11 +155,6 @@ impl ResourceCatalogSnapshot {
     ) -> Option<&yss_graph_document::GraphDocument> {
         self.record(GraphDependencyKey::FunctionBody(path.as_str().into()));
         self.functions.get(path)?.document.as_deref()
-    }
-
-    pub fn variable_contract(&self, resource: &GraphResourceId) -> Option<&VariableValueContract> {
-        self.record(GraphDependencyKey::Variable(resource.as_str().into()));
-        self.variables.get(resource)
     }
 
     pub fn database_schema(&self, resource: &GraphResourceId) -> Option<&DataSchema> {
@@ -231,12 +208,6 @@ impl ResourceCatalogSnapshot {
                     &(parameters, entry.signature.result()),
                 )
             }
-            GraphDependencyKey::Variable(identity) => yss_canonical_hash::hash_canonical(
-                "yssbi.variable-contract.v1",
-                self.variables
-                    .get(&GraphResourceId::new(identity.clone()))?
-                    .data_type(),
-            ),
             GraphDependencyKey::Database(identity) => yss_canonical_hash::hash_canonical(
                 "yssbi.database-schema.v1",
                 self.databases
@@ -274,7 +245,7 @@ impl ResourceCatalogSnapshot {
 mod tests {
     use super::{
         FunctionCatalogEntry, FunctionParameterContract, FunctionSignature, GraphResourceId,
-        ResourceCatalogFingerprint, ResourceCatalogSnapshot, VariableValueContract,
+        ResourceCatalogFingerprint, ResourceCatalogSnapshot,
     };
     use crate::{ColumnSchema, DataSchema};
     use std::collections::BTreeMap;
@@ -283,27 +254,42 @@ mod tests {
 
     #[test]
     fn dependency_observations_ignore_unread_resources_and_recheck_absence() {
-        let a = GraphResourceId::new("variables/a");
-        let b = GraphResourceId::new("variables/b");
-        let missing = GraphResourceId::new("variables/missing");
+        let a = GraphResourceId::new("databases/a");
+        let b = GraphResourceId::new("databases/b");
+        let missing = GraphResourceId::new("databases/missing");
         let catalog = |a_type, b_type, include_missing| {
-            let mut variables = BTreeMap::from([
-                (a.clone(), VariableValueContract::new(a_type)),
-                (b.clone(), VariableValueContract::new(b_type)),
+            let mut databases = BTreeMap::from([
+                (
+                    a.clone(),
+                    DataSchema {
+                        columns: vec![ColumnSchema {
+                            name: "value".into(),
+                            data_type: a_type,
+                        }],
+                    },
+                ),
+                (
+                    b.clone(),
+                    DataSchema {
+                        columns: vec![ColumnSchema {
+                            name: "value".into(),
+                            data_type: b_type,
+                        }],
+                    },
+                ),
             ]);
             if include_missing {
-                variables.insert(missing.clone(), VariableValueContract::new(DataType::Int64));
+                databases.insert(missing.clone(), DataSchema { columns: vec![] });
             }
             ResourceCatalogSnapshot::new(
                 BTreeMap::new(),
-                variables,
-                BTreeMap::new(),
+                databases,
                 ResourceCatalogFingerprint::from_bytes([9; 32]),
             )
         };
         let tracked = catalog(DataType::Int64, DataType::Int64, false).tracked();
-        assert!(tracked.variable_contract(&a).is_some());
-        assert!(tracked.variable_contract(&missing).is_none());
+        assert!(tracked.database_schema(&a).is_some());
+        assert!(tracked.database_schema(&missing).is_none());
         let dependencies = tracked.dependencies();
         assert_eq!(dependencies.entries().len(), 2);
         assert!(
@@ -320,7 +306,6 @@ mod tests {
     #[test]
     fn resource_catalog_exposes_only_graph_compile_contracts() {
         let function_path = GraphResourcePath::new("functions/Forecast.yssbi-function").unwrap();
-        let variable_id = GraphResourceId::new("variables/forecast-input");
         let database_id = GraphResourceId::new("databases/forecast-source");
         let function = FunctionCatalogEntry::new(FunctionSignature::new(
             vec![FunctionParameterContract::new(
@@ -330,7 +315,6 @@ mod tests {
             )],
             Some(DataType::Float64),
         ));
-        let variable = VariableValueContract::new(DataType::Float64);
         let database = DataSchema {
             columns: vec![ColumnSchema {
                 name: "sales".to_owned(),
@@ -340,7 +324,6 @@ mod tests {
         let fingerprint = ResourceCatalogFingerprint::from_bytes([7; 32]);
         let catalog = ResourceCatalogSnapshot::new(
             BTreeMap::from([(function_path.clone(), function.clone())]),
-            BTreeMap::from([(variable_id.clone(), variable.clone())]),
             BTreeMap::from([(database_id.clone(), database.clone())]),
             fingerprint,
         );
@@ -349,7 +332,6 @@ mod tests {
             catalog.function_signature(&function_path),
             Some(function.signature())
         );
-        assert_eq!(catalog.variable_contract(&variable_id), Some(&variable));
         assert_eq!(catalog.database_schema(&database_id), Some(&database));
         assert_eq!(catalog.fingerprint(), &fingerprint);
     }

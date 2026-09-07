@@ -66,7 +66,6 @@ yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sql-source = { path = "../yss-sql-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-tabular-io = { path = "../yss-tabular-io" }
-yss-variable-contract = { path = "../yss-variable-contract" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]

@@ -82,6 +82,7 @@ impl GraphParameterHandle {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphParameterValue {
+    Constant(std::sync::Arc<yss_graph_document::GraphConstant>),
     Scalar(GraphParameterScalar),
     Resource(Box<str>),
     List(Box<[GraphParameterValue]>),

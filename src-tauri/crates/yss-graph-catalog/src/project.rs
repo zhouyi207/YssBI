@@ -49,11 +49,11 @@ pub(super) fn register(
             &["调用", "执行", "函数"][..],
         ),
         (
-            "yssbi.project.variable.get",
-            "Get Variable",
-            "读取变量",
-            &["get", "read", "variable"][..],
-            &["读取", "获取", "变量"][..],
+            "yssbi.constant.get",
+            "Get Constant",
+            "读取常量",
+            &["get", "read", "constant"][..],
+            &["读取", "获取", "常量"][..],
         ),
     ] {
         add_node_messages(messages, id, en, zh, aliases, zh_aliases);
@@ -72,7 +72,7 @@ pub(super) fn register(
             Arc::new(function_call_protocol()?),
             StructuralNodeRole::Call,
         ),
-        leaf(variable_get_protocol()?, "project.variable.get"),
+        leaf(constant_get_protocol()?, "constant.get"),
     ]);
     add_messages(messages);
     Ok(())
@@ -137,10 +137,10 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     )
 }
 
-fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
+fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     let generic = sid("value", TypeParameterId::new)?;
     let mut protocol = protocol(
-        "yssbi.project.variable.get",
+        "yssbi.constant.get",
         vec![data_port(
             "value",
             "Value",
@@ -149,13 +149,25 @@ fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
             PortCardinality::Declared,
         )?],
         vec![generic],
-        vec![resource_parameter("variable")?],
+        vec![ParameterSpec {
+            key: sid("constant", ParameterKey::new)?,
+            title_key: iid("parameters.constant.title")?,
+            description_key: Some(iid("parameters.constant.description")?),
+            value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)?),
+            default_value: None,
+            constraints: vec![ParameterConstraint::Required],
+            editor: ParameterEditorSpec::GraphConstant,
+            presentation: ParameterPresentation::DetailPanel,
+        }],
         NodeScope::Any,
         None,
         pure(),
     )?;
-    protocol.typing = NodeTypingSpec::VariableOutput {
-        parameter: sid("variable", ParameterKey::new)?,
+    protocol.catalog.category_id = sid("constants", NodeCategoryId::new)?;
+    protocol.catalog.icon_id = sid("builtin.constants", IconId::new)?;
+    protocol.execution.determinism = Determinism::Deterministic;
+    protocol.typing = NodeTypingSpec::ConstantOutput {
+        parameter: sid("constant", ParameterKey::new)?,
         output: sid("value", PortKey::new)?,
     };
     Ok(protocol)
@@ -187,10 +199,6 @@ fn protocol(
             "yssbi.project.function.call" => NodeInstanceDisplaySpec::ResourceParameter {
                 parameter: sid("target", ParameterKey::new)?,
                 kind: ResourceDisplayKind::Function,
-            },
-            "yssbi.project.variable.get" => NodeInstanceDisplaySpec::ResourceParameter {
-                parameter: sid("variable", ParameterKey::new)?,
-                kind: ResourceDisplayKind::Variable,
             },
             _ => NodeInstanceDisplaySpec::Static,
         },
@@ -247,7 +255,6 @@ fn data_port(
 fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     let kind = match key {
         "target" | "function" => ResourceDisplayKind::Function,
-        "variable" => ResourceDisplayKind::Variable,
         _ => {
             return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
                 context: "project resource parameter",
@@ -296,11 +303,11 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "Function resource to invoke.",
             "要调用的函数资源。",
         ),
-        ("parameters.variable.title", "Variable", "变量"),
+        ("parameters.constant.title", "Constant", "常量"),
         (
-            "parameters.variable.description",
-            "Bound project variable resource.",
-            "绑定的项目变量资源。",
+            "parameters.constant.description",
+            "Immutable value defined in this graph's Details panel.",
+            "在当前图详情面板中定义的常量值。",
         ),
     ] {
         out.push(("en-US", key, Text(en)));

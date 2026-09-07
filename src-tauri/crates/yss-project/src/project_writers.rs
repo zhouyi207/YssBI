@@ -3,28 +3,21 @@ use crate::{GraphResourceFile, ProjectSession, ProjectState, ProjectTransactionC
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
-use yss_data_contract::{DataType, DataValue};
 use yss_graph_document::GraphResourcePath;
 use yss_project_filesystem::{
     ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
-use yss_project_history::{
-    ChartResourceKey, FunctionResourceKey, ResourceKey, VariableResourceKey,
-};
+use yss_project_history::{ChartResourceKey, FunctionResourceKey, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_layout::{CHART_EXTENSION, PROJECT_METADATA_FILE};
 use yss_project_model::{ProjectData, ProjectDataPatch};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
-use yss_variable_contract::{VariableId, VariableInstance, VariableScope};
-use yss_variable_value::default_value_for;
 
 #[path = "project_writers/charts.rs"]
 mod charts;
 #[path = "project_writers/graph.rs"]
 mod graph;
-#[path = "project_writers/variables.rs"]
-mod variables;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectSaveResult {
@@ -56,42 +49,6 @@ impl ProjectSaveResult {
             self.history,
         )
     }
-}
-
-pub struct VariableMutationResult {
-    variable: VariableInstance,
-    mutation: ProjectResourceMutationFacts,
-}
-
-pub struct CreateVariableRequest {
-    pub project_instance_id: ProjectInstanceId,
-    pub name: String,
-    pub data_type: DataType,
-    pub data_value: DataValue,
-    pub description: String,
-    pub scope: VariableScope,
-    pub tags: Vec<String>,
-    pub expected_collection_revision: u64,
-    pub operation_id: OperationId,
-}
-
-pub struct UpdateVariableRequest {
-    pub project_instance_id: ProjectInstanceId,
-    pub id: VariableId,
-    pub name: Option<String>,
-    pub data_type: Option<DataType>,
-    pub data_value: Option<DataValue>,
-    pub description: Option<String>,
-    pub tags: Option<Vec<String>>,
-    pub expected_revision: ResourceRevision,
-    pub operation_id: OperationId,
-}
-
-pub struct DeleteVariableRequest {
-    pub project_instance_id: ProjectInstanceId,
-    pub id: VariableId,
-    pub expected_revision: ResourceRevision,
-    pub operation_id: OperationId,
 }
 
 #[derive(Debug, Clone)]
@@ -173,12 +130,6 @@ pub struct ProjectResourceMutationParts {
     pub deltas: Box<[yss_project_history::ResourceDeltaEvent]>,
     pub projection_status: ProjectProjectionStatus,
     pub history: ProjectHistoryStatus,
-}
-
-impl VariableMutationResult {
-    pub fn into_parts(self) -> (VariableInstance, ProjectResourceMutationFacts) {
-        (self.variable, self.mutation)
-    }
 }
 
 fn chart_document_state(document: &ChartDocument) -> yss_project_history::ChartDocumentState {
@@ -279,98 +230,7 @@ struct WriterSnapshot {
     session: ProjectSession,
     data: ProjectData,
     graph_resource_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-    variable_revisions: std::collections::HashMap<
-        yss_variable_contract::VariableId,
-        crate::project_state::VariableRevisionEntry,
-    >,
     authority_generation: u64,
-}
-
-enum GlobalVariableMutation {
-    Create {
-        scope: VariableScope,
-        name: String,
-        data_type: DataType,
-        data_value: DataValue,
-        description: String,
-        tags: Vec<String>,
-    },
-    Update {
-        id: VariableId,
-        expected_revision: ResourceRevision,
-        name: Option<String>,
-        data_type: Option<DataType>,
-        data_value: Option<DataValue>,
-        description: Option<String>,
-        tags: Option<Vec<String>>,
-    },
-    Delete {
-        id: VariableId,
-        expected_revision: ResourceRevision,
-    },
-}
-
-enum StagedGlobalVariableMutation {
-    Create {
-        variable: VariableInstance,
-        history_patch: yss_project_history::ResourcePatch,
-    },
-    Update {
-        variable: VariableInstance,
-        expected_revision: ResourceRevision,
-        history_patch: yss_project_history::ResourcePatch,
-    },
-    Delete {
-        variable: VariableInstance,
-        expected_revision: ResourceRevision,
-        history_patch: yss_project_history::ResourcePatch,
-    },
-}
-
-impl StagedGlobalVariableMutation {
-    fn variable(&self) -> &VariableInstance {
-        match self {
-            Self::Create { variable, .. }
-            | Self::Update { variable, .. }
-            | Self::Delete { variable, .. } => variable,
-        }
-    }
-
-    fn expected_revision(&self) -> Option<ResourceRevision> {
-        match self {
-            Self::Create { .. } => None,
-            Self::Update {
-                expected_revision, ..
-            }
-            | Self::Delete {
-                expected_revision, ..
-            } => Some(*expected_revision),
-        }
-    }
-
-    fn history_patch(&self) -> &yss_project_history::ResourcePatch {
-        match self {
-            Self::Create { history_patch, .. }
-            | Self::Update { history_patch, .. }
-            | Self::Delete { history_patch, .. } => history_patch,
-        }
-    }
-
-    fn is_create(&self) -> bool {
-        matches!(self, Self::Create { .. })
-    }
-
-    fn is_delete(&self) -> bool {
-        matches!(self, Self::Delete { .. })
-    }
-
-    fn into_variable(self) -> VariableInstance {
-        match self {
-            Self::Create { variable, .. }
-            | Self::Update { variable, .. }
-            | Self::Delete { variable, .. } => variable,
-        }
-    }
 }
 
 struct CommittedProjectSave {
@@ -400,10 +260,6 @@ fn graph_key(path: &GraphResourcePath) -> ResourceKey {
 
 fn function_key(path: &GraphResourcePath) -> ResourceKey {
     ResourceKey::Function(FunctionResourceKey(path.as_str().into()))
-}
-
-fn variable_key(id: &yss_variable_contract::VariableId) -> ResourceKey {
-    ResourceKey::Variable(VariableResourceKey(format!("variables/{id}").into()))
 }
 
 fn chart_key(path: &ChartResourcePath) -> ResourceKey {
@@ -440,9 +296,6 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
                 .map(|_| ())
                 .map_err(|error| error.to_string())
         }
-        Some("yssbi-vars") => serde_json::from_slice::<crate::GlobalVariablesDocument>(contents)
-            .map(|_| ())
-            .map_err(|error| error.to_string()),
         Some(CHART_EXTENSION) => serde_json::from_slice::<ChartDocument>(contents)
             .map(|_| ())
             .map_err(|error| error.to_string()),
@@ -477,12 +330,10 @@ impl ProjectState {
         }
         let data = self.project_data.read().unwrap().clone();
         let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
-        let variable_revisions = self.variable_revisions.read().unwrap().clone();
         let snapshot = WriterSnapshot {
             session,
             data,
             graph_resource_revisions,
-            variable_revisions,
             authority_generation: publication.authority_generation(),
         };
         drop(publication);
@@ -505,13 +356,11 @@ impl ProjectState {
         }
         let data = self.project_data.read().unwrap();
         let graph_resource_revisions = self.graph_resource_revisions.read().unwrap();
-        let variable_revisions = self.variable_revisions.read().unwrap();
         let chart_revisions = self.chart_revisions.read().unwrap();
         super::project_state::validate_context_revisions(
             context,
             &data,
             &graph_resource_revisions,
-            &variable_revisions,
             &chart_revisions,
         )
     }

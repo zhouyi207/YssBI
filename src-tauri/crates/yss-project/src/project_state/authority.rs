@@ -20,45 +20,9 @@ impl ProjectAuthoritySnapshot {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum VariablePresence {
-    Present,
-    Deleted,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct VariableRevisionEntry {
-    pub(crate) revision: yss_project_identity::ResourceRevision,
-    pub(crate) presence: VariablePresence,
-}
-
-impl VariableRevisionEntry {
-    pub(crate) const fn present(revision: yss_project_identity::ResourceRevision) -> Self {
-        Self {
-            revision,
-            presence: VariablePresence::Present,
-        }
-    }
-
-    pub(crate) const fn deleted(revision: yss_project_identity::ResourceRevision) -> Self {
-        Self {
-            revision,
-            presence: VariablePresence::Deleted,
-        }
-    }
-
-    pub(crate) const fn is_present(self) -> bool {
-        matches!(self.presence, VariablePresence::Present)
-    }
-}
 pub(crate) struct MutationPublication {
     pub(crate) project_instance_id: String,
     pub(crate) resource_revision: u64,
-    pub(crate) authority_generation: u64,
-}
-
-pub(crate) struct VariableStagingBasis {
-    pub(crate) session: ProjectSession,
     pub(crate) authority_generation: u64,
 }
 
@@ -128,14 +92,6 @@ impl MutationPublication {
         self.resource_revision = prepared.next_resource_revision;
         self.authority_generation = prepared.next_authority_generation;
         prepared.next_resource_revision
-    }
-
-    #[cfg(test)]
-    pub(crate) fn advance_authority_generation(&mut self) {
-        let prepared = self
-            .prepare_authority_generation()
-            .expect("test authority generation is available");
-        self.commit_prepared(prepared);
     }
 
     pub(crate) fn reset_to(&mut self, project_instance_id: String) -> String {

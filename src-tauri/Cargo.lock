@@ -9352,7 +9352,6 @@ dependencies = [
  "yss-statistical-harness",
  "yss-tabular-contract",
  "yss-tracing",
- "yss-variable-contract",
  "yss-window-state",
 ]
 
@@ -9416,7 +9415,6 @@ dependencies = [
  "yss-sql-source",
  "yss-tabular-contract",
  "yss-tabular-io",
- "yss-variable-contract",
 ]
 
 [[package]]
@@ -9661,6 +9659,7 @@ dependencies = [
  "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-type-mapping",
+ "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9716,11 +9715,14 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.20",
  "uuid",
  "yss-canonical-hash",
+ "yss-data-contract",
  "yss-graph-protocol",
  "yss-project-layout",
  "yss-resource-naming",
+ "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9747,7 +9749,6 @@ dependencies = [
  "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-type-mapping",
- "yss-variable-contract",
 ]
 
 [[package]]
@@ -9878,8 +9879,6 @@ dependencies = [
  "yss-project-operation",
  "yss-resource-lifecycle",
  "yss-resource-naming",
- "yss-variable-contract",
- "yss-variable-value",
 ]
 
 [[package]]
@@ -9956,7 +9955,6 @@ dependencies = [
  "yss-graph-document",
  "yss-project-history",
  "yss-project-identity",
- "yss-variable-contract",
 ]
 
 [[package]]
@@ -10176,30 +10174,6 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "yss-variable-contract"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "yss-data-contract",
- "yss-tabular-contract",
-]
-
-[[package]]
-name = "yss-variable-value"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "yss-data-contract",
- "yss-tabular-contract",
- "yss-variable-contract",
 ]
 
 [[package]]

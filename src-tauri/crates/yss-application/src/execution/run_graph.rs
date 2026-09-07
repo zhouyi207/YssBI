@@ -16,9 +16,8 @@ use yss_database_runtime::session_api::catalog_snapshot;
 use yss_execution::error::RunPhase;
 use yss_execution::package_preparation::PackagePreparationError;
 use yss_execution::plan::{
-    CanonicalDecimalError, InvalidPlanIdentity, InvalidPlanParameterId, PlanExecutionDemand,
-    PlanGraphId, PlanOutputRef, PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId,
-    PlanResourceObservedState, PlanResourceVersion,
+    InvalidPlanIdentity, PlanExecutionDemand, PlanGraphId, PlanOutputRef, PlanProjectSessionId,
+    PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState, PlanResourceVersion,
 };
 use yss_execution::run_registry::{RunId, RunState};
 use yss_execution::state::{
@@ -203,8 +202,8 @@ pub enum ExecutionApplicationError {
     ProjectPreparation(#[source] ProjectExecutionPreparationError),
     #[error("project snapshot failed")]
     ProjectSnapshot(#[source] ProjectFilesystemError),
-    #[error("project variable binding failed")]
-    VariableBindings(#[source] VariableBindingError),
+    #[error("project resource binding failed")]
+    ResourceBindings(#[source] ResourceBindingError),
     #[error("project facts could not be captured for execution")]
     ProjectFacts(#[source] crate::catalog_query::ProjectCatalogReadError),
     #[error("database catalog snapshot failed")]
@@ -232,23 +231,11 @@ pub enum ExecutionApplicationError {
 }
 
 #[derive(Debug, Error)]
-pub enum VariableBindingError {
-    #[error("variable resource identity is invalid")]
-    InvalidResource { resource: ProjectResourceId },
-    #[error("variable resource has no present value")]
-    MissingValue { resource: ProjectResourceId },
-    #[error("present variable resource has no version")]
+pub enum ResourceBindingError {
+    #[error("present resource has no version")]
     MissingVersion { resource: ProjectResourceId },
-    #[error("variable value identity does not match its resource")]
-    IdentityMismatch { resource: ProjectResourceId },
-    #[error("project value cannot be represented by Execution")]
-    Value(#[source] CanonicalDecimalError),
-    #[error("project value cannot be represented by the runtime")]
-    RuntimeValue(#[source] yss_execution::value::RuntimeValueError),
     #[error("project value contains an invalid Execution identity")]
     Identity(#[source] InvalidPlanIdentity),
-    #[error("project value contains an invalid record field")]
-    Field(#[source] InvalidPlanParameterId),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -348,10 +335,9 @@ where
         .map_err(ExecutionApplicationError::PackagePreparation)?;
     let bindings = map_project_resource_facts(
         captured.project_session_id().as_str(),
-        &project_data,
         prepared_project.resources().grants(),
     )
-    .map_err(ExecutionApplicationError::VariableBindings)?;
+    .map_err(ExecutionApplicationError::ResourceBindings)?;
     drop(project_data);
 
     check_control(&request)?;
@@ -657,9 +643,7 @@ fn collect_resource_requirements(
 ) -> Result<(), ExecutionApplicationError> {
     match value {
         serde_json::Value::String(value) => {
-            let kind = if value.starts_with("variables/") {
-                ProjectResourceKind::Variable
-            } else if value.starts_with("databases/") {
+            let kind = if value.starts_with("databases/") {
                 ProjectResourceKind::DataFrame
             } else if value.starts_with("events/") || value.starts_with("functions/") {
                 ProjectResourceKind::File
@@ -668,7 +652,7 @@ fn collect_resource_requirements(
             };
             let resource =
                 ProjectResourceId::new(value.clone().into_boxed_str()).map_err(|_| {
-                    ExecutionApplicationError::VariableBindings(VariableBindingError::Identity(
+                    ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
                         InvalidPlanIdentity::Empty,
                     ))
                 })?;
@@ -703,7 +687,7 @@ fn plan_basis(
     for grant in grants {
         let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
             .map_err(|_| {
-            ExecutionApplicationError::VariableBindings(VariableBindingError::Identity(
+            ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
                 InvalidPlanIdentity::Empty,
             ))
         })?;
@@ -718,8 +702,8 @@ fn plan_basis(
             match grant.presence() {
                 ProjectResourcePresence::Present => {
                     PlanResourceObservedState::Present(version.ok_or_else(|| {
-                        ExecutionApplicationError::VariableBindings(
-                            VariableBindingError::MissingVersion {
+                        ExecutionApplicationError::ResourceBindings(
+                            ResourceBindingError::MissingVersion {
                                 resource: grant.resource().clone(),
                             },
                         )
@@ -739,21 +723,19 @@ fn plan_basis(
 
 fn map_project_resource_facts(
     project_session_id: &str,
-    project_data: &ProjectData,
     grants: &[ProjectResourceGrant],
-) -> Result<yss_execution::resource_preparation::RunResourceBindings, VariableBindingError> {
+) -> Result<yss_execution::resource_preparation::RunResourceBindings, ResourceBindingError> {
     let mut requirements = Vec::new();
     let mut bindings = Vec::new();
     for grant in grants {
         let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
-            .map_err(|_| VariableBindingError::Identity(InvalidPlanIdentity::Empty))?;
+            .map_err(|_| ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
         let kind = match grant.kind() {
             ProjectResourceKind::DatabaseConnection => {
                 yss_execution::plan::ResourceKind::DatabaseConnection
             }
             ProjectResourceKind::DataFrame => yss_execution::plan::ResourceKind::DataFrame,
             ProjectResourceKind::File => yss_execution::plan::ResourceKind::File,
-            ProjectResourceKind::Variable => yss_execution::plan::ResourceKind::Variable,
             ProjectResourceKind::Plot => yss_execution::plan::ResourceKind::Plot,
         };
         let access = match grant.access() {
@@ -772,26 +754,10 @@ fn map_project_resource_facts(
         }
         let version = grant
             .version()
-            .ok_or_else(|| VariableBindingError::MissingVersion {
+            .ok_or_else(|| ResourceBindingError::MissingVersion {
                 resource: grant.resource().clone(),
             })?;
-        let value = if grant.kind() == ProjectResourceKind::Variable {
-            let variable_id = variable_id_from_resource(grant.resource())?;
-            let variable = project_data.variables.get(&variable_id).ok_or_else(|| {
-                VariableBindingError::MissingValue {
-                    resource: grant.resource().clone(),
-                }
-            })?;
-            if variable.id != variable_id {
-                return Err(VariableBindingError::IdentityMismatch {
-                    resource: grant.resource().clone(),
-                });
-            }
-            yss_execution::value::RuntimeValue::try_from(&variable.data_value)
-                .map_err(VariableBindingError::RuntimeValue)?
-        } else {
-            yss_execution::value::RuntimeValue::Resource(resource.as_str().into())
-        };
+        let value = yss_execution::value::RuntimeValue::Resource(resource.as_str().into());
         bindings.push(
             yss_execution::resource_preparation::RunResourceBinding::new(
                 requirement,
@@ -807,23 +773,6 @@ fn map_project_resource_facts(
             bindings,
         ),
     )
-}
-
-fn variable_id_from_resource(
-    resource: &ProjectResourceId,
-) -> Result<yss_variable_contract::VariableId, VariableBindingError> {
-    let value = resource
-        .as_str()
-        .strip_prefix("variables/")
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| VariableBindingError::InvalidResource {
-            resource: resource.clone(),
-        })?;
-    yss_variable_contract::VariableId::try_from(value).map_err(|_| {
-        VariableBindingError::InvalidResource {
-            resource: resource.clone(),
-        }
-    })
 }
 
 #[cfg(test)]
