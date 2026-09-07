@@ -139,7 +139,7 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
 
-OLS Fit/Summary 从节点参数读取配置，通过 `ScientificBackend::ols` 和 `yss-execution-sci-adapter` 调用 SCI runtime，支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。计算使用已物化的数值序列；当前接入不包含数据库/序列 handle 的物化、Cluster VCE、WLS 或其他统计模型的执行 kernel。配置编辑、编译与这些尚未接入的计算能力是独立边界。
+OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。计算使用已物化的数值序列；当前接入不包含数据库/序列 handle 的物化、Cluster VCE、WLS 或其他统计模型的执行 kernel。配置编辑、编译与这些尚未接入的计算能力是独立边界。
 
 ## 6. Results
 

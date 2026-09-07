@@ -110,7 +110,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-api` README](../../src-tauri/crates/yss-api/README.md#error-contract) 维护。
 
-Graph mutation DTO 可映射 `SetConfiguration`；SCI backend adapter 可使用 OLS request/result/covariance、SCI 的 OLS 配置和计算/报告入口。这些 capability 逐一登记 canonical symbol，不开放整个 Execution 或 SCI namespace；行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
+Graph mutation DTO 可映射 `SetConfiguration`。科学计算端口和 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 service 实现按 SCI Core 分类，依赖中性契约与模型。Composition root 只获 runtime 构造器的精确调用权限；Execution 不依赖 SCI runtime 或模型实现。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
 ## 6. Changing the architecture policy
 

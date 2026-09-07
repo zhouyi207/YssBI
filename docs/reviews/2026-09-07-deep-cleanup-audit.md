@@ -141,7 +141,7 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 
 **F12：过时描述仍在引导维护者。**
 
-[VECComponent.tsx](../../src/modules/results/internal/ui/info/VECComponent.tsx#L275) 的空结果分支提示“VEC 协整估计尚未实现”。但 [vec/estimate.rs](../../src-tauri/crates/yss-sci/src/ts/vec/estimate.rs#L25) 已调用 Johansen stage，且 [node_statistics.rs](../../src-tauri/crates/yss-sci-runtime/src/api/node_statistics.rs#L894) 已接入 `vec_estimate`。建议删除旧实现状态判断，按真实空数据/失败状态表达；这不等于宣称所有 VEC Graph kernel 已接通。
+[VECComponent.tsx](../../src/modules/results/internal/ui/info/VECComponent.tsx#L275) 的空结果分支提示“VEC 协整估计尚未实现”。但 [vec/estimate.rs](../../src-tauri/crates/yss-sci/src/ts/vec/estimate.rs#L25) 已调用 Johansen stage，且 [node_statistics.rs](../../src-tauri/crates/yss-sci-runtime/src/time_series/models.rs) 已接入 `vec_estimate`。建议删除旧实现状态判断，按真实空数据/失败状态表达；这不等于宣称所有 VEC Graph kernel 已接通。
 
 初始架构检查发现 Module Map 仍列出已删除的 `src/modules/plugins`，导致两项文档测试失败。本次已用 `pnpm docs:module-map` 重新生成，仅删除该过期行。`yss-application` README 把已经存在的 yss-api 适配层写成未来工作，本次同步纠正这句文档。业务代码中的遗留项留在清单中，未批量改写。
 

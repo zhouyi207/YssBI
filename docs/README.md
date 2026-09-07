@@ -33,6 +33,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
+- [SCI numerical models](../src-tauri/crates/yss-sci/README.md)
 - [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
 - [Linear algebra backend boundary](../src-tauri/crates/yss-linalg/README.md)
 - [Julia Bayes worker protocol](../src-tauri/julia/README.md)
@@ -57,6 +58,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 - [Version history](version/README.md)
 - [2026-09-07 深度清理审计](reviews/2026-09-07-deep-cleanup-audit.md)：该次源码检查、复现证据和清理建议的快照。
+- [2026-09-07 Tolerance 分析](reviews/2026-09-07-tolerance-analysis.md)：删除全局近似比较配置后的取舍、数值问题与后续改造边界。
 
 ## 文档状态
 

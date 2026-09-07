@@ -53,6 +53,8 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 设置页提供 AI、计算、外观和配色。客户端持久化 AI、主题和外观偏好；计算配置由 Rust settings service 管理。图文档通过显式 Save 提交，设置页不声明未接入的自动保存、网格或编辑器布局选项。
 
+全局近似比较容差已移除，计算设置当前仅保存缺失值偏好。设置存储读取 v1 时丢弃废弃的 `numeric` 字段、保留其他设置与 revision，下次保存写入 v2；当前 IPC 和 v2 文件仍使用严格字段契约。现有算法的判秩、收敛和数值保护阈值由各算法管理。Graph OLS 当前固定采用 Reject，尚未消费全局缺失值偏好；相关数值与配置后续工作见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
+
 变量增删改通过同一个 resource publication 协调器更新变量与资源 revision；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
@@ -159,18 +161,21 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 
 数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、窗口状态和 Julia worker assets 共用 `yss-file-replace` 的平台文件替换操作；临时文件、内容同步、会话重验和失败清理由各调用方负责。
 
-科学计算保持 backend-neutral contract：
+科学计算使用独立的中性契约，运行时实现由 composition root 注入：
 
 ```text
-Application / Execution scientific port
-  → yss-sci-contract
-      → yss-sci-runtime → yss-sci algorithms → yss-linalg → private faer backend
-      → Bayes worker port → Julia adapter
+Application / Execution → yss-sci-contract
+yss-sci-runtime implements ScientificBackend
+  → yss-sci algorithms → yss-linalg → private faer backend
+yss-sci algorithms → shared model options/results in yss-sci-contract
+Bayes worker port → Julia adapter
 ```
 
 Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 各有独立 owner，Application 只编排它们，不让 worker detail 泄漏到 Graph kernel 或 IPC command。
 
 [`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 隔离线性代数后端，对 SCI 和 runtime 的条件数诊断暴露 `ndarray` 数据、分解对象和稳定错误类型。`faer` 只在该 crate 的私有 backend 中使用；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。
+
+[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；Polars 表格准备位于 `runtime::data`，核心算法不再依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。共享端口与实现之间不再保留额外的 Execution→SCI 适配 crate。
 
 ## 7. Statistical Harness
 
