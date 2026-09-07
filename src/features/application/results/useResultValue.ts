@@ -52,6 +52,7 @@ export function useResultValue(
       };
     }
 
+    const releasePayload = dependencies.coordinator.retainPayload(resultId);
     setLoading(true);
     void dependencies.coordinator
       .loadValue({ resultId })
@@ -64,7 +65,7 @@ export function useResultValue(
 
     return () => {
       mounted = false;
-      dependencies.coordinator.releasePayload(resultId);
+      releasePayload();
     };
   }, [dependencies.coordinator, resultId]);
 

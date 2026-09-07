@@ -76,13 +76,14 @@ export function usePagedResultRows(
     setPageIndex(0);
   }, [resultId, totalCount, safePageSize]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const releasePayload =
+      resultId === null ? undefined : dependencies.coordinator.retainPayload(resultId);
+    return () => {
       requestGeneration.current += 1;
-      if (resultId !== null) dependencies.coordinator.releasePayload(resultId);
-    },
-    [dependencies.coordinator, resultId],
-  );
+      releasePayload?.();
+    };
+  }, [dependencies.coordinator, resultId]);
 
   const loadPage = useCallback(
     async (nextPageIndex: number): Promise<ResultQueryOutcome> => {

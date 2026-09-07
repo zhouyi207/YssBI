@@ -46,7 +46,20 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
   const totalCount = payload.totalCount ?? payload.metadata?.length ?? 0;
   const paging = usePagedResultRows(payload.resultId, totalCount);
   return (
-    <ResultViewShell title={payload.title} meta={<span>Length: {totalCount}</span>}>
+    <ResultViewShell
+      title={payload.title}
+      toolbar={
+        <ResultPageToolbar
+          pageIndex={paging.pageIndex}
+          totalPages={paging.totalPages}
+          totalCount={paging.totalCount}
+          pageSize={paging.pageSize}
+          loading={paging.loading}
+          onPrevious={paging.goToPreviousPage}
+          onNext={paging.goToNextPage}
+        />
+      }
+    >
       {paging.error ? (
         <ResultReadError error={paging.error} />
       ) : (

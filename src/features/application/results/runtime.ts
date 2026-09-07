@@ -7,7 +7,7 @@ import { createBoundApplicationStore } from "@/features/core/state/applicationSt
 
 import { ResultService } from "@/services/result/resultService";
 import { toErrorReference } from "@/features/application/errorReference";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
 import {
@@ -157,7 +157,7 @@ export const resultQueryRead: ResultQueryReadCapability = {
 };
 
 export const resultQueryCoordinator = createResultQueryCoordinator({
-  readCurrentProjectInstanceId: () => useProjectIOStore.getState().projectInstanceId,
+  readCurrentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
   service: {
     getDescriptor: (resultId) => ResultService.getDescriptor(resultId),
     getValue: (resultId) => ResultService.getValue(resultId),
@@ -231,7 +231,7 @@ function publishCurrentResult(
 
 function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
   resultQueryCoordinator.resetProject();
-  const projectInstanceId = useProjectIOStore.getState().projectInstanceId;
+  const projectInstanceId = captureProjectLifecycleState().projectInstanceId;
   if (!projectInstanceId) return;
   const previousIds = requests.flatMap((request) => {
     const result = resultProjection.getState().pinResults[pinResultKey(request)];

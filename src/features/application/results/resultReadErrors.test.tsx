@@ -87,7 +87,11 @@ function createTestRuntime(): TestRuntime {
     readCurrentProjectInstanceId: () => projectInstanceId,
     service,
     publication: {
-      releasePayload: vi.fn(),
+      releasePayload: (resultId) => {
+        values.delete(resultId);
+        for (const key of pages.keys()) if (key.startsWith(`${resultId}:`)) pages.delete(key);
+        notify();
+      },
       publishDescriptor: () => undefined,
       publishValue: (_project, resultId, value) => {
         values.set(resultId, value);
@@ -153,6 +157,26 @@ describe("result read machine errors", () => {
       await flushAsyncWork();
     });
   }
+
+  it("retains shared payload until the final mounted consumer releases it", async () => {
+    runtime.service.getValue.mockResolvedValue({ kind: "value", value: 42 });
+    await render(
+      <div>
+        <ValueHarness key="a" />
+        <ValueHarness key="b" />
+      </div>,
+    );
+    expect(valueState?.value).toEqual({ kind: "value", value: 42 });
+    await render(
+      <div>
+        <ValueHarness key="b" />
+      </div>,
+    );
+    expect(valueState?.value).toEqual({ kind: "value", value: 42 });
+    expect(runtime.read.getValue("42")).toEqual({ kind: "value", value: 42 });
+    await render(null);
+    expect(runtime.read.getValue("42")).toBeNull();
+  });
 
   it("stores a stable value fallback for parser failures without parser prose", async () => {
     runtime.service.getValue.mockRejectedValueOnce(

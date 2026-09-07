@@ -34,7 +34,7 @@ export interface ResultQueryCoordinator {
   loadValue(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadPage(request: ResultPageRequest): Promise<ResultQueryOutcome>;
   loadPinResult(request: ResultPinRequest): Promise<ResultQueryOutcome>;
-  releasePayload(resultId: string): void;
+  retainPayload(resultId: string): () => void;
   resetProject(): void;
   resetResult(resultId: string): void;
 }
@@ -169,6 +169,7 @@ export function createResultQueryCoordinator(
 ): ResultQueryCoordinator {
   let projectEpoch = 0;
   const requests = new Map<string, RequestOwner>();
+  const payloadConsumers = new Map<string, Set<symbol>>();
 
   const captureProject = (): string | null => {
     try {
@@ -300,19 +301,29 @@ export function createResultQueryCoordinator(
     loadValue,
     loadPage,
     loadPinResult,
-    releasePayload: (resultId) => {
-      for (const [key, owner] of requests) {
-        if (
-          (owner.scope.kind === "value" || owner.scope.kind === "page") &&
-          owner.scope.resultId === resultId
-        )
-          requests.delete(key);
-      }
-      dependencies.publication.releasePayload(resultId);
+    retainPayload: (resultId) => {
+      const consumers = payloadConsumers.get(resultId) ?? new Set<symbol>();
+      const consumer = Symbol();
+      consumers.add(consumer);
+      payloadConsumers.set(resultId, consumers);
+      return () => {
+        if (!consumers.delete(consumer) || payloadConsumers.get(resultId) !== consumers) return;
+        if (consumers.size > 0) return;
+        payloadConsumers.delete(resultId);
+        for (const [key, owner] of requests) {
+          if (
+            (owner.scope.kind === "value" || owner.scope.kind === "page") &&
+            owner.scope.resultId === resultId
+          )
+            requests.delete(key);
+        }
+        dependencies.publication.releasePayload(resultId);
+      };
     },
     resetProject: () => {
       projectEpoch += 1;
       requests.clear();
+      payloadConsumers.clear();
     },
     resetResult: (resultId) => {
       for (const [key, owner] of requests) {

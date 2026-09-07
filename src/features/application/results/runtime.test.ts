@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResultDescriptor, ResultPage } from "@/shared/types/domain/result";
 import type { RunEventKind } from "@/shared/types/domain/runEvent";
 import { ResultService } from "@/services/result/resultService";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useExecutionStore } from "@/features/core/execution";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
@@ -55,7 +58,7 @@ beforeEach(() => {
   vi.restoreAllMocks();
   resetResultQueryProject();
   useExecutionStore.setState({ graphs: {} });
-  useProjectIOStore.setState({ projectInstanceId: "project-1" });
+  startProjectLifecycle("project-1");
   useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection);
 });
 
@@ -127,7 +130,8 @@ describe("current result lifecycle", () => {
     expect(resultQueryRead.getPinResult(request)).toBeNull();
   });
   it("keeps one page, releases closed-view payloads, and supports detached result reads", async () => {
-    useProjectIOStore.setState({ projectInstanceId: null });
+    clearProjectLifecycle();
+    const releasePayload = resultQueryCoordinator.retainPayload("1");
     vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(descriptor("1"));
     vi.spyOn(ResultService, "getPage").mockImplementation(async (id, offset, limit) => ({
       ...page(id),
@@ -149,7 +153,7 @@ describe("current result lifecycle", () => {
         }),
     );
     const pending = resultQueryCoordinator.loadPage(first);
-    resultQueryCoordinator.releasePayload("1");
+    releasePayload();
     expect(resultQueryRead.getPage(second)).toBeNull();
     expect(resultQueryRead.getDescriptor("1")?.resultId).toBe("1");
     settle(page("1"));
