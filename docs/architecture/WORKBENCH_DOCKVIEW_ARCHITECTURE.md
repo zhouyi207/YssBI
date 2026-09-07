@@ -163,6 +163,12 @@ operations：
 Application 负责组合这些能力；调用方不持有 raw root `DockviewApi`，也不自行实现
 singleton、Result upsert、home edge 或 reveal 规则。
 
+`getEdgeState` 只投影 edge identity、visibility 与 collapse，不为 UI 状态读取序列化布局。
+尺寸由 Dockview 持有，通过 `configureEdge` 的结果和显式 layout serialization 读取；临时布局
+事务从已捕获的 root snapshot 读取 edge size，避免为每个 edge 重复序列化。
+Root runtime 按实际 panel/edge instance 保留监听器，只在实例新增、移除或替换时重新绑定；
+普通布局变化仍同步发布 revision，事务的通知边界不变。
+
 ### 5.2 Internal seam
 
 `src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts` 保存 hydration、committed
@@ -283,9 +289,15 @@ Settings 图标位于状态栏最左侧、Activity Bar 正下方，通过独立�
 Activity 栏原设置入口的位置仅显示插件占位图标，尚无操作逻辑。
 
 Status Bar 通过 Workbench application hook 订阅 root Dockview 的 group 顺序、active panel、visibility
-与 collapsed state，不保存独立的选中或布局状态。图标入口随 main grid 的实时左边缘对齐，右侧信息随其右边缘对齐；Root host
-通过 application layout binding 测量 Dockview 的 middle column 来设置 chrome 偏移，侧栏缩放、折叠和恢复均会更新。Logs 内部的 domain tabs
-继续使用自己的样式。
+与 collapsed state，不保存独立的选中或布局状态。订阅投影只在图标顺序、选中或可操作状态改变时
+触发 React 更新；编辑器的 active 判定同样只订阅自身布尔结果，不因无关的 layout revision 重绘画布。
+图统计从当前 Graph projection 的节点数量和 connection 集合派生，仅 connection 集合替换时重新计数；
+视口文字更新按动画帧合并，只写入变化后的显示文本，切换 editor 时取消旧帧并刷新文字。
+
+图标入口随 main grid 的实时左边缘对齐，右侧信息随其右边缘对齐；Root host 通过 application layout
+binding 测量 Dockview 的 middle column 来设置 chrome 偏移，侧栏缩放、折叠和恢复均会更新。
+偏移 CSS variables 只写在 Status Bar footer 上，数值不变时不重复写入，避免向整个 editor 子树传播
+继承样式失效。Bottom header 调整与几何测量分帧执行。Logs 内部的 domain tabs 继续使用自己的样式。
 
 工作台 chrome 使用以下 token 层级。下表像素值只是 `src/app/App.css` 中的 current default，CSS token 才是调用方 contract：
 
