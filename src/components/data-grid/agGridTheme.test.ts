@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LIGHT_THEME } from "@/shared/config-default";
+import { DEFAULT_LIGHT_THEME } from "@/shared/theme/colorThemePresets";
 import { resolveThemeTokens } from "@/shared/theme/themeTokens";
 import { getAgGridThemeParams } from "./agGridTheme";
 

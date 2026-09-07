@@ -24,7 +24,5 @@ export function useApplicationSettings() {
   return {
     ...snapshot,
     load: loadSettings,
-    updateTheme: settingsUi.updateTheme,
-    updateAppearance: settingsUi.updateAppearance,
   };
 }

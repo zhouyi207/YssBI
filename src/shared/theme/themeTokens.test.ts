@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_DARK_THEME } from "@/shared/config-default";
+import { DEFAULT_DARK_THEME } from "./colorThemePresets";
 import { getPinPalette, getReadableForeground, resolveThemeTokens } from "./themeTokens";
 
 describe("theme token resolver", () => {
@@ -8,7 +8,7 @@ describe("theme token resolver", () => {
     expect(getReadableForeground("#f8fafc")).toBe("#0d1524");
   });
 
-  it("derives surfaces and interaction tokens from semantic settings", () => {
+  it("derives surfaces and interaction tokens from a theme palette", () => {
     const tokens = resolveThemeTokens({
       ...DEFAULT_DARK_THEME,
       workbenchBackground: "#080b12",
@@ -30,7 +30,7 @@ describe("theme token resolver", () => {
     expect(tokens.surfaceRaised).toContain("color-mix");
   });
 
-  it("falls back to the default accent when a setting contains an invalid color", () => {
+  it("falls back to the default accent when a palette contains an invalid color", () => {
     const tokens = resolveThemeTokens({ ...DEFAULT_DARK_THEME, accentColor: "not-a-color" });
 
     expect(tokens.accent).toBe(DEFAULT_DARK_THEME.accentColor);

@@ -1,9 +1,16 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_AI, DEFAULT_APPEARANCE, DEFAULT_THEME } from "@/shared/config-default";
-import { COLOR_THEME_PRESETS } from "@/features/application/settings/colorThemePresets";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_AI, DEFAULT_APPEARANCE } from "@/shared/config-default";
+import {
+  COLOR_THEME_PRESETS,
+  DEFAULT_DARK_THEME,
+  DEFAULT_LIGHT_THEME,
+  getRememberedColorTheme,
+} from "@/shared/theme/colorThemePresets";
 import { setClientSettingsPublisher, useSettingsStore } from "./settingsStore";
+import { settingsRead } from "./read";
+import { settingsUi } from "./ui";
 
 vi.mock("@/features/application/observability/appLogger", () => ({
   logger: {
@@ -16,39 +23,6 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
 const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";
-
-const THEME_KEYS = [
-  "accentColor",
-  "borderColor",
-  "foreground",
-  "gridColor",
-  "mode",
-  "mutedForeground",
-  "nodeBackground",
-  "selectionColor",
-  "sidebarBackground",
-  "workbenchBackground",
-];
-
-const REMOVED_THEME_KEYS = [
-  "execColor",
-  "int32Color",
-  "int64Color",
-  "float32Color",
-  "float64Color",
-  "boolColor",
-  "stringColor",
-  "dateColor",
-  "datetimeColor",
-  "categoricalColor",
-  "dataframeColor",
-  "dataseriesColor",
-  "objectColor",
-  "anyColor",
-  "oneofColor",
-  "arrayColor",
-  "structColor",
-];
 
 const APPEARANCE_KEYS = [
   "colorTheme",
@@ -63,38 +37,50 @@ const AI_KEYS = ["openAiApiKey", "openAiBaseUrl", "openAiModel"];
 
 describe("settingsStore appearance persistence", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     localStorage.clear();
     setClientSettingsPublisher(null);
     useSettingsStore.setState({
       ai: DEFAULT_AI,
-      theme: DEFAULT_THEME,
       appearance: DEFAULT_APPEARANCE,
       isLoading: true,
     });
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   it("deletes the legacy settings key without reading its theme values", async () => {
     localStorage.setItem(
       LEGACY_SETTINGS_STORAGE_KEY,
       JSON.stringify({
-        theme: { ...DEFAULT_THEME, accentColor: "#000000" },
+        theme: { accentColor: "#000000" },
       }),
     );
 
     await useSettingsStore.getState().load();
 
     expect(localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY)).toBeNull();
-    expect(useSettingsStore.getState().theme).toEqual(DEFAULT_THEME);
+    expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
   });
 
-  it("persists only the new semantic theme fields", async () => {
+  it("ignores stored color overrides and persists only the selected theme", async () => {
+    localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        theme: { ...DEFAULT_LIGHT_THEME, accentColor: "#ff0000" },
+        appearance: { colorTheme: "OLED Black" },
+      }),
+    );
     await useSettingsStore.getState().load();
+    expect(settingsRead.getSnapshot().theme).toEqual(COLOR_THEME_PRESETS["OLED Black"]);
     await useSettingsStore.getState().save();
 
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}") as {
-      theme?: Record<string, unknown>;
-    };
-    expect(Object.keys(saved.theme ?? {}).sort()).toEqual([...THEME_KEYS].sort());
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
+    expect(Object.keys(saved).sort()).toEqual(["ai", "appearance"]);
+    expect(saved.appearance.colorTheme).toBe("OLED Black");
   });
 
   it("persists the OpenAI model and API key settings", async () => {
@@ -124,10 +110,39 @@ describe("settingsStore appearance persistence", () => {
     expect(Object.keys(saved.ai ?? {}).sort()).toEqual([...AI_KEYS].sort());
   });
 
-  it("keeps built-in presets free of removed per-pin fields", () => {
-    for (const preset of Object.values(COLOR_THEME_PRESETS)) {
-      expect(Object.keys(preset)).toEqual(expect.arrayContaining(THEME_KEYS));
-      expect(Object.keys(preset).some((key) => REMOVED_THEME_KEYS.includes(key))).toBe(false);
+  it("switches and remembers presets atomically, reuses palettes, and resets via appearance", async () => {
+    const listener = vi.fn();
+    const unsubscribe = settingsRead.subscribe(listener);
+    try {
+      settingsUi.setTheme("OLED Black");
+      expect(listener).toHaveBeenCalledOnce();
+      expect(settingsRead.getSnapshot().theme).toBe(COLOR_THEME_PRESETS["OLED Black"]);
+      expect(settingsRead.getSnapshot().appearance.lastDarkColorTheme).toBe("OLED Black");
+
+      settingsUi.setTheme("Light Modern");
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_LIGHT_THEME);
+      const { lastLightColorTheme, lastDarkColorTheme } = settingsRead.getSnapshot().appearance;
+      expect(lastLightColorTheme).toBe("Light Modern");
+      settingsUi.setTheme(getRememberedColorTheme("dark", lastLightColorTheme, lastDarkColorTheme));
+      const palette = settingsRead.getSnapshot().theme;
+      expect(palette).toBe(COLOR_THEME_PRESETS["OLED Black"]);
+
+      settingsUi.updateAi({ openAiModel: "gpt-test" });
+      expect(settingsRead.getSnapshot().theme).toBe(palette);
+      expect(Object.isFrozen(palette)).toBe(true);
+
+      await settingsUi.resetAppearanceToDefaults();
+      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
+      expect(settingsRead.getSnapshot().appearance).toEqual(DEFAULT_APPEARANCE);
+      expect(settingsRead.getSnapshot().ai.openAiModel).toBe("gpt-test");
+
+      settingsUi.setTheme("Light Modern");
+      await settingsUi.resetAllToDefaults();
+      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
+      expect(settingsRead.getSnapshot().ai).toEqual(DEFAULT_AI);
+    } finally {
+      unsubscribe();
     }
   });
 
@@ -154,7 +169,7 @@ describe("settingsStore appearance persistence", () => {
     expect(loaded).not.toHaveProperty("panelPosition");
     expect(loaded).not.toHaveProperty("futureAppearanceField");
     expect(loaded.lastLightColorTheme).toBe(DEFAULT_APPEARANCE.lastLightColorTheme);
-    expect(loaded.lastDarkColorTheme).toBe(DEFAULT_APPEARANCE.lastDarkColorTheme);
+    expect(loaded.lastDarkColorTheme).toBe("OLED Black");
 
     await useSettingsStore.getState().save();
 

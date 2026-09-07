@@ -2,17 +2,13 @@ import { useSyncExternalStore } from "react";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
+import { resolveColorThemePreset, type ThemePalette } from "@/shared/theme/colorThemePresets";
 import { useSettingsStore } from "./settingsStore";
-import type {
-  AiSettings,
-  AppSettings,
-  AppearanceSettings,
-  ThemeSettings,
-} from "@/shared/types/settings";
+import type { AiSettings, AppSettings, AppearanceSettings } from "@/shared/types/settings";
 
 export interface SettingsReadSnapshot {
   readonly ai: DeepReadonly<AiSettings>;
-  readonly theme: DeepReadonly<ThemeSettings>;
+  readonly theme: ThemePalette;
   readonly appearance: DeepReadonly<AppearanceSettings>;
   readonly isLoading: boolean;
 }
@@ -24,13 +20,16 @@ export interface SettingsReadCapability {
 
 function buildSnapshot(): DeepReadonly<SettingsReadSnapshot> {
   const state = useSettingsStore.getState();
-  const snapshot: SettingsReadSnapshot = {
+  const snapshot = freezeProjectionSnapshot({
     ai: state.ai,
-    theme: state.theme,
     appearance: state.appearance,
     isLoading: state.isLoading,
-  };
-  return freezeProjectionSnapshot(snapshot);
+  });
+  return Object.freeze({
+    ...snapshot,
+    // Reuse the immutable preset so unrelated preferences do not invalidate theme consumers.
+    theme: resolveColorThemePreset(state.appearance.colorTheme),
+  });
 }
 
 let currentSnapshot = buildSnapshot();

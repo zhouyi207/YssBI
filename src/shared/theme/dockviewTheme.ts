@@ -1,6 +1,6 @@
 import { themeDark, themeLight, type DockviewTheme } from "dockview-react";
 
-import type { ThemeMode } from "@/shared/types/settings";
+import type { ThemeMode } from "./colorThemePresets";
 
 export const YSSBI_DOCKVIEW_DARK_THEME: DockviewTheme = {
   ...themeDark,

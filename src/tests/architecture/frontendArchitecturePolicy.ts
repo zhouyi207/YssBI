@@ -196,11 +196,9 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/settings/ui.ts", ["settingsUi"], {
     settingsUi: [
       "setTheme",
-      "updateTheme",
       "updateAi",
       "updateAppearance",
       "resetAllToDefaults",
-      "resetThemeToDefaults",
       "resetAiToDefaults",
       "resetAppearanceToDefaults",
     ],

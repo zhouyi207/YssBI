@@ -1,11 +1,12 @@
 import { create } from "zustand";
-import {
+import type {
   AiSettings,
-  ThemeSettings,
   AppearanceSettings,
   AppSettings,
+  PartialAppSettings,
 } from "@/shared/types/settings";
-import { DEFAULT_THEME, DEFAULT_APPEARANCE, DEFAULT_AI } from "@/shared/config-default";
+import { DEFAULT_APPEARANCE, DEFAULT_AI } from "@/shared/config-default";
+import { getThemeModeForPreset } from "@/shared/theme/colorThemePresets";
 import { logger } from "@/features/core/observability/logger";
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
@@ -23,47 +24,37 @@ export function setClientSettingsPublisher(
 function clientSettingsFingerprint(s: AppSettings): string {
   return JSON.stringify({
     ai: s.ai,
-    theme: s.theme,
     appearance: s.appearance,
   });
 }
 
-function mergeThemeSettings(theme: Partial<ThemeSettings> | undefined): ThemeSettings {
-  const source = theme ?? {};
-  const defaults = DEFAULT_THEME;
+function mergeAppearanceSettings(source?: Partial<AppearanceSettings>): AppearanceSettings {
+  const settings = source ?? {};
+  const colorTheme = settings.colorTheme ?? DEFAULT_APPEARANCE.colorTheme;
+  const isLight = getThemeModeForPreset(colorTheme) === "light";
   return {
-    mode: source.mode === "light" ? "light" : "dark",
-    workbenchBackground: source.workbenchBackground ?? defaults.workbenchBackground,
-    sidebarBackground: source.sidebarBackground ?? defaults.sidebarBackground,
-    nodeBackground: source.nodeBackground ?? defaults.nodeBackground,
-    foreground: source.foreground ?? defaults.foreground,
-    mutedForeground: source.mutedForeground ?? defaults.mutedForeground,
-    accentColor: source.accentColor ?? defaults.accentColor,
-    borderColor: source.borderColor ?? defaults.borderColor,
-    gridColor: source.gridColor ?? defaults.gridColor,
-    selectionColor: source.selectionColor ?? defaults.selectionColor,
+    colorTheme,
+    // Remember the active preset in the same update, without a follow-up effect/write.
+    lastLightColorTheme: isLight
+      ? colorTheme
+      : (settings.lastLightColorTheme ?? DEFAULT_APPEARANCE.lastLightColorTheme),
+    lastDarkColorTheme: isLight
+      ? (settings.lastDarkColorTheme ?? DEFAULT_APPEARANCE.lastDarkColorTheme)
+      : colorTheme,
+    language: settings.language ?? DEFAULT_APPEARANCE.language,
+    smoothScroll: settings.smoothScroll ?? DEFAULT_APPEARANCE.smoothScroll,
+    titleBarStyle: settings.titleBarStyle ?? DEFAULT_APPEARANCE.titleBarStyle,
   };
 }
 
-function mergeSettings(settings: Partial<AppSettings>): AppSettings {
+function mergeSettings(settings: PartialAppSettings): AppSettings {
   return {
     ai: {
       openAiApiKey: settings.ai?.openAiApiKey ?? DEFAULT_AI.openAiApiKey,
       openAiBaseUrl: settings.ai?.openAiBaseUrl ?? DEFAULT_AI.openAiBaseUrl,
       openAiModel: settings.ai?.openAiModel ?? DEFAULT_AI.openAiModel,
     },
-    theme: mergeThemeSettings(settings.theme),
-    appearance: {
-      colorTheme: settings.appearance?.colorTheme ?? DEFAULT_APPEARANCE.colorTheme,
-      lastLightColorTheme:
-        settings.appearance?.lastLightColorTheme ?? DEFAULT_APPEARANCE.lastLightColorTheme,
-      lastDarkColorTheme:
-        settings.appearance?.lastDarkColorTheme ?? DEFAULT_APPEARANCE.lastDarkColorTheme,
-      language: settings.appearance?.language ?? DEFAULT_APPEARANCE.language,
-
-      smoothScroll: settings.appearance?.smoothScroll ?? DEFAULT_APPEARANCE.smoothScroll,
-      titleBarStyle: settings.appearance?.titleBarStyle ?? DEFAULT_APPEARANCE.titleBarStyle,
-    },
+    appearance: mergeAppearanceSettings(settings.appearance),
   };
 }
 
@@ -76,7 +67,7 @@ function loadLocalSettings(): AppSettings {
     localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return mergeSettings({});
-    return mergeSettings(JSON.parse(raw) as Partial<AppSettings>);
+    return mergeSettings(JSON.parse(raw) as PartialAppSettings);
   } catch (error) {
     logger.app.warn(
       `Failed to load local settings: ${error instanceof Error ? error.message : String(error)}`,
@@ -112,7 +103,6 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
   const cur = useSettingsStore.getState();
   const currentPayload: AppSettings = {
     ai: cur.ai,
-    theme: cur.theme,
     appearance: cur.appearance,
   };
   if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
@@ -124,7 +114,6 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
     saveLocalSettings(merged);
     useSettingsStore.setState({
       ai: merged.ai,
-      theme: merged.theme,
       appearance: merged.appearance,
       isLoading: false,
     });
@@ -135,14 +124,12 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
 
 interface SettingsStore {
   ai: AiSettings;
-  theme: ThemeSettings;
   appearance: AppearanceSettings;
   isLoading: boolean;
 
   load: () => Promise<void>;
 
   // 更新后安排持久化。
-  updateTheme: (updates: Partial<ThemeSettings>) => void;
   updateAi: (updates: Partial<AiSettings>) => void;
   updateAppearance: (updates: Partial<AppearanceSettings>) => void;
 
@@ -150,7 +137,6 @@ interface SettingsStore {
   save: () => Promise<void>;
 
   // 恢复默认方法
-  resetThemeToDefaults: () => Promise<void>;
   resetAiToDefaults: () => Promise<void>;
   resetAppearanceToDefaults: () => Promise<void>;
 
@@ -170,7 +156,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const state = get();
     const settings: AppSettings = {
       ai: state.ai,
-      theme: state.theme,
       appearance: state.appearance,
     };
     persistClientSettings(settings);
@@ -185,7 +170,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
   return {
     ai: DEFAULT_AI,
-    theme: DEFAULT_THEME,
     appearance: DEFAULT_APPEARANCE,
     isLoading: true,
 
@@ -197,13 +181,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       });
     },
 
-    updateTheme: (updates) =>
-      set((state) => {
-        const next = { theme: { ...state.theme, ...updates } };
-        queueMicrotask(scheduleSave);
-        return next;
-      }),
-
     updateAi: (updates) =>
       set((state) => {
         const next = { ai: { ...state.ai, ...updates } };
@@ -213,20 +190,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
 
     updateAppearance: (updates) =>
       set((state) => {
-        const next = { appearance: { ...state.appearance, ...updates } };
+        const next = { appearance: mergeAppearanceSettings({ ...state.appearance, ...updates }) };
         queueMicrotask(scheduleSave);
         return next;
       }),
 
     // 立即保存当前状态
     save: saveImmediately,
-
-    // 防抖保存
-
-    resetThemeToDefaults: async () => {
-      set({ theme: DEFAULT_THEME });
-      await saveImmediately();
-    },
 
     resetAiToDefaults: async () => {
       set({ ai: DEFAULT_AI });

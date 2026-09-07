@@ -5,17 +5,17 @@ import {
   type ThemeDefaultParams,
   themeQuartz,
 } from "ag-grid-community";
-import type { ThemeSettings } from "@/shared/types/settings";
+import type { ThemePalette } from "@/shared/theme/colorThemePresets";
 import { resolveThemeTokens } from "@/shared/theme/themeTokens";
 
-export function getAgGridThemeParams(settings: ThemeSettings): Partial<ThemeDefaultParams> {
-  const tokens = resolveThemeTokens(settings);
+export function getAgGridThemeParams(theme: ThemePalette): Partial<ThemeDefaultParams> {
+  const tokens = resolveThemeTokens(theme);
 
   return {
     accentColor: tokens.accent,
     backgroundColor: tokens.workbenchBg,
     borderColor: tokens.border,
-    browserColorScheme: settings.mode,
+    browserColorScheme: theme.mode,
     cellFontSize: 11,
     cellTextColor: tokens.foreground,
     chromeBackgroundColor: tokens.sidebarBg,
@@ -44,8 +44,8 @@ export function getAgGridThemeParams(settings: ThemeSettings): Partial<ThemeDefa
   };
 }
 
-export function buildAgGridTheme(settings: ThemeSettings): Theme {
+export function buildAgGridTheme(theme: ThemePalette): Theme {
   return themeQuartz
-    .withPart(settings.mode === "dark" ? colorSchemeDark : colorSchemeLight)
-    .withParams(getAgGridThemeParams(settings));
+    .withPart(theme.mode === "dark" ? colorSchemeDark : colorSchemeLight)
+    .withParams(getAgGridThemeParams(theme));
 }

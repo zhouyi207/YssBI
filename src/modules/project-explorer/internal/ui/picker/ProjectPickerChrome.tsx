@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
+import { getRememberedColorTheme } from "@/shared/theme/colorThemePresets";
 import {
   openExternalUrlWithDialog,
   useCurrentWindowActions,

@@ -11,7 +11,7 @@ import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/application/project/projectSession";
 import { useApplicationAppearance } from "@/features/application/settings/applicationSettings";
-import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
+import { getRememberedColorTheme } from "@/shared/theme/colorThemePresets";
 import {
   openExternalUrlWithDialog,
   useCurrentWindowActions,

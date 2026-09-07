@@ -1,5 +1,9 @@
-import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@/shared/config-default";
-import type { ThemeMode, ThemeSettings } from "@/shared/types/settings";
+import {
+  DEFAULT_DARK_THEME,
+  DEFAULT_LIGHT_THEME,
+  type ThemeMode,
+  type ThemePalette,
+} from "./colorThemePresets";
 
 export type PinSemanticCategory = "numeric" | "boolean" | "text" | "temporal" | "table" | "object";
 
@@ -117,7 +121,7 @@ export function getPinPalette(mode: ThemeMode): PinPalette {
   return mode === "light" ? { ...LIGHT_PIN_PALETTE } : { ...DARK_PIN_PALETTE };
 }
 
-export function resolveThemeTokens(theme: ThemeSettings): ResolvedThemeTokens {
+export function resolveThemeTokens(theme: ThemePalette): ResolvedThemeTokens {
   const defaults = theme.mode === "light" ? DEFAULT_LIGHT_THEME : DEFAULT_DARK_THEME;
   const workbenchBg = normalizeHex(theme.workbenchBackground, defaults.workbenchBackground);
   const sidebarBg = normalizeHex(theme.sidebarBackground, defaults.sidebarBackground);

@@ -1,17 +1,19 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_DARK_THEME } from "@/shared/config-default";
+import { COLOR_THEME_PRESET_IDS, resolveColorThemePreset } from "@/shared/theme/colorThemePresets";
 import { resolveThemeTokens } from "@/shared/theme/themeTokens";
 import { applyThemeTokens } from "./SettingsEffectsProvider";
 
 describe("applyThemeTokens", () => {
-  it("writes the resolved semantic and compatibility variables as one set", () => {
-    const root = document.createElement("html");
-    const tokens = resolveThemeTokens(DEFAULT_DARK_THEME);
+  const root = document.createElement("html");
+  it.each(COLOR_THEME_PRESET_IDS)("applies the %s preset to all CSS theme variables", (preset) => {
+    const tokens = resolveThemeTokens(resolveColorThemePreset(preset));
 
     applyThemeTokens(root, tokens);
 
+    expect(root.classList.contains("dark")).toBe(tokens.mode === "dark");
+    expect(root.style.colorScheme).toBe(tokens.mode);
     expect(root.style.getPropertyValue("--background")).toBe(tokens.workbenchBg);
     expect(root.style.getPropertyValue("--foreground")).toBe(tokens.foreground);
     expect(root.style.getPropertyValue("--muted")).toBe(tokens.surfaceSunken);

@@ -3,6 +3,7 @@ import { ClientSideRowModelModule, type ColDef } from "ag-grid-community";
 import { AgGridReact, type CustomCellRendererProps, type CustomHeaderProps } from "ag-grid-react";
 import { buildAgGridTheme } from "@/components/data-grid/agGridTheme";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
+import { resolveColorThemePreset } from "@/shared/theme/colorThemePresets";
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
   DATABASE_EDITOR_ROW_HEIGHT,
@@ -139,7 +140,7 @@ export function ReadOnlyDataGrid({
   height = 480,
   fillHeight = false,
 }: ReadOnlyDataGridProps) {
-  const appTheme = useSettingsStore((s) => s.theme);
+  const appTheme = useSettingsStore((s) => resolveColorThemePreset(s.appearance.colorTheme));
 
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
 

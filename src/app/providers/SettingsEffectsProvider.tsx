@@ -1,11 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
 import { useApplicationSettings } from "@/features/application/settings/applicationSettings";
-import {
-  applySmoothScrollSetting,
-  syncColorThemePreset,
-} from "@/features/application/settings/appearanceRuntime";
-import { getThemeModeForPreset } from "@/features/application/settings/colorThemePresets";
+import { applySmoothScrollSetting } from "@/features/application/settings/appearanceRuntime";
 import { resolveThemeTokens, type ResolvedThemeTokens } from "@/shared/theme/themeTokens";
 
 import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
@@ -103,10 +99,8 @@ export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens)
 }
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { theme, appearance, isLoading, load, updateTheme, updateAppearance } =
-    useApplicationSettings();
-  const { language, colorTheme, smoothScroll, lastLightColorTheme, lastDarkColorTheme } =
-    appearance;
+  const { theme, appearance, load } = useApplicationSettings();
+  const { language, smoothScroll } = appearance;
 
   useWindowDecorationEffect();
 
@@ -125,25 +119,6 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
       void i18n.changeLanguage(language);
     }
   }, [language]);
-
-  useEffect(() => {
-    if (isLoading) return;
-    const mode = getThemeModeForPreset(colorTheme);
-    const remembered = mode === "light" ? lastLightColorTheme : lastDarkColorTheme;
-    if (remembered !== colorTheme) {
-      updateAppearance(
-        mode === "light" ? { lastLightColorTheme: colorTheme } : { lastDarkColorTheme: colorTheme },
-      );
-    }
-    syncColorThemePreset(colorTheme, updateTheme);
-  }, [
-    colorTheme,
-    lastDarkColorTheme,
-    lastLightColorTheme,
-    updateAppearance,
-    updateTheme,
-    isLoading,
-  ]);
 
   useEffect(() => {
     applySmoothScrollSetting(smoothScroll);

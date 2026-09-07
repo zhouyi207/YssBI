@@ -3,6 +3,8 @@ import {
   getColorThemeForMode,
   getRememberedColorTheme,
   getThemeModeForPreset,
+  resolveColorThemePreset,
+  DEFAULT_DARK_THEME,
 } from "./colorThemePresets";
 
 describe("color theme presets", () => {
@@ -22,5 +24,10 @@ describe("color theme presets", () => {
     );
     expect(getRememberedColorTheme("dark", "", "OLED Black")).toBe("OLED Black");
     expect(getRememberedColorTheme("light", "", "")).toBe("Light Modern");
+  });
+
+  it("resolves unknown preset names to the stable default palette", () => {
+    expect(resolveColorThemePreset("missing theme")).toBe(DEFAULT_DARK_THEME);
+    expect(resolveColorThemePreset("toString")).toBe(DEFAULT_DARK_THEME);
   });
 });
