@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import * as projectHydration from "@/features/application/project/projectHydration";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { SidebarDataRow } from "@/modules/data-explorer/internal/ui/activity/SidebarDataRow";
@@ -114,7 +114,7 @@ describe("resource sidebar rows", () => {
     mocks.revealDetails.mockResolvedValue(undefined);
     useVariableStore.getState().clear();
     useDatabaseStore.getState().clear();
-    useProjectIOStore.setState({ refreshResourceIndex: vi.fn().mockResolvedValue(true) });
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -234,7 +234,7 @@ describe("resource sidebar rows", () => {
     expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]?.disabled).toBe(true);
     act(() => row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
 
-    expect(useProjectIOStore.getState().refreshResourceIndex).not.toHaveBeenCalled();
+    expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
     expect(state.refresh).toHaveBeenCalledOnce();
   });
 
@@ -251,7 +251,7 @@ describe("resource sidebar rows", () => {
 
     expect(row).not.toBeNull();
     act(() => row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-    expect(useProjectIOStore.getState().refreshResourceIndex).not.toHaveBeenCalled();
+    expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
     expect(state.refresh).toHaveBeenCalledOnce();
   });
 
@@ -276,7 +276,9 @@ describe("resource sidebar rows", () => {
       });
       return true;
     });
-    useProjectIOStore.setState({ refreshResourceIndex });
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
+      refreshResourceIndex,
+    );
     renderVariable(null);
     const row = host.querySelector('[aria-disabled="true"]');
 
@@ -299,7 +301,9 @@ describe("resource sidebar rows", () => {
     const state = catalogState("ready", []);
     mocks.catalogState = state;
     const refreshResourceIndex = vi.fn().mockResolvedValue(false);
-    useProjectIOStore.setState({ refreshResourceIndex });
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
+      refreshResourceIndex,
+    );
     renderVariable(null);
     const row = host.querySelector('[aria-disabled="true"]');
 
@@ -323,7 +327,9 @@ describe("resource sidebar rows", () => {
       });
       return true;
     });
-    useProjectIOStore.setState({ refreshResourceIndex });
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
+      refreshResourceIndex,
+    );
     renderDatabase(null);
     const row = host.querySelector('[aria-disabled="true"]');
 
