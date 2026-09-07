@@ -22,14 +22,11 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDirtyChange }) => {
   const { t } = useTranslation();
   const ai = useSettingsRead((s) => s.ai);
-  const theme = useSettingsRead((s) => s.theme);
   const appearance = useSettingsRead((s) => s.appearance);
   const isLoading = useSettingsRead((s) => s.isLoading);
-  const updateTheme = settingsUi.updateTheme;
   const updateAi = settingsUi.updateAi;
   const updateAppearance = settingsUi.updateAppearance;
   const resetAllToDefaults = settingsUi.resetAllToDefaults;
-  const resetThemeToDefaults = settingsUi.resetThemeToDefaults;
   const resetAiToDefaults = settingsUi.resetAiToDefaults;
   const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
 
@@ -47,7 +44,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     { id: "ai", label: t("settings.sections.ai") },
     { id: "computation", label: t("settings.sections.computation") },
     { id: "appearance", label: t("settings.sections.appearance") },
-    { id: "color", label: t("settings.sections.color") },
   ];
 
   const visibleSections = useMemo(() => {
@@ -137,7 +133,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     const sectionNames: Record<string, string> = {
       ai: t("settings.sections.ai"),
       appearance: t("settings.sections.appearance"),
-      color: t("settings.sections.color"),
     };
 
     const sectionName = sectionNames[section] || section;
@@ -158,9 +153,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
           break;
         case "appearance":
           await resetAppearanceToDefaults();
-          break;
-        case "color":
-          await resetThemeToDefaults();
           break;
       }
     } catch (error) {
@@ -345,100 +337,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             </div>
           </div>
         );
-      case "color":
-        return (
-          <div className="space-y-8">
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl text-foreground">{t("settings.sections.color")}</h2>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleResetSection("color")}
-                  disabled={isResetting}
-                >
-                  {t("common.restoreDefaults")}
-                </Button>
-              </div>
-
-              <ColorGroup title={t("settings.groups.surfaces")}>
-                <SettingItem
-                  label={t("settings.labels.workbenchBackground")}
-                  description={t("settings.descriptions.workbenchBackground")}
-                  type="color"
-                  value={theme.workbenchBackground}
-                  onChange={(val: string) => updateTheme({ workbenchBackground: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.sidebarBackground")}
-                  description={t("settings.descriptions.sidebarBackground")}
-                  type="color"
-                  value={theme.sidebarBackground}
-                  onChange={(val: string) => updateTheme({ sidebarBackground: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.nodeBackground")}
-                  description={t("settings.descriptions.nodeBackground")}
-                  type="color"
-                  value={theme.nodeBackground}
-                  onChange={(val: string) => updateTheme({ nodeBackground: val })}
-                />
-              </ColorGroup>
-
-              <ColorGroup title={t("settings.groups.content")}>
-                <SettingItem
-                  label={t("settings.labels.foreground")}
-                  description={t("settings.descriptions.foreground")}
-                  type="color"
-                  value={theme.foreground}
-                  onChange={(val: string) => updateTheme({ foreground: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.mutedForeground")}
-                  description={t("settings.descriptions.mutedForeground")}
-                  type="color"
-                  value={theme.mutedForeground}
-                  onChange={(val: string) => updateTheme({ mutedForeground: val })}
-                />
-              </ColorGroup>
-
-              <ColorGroup title={t("settings.groups.interaction")}>
-                <SettingItem
-                  label={t("settings.labels.accentColor")}
-                  description={t("settings.descriptions.accentColor")}
-                  type="color"
-                  value={theme.accentColor}
-                  onChange={(val: string) => updateTheme({ accentColor: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.selectionColor")}
-                  description={t("settings.descriptions.selectionColor")}
-                  type="color"
-                  value={theme.selectionColor}
-                  onChange={(val: string) => updateTheme({ selectionColor: val })}
-                />
-              </ColorGroup>
-
-              <ColorGroup title={t("settings.groups.structure")}>
-                <SettingItem
-                  label={t("settings.labels.borderColor")}
-                  description={t("settings.descriptions.borderColor")}
-                  type="color"
-                  value={theme.borderColor}
-                  onChange={(val: string) => updateTheme({ borderColor: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.gridColor")}
-                  description={t("settings.descriptions.gridColor")}
-                  type="color"
-                  value={theme.gridColor}
-                  onChange={(val: string) => updateTheme({ gridColor: val })}
-                />
-              </ColorGroup>
-            </div>
-          </div>
-        );
       default:
         return null;
     }
@@ -563,24 +461,7 @@ type SettingItemProps =
       value?: string;
       options?: Array<{ label: string; value: string }>;
       onChange?: (val: string) => void;
-    })
-  | (SettingItemBase & {
-      type: "color";
-      value?: string;
-      onChange?: (val: string) => void;
     });
-
-const ColorGroup: React.FC<{ title: string; children: React.ReactNode }> = ({
-  title,
-  children,
-}) => (
-  <div className="mb-8">
-    <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">
-      {title}
-    </h3>
-    <div className="space-y-6">{children}</div>
-  </div>
-);
 
 const SettingItem: React.FC<SettingItemProps> = (props) => {
   const { label, description, type, placeholder, disabled } = props;
@@ -646,26 +527,6 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
               value={props.value || props.options?.[0]?.value || ""}
               onChange={(val) => props.onChange?.(val)}
               disabled={disabled}
-            />
-          </div>
-        )}
-        {type === "color" && (
-          <div className="flex items-center gap-3">
-            <div className="relative w-10 h-6 rounded border border-border overflow-hidden">
-              <Input
-                id={controlId}
-                type="color"
-                value={props.value}
-                onChange={(e) => props.onChange?.(e.target.value)}
-                className="absolute -inset-1 h-8 w-12 cursor-pointer border-none bg-transparent p-0"
-              />
-            </div>
-            <Input
-              aria-label={label}
-              type="text"
-              value={props.value}
-              onChange={(e) => props.onChange?.(e.target.value)}
-              className="h-7 w-24 font-mono text-[11px]"
             />
           </div>
         )}

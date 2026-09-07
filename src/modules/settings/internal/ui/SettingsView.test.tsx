@@ -11,8 +11,8 @@ import { SettingsView } from "./SettingsView";
 const settings = vi.hoisted(() => ({
   resetAllToDefaults: vi.fn(),
   resetAiToDefaults: vi.fn(),
-  resetThemeToDefaults: vi.fn(),
   resetAppearanceToDefaults: vi.fn(),
+  updateAppearance: vi.fn(),
 }));
 
 const computation = vi.hoisted(() => ({
@@ -89,18 +89,6 @@ vi.mock("@/features/core/settings/settingsStore", () => {
       openAiBaseUrl: "https://api.openai.com/v1",
       openAiApiKey: "",
     },
-    theme: {
-      mode: "dark",
-      workbenchBackground: "#000000",
-      sidebarBackground: "#000000",
-      nodeBackground: "#000000",
-      foreground: "#ffffff",
-      mutedForeground: "#999999",
-      accentColor: "#000000",
-      borderColor: "#333333",
-      gridColor: "#222222",
-      selectionColor: "#000000",
-    },
     appearance: {
       colorTheme: "Dark Modern (Default)",
       language: "en-US",
@@ -109,11 +97,9 @@ vi.mock("@/features/core/settings/settingsStore", () => {
     },
     isLoading: false,
     updateAi: vi.fn(),
-    updateTheme: vi.fn(),
-    updateAppearance: vi.fn(),
+    updateAppearance: settings.updateAppearance,
     resetAllToDefaults: settings.resetAllToDefaults,
     resetAiToDefaults: settings.resetAiToDefaults,
-    resetThemeToDefaults: settings.resetThemeToDefaults,
     resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
   };
   const useSettingsStore = Object.assign(
@@ -138,8 +124,6 @@ describe("SettingsView computation settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settings.resetAllToDefaults.mockResolvedValue(undefined);
-    settings.resetAiToDefaults.mockResolvedValue(undefined);
-    settings.resetThemeToDefaults.mockResolvedValue(undefined);
     settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
     computation.enabled = true;
@@ -212,21 +196,26 @@ describe("SettingsView computation settings", () => {
     expect(host.querySelector('input[type="password"]')).not.toBeNull();
   });
 
-  it("exposes only semantic color controls and keeps pin colors fixed", async () => {
+  it("changes appearance colors only through the theme selector", async () => {
     render();
-    await openSection("color");
+    expect(host.textContent).not.toContain("settings.sections.color");
+    await openSection("appearance");
 
-    expect(host.textContent).toContain("settings.labels.workbenchBackground");
-    expect(host.textContent).toContain("settings.labels.nodeBackground");
-    expect(host.textContent).toContain("settings.labels.foreground");
-    expect(host.textContent).toContain("settings.labels.mutedForeground");
-    expect(host.textContent).toContain("settings.labels.borderColor");
-    expect(host.textContent).toContain("settings.labels.gridColor");
-    expect(host.textContent).toContain("settings.labels.selectionColor");
-    expect(host.textContent).not.toContain("settings.groups.pinColors");
-    expect(host.textContent).not.toContain("settings.labels.executionColor");
-    expect(host.textContent).not.toContain("settings.labels.int32Color");
-    expect(host.querySelectorAll('input[type="color"]').length).toBe(9);
+    const themeLabel = [...host.querySelectorAll("label")].find(
+      (label) => label.textContent === "settings.labels.colorTheme",
+    )!;
+    const themeSelect = document.getElementById(themeLabel.htmlFor) as HTMLSelectElement;
+    expect([...themeSelect.options].map((option) => option.value)).toEqual([
+      "Dark Modern (Default)",
+      "OLED Black",
+      "Light Modern",
+    ]);
+    act(() => {
+      themeSelect.value = "OLED Black";
+      themeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(settings.updateAppearance).toHaveBeenCalledWith({ colorTheme: "OLED Black" });
+    expect(host.querySelector('input[type="color"]')).toBeNull();
   });
 
   it("applies and resets the statistical missing-value preference", async () => {

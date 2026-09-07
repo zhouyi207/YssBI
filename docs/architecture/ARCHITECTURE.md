@@ -51,7 +51,7 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 前端 Project hydration 由 `features/application/project/projectHydration.ts` 编排准备、投影提交和清理，并返回包含 project instance 与 publication revision 的 `ProjectLoadReceipt`。`projectIOStore.ts` 只保存已安装投影的状态和图加载运行态；加载回执不携带第二份项目内容。资源类别取自 Rust 索引中的显式字段，客户端资源键编码保留原始 opaque path。
 
-设置页提供 AI、计算、外观和配色。客户端持久化 AI、主题和外观偏好；计算配置由 Rust settings service 管理。图文档通过显式 Save 提交，设置页不声明未接入的自动保存、网格或编辑器布局选项。
+设置页提供 AI、计算和外观。客户端仅持久化 AI 与外观偏好；配色由 `appearance.colorTheme` 选择的只读主题预设统一派生，不保存或跨窗口同步独立颜色值。主题选择与亮／暗模式的主题记忆在同一次状态更新中提交，界面、图表和表格共用主题配色。计算配置由 Rust settings service 管理。图文档通过显式 Save 提交，设置页不声明未接入的自动保存、网格或编辑器布局选项。
 
 全局近似比较容差已移除，计算设置当前仅保存缺失值偏好。设置存储读取 v1 时丢弃废弃的 `numeric` 字段、保留其他设置与 revision，下次保存写入 v2；当前 IPC 和 v2 文件仍使用严格字段契约。现有算法的判秩、收敛和数值保护阈值由各算法管理。Graph OLS 当前固定采用 Reject，尚未消费全局缺失值偏好；相关数值与配置后续工作见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
 
