@@ -3,22 +3,9 @@
 //! 统一处理单/多约束，F = W/q ~ F(q, df_residual)。
 
 use ndarray::{Array1, Array2};
-use serde::Serialize;
 use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
-use super::common::Alternative;
-
-/// Wald 假设检验结果
-#[derive(Debug, Clone, Serialize)]
-pub struct WaldTestResult {
-    pub constraint_desc: String,
-    pub alternative: String,
-    pub r_beta_minus_r: f64,
-    pub stat: f64,
-    pub df1: usize,
-    pub df2: usize,
-    pub p_value: f64,
-}
+use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
 
 /// Wald 检验：H0: Rβ = r
 ///

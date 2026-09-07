@@ -10,6 +10,7 @@ default = []
 test-support = []
 
 [dependencies]
+yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

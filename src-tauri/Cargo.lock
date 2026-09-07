@@ -9346,6 +9346,7 @@ dependencies = [
  "yss-project-registry",
  "yss-project-registry-contract",
  "yss-project-watcher",
+ "yss-sci-contract",
  "yss-sci-runtime",
  "yss-settings",
  "yss-statistical-harness",
@@ -9383,7 +9384,6 @@ dependencies = [
  "yss-display-naming",
  "yss-duckdb",
  "yss-execution",
- "yss-execution-sci-adapter",
  "yss-file-replace",
  "yss-function-editor-projection",
  "yss-graph-analysis",
@@ -9413,7 +9413,6 @@ dependencies = [
  "yss-resource-naming",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-settings",
  "yss-sql-source",
  "yss-tabular-contract",
  "yss-tabular-io",
@@ -9622,15 +9621,7 @@ dependencies = [
  "thiserror 2.0.20",
  "uuid",
  "yss-data-contract",
-]
-
-[[package]]
-name = "yss-execution-sci-adapter"
-version = "0.1.0"
-dependencies = [
- "yss-execution",
  "yss-sci-contract",
- "yss-sci-runtime",
 ]
 
 [[package]]
@@ -9694,6 +9685,7 @@ dependencies = [
  "yss-graph-compiler-diagnostics",
  "yss-graph-protocol",
  "yss-graph-registry",
+ "yss-sci-contract",
 ]
 
 [[package]]
@@ -10060,14 +10052,13 @@ dependencies = [
 name = "yss-sci"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "csv",
  "ndarray",
  "num-traits",
- "polars",
  "serde",
  "statrs",
  "yss-linalg",
+ "yss-sci-contract",
 ]
 
 [[package]]
@@ -10083,7 +10074,9 @@ dependencies = [
 name = "yss-sci-runtime"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ndarray",
+ "polars",
  "rand 0.10.2",
  "serde",
  "serde_json",
@@ -10253,7 +10246,6 @@ dependencies = [
  "yss-diagnostics",
  "yss-duckdb",
  "yss-execution",
- "yss-execution-sci-adapter",
  "yss-julia-worker",
  "yss-project",
  "yss-project-identity",
@@ -10262,6 +10254,8 @@ dependencies = [
  "yss-project-registry-sqlite",
  "yss-project-watcher",
  "yss-project-watcher-notify",
+ "yss-sci-contract",
+ "yss-sci-runtime",
  "yss-settings",
  "yss-statistical-harness",
  "yss-statistical-harness-sqlite",

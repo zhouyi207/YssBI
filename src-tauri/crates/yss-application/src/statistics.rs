@@ -4,11 +4,11 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use crate::execution::{ApplicationState, SessionCaptureError};
-use yss_execution::ports::scientific::{
+use yss_sci_contract::SciError;
+use yss_sci_contract::scientific::{
     AcfPacfRequest, AcfPacfResult, BackendExecutionControl, ScientificBackendError,
 };
-use yss_sci_contract::SciError;
-use yss_sci_runtime::api::time_series::serial_tests::{
+use yss_sci_runtime::time_series::serial_tests::{
     SerialTestsInput, compute_serial_tests as compute_serial_tests_api,
 };
 
@@ -25,15 +25,15 @@ pub fn compute_acf_pacf(
     residuals: Vec<f64>,
     max_lag: usize,
 ) -> Result<AcfPacfResult, AcfPacfApplicationError> {
-    let session = application.capture_session()?;
+    let _session = application.capture_session()?;
     let cancellation = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let control = BackendExecutionControl::from_shared(
         cancellation,
         Instant::now() + Duration::from_secs(60),
     );
-    session
-        .execution()
+    application
         .scientific_backend()
+        .ok_or(ScientificBackendError::Unavailable)?
         .acf_pacf(
             AcfPacfRequest {
                 values: residuals,

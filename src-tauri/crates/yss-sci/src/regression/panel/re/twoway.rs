@@ -15,7 +15,7 @@ pub fn fit_panel_re_fgls_twoway(
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
-    cov_params: Option<crate::regression::covariance::CovParams>,
+    cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
     let n = endog.len();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
@@ -76,11 +76,12 @@ pub fn fit_panel_re_fgls_twoway(
     let ols_w = OLS {
         endog: y_w.clone(),
         exog: x_w_use,
-        config: crate::regression::linear_model::OLSConfig {
-            constant: false,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            false,
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     };
     let res_w = ols_w
         .fit()
@@ -120,11 +121,12 @@ pub fn fit_panel_re_fgls_twoway(
     let res_b_e = OLS {
         endog: y_b_e_arr,
         exog: x_b_e_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way) between-entity: {}", e))?;
@@ -156,11 +158,12 @@ pub fn fit_panel_re_fgls_twoway(
     let res_b_t = OLS {
         endog: y_b_t_arr,
         exog: x_b_t_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way) between-time: {}", e))?;
@@ -211,7 +214,7 @@ pub fn fit_panel_re_fgls_twoway(
 
     let cov_params = cov_params.or_else(|| {
         if cov_type == "cluster" {
-            Some(crate::regression::covariance::CovParams::Cluster {
+            Some(yss_sci_contract::regression::CovParams::Cluster {
                 cluster_id: entity_id.to_vec(),
                 xtreg_fe_style: false,
             })
@@ -219,11 +222,12 @@ pub fn fit_panel_re_fgls_twoway(
             None
         }
     });
-    let config = crate::regression::linear_model::OLSConfig {
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
         constant,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols_re = OLS {
         endog: y_star,
@@ -589,11 +593,12 @@ pub fn fit_panel_re_mle_twoway(
     let res_w = OLS {
         endog: y_w.clone(),
         exog: x_w_use,
-        config: crate::regression::linear_model::OLSConfig {
-            constant: false,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            false,
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE) within: {}", e))?;
@@ -619,11 +624,12 @@ pub fn fit_panel_re_mle_twoway(
     let res_b_e = OLS {
         endog: Array1::from_vec(y_b_e.clone()),
         exog: x_b_e_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-entity: {}", e))?;
@@ -651,11 +657,12 @@ pub fn fit_panel_re_mle_twoway(
     let res_b_t = OLS {
         endog: Array1::from_vec(y_b_t.clone()),
         exog: x_b_t_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-time: {}", e))?;
@@ -687,11 +694,12 @@ pub fn fit_panel_re_mle_twoway(
         let res_const = OLS {
             endog: y_star_const,
             exog: x_const,
-            config: crate::regression::linear_model::OLSConfig {
-                constant: true,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         }
         .fit()
         .map_err(|e| format!("Panel RE (Two-Way MLE) const: {}", e))?;
@@ -728,11 +736,12 @@ pub fn fit_panel_re_mle_twoway(
             let res_c = OLS {
                 endog: y_star_c,
                 exog: x_c_arr,
-                config: crate::regression::linear_model::OLSConfig {
-                    constant: true,
-                    cov_type: "nonrobust".to_string(),
-                    cov_params: None,
-                },
+                config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                    true,
+                    "nonrobust",
+                    (None).as_ref(),
+                )
+                .map_err(|error| error.to_string())?,
             }
             .fit()
             .unwrap();
@@ -805,11 +814,12 @@ pub fn fit_panel_re_mle_twoway(
     let res_w2 = OLS {
         endog: y_w2,
         exog: x_w2_use,
-        config: crate::regression::linear_model::OLSConfig {
-            constant: false,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            false,
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE): {}", e))?;
@@ -851,11 +861,12 @@ pub fn fit_panel_re_mle_twoway(
         let res = OLS {
             endog: y_star,
             exog: x_star_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         }
         .fit()
         .map_err(|e| format!("Panel RE (Two-Way MLE): {}", e))?;
@@ -957,11 +968,12 @@ pub fn fit_panel_re_mle_twoway(
     let mut result = OLS {
         endog: y_star,
         exog: x_star_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()?;
 
@@ -1022,11 +1034,12 @@ pub fn fit_panel_re_mle_twoway(
         let ols_res = OLS {
             endog: endog.clone(),
             exog: x_ols_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         }
         .fit()
         .map_err(|e| format!("Panel RE (Two-Way) MLE OLS: {}", e))?;

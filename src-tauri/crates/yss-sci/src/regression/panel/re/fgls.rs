@@ -5,7 +5,7 @@ pub fn fit_panel_re_fgls(
     entity_id: &[usize],
     constant: bool,
     cov_type: &str,
-    cov_params: Option<crate::regression::covariance::CovParams>,
+    cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
     let n = endog.len();
     if exog.nrows() != n {
@@ -69,11 +69,12 @@ pub fn fit_panel_re_fgls(
     let ols_w = OLS {
         endog: y_w.clone(),
         exog: x_w_use,
-        config: crate::regression::linear_model::OLSConfig {
-            constant: false,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            false,
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     };
     let res_w = ols_w
         .fit()
@@ -107,11 +108,12 @@ pub fn fit_panel_re_fgls(
     let ols_b = OLS {
         endog: y_b,
         exog: x_b_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     };
     let res_b = ols_b
         .fit()
@@ -166,7 +168,7 @@ pub fn fit_panel_re_fgls(
 
     let cov_params = cov_params.or_else(|| {
         if cov_type == "cluster" {
-            Some(crate::regression::covariance::CovParams::Cluster {
+            Some(yss_sci_contract::regression::CovParams::Cluster {
                 cluster_id: entity_id.to_vec(),
                 xtreg_fe_style: false,
             })
@@ -174,11 +176,12 @@ pub fn fit_panel_re_fgls(
             None
         }
     });
-    let config = crate::regression::linear_model::OLSConfig {
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
         constant,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols_re = OLS {
         endog: y_star,

@@ -5,7 +5,7 @@
 use ndarray::{Array1, Array2};
 use std::f64::consts::PI;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{OLS, OLSConfig, WLS, WLSConfig};
+use yss_sci::regression::linear_model::{OLS, WLS, WLSConfig};
 
 const TOL: f64 = 1e-10;
 const TOL_REL: f64 = 1e-8;
@@ -69,11 +69,12 @@ fn test_ols_golden() {
     let ols = OLS {
         endog: endog.clone(),
         exog: exog.clone(),
-        config: OLSConfig {
-            constant: true,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            true,
+            &("nonrobust".to_string()),
+            (None).as_ref(),
+        )
+        .expect("valid OLS covariance options"),
     };
     let o = ols.fit().unwrap();
 
@@ -700,11 +701,12 @@ fn test_diagnostics_direct_helpers() {
     let ols = OLS {
         endog: endog.clone(),
         exog: exog.clone(),
-        config: OLSConfig {
-            constant: true,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            true,
+            &("nonrobust".to_string()),
+            (None).as_ref(),
+        )
+        .expect("valid OLS covariance options"),
     };
     let o = ols.fit().unwrap();
     let fitted: Array1<f64> = exog

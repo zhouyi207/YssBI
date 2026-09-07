@@ -248,7 +248,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         let execution = ExecutionRuntimeState::from_composition(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
-            Arc::new(yss_execution_sci_adapter::SciRuntimeBackend::new()),
+            Arc::new(yss_sci_runtime::SciRuntimeBackend::new()),
         );
         let plan = execution
             .prepare_compiled_package(package, RuntimeGeneration::INITIAL)

@@ -18,9 +18,7 @@ pub fn compute_acf_pacf(
         .map_err(acf_pacf_command_error)
 }
 
-fn acf_pacf_response(
-    result: yss_execution::ports::scientific::AcfPacfResult,
-) -> AcfPacfResponseDto {
+fn acf_pacf_response(result: yss_sci_contract::scientific::AcfPacfResult) -> AcfPacfResponseDto {
     AcfPacfResponseDto {
         acf: result.acf,
         pacf: result.pacf,
@@ -42,19 +40,19 @@ fn acf_pacf_command_error(error: AcfPacfApplicationError) -> CommandError {
             }
         },
         AcfPacfApplicationError::Backend(error) => match error {
-            yss_execution::ports::scientific::ScientificBackendError::InvalidInput { .. } => {
+            yss_sci_contract::scientific::ScientificBackendError::InvalidInput { .. } => {
                 CommandError::expected("invalid_acf_pacf_input")
             }
-            yss_execution::ports::scientific::ScientificBackendError::Cancelled => {
+            yss_sci_contract::scientific::ScientificBackendError::Cancelled => {
                 CommandError::expected("operation_cancelled")
             }
-            yss_execution::ports::scientific::ScientificBackendError::DeadlineExceeded => {
+            yss_sci_contract::scientific::ScientificBackendError::DeadlineExceeded => {
                 CommandError::expected("operation_deadline_exceeded")
             }
-            yss_execution::ports::scientific::ScientificBackendError::Unavailable => {
+            yss_sci_contract::scientific::ScientificBackendError::Unavailable => {
                 CommandError::expected("scientific_backend_unavailable")
             }
-            yss_execution::ports::scientific::ScientificBackendError::ComputationFailed => {
+            yss_sci_contract::scientific::ScientificBackendError::ComputationFailed => {
                 CommandError::expected("scientific_computation_failed")
             }
         },

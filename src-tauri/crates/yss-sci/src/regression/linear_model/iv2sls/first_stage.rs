@@ -3,7 +3,8 @@ use super::critical_values::{
     stock_yogo_cv_liml_2_endog,
 };
 use super::types::FirstStageSummary;
-use crate::regression::covariance::{CovParams, compute_cov_beta};
+use crate::regression::covariance::compute_cov_beta;
+use yss_sci_contract::regression::CovParams;
 
 use ndarray::Array2;
 use statrs::{

@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+chrono.workspace = true
+polars.workspace = true
 yss-linalg = { path = "../yss-linalg" }
 ndarray.workspace = true
 rand.workspace = true

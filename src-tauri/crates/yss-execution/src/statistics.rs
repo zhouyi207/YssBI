@@ -1,11 +1,12 @@
-use crate::ports::scientific::{
-    BackendExecutionControl, OlsCovariance, OlsRequest, ScientificBackend, ScientificBackendError,
-};
 use crate::state::{
     KernelExecutionError, PreparedKernelInvocation, numeric_input, parameter_value,
 };
 use crate::value::RuntimeValue;
 use std::collections::BTreeMap;
+use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
+use yss_sci_contract::scientific::{
+    BackendExecutionControl, OlsRequest, ScientificBackend, ScientificBackendError,
+};
 
 #[derive(Clone, Copy)]
 pub(crate) enum StatisticalKernel {
@@ -52,8 +53,10 @@ pub(crate) fn execute(
                     OlsRequest {
                         response,
                         predictors,
-                        constant,
-                        covariance,
+                        options: OlsOptions {
+                            constant,
+                            covariance,
+                        },
                     },
                     &BackendExecutionControl::from_shared(
                         invocation.control.cancellation.clone(),
@@ -80,7 +83,10 @@ pub(crate) fn execute(
                     numeric_list(result.residuals)?,
                 ],
                 _ => {
-                    let report = json_value(result.report)?;
+                    let report = json_value(
+                        serde_json::to_value(result.report)
+                            .map_err(|_| KernelExecutionError::Failed)?,
+                    )?;
                     vec![report.clone(), report]
                 }
             }
@@ -126,11 +132,17 @@ fn covariance(
             },
         },
         "HAC" => OlsCovariance::Hac {
-            kernel: string("kernel")?,
-            bandwidth: integer("bandwidth")?,
+            kernel: string("kernel")?.into_string(),
+            bandwidth: Some(
+                i64::try_from(integer("bandwidth")?)
+                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+            ),
         },
         "newey" => OlsCovariance::Newey {
-            lag: integer("lag")?,
+            lag: Some(
+                i64::try_from(integer("lag")?)
+                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+            ),
         },
         _ => return Err(KernelExecutionError::InvalidNumericInput),
     })

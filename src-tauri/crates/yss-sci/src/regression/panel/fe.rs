@@ -5,8 +5,8 @@
 //! Stata xtreg, fe style: R2 Within/Between/Overall, sigma_u, sigma_e, rho, corr(u_i,Xb).
 
 use crate::regression::collinearity::drop_collinear_columns;
-use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLS, OLSConfig};
+use crate::regression::linear_model::OLS;
+use yss_sci_contract::regression::CovParams;
 
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
@@ -583,11 +583,12 @@ pub fn fit_panel_fe(
             None
         }
     });
-    let config = OLSConfig {
-        constant: has_const,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        has_const,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: y_tilde,
@@ -859,11 +860,12 @@ pub fn fit_panel_fe_time(
             None
         }
     });
-    let config = OLSConfig {
-        constant: has_const,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        has_const,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: y_tilde,
@@ -1122,11 +1124,12 @@ pub fn fit_panel_fe_twoway(
             None
         }
     });
-    let config = OLSConfig {
-        constant: has_const,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        has_const,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: y_tilde,

@@ -6,11 +6,11 @@
 //! Gives same slope coefficients β as within estimator.
 
 use crate::regression::collinearity::drop_collinear_columns;
-use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLS, OLSConfig};
+use crate::regression::linear_model::OLS;
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 use yss_linalg::{MatrixExt, Solve};
+use yss_sci_contract::regression::CovParams;
 
 /// Panel LSDV estimator (Stata areg style)
 /// exog: [1, x1, x2, ...] with constant in column 0
@@ -89,11 +89,12 @@ pub fn fit_panel_lsdv(
             None
         }
     });
-    let config = OLSConfig {
-        constant: true,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        true,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: endog.clone(),
@@ -307,11 +308,12 @@ pub fn fit_panel_lsdv_time(
             None
         }
     });
-    let config = OLSConfig {
-        constant: true,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        true,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: endog.clone(),
@@ -537,11 +539,12 @@ pub fn fit_panel_lsdv_twoway(
             None
         }
     });
-    let config = OLSConfig {
-        constant: true,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        true,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: endog.clone(),

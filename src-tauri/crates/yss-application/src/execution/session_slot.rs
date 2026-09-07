@@ -10,13 +10,13 @@ use yss_database_runtime::runtime::{
     DatabaseSessionDrainControl,
 };
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::{ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState};
 use yss_graph_runtime::GraphRuntimeState;
 use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
+use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ApplicationSessionEpoch(u64);
@@ -1111,6 +1111,10 @@ pub struct ApplicationState {
 }
 
 impl ApplicationState {
+    pub(crate) fn scientific_backend(&self) -> Option<&dyn ScientificBackend> {
+        self.scientific_backend.as_deref()
+    }
+
     pub fn new(session_slot: Arc<ApplicationSessionSlot>) -> Self {
         Self {
             session_slot,

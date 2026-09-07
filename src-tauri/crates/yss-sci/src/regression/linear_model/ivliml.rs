@@ -4,7 +4,8 @@
 //! κ-class estimator with κ = minimum eigenvalue of (Ỹ'MZ Ỹ)^{-1/2} Ỹ'MX1 Ỹ (Ỹ'MZ Ỹ)^{-1/2}
 //! β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
 
-use crate::regression::covariance::{CovParams, compute_cov_beta};
+use crate::regression::covariance::compute_cov_beta;
+use yss_sci_contract::regression::CovParams;
 
 use ndarray::{Array1, Array2};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};

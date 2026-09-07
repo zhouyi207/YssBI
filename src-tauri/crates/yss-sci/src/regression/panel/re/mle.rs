@@ -272,11 +272,12 @@ pub fn fit_panel_re_mle(
             let res = OLS {
                 endog: Array1::from_vec(y_star),
                 exog: x_use,
-                config: crate::regression::linear_model::OLSConfig {
-                    constant: true,
-                    cov_type: "nonrobust".to_string(),
-                    cov_params: None,
-                },
+                config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                    true,
+                    "nonrobust",
+                    (None).as_ref(),
+                )
+                .map_err(|error| error.to_string())?,
             }
             .fit()
             .map_err(|e| format!("const-only GLS: {}", e))?;
@@ -433,11 +434,12 @@ pub fn fit_panel_re_mle(
         let ols_re = OLS {
             endog: y_star,
             exog: x_star_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         };
         let res0 = ols_re
             .fit()
@@ -522,11 +524,12 @@ pub fn fit_panel_re_mle(
     };
 
     // MLE always uses OIM standard errors; ignore cov_type/cov_params.
-    let config = crate::regression::linear_model::OLSConfig {
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
         constant,
-        cov_type: "nonrobust".to_string(),
-        cov_params: None,
-    };
+        "nonrobust",
+        (None).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let mut result = OLS {
         endog: y_star,
@@ -609,11 +612,12 @@ pub fn fit_panel_re_mle(
         let ols_pooled = OLS {
             endog: endog.clone(),
             exog: x_ols_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         };
         let res_ols = ols_pooled
             .fit()

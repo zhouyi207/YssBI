@@ -1,4 +1,5 @@
-use crate::regression::covariance::{CovParams, compute_cov_beta};
+use crate::regression::covariance::compute_cov_beta;
+use yss_sci_contract::regression::CovParams;
 
 use ndarray::{Array1, Array2};
 use statrs::{

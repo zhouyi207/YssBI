@@ -3,9 +3,9 @@
 //! Δy_it = β Δx_it + Δu_it
 //! 与 Stata D. 算子一致：仅在原始数据中相邻时间点之间差分（delta=1），不跨 gap。
 
-use crate::regression::covariance::CovParams;
-use crate::regression::linear_model::{OLS, OLSConfig};
+use crate::regression::linear_model::OLS;
 use ndarray::{Array1, Array2};
+use yss_sci_contract::regression::CovParams;
 
 /// Panel First Difference estimator
 ///
@@ -91,11 +91,12 @@ pub fn fit_panel_fd(
             None
         }
     });
-    let config = OLSConfig {
-        constant: has_const,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+        has_const,
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: dy_arr,

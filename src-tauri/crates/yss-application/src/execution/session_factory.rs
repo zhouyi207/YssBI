@@ -13,7 +13,6 @@ use yss_database_runtime::runtime::DatabaseRuntimeSession;
 use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::plan::PlanProjectSessionId;
-use yss_execution::ports::scientific::ScientificBackend;
 use yss_execution::resource_preparation::ResourceProviderFactory;
 use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
@@ -22,6 +21,7 @@ use yss_project::ProjectState;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
+use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Debug, Eq, PartialEq, Error)]
 pub(crate) enum ReplacementCandidateInputError {

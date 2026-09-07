@@ -15,18 +15,6 @@ pub enum MissingValuePolicy {
     Reject,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct NumericTolerance {
-    pub absolute: f64,
-    pub relative: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SciComputationSettings {
-    pub tolerance: NumericTolerance,
-    pub missing_values: MissingValuePolicy,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatisticalObservationMetadata {

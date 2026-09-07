@@ -35,7 +35,6 @@ members = [
   "crates/yss-display-naming",
   "crates/yss-duckdb",
   "crates/yss-execution",
-  "crates/yss-execution-sci-adapter",
   "crates/yss-file-replace",
   "crates/yss-function-editor-projection",
   "crates/yss-graph-analysis",
@@ -161,6 +160,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-sci-contract = { path = "./crates/yss-sci-contract" }
+yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-api = { path = "./crates/yss-api" }
 yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
@@ -169,7 +170,6 @@ yss-bayes-artifact-polars = { path = "./crates/yss-bayes-artifact-polars" }
 yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-execution = { path = "./crates/yss-execution" }
-yss-execution-sci-adapter = { path = "./crates/yss-execution-sci-adapter" }
 yss-julia-worker = { path = "./crates/yss-julia-worker" }
 yss-project = { path = "./crates/yss-project" }
 yss-project-identity = { path = "./crates/yss-project-identity" }

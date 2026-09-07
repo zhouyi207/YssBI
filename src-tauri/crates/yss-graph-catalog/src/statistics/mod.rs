@@ -247,6 +247,7 @@ fn configure_parameters(family: Family) -> Result<Vec<ParameterSpec>, BuiltinAss
 }
 
 fn ols_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyError> {
+    let defaults = yss_sci_contract::regression::OlsOptions::default();
     let choice = |key, default, choices: &[&'static str]| {
         let mut parameter = select_parameter(key, default)?;
         parameter.constraints.push(ParameterConstraint::OneOf(
@@ -271,13 +272,13 @@ fn ols_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyErro
     Ok(ConfigurationSchema {
         fields: vec![
             ConfigurationFieldSpec {
-                parameter: toggle_parameter("constant", true)?,
+                parameter: toggle_parameter("constant", defaults.constant)?,
                 visible_when: None,
             },
             ConfigurationFieldSpec {
                 parameter: choice(
                     "covariance",
-                    "nonrobust",
+                    defaults.covariance.name(),
                     &[
                         "nonrobust",
                         "HC0",

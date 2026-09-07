@@ -3,35 +3,7 @@
 
 use ndarray::{Array1, Array2};
 
-/// 协方差计算所需的额外参数（cluster、HAC、fixed scale 等）
-#[derive(Debug, Clone)]
-pub enum CovParams {
-    FixedScale {
-        scale: f64,
-    },
-    Cluster {
-        cluster_id: Vec<usize>,
-        /// When true, use Stata xtreg,fe style: denom = (N-k-1) instead of (N-k).
-        /// Only for FE within estimator where design matrix has slopes only (no absorbed dummies).
-        /// For LSDV: use false — x already includes all dummies, (N-k) is correct.
-        xtreg_fe_style: bool,
-    },
-    HAC {
-        kernel: String,
-        bandwidth: Option<i64>,
-    },
-    /// Stata newey: Bartlett kernel + n/(n-k) finite-sample adjustment (与 ivreg2 HAC 不同)
-    Newey {
-        lag: Option<i64>,
-    },
-    HacPanel {
-        entity_id: Vec<usize>,
-        time_id: Vec<usize>,
-    },
-    HacGroupsum {
-        group_id: Vec<usize>,
-    },
-}
+use yss_sci_contract::regression::CovParams;
 
 /// 计算参数协方差矩阵 cov_beta
 /// - x: (n × k) 设计矩阵
@@ -406,7 +378,7 @@ fn cov_newey(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regression::linear_model::{OLS, OLSConfig};
+    use crate::regression::linear_model::OLS;
 
     #[test]
     fn test_hac_bartlett_bw1_equals_hc0() {
@@ -425,23 +397,26 @@ mod tests {
         let ols_hc0 = OLS {
             endog: endog.clone(),
             exog: exog.clone(),
-            config: OLSConfig {
-                constant: true,
-                cov_type: "HC0".to_string(),
-                cov_params: None,
-            },
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                &("HC0".to_string()),
+                (None).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
         };
         let ols_hac = OLS {
             endog,
             exog,
-            config: OLSConfig {
-                constant: true,
-                cov_type: "HAC".to_string(),
-                cov_params: Some(CovParams::HAC {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                &("HAC".to_string()),
+                (Some(CovParams::HAC {
                     kernel: "Bartlett".to_string(),
                     bandwidth: Some(1),
-                }),
-            },
+                }))
+                .as_ref(),
+            )
+            .expect("valid OLS covariance options"),
         };
 
         let r_hc0 = ols_hc0.fit().unwrap();
@@ -478,20 +453,22 @@ mod tests {
         let ols_hc1 = OLS {
             endog: endog.clone(),
             exog: exog.clone(),
-            config: OLSConfig {
-                constant: true,
-                cov_type: "HC1".to_string(),
-                cov_params: None,
-            },
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                &("HC1".to_string()),
+                (None).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
         };
         let ols_newey = OLS {
             endog,
             exog,
-            config: OLSConfig {
-                constant: true,
-                cov_type: "newey".to_string(),
-                cov_params: Some(CovParams::Newey { lag: Some(0) }),
-            },
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                &("newey".to_string()),
+                (Some(CovParams::Newey { lag: Some(0) })).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
         };
 
         let r_hc1 = ols_hc1.fit().unwrap();
@@ -528,14 +505,16 @@ mod tests {
         let ols = OLS {
             endog,
             exog,
-            config: OLSConfig {
-                constant: true,
-                cov_type: "HAC".to_string(),
-                cov_params: Some(CovParams::HAC {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                &("HAC".to_string()),
+                (Some(CovParams::HAC {
                     kernel: "Bartlett".to_string(),
                     bandwidth: Some(5),
-                }),
-            },
+                }))
+                .as_ref(),
+            )
+            .expect("valid OLS covariance options"),
         };
 
         let r = ols.fit().unwrap();

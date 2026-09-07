@@ -3,21 +3,9 @@
 //! 仅支持 q=1，t = (Rβ - r) / se(Rβ - r) ~ t(df_residual)，支持单侧。
 
 use ndarray::{Array1, Array2};
-use serde::Serialize;
 use statrs::distribution::{ContinuousCDF, StudentsT};
 
-use super::common::Alternative;
-
-/// t 检验结果
-#[derive(Debug, Clone, Serialize)]
-pub struct TTestResult {
-    pub constraint_desc: String,
-    pub alternative: String,
-    pub r_beta_minus_r: f64,
-    pub stat: f64,
-    pub df: usize,
-    pub p_value: f64,
-}
+use yss_sci_contract::hypothesis::{Alternative, TTestResult};
 
 /// t 检验：H0: Rβ = r（仅 q=1）
 ///

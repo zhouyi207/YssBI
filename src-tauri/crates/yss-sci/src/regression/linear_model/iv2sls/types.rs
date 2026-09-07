@@ -8,8 +8,8 @@
 //! Stage 1: Regress each endogenous on Z = [exog, instruments] → endog_hat
 //! Stage 2: Regress Y on X = [exog, endog_hat] → β. VCE uses structural residuals u = y - X_struct*β.
 
-use crate::regression::covariance::CovParams;
 use ndarray::{Array1, Array2};
+use yss_sci_contract::regression::CovParams;
 
 /// 2SLS 配置，与 OLS 一致（constant, cov_type, cov_params）
 pub struct IV2SLSConfig {

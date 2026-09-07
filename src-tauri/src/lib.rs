@@ -120,8 +120,8 @@ fn initialize_harness_state(
 fn initialize_application_state(
     project_state: Arc<yss_project::ProjectState>,
 ) -> Result<yss_application::execution::ApplicationState, ApplicationInitializationError> {
-    let scientific_backend: Arc<dyn yss_execution::ports::scientific::ScientificBackend> =
-        Arc::new(yss_execution_sci_adapter::SciRuntimeBackend::new());
+    let scientific_backend: Arc<dyn yss_sci_contract::scientific::ScientificBackend> =
+        Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
     let candidate = yss_application::execution::session_factory::build_current_project_candidate(
         yss_application::execution::ApplicationSessionEpoch::INITIAL,
         Arc::clone(&project_state),

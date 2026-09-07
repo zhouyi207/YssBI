@@ -8,7 +8,7 @@ pub fn fit_panel_re_fgls_time(
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
-    cov_params: Option<crate::regression::covariance::CovParams>,
+    cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
     let n = endog.len();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
@@ -59,11 +59,12 @@ pub fn fit_panel_re_fgls_time(
     let ols_w = OLS {
         endog: y_w.clone(),
         exog: x_w_use,
-        config: crate::regression::linear_model::OLSConfig {
-            constant: false,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+            false,
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     };
     let res_w = ols_w
         .fit()
@@ -93,11 +94,12 @@ pub fn fit_panel_re_fgls_time(
     let ols_b = OLS {
         endog: y_b,
         exog: x_b_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     };
     let res_b = ols_b
         .fit()
@@ -148,7 +150,7 @@ pub fn fit_panel_re_fgls_time(
 
     let cov_params = cov_params.or_else(|| {
         if cov_type == "cluster" {
-            Some(crate::regression::covariance::CovParams::Cluster {
+            Some(yss_sci_contract::regression::CovParams::Cluster {
                 cluster_id: time_id.to_vec(),
                 xtreg_fe_style: false,
             })
@@ -156,11 +158,12 @@ pub fn fit_panel_re_fgls_time(
             None
         }
     });
-    let config = crate::regression::linear_model::OLSConfig {
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
         constant,
-        cov_type: cov_type.to_string(),
-        cov_params,
-    };
+        cov_type,
+        (cov_params).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols_re = OLS {
         endog: y_star,
@@ -394,7 +397,7 @@ pub fn fit_panel_re_be_time(
     time_id: &[usize],
     constant: bool,
     _cov_type: &str,
-    _cov_params: Option<crate::regression::covariance::CovParams>,
+    _cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
     let n = endog.len();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
@@ -432,11 +435,12 @@ pub fn fit_panel_re_be_time(
 
     // Stata xtreg be does not support vce(cluster); between regression has n_b rows (one per time),
     // so cluster_id from full panel (length n) would not match. Use nonrobust like entity BE.
-    let config = crate::regression::linear_model::OLSConfig {
+    let config = yss_sci_contract::regression::OlsOptions::from_covariance_parts(
         constant,
-        cov_type: "nonrobust".to_string(),
-        cov_params: None,
-    };
+        "nonrobust",
+        (None).as_ref(),
+    )
+    .map_err(|error| error.to_string())?;
 
     let ols = OLS {
         endog: y_b,
@@ -697,11 +701,12 @@ pub fn fit_panel_re_mle_time(
             let res = OLS {
                 endog: Array1::from_vec(y_star),
                 exog: x_use,
-                config: crate::regression::linear_model::OLSConfig {
-                    constant: true,
-                    cov_type: "nonrobust".to_string(),
-                    cov_params: None,
-                },
+                config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                    true,
+                    "nonrobust",
+                    (None).as_ref(),
+                )
+                .map_err(|error| error.to_string())?,
             }
             .fit()
             .map_err(|e| format!("const-only GLS: {}", e))?;
@@ -856,11 +861,12 @@ pub fn fit_panel_re_mle_time(
         let ols_re = OLS {
             endog: y_star,
             exog: x_star_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         };
         let res0 = ols_re
             .fit()
@@ -946,11 +952,12 @@ pub fn fit_panel_re_mle_time(
     let mut result = OLS {
         endog: y_star,
         exog: x_star_use,
-        config: crate::regression::linear_model::OLSConfig {
+        config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
-        },
+            "nonrobust",
+            (None).as_ref(),
+        )
+        .map_err(|error| error.to_string())?,
     }
     .fit()?;
 
@@ -1019,11 +1026,12 @@ pub fn fit_panel_re_mle_time(
         let ols_pooled = OLS {
             endog: endog.clone(),
             exog: x_ols_use,
-            config: crate::regression::linear_model::OLSConfig {
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                 constant,
-                cov_type: "nonrobust".to_string(),
-                cov_params: None,
-            },
+                "nonrobust",
+                (None).as_ref(),
+            )
+            .map_err(|error| error.to_string())?,
         };
         let res_ols = ols_pooled
             .fit()

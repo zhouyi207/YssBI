@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use yss_sci_runtime::api::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
+use yss_sci_runtime::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
 
 const SIMPLE_EXPONENTIAL: &str =
     include_str!("fixtures/time_series/acf_pacf/simple_exponential.json");

@@ -1,13 +1,19 @@
 # yss-sci-contract
 
-Backend-neutral scientific-computing contracts shared by application workflows,
-scientific runtimes, and concrete backend adapters.
+Backend-neutral scientific contracts shared by application workflows, Execution,
+the scientific runtime and numerical models.
 
-This crate owns statistical input values, computation settings, monotonic
-execution controls, cancellation tokens, and stable scientific error codes. It
-does not own algorithms, project/database state, Julia processes, Tauri
-transport, or presentation DTOs.
+- `scientific`: the OLS/ACF backend port, requests/results, admission controls and
+  backend failures. These types contain no execution-plan or project identities.
+- `regression`: the single OLS configuration/default and covariance selection.
+  The report submodule defines typed OLS summary records; construction and labels
+  belong to the runtime.
+- `hypothesis`: shared alternatives and computed t/Wald results.
+- `computation`: validated statistical inputs and observation metadata.
+- `control`: monotonic execution/cancellation controls used by scientific workers.
+- `error`: stable operation and scientific error vocabulary.
 
-Statistical observation metadata records row selection counts and the applied
-missing-value policy. It carries no project/node setting provenance or unused
-convergence-tolerance fields.
+This crate owns data and callable contracts, not algorithms, report rendering,
+project/database state, Tauri, Polars, faer or concrete backend implementations.
+Observation metadata records row selection counts and the applied missing-value
+policy. There is no global approximate-equality tolerance configuration.

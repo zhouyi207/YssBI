@@ -12,7 +12,6 @@ use crate::finalization::{
 };
 use crate::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::package_preparation::PreparedExecutionPlan;
-use crate::ports::scientific::ScientificBackend;
 use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
@@ -23,6 +22,7 @@ use crate::run_output::RunOutputMessage;
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
 use crate::value::RuntimeValue;
+use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Clone)]
 pub struct RunExecutionControl {
@@ -222,21 +222,23 @@ struct UnavailableScientificBackend;
 impl ScientificBackend for UnavailableScientificBackend {
     fn ols(
         &self,
-        _: crate::ports::scientific::OlsRequest,
-        _: &crate::ports::scientific::BackendExecutionControl,
-    ) -> Result<crate::ports::scientific::OlsResult, crate::ports::scientific::ScientificBackendError>
-    {
-        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
+        _: yss_sci_contract::scientific::OlsRequest,
+        _: &yss_sci_contract::scientific::BackendExecutionControl,
+    ) -> Result<
+        yss_sci_contract::scientific::OlsResult,
+        yss_sci_contract::scientific::ScientificBackendError,
+    > {
+        Err(yss_sci_contract::scientific::ScientificBackendError::Unavailable)
     }
     fn acf_pacf(
         &self,
-        _request: crate::ports::scientific::AcfPacfRequest,
-        _control: &crate::ports::scientific::BackendExecutionControl,
+        _request: yss_sci_contract::scientific::AcfPacfRequest,
+        _control: &yss_sci_contract::scientific::BackendExecutionControl,
     ) -> Result<
-        crate::ports::scientific::AcfPacfResult,
-        crate::ports::scientific::ScientificBackendError,
+        yss_sci_contract::scientific::AcfPacfResult,
+        yss_sci_contract::scientific::ScientificBackendError,
     > {
-        Err(crate::ports::scientific::ScientificBackendError::Unavailable)
+        Err(yss_sci_contract::scientific::ScientificBackendError::Unavailable)
     }
 }
 

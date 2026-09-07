@@ -1,4 +1,5 @@
 //! Hypothesis testing orchestration: parse → linearize → format → dispatch.
+use yss_sci_contract::hypothesis::Alternative as SciAlternative;
 
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
@@ -7,10 +8,7 @@ use yss_math_expr::{
     BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
 use yss_sci_contract::SciError;
-use yss_sci_runtime::api::stats::hypothesis::{
-    Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
-};
-use yss_sci_runtime::engine::SciContext;
+use yss_sci_runtime::hypothesis::{LinearHypothesisTestInput, t_test, wald_test};
 
 pub struct HypothesisTestInput {
     pub betas: Vec<f64>,
@@ -182,7 +180,7 @@ pub fn run_hypothesis_test(
     };
     match resolved.test_method {
         TestMethod::TTest => {
-            let result = t_test(&SciContext::rust(), test_input)?;
+            let result = t_test(test_input)?;
             Ok(HypothesisTestOutput {
                 test_type: "t".to_string(),
                 h0_form,
@@ -196,7 +194,7 @@ pub fn run_hypothesis_test(
             })
         }
         TestMethod::Wald => {
-            let result = wald_test(&SciContext::rust(), test_input)?;
+            let result = wald_test(test_input)?;
             Ok(HypothesisTestOutput {
                 test_type: "wald".to_string(),
                 h0_form,

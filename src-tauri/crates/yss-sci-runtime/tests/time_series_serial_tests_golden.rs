@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use yss_sci_runtime::api::time_series::serial_tests::{
+use yss_sci_runtime::time_series::serial_tests::{
     SerialTestWithLag, SerialTestsInput, SerialTestsOutput, compute_serial_tests,
 };
 
