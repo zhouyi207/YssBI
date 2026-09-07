@@ -16,17 +16,6 @@ const logEntry = {
 } satisfies DiagnosticRecordDto;
 
 const catalog = {
-  variables: {
-    "var-1": {
-      id: "var-1",
-      name: "X",
-      dataType: { kind: "Float64" as const },
-      dataValue: { kind: "Float64" as const, value: 1 },
-      scope: { type: "global" as const },
-      description: "",
-      tags: [],
-    },
-  },
   events: { "evt-1": { id: "evt-1", name: "Main" } },
   functions: { "fn-1": { id: "fn-1", name: "Add", functionInputs: [], functionOutputs: [] } },
   dataframes: {
@@ -47,15 +36,6 @@ describe("resolveDetailPanelModel", () => {
   });
 
   it("resolves resource-backed panels from catalog snapshots", () => {
-    expect(
-      resolveDetailPanelModel({
-        target: { kind: "variable", id: "var-1" },
-        selectedLog: null,
-        chartDocument: null,
-        ...catalog,
-      }),
-    ).toMatchObject({ kind: "variable", id: "var-1", variable: { name: "X" } });
-
     expect(
       resolveDetailPanelModel({
         target: { kind: "data", id: "df-1" },

@@ -12,15 +12,15 @@ import {
 } from "./dndContracts";
 
 describe("parseCanvasDragPayload", () => {
-  it("accepts sidebar variable spawn data only with a backend descriptor", () => {
+  it("accepts sidebar database spawn data only with a backend descriptor", () => {
     const descriptor = {
       kind: "resourceBound" as const,
-      nodeTypeId: "variable.get",
-      resourcePath: "variables/v1",
+      nodeTypeId: "yssbi.dataframe.source.get",
+      resourcePath: "databases/v1",
       resourceRevision: 2,
-      createArgs: { kind: "variable" as const },
+      createArgs: { kind: "database" as const },
     };
-    const payload = buildSidebarDragData("v1", "count", "variable", descriptor);
+    const payload = buildSidebarDragData("v1", "count", "data", descriptor);
     expect(parseCanvasDragPayload(payload)?.type).toBe("node-template");
     expect(isNodeTemplateDragData(payload)).toBe(true);
     expect(isSidebarSpawnDrag(payload)).toBe(true);
@@ -72,12 +72,12 @@ describe("buildSidebarDragState", () => {
   it("builds node-template drag state with the exact descriptor", () => {
     const descriptor = {
       kind: "resourceBound" as const,
-      nodeTypeId: "variable.get",
-      resourcePath: "variables/v1",
+      nodeTypeId: "yssbi.dataframe.source.get",
+      resourcePath: "databases/v1",
       resourceRevision: 2,
-      createArgs: { kind: "variable" as const },
+      createArgs: { kind: "database" as const },
     };
-    const payload = buildSidebarDragData("v1", "count", "variable", descriptor);
+    const payload = buildSidebarDragData("v1", "count", "data", descriptor);
     expect(payload).not.toBeNull();
     const state = buildSidebarDragState(payload!, 10, 20);
     expect(isNodeTemplateDragState(state)).toBe(true);

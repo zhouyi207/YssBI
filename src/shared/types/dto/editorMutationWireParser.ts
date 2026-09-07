@@ -8,6 +8,8 @@ import type {
   TypeExprDto,
 } from "./editorMutation";
 import type { GraphProjectionReplacementDto } from "./editorProjection";
+import { isRustDataValueWire } from "./dataValue";
+import { isBackendDataType } from "../domain/dataType";
 import {
   isEditorGraphProjectionDto,
   isFunctionEditorProjectionDto,
@@ -236,10 +238,76 @@ function isInputState(value: unknown): boolean {
   );
 }
 
+export function isGraphConstant(
+  value: unknown,
+): value is import("../domain/editorMutation").GraphConstantDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id",
+      "name",
+      "dataType",
+      "dataValue",
+      ...["tabular", "description", "tags"].filter((key) => key in value),
+    ])
+  )
+    return false;
+  if (
+    !isUuid(value.id) ||
+    typeof value.name !== "string" ||
+    !value.name.trim() ||
+    !isBackendDataType(value.dataType) ||
+    !isRustDataValueWire(value.dataValue)
+  )
+    return false;
+  if ("description" in value && typeof value.description !== "string") return false;
+  if (
+    "tags" in value &&
+    (!Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === "string"))
+  )
+    return false;
+  if ("tabular" in value) {
+    if (
+      !isRecord(value.tabular) ||
+      !hasExactKeys(value.tabular, ["columns"]) ||
+      !isRecord(value.tabular.columns)
+    )
+      return false;
+    let length: number | undefined;
+    for (const cells of Object.values(value.tabular.columns)) {
+      if (
+        !Array.isArray(cells) ||
+        !cells.every(
+          (cell) =>
+            cell === null ||
+            typeof cell === "boolean" ||
+            typeof cell === "string" ||
+            (typeof cell === "number" && Number.isFinite(cell)),
+        )
+      )
+        return false;
+      if (length !== undefined && cells.length !== length) return false;
+      length = cells.length;
+    }
+  }
+  return true;
+}
+
 export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["nodes", "port_bindings", "connections", "input_states"]) ||
+    !hasExactKeys(value, [
+      "nodes",
+      "port_bindings",
+      "connections",
+      "input_states",
+      ...("constants" in value ? ["constants"] : []),
+    ]) ||
+    ("constants" in value &&
+      (!isRecord(value.constants) ||
+        !Object.entries(value.constants).every(
+          ([id, constant]) => isUuid(id) && isGraphConstant(constant) && constant.id === id,
+        ))) ||
     !isRecord(value.nodes) ||
     !Object.entries(value.nodes).every(
       ([nodeId, node]) =>

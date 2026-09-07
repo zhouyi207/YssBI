@@ -34,8 +34,6 @@ function resourceKeyFromRef(ref: ResourceRef): ResourceKey {
       return `yssbi://chart/${ref.id}`;
     case "database":
       return `yssbi://database/${ref.id}`;
-    case "variable":
-      return `yssbi://variable/${ref.id}`;
   }
 }
 

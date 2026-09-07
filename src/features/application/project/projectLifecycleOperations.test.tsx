@@ -133,16 +133,15 @@ function activeTerminalRowRejectionReceipt(
 
 function mockProjectBHydration(): void {
   vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
-  vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
+  vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
     databases: {},
-    variables: {},
   });
   vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
     projectInstanceId: "project-b",
     publicationRevision: 0,
     projectName: "Project B",
     graphs: [],
-    variables: [],
+
     charts: [],
     databases: [],
     exportTime: "",
@@ -230,16 +229,15 @@ describe("project lifecycle initiating operations", () => {
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
-    vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
+    vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
       databases: {},
-      variables: {},
     });
     vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
       projectInstanceId: "project-b",
       publicationRevision: 0,
       projectName: "Project B",
       graphs: [],
-      variables: [],
+
       charts: [],
       databases: [],
       exportTime: "",
@@ -266,7 +264,6 @@ describe("project lifecycle initiating operations", () => {
 
     expect(useEditorStore.getState()).toMatchObject({
       detailFocus: null,
-      variablesGraphScopePath: null,
     });
   });
 
@@ -368,16 +365,15 @@ describe("project lifecycle initiating operations", () => {
     const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, "saveProjectAs").mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, "getProjectPath").mockResolvedValue("C:/project-b/metadata.yssbi");
-    vi.spyOn(ProjectService, "getDatabasesVariables").mockResolvedValue({
+    vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
       databases: {},
-      variables: {},
     });
     vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
       projectInstanceId: "project-b",
       publicationRevision: 0,
       projectName: "Project B",
       graphs: [],
-      variables: [],
+
       charts: [],
       databases: [],
       exportTime: "",
@@ -651,7 +647,7 @@ describe("project lifecycle initiating operations", () => {
           revision: 1,
         },
       ],
-      variables: [],
+
       charts: [],
       databases: [],
       exportTime: "",

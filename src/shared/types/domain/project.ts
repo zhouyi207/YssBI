@@ -1,9 +1,6 @@
-import type { Variable } from "./variable";
 import type { DatabaseEngineDTO } from "./database";
 import type { FunctionEditorProjectionDto } from "./editorProjection";
 import type { FunctionSignatureDto, ResourceKeyDto } from "./editorMutation";
-import type { DataType } from "./dataType";
-import type { DataValue } from "./dataValue";
 import type { ChartType } from "./chart";
 
 export interface ProjectRecordRow {
@@ -90,21 +87,6 @@ export interface ProjectChartIndexRow {
   revision: number;
 }
 
-export interface ProjectVariableIndexRow {
-  id: string;
-  resourcePath: string;
-  revision: number;
-  name: string;
-  dataType: DataType;
-  dataValue: DataValue;
-  description: string;
-  scope: Variable["scope"];
-  tags: string[];
-  ownerGraphPath?: string | null;
-  ownerGraphName?: string | null;
-  ownerGraphKind?: "event" | "function" | null;
-}
-
 export interface ProjectDatabaseIndexRow {
   id: string;
   resourcePath: string;
@@ -122,7 +104,6 @@ export interface ProjectIndexRow {
   publicationRevision: number;
   graphs: ProjectGraphIndexRow[];
   charts: ProjectChartIndexRow[];
-  variables: ProjectVariableIndexRow[];
   databases: ProjectDatabaseIndexRow[];
 }
 

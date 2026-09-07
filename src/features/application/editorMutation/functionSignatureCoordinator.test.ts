@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
-import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import type {
   FunctionSignatureDto,
@@ -150,7 +149,6 @@ describe("executeFunctionSignatureMutation", () => {
     resetPendingBackendMutations();
     resetFunctionSignatureCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
-    useVariableStore.setState({ variables: {} });
     installState();
   });
 
@@ -322,7 +320,7 @@ describe("executeFunctionSignatureMutation", () => {
         },
       ],
       databases: [],
-      variables: [],
+
       charts: [],
     });
 

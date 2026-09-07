@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useDetailsCommands } from "@/features/application/editor";
 import { updateFunctionSignature } from "@/features/application/graphDocument/graphDocumentActions";
 import { loadChartDocumentForView } from "@/features/application/chart/chartViewActions";
 import { DetailEmptyState } from "./DetailEmptyState";
@@ -9,12 +8,10 @@ import { FunctionDetailPanel } from "./panels/FunctionDetailPanel";
 import { LogDetailPanel } from "./panels/LogDetailPanel";
 import { NodeDefinitionDetailPanel } from "./panels/NodeDefinitionDetailPanel";
 import { NodeDetailPanel } from "./panels/NodeDetailPanel";
-import { VariableDetailPanel } from "./panels/VariableDetailPanel";
 import { ChartDetailPanel } from "./panels/ChartDetailPanel";
 import { useDetailPanelModel } from "./useDetailPanelModel";
 
 export function DetailsPane() {
-  const { updateVariable } = useDetailsCommands();
   const { model, chartPath, chartName, chartDocument } = useDetailPanelModel();
 
   useEffect(() => {
@@ -29,18 +26,12 @@ export function DetailsPane() {
       return <NodeDetailPanel graphPath={model.graphPath} nodeId={model.nodeId} />;
     case "nodeDefinition":
       return <NodeDefinitionDetailPanel nodeType={model.nodeType} />;
-    case "variable":
-      return (
-        <VariableDetailPanel
-          variable={model.variable}
-          onUpdate={(patch) => updateVariable(model.id, patch)}
-        />
-      );
     case "event":
-      return <EventDetailPanel event={model.event} />;
+      return <EventDetailPanel event={model.event} graphPath={model.path} />;
     case "function":
       return (
         <FunctionDetailPanel
+          graphPath={model.path}
           fn={model.fn}
           onSignatureChange={(patch) => {
             void updateFunctionSignature(model.path, patch);

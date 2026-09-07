@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VariableValueEditorModal } from "./VariableValueEditorModal";
+import { ConstantValueEditorModal } from "./ConstantValueEditorModal";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -10,7 +10,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        "detail.variableValue.errors.invalidJson": "Invalid JSON",
+        "detail.constantValue.errors.invalidJson": "Invalid JSON",
         "common.confirm": "OK",
       })[key] ?? key,
   }),
@@ -31,7 +31,7 @@ function setTextareaValue(element: HTMLTextAreaElement, value: string): void {
   });
 }
 
-describe("VariableValueEditorModal validation", () => {
+describe("ConstantValueEditorModal validation", () => {
   let host: HTMLDivElement;
   let root: Root;
   const onSave = vi.fn();
@@ -53,7 +53,7 @@ describe("VariableValueEditorModal validation", () => {
   it("shows invalid JSON inside the dialog and describes the textarea", () => {
     act(() =>
       root.render(
-        <VariableValueEditorModal
+        <ConstantValueEditorModal
           open
           onClose={onClose}
           dataType={{ kind: "Array", inner: { kind: "Int64" } }}

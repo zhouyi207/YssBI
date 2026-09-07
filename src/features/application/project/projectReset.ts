@@ -24,7 +24,6 @@ export interface ProjectPresentationResetActions {
 export function resetProjectScopedRightSidebarState(): void {
   const editor = useEditorStore.getState();
   editor.clearDetailFocus();
-  editor.setVariablesGraphScope(null);
 }
 
 function runOwnedReset(owner: ProjectLifecycleStateSnapshot, reset: () => void): boolean {

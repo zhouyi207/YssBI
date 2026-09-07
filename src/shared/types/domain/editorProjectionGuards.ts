@@ -23,6 +23,7 @@ const scalarTypes = new Set([
 const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
 const parameterEditorKinds = new Set([
+  "graphConstant",
   "auto",
   "text",
   "number",

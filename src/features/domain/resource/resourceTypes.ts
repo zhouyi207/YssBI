@@ -1,6 +1,6 @@
 import type { GraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
-export type ResourceKind = GraphResourceKind | "chart" | "database" | "variable";
+export type ResourceKind = GraphResourceKind | "chart" | "database";
 
 /** Canonical store key — always equals `ProjectResourceMeta.uri`. */
 export type ResourceKey = string;

@@ -1,5 +1,5 @@
 import type { ClipboardSubgraphDto } from "./clipboardSubgraph";
-import { isTypedLiteralWire } from "./editorMutationWireParser";
+import { isGraphConstant, isTypedLiteralWire } from "./editorMutationWireParser";
 
 interface UnknownRecord {
   [key: string]: unknown;
@@ -67,7 +67,7 @@ function isCreateArgs(value: unknown): boolean {
   return (
     isRecord(value) &&
     hasExactKeys(value, ["kind"]) &&
-    ["function", "variable", "database"].includes(value.kind as string)
+    ["function", "database"].includes(value.kind as string)
   );
 }
 
@@ -198,8 +198,11 @@ export function parseClipboardSubgraphDto(value: unknown): ClipboardSubgraphDto 
       "portBindings",
       "inputStates",
       "connections",
+      ...("constants" in value ? ["constants"] : []),
     ]) ||
     value.schemaVersion !== 1 ||
+    ("constants" in value &&
+      (!Array.isArray(value.constants) || !value.constants.every(isGraphConstant))) ||
     !Array.isArray(value.nodes) ||
     !value.nodes.every(isNode) ||
     !Array.isArray(value.portBindings) ||

@@ -110,7 +110,7 @@ describe("Rust-generated node-system golden contracts", () => {
       "parameterizedStatic",
       "resourceBound",
       "resourceBound",
-      "resourceBound",
+      "static",
     ]);
     for (const item of localizedCatalog.items) {
       expect(isNodeCreationDescriptorDto(item.creation)).toBe(true);

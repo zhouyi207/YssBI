@@ -1,7 +1,4 @@
-export type ResourceBoundCreateArgsDto =
-  | { kind: "function" }
-  | { kind: "variable" }
-  | { kind: "database" };
+export type ResourceBoundCreateArgsDto = { kind: "function" } | { kind: "database" };
 
 export type NodeCreationDescriptorDto =
   | {
@@ -28,10 +25,7 @@ function isExactRecord(value: unknown, keys: readonly string[]): value is Record
 }
 
 function isResourceBoundCreateArgs(value: unknown): value is ResourceBoundCreateArgsDto {
-  return (
-    isExactRecord(value, ["kind"]) &&
-    (value.kind === "function" || value.kind === "variable" || value.kind === "database")
-  );
+  return isExactRecord(value, ["kind"]) && (value.kind === "function" || value.kind === "database");
 }
 
 export function isNodeCreationDescriptorDto(value: unknown): value is NodeCreationDescriptorDto {

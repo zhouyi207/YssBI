@@ -3,7 +3,6 @@ import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
 export type DetailTarget =
   | { kind: "node"; id: string; graphPath: string }
   | { kind: "nodeDefinition"; nodeType: string }
-  | { kind: "variable"; id: string }
   | { kind: "data"; id: string }
   | { kind: "log" }
   | { kind: "event"; path: string }

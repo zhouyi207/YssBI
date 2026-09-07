@@ -5,8 +5,10 @@ import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { PinEditor } from "../shared/PinEditor";
 
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
+import { GraphConstantsPanel } from "./GraphConstantsPanel";
 
 interface FunctionDetailPanelProps {
+  graphPath: string;
   fn: {
     name: string;
     inputs?: FunctionPinSpec[];
@@ -16,7 +18,11 @@ interface FunctionDetailPanelProps {
   onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
 
-export function FunctionDetailPanel({ fn, onSignatureChange }: FunctionDetailPanelProps) {
+export function FunctionDetailPanel({
+  fn,
+  graphPath,
+  onSignatureChange,
+}: FunctionDetailPanelProps) {
   const { t } = useTranslation();
 
   return (
@@ -29,6 +35,7 @@ export function FunctionDetailPanel({ fn, onSignatureChange }: FunctionDetailPan
           {t("detail.typeLabels.function")}
         </DetailReadonlyField>
       </DetailForm>
+      <GraphConstantsPanel key={graphPath} graphPath={graphPath} />
       <PinEditor
         title={t("detail.pinEditor.inputs")}
         emptyMessage={t("detail.pinEditor.noInputs")}

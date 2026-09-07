@@ -21,7 +21,7 @@ import {
   formatGraphDiagnostic,
   isUnboundInputDiagnostic,
 } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
-import { dataValueFromBackend, dataValueToRaw } from "@/shared/types/domain/dataValue";
+import { deserializeDataValue, dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { PRIMITIVE_SCALAR_INPUT_KEYS, scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinContextMenu } from "../ContextMenu";
@@ -40,7 +40,7 @@ function toDisplayValue(value: unknown): unknown {
       "Null" in value)
   ) {
     return dataValueToRaw(
-      dataValueFromBackend(value as Parameters<typeof dataValueFromBackend>[0]),
+      deserializeDataValue(value as Parameters<typeof deserializeDataValue>[0]),
     );
   }
   return value;

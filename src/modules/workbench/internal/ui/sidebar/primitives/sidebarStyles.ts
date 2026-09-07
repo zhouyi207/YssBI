@@ -29,7 +29,7 @@ function sidebarItemRowBaseClass(isSelected = false) {
   );
 }
 
-/** Leaf row: data / graph / variable / chart items. */
+/** Leaf row: data / graph / chart items. */
 export function sidebarItemRowClass(isSelected = false) {
   return sidebarItemRowBaseClass(isSelected);
 }
@@ -43,13 +43,6 @@ export function sidebarItemLabelClass(isSelected = false) {
   return cn(
     "min-w-0 flex-1 truncate text-[12px] leading-normal tracking-tight",
     isSelected ? "font-medium text-sidebar-foreground" : "font-normal",
-  );
-}
-
-export function sidebarVariableTypeBadgeClass(isSelected = false) {
-  return cn(
-    "min-w-0 max-w-[40%] shrink truncate flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
-    isSelected ? "bg-white/[0.12]" : "bg-sidebar-accent/50",
   );
 }
 

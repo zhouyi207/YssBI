@@ -8,6 +8,5 @@ function resourceNodeSpawnTemplate(
   return { title, descriptor };
 }
 
-export const variableNodeSpawnTemplate = resourceNodeSpawnTemplate;
 export const dataFrameNodeSpawnTemplate = resourceNodeSpawnTemplate;
 export const functionCallNodeSpawnTemplate = resourceNodeSpawnTemplate;

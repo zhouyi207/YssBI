@@ -5,5 +5,4 @@ export type {
   EditorDataframes,
   EditorEvents,
   EditorFunctions,
-  EditorVariables,
 } from "./editorCollections";

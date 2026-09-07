@@ -1,12 +1,10 @@
 import { useProjectIOStore, resetGraphLoadOwnership } from "./projectIOStore";
 import { LoadStatus } from "@/shared/types/ui/common";
-import type { Variable } from "@/shared/types";
 import { ProjectService, type ProjectActivationResult } from "@/services/project/projectService";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { logger } from "@/features/application/observability/appLogger";
 
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 
@@ -20,11 +18,6 @@ import {
   applySnapshotDocumentPatches,
   prepareResourceProjectionSnapshot,
 } from "@/features/core/resource/resourceSnapshotProjection";
-import {
-  buildVariableCatalog,
-  variableCatalogToResourceMetas,
-  variableRevisionsFromIndex,
-} from "@/features/core/variable/variableCatalog";
 import { resetClientProjectState } from "@/features/application/project/projectReset";
 import { synchronizeProjectPresentation } from "@/features/application/project/projectPresentationSync";
 import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
@@ -96,7 +89,6 @@ function buildResourceIndex(params: {
     chartType: import("@/shared/types/domain/chart").ChartType;
     revision: number;
   }>;
-  variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
 }): ProjectResourceMeta[] {
   const resources: ProjectResourceMeta[] = [];
@@ -121,7 +113,6 @@ function buildResourceIndex(params: {
       hasConflictDocument: false,
     });
   }
-  resources.push(...variableCatalogToResourceMetas(params.variables));
   for (const [id, database] of Object.entries(params.databases)) {
     const name = typeof database.name === "string" ? database.name : id;
     resources.push({
@@ -170,10 +161,6 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
     if (!isCurrentProjectIdentity(identity)) return false;
     if (index.projectInstanceId !== identity.projectInstanceId) return false;
-    const variableCatalog = buildVariableCatalog(index.variables);
-    useVariableStore
-      .getState()
-      .setVariableSnapshot(variableCatalog, variableRevisionsFromIndex(index.variables));
 
     const databaseRows = index.databases;
     const databasePaths = Object.fromEntries(databaseRows.map((row) => [row.id, row.resourcePath]));
@@ -201,7 +188,6 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     const incoming = buildResourceIndex({
       graphs: index.graphs,
       charts: chartIndex,
-      variables: variableCatalog,
       databases: useDatabaseStore.getState().databases,
     });
 
@@ -234,7 +220,7 @@ export async function prepareAuthoritativeProjectLoad(
 ): Promise<PreparedAuthoritativeProjectLoad> {
   const path = await ProjectService.getProjectPath(identity.projectInstanceId);
   assertCurrentProjectIdentity(identity);
-  const { databases } = await ProjectService.getDatabasesVariables(identity.projectInstanceId);
+  const { databases } = await ProjectService.getDatabases(identity.projectInstanceId);
   assertCurrentProjectIdentity(identity);
   const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
   assertCurrentProjectIdentity(identity);
@@ -328,12 +314,6 @@ export async function commitPreparedAuthoritativeProjectLoad(
     useDatabaseStore.setState({
       databases: prepared.storeState.databases,
       revisions: prepared.storeState.databaseRevisions,
-    }),
-  );
-  commitProjectLoadStep("variable", () =>
-    useVariableStore.setState({
-      variables: prepared.storeState.variables,
-      revisions: prepared.storeState.variableRevisions,
     }),
   );
   commitProjectLoadStep("chart", () =>
@@ -460,7 +440,6 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
     return;
 
   if (!commitOwnedClear(() => useDatabaseStore.getState().setDatabaseSnapshot({}, {}))) return;
-  if (!commitOwnedClear(() => useVariableStore.getState().clear())) return;
   if (
     !commitOwnedClear(() =>
       useResourceStore.getState().setSnapshot({ resources: [], graphOrder: [] }),

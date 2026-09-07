@@ -31,6 +31,28 @@ export type DataValue =
   | { kind: "Struct"; value: { typeKey: string; handleId: string } }
   | { kind: "Null" };
 
+export type SerializedDataSeriesValue =
+  | string
+  | {
+      id: string;
+      elementType?: DataType;
+      dummyInfo?: unknown;
+      timeSeriesState?: unknown;
+    };
+
+/** 后端 DataValue 序列化格式（Rust serde 外部标签枚举） */
+export type SerializedDataValue =
+  | { Boolean: boolean }
+  | { Int64: number }
+  | { Float64: number }
+  | { String: string }
+  | { Array: SerializedDataValue[] }
+  | { Object: Record<string, SerializedDataValue> }
+  | { DataFrame: string }
+  | { DataSeries: SerializedDataSeriesValue }
+  | { Struct: { typeKey: string; handleId: string } }
+  | "Null";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -53,7 +75,7 @@ function dataTypeFromBackend(value: unknown): DataType {
   return dataTypeFromKey(value.kind);
 }
 
-export function dataValueFromBackend(value: unknown): DataValue {
+export function deserializeDataValue(value: unknown): DataValue {
   if (value == null || value === "Null") return { kind: "Null" };
   if (!isRecord(value)) return { kind: "Null" };
   if ("kind" in value && "value" in value) return value as DataValue;
@@ -70,10 +92,18 @@ export function dataValueFromBackend(value: unknown): DataValue {
     return { kind: "String", value: value.String };
   }
   if ("Array" in value && Array.isArray(value.Array)) {
-    return { kind: "Array", value: value.Array.map(dataValueFromBackend) };
+    return { kind: "Array", value: value.Array.map(deserializeDataValue) };
   }
   if ("Object" in value && isRecord(value.Object)) {
-    return { kind: "Object", value: value.Object };
+    return {
+      kind: "Object",
+      value: Object.fromEntries(
+        Object.entries(value.Object).map(([key, value]) => [
+          key,
+          dataValueToRaw(deserializeDataValue(value)),
+        ]),
+      ),
+    };
   }
   if ("DataFrame" in value && typeof value.DataFrame === "string") {
     return { kind: "DataFrame", value: value.DataFrame };
@@ -228,5 +258,51 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
       return inferDataValueFromJson(raw);
     default:
       return { kind: "Null" };
+  }
+}
+
+export function serializeDataValue(dv: DataValue): SerializedDataValue {
+  switch (dv.kind) {
+    case "Boolean":
+      return { Boolean: dv.value };
+    case "Int64":
+      return { Int64: dv.value };
+    case "Float64":
+      return { Float64: dv.value };
+    case "String":
+      return { String: dv.value };
+    // 后端 DataValue 无 Date/Datetime/Time/Categorical 变体，统一以 String 承载
+    case "Date":
+    case "Datetime":
+    case "Time":
+    case "Categorical":
+      return { String: dv.value };
+    case "Array":
+      return { Array: dv.value.map(serializeDataValue) };
+    case "Object":
+      return {
+        Object: Object.fromEntries(
+          Object.entries(dv.value).map(([key, value]) => [
+            key,
+            serializeDataValue(inferDataValueFromJson(value)),
+          ]),
+        ),
+      };
+    case "DataFrame":
+      return { DataFrame: dv.value };
+    case "DataSeries": {
+      if (typeof dv.value === "string") {
+        return { DataSeries: dv.value };
+      }
+      const payload: SerializedDataSeriesValue = { id: dv.value.id };
+      if (dv.value.elementType) {
+        payload.elementType = dv.value.elementType;
+      }
+      return { DataSeries: payload };
+    }
+    case "Struct":
+      return { Struct: dv.value };
+    case "Null":
+      return "Null";
   }
 }

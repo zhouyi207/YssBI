@@ -36,13 +36,6 @@ function isSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value);
 }
 
-function isJsonValue(value: unknown): boolean {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every(isJsonValue);
-  return isRecord(value) && Object.values(value).every(isJsonValue);
-}
-
 function isPositionShape(value: unknown): boolean {
   return isRecord(value) && hasExactKeys(value, ["x", "y"]);
 }
@@ -183,15 +176,6 @@ function isFunctionPatchShape(value: unknown): boolean {
   );
 }
 
-function isBeforeAfterShape(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    hasExactKeys(value, ["before", "after"]) &&
-    isJsonValue(value.before) &&
-    isJsonValue(value.after)
-  );
-}
-
 function isPathMoveShape(value: unknown): boolean {
   return isRecord(value) && hasExactKeys(value, ["from", "to"]);
 }
@@ -280,10 +264,7 @@ function isResourcePayloadShape(value: unknown): boolean {
     case "resource_lifecycle":
       return isLifecyclePatchShape(value.patch);
     case "resource_move":
-    case "variable_scope_move":
       return isPathMoveShape(value.patch);
-    case "variable":
-      return isBeforeAfterShape(value.patch);
     case "database":
       return isDatabasePatchShape(value.patch);
     default:
@@ -307,8 +288,6 @@ function cloneResourceKey(resource: ResourceKeyDto): ResourceKeyDto {
       return { kind: "graph", key: resource.key };
     case "function":
       return { kind: "function", key: resource.key };
-    case "variable":
-      return { kind: "variable", key: resource.key };
     case "database":
       return { kind: "database", key: resource.key };
     case "chart":
@@ -330,10 +309,6 @@ function cloneResourcePayload(payload: ResourceDocumentPatchDto): ResourceDocume
       return { kind: "resource_lifecycle", patch: structuredClone(payload.patch) };
     case "resource_move":
       return { kind: "resource_move", patch: structuredClone(payload.patch) };
-    case "variable":
-      return { kind: "variable", patch: structuredClone(payload.patch) };
-    case "variable_scope_move":
-      return { kind: "variable_scope_move", patch: structuredClone(payload.patch) };
     case "database":
       return { kind: "database", patch: structuredClone(payload.patch) };
     default:

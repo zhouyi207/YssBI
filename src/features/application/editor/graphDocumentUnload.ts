@@ -1,4 +1,4 @@
-import { useGraphProjectionStore, useVariableStore } from "@/features/core/dataStore";
+import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { invalidateGraphLoadOwnership } from "@/features/application/project/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution";
@@ -28,7 +28,6 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
   useGraphProjectionStore.getState().clearGraph(graphPath);
   useGraphDraftStore.getState().clearGraph(graphPath);
   clearCanvasInteractionGraph(graphPath);
-  useVariableStore.getState().clearGraphVariables(graphPath);
   useExecutionStore.getState().releaseGraphExecutionState(graphPath);
   releaseGraphViewport(graphPath);
 

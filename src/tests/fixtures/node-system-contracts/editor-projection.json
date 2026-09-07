@@ -24,26 +24,26 @@
       "display": {
         "iconId": "builtin.constants",
         "styleId": "builtin.default",
-        "title": "Boolean Constant",
+        "title": "Contract Boolean",
         "userLabel": "Contract Boolean"
       },
       "graphPath": "events/contract.yssbi-event",
       "nodeId": "00000000-0000-0000-0000-000000000002",
-      "nodeTypeId": "yssbi.constant.bool",
+      "nodeTypeId": "yssbi.constant.get",
       "parameterEditors": [
         {
           "configuration": null,
           "display": {
-            "description": "The constant value.",
-            "title": "Value"
+            "description": "Immutable value defined in this graph's Details panel.",
+            "title": "Constant"
           },
-          "editor": "toggle",
-          "key": "value",
+          "editor": "graphConstant",
+          "key": "constant",
           "multiline": false,
-          "presentation": "inlineAndDetail",
-          "value": true,
+          "presentation": "detailPanel",
+          "value": "00000000-0000-0000-0000-000000000004",
           "valueType": {
-            "kind": "Boolean"
+            "kind": "String"
           }
         }
       ],

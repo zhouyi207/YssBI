@@ -8,7 +8,6 @@ import {
 import { isGraphDraftDirty, isGraphDraftSaving } from "@/features/core/graphDraft";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useVariableStore } from "@/features/core/dataStore/variableStore";
 
 import { validateResourceMutationResult } from "@/features/domain/resource/resourceMutationValidation";
 import { toProjectionEntities } from "@/features/domain/editorProjection";
@@ -16,15 +15,11 @@ import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuard
 import { lookupGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type { DatabaseDocumentDto, DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabaseRecord } from "@/features/application/dataManagement/databaseRecords";
-import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
-import { variableCatalogToResourceMetas } from "@/features/core/variable/variableCatalog";
 import type {
   GraphProjectionReplacementDto,
   ResourceDeltaDto,
   ResourceMutationResultDto,
-  VariableDocumentPatchDto,
 } from "@/shared/types/domain/editorMutation";
-import type { Variable } from "@/shared/types/domain/variable";
 import type { ChartDocument, ChartIndexEntry } from "@/shared/types/domain/chart";
 import { installFunctionEditorProjection } from "@/features/application/graphDocument/functionSignatureSync";
 import {
@@ -37,7 +32,6 @@ import type {
   PreparedFunctionDeltaInstall,
   PreparedProjectPublication,
   PreparePublicationContext,
-  PreparedVariableDeltaInstall,
 } from "./projectPublicationCoordinator";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
@@ -63,15 +57,6 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function sameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function variableDocument(variable: Variable): Omit<Variable, "resourcePath"> {
-  const { resourcePath: _projectionMetadata, ...document } = variable;
-  return document;
-}
-
-function sameVariableDocument(left: Variable, right: Variable): boolean {
-  return sameValue(variableDocument(left), variableDocument(right));
 }
 
 function canonicalize(value: unknown): unknown {
@@ -164,55 +149,6 @@ function prepareFunctionInstalls(
   return installs;
 }
 
-function prepareVariableInstalls(deltas: ResourceDeltaDto[]): PreparedVariableDeltaInstall[] {
-  const variableState = useVariableStore.getState();
-  const variables = variableState.variables;
-  const revisions = variableState.revisions;
-  const installs: PreparedVariableDeltaInstall[] = [];
-  for (const delta of deltas) {
-    if (delta.resource.kind !== "variable" || delta.payload.kind !== "variable") continue;
-    const id = delta.resource.key.slice("variables/".length);
-    const current = variables[id] ?? null;
-    const patch = delta.payload.patch as VariableDocumentPatchDto;
-    const before =
-      patch.before == null
-        ? null
-        : normalizeVariableFromBackend(
-            patch.before as Parameters<typeof normalizeVariableFromBackend>[0],
-          );
-    const normalizedAfter =
-      patch.after == null
-        ? null
-        : normalizeVariableFromBackend(
-            patch.after as Parameters<typeof normalizeVariableFromBackend>[0],
-          );
-    const after =
-      normalizedAfter == null
-        ? null
-        : {
-            ...variableDocument(normalizedAfter),
-            ...(current?.resourcePath ? { resourcePath: current.resourcePath } : {}),
-          };
-    if (
-      (before === null) !== (current === null) ||
-      (revisions[id] ?? 0) !== delta.fromRevision ||
-      (before && current && !sameVariableDocument(before, current)) ||
-      (before && before.id !== id) ||
-      (after && after.id !== id)
-    ) {
-      throw new Error(`variable delta for '${delta.resource.key}' is inconsistent`);
-    }
-    installs.push({
-      id,
-      before,
-      after,
-      fromRevision: delta.fromRevision,
-      toRevision: delta.toRevision,
-    });
-  }
-  return installs;
-}
-
 function databaseDocumentMatches(current: DatabaseRecord, expected: DatabaseDocumentDto): boolean {
   return (
     current.id === expected.id &&
@@ -294,8 +230,6 @@ interface PublicationAggregate {
   graphMeta?: ReturnType<typeof useGraphMetaStore.getState>["graphs"];
   databases: ReturnType<typeof useDatabaseStore.getState>["databases"];
   databaseRevisions: ReturnType<typeof useDatabaseStore.getState>["revisions"];
-  variables: ReturnType<typeof useVariableStore.getState>["variables"];
-  variableRevisions: ReturnType<typeof useVariableStore.getState>["revisions"];
   chartIndex: ChartIndexEntry[];
   chartDocuments: Record<string, ChartDocument>;
   focusedSession?: ReturnType<typeof useGraphSessionStore.getState>["focusedSession"];
@@ -330,8 +264,6 @@ function createPublicationAggregate(
     >,
     databases: structuredClone(useDatabaseStore.getState().databases),
     databaseRevisions: structuredClone(useDatabaseStore.getState().revisions),
-    variables: structuredClone(useVariableStore.getState().variables),
-    variableRevisions: structuredClone(useVariableStore.getState().revisions),
     chartIndex: structuredClone(chart.index),
     chartDocuments: structuredClone(chart.documents),
   };
@@ -573,26 +505,6 @@ function applyMovesToAggregate(
   }
 }
 
-function markPreparedVariableScopeDirty(
-  aggregate: PublicationAggregate,
-  scope: Variable["scope"],
-): void {
-  const graphPath =
-    scope.type === "event"
-      ? scope.eventPath
-      : scope.type === "function"
-        ? scope.functionPath
-        : null;
-  if (!graphPath) return;
-  const kind = aggregate.graphMeta?.[graphPath]?.type;
-  if (kind !== "event" && kind !== "function") return;
-  const key = resourceKey({ id: graphPath, kind });
-  const resource = aggregate.resources[key];
-  if (resource) aggregate.resources[key] = { ...resource, hasDirtyDocument: true };
-  const document = aggregate.documents[key];
-  if (document) aggregate.documents[key] = { ...document, dirty: true };
-}
-
 function chartMatchesPatchState(
   document: ChartDocument,
   state: Extract<ResourceDeltaDto["payload"], { kind: "chart" }>["patch"]["before"],
@@ -670,10 +582,7 @@ function hasGraphOwnedPublicationWork(
     declaredGraphPaths.length > 0 ||
     context.moves.some((move) => move.kind !== "chart") ||
     result.deltas.some(
-      (delta) =>
-        delta.resource.kind === "graph" ||
-        delta.resource.kind === "function" ||
-        delta.resource.kind === "variable",
+      (delta) => delta.resource.kind === "graph" || delta.resource.kind === "function",
     )
   );
 }
@@ -771,20 +680,6 @@ export function prepareSynchronousPublicationCommit(
       functionOutputs: [...install.functionOutputs],
     };
   }
-  const variableInstalls = prepareVariableInstalls(result.deltas);
-  for (const install of variableInstalls) {
-    if (install.before) markPreparedVariableScopeDirty(aggregate, install.before.scope);
-    aggregate.variableRevisions[install.id] = install.toRevision;
-    if (install.after) {
-      aggregate.variables[install.id] = install.after;
-      markPreparedVariableScopeDirty(aggregate, install.after.scope);
-      const [meta] = variableCatalogToResourceMetas({ [install.id]: install.after });
-      aggregate.resources[meta.uri] = meta;
-    } else {
-      delete aggregate.variables[install.id];
-      delete aggregate.resources[`yssbi://variable/${install.id}`];
-    }
-  }
   applyDatabaseDeltasToAggregate(aggregate, result.deltas);
   applyChartDeltasToAggregate(aggregate, result.deltas);
 
@@ -807,8 +702,6 @@ export function prepareSynchronousPublicationCommit(
       ...(aggregate.graphMeta ? { graphMeta: aggregate.graphMeta } : {}),
       databases: aggregate.databases,
       databaseRevisions: aggregate.databaseRevisions,
-      variables: aggregate.variables,
-      variableRevisions: aggregate.variableRevisions,
       chartIndex: aggregate.chartIndex,
       chartDocuments: aggregate.chartDocuments,
       ...("focusedSession" in aggregate ? { focusedSession: aggregate.focusedSession } : {}),
@@ -834,10 +727,6 @@ export function commitPreparedPublication(plan: PreparedProjectPublication): voi
     useDatabaseStore.setState({
       databases: plan.storeState.databases,
       revisions: plan.storeState.databaseRevisions,
-    });
-    useVariableStore.setState({
-      variables: plan.storeState.variables,
-      revisions: plan.storeState.variableRevisions,
     });
     useChartDocumentStore.setState({
       index: plan.storeState.chartIndex,

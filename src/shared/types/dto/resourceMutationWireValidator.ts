@@ -1,5 +1,4 @@
 import type { ResourceDeltaDto } from "@/shared/types/dto/editorMutation";
-import { isRustDataValueWire } from "@/shared/types/dto/dataValue";
 import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
 import { isTypedLiteralWire, isTypeExprWire } from "@/shared/types/dto/editorMutationWireParser";
 
@@ -171,38 +170,6 @@ function isFunctionPatch(value: unknown): boolean {
   return isRecord(value) && isFunctionSignature(value.before) && isFunctionSignature(value.after);
 }
 
-function isVariableDocument(value: unknown): boolean {
-  if (
-    !isRecord(value) ||
-    !isUuid(value.id) ||
-    typeof value.name !== "string" ||
-    !hasOwn(value, "dataType") ||
-    !isRustDataValueWire(value.dataValue) ||
-    typeof value.description !== "string" ||
-    !Array.isArray(value.tags) ||
-    !value.tags.every((tag) => typeof tag === "string") ||
-    !isRecord(value.scope)
-  )
-    return false;
-  return (
-    value.scope.type === "global" ||
-    (value.scope.type === "event" && typeof value.scope.eventPath === "string") ||
-    (value.scope.type === "function" && typeof value.scope.functionPath === "string")
-  );
-}
-
-function isVariablePatch(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    Object.keys(value).length === 2 &&
-    hasOwn(value, "before") &&
-    hasOwn(value, "after") &&
-    (value.before === null || isVariableDocument(value.before)) &&
-    (value.after === null || isVariableDocument(value.after)) &&
-    !(value.before === null && value.after === null)
-  );
-}
-
 function isSqlEngine(value: unknown): boolean {
   if (!isRecord(value) || Object.keys(value).length !== 1) return false;
   if (isRecord(value.sqlite)) {
@@ -296,12 +263,6 @@ function isDatabasePatch(value: unknown): boolean {
   )
     return false;
   return value.before === null || value.after === null || value.before.id === value.after.id;
-}
-
-function isVariableResourceKey(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const [prefix, id, ...rest] = value.split("/");
-  return prefix === "variables" && rest.length === 0 && isUuid(id);
 }
 
 function isNonEmptyPath(value: unknown): value is string {
@@ -402,14 +363,6 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
       isGraphResourcePath(key) &&
       value.payload.kind === "function" &&
       isFunctionPatch(value.payload.patch)
-    );
-  }
-  if (kind === "variable") {
-    return (
-      isVariableResourceKey(key) &&
-      ((value.payload.kind === "variable" && isVariablePatch(value.payload.patch)) ||
-        (value.payload.kind === "variable_scope_move" &&
-          isResourcePathMovePatch(value.payload.patch, true)))
     );
   }
   if (kind === "chart") {

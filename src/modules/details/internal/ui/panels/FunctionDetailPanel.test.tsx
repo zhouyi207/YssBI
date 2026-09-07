@@ -28,6 +28,7 @@ describe("FunctionDetailPanel", () => {
   it("renders the resource name as read-only while keeping signature edits available", () => {
     const onSignatureChange = vi.fn();
     const element = FunctionDetailPanel({
+      graphPath: "functions/Compute.yssbi-function",
       fn: {
         name: "Compute",
         inputs: [createDataSignaturePin("input-1", "Value", { kind: "Int64" })],

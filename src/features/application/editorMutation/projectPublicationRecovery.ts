@@ -7,7 +7,7 @@ import type {
   PreparedProjectRecovery,
   ProjectRecoveryPreparation,
 } from "./projectPublicationCoordinator";
-import { useDatabaseStore, useGraphMetaStore, useVariableStore } from "@/features/core/dataStore";
+import { useDatabaseStore, useGraphMetaStore } from "@/features/core/dataStore";
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
@@ -24,11 +24,6 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from "@/features/core/resource";
-import {
-  buildVariableCatalog,
-  variableCatalogToResourceMetas,
-  variableRevisionsFromIndex,
-} from "@/features/core/variable/variableCatalog";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useViewportStore } from "@/features/core/viewport";
@@ -101,7 +96,7 @@ export function validateProjectRecoveryIndex(
   if (new Set(index.graphs.map((graph) => graph.path)).size !== index.graphs.length) {
     return "recovery graph metadata contains duplicate paths";
   }
-  if (!Array.isArray(index.variables) || !Array.isArray(index.charts)) {
+  if (!Array.isArray(index.charts)) {
     return "recovery resource index is incomplete";
   }
   if (
@@ -249,7 +244,6 @@ export function collectProjectRecoveryGraphPaths(
 
 function recoveryResources(
   index: ProjectIndexRow,
-  variables: ReturnType<typeof buildVariableCatalog>,
   chartDocuments: Readonly<Record<string, unknown>>,
   databases: Readonly<Record<string, { name?: unknown }>>,
 ): ProjectResourceMeta[] {
@@ -270,7 +264,6 @@ function recoveryResources(
       hasConflictDocument: false,
     })),
   );
-  resources.push(...variableCatalogToResourceMetas(variables));
   for (const [id, database] of Object.entries(databases)) {
     resources.push({
       id,
@@ -419,8 +412,6 @@ function databaseFromIndex(
 export function prepareProjectRecoveryCommit(
   plan: ProjectRecoveryPreparation,
 ): PreparedProjectRecovery {
-  const variables = buildVariableCatalog(plan.index.variables);
-  const variableRevisions = variableRevisionsFromIndex(plan.index.variables);
   const currentDatabases = useDatabaseStore.getState().databases;
   const databaseRows = plan.index.databases;
   const databases = Object.fromEntries(
@@ -474,7 +465,7 @@ export function prepareProjectRecoveryCommit(
 
   const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
   const remappedResources = remapResources(useResourceStore.getState().resources, plan);
-  const incoming = recoveryResources(plan.index, variables, chartDocuments, databases);
+  const incoming = recoveryResources(plan.index, chartDocuments, databases);
   const { resources: projectedResources, documentPatches } = prepareResourceProjectionSnapshot(
     incoming,
     remappedResources,
@@ -547,8 +538,6 @@ export function prepareProjectRecoveryCommit(
       graphMeta,
       databases,
       databaseRevisions,
-      variables,
-      variableRevisions,
       chartIndex,
       chartDocuments,
       focusedSession,
@@ -566,10 +555,6 @@ export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): vo
     useDatabaseStore.setState({
       databases: plan.storeState.databases,
       revisions: plan.storeState.databaseRevisions,
-    });
-    useVariableStore.setState({
-      variables: plan.storeState.variables,
-      revisions: plan.storeState.variableRevisions,
     });
     useChartDocumentStore.setState({
       index: plan.storeState.chartIndex,

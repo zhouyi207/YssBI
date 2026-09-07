@@ -102,7 +102,6 @@ function parseResourceKey(value: unknown): ResourceKeyDto | null {
   if (
     value.kind !== "graph" &&
     value.kind !== "function" &&
-    value.kind !== "variable" &&
     value.kind !== "database" &&
     value.kind !== "chart"
   ) {

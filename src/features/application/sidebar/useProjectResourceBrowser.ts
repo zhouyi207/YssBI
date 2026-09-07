@@ -4,10 +4,8 @@ import { useFunctionCatalog } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useGraphResourcesByKind } from "@/features/core/resource";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import { partitionVariableCatalog } from "@/features/core/variable/variableScopeSelectors";
 import { useSidebarStore, type ProjectTreeCategoryId } from "@/features/core/sidebar";
 import { buildProjectResourceBrowser, resolveActiveProjectGraph } from "./projectResourceBrowser";
 
@@ -15,7 +13,6 @@ export function useProjectResourceBrowser() {
   const { t } = useTranslation();
   const events = useGraphResourcesByKind("event");
   const functions = useFunctionCatalog();
-  const variables = useVariableStore((state) => state.variables);
   const charts = useChartDocumentStore((state) => state.index);
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const focusedSession = useGraphSessionStore((state) => state.focusedSession);
@@ -40,14 +37,6 @@ export function useProjectResourceBrowser() {
     () => resolveActiveProjectGraph({ events, functions, activeEditor }),
     [activeEditor, events, functions],
   );
-  const { global: globalVariables, local: localVariables } = useMemo(
-    () =>
-      partitionVariableCatalog(
-        variables,
-        activeGraph ? { graphPath: activeGraph.path, graphKind: activeGraph.kind } : undefined,
-      ),
-    [activeGraph, variables],
-  );
 
   useEffect(() => {
     if (
@@ -65,9 +54,6 @@ export function useProjectResourceBrowser() {
         events,
         functions,
         charts,
-        localVariables,
-        globalVariables,
-        activeGraph,
         query: projectTreeQuery,
         expandedCategoryIds: new Set(
           Object.entries(projectTreeExpandedCategories)
@@ -78,27 +64,12 @@ export function useProjectResourceBrowser() {
           events: t("sidebar.projectTree.categories.events"),
           functions: t("sidebar.projectTree.categories.functions"),
           charts: t("sidebar.projectTree.categories.charts"),
-          variables: t("sidebar.projectTree.categories.variables"),
-          localVariables: t("sidebar.projectTree.categories.localVariables"),
-          globalVariables: t("sidebar.projectTree.categories.globalVariables"),
           noEvents: t("sidebar.noEvents"),
           noFunctions: t("sidebar.noFunctions"),
           noCharts: t("chartsSidebar.noCharts"),
-          noLocalVariables: t("sidebar.noLocalVariables"),
-          noGlobalVariables: t("sidebar.noGlobalVariables"),
         },
       }),
-    [
-      activeGraph,
-      events,
-      functions,
-      globalVariables,
-      localVariables,
-      projectTreeExpandedCategories,
-      projectTreeQuery,
-      t,
-      charts,
-    ],
+    [events, functions, projectTreeExpandedCategories, projectTreeQuery, t, charts],
   );
 
   const queryIsActive = projectTreeQuery.trim().length > 0;

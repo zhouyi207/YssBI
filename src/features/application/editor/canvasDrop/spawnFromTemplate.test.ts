@@ -22,10 +22,10 @@ describe("spawnNodeFromTemplate", () => {
       label: "variable",
       descriptor: {
         kind: "resourceBound",
-        nodeTypeId: "yssbi.project.variable.get",
-        resourcePath: "variables/00000000-0000-0000-0000-000000000001",
+        nodeTypeId: "yssbi.project.database.get",
+        resourcePath: "databases/00000000-0000-0000-0000-000000000001",
         resourceRevision: 5,
-        createArgs: { kind: "variable" },
+        createArgs: { kind: "database" },
       },
     },
     {
@@ -93,7 +93,7 @@ describe("spawnNodeFromTemplate", () => {
         items,
         descriptor.resourcePath,
         "function",
-        "yssbi.project.variable.get",
+        "yssbi.project.database.get",
       ),
     ).toBeNull();
     expect(findResourceNodeSpawnTemplate(items, "functions/opaque", "function")).toBeNull();

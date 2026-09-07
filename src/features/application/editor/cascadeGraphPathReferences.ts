@@ -13,10 +13,6 @@ function remapEditorGraphPaths(from: string, to: string): void {
   } else if (focus?.kind === "node" && focus.graphPath === from) {
     store.setDetailFocus({ ...focus, graphPath: to });
   }
-
-  if (store.variablesGraphScopePath === from) {
-    store.setVariablesGraphScope(to);
-  }
 }
 
 export function remapChartNonViewportUiState(from: string, to: string): void {

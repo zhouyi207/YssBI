@@ -10,19 +10,9 @@ export const DEFAULT_ARRAY_JSON = JSON.stringify(DEFAULT_ARRAY_VALUE, null, 2);
 
 export const DEFAULT_OBJECT_JSON = JSON.stringify(DEFAULT_OBJECT_VALUE, null, 2);
 
-export const DEFAULT_DATAFRAME_JSON = `{
+export const DEFAULT_DATAFRAME_JSON = "{}";
 
-  "col_0": [1, 2],
-
-  "col_1": [3, 4]
-
-}`;
-
-export const DEFAULT_DATASERIES_JSON = `{
-
-  "col_0": [1, 2, 3, 4]
-
-}`;
+export const DEFAULT_DATASERIES_JSON = JSON.stringify({ value: [] }, null, 2);
 
 export function isJsonLiteralContent(value: string): boolean {
   const t = value.trim();
@@ -30,7 +20,7 @@ export function isJsonLiteralContent(value: string): boolean {
   return t.startsWith("[") || t.startsWith("{");
 }
 
-export function getVariableLiteralPayload(dataType: DataType, dataValue: DataValue): string {
+export function getConstantLiteralPayload(dataType: DataType, dataValue: DataValue): string {
   if (dataType.kind === "DataFrame" && dataValue.kind === "DataFrame") {
     return dataValue.value;
   }
@@ -42,7 +32,7 @@ export function getVariableLiteralPayload(dataType: DataType, dataValue: DataVal
   return "";
 }
 
-export function isVariableValueEmpty(dataType: DataType, dataValue: DataValue): boolean {
+export function isConstantValueEmpty(dataType: DataType, dataValue: DataValue): boolean {
   if (dataValue.kind === "Null") return true;
 
   switch (dataType.kind) {
@@ -60,7 +50,7 @@ export function isVariableValueEmpty(dataType: DataType, dataValue: DataValue): 
     case "DataSeries": {
       if (dataValue.kind !== "DataSeries") return true;
 
-      const payload = getVariableLiteralPayload(dataType, dataValue);
+      const payload = getConstantLiteralPayload(dataType, dataValue);
 
       return !payload.trim();
     }
@@ -142,14 +132,14 @@ function summarizeDataSeriesJson(json: string): string | null {
   return colName ? `DataSeries(${colName})` : "DataSeries";
 }
 
-export function formatVariableValueSummary(
+export function formatConstantValueSummary(
   dataType: DataType,
 
   dataValue: DataValue,
 
   emptyLabel = "(empty)",
 ): string {
-  if (isVariableValueEmpty(dataType, dataValue)) return emptyLabel;
+  if (isConstantValueEmpty(dataType, dataValue)) return emptyLabel;
 
   switch (dataType.kind) {
     case "Array":
@@ -169,7 +159,7 @@ export function formatVariableValueSummary(
       return emptyLabel;
 
     case "DataFrame": {
-      const payload = getVariableLiteralPayload(dataType, dataValue);
+      const payload = getConstantLiteralPayload(dataType, dataValue);
 
       if (!payload) return emptyLabel;
 
@@ -181,7 +171,7 @@ export function formatVariableValueSummary(
     }
 
     case "DataSeries": {
-      const payload = getVariableLiteralPayload(dataType, dataValue);
+      const payload = getConstantLiteralPayload(dataType, dataValue);
 
       if (!payload) return emptyLabel;
 
@@ -225,7 +215,7 @@ export function dataValueToEditableJson(dataType: DataType, dataValue: DataValue
   }
 
   if (dataType.kind === "DataFrame") {
-    const payload = getVariableLiteralPayload(dataType, dataValue);
+    const payload = getConstantLiteralPayload(dataType, dataValue);
 
     if (payload && isJsonLiteralContent(payload)) {
       return prettyJsonString(payload, DEFAULT_DATAFRAME_JSON);
@@ -235,7 +225,7 @@ export function dataValueToEditableJson(dataType: DataType, dataValue: DataValue
   }
 
   if (dataType.kind === "DataSeries") {
-    const payload = getVariableLiteralPayload(dataType, dataValue);
+    const payload = getConstantLiteralPayload(dataType, dataValue);
 
     if (payload && isJsonLiteralContent(payload)) {
       return prettyJsonString(payload, DEFAULT_DATASERIES_JSON);
@@ -365,6 +355,6 @@ export function parseDataSeriesValueFromJson(
   return { ok: true, value: { kind: "DataSeries", value: compact } };
 }
 
-export function isJsonEditableVariableType(dataType: DataType): boolean {
+export function isJsonEditableConstantType(dataType: DataType): boolean {
   return ["Array", "Object", "DataFrame", "DataSeries"].includes(dataType.kind);
 }

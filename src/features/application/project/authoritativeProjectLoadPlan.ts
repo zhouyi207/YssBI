@@ -1,12 +1,6 @@
-import type { Variable } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
 import type { ProjectGraphIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
-import {
-  buildVariableCatalog,
-  variableCatalogToResourceMetas,
-  variableRevisionsFromIndex,
-} from "@/features/core/variable/variableCatalog";
 
 import {
   buildGraphResourceMeta,
@@ -30,8 +24,6 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
   readonly storeState: {
     readonly databases: Record<string, DatabaseRecord>;
     readonly databaseRevisions: Record<string, number>;
-    readonly variables: Record<string, Variable>;
-    readonly variableRevisions: Record<string, number>;
     readonly graphMeta: Record<string, GraphMeta>;
     readonly chartIndex: ChartIndexEntry[];
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
@@ -56,27 +48,14 @@ export interface AuthoritativeProjectLoadPlanDependencies {
     raw: Record<string, unknown>,
     current: Record<string, DatabaseRecord>,
   ): Record<string, DatabaseRecord>;
-  normalizeVariables(index: ProjectIndexRow): {
-    variables: Record<string, Variable>;
-    revisions: Record<string, number>;
-  };
   prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta>;
   prepareResourceState(input: {
     graphs: ProjectGraphIndexRow[];
     charts: ChartIndexEntry[];
-    variables: Record<string, Variable>;
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
 
   validateCoordinatorStart(projectInstanceId: string, publicationRevision: number): void;
-}
-
-function prepareVariables(index: ProjectIndexRow) {
-  const variables = buildVariableCatalog(index.variables);
-  return {
-    variables,
-    revisions: variableRevisionsFromIndex(index.variables),
-  };
 }
 
 function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, GraphMeta> {
@@ -104,7 +83,6 @@ function prepareFunctionState(graphs: ProjectGraphIndexRow[]): Record<string, Gr
 export function buildProjectResourceState(input: {
   graphs: ProjectGraphIndexRow[];
   charts: ChartIndexEntry[];
-  variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
   loadedChartPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
@@ -125,7 +103,6 @@ export function buildProjectResourceState(input: {
       hasConflictDocument: false,
     });
   }
-  resources.push(...variableCatalogToResourceMetas(input.variables));
   for (const [id, database] of Object.entries(input.databases)) {
     resources.push({
       id,
@@ -152,7 +129,6 @@ export const defaultAuthoritativeProjectLoadPlanDependencies: Omit<
   "validateCoordinatorStart"
 > = {
   normalizeDatabases,
-  normalizeVariables: prepareVariables,
   prepareFunctionState,
   prepareResourceState: buildProjectResourceState,
 };
@@ -174,7 +150,6 @@ export function buildAuthoritativeProjectLoadPlan(
       { ...database, resourcePath: databaseResourcePaths[id] },
     ]),
   );
-  const variableState = dependencies.normalizeVariables(source.index);
   const chartIndex = source.index.charts.map((chart) => ({
     chartPath: chart.chartPath,
     name: chart.name,
@@ -186,7 +161,6 @@ export function buildAuthoritativeProjectLoadPlan(
   const resourceState = dependencies.prepareResourceState({
     graphs: source.index.graphs,
     charts: chartIndex,
-    variables: variableState.variables,
     databases,
   });
   const authoritativeChartPaths = new Set(chartIndex.map((chart) => chart.chartPath));
@@ -205,8 +179,6 @@ export function buildAuthoritativeProjectLoadPlan(
     storeState: {
       databases,
       databaseRevisions,
-      variables: variableState.variables,
-      variableRevisions: variableState.revisions,
       graphMeta,
       chartIndex,
       resources: resourceState.resources,

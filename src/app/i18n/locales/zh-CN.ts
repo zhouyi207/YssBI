@@ -199,8 +199,6 @@ export const zhCN = {
       rename: "重命名",
       duplicate: "复制",
       delete: "删除",
-      newLocalVariable: "新建局部变量",
-      newGlobalVariable: "新建全局变量",
       newChart: "新建图表",
       importData: "导入数据",
       revealInExplorer: "在资源管理器中打开",
@@ -209,7 +207,6 @@ export const zhCN = {
     dialog: {
       createSubmit: "创建",
       renameGraphTitle: "重命名",
-      renameVariableTitle: "重命名变量",
       renameChartTitle: "重命名图表",
       renameDataTitle: "重命名数据集",
       renameSubmit: "重命名",
@@ -363,7 +360,6 @@ export const zhCN = {
     cut: "剪切",
     copy: "复制",
     paste: "粘贴",
-    manageVariables: "管理变量",
     importData: "导入数据",
     databaseEditor: "数据库编辑器",
     newChart: "新建图表",
@@ -990,8 +986,6 @@ export const zhCN = {
   },
   sidebar: {
     open: "打开",
-    promoteToGlobal: "提升为全局变量",
-    demoteToLocal: "降级为局部变量",
     viewInDatabaseEditor: "在数据库编辑器中查看",
 
     projectTree: {
@@ -1003,9 +997,6 @@ export const zhCN = {
         events: "事件",
         functions: "函数",
         charts: "图表",
-        variables: "变量",
-        localVariables: "局部",
-        globalVariables: "全局",
       },
     },
 
@@ -1015,14 +1006,10 @@ export const zhCN = {
     noData: "暂无数据",
     noEvents: "暂无 Event",
     noFunctions: "暂无 Function",
-    noLocalVariables: "暂无局部变量",
-    noGlobalVariables: "暂无全局变量",
     dataLoading: "正在加载数据…",
     dataLoadFailed: "数据加载失败",
     noCommandHistory: "无命令历史",
     noBuiltinNodes: "无系统内置节点",
-    deleteVariableTitle: "删除变量",
-    deleteVariableMessage: "确定删除变量「{{name}}」？此操作无法撤销。",
     deleteDataTitle: "删除数据集",
     deleteDataMessage: "确定删除数据集「{{name}}」？此操作无法撤销。",
     sections: {
@@ -1222,7 +1209,6 @@ export const zhCN = {
       column: "列名",
     },
     itemTypes: {
-      variable: "变量",
       event: "事件",
       function: "函数",
       data: "数据集",
@@ -1247,16 +1233,21 @@ export const zhCN = {
       columns: "{{count}} 列",
       rows: "{{count}} 行",
     },
-    variableValue: {
+    constants: {
+      title: "常量",
+      defaultName: "常量",
+      add: "添加常量",
+      updateFailed: "常量更新失败，请重试。",
+      insertReference: "插入引用",
+      remove: "删除常量 {{name}}",
+      empty: "在此添加供当前图使用的常量。",
+      choose: "选择常量",
+    },
+    constantValue: {
       edit: "编辑",
       empty: "（空）",
       clear: "清空",
       jsonLabel: "JSON",
-      database: "数据集",
-      column: "列",
-      selectDatabase: "选择数据集",
-      selectColumn: "选择列",
-      columnPreview: "共 {{count}} 列",
       title: {
         Array: "编辑 Array 值",
         Object: "编辑 Object 值",
@@ -1264,11 +1255,11 @@ export const zhCN = {
         DataSeries: "编辑 DataSeries 值",
       },
       description: {
-        Array: "以 JSON 数组编辑元素值，元素类型由变量类型决定。",
+        Array: "以 JSON 数组编辑元素值，元素类型由常量类型决定。",
         Object: "以 JSON 对象编辑键值。",
         DataFrame:
-          '以 JSON 填写表格内容：{"col_1":[1,2],"col_2":[3,4]}（列名 → 值数组，各列长度须一致）；执行时自动转为 DataFrame。',
-        DataSeries: '单列列式 JSON：{"列名":[1,2,3]}；执行时自动转为 DataSeries。',
+          '以 JSON 填写表格内容：{"col_1":[1,2],"col_2":[3,4]}，各列长度须一致。数据随当前图保存。',
+        DataSeries: '单列 JSON：{"列名":[1,2,3]}。数据随当前图保存。',
       },
       errors: {
         invalidJson: "JSON 格式无效",
@@ -1276,10 +1267,6 @@ export const zhCN = {
         notObject: "请输入 JSON 对象",
         notDataFrameContent: "DataFrame 需为列名 → 值数组的对象，且各列长度一致",
         notDataSeriesContent: 'DataSeries 需为仅含一列的列式对象 {"列名":[...]}',
-        notString: "请输入 JSON 字符串（引用 ID）",
-        notStringOrIdObject: '请输入 JSON 字符串或 {"id":"..."} 对象',
-        noDatabase: "请选择数据集",
-        noColumn: "请选择列",
       },
     },
     delete: {

@@ -29,7 +29,7 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 vi.mock("@/services/project/projectService", () => ({
   ProjectService: {
     getProjectPath: vi.fn(),
-    getDatabasesVariables: vi.fn(),
+    getDatabases: vi.fn(),
     getProjectIndex: vi.fn(),
   },
 }));
@@ -63,9 +63,8 @@ describe("projectIOStore error references", () => {
       projectInstanceId,
     });
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue(null);
-    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({
+    vi.mocked(ProjectService.getDatabases).mockResolvedValue({
       databases: {},
-      variables: {},
     });
   });
 
@@ -80,7 +79,7 @@ describe("projectIOStore error references", () => {
       publicationRevision: 0,
       projectName: "Initial project",
       graphs: [],
-      variables: [],
+
       charts: [],
       databases: [],
       exportTime: "",

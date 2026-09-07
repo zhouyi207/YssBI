@@ -7,7 +7,6 @@ import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 export interface EditorUiSnapshot {
   readonly contextMenu: DeepReadonly<EditorContextMenuState> | null;
   readonly detailFocus: DeepReadonly<DetailFocus> | null;
-  readonly variablesGraphScopePath: string | null;
 }
 
 export interface EditorUiCapability {
@@ -16,7 +15,6 @@ export interface EditorUiCapability {
   readonly setContextMenu: (menu: DeepReadonly<EditorContextMenuState> | null) => void;
   readonly setDetailFocus: (focus: DeepReadonly<DetailFocus>) => void;
   readonly clearDetailFocus: () => void;
-  readonly setVariablesGraphScope: (graphPath: string | null) => void;
 }
 
 function buildSnapshot(): DeepReadonly<EditorUiSnapshot> {
@@ -24,7 +22,6 @@ function buildSnapshot(): DeepReadonly<EditorUiSnapshot> {
   return Object.freeze({
     contextMenu: state.contextMenu ? Object.freeze({ ...state.contextMenu }) : null,
     detailFocus: state.detailFocus,
-    variablesGraphScopePath: state.variablesGraphScopePath,
   });
 }
 
@@ -62,6 +59,4 @@ export const editorUi: EditorUiCapability = {
   setContextMenu: (menu) => useEditorStore.getState().setContextMenu(menu ? { ...menu } : null),
   setDetailFocus: (focus) => useEditorStore.getState().setDetailFocus(focus as DetailFocus),
   clearDetailFocus: () => useEditorStore.getState().clearDetailFocus(),
-  setVariablesGraphScope: (graphPath) =>
-    useEditorStore.getState().setVariablesGraphScope(graphPath),
 };

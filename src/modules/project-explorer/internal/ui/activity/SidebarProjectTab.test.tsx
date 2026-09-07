@@ -42,20 +42,16 @@ const actions = {
   onAddEvent: vi.fn(),
   onAddFunction: vi.fn(),
   onAddChart: vi.fn(),
-  onAddVariable: vi.fn(),
+
   onCategoryContextMenu: vi.fn(),
   onGraphContextMenu: vi.fn(),
-  onVariableContextMenu: vi.fn(),
+
   onChartContextMenu: vi.fn(),
   onOpenChart: vi.fn(),
 };
 
 function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserRow {
-  const level =
-    categoryId === PROJECT_TREE_CATEGORY_IDS.localVariables ||
-    categoryId === PROJECT_TREE_CATEGORY_IDS.globalVariables
-      ? 1
-      : 0;
+  const level = 0;
   return {
     kind: "category",
     rowKey: `category:${categoryId}`,
@@ -68,29 +64,16 @@ function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserR
 
 function renderBrowser({
   activeGraph = { path: "events/Main.yssbi-event", kind: "event", name: "Main" },
-  localVariables = {},
 }: {
   activeGraph?: ActiveProjectGraph | null;
-  localVariables?: Record<string, unknown>;
 } = {}) {
   const categoryIds = [
     PROJECT_TREE_CATEGORY_IDS.events,
     PROJECT_TREE_CATEGORY_IDS.functions,
     PROJECT_TREE_CATEGORY_IDS.charts,
-    PROJECT_TREE_CATEGORY_IDS.variables,
-    PROJECT_TREE_CATEGORY_IDS.localVariables,
-    PROJECT_TREE_CATEGORY_IDS.globalVariables,
   ];
   const rows = categoryIds.map(categoryRow);
-  if (Object.keys(localVariables).length === 0) {
-    rows.splice(5, 0, {
-      kind: "empty",
-      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
-      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
-      level: 2,
-      message: "No local variables",
-    });
-  }
+
   browserState.current = {
     rows,
     categoryIds: new Set(categoryIds),
@@ -132,7 +115,7 @@ describe("SidebarProjectTab", () => {
     host.remove();
   });
 
-  it("renders the Project projection categories, search, and local empty state", () => {
+  it("renders the Project projection categories and search", () => {
     renderBrowser();
     act(() =>
       root.render(
@@ -148,14 +131,10 @@ describe("SidebarProjectTab", () => {
       `Projected ${PROJECT_TREE_CATEGORY_IDS.events}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.functions}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.charts}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.variables}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.globalVariables}`,
     ]);
     expect(host.querySelector("input")?.getAttribute("placeholder")).toBe(
       "Search project resources...",
     );
-    expect(host.textContent).toContain("No local variables");
 
     renderBrowser({ activeGraph: null });
     act(() =>
@@ -167,12 +146,9 @@ describe("SidebarProjectTab", () => {
         </I18nextProvider>,
       ),
     );
-    expect(host.textContent).toContain(`Projected ${PROJECT_TREE_CATEGORY_IDS.localVariables}`);
-    expect(host.textContent).toContain("No local variables");
 
     renderBrowser({
       activeGraph: { path: "events/Main.yssbi-event", kind: "event", name: "Main" },
-      localVariables: {},
     });
     act(() =>
       root.render(
@@ -183,7 +159,6 @@ describe("SidebarProjectTab", () => {
         </I18nextProvider>,
       ),
     );
-    expect(host.textContent).toContain("No local variables");
   });
 
   it("disables category triggers while searching", () => {

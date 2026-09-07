@@ -1,4 +1,3 @@
-import type { VariableListEntry } from "@/features/core/variable/variableScopeSelectors";
 import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
@@ -15,23 +14,15 @@ export interface ProjectResourceBrowserInput {
   events: Readonly<Record<string, { name: string }>>;
   functions: Readonly<Record<string, { name: string }>>;
   charts: readonly { chartPath: string; name: string }[];
-  localVariables: Readonly<Record<string, VariableListEntry>>;
-  globalVariables: Readonly<Record<string, VariableListEntry>>;
-  activeGraph: ActiveProjectGraph | null;
   query: string;
   expandedCategoryIds: ReadonlySet<ProjectTreeCategoryId>;
   labels: {
     events: string;
     functions: string;
     charts: string;
-    variables: string;
-    localVariables: string;
-    globalVariables: string;
     noEvents: string;
     noFunctions: string;
     noCharts: string;
-    noLocalVariables: string;
-    noGlobalVariables: string;
   };
 }
 
@@ -61,17 +52,6 @@ export type ProjectResourceGraphRow = {
   graphType: "event" | "function";
 };
 
-export type ProjectResourceVariableRow = {
-  kind: "variable";
-  rowKey: string;
-  level: number;
-  id: string;
-  resourcePath?: string;
-  name: string;
-  dataType: unknown;
-  isGlobal: boolean;
-};
-
 export type ProjectResourceChartRow = {
   kind: "chart";
   rowKey: string;
@@ -84,7 +64,6 @@ export type ProjectResourceBrowserRow =
   | ProjectResourceBrowserCategoryRow
   | ProjectResourceBrowserEmptyRow
   | ProjectResourceGraphRow
-  | ProjectResourceVariableRow
   | ProjectResourceChartRow;
 
 export interface ProjectResourceBrowserProjection {
@@ -124,7 +103,7 @@ interface Category {
   id: ProjectTreeCategoryId;
   label: string;
   emptyMessage?: string;
-  leaves: Array<ProjectResourceGraphRow | ProjectResourceVariableRow | ProjectResourceChartRow>;
+  leaves: Array<ProjectResourceGraphRow | ProjectResourceChartRow>;
   children?: Category[];
 }
 
@@ -184,25 +163,6 @@ function buildCategories(input: ProjectResourceBrowserInput): Category[] {
     },
   ];
 
-  categories.push({
-    id: PROJECT_TREE_CATEGORY_IDS.variables,
-    label: input.labels.variables,
-    leaves: [],
-    children: [
-      {
-        id: PROJECT_TREE_CATEGORY_IDS.localVariables,
-        label: input.labels.localVariables,
-        emptyMessage: input.labels.noLocalVariables,
-        leaves: input.activeGraph ? variableRows(input.localVariables, false) : [],
-      },
-      {
-        id: PROJECT_TREE_CATEGORY_IDS.globalVariables,
-        label: input.labels.globalVariables,
-        emptyMessage: input.labels.noGlobalVariables,
-        leaves: variableRows(input.globalVariables, true),
-      },
-    ],
-  });
   return categories;
 }
 
@@ -271,21 +231,5 @@ function graphRows(
     id: path,
     name: graph.name,
     graphType,
-  }));
-}
-
-function variableRows(
-  variables: Readonly<Record<string, VariableListEntry>>,
-  isGlobal: boolean,
-): ProjectResourceVariableRow[] {
-  return Object.entries(variables).map(([id, variable]) => ({
-    kind: "variable",
-    rowKey: `variable:${isGlobal ? "global" : "local"}:${variable.resourcePath ?? id}`,
-    level: 0,
-    id,
-    resourcePath: variable.resourcePath,
-    name: variable.name,
-    dataType: variable.dataType,
-    isGlobal,
   }));
 }

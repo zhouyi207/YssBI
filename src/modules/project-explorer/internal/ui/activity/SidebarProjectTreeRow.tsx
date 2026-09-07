@@ -12,20 +12,17 @@ import {
 } from "@/modules/workbench/public";
 import type { GraphResourceType } from "./projectSidebarTypes";
 import { SidebarGraphRow } from "./SidebarGraphRow";
-import { SidebarVariableRow } from "./SidebarVariableRow";
 import { SidebarChartRow } from "./SidebarChartRow";
 
 export interface SidebarProjectTreeActions {
   onAddEvent: () => void;
   onAddFunction: () => void;
   onAddChart: () => void;
-  onAddVariable: (isGlobal: boolean) => void;
   onCategoryContextMenu: (event: React.MouseEvent, categoryId: ProjectTreeCategoryId) => void;
   onGraphContextMenu: (
     event: React.MouseEvent,
     target: { type: "graph"; id: string; name: string; graphType: GraphResourceType },
   ) => void;
-  onVariableContextMenu: (event: React.MouseEvent, id: string, name: string) => void;
   onChartContextMenu: (event: React.MouseEvent, path: string, name: string) => void;
   onOpenChart: (path: string, name: string) => void;
 }
@@ -44,18 +41,6 @@ function categoryAddConfig(
       return {
         onAdd: actions.onAddChart,
         ariaLabel: t("contextMenu.sidebar.newChart"),
-      };
-    case PROJECT_TREE_CATEGORY_IDS.variables:
-      return null;
-    case PROJECT_TREE_CATEGORY_IDS.localVariables:
-      return {
-        onAdd: () => actions.onAddVariable(false),
-        ariaLabel: t("contextMenu.sidebar.newLocalVariable"),
-      };
-    case PROJECT_TREE_CATEGORY_IDS.globalVariables:
-      return {
-        onAdd: () => actions.onAddVariable(true),
-        ariaLabel: t("contextMenu.sidebar.newGlobalVariable"),
       };
   }
 }
@@ -135,19 +120,6 @@ export function SidebarProjectTreeRow({
               graphType: row.graphType,
             })
           }
-        />
-      );
-    case "variable":
-      return (
-        <SidebarVariableRow
-          id={row.id}
-          resourcePath={row.resourcePath}
-          name={row.name}
-          dataType={row.dataType}
-          isGlobal={row.isGlobal}
-          indentDepth={row.level}
-          isSelected={detailTarget?.kind === "variable" && detailTarget.id === row.id}
-          onContextMenu={(event) => actions.onVariableContextMenu(event, row.id, row.name)}
         />
       );
     case "chart":

@@ -251,6 +251,7 @@ export interface ParameterDisplayDto {
   description: string | null;
 }
 export type ParameterEditorKindDto =
+  | "graphConstant"
   | "auto"
   | "text"
   | "number"

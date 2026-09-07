@@ -30,7 +30,7 @@ interface UseCanvasDropParams {
 }
 
 /**
- * Canvas drop logic: template drop, variable drop menu, click outside, and context menu.
+ * Canvas drop logic: template drop, click outside, and context menu.
  */
 export function useCanvasDrop({
   canvasElementRef,

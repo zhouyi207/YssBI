@@ -59,11 +59,11 @@ export function isBackendDataType(value: unknown): value is DataType {
 }
 
 /**
- * 变量详情面板「标量类型」可选集（收敛后：仅运行时规范标量）。
- * Int32/Float32/UInt* 属 DB/DataView 保真层，不作为变量标量类型；
+ * 常量详情面板的类型可选集。
+ * Int32/Float32/UInt* 属 DB/DataView 保真层，不作为常量标量类型；
  * Categorical/Date/time/datetime 属列级概念，只作为 DataSeries 元素类型出现。
  */
-export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
+export const CONSTANT_SELECTABLE_DATA_TYPE_KINDS = [
   "Boolean",
   "Int64",
   "Float64",
@@ -74,15 +74,13 @@ export const VARIABLE_SELECTABLE_DATA_TYPE_KINDS = [
   "DataSeries",
 ] as const;
 
-export type VariableSelectableDataTypeKind = (typeof VARIABLE_SELECTABLE_DATA_TYPE_KINDS)[number];
+/** 常量 Array 默认初始值（新建 / 类型切换） */
+export const DEFAULT_ARRAY_VALUE: readonly number[] = [];
 
-/** 变量 Array 默认初始值（新建 / 类型切换） */
-export const DEFAULT_ARRAY_VALUE: readonly number[] = [1, 2, 3];
+/** 常量 Object 默认初始值（新建 / 类型切换） */
+export const DEFAULT_OBJECT_VALUE: Readonly<Record<string, number>> = {};
 
-/** 变量 Object 默认初始值（新建 / 类型切换） */
-export const DEFAULT_OBJECT_VALUE: Readonly<Record<string, number>> = { key_0: 1, key_1: 2 };
-
-/** DataSeries 变量的元素类型可选集（列级类型）。 */
+/** DataSeries 常量的元素类型可选集（列级类型）。 */
 export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
   "Boolean",
   "Int64",
@@ -95,10 +93,6 @@ export const DATA_SERIES_ELEMENT_TYPE_KINDS = [
 ] as const;
 
 export type DataSeriesElementTypeKind = (typeof DATA_SERIES_ELEMENT_TYPE_KINDS)[number];
-
-export function isVariableDataTypeAllowed(dataType: DataType): boolean {
-  return dataType.kind !== "Any";
-}
 
 /** 获取 DataType 的 kind 字符串 */
 export function dataTypeKind(dt: DataType): string {

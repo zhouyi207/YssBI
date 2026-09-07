@@ -44,12 +44,6 @@ function ProjectActivityPanelController() {
           renameGraphItem: actions.renameGraphItem,
           deleteGraphItem: actions.deleteGraphItem,
           duplicateGraphItem: actions.duplicateGraphItem,
-          addVariable: actions.addVariable,
-          renameVariableItem: actions.renameVariableItem,
-          deleteVariable: actions.deleteVariableItem,
-          promoteVariable: actions.promoteVariable,
-          demoteVariable: actions.demoteVariable,
-          canDemoteVariable: actions.canDemoteVariable,
           openChart: actions.openChart,
           renameChartItem: actions.renameChartItem,
           duplicateChart: actions.duplicateChart,
@@ -68,13 +62,6 @@ function ProjectActivityPanelController() {
       target: { type: "graph"; id: string; name: string; graphType: GraphResourceType },
     ) => openActionMenu(event, target),
     [openActionMenu],
-  );
-
-  const openVariableContextMenu = useCallback(
-    (event: MouseEvent, id: string, name: string) => {
-      openActionMenu(event, actions.openVariableContextMenuTarget(id, name));
-    },
-    [actions, openActionMenu],
   );
 
   const openChartContextMenu = useCallback(
@@ -96,15 +83,6 @@ function ProjectActivityPanelController() {
         case PROJECT_TREE_CATEGORY_IDS.charts:
           openActionMenu(event, { type: "chartSection" });
           return;
-        case PROJECT_TREE_CATEGORY_IDS.variables:
-          openActionMenu(event, { type: "variableSection" });
-          return;
-        case PROJECT_TREE_CATEGORY_IDS.localVariables:
-          openActionMenu(event, { type: "variableSection", isGlobal: false });
-          return;
-        case PROJECT_TREE_CATEGORY_IDS.globalVariables:
-          openActionMenu(event, { type: "variableSection", isGlobal: true });
-          return;
       }
     },
     [openActionMenu],
@@ -115,20 +93,12 @@ function ProjectActivityPanelController() {
       onAddEvent: () => void actions.addEvent(),
       onAddFunction: () => void actions.addFunction(),
       onAddChart: () => void actions.addChart(),
-      onAddVariable: (isGlobal) => void actions.addVariable(undefined, "Int64", isGlobal),
       onCategoryContextMenu: openProjectCategoryContextMenu,
       onGraphContextMenu: openGraphContextMenu,
-      onVariableContextMenu: openVariableContextMenu,
       onChartContextMenu: openChartContextMenu,
       onOpenChart: actions.openChart,
     }),
-    [
-      actions,
-      openChartContextMenu,
-      openGraphContextMenu,
-      openProjectCategoryContextMenu,
-      openVariableContextMenu,
-    ],
+    [actions, openChartContextMenu, openGraphContextMenu, openProjectCategoryContextMenu],
   );
 
   return (

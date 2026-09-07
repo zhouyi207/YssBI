@@ -13,7 +13,6 @@ export * from "./columnStatsStore";
 export * from "./columnDistributionStore";
 export * from "./datasetOverviewStore";
 export * from "./graphMetaStore";
-export * from "./variableStore";
 export * from "./graphEntityAccess";
 export * from "./graphProjectionStore";
 

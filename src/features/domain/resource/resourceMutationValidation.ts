@@ -17,13 +17,7 @@ function isSafeRevision(value: unknown): value is number {
 }
 
 function isResourceKind(value: unknown): value is ResourceDeltaDto["resource"]["kind"] {
-  return (
-    value === "graph" ||
-    value === "function" ||
-    value === "variable" ||
-    value === "database" ||
-    value === "chart"
-  );
+  return value === "graph" || value === "function" || value === "database" || value === "chart";
 }
 
 function isPayloadKind(value: unknown): value is ResourceDocumentPatchDto["kind"] {
@@ -33,8 +27,6 @@ function isPayloadKind(value: unknown): value is ResourceDocumentPatchDto["kind"
     value === "chart" ||
     value === "resource_lifecycle" ||
     value === "resource_move" ||
-    value === "variable" ||
-    value === "variable_scope_move" ||
     value === "database"
   );
 }

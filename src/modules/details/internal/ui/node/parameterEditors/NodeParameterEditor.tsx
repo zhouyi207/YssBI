@@ -1,4 +1,5 @@
 import type { TFunction } from "i18next";
+import { useGraphConstants } from "@/features/application/graphDraft/graphConstantActions";
 import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -82,6 +83,8 @@ export function NodeParameterEditor({
   formatFallback,
 }: NodeParameterEditorProps) {
   const { t } = useTranslation();
+  const { constants } = useGraphConstants(graphPath);
+  const errorId = useId();
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const pendingRef = useRef(false);
@@ -134,6 +137,34 @@ export function NodeParameterEditor({
     }
   };
 
+  if (parameter.editor === "graphConstant") {
+    return (
+      <DetailFieldRow label={parameter.display.title}>
+        <div className="space-y-1">
+          <select
+            aria-label={parameter.display.title}
+            className={detailInlineInputClass}
+            value={String(parameter.value ?? "")}
+            disabled={pending}
+            aria-invalid={errors.length > 0}
+            onChange={(event) => void commit(event.target.value)}
+          >
+            {!constants[String(parameter.value ?? "")] && (
+              <option value={String(parameter.value ?? "")} disabled>
+                {t("detail.constants.choose")}
+              </option>
+            )}
+            {Object.values(constants).map((constant) => (
+              <option key={constant.id} value={constant.id}>
+                {constant.name}
+              </option>
+            ))}
+          </select>
+          <ParameterErrorList id={errorId} errors={errors} />
+        </div>
+      </DetailFieldRow>
+    );
+  }
   return (
     <ParameterValueEditor
       parameter={parameter}

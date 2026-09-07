@@ -17,8 +17,6 @@ interface EditorStore {
   detailFocus: DetailFocus | null;
   setDetailFocus: (focus: DetailFocus) => void;
   clearDetailFocus: () => void;
-  variablesGraphScopePath: string | null;
-  setVariablesGraphScope: (graphPath: string | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -27,6 +25,4 @@ export const useEditorStore = create<EditorStore>((set) => ({
   detailFocus: null,
   setDetailFocus: (detailFocus) => set({ detailFocus }),
   clearDetailFocus: () => set({ detailFocus: null }),
-  variablesGraphScopePath: null,
-  setVariablesGraphScope: (variablesGraphScopePath) => set({ variablesGraphScopePath }),
 }));

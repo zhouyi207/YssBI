@@ -11,7 +11,6 @@ import type {
 export type ResourceKeyDto =
   | { kind: "graph"; key: string }
   | { kind: "function"; key: string }
-  | { kind: "variable"; key: string }
   | { kind: "database"; key: string }
   | { kind: "chart"; key: string };
 
@@ -23,6 +22,8 @@ export interface MutationRequestDto<TPayload> {
 }
 
 export type EditorGraphMutationDto =
+  | { type: "setConstant"; payload: { id: string; constant: GraphConstantDto | null } }
+  | { type: "insertConstantReference"; payload: { id: string; position: NodePositionDto } }
   | {
       type: "createNode";
       payload: {
@@ -163,7 +164,18 @@ export interface InputStateDto {
 }
 
 /** Raw unsaved Graph document owned by one frontend editor session. */
+export interface GraphConstantDto {
+  id: string;
+  name: string;
+  dataType: import("./dataType").DataType;
+  dataValue: import("./dataValue").SerializedDataValue;
+  tabular?: { columns: Record<string, Array<null | boolean | number | string>> };
+  description?: string;
+  tags?: string[];
+}
+
 export interface GraphDocumentDto {
+  constants?: Record<string, GraphConstantDto>;
   nodes: Record<string, DocumentNodeDto>;
   port_bindings: Array<[DocumentPortAddressDto, DynamicPortBindingDto]>;
   connections: Record<string, DocumentConnectionDto>;
@@ -171,6 +183,12 @@ export interface GraphDocumentDto {
 }
 
 export type GraphDocumentOperationDto =
+  | {
+      operation: "set_constant";
+      id: string;
+      before: GraphConstantDto | null;
+      after: GraphConstantDto | null;
+    }
   | { operation: "insert_node"; node: DocumentNodeDto }
   | { operation: "remove_node"; node: DocumentNodeDto }
   | { operation: "update_node"; before: DocumentNodeDto; after: DocumentNodeDto }
@@ -205,11 +223,6 @@ export interface FunctionSignatureDto {
 export interface FunctionDocumentPatchDto {
   before: FunctionSignatureDto;
   after: FunctionSignatureDto;
-}
-
-export interface VariableDocumentPatchDto {
-  before: unknown;
-  after: unknown;
 }
 
 export interface DatabaseDocumentPatchDto {
@@ -247,8 +260,6 @@ export type ResourceDocumentPatchDto =
   | { kind: "chart"; patch: ChartDocumentPatchDto }
   | { kind: "resource_lifecycle"; patch: ResourceLifecyclePatchDto }
   | { kind: "resource_move"; patch: ResourcePathMovePatchDto }
-  | { kind: "variable"; patch: VariableDocumentPatchDto }
-  | { kind: "variable_scope_move"; patch: ResourcePathMovePatchDto }
   | { kind: "database"; patch: DatabaseDocumentPatchDto };
 
 export interface ResourceDeltaDto<TPayload = ResourceDocumentPatchDto> {

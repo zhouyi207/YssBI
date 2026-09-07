@@ -5,12 +5,7 @@ import type {
   ResourceMoveDto,
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
-import type {
-  FunctionSignaturePin,
-  Variable,
-  ChartDocument,
-  ChartIndexEntry,
-} from "@/shared/types";
+import type { FunctionSignaturePin, ChartDocument, ChartIndexEntry } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphProjectionStore";
 import {
@@ -89,14 +84,6 @@ export interface PreparedFunctionDeltaInstall {
   readonly functionOutputs: readonly FunctionSignaturePin[];
 }
 
-export interface PreparedVariableDeltaInstall {
-  readonly id: string;
-  readonly before: Variable | null;
-  readonly after: Variable | null;
-  readonly fromRevision: number;
-  readonly toRevision: number;
-}
-
 export interface PreparedPublicationStoreState {
   readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
   readonly graphOrder: string[];
@@ -104,8 +91,6 @@ export interface PreparedPublicationStoreState {
   readonly graphMeta?: Readonly<Record<string, GraphMeta>>;
   readonly databases: Readonly<Record<string, DatabaseRecord>>;
   readonly databaseRevisions: Readonly<Record<string, number>>;
-  readonly variables: Readonly<Record<string, Variable>>;
-  readonly variableRevisions: Readonly<Record<string, number>>;
   readonly chartIndex: ChartIndexEntry[];
   readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
   readonly focusedSession?: FocusedGraphSession | null;

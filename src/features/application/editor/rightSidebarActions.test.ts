@@ -84,7 +84,6 @@ beforeEach(() => {
   mocks.ensureView.mockResolvedValue(viewPanel("details"));
   useEditorStore.setState({
     detailFocus: null,
-    variablesGraphScopePath: null,
   });
 });
 
@@ -95,7 +94,6 @@ describe("right sidebar context actions", () => {
       kind: "function",
       path: "functions/F.yssbi-function",
     });
-    expect(useEditorStore.getState().variablesGraphScopePath).toBe("functions/F.yssbi-function");
 
     setInspectionContext("events/Main.yssbi-event", ["node-1"]);
     expect(useEditorStore.getState().detailFocus).toEqual({
@@ -125,10 +123,10 @@ describe("right sidebar context actions", () => {
   });
 
   it("updates explicit Details context without ensuring or activating a view", async () => {
-    await revealDetails({ kind: "variable", id: "variable-1" });
+    await revealDetails({ kind: "data", id: "database-1" });
     expect(useEditorStore.getState().detailFocus).toEqual({
-      kind: "variable",
-      id: "variable-1",
+      kind: "data",
+      id: "database-1",
     });
     expect(mocks.ensureView).not.toHaveBeenCalled();
     expect(mocks.reveal).not.toHaveBeenCalled();

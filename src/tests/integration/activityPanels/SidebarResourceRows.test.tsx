@@ -5,10 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import * as projectHydration from "@/features/application/project/projectHydration";
-import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { SidebarDataRow } from "@/modules/data-explorer/internal/ui/activity/SidebarDataRow";
-import { SidebarVariableRow } from "@/modules/project-explorer/internal/ui/activity/SidebarVariableRow";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -45,15 +43,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   TooltipContent: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-const variablePath = "variables/00000000-0000-0000-0000-000000000001";
 const databasePath = "databases/sales / . # 数据";
-const variableGet: NodeCreationDescriptor = {
-  kind: "resourceBound",
-  nodeTypeId: "yssbi.project.variable.get",
-  resourcePath: variablePath,
-  resourceRevision: 3,
-  createArgs: { kind: "variable" },
-};
 
 const databaseSource: NodeCreationDescriptor = {
   kind: "resourceBound",
@@ -85,7 +75,7 @@ function item(title: string, descriptor: NodeCreationDescriptor) {
 
 function catalogState(
   status: LocalizedNodeCatalogState["status"] = "ready",
-  items = [item("Get Counter", variableGet), item("Sales", databaseSource)],
+  items = [item("Sales", databaseSource)],
 ): LocalizedNodeCatalogState {
   return {
     status,
@@ -112,7 +102,6 @@ describe("resource sidebar rows", () => {
     mocks.draggableInputs.length = 0;
     mocks.catalogState = catalogState();
     mocks.revealDetails.mockResolvedValue(undefined);
-    useVariableStore.getState().clear();
     useDatabaseStore.getState().clear();
     vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     host = document.createElement("div");
@@ -124,21 +113,6 @@ describe("resource sidebar rows", () => {
     act(() => root.unmount());
     host.remove();
   });
-
-  function renderVariable(resourcePath: string | null = variablePath, isGlobal = true) {
-    act(() =>
-      root.render(
-        <SidebarVariableRow
-          id="variable-id"
-          resourcePath={resourcePath ?? undefined}
-          name="Counter"
-          dataType={{ kind: "Int64" }}
-          isGlobal={isGlobal}
-          onContextMenu={vi.fn()}
-        />,
-      ),
-    );
-  }
 
   function renderDatabase(resourcePath: string | null = databasePath, data: unknown = {}) {
     act(() =>
@@ -154,23 +128,8 @@ describe("resource sidebar rows", () => {
     );
   }
 
-  it.each([
-    ["global", true],
-    ["local", false],
-  ])("uses the exact current variable Get descriptor for a %s variable", (_scope, isGlobal) => {
-    renderVariable(variablePath, isGlobal);
-
-    const input = mocks.draggableInputs[mocks.draggableInputs.length - 1];
-    expect(input).toMatchObject({
-      disabled: false,
-      data: { type: "node-template", template: { title: "Counter", descriptor: variableGet } },
-    });
-    const dragData = input?.data as { template?: { descriptor?: unknown } };
-    expect(dragData.template?.descriptor).toBe(variableGet);
-  });
-
   it("forwards pointer down to the dnd-kit drag listener", () => {
-    renderVariable();
+    renderDatabase();
     const row = host.firstElementChild;
 
     act(() => row?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
@@ -190,13 +149,7 @@ describe("resource sidebar rows", () => {
     expect(dragData.template?.descriptor).toBe(databaseSource);
   });
 
-  it("explicitly reveals Details for variable and database row clicks", async () => {
-    renderVariable();
-    await act(async () => {
-      host.firstElementChild?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
+  it("explicitly reveals Details for database row clicks", async () => {
     renderDatabase();
     await act(async () => {
       host.firstElementChild?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -204,7 +157,6 @@ describe("resource sidebar rows", () => {
     });
 
     expect(mocks.revealDetails.mock.calls.map(([focus]) => focus)).toEqual([
-      { kind: "variable", id: "variable-id" },
       { kind: "data", id: "database-id" },
     ]);
   });
@@ -225,9 +177,9 @@ describe("resource sidebar rows", () => {
   it.each([
     ["stale", catalogState("loading")],
     ["missing", catalogState("ready", [])],
-  ])("disables a variable row for a %s descriptor and refreshes on interaction", (_case, state) => {
+  ])("disables a database row for a %s descriptor and refreshes on interaction", (_case, state) => {
     mocks.catalogState = state;
-    renderVariable();
+    renderDatabase();
     const row = host.querySelector('[aria-disabled="true"]');
 
     expect(row).not.toBeNull();
@@ -255,48 +207,6 @@ describe("resource sidebar rows", () => {
     expect(state.refresh).toHaveBeenCalledOnce();
   });
 
-  it("hydrates a missing variable path through ProjectIndex before refreshing Catalog and dragging", async () => {
-    const state = catalogState("ready", []);
-    mocks.catalogState = state;
-    const refreshResourceIndex = vi.fn(async () => {
-      useVariableStore.setState({
-        variables: {
-          "variable-id": {
-            id: "variable-id",
-            resourcePath: variablePath,
-            name: "Counter",
-            dataType: { kind: "Int64" },
-            dataValue: { kind: "Int64", value: 1 },
-            description: "",
-            scope: { type: "global" },
-            tags: [],
-          },
-        },
-        revisions: { "variable-id": 1 },
-      });
-      return true;
-    });
-    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
-      refreshResourceIndex,
-    );
-    renderVariable(null);
-    const row = host.querySelector('[aria-disabled="true"]');
-
-    await act(async () => {
-      row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(refreshResourceIndex).toHaveBeenCalledOnce();
-    expect(state.refresh).toHaveBeenCalledOnce();
-    mocks.catalogState = catalogState("ready", [item("Get Counter", variableGet)]);
-    renderVariable(useVariableStore.getState().variables["variable-id"]?.resourcePath);
-    expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]).toMatchObject({
-      disabled: false,
-      data: { type: "node-template", template: { title: "Counter", descriptor: variableGet } },
-    });
-  });
-
   it("suppresses Catalog refresh when missing-path ProjectIndex hydration becomes stale", async () => {
     const state = catalogState("ready", []);
     mocks.catalogState = state;
@@ -304,7 +214,7 @@ describe("resource sidebar rows", () => {
     vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
       refreshResourceIndex,
     );
-    renderVariable(null);
+    renderDatabase(null);
     const row = host.querySelector('[aria-disabled="true"]');
 
     await act(async () => {

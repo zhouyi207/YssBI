@@ -85,7 +85,6 @@ export {
   sidebarItemLabelClass,
   sidebarItemRowClass,
   sidebarRowActionClass,
-  sidebarVariableTypeBadgeClass,
   SIDEBAR_CHEVRON_SIZE,
   SIDEBAR_ROW_HEIGHT_CLASS,
   SIDEBAR_ROW_ICON_SIZE,

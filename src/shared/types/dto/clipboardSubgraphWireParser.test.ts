@@ -7,7 +7,7 @@ const completeSnapshot = {
   nodes: [
     {
       localId: "node/0",
-      creation: { kind: "static", nodeTypeId: "yssbi.constant.int64" },
+      creation: { kind: "static", nodeTypeId: "yssbi.constant.get" },
       parameters: { value: 42, nested: { enabled: true } },
       userLabel: "Source",
       relativePosition: { x: 0, y: 10 },

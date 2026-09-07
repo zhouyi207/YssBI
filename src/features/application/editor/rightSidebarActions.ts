@@ -21,10 +21,6 @@ export function setDetailContext(focus: DetailFocus | null): void {
   const store = useEditorStore.getState();
   if (focus) store.setDetailFocus(focus);
   else store.clearDetailFocus();
-
-  if (focus?.kind === "event" || focus?.kind === "function") {
-    store.setVariablesGraphScope(focus.path);
-  }
 }
 
 /** Apply tab-derived context without replacing an explicit node inspection in the same graph. */
@@ -35,7 +31,6 @@ export function setPassiveDetailContext(focus: DetailFocus): void {
     current?.kind === "node" &&
     current.graphPath === focus.path;
   if (preservesNodeFocus) {
-    useEditorStore.getState().setVariablesGraphScope(focus.path);
     return;
   }
   setDetailContext(focus);
@@ -47,7 +42,13 @@ export function setInspectionContext(graphPath: string, selectedNodeIds: readonl
   if (selectedNodeIds.length === 1 && graphPath.length > 0 && nodeId?.length > 0) {
     store.setDetailFocus({ kind: "node", id: nodeId, graphPath });
   } else if (store.detailFocus?.kind === "node") {
-    store.clearDetailFocus();
+    const resource = Object.values(useResourceStore.getState().resources).find(
+      (resource) =>
+        resource.id === graphPath && (resource.kind === "event" || resource.kind === "function"),
+    );
+    if (resource?.kind === "event" || resource?.kind === "function")
+      store.setDetailFocus({ kind: resource.kind, path: graphPath });
+    else store.clearDetailFocus();
   }
 }
 
@@ -74,3 +75,4 @@ export async function revealInspect(
   if (selectedNodeIds.length !== 1 || graphPath.length === 0 || !nodeId) return;
   await revealWorkbenchView("inspect");
 }
+import { useResourceStore } from "@/features/core/resource";

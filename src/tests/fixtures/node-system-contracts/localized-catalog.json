@@ -274,26 +274,21 @@
       "title": "Contract Function"
     },
     {
-      "aliases": ["get", "read", "variable"],
-      "backendSearchText": ["get", "read", "variable"],
-      "categoryId": "project",
+      "aliases": ["get", "read", "constant"],
+      "backendSearchText": ["get", "read", "constant"],
+      "categoryId": "constants",
       "creation": {
-        "createArgs": {
-          "kind": "variable"
-        },
-        "kind": "resourceBound",
-        "nodeTypeId": "yssbi.project.variable.get",
-        "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
-        "resourceRevision": 12
+        "kind": "static",
+        "nodeTypeId": "yssbi.constant.get"
       },
-      "documentation": "# Get Variable\n\nReads the current value of a project **variable** selected in the node inspector.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| *(inspector)* **Variable** | Variable to read (not a graph pin) |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Value** | Current variable contents (`Any` type; schema resolved from variable) |\n\n## Usage\n\nPick a variable in the node properties, then wire **Value** to consumers (**Convert**, regression **Y**/**X**, etc.). Re-evaluates each graph run with the latest stored value.\n",
-      "iconId": "builtin.project",
-      "nodeTypeId": "yssbi.project.variable.get",
+      "documentation": "# Get Constant\n\nOutputs a named constant defined in the current Event or Function. Add and edit constants in the graph's Details panel, then select one in this node's parameters or insert its reference from that panel.\n\nThe output type follows the selected constant. Supported values include scalars, arrays, objects, DataFrames, and DataSeries. Table data is stored with the graph.\n\nConstants are immutable during a run. Editing a constant changes the graph draft; compile again to use the new value and save to persist it. Renaming a constant preserves its references. Deleting a referenced constant produces a graph problem until its nodes are reassigned or removed.\n",
+      "iconId": "builtin.constants",
+      "nodeTypeId": "yssbi.constant.get",
       "parameters": [
         {
-          "description": "Bound project variable resource.",
-          "key": "variable",
-          "title": "Variable"
+          "description": "Immutable value defined in this graph's Details panel.",
+          "key": "constant",
+          "title": "Constant"
         }
       ],
       "ports": [
@@ -303,12 +298,10 @@
           "label": "Value"
         }
       ],
-      "resourceNames": ["Contract Variable"],
-      "resourcePath": "variables/00000000-0000-0000-0000-000000000004",
-      "resourceRevision": 12,
+      "resourceNames": [],
       "styleId": "builtin.default",
-      "technicalTerms": ["Contract Variable", "get", "read", "variable"],
-      "title": "Contract Variable"
+      "technicalTerms": ["get", "read", "constant"],
+      "title": "Get Constant"
     }
   ],
   "locale": "en-US",

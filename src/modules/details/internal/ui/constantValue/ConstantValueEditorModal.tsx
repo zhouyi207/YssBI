@@ -17,14 +17,14 @@ import type { DataType } from "@/shared/types/domain/dataType";
 import type { DataValue } from "@/shared/types/domain/dataValue";
 import {
   dataValueToEditableJson,
-  isJsonEditableVariableType,
+  isJsonEditableConstantType,
   parseArrayValueFromJson,
   parseDataFrameValueFromJson,
   parseDataSeriesValueFromJson,
   parseObjectValueFromJson,
-} from "./variableValueUtils";
+} from "./constantValueUtils";
 
-interface VariableValueEditorModalProps {
+interface ConstantValueEditorModalProps {
   open: boolean;
   onClose: () => void;
   dataType: DataType;
@@ -35,20 +35,20 @@ interface VariableValueEditorModalProps {
 const jsonTextareaClass =
   "min-h-[220px] w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 
-export function VariableValueEditorModal({
+export function ConstantValueEditorModal({
   open,
   onClose,
   dataType,
   dataValue,
   onSave,
-}: VariableValueEditorModalProps) {
+}: ConstantValueEditorModalProps) {
   const { t } = useTranslation();
   const [jsonDraft, setJsonDraft] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const jsonErrorId = useId();
 
   useEffect(() => {
-    if (!open || !isJsonEditableVariableType(dataType)) return;
+    if (!open || !isJsonEditableConstantType(dataType)) return;
     setJsonDraft(dataValueToEditableJson(dataType, dataValue));
     setJsonError(null);
   }, [open, dataType, dataValue]);
@@ -80,7 +80,7 @@ export function VariableValueEditorModal({
     }
 
     if (!result.ok) {
-      setJsonError(t(`detail.variableValue.errors.${result.error}`));
+      setJsonError(t(`detail.constantValue.errors.${result.error}`));
       return;
     }
     setJsonError(null);
@@ -88,7 +88,7 @@ export function VariableValueEditorModal({
     onClose();
   };
 
-  if (!isJsonEditableVariableType(dataType)) {
+  if (!isJsonEditableConstantType(dataType)) {
     return null;
   }
 
@@ -96,18 +96,18 @@ export function VariableValueEditorModal({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="flex max-h-[85vh] max-w-[560px] flex-col overflow-hidden p-0">
         <DialogHeader className="border-b border-border bg-muted/20 px-6 py-4">
-          <DialogTitle>{t(`detail.variableValue.title.${dataType.kind}`)}</DialogTitle>
+          <DialogTitle>{t(`detail.constantValue.title.${dataType.kind}`)}</DialogTitle>
           <DialogDescription>
-            {t(`detail.variableValue.description.${dataType.kind}`)}
+            {t(`detail.constantValue.description.${dataType.kind}`)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 px-6 py-5">
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <Label htmlFor="variable-value-json">{t("detail.variableValue.jsonLabel")}</Label>
+            <Label htmlFor="constant-value-json">{t("detail.constantValue.jsonLabel")}</Label>
             <ScrollArea className="min-h-0 flex-1">
               <textarea
-                id="variable-value-json"
+                id="constant-value-json"
                 className={jsonTextareaClass}
                 value={jsonDraft}
                 spellCheck={false}
@@ -133,7 +133,7 @@ export function VariableValueEditorModal({
             {t("common.cancel")}
           </Button>
           <Button type="button" variant="outline" size="lg" onClick={handleClear}>
-            {t("detail.variableValue.clear")}
+            {t("detail.constantValue.clear")}
           </Button>
           <Button type="button" size="lg" onClick={handleSave}>
             {t("common.confirm")}

@@ -11,7 +11,6 @@ features/application/editor/
 ├── useEditorCanvas.ts         # Panel-scoped Canvas commands/workspace/resources/interaction
 ├── useEditorOperations.ts     # Clipboard, history, node ops
 ├── useEditorPanelCommands.ts  # Narrow panel open/split facade
-├── useDetailsCommands.ts      # Details-only mutation capability
 └── index.ts
 
 features/core/editor/
@@ -46,7 +45,7 @@ const canvas = useEditorCanvas({
 Use `mode: 'preview'` for an inactive Dockview panel. Preview does not mount
 the panel's context-menu actions, global pointer loop, or drop handling.
 
-`CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` / `execution` model from
+`CanvasOverlays` receives a discriminated `graph` / `palette` / `execution` model from
 the controller and must not assemble application commands.
 
 ### Other consumers
@@ -54,7 +53,7 @@ the controller and must not assemble application commands.
 Use the narrow capability matching the caller:
 
 ```tsx
-const { updateVariable } = useDetailsCommands();
+const { constants, loaded, saving } = useGraphConstants(graphPath);
 ```
 
 Project Explorer obtains its active resource through
@@ -65,7 +64,7 @@ Project Explorer obtains its active resource through
 | Capability / Hook                  | Interface                                                                  | Mount/caller            |
 | ---------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
 | `WorkbenchCommandCapability`       | Menu, keyboard, and welcome actions composed by the app                    | `WorkbenchWindow` props |
-| `useDetailsCommands()`             | Variable mutation required by Details                                      | `DetailsPane`           |
+| `useGraphConstants(graphPath)`     | Constants in the active graph draft                                        | Event/Function Details |
 | `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | `GraphCanvasController` |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through

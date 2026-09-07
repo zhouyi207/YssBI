@@ -38,12 +38,10 @@ export const PIN_COLORS: Record<string, string> = {
   delegate: "var(--status-danger)",
 };
 
-/** Sidebar item type icon colors (event, function, variable, data) */
+/** Sidebar item type icon colors (event, function, data) */
 export const TYPE_ICON_COLORS: Record<string, string> = {
   event: "var(--status-info)",
   function: "var(--status-success)",
-  variable: "var(--muted-foreground)",
-  variableGlobal: "var(--status-warning)",
   data: "var(--status-success)",
   chart: "var(--pin-temporal)",
 };

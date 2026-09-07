@@ -46,7 +46,7 @@ describe("sidebarStore section expand", () => {
     store.setProjectTreeQuery("find me");
     store.setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.functions, true);
     store.setProjectTreeCategoriesExpanded(
-      [PROJECT_TREE_CATEGORY_IDS.events, PROJECT_TREE_CATEGORY_IDS.globalVariables],
+      [PROJECT_TREE_CATEGORY_IDS.events, PROJECT_TREE_CATEGORY_IDS.charts],
       false,
     );
     store.resetProjectTreeQuery();
@@ -57,7 +57,7 @@ describe("sidebarStore section expand", () => {
         ...PROJECT_TREE_EXPANSION_DEFAULTS,
         [PROJECT_TREE_CATEGORY_IDS.events]: false,
         [PROJECT_TREE_CATEGORY_IDS.functions]: true,
-        [PROJECT_TREE_CATEGORY_IDS.globalVariables]: false,
+        [PROJECT_TREE_CATEGORY_IDS.charts]: false,
       },
     });
   });

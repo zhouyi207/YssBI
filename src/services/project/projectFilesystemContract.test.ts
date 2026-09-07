@@ -71,7 +71,7 @@ const projectDatabaseIdentityFields = {
 const activeProjectCommandIdentityFields = {
   get_localized_node_catalog: "projectInstanceId",
   get_compatible_node_catalog: "projectInstanceId",
-  get_project_databases_variables: "projectInstanceId",
+  get_project_databases: "projectInstanceId",
   get_project_path: "projectInstanceId",
   get_project_index: "projectInstanceId",
   get_project_resource_path: "projectInstanceId",
@@ -86,10 +86,7 @@ const activeProjectCommandIdentityFields = {
   duplicate_graph: "projectInstanceId",
   remove_graph: "projectInstanceId",
   rename_graph_resource: "projectInstanceId",
-  create_variable: "projectInstanceId",
-  get_variable: "projectInstanceId",
-  update_variable: "projectInstanceId",
-  delete_variable: "projectInstanceId",
+
   create_chart: "projectInstanceId",
   duplicate_chart: "projectInstanceId",
   load_chart: "projectInstanceId",
@@ -483,7 +480,6 @@ const workflowFiles = [
 
   "src/features/application/editor/useProjectOperations.ts",
   "src/features/application/editor/useChartManagement.ts",
-  "src/features/application/dataManagement/variableActions.ts",
   "src/features/application/resource/resourceActions.ts",
   "src/features/application/project/useProjectPicker.ts",
 ] as const;
@@ -768,7 +764,7 @@ describe("projectFilesystemContract", () => {
     const offenders = workflowFiles.filter((path) => {
       const source = readFileSync(resolve(path), "utf8");
       if (
-        !/await\s+(?:ProjectService|GraphService|GraphProjectionService|VariableService|ChartService)\./.test(
+        !/await\s+(?:ProjectService|GraphService|GraphProjectionService|ChartService)\./.test(
           source,
         )
       ) {

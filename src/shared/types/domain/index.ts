@@ -28,7 +28,6 @@ export * from "./graphResourcePath";
 export * from "./dataType";
 export * from "./typeSystem";
 export * from "./dataValue";
-export * from "./variable";
 export * from "./project";
 export * from "./database";
 export * from "./dataframe";

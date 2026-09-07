@@ -1,36 +1,4 @@
-/**
- * DataValue DTO 转换
- *
- * 前后端 DataValue 格式互转
- */
-
-import type { DataValue } from "../domain/dataValue";
-import type { DataTypeBackendFormat } from "./dataType";
-import { dataTypeToBackend } from "./dataType";
-
-/** 后端 DataSeries 值（id 或带元数据的 struct） */
-export type DataSeriesValueBackend =
-  | string
-  | {
-      id: string;
-      elementType?: DataTypeBackendFormat;
-      dummyInfo?: unknown;
-      timeSeriesState?: unknown;
-    };
-
-/** 后端 DataValue 序列化格式（Rust serde 外部标签枚举） */
-export type DataValueBackend =
-  | { Boolean: boolean }
-  | { Int64: number }
-  | { Float64: number }
-  | { String: string }
-  | { Array: DataValueBackend[] }
-  | { Object: Record<string, unknown> }
-  | { DataFrame: string }
-  | { DataSeries: DataSeriesValueBackend }
-  | { Struct: { typeKey: string; handleId: string } }
-  | "Null"
-  | { Null: null };
+import type { SerializedDataValue } from "../domain/dataValue";
 
 const DATA_TYPE_LEAVES = new Set([
   "Boolean",
@@ -96,7 +64,7 @@ function isDataSeriesWire(value: unknown): boolean {
 }
 
 /** Strict validator for Rust's externally tagged `DataValue` serde wire. */
-export function isRustDataValueWire(value: unknown): value is DataValueBackend {
+export function isRustDataValueWire(value: unknown): value is SerializedDataValue {
   if (value === "Null") return true;
   if (!isRecord(value) || Object.keys(value).length !== 1) return false;
   if ("Boolean" in value) return typeof value.Boolean === "boolean";
@@ -119,44 +87,4 @@ export function isRustDataValueWire(value: unknown): value is DataValueBackend {
     );
   }
   return false;
-}
-
-/** 转为后端期望的格式 */
-export function dataValueToBackend(dv: DataValue): DataValueBackend | { Null: null } {
-  switch (dv.kind) {
-    case "Boolean":
-      return { Boolean: dv.value };
-    case "Int64":
-      return { Int64: dv.value };
-    case "Float64":
-      return { Float64: dv.value };
-    case "String":
-      return { String: dv.value };
-    // 后端 DataValue 无 Date/Datetime/Time/Categorical 变体，统一以 String 承载
-    case "Date":
-    case "Datetime":
-    case "Time":
-    case "Categorical":
-      return { String: dv.value };
-    case "Array":
-      return { Array: dv.value.map(dataValueToBackend) };
-    case "Object":
-      return { Object: dv.value };
-    case "DataFrame":
-      return { DataFrame: dv.value };
-    case "DataSeries": {
-      if (typeof dv.value === "string") {
-        return { DataSeries: dv.value };
-      }
-      const payload: DataSeriesValueBackend = { id: dv.value.id };
-      if (dv.value.elementType) {
-        payload.elementType = dataTypeToBackend(dv.value.elementType);
-      }
-      return { DataSeries: payload };
-    }
-    case "Struct":
-      return { Struct: dv.value };
-    case "Null":
-      return { Null: null };
-  }
 }

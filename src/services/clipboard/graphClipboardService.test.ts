@@ -20,7 +20,7 @@ const snapshot: ClipboardSubgraphDto = {
   nodes: [
     {
       localId: "node/0",
-      creation: { kind: "static", nodeTypeId: "yssbi.constant.int64" },
+      creation: { kind: "static", nodeTypeId: "yssbi.constant.get" },
       parameters: { value: 42 },
       userLabel: null,
       relativePosition: { x: 0, y: 0 },

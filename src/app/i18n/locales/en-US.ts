@@ -213,8 +213,6 @@ export const enUS = {
       rename: "Rename",
       duplicate: "Duplicate",
       delete: "Delete",
-      newLocalVariable: "New Local Variable",
-      newGlobalVariable: "New Global Variable",
       newChart: "New Chart",
       importData: "Import Data",
       revealInExplorer: "Reveal in File Explorer",
@@ -223,7 +221,6 @@ export const enUS = {
     dialog: {
       createSubmit: "Create",
       renameGraphTitle: "Rename",
-      renameVariableTitle: "Rename Variable",
       renameChartTitle: "Rename Chart",
       renameDataTitle: "Rename Dataset",
       renameSubmit: "Rename",
@@ -383,7 +380,6 @@ export const enUS = {
     cut: "Cut",
     copy: "Copy",
     paste: "Paste",
-    manageVariables: "Manage Variables",
     importData: "Import Data",
     databaseEditor: "Database Editor",
     newChart: "New Chart",
@@ -1049,8 +1045,6 @@ export const enUS = {
   },
   sidebar: {
     open: "Open",
-    promoteToGlobal: "Promote to global",
-    demoteToLocal: "Demote to local",
     viewInDatabaseEditor: "View in Database Editor",
 
     projectTree: {
@@ -1062,9 +1056,6 @@ export const enUS = {
         events: "Events",
         functions: "Functions",
         charts: "Charts",
-        variables: "Variables",
-        localVariables: "Local",
-        globalVariables: "Global",
       },
     },
 
@@ -1074,14 +1065,10 @@ export const enUS = {
     noData: "No data yet",
     noEvents: "No Events yet",
     noFunctions: "No Functions yet",
-    noLocalVariables: "No local variables yet",
-    noGlobalVariables: "No global variables yet",
     dataLoading: "Loading data…",
     dataLoadFailed: "Failed to load data",
     noCommandHistory: "No command history",
     noBuiltinNodes: "No built-in nodes",
-    deleteVariableTitle: "Delete Variable",
-    deleteVariableMessage: 'Delete variable "{{name}}"? This cannot be undone.',
     deleteDataTitle: "Delete Dataset",
     deleteDataMessage: 'Delete dataset "{{name}}"? This cannot be undone.',
     sections: {
@@ -1281,7 +1268,6 @@ export const enUS = {
       column: "Column",
     },
     itemTypes: {
-      variable: "Variable",
       event: "Event",
       function: "Function",
       data: "Dataset",
@@ -1306,16 +1292,21 @@ export const enUS = {
       columns: "{{count}} columns",
       rows: "{{count}} rows",
     },
-    variableValue: {
+    constants: {
+      title: "Constants",
+      defaultName: "Constant",
+      add: "Add constant",
+      updateFailed: "Could not update the constant. Please try again.",
+      insertReference: "Insert reference",
+      remove: "Delete constant {{name}}",
+      empty: "Add a value to reuse in this graph.",
+      choose: "Choose a constant",
+    },
+    constantValue: {
       edit: "Edit",
       empty: "(empty)",
       clear: "Clear",
       jsonLabel: "JSON",
-      database: "Dataset",
-      column: "Column",
-      selectDatabase: "Select dataset",
-      selectColumn: "Select column",
-      columnPreview: "{{count}} columns",
       title: {
         Array: "Edit Array Value",
         Object: "Edit Object Value",
@@ -1323,11 +1314,11 @@ export const enUS = {
         DataSeries: "Edit DataSeries Value",
       },
       description: {
-        Array: "Edit elements as a JSON array. Element types follow the variable type.",
+        Array: "Edit elements as a JSON array. Element types follow the constant type.",
         Object: "Edit key-value pairs as a JSON object.",
         DataFrame:
-          'Fill table content as JSON: {"col_1":[1,2],"col_2":[3,4]} (column name → value array, equal lengths); materialized at execution.',
-        DataSeries: 'Single-column map JSON: {"col":[1,2,3]}; materialized at execution.',
+          'Enter table data as JSON: {"col_1":[1,2],"col_2":[3,4]}. Columns must have equal lengths. Data is saved with this graph.',
+        DataSeries: 'Single-column JSON: {"col":[1,2,3]}. Data is saved with this graph.',
       },
       errors: {
         invalidJson: "Invalid JSON",
@@ -1336,10 +1327,6 @@ export const enUS = {
         notDataFrameContent:
           "DataFrame expects an object mapping column names to equal-length value arrays",
         notDataSeriesContent: 'DataSeries expects a single-column object {"col":[...]}',
-        notString: "Expected a JSON string (reference ID)",
-        notStringOrIdObject: 'Expected a JSON string or {"id":"..."} object',
-        noDatabase: "Select a dataset",
-        noColumn: "Select a column",
       },
     },
     delete: {

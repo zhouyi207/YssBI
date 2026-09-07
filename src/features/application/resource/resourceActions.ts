@@ -14,10 +14,6 @@ import {
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 
 import type { GraphResourceKind } from "@/shared/types/domain/graphResourcePath";
-import {
-  deleteVariableAction,
-  renameVariableAction,
-} from "@/features/application/dataManagement/variableActions";
 import { executeDatabaseMutation } from "@/features/application/dataManagement/databaseMutation";
 
 export type { GraphResourceKind };
@@ -127,11 +123,6 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
     return;
   }
 
-  if (ref.kind === "variable") {
-    await renameVariableAction(ref.id, name);
-    return;
-  }
-
   useResourceStore.getState().patchResource({ id: ref.id, kind: ref.kind }, { name });
 }
 
@@ -190,11 +181,6 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
         ref.id,
       ),
     );
-    return;
-  }
-
-  if (ref.kind === "variable") {
-    await deleteVariableAction(ref.id);
     return;
   }
 }

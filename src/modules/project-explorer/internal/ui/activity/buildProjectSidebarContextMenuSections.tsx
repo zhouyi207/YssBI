@@ -8,7 +8,6 @@ import {
   VscTrash,
 } from "react-icons/vsc";
 
-import { DEFAULT_VARIABLE_NAME } from "@/shared/constants/defaultResourceNames";
 import type { ActionMenuSection } from "@/shared/ui/actionMenu";
 import type {
   ProjectSidebarContextMenuActions,
@@ -77,92 +76,6 @@ export function buildProjectSidebarContextMenuSections(
               target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunction"),
             icon: <VscAdd size={12} />,
             onClick: () => void actions.createGraph(target.graphType),
-          },
-        ],
-      },
-    ];
-  }
-
-  if (target.type === "variable") {
-    const scopeItems = target.isGlobal
-      ? [
-          {
-            id: "demote-to-local",
-            label: t("sidebar.demoteToLocal"),
-            icon: <VscEdit size={12} />,
-            disabled: !actions.canDemoteVariable,
-            title: actions.canDemoteVariable ? undefined : t("sidebar.noActiveGraph"),
-            onClick: () => void actions.demoteVariable(target.id),
-          },
-        ]
-      : [
-          {
-            id: "promote-to-global",
-            label: t("sidebar.promoteToGlobal"),
-            icon: <VscEdit size={12} />,
-            onClick: () => void actions.promoteVariable(target.id),
-          },
-        ];
-
-    return [
-      {
-        items: [
-          {
-            id: "rename",
-            label: t("contextMenu.sidebar.rename"),
-            icon: <VscEdit size={12} />,
-            onClick: () => actions.renameVariableItem(target.id, target.name),
-          },
-          ...scopeItems,
-        ],
-      },
-      {
-        items: [
-          {
-            id: "delete",
-            label: t("contextMenu.sidebar.delete"),
-            icon: <VscTrash size={12} />,
-            danger: true,
-            onClick: () => void actions.deleteVariable(target.id, target.name),
-          },
-        ],
-      },
-    ];
-  }
-
-  if (target.type === "variableSection") {
-    if (target.isGlobal === undefined) {
-      return [
-        {
-          items: [
-            {
-              id: "new-local-variable",
-              label: t("contextMenu.sidebar.newLocalVariable"),
-              icon: <VscAdd size={12} />,
-              onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", false),
-            },
-            {
-              id: "new-global-variable",
-              label: t("contextMenu.sidebar.newGlobalVariable"),
-              icon: <VscAdd size={12} />,
-              onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", true),
-            },
-          ],
-        },
-      ];
-    }
-
-    const isGlobal = target.isGlobal;
-    return [
-      {
-        items: [
-          {
-            id: "new-variable",
-            label: isGlobal
-              ? t("contextMenu.sidebar.newGlobalVariable")
-              : t("contextMenu.sidebar.newLocalVariable"),
-            icon: <VscAdd size={12} />,
-            onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", isGlobal),
           },
         ],
       },

@@ -50,7 +50,6 @@ export const SidebarDataRow = memo(function SidebarDataRow({
       refresh();
     } else {
       void refreshMissingSidebarResourcePath({
-        kind: "database",
         id,
         hasCurrentDescriptor: (path) => templateForPath(path) != null,
         refreshCatalog: refresh,

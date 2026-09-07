@@ -110,7 +110,7 @@ describe("editor panel Dockview synchronization", () => {
     mocks.panels = [editorPanel("panel-a", "events/A", true)];
     mocks.groups = [group()];
     mocks.rootActivePanelInstanceId = "panel-a";
-    useEditorStore.setState({ variablesGraphScopePath: null });
+    useEditorStore.setState({});
   });
 
   it("does not write to Dockview while passively focusing its already active group", () => {
@@ -126,7 +126,6 @@ describe("editor panel Dockview synchronization", () => {
       kind: "event",
       path: "events/A",
     });
-    expect(useEditorStore.getState().variablesGraphScopePath).toBe("events/A");
   });
 
   it("physically activates an editor that is only active inside its inactive group", async () => {

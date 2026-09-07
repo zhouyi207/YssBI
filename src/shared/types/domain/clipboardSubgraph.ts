@@ -10,10 +10,7 @@ export type ClipboardNodeCreationDto =
       createArgs: ClipboardResourceBoundCreateArgsDto;
     };
 
-export type ClipboardResourceBoundCreateArgsDto =
-  | { kind: "function" }
-  | { kind: "variable" }
-  | { kind: "database" };
+export type ClipboardResourceBoundCreateArgsDto = { kind: "function" } | { kind: "database" };
 
 export type ClipboardPortRefDto =
   | { kind: "declared"; key: string }
@@ -68,6 +65,7 @@ export interface ClipboardConnectionDto {
 
 export interface ClipboardSubgraphDto {
   schemaVersion: 1;
+  constants?: import("./editorMutation").GraphConstantDto[];
   nodes: ClipboardNodeDto[];
   portBindings: ClipboardPortBindingDto[];
   inputStates: ClipboardInputStateDto[];

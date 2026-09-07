@@ -17,4 +17,3 @@ export type { IpcErrorDto } from "./ipcError";
 
 export * from "./dataType";
 export * from "./dataValue";
-export * from "./variable";

@@ -43,7 +43,7 @@ const draftDocument: GraphDocumentDto = {
   nodes: {
     [sourcePort.nodeId]: {
       id: sourcePort.nodeId,
-      node_type: "yssbi.constant.int64",
+      node_type: "yssbi.constant.get",
       position: { x: 10, y: 20 },
       parameters: {},
       user_label: null,

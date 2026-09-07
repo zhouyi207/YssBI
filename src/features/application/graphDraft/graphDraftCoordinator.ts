@@ -24,7 +24,9 @@ import { graphDraftErrorCode, type GraphDraftRejectionCode } from "./graphDraftE
 export interface ApplyGraphDraftMutationInput {
   graphPath: string;
   locale?: string;
-  mutation: EditorGraphMutationDto;
+  mutation:
+    | EditorGraphMutationDto
+    | ((document: NonNullable<ReturnType<typeof getGraphDraftDocument>>) => EditorGraphMutationDto);
 }
 
 export interface GraphDraftCoordinatorDependencies {
@@ -97,7 +99,7 @@ async function applyAfterPrevious(
       input.graphPath,
       input.locale ?? currentProjectionLocale(),
       document,
-      input.mutation,
+      typeof input.mutation === "function" ? input.mutation(document) : input.mutation,
     );
   } catch (error) {
     if (

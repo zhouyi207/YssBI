@@ -3,7 +3,6 @@ export { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 export { useEditorOperations } from "./useEditorOperations";
 export { useGraphCanvasCommands } from "./useGraphCanvasCommands";
 export { useChartManagement, useOpenChart } from "./useChartManagement";
-export { useDetailsCommands } from "./useDetailsCommands";
 export { useDetailResourceProjection } from "./useDetailResourceProjection";
 export type { WorkbenchCommandCapability } from "./workbenchCommandCapability";
 export { disconnectConnectionsById, insertRerouteAtConnection } from "./edgeOperations";

@@ -18,10 +18,10 @@ describe("resolveDetailTarget", () => {
   it("returns explicit detail focus when set", () => {
     expect(
       resolveDetailTarget({
-        detailFocus: { kind: "variable", id: "var-1" },
+        detailFocus: { kind: "data", id: "var-1" },
         selectedLog: null,
       }),
-    ).toEqual({ kind: "variable", id: "var-1" });
+    ).toEqual({ kind: "data", id: "var-1" });
   });
 
   it("returns event detail focus from sidebar click", () => {

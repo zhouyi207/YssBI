@@ -10,7 +10,6 @@ import type {
   ProjectFunctionGraphIndexRow,
   ProjectGraphIndexRow,
   ProjectIndexRow,
-  ProjectVariableIndexRow,
   ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
 import type { FunctionSignatureDto } from "@/shared/types/domain/editorMutation";
@@ -165,7 +164,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       "exportTime",
       "graphs",
       "charts",
-      "variables",
       "databases",
     ]) ||
     typeof value.projectInstanceId !== "string" ||
@@ -174,7 +172,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     typeof value.exportTime !== "string" ||
     !Array.isArray(value.graphs) ||
     !Array.isArray(value.charts) ||
-    !Array.isArray(value.variables) ||
     !Array.isArray(value.databases) ||
     !value.databases.every(isProjectDatabaseIndexRow)
   ) {
@@ -188,7 +185,6 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       exportTime: value.exportTime,
       graphs: value.graphs.map(parseProjectGraphIndexRow),
       charts: value.charts.map(parseProjectChartIndexRow),
-      variables: value.variables as ProjectVariableIndexRow[],
       databases: value.databases,
     };
   } catch {
@@ -316,17 +312,15 @@ export class ProjectService {
   }
 
   /**
-   * 分阶段加载第一步：获取 databases + variables（含 schema）
+   * 分阶段加载第一步：获取 databases（含 schema）
    */
-  static async getDatabasesVariables(projectInstanceId: string): Promise<{
+  static async getDatabases(projectInstanceId: string): Promise<{
     databases: Record<string, unknown>;
-    variables: Record<string, unknown>;
   }> {
     const data = await invokeCommand<{
       databases: Record<string, unknown>;
-      variables: Record<string, unknown>;
-    }>("get_project_databases_variables", { projectInstanceId });
-    return { databases: data.databases || {}, variables: data.variables || {} };
+    }>("get_project_databases", { projectInstanceId });
+    return { databases: data.databases || {} };
   }
 
   /**
