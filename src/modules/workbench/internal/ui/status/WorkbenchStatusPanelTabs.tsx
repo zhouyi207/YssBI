@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { VscError, VscInfo, VscOutput, VscSparkle, VscTerminal } from "react-icons/vsc";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { STATUS_BAR_ICON_SIZE } from "@/shared/theme/statusBarTokens";
 import { useWorkbenchStatusPanelTabs } from "../../application/useWorkbenchStatusPanelTabs";
 
 const STATUS_VIEWS = {
@@ -39,7 +40,7 @@ export const WorkbenchStatusPanelTabs = memo(function WorkbenchStatusPanelTabs({
                 disabled={disabled}
                 onClick={onSelect}
               >
-                <Icon size={16} aria-hidden />
+                <Icon size={STATUS_BAR_ICON_SIZE} aria-hidden />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top">{title}</TooltipContent>

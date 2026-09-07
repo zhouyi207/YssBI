@@ -278,7 +278,8 @@ Persistence invariant：
 
 ## 9. 视觉尺寸层级
 
-root 水平标签和 Status Bar 面板图标统一使用蓝色圆角背景表示选中。Problems、Output、Logs
+root 水平标签使用蓝色圆角背景表示选中；Status Bar 面板图标使用强调色表示选中，不再增加背景。
+Problems、Output、Logs
 的图标位于窗口最底部的 Status Bar，提供悬停名称和无障碍标签；再次点击当前 bottom panel 图标
 收起底部区域，折叠时不预留旧标签行。缺失的 panel 可由图标重新打开，移到其他 group 的 panel
 则在其实际位置 reveal。

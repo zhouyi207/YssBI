@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { VscSettingsGear } from "react-icons/vsc";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { STATUS_BAR_ICON_SIZE } from "@/shared/theme/statusBarTokens";
 import { useWorkbenchUi, workbenchUi } from "../../state/ui";
 import { StatusBarItem, type WorkbenchStatusBarItem } from "./StatusBarItem";
 import { WorkbenchStatusPanelTabs } from "./WorkbenchStatusPanelTabs";
@@ -37,7 +38,7 @@ export function StatusBar({
               aria-expanded={settingsOpen}
               onClick={workbenchUi.openSettings}
             >
-              <VscSettingsGear size={16} aria-hidden />
+              <VscSettingsGear size={STATUS_BAR_ICON_SIZE} aria-hidden />
             </button>
           </TooltipTrigger>
           <TooltipContent side="top">{settingsTitle}</TooltipContent>

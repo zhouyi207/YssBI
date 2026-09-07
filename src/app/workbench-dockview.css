@@ -170,8 +170,8 @@
 
 [data-workbench-status-action][aria-pressed="true"],
 [data-workbench-status-action][aria-expanded="true"] {
-  background: var(--accent-color);
-  color: var(--primary-foreground);
+  background: transparent;
+  color: var(--accent-color);
 }
 
 [data-workbench-status-action]:focus-visible {

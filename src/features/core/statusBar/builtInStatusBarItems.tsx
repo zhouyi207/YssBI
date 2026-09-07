@@ -1,4 +1,5 @@
 import { VscCircleFilled, VscGraph, VscRadioTower, VscZoomIn } from "react-icons/vsc";
+import { STATUS_BAR_ICON_SIZE } from "@/shared/theme/statusBarTokens";
 import type { StatusBarItemRegistration } from "./statusBarItemTypes";
 
 export type BuiltInStatusBarActions = {
@@ -18,7 +19,7 @@ export function createBuiltInStatusBarItems(
       tooltip: (ctx) => ctx.t("bottomBar.nodeCount"),
       render: (ctx) => (
         <>
-          <VscGraph size={13} className="text-[var(--accent-color)]" />
+          <VscGraph size={STATUS_BAR_ICON_SIZE} className="shrink-0 text-[var(--accent-color)]" />
           <span>{ctx.t("bottomBar.nodes", { count: ctx.nodeCount })}</span>
         </>
       ),
@@ -30,7 +31,10 @@ export function createBuiltInStatusBarItems(
       tooltip: (ctx) => ctx.t("bottomBar.connectionCount"),
       render: (ctx) => (
         <>
-          <VscRadioTower size={13} className="text-[var(--accent-color)]" />
+          <VscRadioTower
+            size={STATUS_BAR_ICON_SIZE}
+            className="shrink-0 text-[var(--accent-color)]"
+          />
           <span>{ctx.t("bottomBar.links", { count: ctx.connectionCount })}</span>
         </>
       ),
@@ -43,9 +47,11 @@ export function createBuiltInStatusBarItems(
       render: (ctx) => (
         <>
           <VscCircleFilled
-            size={9}
+            size={STATUS_BAR_ICON_SIZE}
             className={
-              ctx.selectedCount > 0 ? "text-[var(--accent-color)]" : "text-muted-foreground"
+              ctx.selectedCount > 0
+                ? "shrink-0 text-[var(--accent-color)]"
+                : "shrink-0 text-muted-foreground"
             }
           />
           <span>{ctx.t("bottomBar.selected", { count: ctx.selectedCount })}</span>
@@ -61,7 +67,7 @@ export function createBuiltInStatusBarItems(
       onClick: () => actions.resetCanvasViewport(),
       render: (ctx) => (
         <>
-          <VscZoomIn size={13} className="text-[var(--accent-color)]" />
+          <VscZoomIn size={STATUS_BAR_ICON_SIZE} className="shrink-0 text-[var(--accent-color)]" />
           {actions.renderViewportStatus(ctx.activeEditorGroupId ?? "", ctx.activeResourceRef)}
         </>
       ),
