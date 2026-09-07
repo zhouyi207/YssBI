@@ -49,6 +49,10 @@ flowchart LR
 
 Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
 
+前端 Project hydration 由 `features/application/project/projectHydration.ts` 编排准备、投影提交和清理，并返回包含 project instance 与 publication revision 的 `ProjectLoadReceipt`。`projectIOStore.ts` 只保存已安装投影的状态和图加载运行态；加载回执不携带第二份项目内容。资源类别取自 Rust 索引中的显式字段，客户端资源键编码保留原始 opaque path。
+
+设置页提供 AI、计算、外观和配色。客户端持久化 AI、主题和外观偏好；计算配置由 Rust settings service 管理。图文档通过显式 Save 提交，设置页不声明未接入的自动保存、网格或编辑器布局选项。
+
 变量增删改通过同一个 resource publication 协调器更新变量与资源 revision；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
@@ -152,6 +156,8 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 - 大表 query/edit/profile/export 保持在 Rust，使用分页、列投影、SQL aggregate 或批处理；
 - Polars materialization 只用于适合内存处理的路径；
 - mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
+
+数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、窗口状态和 Julia worker assets 共用 `yss-file-replace` 的平台文件替换操作；临时文件、内容同步、会话重验和失败清理由各调用方负责。
 
 科学计算保持 backend-neutral contract：
 

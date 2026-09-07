@@ -104,6 +104,8 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 当前 gate 不保留 debt exemption list。真实 finding 直接失败；如果 policy 与目标架构需要共同改变，在同一变更中修改 implementation、policy、focused regression 和当前架构文档。
 
+`yss-file-replace` 按 Platform Adapter 分类。Application 的数据库导出模块和 Julia worker 的 assets 模块仅获 `atomic_replace` 的精确调用权限；这不会开放 Application/Backend Adapter 对整个平台层的依赖。Window State 与文件替换同属平台层，内容生成和持久化事务仍归各自 owner。
+
 执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-api` README](../../src-tauri/crates/yss-api/README.md#error-contract) 维护。
 
 Graph mutation DTO 可映射 `SetConfiguration`；SCI backend adapter 可使用 OLS request/result/covariance、SCI 的 OLS 配置和计算/报告入口。这些 capability 逐一登记 canonical symbol，不开放整个 Execution 或 SCI namespace；行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。

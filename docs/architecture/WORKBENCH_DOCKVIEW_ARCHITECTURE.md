@@ -48,6 +48,8 @@ root Dockview 是以下物理事实的唯一 authority：
 - active group 与 active panel；
 - edge group 的位置、可见性、尺寸和 collapsed state。
 
+实现按职责分开：`workbenchDockviewOperations.ts` 提供元数据与 live Dockview 操作，`workbenchDockviewTransaction.ts` 保存一次待提交事务的临时布局和命令，`workbenchDockviewInternal.ts` 负责绑定、串行执行、hydration 与事件观察。事务接口由 `workbenchTypes.ts` 定义，临时事务不构成独立的已提交布局 authority。
+
 `useWorkbenchUiStore` 只保存 Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、Activity active tab 或 edge collapse 的镜像。
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。

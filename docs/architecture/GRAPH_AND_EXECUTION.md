@@ -5,7 +5,7 @@
 > Canonical owners: Graph/Execution/Project 源码与测试拥有可执行事实；本文拥有阶段之间的稳定 contract
 > Update when: Graph authority、阶段语义、projection、execution result 或 output 边界改变时
 
-本文描述当前实现。准备工作的验收记录和条件性后续工作见根目录 [plan.md](../../plan.md)。Workbench 布局和 operational logging 不复制 Graph 领域状态。
+本文描述当前实现。条件性后续工作见 [v0.3 roadmap](../roadmap/v0_3.md)。Workbench 布局和 operational logging 不复制 Graph 领域状态。
 
 ## 1. Authority and identities
 
@@ -55,6 +55,8 @@ Open、Hydrate、Transform、Save、Compile 共用 Runtime Resolve。只读 `res
 Mutation 和 history requests 由 frontend application 的同一 Graph FIFO 协调。返回后检查 Project identity、Draft session/generation 和 coordinator epoch；Compile 还检查独立 request ID。关闭重开、Project replacement、后续编辑及新 Compile 都会使旧回调失效，旧失败不能清除新 artifact。
 
 Draft/history/projection 在写入前完成 projection preparation，避免先改 Draft 再发现 projection 无效。`GraphProjectionStore` 单个 Graph bucket 一次替换 topology、端口、顶层 diagnostics、basis、outcome 和 run gate。无效 response 保留原 document/history；不同 Store 的发布仍由 Application 协调。
+
+Undo/redo 条目只保留文档意图，容量由 `graphDraftStore.ts` 的 `GRAPH_HISTORY_LIMIT` 限制。恢复前重新 Resolve 目标文档，并采用这次解析的投影；历史中不保留旧的解析投影。Graph locale 查询独立于加载/刷新生命周期，草稿 FIFO 不反向依赖加载流程。
 
 没有 Graph Projection background channel、独立 ProblemsStore 或面板自有 subscription。关闭 Problems 不影响 Canvas、Details 或 Run Gate。Dirty Draft 的重新解析只替换解析结果，不覆盖未保存 document。
 
@@ -147,13 +149,15 @@ Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备
 
 Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。
 
-Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；关闭展示组件释放本地 value/page，主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
+Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence 和 DataSeries renderer 都提供分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 
 已打开的 Result panel 绑定 output address，在原位置清空并更新；独立展示窗口收到失效通知后释放旧内容。
 
 语义输入改变会清除该图的当前结果；变量等资源的已提交变更按 Rust 公告的受影响图清除结果和前端缓存；移动节点等不改变语义输入的操作可保留结果。删除、重命名、卸载图和 Project session replacement 释放对应结果。Project replacement 更换 ResultStore 并清空前端投影，旧查询不能写入新 session。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除当前 Results。
 
 统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
+
+报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
 
 ## 7. Graph Problems
 

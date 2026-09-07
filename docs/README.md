@@ -48,13 +48,14 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
 - [v0.3 roadmap](roadmap/v0_3.md)
 - [v1.0 roadmap](roadmap/v1_0.md)
-- [Graph Compile / Execute 准备计划](../plan.md)：统一 Resolve、动态 Pin、语义事实、精确依赖、Draft currentness 和编译/执行数据契约；同时承接 Problems、Logs、Output 的相关验收任务。
+- [Graph Compile / Execute follow-up](roadmap/v0_3.md)：条件性后续项按 release backlog 维护。
 - [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
 - [Generated module map](reference/MODULE_MAP.md)
 
 ## History
 
 - [Version history](version/README.md)
+- [2026-09-07 深度清理审计](reviews/2026-09-07-deep-cleanup-audit.md)：该次源码检查、复现证据和清理建议的快照。
 
 ## 文档状态
 

@@ -38,6 +38,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-duckdb` | `src-tauri/crates/yss-duckdb` | [Cargo.toml](../../src-tauri/crates/yss-duckdb/Cargo.toml) | — |
 | `yss-execution` | `src-tauri/crates/yss-execution` | [Cargo.toml](../../src-tauri/crates/yss-execution/Cargo.toml) | — |
 | `yss-execution-sci-adapter` | `src-tauri/crates/yss-execution-sci-adapter` | [Cargo.toml](../../src-tauri/crates/yss-execution-sci-adapter/Cargo.toml) | [README](../../src-tauri/crates/yss-execution-sci-adapter/README.md) |
+| `yss-file-replace` | `src-tauri/crates/yss-file-replace` | [Cargo.toml](../../src-tauri/crates/yss-file-replace/Cargo.toml) | — |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | — |
 | `yss-graph-analysis-contract` | `src-tauri/crates/yss-graph-analysis-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis-contract/Cargo.toml) | — |
@@ -107,7 +108,6 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |
-| `plugins` | `src/modules/plugins` | — |
 | `problems` | `src/modules/problems` | [public.ts](../../src/modules/problems/public.ts) |
 | `project-explorer` | `src/modules/project-explorer` | [public.ts](../../src/modules/project-explorer/public.ts) |
 | `results` | `src/modules/results` | [public.ts](../../src/modules/results/public.ts) |
