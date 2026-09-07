@@ -576,8 +576,10 @@ export function createWorkbenchDockviewRuntime(): {
         throwAsLayoutError("layout_restore_failed", { position }, () => {
           const edge = boundApi.getEdgeGroup(position);
           if (!edge) return false;
-          if (collapsed) edge.collapse();
-          else {
+          if (collapsed) {
+            edge.collapse();
+            if (position === "bottom") boundApi.setEdgeGroupVisible(position, false);
+          } else {
             boundApi.setEdgeGroupVisible(position, true);
             edge.expand();
           }

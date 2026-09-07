@@ -1,12 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { VscSettingsGear } from "react-icons/vsc";
+import { VscExtensions } from "react-icons/vsc";
 import type { ReactNode } from "react";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WORKBENCH_ACTIVITY_GROUP_ID } from "../../dockview/workbenchDockviewDefaults";
-import { workbenchUi } from "../../state/ui";
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
   event.stopPropagation();
@@ -21,13 +19,12 @@ export function WorkbenchActivityActions({
   ...props
 }: WorkbenchActivityActionsProps) {
   const { t } = useTranslation();
-  const openSettings = workbenchUi.openSettings;
 
   if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== "left") {
     return null;
   }
 
-  const title = t("menubar.settings");
+  const title = t("activityBar.plugins");
 
   return (
     <div
@@ -39,31 +36,26 @@ export function WorkbenchActivityActions({
       {additionalActions}
       {additionalActions ? (
         <span
-          data-workbench-activity-settings-divider
+          data-workbench-activity-divider
           aria-hidden="true"
           className="my-1 h-px w-6 bg-[var(--strong-border)]"
         />
       ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            data-workbench-activity-settings
+          <span
+            role="img"
+            data-workbench-activity-plugins
             aria-label={title}
-            aria-haspopup="dialog"
-            onClick={openSettings}
-            className="relative size-10 bg-transparent p-0 hover:bg-transparent dark:hover:bg-transparent"
+            className="relative flex size-10 items-center justify-center"
           >
             <span
-              data-workbench-activity-settings-surface
               aria-hidden="true"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color]"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground"
             >
-              <VscSettingsGear size={18} />
+              <VscExtensions size={18} />
             </span>
-          </Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side="right">{title}</TooltipContent>
       </Tooltip>

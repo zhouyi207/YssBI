@@ -6,19 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-
-const mocks = vi.hoisted(() => ({
-  openSettings: vi.fn(),
-}));
+import { workbenchUi } from "../../state/ui";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
-}));
-
-vi.mock("../../state/ui", () => ({
-  workbenchUi: {
-    openSettings: mocks.openSettings,
-  },
 }));
 
 import { WorkbenchActivityActions } from "./WorkbenchActivityActions";
@@ -38,6 +29,7 @@ describe("WorkbenchActivityActions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    workbenchUi.setSettingsOpen(false);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -48,7 +40,7 @@ describe("WorkbenchActivityActions", () => {
     document.body.replaceChildren();
   });
 
-  it("renders Settings only for the Activity group and opens the settings dialog", () => {
+  it("renders an inert plugin placeholder only for the Activity group", () => {
     act(() =>
       root.render(
         <TooltipProvider>
@@ -60,13 +52,13 @@ describe("WorkbenchActivityActions", () => {
       ),
     );
 
-    const settingsButton = host.querySelector<HTMLButtonElement>(
-      "[data-workbench-activity-settings]",
-    );
-    expect(settingsButton).not.toBeNull();
+    const plugins = host.querySelector<HTMLElement>("[data-workbench-activity-plugins]");
+    expect(plugins).not.toBeNull();
+    expect(plugins?.getAttribute("role")).toBe("img");
+    expect(host.querySelector("button")).toBeNull();
 
-    act(() => settingsButton?.click());
-    expect(mocks.openSettings).toHaveBeenCalledOnce();
+    act(() => plugins?.click());
+    expect(workbenchUi.getSnapshot().isSettingsOpen).toBe(false);
 
     act(() =>
       root.render(
@@ -75,7 +67,7 @@ describe("WorkbenchActivityActions", () => {
         </TooltipProvider>,
       ),
     );
-    expect(host.querySelector("[data-workbench-activity-settings]")).toBeNull();
+    expect(host.querySelector("[data-workbench-activity-plugins]")).toBeNull();
     expect(host.querySelector("[data-testid='additional-action']")).toBeNull();
   });
 });

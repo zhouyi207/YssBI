@@ -822,7 +822,6 @@ export const enUS = {
     selectedNodes: "Selected nodes",
     executionStatus: "Execution status",
     canvasViewport: "Canvas viewport",
-    openLogsPanel: "Show Logs",
     resetViewport: "Reset canvas viewport",
     ariaLabel: "Status bar",
   },
@@ -1017,6 +1016,7 @@ export const enUS = {
     },
   },
   activityBar: {
+    plugins: "Plugins",
     project: "Project",
     nodes: "Nodes",
     data: "Data",

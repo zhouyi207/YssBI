@@ -1,4 +1,10 @@
+import { useTranslation } from "react-i18next";
+import { VscSettingsGear } from "react-icons/vsc";
+
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useWorkbenchUi, workbenchUi } from "../../state/ui";
 import { StatusBarItem, type WorkbenchStatusBarItem } from "./StatusBarItem";
+import { WorkbenchStatusPanelTabs } from "./WorkbenchStatusPanelTabs";
 
 export function StatusBar({
   ariaLabel,
@@ -9,20 +15,52 @@ export function StatusBar({
   readonly left: readonly WorkbenchStatusBarItem[];
   readonly right: readonly WorkbenchStatusBarItem[];
 }) {
+  const { t } = useTranslation();
+  const settingsTitle = t("menubar.settings");
+  const settingsOpen = useWorkbenchUi((state) => state.isSettingsOpen);
+
   return (
     <footer
-      className="flex h-(--statusbar-height) shrink-0 items-center justify-between overflow-hidden border-t border-(--strong-border) bg-(--panel-header-bg) text-[11px] font-medium text-foreground"
+      className="relative flex h-(--statusbar-height) shrink-0 items-center justify-between overflow-hidden border-t border-(--strong-border) bg-(--panel-header-bg) text-[11px] font-medium text-foreground"
       aria-label={ariaLabel}
     >
-      <div className="flex h-full min-w-0 items-center">
+      <div className="absolute inset-y-0 left-0 flex w-11 items-center justify-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-workbench-status-action
+              data-workbench-status-settings
+              aria-label={settingsTitle}
+              aria-haspopup="dialog"
+              aria-expanded={settingsOpen}
+              onClick={workbenchUi.openSettings}
+            >
+              <VscSettingsGear size={16} aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{settingsTitle}</TooltipContent>
+        </Tooltip>
+      </div>
+      <div
+        className="flex h-full shrink-0 items-center"
+        style={{ paddingLeft: "max(var(--workbench-center-offset, 0px), 44px)" }}
+      >
+        <WorkbenchStatusPanelTabs position="bottom" />
         {left.map((item) => (
           <StatusBarItem key={item.id} item={item} />
         ))}
       </div>
-      <div className="flex h-full shrink-0 items-center">
+      <div
+        className="flex h-full min-w-0 items-center justify-end overflow-hidden"
+        style={{ marginRight: "max(var(--workbench-center-right-offset, 0px), 76px)" }}
+      >
         {right.map((item) => (
           <StatusBarItem key={item.id} item={item} />
         ))}
+      </div>
+      <div className="absolute inset-y-0 right-0 flex items-center">
+        <WorkbenchStatusPanelTabs position="right" />
       </div>
     </footer>
   );

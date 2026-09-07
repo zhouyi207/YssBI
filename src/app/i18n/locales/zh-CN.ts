@@ -765,7 +765,6 @@ export const zhCN = {
     selectedNodes: "选中节点",
     executionStatus: "执行状态",
     canvasViewport: "画布视图",
-    openLogsPanel: "显示日志",
     resetViewport: "重置画布视口",
     ariaLabel: "状态栏",
   },
@@ -958,6 +957,7 @@ export const zhCN = {
     },
   },
   activityBar: {
+    plugins: "插件",
     project: "项目",
     nodes: "节点",
     data: "数据",

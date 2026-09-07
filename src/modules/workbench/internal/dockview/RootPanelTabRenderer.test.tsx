@@ -106,6 +106,7 @@ describe("RootPanelTabRenderer", () => {
     api = null;
     host = document.createElement("div");
     host.dataset.yssbiRootDockview = "";
+    host.style.setProperty("--accent-color", "rgb(49, 94, 222)");
     document.body.appendChild(host);
     workbenchStyle = document.createElement("style");
     workbenchStyle.textContent = WORKBENCH_DOCKVIEW_CSS;
@@ -181,6 +182,9 @@ describe("RootPanelTabRenderer", () => {
     expect(content.querySelector("[data-workbench-tab-title]")?.textContent).toBe("Main");
     expect(content.querySelector('[data-workbench-tab-icon="event"]')).not.toBeNull();
     expect(content.querySelector("[data-workbench-tab-dirty]")).not.toBeNull();
+    // Dockview initially omits dv-horizontal on top headers.
+    expect(tabShell("editor-a").parentElement?.classList.contains("dv-horizontal")).toBe(false);
+    expect(getComputedStyle(tabShell("editor-a")).backgroundColor).toBe("rgb(49, 94, 222)");
 
     const closeButton = content.querySelector<HTMLButtonElement>("[data-workbench-tab-close]")!;
     const closeEvent = new MouseEvent("click", {

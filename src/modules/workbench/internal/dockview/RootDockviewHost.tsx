@@ -28,6 +28,7 @@ import { workbenchLayoutController } from "../application/workbenchLayoutControl
 import { snapTopLeftToCursor } from "../ui/dnd/snapTopLeftToCursorModifier";
 import { WorkbenchActivityActions } from "../ui/activity/WorkbenchActivityActions";
 import { workbenchDockviewRead } from "./workbenchRead";
+import { bindWorkbenchStatusBarLayout } from "../application/workbenchStatusBarLayout";
 import type {
   RootPanelActivationTarget,
   RootPanelRegistry,
@@ -80,12 +81,16 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
   ) => {
     const bindWorkbenchLayout = useWorkbenchLayout();
     const activationDisposableRef = useRef<{ dispose(): void } | null>(null);
+    const statusBarLayoutCleanupRef = useRef<(() => void) | null>(null);
+    const hostRef = useRef<HTMLDivElement>(null);
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
     useEffect(
       () => () => {
         activationDisposableRef.current?.dispose();
         activationDisposableRef.current = null;
+        statusBarLayoutCleanupRef.current?.();
+        statusBarLayoutCleanupRef.current = null;
       },
       [],
     );
@@ -93,6 +98,10 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
     const onDockviewReady = useCallback(
       (event: DockviewReadyEvent) => {
         bindWorkbenchLayout(event);
+        statusBarLayoutCleanupRef.current?.();
+        statusBarLayoutCleanupRef.current = hostRef.current
+          ? bindWorkbenchStatusBarLayout(event.api, hostRef.current)
+          : null;
         activationDisposableRef.current?.dispose();
         activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
           if (!workbenchDockviewRead.isHydrated || !workbenchLayoutController.projectResourcesReady)
@@ -121,6 +130,7 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
       >
         <div ref={ref} className="relative flex min-w-0 flex-1 overflow-hidden">
           <div
+            ref={hostRef}
             data-yssbi-root-dockview
             data-testid="root-dockview"
             className="h-full min-h-0 w-full min-w-0"
