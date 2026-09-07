@@ -55,7 +55,8 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-graph-type-mapping` | `src-tauri/crates/yss-graph-type-mapping` | [Cargo.toml](../../src-tauri/crates/yss-graph-type-mapping/Cargo.toml) | — |
 | `yss-julia-runtime` | `src-tauri/crates/yss-julia-runtime` | [Cargo.toml](../../src-tauri/crates/yss-julia-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `src-tauri/crates/yss-julia-worker` | [Cargo.toml](../../src-tauri/crates/yss-julia-worker/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-worker/README.md) |
-| `yss-math` | `src-tauri/crates/yss-math` | [Cargo.toml](../../src-tauri/crates/yss-math/Cargo.toml) | — |
+| `yss-linalg` | `src-tauri/crates/yss-linalg` | [Cargo.toml](../../src-tauri/crates/yss-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-linalg/README.md) |
+| `yss-math-expr` | `src-tauri/crates/yss-math-expr` | [Cargo.toml](../../src-tauri/crates/yss-math-expr/Cargo.toml) | — |
 | `yss-path-display` | `src-tauri/crates/yss-path-display` | [Cargo.toml](../../src-tauri/crates/yss-path-display/Cargo.toml) | — |
 | `yss-project` | `src-tauri/crates/yss-project` | [Cargo.toml](../../src-tauri/crates/yss-project/Cargo.toml) | [README](../../src-tauri/crates/yss-project/README.md) |
 | `yss-project-change` | `src-tauri/crates/yss-project-change` | [Cargo.toml](../../src-tauri/crates/yss-project-change/Cargo.toml) | — |

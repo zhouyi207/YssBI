@@ -164,11 +164,13 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 ```text
 Application / Execution scientific port
   → yss-sci-contract
-      → yss-sci-runtime → Rust algorithms
+      → yss-sci-runtime → yss-sci algorithms → yss-linalg → private faer backend
       → Bayes worker port → Julia adapter
 ```
 
 Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 各有独立 owner，Application 只编排它们，不让 worker detail 泄漏到 Graph kernel 或 IPC command。
+
+[`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 隔离线性代数后端，对 SCI 和 runtime 的条件数诊断暴露 `ndarray` 数据、分解对象和稳定错误类型。`faer` 只在该 crate 的私有 backend 中使用；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。
 
 ## 7. Statistical Harness
 

@@ -34,6 +34,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
+- [Linear algebra backend boundary](../src-tauri/crates/yss-linalg/README.md)
 - [Julia Bayes worker protocol](../src-tauri/julia/README.md)
 
 ## Development

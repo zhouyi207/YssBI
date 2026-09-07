@@ -11,6 +11,10 @@ contract and evolve as a unit.
 the existing OLS implementation and regression report model. Coefficient labels account for
 whether the fitted design includes an intercept.
 
+Algorithms use `yss-linalg` for their numerical backend; runtime condition-number
+diagnostics use the same interface. Public data stays in ndarray and no runtime
+API depends on concrete faer types.
+
 The crate does not own project/database state, graph execution, Tauri commands, frontend wire
 errors, Julia processes, or Bayesian worker lifecycle. Those responsibilities remain in their
 dedicated crates or in Application and the composition root.
