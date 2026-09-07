@@ -2,7 +2,6 @@ import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 
 import { handleGraphResourceDrop } from "./handleGraphResourceDrop";
 
-import { clearEditorDragSession } from "./useEditorDragPreviewMonitor";
 import {
   resolveDropIntoEditorDragState,
   resolveDropPointerFromDragEnd,
@@ -106,7 +105,6 @@ async function executeSidebarSpawnDragEnd(
   options.finishSidebarDrag();
 
   if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
-    clearEditorDragSession();
     return;
   }
 
@@ -121,12 +119,10 @@ async function executeSidebarSpawnDragEnd(
     if (target && dropState && sidebarResource.type === "function") {
       const handled = await tryDropFunctionIntoCanvas(target, dropState, modifiers);
       if (handled) {
-        clearEditorDragSession();
         return;
       }
     }
     if (target) await handleGraphResourceDrop(sidebarResource, target.groupId);
-    clearEditorDragSession();
     return;
   }
 
@@ -134,15 +130,12 @@ async function executeSidebarSpawnDragEnd(
     const target = resolveCanvasDropTarget(event, dropPointer);
     if (target && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
       if (!(await workbenchDockviewControl.activate(target.panelInstanceId))) {
-        clearEditorDragSession();
         return;
       }
       const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
       if (handler) await handler(capturedSidebarDrag, modifiers);
     }
   }
-
-  clearEditorDragSession();
 }
 
 /** Handle only sidebar-to-editor DnD; Dockview owns tab/group drag, order, move, and split. */
@@ -152,7 +145,6 @@ export async function executeEditorDragEnd(
 ): Promise<void> {
   const activeData = parseCanvasDragPayload(event.active.data.current);
   if (!isSidebarSpawnDrag(activeData)) {
-    clearEditorDragSession();
     return;
   }
 
@@ -160,6 +152,5 @@ export async function executeEditorDragEnd(
     await executeSidebarSpawnDragEnd(event, activeData, options);
   } catch (error) {
     logger.graph.error(`Editor drag/drop failed: ${formatErrorMessage(error)}`, "EditorDragDrop");
-    clearEditorDragSession();
   }
 }

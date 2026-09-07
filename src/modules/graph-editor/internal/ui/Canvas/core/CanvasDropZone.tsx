@@ -3,7 +3,6 @@ import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
 
 /**
  * Canvas / watermark droppable target.
- * Visual preview is rendered by `EditorDropPreviewOverlay` via `useEditorDragPreviewMonitor`.
  */
 export function CanvasDropZone({
   panelInstanceId,

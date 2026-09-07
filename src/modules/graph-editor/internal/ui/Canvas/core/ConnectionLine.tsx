@@ -5,7 +5,7 @@ import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import type { ViewportScope } from "@/features/core/viewport";
 import { drawEdge } from "./Edge";
 
-import { Pin } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { getConnectPreview, subscribeConnectPreview } from "@/features/core/canvas/connectPreview";
 import type { ConnectionFeedback } from "@/features/core/canvas/connectionInteraction";
@@ -41,7 +41,7 @@ export const ConnectionLine = ({
   viewportScope: ViewportScope | null;
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
   getCanvasLocalPoint: (x: number, y: number) => { x: number; y: number };
-  pendingConnection?: Pin | null;
+  pendingConnection?: PinData | null;
   menuPos?: { x: number; y: number } | null;
 }) => {
   const lineCanvasRef = useRef<HTMLCanvasElement>(null);

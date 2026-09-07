@@ -2,7 +2,7 @@ import {
   useGraphInteractionStore,
   getCanvasInteraction,
 } from "@/features/core/graphInteraction/graphInteractionStore";
-import type { Pin } from "@/shared/types/domain";
+import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { ConnectionFeedback } from "./connectionInteraction";
 
 export interface CanvasPreviewScope {
@@ -11,7 +11,7 @@ export interface CanvasPreviewScope {
 }
 export type ConnectPreviewState = {
   active: boolean;
-  startPin: Pin | null;
+  startPin: PinData | null;
   worldX: number;
   worldY: number;
   groupId?: string;
@@ -49,7 +49,7 @@ export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewStat
   };
   const preview: ConnectPreviewState = {
     active: true,
-    startPin: interaction.session.source as Pin,
+    startPin: interaction.session.source,
     worldX: end.x,
     worldY: end.y,
     groupId: interaction.session.groupId,

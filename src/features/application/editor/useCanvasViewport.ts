@@ -7,7 +7,6 @@ import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useGraphProjectionStore } from "@/features/core/dataStore";
 import { useGraphInteractionStore } from "@/features/core/graphInteraction";
 import { measurePinConnectionAnchor } from "@/features/core/canvas/pinConnectionAnchor";
-import { resolvePinOffsetWaiters } from "@/features/core/canvas/pinOffsetWaiter";
 
 export function useCanvasViewport(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
@@ -123,8 +122,6 @@ export function useCanvasViewport(
       }
       return nextOffsets;
     });
-
-    resolvePinOffsetWaiters(graphPath, nextOffsets);
   }, [canvasElementRef, graphNodeIds, nodeResizeVersion, graphPath, viewportScope]);
 
   const getPinWorldPos = useCallback(
