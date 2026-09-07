@@ -1,4 +1,4 @@
-﻿// ======================== VIF 多重共线性检验 ========================
+// ======================== VIF 多重共线性检验 ========================
 // 对应 Stata estat vif
 // VIF_c(x_j) = 1/(1-R²_j)，R²_j 为 x_j 对其他解释变量回归的 R²
 
@@ -50,7 +50,10 @@ pub fn vif_centered(x: &Array2<f64>, has_constant: bool) -> Result<Vec<VifEntry>
             let v = 1.0 / (1.0 - r2);
             (v, 1.0 / v)
         };
-        result.push(VifEntry { vif, tolerance: tol });
+        result.push(VifEntry {
+            vif,
+            tolerance: tol,
+        });
     }
     Ok(result)
 }
@@ -65,24 +68,23 @@ fn r2_centered_aux(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
         return Ok(0.0);
     }
 
-    let y_col = y.view().into_faer_col().to_owned();
-    let x_faer = x.view().into_faer().to_owned();
-    let xtx = x_faer.as_ref().transpose() * x_faer.as_ref();
-    let xty = x_faer.as_ref().transpose() * y_col.as_ref();
+    let y_col = y.view().to_owned();
+    let x_matrix = x.view().to_owned();
+    let xtx = x_matrix.t().matmul(&x_matrix.view());
+    let xty = x_matrix.t().matmul(&y_col.view());
     let xtx_inv = xtx
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "VIF: X'X singular in auxiliary regression".to_string())?
-        .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-    let beta = xtx_inv.as_ref() * xty.as_ref();
-    let y_hat = x_faer.as_ref() * beta.as_ref();
+        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+    let beta = xtx_inv.view().matmul(&xty.view());
+    let y_hat = x_matrix.view().matmul(&beta.view());
 
     let rss: f64 = y_col
-        .as_ref()
+        .view()
         .iter()
-        .zip(y_hat.as_ref().iter())
+        .zip(y_hat.view().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     let r2 = 1.0 - rss / tss;
     Ok(r2)
 }
-

@@ -1,4 +1,4 @@
-﻿// ============== Time Random Effects (group by time_id) ==============
+// ============== Time Random Effects (group by time_id) ==============
 
 /// Panel RE FGLS (Time): same as entity RE but group by time period
 pub fn fit_panel_re_fgls_time(
@@ -14,7 +14,11 @@ pub fn fit_panel_re_fgls_time(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (FGLS Time): lengths must match".to_string());
     }
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_times < 2 {
         return Err("Panel RE (FGLS Time): need at least 2 time periods".to_string());
     }
@@ -61,7 +65,9 @@ pub fn fit_panel_re_fgls_time(
             cov_params: None,
         },
     };
-    let res_w = ols_w.fit().map_err(|e| format!("Panel RE (Time) within: {}", e))?;
+    let res_w = ols_w
+        .fit()
+        .map_err(|e| format!("Panel RE (Time) within: {}", e))?;
     let df_e = (n as i64 - n_times as i64 - k_w as i64).max(1) as usize;
     let sigma2_e = res_w.ss_residual / df_e as f64;
 
@@ -93,9 +99,15 @@ pub fn fit_panel_re_fgls_time(
             cov_params: None,
         },
     };
-    let res_b = ols_b.fit().map_err(|e| format!("Panel RE (Time) between: {}", e))?;
+    let res_b = ols_b
+        .fit()
+        .map_err(|e| format!("Panel RE (Time) between: {}", e))?;
     let df_b = res_b.df_residual;
-    let t_bar = if t_bar_harmonic > 1e-300 { t_bar_harmonic } else { n as f64 / n_times as f64 };
+    let t_bar = if t_bar_harmonic > 1e-300 {
+        t_bar_harmonic
+    } else {
+        n as f64 / n_times as f64
+    };
     let sigma2_u = if df_b > 0 {
         (res_b.ss_residual / df_b as f64 - sigma2_e / t_bar).max(0.0)
     } else {
@@ -159,7 +171,11 @@ pub fn fit_panel_re_fgls_time(
     let result = ols_re.fit()?;
 
     let kept: Vec<usize> = (0..k).filter(|j| !omitted_final.contains(j)).collect();
-    let omitted_indices = if omitted_final.is_empty() { None } else { Some(omitted_final) };
+    let omitted_indices = if omitted_final.is_empty() {
+        None
+    } else {
+        Some(omitted_final)
+    };
     let betas = &result.betas;
 
     let mut obs_per_group: HashMap<usize, usize> = HashMap::new();
@@ -167,7 +183,10 @@ pub fn fit_panel_re_fgls_time(
         *obs_per_group.entry(tid).or_insert(0) += 1;
     }
     let tids: Vec<usize> = obs_per_group.keys().copied().collect();
-    let obs_per_grp: Vec<usize> = tids.iter().map(|&tid| obs_per_group.get(&tid).copied().unwrap_or(0)).collect();
+    let obs_per_grp: Vec<usize> = tids
+        .iter()
+        .map(|&tid| obs_per_group.get(&tid).copied().unwrap_or(0))
+        .collect();
     let obs_min = obs_per_grp.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_grp.iter().copied().max().unwrap_or(0);
     let obs_avg = obs_per_grp.iter().sum::<usize>() as f64 / n_times as f64;
@@ -175,12 +194,25 @@ pub fn fit_panel_re_fgls_time(
     let r2_within = {
         let y_w_vec: Vec<f64> = within_transform(&y_vec, time_id).iter().cloned().collect();
         let xb: Vec<f64> = (0..n)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| exog[[i, c]] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .sum()
+            })
             .collect();
         let xb_bar = between_transform(&xb, time_id);
         let xb_w: Vec<f64> = (0..n).map(|i| xb[i] - xb_bar[i]).collect();
-        let (y_mean, xb_mean) = (y_w_vec.iter().sum::<f64>() / n as f64, xb_w.iter().sum::<f64>() / n as f64);
-        let cov = y_w_vec.iter().zip(xb_w.iter()).map(|(y, x)| (y - y_mean) * (x - xb_mean)).sum::<f64>() / (n as f64 - 1.0).max(1.0);
+        let (y_mean, xb_mean) = (
+            y_w_vec.iter().sum::<f64>() / n as f64,
+            xb_w.iter().sum::<f64>() / n as f64,
+        );
+        let cov = y_w_vec
+            .iter()
+            .zip(xb_w.iter())
+            .map(|(y, x)| (y - y_mean) * (x - xb_mean))
+            .sum::<f64>()
+            / (n as f64 - 1.0).max(1.0);
         let (var_y, var_xb) = (
             y_w_vec.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
             xb_w.iter().map(|x| (x - xb_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -197,10 +229,20 @@ pub fn fit_panel_re_fgls_time(
         let n_b = y_b_vec.len();
         let y_mean = y_b_vec.iter().sum::<f64>() / n_b as f64;
         let xb_b: Vec<f64> = (0..n_b)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| x_b_vec[i][c] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| x_b_vec[i][c] * betas[idx])
+                    .sum()
+            })
             .collect();
         let xb_mean = xb_b.iter().sum::<f64>() / n_b as f64;
-        let cov = y_b_vec.iter().zip(xb_b.iter()).map(|(y, x)| (y - y_mean) * (x - xb_mean)).sum::<f64>() / (n_b as f64 - 1.0).max(1.0);
+        let cov = y_b_vec
+            .iter()
+            .zip(xb_b.iter())
+            .map(|(y, x)| (y - y_mean) * (x - xb_mean))
+            .sum::<f64>()
+            / (n_b as f64 - 1.0).max(1.0);
         let (var_y, var_xb) = (
             y_b_vec.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_b as f64 - 1.0).max(1.0),
             xb_b.iter().map(|x| (x - xb_mean).powi(2)).sum::<f64>() / (n_b as f64 - 1.0).max(1.0),
@@ -214,10 +256,23 @@ pub fn fit_panel_re_fgls_time(
 
     let r2_overall = {
         let xb_obs: Vec<f64> = (0..n)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| exog[[i, c]] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .sum()
+            })
             .collect();
-        let (xb_mean, y_mean) = (xb_obs.iter().sum::<f64>() / n as f64, endog.iter().sum::<f64>() / n as f64);
-        let cov = xb_obs.iter().zip(endog.iter()).map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>() / (n as f64 - 1.0).max(1.0);
+        let (xb_mean, y_mean) = (
+            xb_obs.iter().sum::<f64>() / n as f64,
+            endog.iter().sum::<f64>() / n as f64,
+        );
+        let cov = xb_obs
+            .iter()
+            .zip(endog.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
+            / (n as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
             xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
             endog.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -234,9 +289,21 @@ pub fn fit_panel_re_fgls_time(
     let rho = sigma2_u / (sigma2_u + sigma2_e);
 
     let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        r2: Some(super::PanelR2Stats {
+            r2_within,
+            r2_between,
+            r2_overall,
+        }),
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: None,
     });
@@ -246,21 +313,31 @@ pub fn fit_panel_re_fgls_time(
         let betas_nd = &result.betas;
         let k_b = betas_nd.len();
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
-            (betas_nd.slice(ndarray::s![1..]).to_owned(), cov_beta.slice(ndarray::s![1.., 1..]).to_owned(), k_b - 1)
+            (
+                betas_nd.slice(ndarray::s![1..]).to_owned(),
+                cov_beta.slice(ndarray::s![1.., 1..]).to_owned(),
+                k_b - 1,
+            )
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_faer = v_s.view().into_faer().to_owned();
-        let beta_s_faer = beta_s.view().into_faer_col().to_owned();
-        let x = v_s_faer.as_ref().llt(Side::Lower).map_err(|_| "RE Time Wald".to_string())?.solve(beta_s_faer.as_ref());
-        let x_nd = x.as_ref().into_ndarray();
+        let v_s_matrix = v_s.view().to_owned();
+        let beta_s_vector = beta_s.view().to_owned();
+        let x = v_s_matrix
+            .view()
+            .cholesky()
+            .map_err(|_| "RE Time Wald".to_string())?
+            .solve(&beta_s_vector.view());
+        let x_nd = x.view();
         let wald = beta_s.dot(&x_nd);
         let chi2_dist = ChiSquared::new(df_wald as f64).map_err(|e| format!("{}", e))?;
         (wald, 1.0 - chi2_dist.cdf(wald))
     };
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| 2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs())));
+    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+    });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - z_crit * &result.stds;
     let conf_int_right_z = &result.betas + z_crit * &result.stds;
@@ -323,16 +400,17 @@ pub fn fit_panel_re_be_time(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (BE Time): lengths must match".to_string());
     }
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_times < 2 {
         return Err("Panel RE (BE Time): need at least 2 time periods".to_string());
     }
 
-    let (_, y_b_vec, x_b_vec) = group_means(
-        &endog.iter().cloned().collect::<Vec<_>>(),
-        exog,
-        time_id,
-    );
+    let (_, y_b_vec, x_b_vec) =
+        group_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, time_id);
     let k = exog.ncols();
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
@@ -368,7 +446,11 @@ pub fn fit_panel_re_be_time(
     let result = ols.fit()?;
 
     let kept: Vec<usize> = (0..k).filter(|j| !omitted_b.contains(j)).collect();
-    let omitted_indices = if omitted_b.is_empty() { None } else { Some(omitted_b) };
+    let omitted_indices = if omitted_b.is_empty() {
+        None
+    } else {
+        Some(omitted_b)
+    };
     let betas = &result.betas;
 
     let mut obs_per_group: HashMap<usize, usize> = HashMap::new();
@@ -403,8 +485,11 @@ pub fn fit_panel_re_be_time(
             y_w.iter().sum::<f64>() / n as f64,
             xb_w.iter().sum::<f64>() / n as f64,
         );
-        let cov = y_w.iter().zip(xb_w.iter())
-            .map(|(y, x)| (y - y_mean) * (x - xb_mean)).sum::<f64>()
+        let cov = y_w
+            .iter()
+            .zip(xb_w.iter())
+            .map(|(y, x)| (y - y_mean) * (x - xb_mean))
+            .sum::<f64>()
             / (n as f64 - 1.0).max(1.0);
         let (var_y, var_xb) = (
             y_w.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -431,8 +516,11 @@ pub fn fit_panel_re_be_time(
             xb_obs.iter().sum::<f64>() / n as f64,
             endog.iter().sum::<f64>() / n as f64,
         );
-        let cov = xb_obs.iter().zip(endog.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_obs
+            .iter()
+            .zip(endog.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
             xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -448,15 +536,29 @@ pub fn fit_panel_re_be_time(
     // sd(λ_t + avg(e_.t)) — time-level composite error (like entity BE: sd(u_i + avg(e_i.)))
     let sd_lambda_plus_avg_e = (result.ms_residual).sqrt();
     let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u: sd_lambda_plus_avg_e, sigma_e: 0.0, rho: 0.0 },
+        r2: Some(super::PanelR2Stats {
+            r2_within,
+            r2_between,
+            r2_overall,
+        }),
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u: sd_lambda_plus_avg_e,
+            sigma_e: 0.0,
+            rho: 0.0,
+        },
         corr_u_i_xb: 0.0,
         theta: None,
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| 2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs())));
+    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+    });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - z_crit * &result.stds;
     let conf_int_right_z = &result.betas + z_crit * &result.stds;
@@ -517,7 +619,11 @@ pub fn fit_panel_re_mle_time(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (MLE Time): lengths must match".to_string());
     }
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_times < 2 {
         return Err("Panel RE (MLE Time): need at least 2 time periods".to_string());
     }
@@ -525,7 +631,11 @@ pub fn fit_panel_re_mle_time(
     let (obs_per_time, t_bar_harmonic) = obs_per_group_and_harmonic_mean(time_id);
     let k = exog.ncols();
     let endog_vec: Vec<f64> = endog.iter().cloned().collect();
-    let t_bar = if t_bar_harmonic > 1e-300 { t_bar_harmonic } else { n as f64 / n_times as f64 };
+    let t_bar = if t_bar_harmonic > 1e-300 {
+        t_bar_harmonic
+    } else {
+        n as f64 / n_times as f64
+    };
 
     let y_global_mean = endog_vec.iter().sum::<f64>() / n as f64;
     let mut sigma2_e_null;
@@ -577,7 +687,9 @@ pub fn fit_panel_re_mle_time(
                 })
                 .collect();
             let y_bar = between_transform(endog_vec, time_id);
-            let y_star: Vec<f64> = (0..n).map(|i| endog_vec[i] - theta_arr[i] * y_bar[i]).collect();
+            let y_star: Vec<f64> = (0..n)
+                .map(|i| endog_vec[i] - theta_arr[i] * y_bar[i])
+                .collect();
             let x_star_const: Vec<f64> = (0..n).map(|i| 1.0 - theta_arr[i]).collect();
             let x_const = Array2::from_shape_vec((n, 1), x_star_const).unwrap();
             let (x_use, _) = drop_collinear_columns(&x_const, &[false], Some(0))
@@ -594,13 +706,36 @@ pub fn fit_panel_re_mle_time(
             .fit()
             .map_err(|e| format!("const-only GLS: {}", e))?;
             let alpha = res.betas[0];
-            let ll = re_mle_log_lik(endog_vec, exog, time_id, &[alpha], &[0], su, se, obs_per_time);
+            let ll = re_mle_log_lik(
+                endog_vec,
+                exog,
+                time_id,
+                &[alpha],
+                &[0],
+                su,
+                se,
+                obs_per_time,
+            );
             Ok((alpha, ll))
         }
 
-        let (_, ll_sa) = gls_alpha_and_ll_time(&endog_vec, exog, time_id, &obs_per_time, sigma2_u_sa, sigma2_e_sa)?;
+        let (_, ll_sa) = gls_alpha_and_ll_time(
+            &endog_vec,
+            exog,
+            time_id,
+            &obs_per_time,
+            sigma2_u_sa,
+            sigma2_e_sa,
+        )?;
         let (_, ll_pool) = if use_pooled_init {
-            gls_alpha_and_ll_time(&endog_vec, exog, time_id, &obs_per_time, sigma2_u_pool, sigma2_e_pool)?
+            gls_alpha_and_ll_time(
+                &endog_vec,
+                exog,
+                time_id,
+                &obs_per_time,
+                sigma2_u_pool,
+                sigma2_e_pool,
+            )?
         } else {
             (0.0, f64::NEG_INFINITY)
         };
@@ -615,9 +750,23 @@ pub fn fit_panel_re_mle_time(
             &obs_per_time,
         );
         let (alpha_init, sigma2_e_init, sigma2_u_init, ll_init) = {
-            let (alpha_sa, _) = gls_alpha_and_ll_time(&endog_vec, exog, time_id, &obs_per_time, sigma2_u_sa, sigma2_e_sa)?;
+            let (alpha_sa, _) = gls_alpha_and_ll_time(
+                &endog_vec,
+                exog,
+                time_id,
+                &obs_per_time,
+                sigma2_u_sa,
+                sigma2_e_sa,
+            )?;
             let (alpha_pool, _) = if use_pooled_init {
-                gls_alpha_and_ll_time(&endog_vec, exog, time_id, &obs_per_time, sigma2_u_pool, sigma2_e_pool)?
+                gls_alpha_and_ll_time(
+                    &endog_vec,
+                    exog,
+                    time_id,
+                    &obs_per_time,
+                    sigma2_u_pool,
+                    sigma2_e_pool,
+                )?
             } else {
                 (0.0, f64::NEG_INFINITY)
             };
@@ -638,9 +787,24 @@ pub fn fit_panel_re_mle_time(
         let mut params_const = vec![alpha_init, sigma2_u_init.ln(), sigma2_e_init.ln()];
         let h_num = 1e-6;
         for _ in 0..max_iter_null {
-            match re_mle_newton_step(&params_const, &endog_vec, exog, time_id, &kept_const, &obs_per_time, h_num) {
+            match re_mle_newton_step(
+                &params_const,
+                &endog_vec,
+                exog,
+                time_id,
+                &kept_const,
+                &obs_per_time,
+                h_num,
+            ) {
                 Ok((new_params, _neg_ll, converged)) => {
-                    let ll = -re_mle_neg_ll_from_params(&new_params, &endog_vec, exog, time_id, &kept_const, &obs_per_time);
+                    let ll = -re_mle_neg_ll_from_params(
+                        &new_params,
+                        &endog_vec,
+                        exog,
+                        time_id,
+                        &kept_const,
+                        &obs_per_time,
+                    );
                     mle_iter_log_lik_const.push(ll);
                     params_const = new_params;
                     sigma2_u_null = params_const[1].exp().clamp(1e-12, 1e10);
@@ -672,7 +836,8 @@ pub fn fit_panel_re_mle_time(
             })
             .collect();
         let y_bar = between_transform(&endog_vec, time_id);
-        let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
+        let y_star: Array1<f64> =
+            Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
         let mut x_star = Array2::zeros((n, k));
         for c in 0..k {
             let col: Vec<f64> = exog.column(c).iter().cloned().collect();
@@ -697,9 +862,20 @@ pub fn fit_panel_re_mle_time(
                 cov_params: None,
             },
         };
-        let res0 = ols_re.fit().map_err(|e| format!("Panel RE (MLE Time) iter 0: {}", e))?;
+        let res0 = ols_re
+            .fit()
+            .map_err(|e| format!("Panel RE (MLE Time) iter 0: {}", e))?;
         betas = res0.betas.to_vec();
-        let ll0_full = re_mle_log_lik(&endog_vec, exog, time_id, &betas, &kept, sigma2_u, sigma2_e, &obs_per_time);
+        let ll0_full = re_mle_log_lik(
+            &endog_vec,
+            exog,
+            time_id,
+            &betas,
+            &kept,
+            sigma2_u,
+            sigma2_e,
+            &obs_per_time,
+        );
         mle_iter_log_lik.push(ll0_full);
     }
 
@@ -708,12 +884,27 @@ pub fn fit_panel_re_mle_time(
     params.push(sigma2_e.ln());
     let h_num = 1e-6;
     for _ in 0..max_iter {
-        match re_mle_newton_step(&params, &endog_vec, exog, time_id, &kept, &obs_per_time, h_num) {
+        match re_mle_newton_step(
+            &params,
+            &endog_vec,
+            exog,
+            time_id,
+            &kept,
+            &obs_per_time,
+            h_num,
+        ) {
             Ok((new_params, _neg_ll, converged)) => {
                 let n_beta = kept.len();
                 sigma2_u = new_params[n_beta].exp().clamp(1e-12, 1e10);
                 sigma2_e = new_params[n_beta + 1].exp().clamp(1e-12, 1e10);
-                let ll = -re_mle_neg_ll_from_params(&new_params, &endog_vec, exog, time_id, &kept, &obs_per_time);
+                let ll = -re_mle_neg_ll_from_params(
+                    &new_params,
+                    &endog_vec,
+                    exog,
+                    time_id,
+                    &kept,
+                    &obs_per_time,
+                );
                 mle_iter_log_lik.push(ll);
                 params = new_params;
                 if converged {
@@ -771,7 +962,11 @@ pub fn fit_panel_re_mle_time(
     }
 
     let kept: Vec<usize> = (0..k).filter(|j| !omitted_mle.contains(j)).collect();
-    let omitted_indices = if omitted_mle.is_empty() { None } else { Some(omitted_mle) };
+    let omitted_indices = if omitted_mle.is_empty() {
+        None
+    } else {
+        Some(omitted_mle)
+    };
 
     let mut obs_per_group: HashMap<usize, usize> = HashMap::new();
     for &tid in time_id {
@@ -787,13 +982,31 @@ pub fn fit_panel_re_mle_time(
     let rho = sigma2_u / (sigma2_u + sigma2_e);
 
     let betas_vec: Vec<f64> = result.betas.iter().cloned().collect();
-    let log_likelihood = re_mle_log_lik(&endog_vec, exog, time_id, &betas_vec, &kept, sigma2_u, sigma2_e, &obs_per_time);
-    let k_slopes = if constant && kept.len() > 1 { kept.len() - 1 } else { kept.len() };
+    let log_likelihood = re_mle_log_lik(
+        &endog_vec,
+        exog,
+        time_id,
+        &betas_vec,
+        &kept,
+        sigma2_u,
+        sigma2_e,
+        &obs_per_time,
+    );
+    let k_slopes = if constant && kept.len() > 1 {
+        kept.len() - 1
+    } else {
+        kept.len()
+    };
     let lr_chi2 = {
         let raw = 2.0 * (log_likelihood - ll_null);
-        if raw.is_nan() || raw.is_infinite() { 0.0 } else { raw.max(0.0) }
+        if raw.is_nan() || raw.is_infinite() {
+            0.0
+        } else {
+            raw.max(0.0)
+        }
     };
-    let chi2_lr = ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE MLE Time LR: {}", e))?;
+    let chi2_lr =
+        ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE MLE Time LR: {}", e))?;
     let prob_lr_chi2 = 1.0 - chi2_lr.cdf(lr_chi2);
 
     let ll_ols = {
@@ -812,29 +1025,54 @@ pub fn fit_panel_re_mle_time(
                 cov_params: None,
             },
         };
-        let res_ols = ols_pooled.fit().map_err(|e| format!("Panel RE MLE Time OLS: {}", e))?;
+        let res_ols = ols_pooled
+            .fit()
+            .map_err(|e| format!("Panel RE MLE Time OLS: {}", e))?;
         let ols_betas: Vec<f64> = res_ols.betas.iter().cloned().collect();
         let ols_kept: Vec<usize> = (0..k).filter(|j| !ols_omitted.contains(j)).collect();
         let sigma2_e_ols = (res_ols.ss_residual / n as f64).max(1e-12);
-        re_mle_log_lik(&endog_vec, exog, time_id, &ols_betas, &ols_kept, 0.0, sigma2_e_ols, &obs_per_time)
+        re_mle_log_lik(
+            &endog_vec,
+            exog,
+            time_id,
+            &ols_betas,
+            &ols_kept,
+            0.0,
+            sigma2_e_ols,
+            &obs_per_time,
+        )
     };
     let chibar2 = {
         let raw = 2.0 * (log_likelihood - ll_ols);
-        if raw.is_nan() || raw.is_infinite() { 0.0 } else { raw.max(0.0) }
+        if raw.is_nan() || raw.is_infinite() {
+            0.0
+        } else {
+            raw.max(0.0)
+        }
     };
     let chi2_1 = ChiSquared::new(1.0).map_err(|e| format!("Panel RE MLE Time chibar2: {}", e))?;
     let prob_chibar2 = 0.5 * (1.0 - chi2_1.cdf(chibar2));
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: None,
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE Time: {}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| 2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs())));
+    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+        2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
+    });
     let z_crit = std_normal.inverse_cdf(0.975);
     let conf_int_left_z = &result.betas - z_crit * &result.stds;
     let conf_int_right_z = &result.betas + z_crit * &result.stds;

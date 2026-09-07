@@ -1,4 +1,4 @@
-﻿/// Two-way within: z̃_it = z_it - z̄_i - z̄_t + z̄
+/// Two-way within: z̃_it = z_it - z̄_i - z̄_t + z̄
 fn within_transform_twoway(v: &[f64], entity_id: &[usize], time_id: &[usize]) -> Array1<f64> {
     let n = v.len();
     let z_bar_i = between_transform(v, entity_id);
@@ -21,10 +21,20 @@ pub fn fit_panel_re_fgls_twoway(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way FGLS): lengths must match".to_string());
     }
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 || n_times < 2 {
-        return Err("Panel RE (Two-Way FGLS): need at least 2 entities and 2 time periods".to_string());
+        return Err(
+            "Panel RE (Two-Way FGLS): need at least 2 entities and 2 time periods".to_string(),
+        );
     }
 
     let (obs_per_entity, t_bar_entity) = obs_per_group_and_harmonic_mean(entity_id);
@@ -72,7 +82,9 @@ pub fn fit_panel_re_fgls_twoway(
             cov_params: None,
         },
     };
-    let res_w = ols_w.fit().map_err(|e| format!("Panel RE (Two-Way) within: {}", e))?;
+    let res_w = ols_w
+        .fit()
+        .map_err(|e| format!("Panel RE (Two-Way) within: {}", e))?;
     let df_w = (n as i64 - n_entities as i64 - n_times as i64 + 1 - k_w as i64).max(1) as usize;
     let sigma2_e = res_w.ss_residual / df_w as f64;
 
@@ -168,8 +180,7 @@ pub fn fit_panel_re_fgls_twoway(
     let ratio_lambda = (n_bar * sigma2_lambda / sigma2_e.max(1e-300)).max(0.0);
     let theta_id = 1.0 - (1.0 + ratio_alpha).powf(-0.5);
     let theta_time = 1.0 - (1.0 + ratio_lambda).powf(-0.5);
-    let theta_total = theta_id + theta_time - 1.0
-        + (1.0 + ratio_alpha + ratio_lambda).powf(-0.5);
+    let theta_total = theta_id + theta_time - 1.0 + (1.0 + ratio_alpha + ratio_lambda).powf(-0.5);
 
     let y_bar_i = between_transform(&y_vec, entity_id);
     let y_bar_t = between_transform(&y_vec, time_id);
@@ -186,7 +197,8 @@ pub fn fit_panel_re_fgls_twoway(
         let x_bar_t = between_transform(&col, time_id);
         let x_bar: f64 = col.iter().sum::<f64>() / n as f64;
         for i in 0..n {
-            x_star[[i, c]] = col[i] - theta_id * x_bar_i[i] - theta_time * x_bar_t[i] + theta_total * x_bar;
+            x_star[[i, c]] =
+                col[i] - theta_id * x_bar_i[i] - theta_time * x_bar_t[i] + theta_total * x_bar;
         }
     }
 
@@ -229,10 +241,7 @@ pub fn fit_panel_re_fgls_twoway(
     };
     let betas = &result.betas;
 
-    let obs_per_grp: Vec<usize> = obs_per_entity
-        .values()
-        .copied()
-        .collect();
+    let obs_per_grp: Vec<usize> = obs_per_entity.values().copied().collect();
     let obs_min = obs_per_grp.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_grp.iter().copied().max().unwrap_or(0);
     let obs_avg = obs_per_grp.iter().sum::<usize>() as f64 / n_entities as f64;
@@ -243,12 +252,19 @@ pub fn fit_panel_re_fgls_twoway(
             .cloned()
             .collect();
         let xb: Vec<f64> = (0..n)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| exog[[i, c]] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .sum()
+            })
             .collect();
         let xb_bar_i = between_transform(&xb, entity_id);
         let xb_bar_t = between_transform(&xb, time_id);
         let xb_bar: f64 = xb.iter().sum::<f64>() / n as f64;
-        let xb_w: Vec<f64> = (0..n).map(|i| xb[i] - xb_bar_i[i] - xb_bar_t[i] + xb_bar).collect();
+        let xb_w: Vec<f64> = (0..n)
+            .map(|i| xb[i] - xb_bar_i[i] - xb_bar_t[i] + xb_bar)
+            .collect();
         let (y_mean, xb_mean) = (
             y_w.iter().sum::<f64>() / n as f64,
             xb_w.iter().sum::<f64>() / n as f64,
@@ -275,7 +291,12 @@ pub fn fit_panel_re_fgls_twoway(
         let n_b = y_b_vec.len();
         let y_mean = y_b_vec.iter().sum::<f64>() / n_b as f64;
         let xb_b: Vec<f64> = (0..n_b)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| x_b_vec[i][c] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| x_b_vec[i][c] * betas[idx])
+                    .sum()
+            })
             .collect();
         let xb_mean = xb_b.iter().sum::<f64>() / n_b as f64;
         let cov = y_b_vec
@@ -297,7 +318,12 @@ pub fn fit_panel_re_fgls_twoway(
 
     let r2_overall = {
         let xb_obs: Vec<f64> = (0..n)
-            .map(|i| kept.iter().enumerate().map(|(idx, &c)| exog[[i, c]] * betas[idx]).sum())
+            .map(|i| {
+                kept.iter()
+                    .enumerate()
+                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .sum()
+            })
             .collect();
         let (xb_mean, y_mean) = (
             xb_obs.iter().sum::<f64>() / n as f64,
@@ -330,8 +356,16 @@ pub fn fit_panel_re_fgls_twoway(
             r2_between,
             r2_overall,
         }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: None,
     });
@@ -349,17 +383,17 @@ pub fn fit_panel_re_fgls_twoway(
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_faer = v_s.view().into_faer().to_owned();
-        let beta_s_faer = beta_s.view().into_faer_col().to_owned();
-        let x = v_s_faer
-            .as_ref()
-            .llt(Side::Lower)
+        let v_s_matrix = v_s.view().to_owned();
+        let beta_s_vector = beta_s.view().to_owned();
+        let x = v_s_matrix
+            .view()
+            .cholesky()
             .map_err(|_| "Panel RE (Two-Way) Wald".to_string())?
-            .solve(beta_s_faer.as_ref());
-        let x_nd = x.as_ref().into_ndarray();
+            .solve(&beta_s_vector.view());
+        let x_nd = x.view();
         let wald = beta_s.dot(&x_nd);
-        let chi2_dist =
-            ChiSquared::new(df_wald as f64).map_err(|e| format!("Panel RE (Two-Way) Wald: {}", e))?;
+        let chi2_dist = ChiSquared::new(df_wald as f64)
+            .map_err(|e| format!("Panel RE (Two-Way) Wald: {}", e))?;
         (wald, 1.0 - chi2_dist.cdf(wald))
     };
 
@@ -428,8 +462,7 @@ fn twoway_theta(
     let ratio_lambda = (n_bar * sigma2_lambda / se).max(0.0);
     let theta_id = 1.0 - (1.0 + ratio_alpha).powf(-0.5);
     let theta_time = 1.0 - (1.0 + ratio_lambda).powf(-0.5);
-    let theta_total =
-        theta_id + theta_time - 1.0 + (1.0 + ratio_alpha + ratio_lambda).powf(-0.5);
+    let theta_total = theta_id + theta_time - 1.0 + (1.0 + ratio_alpha + ratio_lambda).powf(-0.5);
     (theta_id, theta_time, theta_total)
 }
 
@@ -495,10 +528,20 @@ pub fn fit_panel_re_mle_twoway(
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way MLE): lengths must match".to_string());
     }
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
-    let n_times = time_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let n_times = time_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 || n_times < 2 {
-        return Err("Panel RE (Two-Way MLE): need at least 2 entities and 2 time periods".to_string());
+        return Err(
+            "Panel RE (Two-Way MLE): need at least 2 entities and 2 time periods".to_string(),
+        );
     }
 
     let (obs_per_entity, t_bar_entity) = obs_per_group_and_harmonic_mean(entity_id);
@@ -585,8 +628,7 @@ pub fn fit_panel_re_mle_twoway(
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-entity: {}", e))?;
     let df_b_e = res_b_e.df_residual;
-    let mut sigma2_alpha =
-        (res_b_e.ss_residual / df_b_e as f64 - sigma2_e / t_bar).max(1e-10);
+    let mut sigma2_alpha = (res_b_e.ss_residual / df_b_e as f64 - sigma2_e / t_bar).max(1e-10);
 
     let (_, y_b_t, x_b_t) = group_means(&y_vec, exog, time_id);
     let n_b_t = y_b_t.len();
@@ -618,11 +660,12 @@ pub fn fit_panel_re_mle_twoway(
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-time: {}", e))?;
     let df_b_t = res_b_t.df_residual;
-    let mut sigma2_lambda =
-        (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
+    let mut sigma2_lambda = (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
 
     if sigma2_alpha <= 0.0 && sigma2_lambda <= 0.0 {
-        return Err("Panel RE (Two-Way MLE): both sigma_alpha^2 and sigma_lambda^2 <= 0".to_string());
+        return Err(
+            "Panel RE (Two-Way MLE): both sigma_alpha^2 and sigma_lambda^2 <= 0".to_string(),
+        );
     }
 
     // Constant-only model for ll_null
@@ -633,9 +676,9 @@ pub fn fit_panel_re_mle_twoway(
             twoway_theta(sigma2_alpha, sigma2_lambda, sigma2_e, t_bar, n_bar);
         let y_bar_i = between_transform(&y_vec, entity_id);
         let y_bar_t = between_transform(&y_vec, time_id);
-        let y_star_const: Array1<f64> =
-            Array1::from_shape_fn(n, |i| y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i]
-                + theta_total * y_global_mean);
+        let y_star_const: Array1<f64> = Array1::from_shape_fn(n, |i| {
+            y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i] + theta_total * y_global_mean
+        });
         let x_const_star: Vec<f64> = (0..n)
             .map(|_| 1.0 - theta_id - theta_time + theta_total)
             .collect();
@@ -678,7 +721,9 @@ pub fn fit_panel_re_mle_twoway(
                 y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i]
                     + theta_total * y_global_mean
             });
-            let x_c: Vec<f64> = (0..n).map(|_| 1.0 - theta_id - theta_time + theta_total).collect();
+            let x_c: Vec<f64> = (0..n)
+                .map(|_| 1.0 - theta_id - theta_time + theta_total)
+                .collect();
             let x_c_arr = Array2::from_shape_vec((n, 1), x_c).unwrap();
             let res_c = OLS {
                 endog: y_star_c,
@@ -769,10 +814,8 @@ pub fn fit_panel_re_mle_twoway(
     .fit()
     .map_err(|e| format!("Panel RE (Two-Way MLE): {}", e))?;
     sigma2_e = (res_w2.ss_residual / df_w as f64).max(1e-12);
-    sigma2_alpha =
-        (res_b_e.ss_residual / df_b_e as f64 - sigma2_e / t_bar).max(1e-10);
-    sigma2_lambda =
-        (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
+    sigma2_alpha = (res_b_e.ss_residual / df_b_e as f64 - sigma2_e / t_bar).max(1e-10);
+    sigma2_lambda = (res_b_t.ss_residual / df_b_t as f64 - sigma2_e / n_bar).max(1e-10);
 
     let mut kept: Vec<usize>;
     let mut betas: Vec<f64> = vec![0.0; k];
@@ -838,7 +881,14 @@ pub fn fit_panel_re_mle_twoway(
         mle_iter_log_lik.push(ll);
 
         let r: Vec<f64> = (0..n)
-            .map(|i| y_vec[i] - kept.iter().enumerate().map(|(_j, &c)| exog[[i, c]] * betas[c]).sum::<f64>())
+            .map(|i| {
+                y_vec[i]
+                    - kept
+                        .iter()
+                        .enumerate()
+                        .map(|(_j, &c)| exog[[i, c]] * betas[c])
+                        .sum::<f64>()
+            })
             .collect();
         let r_w = within_transform_twoway(&r, entity_id, time_id);
         let ss_w: f64 = r_w.iter().map(|x| x * x).sum();
@@ -961,16 +1011,14 @@ pub fn fit_panel_re_mle_twoway(
         kept.len()
     };
     let lr_chi2 = (2.0 * (log_likelihood - ll_null)).max(0.0);
-    let chi2_lr = ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE (Two-Way) MLE LR: {}", e))?;
+    let chi2_lr = ChiSquared::new(k_slopes as f64)
+        .map_err(|e| format!("Panel RE (Two-Way) MLE LR: {}", e))?;
     let prob_lr_chi2 = 1.0 - chi2_lr.cdf(lr_chi2);
 
     let ll_ols = {
-        let (x_ols_use, ols_omitted) = drop_collinear_columns(
-            exog,
-            &vec![false; k],
-            if constant { Some(0) } else { None },
-        )
-        .map_err(|e| format!("Panel RE (Two-Way) MLE OLS: {}", e))?;
+        let (x_ols_use, ols_omitted) =
+            drop_collinear_columns(exog, &vec![false; k], if constant { Some(0) } else { None })
+                .map_err(|e| format!("Panel RE (Two-Way) MLE OLS: {}", e))?;
         let ols_res = OLS {
             endog: endog.clone(),
             exog: x_ols_use,
@@ -1002,13 +1050,22 @@ pub fn fit_panel_re_mle_twoway(
         )
     };
     let chibar2 = 2.0 * (log_likelihood - ll_ols).max(0.0);
-    let chibar2_dist = ChiSquared::new(0.5).map_err(|e| format!("Panel RE (Two-Way) chibar2: {}", e))?;
+    let chibar2_dist =
+        ChiSquared::new(0.5).map_err(|e| format!("Panel RE (Two-Way) chibar2: {}", e))?;
     let prob_chibar2 = 1.0 - chibar2_dist.cdf(chibar2);
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: None,
     });
@@ -1064,4 +1121,3 @@ pub fn fit_panel_re_mle_twoway(
         mle_iter_log_lik: Some(mle_iter_log_lik),
     })
 }
-

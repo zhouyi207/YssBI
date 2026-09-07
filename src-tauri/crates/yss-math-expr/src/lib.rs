@@ -1,7 +1,9 @@
-mod adapter;
-mod ir;
+//! Mathematical expression AST and parsing for plain text and LaTeX input.
 
-pub use ir::{BinaryOp, ComparisonOp, MathError, MathErrorKind, MathExpr, MathRelation, UnaryOp};
+mod adapter;
+mod ast;
+
+pub use ast::{BinaryOp, ComparisonOp, MathError, MathErrorKind, MathExpr, MathRelation, UnaryOp};
 
 pub const MAX_RELATIONS: usize = 64;
 

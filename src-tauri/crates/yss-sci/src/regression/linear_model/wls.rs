@@ -1,11 +1,12 @@
 use crate::regression::covariance::{CovParams, compute_cov_beta};
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
-use faer::{Mat, Side, linalg::solvers::Solve};
+
 use ndarray::{Array1, Array2};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+use yss_linalg::matrix_rank;
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 pub struct WLSConfig {
     pub constant: bool,
@@ -57,18 +58,18 @@ impl WLS {
     pub fn fit(&self) -> Result<WLSResult, String> {
         let sqrt_weights = self.weights.mapv(|w| w.sqrt());
 
-        let mut z = self.endog.view().into_faer_col().to_owned();
-        let mut zz = self.exog.view().into_faer().to_owned();
+        let mut z = self.endog.view().to_owned();
+        let mut zz = self.exog.view().to_owned();
 
         for (i, &sw) in sqrt_weights.iter().enumerate() {
             z[i] *= sw;
         }
-        for (i, mut row) in zz.row_iter_mut().enumerate() {
+        for (i, mut row) in zz.rows_mut().into_iter().enumerate() {
             let sw = sqrt_weights[i];
             row *= sw;
         }
 
-        let (rank, cond_no) = matrix_rank(zz.as_ref().to_owned());
+        let (rank, cond_no) = matrix_rank(zz.view()).unwrap_or((0, f64::INFINITY));
         let n = zz.nrows();
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
@@ -80,14 +81,14 @@ impl WLS {
             self.config.cov_type.clone()
         };
 
-        let xtx = zz.as_ref().transpose() * zz.as_ref();
-        let xtz = zz.as_ref().transpose() * z.as_ref();
+        let xtx = zz.t().matmul(&zz.view());
+        let xtz = zz.t().matmul(&z.view());
         let xtx_inv = xtx
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "WLS: X'WX matrix is not positive definite".to_string())?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let betas = xtx_inv.as_ref() * xtz;
-        let z_hat = zz.as_ref() * betas.as_ref();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let betas = xtx_inv.view().matmul(&xtz);
+        let z_hat = zz.view().matmul(&betas.view());
 
         let z_mean = z.iter().mean();
         let ss_total = if self.config.constant {
@@ -95,7 +96,7 @@ impl WLS {
         } else {
             z.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (z.as_ref() - z_hat.as_ref())
+        let ss_residual = (&z.view() - &z_hat.view())
             .iter()
             .map(|v| v.powi(2))
             .sum::<f64>();
@@ -115,10 +116,10 @@ impl WLS {
             FisherSnedecor::new(df1, df2).map_err(|e| format!("WLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
-        let u = z - z_hat.as_ref();
-        let x_nd = zz.as_ref().into_ndarray().to_owned();
-        let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
-        let u_nd: Array1<f64> = u.as_ref().into_ndarray().to_owned();
+        let u = &z - &z_hat.view();
+        let x_nd = zz.view().to_owned();
+        let xtx_inv_nd = xtx_inv.view().to_owned();
+        let u_nd: Array1<f64> = u.view().to_owned();
 
         let cov_beta = compute_cov_beta(
             &x_nd,
@@ -130,7 +131,7 @@ impl WLS {
         )?;
 
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
-        let betas_nd = betas.as_ref().into_ndarray().to_owned();
+        let betas_nd = betas.view().to_owned();
         let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())

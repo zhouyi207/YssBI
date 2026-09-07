@@ -406,9 +406,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
                 && root.target == "yss_graph_registry"
                 && root.kind == ProductionRootKind::Library)
     );
-    assert!(workspace.roots.iter().any(|root| root.package == "yss-math"
-        && root.target == "yss_math"
-        && root.kind == ProductionRootKind::Library));
+    assert!(
+        workspace
+            .roots
+            .iter()
+            .any(|root| root.package == "yss-math-expr"
+                && root.target == "yss_math_expr"
+                && root.kind == ProductionRootKind::Library)
+    );
     assert!(
         workspace
             .roots
@@ -1034,10 +1039,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let math_root = ProductionRoot {
         package_id: "math-package".to_owned(),
-        package: "yss-math".to_owned(),
-        target: "yss_math".to_owned(),
+        package: "yss-math-expr".to_owned(),
+        target: "yss_math_expr".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-math/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-math-expr/src/lib.rs"),
     };
     let path_display_root = ProductionRoot {
         package_id: "path-display-package".to_owned(),
@@ -1248,8 +1253,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &math_root,
-                "src-tauri/crates/yss-math/src/lib.rs",
-                "yss_math",
+                "src-tauri/crates/yss-math-expr/src/lib.rs",
+                "yss_math_expr",
             ),
             module(
                 &path_display_root,
@@ -1387,7 +1392,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Graph
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-math/src/lib.rs"],
+        classified["src-tauri/crates/yss-math-expr/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -4446,10 +4451,10 @@ fn graph_protocol_has_one_pure_crate_owner_without_compatibility_module() {
 fn math_parser_has_one_pure_crate_owner_without_compatibility_module() {
     let root = repository_root();
     for relative in [
-        "src-tauri/crates/yss-math/Cargo.toml",
-        "src-tauri/crates/yss-math/src/lib.rs",
-        "src-tauri/crates/yss-math/src/adapter.rs",
-        "src-tauri/crates/yss-math/src/ir.rs",
+        "src-tauri/crates/yss-math-expr/Cargo.toml",
+        "src-tauri/crates/yss-math-expr/src/lib.rs",
+        "src-tauri/crates/yss-math-expr/src/adapter.rs",
+        "src-tauri/crates/yss-math-expr/src/ast.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -7372,7 +7377,7 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     )
     .expect("Bayes model manifest must be readable");
     assert!(manifest.contains("serde.workspace = true"));
-    assert!(manifest.contains("yss-math"));
+    assert!(manifest.contains("yss-math-expr"));
     for forbidden_dependency in ["polars", "tauri", "yss-sci", "yss-julia"] {
         assert!(
             !manifest.contains(forbidden_dependency),

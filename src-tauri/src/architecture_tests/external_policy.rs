@@ -659,7 +659,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-math",
+        owning_package: "yss-math-expr",
         mode: RustDependencyMode::Runtime,
         package_name: "mathlex",
         target_condition: None,
@@ -881,9 +881,15 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci",
+        owning_package: "yss-linalg",
         mode: RustDependencyMode::Runtime,
         package_name: "faer",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-linalg",
+        mode: RustDependencyMode::Runtime,
+        package_name: "ndarray",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1388,9 +1394,14 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "polars-dtype",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::SciCore,
+        source_layer: RustLayer::PureLeaf,
         mode: RustDependencyMode::Runtime,
         package_name: "faer",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "ndarray",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Execution,

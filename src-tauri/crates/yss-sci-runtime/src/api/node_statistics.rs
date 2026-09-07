@@ -6,13 +6,13 @@ use crate::models::regression::{
 use ndarray::{Array1, Array2};
 use serde::Serialize;
 use statrs::distribution::{ContinuousCDF, Normal};
+use yss_linalg::matrix_rank;
 use yss_sci::regression::discrete::{Logit, LogitConfig, Probit, ProbitConfig};
 use yss_sci::regression::linear_model::{
     GLS, GLSConfig, IV2SLS, IV2SLSConfig, IVLIML, IVLIMLConfig, OLS, OLSConfig, Prais, PraisConfig,
     WLS, WLSConfig,
 };
 use yss_sci::regression::panel::fit_panel_fe_twoway;
-use yss_sci::tools::{IntoFaer, matrix_rank};
 use yss_sci::ts::unit_root::adf_test;
 use yss_sci::ts::var::{VAR, VARConfig, var_varsoc};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
@@ -598,7 +598,7 @@ fn linear_fit(
 }
 
 fn design_condition_number(design: &Array2<f64>) -> f64 {
-    matrix_rank(design.view().into_faer().to_owned()).1
+    matrix_rank(design.view()).map_or(f64::INFINITY, |(_, condition)| condition)
 }
 
 fn design_matrix(

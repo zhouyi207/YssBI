@@ -17,8 +17,8 @@ fn build_white_z_full(x: &Array2<f64>, k: usize, p: usize, n: usize) -> Vec<Vec<
     z_cols
 }
 
-/// 从列向量列表构建 faer 矩阵
-fn build_z_faer(z_cols: &[Vec<f64>], n: usize) -> Option<faer::Mat<f64>> {
+/// 从列向量列表构建设计矩阵
+fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<ndarray::Array2<f64>> {
     let n_cols = z_cols.len();
     if n_cols == 0 {
         return None;
@@ -30,7 +30,7 @@ fn build_z_faer(z_cols: &[Vec<f64>], n: usize) -> Option<faer::Mat<f64>> {
         }
     }
     let z_arr = Array2::from_shape_vec((n, n_cols), z_raw).ok()?;
-    Some(z_arr.view().into_faer().to_owned())
+    Some(z_arr.view().to_owned())
 }
 
 /// White 异方差检验（estat imtest, white）
@@ -65,11 +65,11 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
         ));
     }
 
-    let z_faer = build_z_faer(&z_cols, n)
+    let z_matrix = build_z_matrix(&z_cols, n)
         .ok_or_else(|| "white_test: failed to build Z matrix".to_string())?;
 
-    let s_sv = z_faer
-        .as_ref()
+    let s_sv = z_matrix
+        .view()
         .singular_values()
         .map_err(|e| format!("white_test: SVD failed: {:?}", e))?;
     let max_sv = s_sv.first().copied().unwrap_or(0.0);
@@ -86,29 +86,29 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
     }
 
     // 秩不足时 QR 会除以近零对角元产生 NaN，改用 SVD 并截断小奇异值
-    let svd = z_faer
-        .as_ref()
+    let svd = z_matrix
+        .view()
         .svd()
         .map_err(|e| format!("white_test: SVD failed: {:?}", e))?;
-    let u = svd.U();
-    let v = svd.V();
-    let size = Ord::min(z_faer.nrows(), z_faer.ncols());
-    let b_col = u_sq.view().into_faer_col().to_owned();
+    let u = svd.left_vectors();
+    let v = svd.right_vectors();
+    let size = Ord::min(z_matrix.nrows(), z_matrix.ncols());
+    let b_col = u_sq.view().to_owned();
     // tmp = U' * b
-    let tmp = u.get(.., ..size).transpose() * b_col.as_ref();
+    let tmp = u.slice(ndarray::s![.., ..size]).t().matmul(&b_col.view());
     // tmp2[i] = tmp[i] / s[i] when s[i] > tol, else 0（避免除以零）
-    let mut tmp2 = Mat::zeros(size, 1);
-    let tmp_nd = tmp.as_ref().into_ndarray().to_owned();
+    let mut tmp2 = ndarray::Array2::<f64>::zeros((size, 1));
+    let tmp_nd = tmp.view().to_owned();
     for i in 0..size {
         let si = s_sv[i];
         let ti = tmp_nd[i];
-        tmp2.as_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
+        tmp2.view_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
     }
     // gamma = V * tmp2
-    let gamma = v.get(.., ..size) * tmp2.as_ref();
-    let y_hat = z_faer.as_ref() * gamma;
+    let gamma = v.slice(ndarray::s![.., ..size]).matmul(&tmp2.view());
+    let y_hat = z_matrix.view().matmul(&gamma);
 
-    let y_hat_mat = y_hat.as_ref().into_ndarray().to_owned();
+    let y_hat_mat = y_hat.view().to_owned();
     let y_hat_nd: Array1<f64> = y_hat_mat.column(0).into_owned();
     let y_mean = u_sq.iter().sum::<f64>() / n as f64;
     let tss: f64 = u_sq.iter().map(|v| (v - y_mean).powi(2)).sum();
@@ -169,11 +169,11 @@ pub fn white_test_weighted(
         ));
     }
 
-    let z_faer = build_z_faer(&z_cols, n)
+    let z_matrix = build_z_matrix(&z_cols, n)
         .ok_or_else(|| "white_test_weighted: failed to build Z matrix".to_string())?;
 
-    let s_sv = z_faer
-        .as_ref()
+    let s_sv = z_matrix
+        .view()
         .singular_values()
         .map_err(|e| format!("white_test_weighted: SVD failed: {:?}", e))?;
     let max_sv = s_sv.first().copied().unwrap_or(0.0);
@@ -189,26 +189,26 @@ pub fn white_test_weighted(
         });
     }
 
-    let svd = z_faer
-        .as_ref()
+    let svd = z_matrix
+        .view()
         .svd()
         .map_err(|e| format!("white_test_weighted: SVD failed: {:?}", e))?;
-    let u = svd.U();
-    let v = svd.V();
-    let size = Ord::min(z_faer.nrows(), z_faer.ncols());
-    let b_col = y.view().into_faer_col().to_owned();
-    let tmp = u.get(.., ..size).transpose() * b_col.as_ref();
-    let mut tmp2 = Mat::zeros(size, 1);
-    let tmp_nd = tmp.as_ref().into_ndarray().to_owned();
+    let u = svd.left_vectors();
+    let v = svd.right_vectors();
+    let size = Ord::min(z_matrix.nrows(), z_matrix.ncols());
+    let b_col = y.view().to_owned();
+    let tmp = u.slice(ndarray::s![.., ..size]).t().matmul(&b_col.view());
+    let mut tmp2 = ndarray::Array2::<f64>::zeros((size, 1));
+    let tmp_nd = tmp.view().to_owned();
     for i in 0..size {
         let si = s_sv[i];
         let ti = tmp_nd[i];
-        tmp2.as_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
+        tmp2.view_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
     }
-    let gamma = v.get(.., ..size) * tmp2.as_ref();
-    let y_hat = z_faer.as_ref() * gamma;
+    let gamma = v.slice(ndarray::s![.., ..size]).matmul(&tmp2.view());
+    let y_hat = z_matrix.view().matmul(&gamma);
 
-    let y_hat_mat = y_hat.as_ref().into_ndarray().to_owned();
+    let y_hat_mat = y_hat.view().to_owned();
     let y_hat_nd: Array1<f64> = y_hat_mat.column(0).into_owned();
 
     let y_mean = y.iter().sum::<f64>() / n as f64;

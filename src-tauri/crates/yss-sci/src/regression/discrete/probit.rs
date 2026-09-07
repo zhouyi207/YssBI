@@ -3,10 +3,9 @@
 //! P(y=1|x) = Φ(x'β) where Φ is the standard normal CDF.
 //! IRLS uses weight w = φ(η)² / [Φ(η)(1-Φ(η))] and working response z = η + (y-p)/w.
 
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
 use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF, Normal};
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 const MAX_ITER: usize = 100;
 const TOL: f64 = 1e-8;
@@ -114,19 +113,19 @@ impl Probit {
                 .map(|(zi, sw)| zi * sw)
                 .collect();
 
-            let xw_faer = xw.view().into_faer().to_owned();
-            let zw_faer = zw.view().into_faer_col().to_owned();
+            let xw_matrix = xw.view().to_owned();
+            let zw_vector = zw.view().to_owned();
 
-            let xtx = xw_faer.as_ref().transpose() * xw_faer.as_ref();
-            let xtz = xw_faer.as_ref().transpose() * zw_faer.as_ref();
+            let xtx = xw_matrix.t().matmul(&xw_matrix.view());
+            let xtz = xw_matrix.t().matmul(&zw_vector.view());
 
             let xtx_inv = xtx
-                .llt(Side::Lower)
+                .cholesky()
                 .map_err(|_| "Probit: X'WX not positive definite".to_string())?
-                .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
+                .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
 
-            let beta_new = xtx_inv.as_ref() * xtz;
-            let beta_new_nd = beta_new.as_ref().into_ndarray().to_owned();
+            let beta_new = xtx_inv.view().matmul(&xtz);
+            let beta_new_nd = beta_new.view().to_owned();
 
             let diff: f64 = beta
                 .iter()
@@ -150,13 +149,13 @@ impl Probit {
                 for (i, mut row) in xw_final.outer_iter_mut().enumerate() {
                     row *= w_final[i].sqrt();
                 }
-                let xtx_final = xw_final.view().into_faer().to_owned();
-                let xtx_f = xtx_final.as_ref().transpose() * xtx_final.as_ref();
+                let xtx_final = xw_final.view().to_owned();
+                let xtx_f = xtx_final.t().matmul(&xtx_final.view());
                 let cov_beta = xtx_f
-                    .llt(Side::Lower)
+                    .cholesky()
                     .map_err(|_| "Probit: failed to invert Hessian".to_string())?
-                    .solve(Mat::identity(xtx_f.nrows(), xtx_f.ncols()));
-                let cov_beta_nd = cov_beta.as_ref().into_ndarray().to_owned();
+                    .solve(&ndarray::Array2::<f64>::eye(xtx_f.nrows()));
+                let cov_beta_nd = cov_beta.view().to_owned();
 
                 let std_err = cov_beta_nd.diag().mapv(f64::sqrt);
 

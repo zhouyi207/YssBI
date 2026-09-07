@@ -4,13 +4,13 @@ use super::critical_values::{
 };
 use super::types::FirstStageSummary;
 use crate::regression::covariance::{CovParams, compute_cov_beta};
-use crate::tools::{IntoFaer, IntoNdarray};
-use faer::{Mat, Side, linalg::solvers::Solve};
+
 use ndarray::Array2;
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
     statistics::Statistics,
 };
+use yss_linalg::{MatrixExt, Solve};
 
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
 pub(crate) fn compute_first_stage_summary(
@@ -49,12 +49,11 @@ pub(crate) fn compute_first_stage_summary(
     let x1tx1 = x1.t().dot(&x1);
     let x1tx1_inv = x1tx1
         .view()
-        .into_faer()
         .to_owned()
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "IV2SLS firststage: X1'X1 not pd".to_string())?
-        .solve(Mat::identity(x1tx1.nrows(), x1tx1.ncols()));
-    let x1tx1_inv_nd = x1tx1_inv.as_ref().into_ndarray().to_owned();
+        .solve(&ndarray::Array2::<f64>::eye(x1tx1.nrows()));
+    let x1tx1_inv_nd = x1tx1_inv.view().to_owned();
 
     // M_X1 = I - X1(X1'X1)^{-1}X1'
     let px1 = x1.dot(&x1tx1_inv_nd).dot(&x1.t());
@@ -83,12 +82,11 @@ pub(crate) fn compute_first_stage_summary(
     let ztz = z.t().dot(z);
     let ztz_inv = ztz
         .view()
-        .into_faer()
         .to_owned()
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "IV2SLS firststage: Z'Z not pd".to_string())?
-        .solve(Mat::identity(ztz.nrows(), ztz.ncols()));
-    let ztz_inv_nd = ztz_inv.as_ref().into_ndarray().to_owned();
+        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
+    let ztz_inv_nd = ztz_inv.view().to_owned();
     let pz = z.dot(&ztz_inv_nd).dot(&z.t());
     let mut mz_y_data = Vec::with_capacity(n * k_endog);
     for i in 0..n {
@@ -109,12 +107,11 @@ pub(crate) fn compute_first_stage_summary(
     let x2_mx1_x2 = x2_mx1.t().dot(&x2_mx1);
     let x2_mx1_x2_inv = x2_mx1_x2
         .view()
-        .into_faer()
         .to_owned()
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "IV2SLS firststage: X2'M_X1 X2 not pd".to_string())?
-        .solve(Mat::identity(x2_mx1_x2.nrows(), x2_mx1_x2.ncols()));
-    let x2_mx1_x2_inv_nd = x2_mx1_x2_inv.as_ref().into_ndarray().to_owned();
+        .solve(&ndarray::Array2::<f64>::eye(x2_mx1_x2.nrows()));
+    let x2_mx1_x2_inv_nd = x2_mx1_x2_inv.view().to_owned();
 
     let mut y_mx1_data = Vec::with_capacity(n * k_endog);
     for i in 0..n {
@@ -143,20 +140,15 @@ pub(crate) fn compute_first_stage_summary(
     } else {
         let sigma_inv = sigma_vv
             .view()
-            .into_faer()
             .to_owned()
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "IV2SLS firststage: sigma_vv not pd".to_string())?
-            .solve(Mat::identity(sigma_vv.nrows(), sigma_vv.ncols()));
-        let g_mat = sigma_inv
-            .as_ref()
-            .into_ndarray()
-            .to_owned()
-            .dot(&inner_scaled);
-        let g_faer = g_mat.view().into_faer();
-        let evd = faer::linalg::solvers::SelfAdjointEigen::new(g_faer, Side::Lower)
+            .solve(&ndarray::Array2::<f64>::eye(sigma_vv.nrows()));
+        let g_mat = sigma_inv.view().to_owned().dot(&inner_scaled);
+        let g_matrix = g_mat.view();
+        let evd = yss_linalg::SymmetricEigen::factor(g_matrix)
             .map_err(|_| "IV2SLS firststage: EVD failed".to_string())?;
-        let s_col = evd.S().column_vector();
+        let s_col = evd.values();
         s_col.iter().fold(f64::INFINITY, |a, &b| a.min(b))
     };
 
@@ -232,16 +224,11 @@ pub(crate) fn compute_first_stage_summary(
         let mx2t_my = mx2.t().dot(&my);
         let mx2t_mx2_inv = mx2t_mx2
             .view()
-            .into_faer()
             .to_owned()
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "IV2SLS firststage: M_X2'M_X2 not pd".to_string())?
-            .solve(Mat::identity(mx2t_mx2.nrows(), mx2t_mx2.ncols()));
-        let xi = mx2t_mx2_inv
-            .as_ref()
-            .into_ndarray()
-            .to_owned()
-            .dot(&mx2t_my);
+            .solve(&ndarray::Array2::<f64>::eye(mx2t_mx2.nrows()));
+        let xi = mx2t_mx2_inv.view().to_owned().dot(&mx2t_my);
         let fitted = mx2.dot(&xi);
         let ss_resid_partial: f64 = my
             .iter()
@@ -277,18 +264,11 @@ pub(crate) fn compute_first_stage_summary(
             let cov_gamma2 = cov_gamma.slice(ndarray::s![k1.., k1..]).into_owned();
             let cov_gamma2_inv = cov_gamma2
                 .view()
-                .into_faer()
                 .to_owned()
-                .llt(Side::Lower)
+                .cholesky()
                 .map_err(|_| "IV2SLS firststage: cov_gamma2 not pd".to_string())?
-                .solve(Mat::identity(cov_gamma2.nrows(), cov_gamma2.ncols()));
-            let wald = gamma2.dot(
-                &cov_gamma2_inv
-                    .as_ref()
-                    .into_ndarray()
-                    .to_owned()
-                    .dot(&gamma2),
-            );
+                .solve(&ndarray::Array2::<f64>::eye(cov_gamma2.nrows()));
+            let wald = gamma2.dot(&cov_gamma2_inv.view().to_owned().dot(&gamma2));
             let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
             let f_p = 1.0 - chi2.cdf(wald);
             (wald / k_iv as f64, f_p, k_iv, df_z)
@@ -365,12 +345,11 @@ pub(crate) fn compute_first_stage_summary(
             let wtw = w.t().dot(&w);
             let wtw_inv = wtw
                 .view()
-                .into_faer()
                 .to_owned()
-                .llt(Side::Lower)
+                .cholesky()
                 .map_err(|_| "IV2SLS firststage: W'W not pd".to_string())?
-                .solve(Mat::identity(wtw.nrows(), wtw.ncols()));
-            let wtw_inv_nd = wtw_inv.as_ref().into_ndarray().to_owned();
+                .solve(&ndarray::Array2::<f64>::eye(wtw.nrows()));
+            let wtw_inv_nd = wtw_inv.view().to_owned();
 
             let y1_tilde = &y1 - &w.dot(&wtw_inv_nd.dot(&w.t().dot(&y1)));
             let y1_hat_tilde = if let Some(ref y0h) = y0_hat {
@@ -386,15 +365,13 @@ pub(crate) fn compute_first_stage_summary(
                 let w_hat_t_w_hat = w_hat.t().dot(&w_hat);
                 let w_hat_t_w_hat_inv = w_hat_t_w_hat
                     .view()
-                    .into_faer()
                     .to_owned()
-                    .llt(Side::Lower)
+                    .cholesky()
                     .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
-                    .solve(Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.ncols()));
+                    .solve(&ndarray::Array2::<f64>::eye(w_hat_t_w_hat.nrows()));
                 let proj = w_hat.dot(
                     &w_hat_t_w_hat_inv
-                        .as_ref()
-                        .into_ndarray()
+                        .view()
                         .to_owned()
                         .dot(&w_hat.t().dot(&y1_hat)),
                 );

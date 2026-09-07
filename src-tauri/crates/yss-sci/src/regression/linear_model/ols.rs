@@ -1,12 +1,13 @@
 use crate::regression::covariance::{CovParams, compute_cov_beta};
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
-use faer::{Mat, Side, linalg::solvers::Solve};
+
 use ndarray::{Array1, Array2};
 use num_traits::{One, Pow, Zero};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+use yss_linalg::matrix_rank;
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 fn is_robust_cov_type(cov_type: &str) -> bool {
     matches!(
@@ -71,10 +72,10 @@ pub struct OLSResult {
 
 impl OLS {
     pub fn fit(&self) -> Result<OLSResult, String> {
-        let y = self.endog.view().into_faer_col().to_owned();
-        let x = self.exog.view().into_faer().to_owned();
+        let y = self.endog.view().to_owned();
+        let x = self.exog.view().to_owned();
 
-        let (rank, cond_no) = matrix_rank(x.as_ref().to_owned());
+        let (rank, cond_no) = matrix_rank(x.view()).unwrap_or((0, f64::INFINITY));
 
         let num_obversion = x.nrows();
         let df_redidual = num_obversion - rank;
@@ -88,14 +89,14 @@ impl OLS {
         };
 
         // 普通最小二乘
-        let xtx = x.transpose() * x.as_ref();
-        let xty = x.transpose() * y.as_ref();
+        let xtx = x.t().matmul(&x.view());
+        let xty = x.t().matmul(&y.view());
         let xtx_inv = xtx
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "OLS: X'X matrix is not positive definite (likely rank-deficient or has multicollinearity). Check your input variables.".to_string())?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let betas = xtx_inv.as_ref() * xty;
-        let y_hat = x.as_ref() * betas.as_ref();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let betas = xtx_inv.view().matmul(&xty);
+        let y_hat = x.view().matmul(&betas.view());
 
         let y_mean = y.iter().mean();
 
@@ -104,7 +105,7 @@ impl OLS {
         } else {
             y.iter().map(|v| v.pow(2)).sum::<f64>()
         };
-        let ss_residual = (y.as_ref() - y_hat.as_ref())
+        let ss_residual = (&y.view() - &y_hat.view())
             .iter()
             .map(|v| v.pow(2))
             .sum::<f64>();
@@ -118,11 +119,11 @@ impl OLS {
         let r2_adjusted = 1.0 - ms_residual / ms_total;
 
         // 残差（需在 cov_beta 之前计算）
-        let u = y - y_hat.as_ref();
+        let u = &y - &y_hat.view();
 
-        let x_nd = x.as_ref().into_ndarray().to_owned();
-        let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
-        let u_nd: Array1<f64> = u.as_ref().into_ndarray().to_owned();
+        let x_nd = x.view().to_owned();
+        let xtx_inv_nd = xtx_inv.view().to_owned();
+        let u_nd: Array1<f64> = u.view().to_owned();
 
         // 参数协方差矩阵（根据 cov_type）
         let cov_beta = compute_cov_beta(
@@ -139,7 +140,7 @@ impl OLS {
         // F 统计量：robust VCE 时用 Wald，否则用经典 F
         let (f, f_p_value) = if df_model > 0 {
             if is_robust_cov_type(&covariance_type) {
-                let betas_nd = betas.as_ref().into_ndarray().to_owned();
+                let betas_nd = betas.view().to_owned();
                 // Wald = β_s' V_s^{-1} β_s，F = Wald / df_model
                 let (beta_s, v_s) = if self.config.constant && rank > 1 {
                     (
@@ -150,12 +151,12 @@ impl OLS {
                     (betas_nd.clone(), cov_beta.clone())
                 };
                 let wald = if beta_s.len() > 0 {
-                    let v_faer = v_s.view().into_faer().to_owned();
-                    let beta_faer = beta_s.view().into_faer_col().to_owned();
-                    match v_faer.as_ref().llt(Side::Lower) {
+                    let v_matrix = v_s.view().to_owned();
+                    let beta_vector = beta_s.view().to_owned();
+                    match v_matrix.view().cholesky() {
                         Ok(llt) => {
-                            let x_sol = llt.solve(beta_faer.as_ref());
-                            beta_s.dot(&x_sol.as_ref().into_ndarray())
+                            let x_sol = llt.solve(&beta_vector.view());
+                            beta_s.dot(&x_sol.view())
                         }
                         Err(_) => 0.0, // cov 非正定（如 cluster 聚类少）时回退
                     }
@@ -192,7 +193,7 @@ impl OLS {
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
 
         // t value
-        let betas_nd = betas.as_ref().into_ndarray().to_owned();
+        let betas_nd = betas.view().to_owned();
         let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())

@@ -4,14 +4,14 @@
 //! - Prais-Winsten: preserves first observation via √(1-ρ²) transform
 //! - Cochrane-Orcutt (corc): drops first observation
 
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
 use crate::ts::serial_correlation::durbin_watson;
-use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+use yss_linalg::matrix_rank;
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 /// Transform method: Prais-Winsten (keep t=1) or Cochrane-Orcutt (drop t=1)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,23 +120,23 @@ impl Prais {
 
         let y_nd = &self.endog;
         let x_nd = &self.exog;
-        let y = y_nd.view().into_faer_col().to_owned();
-        let x = x_nd.view().into_faer().to_owned();
+        let y = y_nd.view().to_owned();
+        let x = x_nd.view().to_owned();
 
         // Initial OLS
-        let xtx = x.as_ref().transpose() * x.as_ref();
-        let xty = x.as_ref().transpose() * y.as_ref();
+        let xtx = x.t().matmul(&x.view());
+        let xty = x.t().matmul(&y.view());
         let xtx_inv = xtx
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| {
                 "Prais: X'X is singular (rank-deficient). Check for multicollinearity.".to_string()
             })?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let betas_init = xtx_inv.as_ref() * xty.as_ref();
-        let y_hat_init = x.as_ref() * betas_init.as_ref();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let betas_init = xtx_inv.view().matmul(&xty.view());
+        let y_hat_init = x.view().matmul(&betas_init.view());
         let u_init: Vec<f64> = y
             .iter()
-            .zip(y_hat_init.as_ref().iter())
+            .zip(y_hat_init.view().iter())
             .map(|(a, b)| a - b)
             .collect();
 
@@ -195,28 +195,26 @@ impl Prais {
             };
 
             let n_star = y_star.len();
-            let x_star_faer = x_star.view().into_faer().to_owned();
-            let y_star_faer = y_star.view().into_faer_col().to_owned();
+            let x_star_matrix = x_star.view().to_owned();
+            let y_star_vector = y_star.view().to_owned();
 
-            let (rank, cond_no_val) = matrix_rank(x_star_faer.as_ref().to_owned());
+            let (rank, cond_no_val) =
+                matrix_rank(x_star_matrix.view()).unwrap_or((0, f64::INFINITY));
             cond_no = cond_no_val;
 
-            let xtx_s = x_star_faer.as_ref().transpose() * x_star_faer.as_ref();
-            let xty_s = x_star_faer.as_ref().transpose() * y_star_faer.as_ref();
+            let xtx_s = x_star_matrix.t().matmul(&x_star_matrix.view());
+            let xty_s = x_star_matrix.t().matmul(&y_star_vector.view());
 
             xtx_inv_s = xtx_s
-                .llt(Side::Lower)
+                .cholesky()
                 .map_err(|_| "Prais: transformed X'X is singular".to_string())?
-                .solve(Mat::identity(xtx_s.nrows(), xtx_s.ncols()));
-            betas = (xtx_inv_s.as_ref() * xty_s.as_ref())
-                .as_ref()
-                .into_ndarray()
-                .to_owned();
+                .solve(&ndarray::Array2::<f64>::eye(xtx_s.nrows()));
+            betas = xtx_inv_s.view().matmul(&xty_s.view()).view().to_owned();
 
-            let y_hat_star = x_star_faer.as_ref() * betas.view().into_faer_col();
-            let res_trans: Vec<f64> = y_star_faer
+            let y_hat_star = x_star_matrix.view().matmul(&betas.view());
+            let res_trans: Vec<f64> = y_star_vector
                 .iter()
-                .zip(y_hat_star.as_ref().iter())
+                .zip(y_hat_star.view().iter())
                 .map(|(a, b)| a - b)
                 .collect();
             let dw_transformed = durbin_watson(&res_trans);
@@ -237,11 +235,14 @@ impl Prais {
 
                 // All statistics based on ρ-transformed variables (Stata convention)
                 let ss_residual: f64 = res_trans.iter().map(|r| r * r).sum();
-                let y_star_mean = y_star_faer.iter().mean();
+                let y_star_mean = y_star_vector.iter().mean();
                 let ss_total: f64 = if self.config.constant {
-                    y_star_faer.iter().map(|v| (v - y_star_mean).powi(2)).sum()
+                    y_star_vector
+                        .iter()
+                        .map(|v| (v - y_star_mean).powi(2))
+                        .sum()
                 } else {
-                    y_star_faer.iter().map(|v| v.powi(2)).sum()
+                    y_star_vector.iter().map(|v| v.powi(2)).sum()
                 };
                 let ss_model = ss_total - ss_residual;
                 let r2 = 1.0 - ss_residual / ss_total;
@@ -256,7 +257,7 @@ impl Prais {
                 let f_p_value = 1.0 - dist_f.cdf(f);
 
                 // cov(β) = σ² (X*'X*)⁻¹, σ² = ms_residual
-                let xtx_inv_nd = xtx_inv_s.as_ref().into_ndarray().to_owned();
+                let xtx_inv_nd = xtx_inv_s.view().to_owned();
                 let cov_beta = ms_residual * &xtx_inv_nd;
                 let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
                 let t_values: Vec<f64> = betas
@@ -271,8 +272,8 @@ impl Prais {
                     .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
                     .collect();
                 let t_crit = t_dist.inverse_cdf(0.975);
-                let ci_lower = &betas - &(std_err.mapv(|v| t_crit * v));
-                let ci_upper = &betas + &(std_err.mapv(|v| t_crit * v));
+                let ci_lower = &betas - &std_err.mapv(|v| t_crit * v);
+                let ci_upper = &betas + &std_err.mapv(|v| t_crit * v);
 
                 let method = match self.config.transform {
                     PraisTransform::PraisWinsten => "Prais-Winsten",
@@ -316,10 +317,10 @@ impl Prais {
             }
 
             // Update residuals for next iteration: ŷ = Xβ on original data
-            let y_hat = x.as_ref() * betas.view().into_faer_col();
+            let y_hat = x.view().matmul(&betas.view());
             residuals = y
                 .iter()
-                .zip(y_hat.as_ref().iter())
+                .zip(y_hat.view().iter())
                 .map(|(a, b)| a - b)
                 .collect();
         }

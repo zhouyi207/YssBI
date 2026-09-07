@@ -1,4 +1,4 @@
-﻿// 回归诊断：BP 检验（异方差检验）等
+// 回归诊断：BP 检验（异方差检验）等
 //
 // 实现 Stata `estat hettest` 的四种变体：
 // - `estat hettest`：z = 拟合值，原始 BP 公式
@@ -6,10 +6,9 @@
 // - `estat hettest, iid`：z = 拟合值，Koenker 形式 (LM = n×R²)
 // - `estat hettest, rhs iid`：z = RHS 变量，Koenker 形式
 
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{Mat, Side, linalg::solvers::Solve};
 use ndarray::{Array1, Array2};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 /// Breusch-Pagan 异方差检验结果
 #[derive(Debug, Clone)]
@@ -23,26 +22,26 @@ pub struct BreuschPaganResult {
 }
 
 /// 辅助函数：给定 z 矩阵，计算原始 BP 统计量 LM = (1/2)·ESS
-fn bp_stat_stata(g: &Array1<f64>, z_faer: &faer::Mat<f64>) -> Result<(f64, usize), String> {
-    let m = z_faer.ncols();
-    let g_col = g.view().into_faer_col().to_owned();
+fn bp_stat_stata(g: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64, usize), String> {
+    let m = z_matrix.ncols();
+    let g_col = g.view().to_owned();
 
-    let ztz = z_faer.as_ref().transpose() * z_faer.as_ref();
-    let ztg = z_faer.as_ref().transpose() * g_col.as_ref();
+    let ztz = z_matrix.t().matmul(&z_matrix.view());
+    let ztg = z_matrix.t().matmul(&g_col.view());
 
     let ztz_inv = ztz
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "BP: Z'Z singular in auxiliary regression".to_string())?
-        .solve(Mat::identity(ztz.nrows(), ztz.ncols()));
-    let gamma = ztz_inv.as_ref() * ztg;
-    let g_hat = z_faer.as_ref() * gamma.as_ref();
+        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
+    let gamma = ztz_inv.view().matmul(&ztg);
+    let g_hat = z_matrix.view().matmul(&gamma.view());
 
     let g_mean = 1.0;
-    let tss: f64 = g_col.as_ref().iter().map(|v| (v - g_mean).powi(2)).sum();
+    let tss: f64 = g_col.view().iter().map(|v| (v - g_mean).powi(2)).sum();
     let rss: f64 = g_col
-        .as_ref()
+        .view()
         .iter()
-        .zip(g_hat.as_ref().iter())
+        .zip(g_hat.view().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     let ess = tss - rss;
@@ -53,27 +52,30 @@ fn bp_stat_stata(g: &Array1<f64>, z_faer: &faer::Mat<f64>) -> Result<(f64, usize
 }
 
 /// 辅助函数：给定 z 矩阵，计算 Koenker 统计量 LM = n×R²（假定 g 均值为 1）
-fn bp_stat_koenker(g: &Array1<f64>, z_faer: &faer::Mat<f64>) -> Result<(f64, usize), String> {
+fn bp_stat_koenker(
+    g: &Array1<f64>,
+    z_matrix: &ndarray::Array2<f64>,
+) -> Result<(f64, usize), String> {
     let n = g.len();
-    let m = z_faer.ncols();
-    let g_col = g.view().into_faer_col().to_owned();
+    let m = z_matrix.ncols();
+    let g_col = g.view().to_owned();
 
-    let ztz = z_faer.as_ref().transpose() * z_faer.as_ref();
-    let ztg = z_faer.as_ref().transpose() * g_col.as_ref();
+    let ztz = z_matrix.t().matmul(&z_matrix.view());
+    let ztg = z_matrix.t().matmul(&g_col.view());
 
     let ztz_inv = ztz
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "BP: Z'Z singular in auxiliary regression".to_string())?
-        .solve(Mat::identity(ztz.nrows(), ztz.ncols()));
-    let gamma = ztz_inv.as_ref() * ztg;
-    let g_hat = z_faer.as_ref() * gamma.as_ref();
+        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
+    let gamma = ztz_inv.view().matmul(&ztg);
+    let g_hat = z_matrix.view().matmul(&gamma.view());
 
     let g_mean = 1.0;
-    let tss: f64 = g_col.as_ref().iter().map(|v| (v - g_mean).powi(2)).sum();
+    let tss: f64 = g_col.view().iter().map(|v| (v - g_mean).powi(2)).sum();
     let rss: f64 = g_col
-        .as_ref()
+        .view()
         .iter()
-        .zip(g_hat.as_ref().iter())
+        .zip(g_hat.view().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
 
@@ -110,8 +112,8 @@ pub fn breusch_pagan_stata_rhs(
     }
     let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
 
-    let z_faer = x.view().into_faer().to_owned();
-    let (lm_stat, df) = bp_stat_stata(&g, &z_faer)?;
+    let z_matrix = x.view().to_owned();
+    let (lm_stat, df) = bp_stat_stata(&g, &z_matrix)?;
 
     if df == 0 {
         return Ok(BreuschPaganResult {
@@ -159,8 +161,8 @@ pub fn breusch_pagan_koenker_rhs(
     }
     let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
 
-    let z_faer = x.view().into_faer().to_owned();
-    let (lm_stat, df) = bp_stat_koenker(&g, &z_faer)?;
+    let z_matrix = x.view().to_owned();
+    let (lm_stat, df) = bp_stat_koenker(&g, &z_matrix)?;
 
     if df == 0 {
         return Ok(BreuschPaganResult {
@@ -182,8 +184,8 @@ pub fn breusch_pagan_koenker_rhs(
 }
 
 /// 构建 z = [1, fitted_values] 矩阵
-fn build_z_fitted(n: usize, fitted: &Array1<f64>) -> faer::Mat<f64> {
-    let mut z = faer::Mat::zeros(n, 2);
+fn build_z_fitted(n: usize, fitted: &Array1<f64>) -> ndarray::Array2<f64> {
+    let mut z = ndarray::Array2::<f64>::zeros((n, 2));
     for i in 0..n {
         z[(i, 0)] = 1.0;
         z[(i, 1)] = fitted[i];
@@ -217,8 +219,8 @@ pub fn breusch_pagan_stata(
     }
     let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
 
-    let z_faer = build_z_fitted(n, fitted_values);
-    let (lm_stat, df) = bp_stat_stata(&g, &z_faer)?;
+    let z_matrix = build_z_fitted(n, fitted_values);
+    let (lm_stat, df) = bp_stat_stata(&g, &z_matrix)?;
 
     if df == 0 {
         return Ok(BreuschPaganResult {
@@ -265,8 +267,8 @@ pub fn breusch_pagan_koenker(
     }
     let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
 
-    let z_faer = build_z_fitted(n, fitted_values);
-    let (lm_stat, df) = bp_stat_koenker(&g, &z_faer)?;
+    let z_matrix = build_z_fitted(n, fitted_values);
+    let (lm_stat, df) = bp_stat_koenker(&g, &z_matrix)?;
 
     if df == 0 {
         return Ok(BreuschPaganResult {
@@ -286,4 +288,3 @@ pub fn breusch_pagan_koenker(
         p_value,
     })
 }
-

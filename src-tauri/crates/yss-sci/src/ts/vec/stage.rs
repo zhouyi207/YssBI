@@ -1,4 +1,4 @@
-﻿/// 对 y (T×K) 做一阶差分，首行 NaN
+/// 对 y (T×K) 做一阶差分，首行 NaN
 fn diff_y(y: &Array2<f64>) -> Array2<f64> {
     let (n, k) = (y.nrows(), y.ncols());
     let mut dy = Array2::zeros((n, k));
@@ -27,7 +27,7 @@ pub(crate) struct JohansenStage1 {
     pub s11: Array2<f64>,
     /// (列索引, λ)，λ 降序
     pub eval_pairs: Vec<(usize, f64)>,
-    /// 特征向量矩阵实部（m1×m1），与 faer 复特征向量 U 的 .re 一致
+    /// 特征向量矩阵实部（m1×m1），保留复特征向量的实部
     pub u_eigen_real: Array2<f64>,
 }
 
@@ -61,10 +61,7 @@ pub(crate) fn johansen_stage1(
     let m2 = n_lag_dy + if has_const { 1 } else { 0 } + if has_trend { 1 } else { 0 } + m_si;
 
     if n <= m2 {
-        return Err(format!(
-            "VEC: need n > m2 ({}), got n={}",
-            m2, n
-        ));
+        return Err(format!("VEC: need n > m2 ({}), got n={}", m2, n));
     }
 
     let mut z0 = Array2::zeros((n, k));
@@ -101,19 +98,19 @@ pub(crate) fn johansen_stage1(
     }
 
     let t_inv = 1.0 / (n as f64);
-    let m02 = (z0.t().dot(&z2)) * t_inv;
-    let m12 = (z1.t().dot(&z2)) * t_inv;
-    let m22 = (z2.t().dot(&z2)) * t_inv;
+    let m02 = z0.t().dot(&z2) * t_inv;
+    let m12 = z1.t().dot(&z2) * t_inv;
+    let m22 = z2.t().dot(&z2) * t_inv;
 
-    let m22_faer = m22.view().into_faer().to_owned();
-    let m22_inv = m22_faer
-        .as_ref()
-        .llt(Side::Lower)
+    let m22_matrix = m22.view().to_owned();
+    let m22_inv = m22_matrix
+        .view()
+        .cholesky()
         .map_err(|_| "VEC: M22 not positive definite (collinearity in Z2)".to_string())?
-        .solve(Mat::identity(m22.nrows(), m22.ncols()));
+        .solve(&ndarray::Array2::<f64>::eye(m22.nrows()));
 
-    let m02_m22i = m02.view().into_faer().to_owned() * m22_inv.as_ref();
-    let m12_m22i = m12.view().into_faer().to_owned() * m22_inv.as_ref();
+    let m02_m22i = m02.view().to_owned().matmul(&m22_inv.view());
+    let m12_m22i = m12.view().to_owned().matmul(&m22_inv.view());
 
     let mut r0 = z0.clone();
     let mut r1 = z1.clone();
@@ -121,46 +118,50 @@ pub(crate) fn johansen_stage1(
         for j in 0..k {
             let mut s = 0.0;
             for c in 0..m2 {
-                s += m02_m22i.as_ref()[(j, c)] * z2[[i, c]];
+                s += m02_m22i.view()[(j, c)] * z2[[i, c]];
             }
             r0[[i, j]] -= s;
         }
         for j in 0..m1 {
             let mut s = 0.0;
             for c in 0..m2 {
-                s += m12_m22i.as_ref()[(j, c)] * z2[[i, c]];
+                s += m12_m22i.view()[(j, c)] * z2[[i, c]];
             }
             r1[[i, j]] -= s;
         }
     }
 
-    let s00 = (r0.t().dot(&r0)) * t_inv;
-    let s01 = (r0.t().dot(&r1)) * t_inv;
-    let s10 = (r1.t().dot(&r0)) * t_inv;
-    let s11 = (r1.t().dot(&r1)) * t_inv;
+    let s00 = r0.t().dot(&r0) * t_inv;
+    let s01 = r0.t().dot(&r1) * t_inv;
+    let s10 = r1.t().dot(&r0) * t_inv;
+    let s11 = r1.t().dot(&r1) * t_inv;
 
-    let s00_faer = s00.view().into_faer().to_owned();
-    let s00_inv = s00_faer
-        .as_ref()
-        .llt(Side::Lower)
+    let s00_matrix = s00.view().to_owned();
+    let s00_inv = s00_matrix
+        .view()
+        .cholesky()
         .map_err(|_| "VEC: S00 not positive definite".to_string())?
-        .solve(Mat::identity(s00.nrows(), s00.ncols()));
+        .solve(&ndarray::Array2::<f64>::eye(s00.nrows()));
 
-    let s11_faer = s11.view().into_faer().to_owned();
-    let s11_inv = s11_faer
-        .as_ref()
-        .llt(Side::Lower)
+    let s11_matrix = s11.view().to_owned();
+    let s11_inv = s11_matrix
+        .view()
+        .cholesky()
         .map_err(|_| "VEC: S11 not positive definite".to_string())?
-        .solve(Mat::identity(s11.nrows(), s11.ncols()));
+        .solve(&ndarray::Array2::<f64>::eye(s11.nrows()));
 
-    let s10_s00i_s01 = s10.view().into_faer().to_owned() * s00_inv.as_ref() * s01.view().into_faer();
-    let e_mat = s11_inv.as_ref() * s10_s00i_s01.as_ref();
+    let s10_s00i_s01 = s10
+        .view()
+        .to_owned()
+        .matmul(&s00_inv.view())
+        .matmul(&s01.view());
+    let e_mat = s11_inv.view().matmul(&s10_s00i_s01.view());
 
-    let evd = faer::linalg::solvers::Eigen::new_from_real(e_mat.as_ref())
+    let evd = yss_linalg::Eigen::factor(e_mat.view())
         .map_err(|_| "VEC: eigenvalue decomposition failed".to_string())?;
 
-    let s_diag = evd.S().column_vector();
-    let u_c = evd.U();
+    let s_diag = evd.values();
+    let u_c = evd.vectors();
     let u_nr = u_c.nrows();
     let u_nc = u_c.ncols();
     let mut u_eigen_real = Array2::zeros((u_nr, u_nc));
@@ -172,7 +173,7 @@ pub(crate) fn johansen_stage1(
 
     let mut eval_pairs: Vec<(usize, f64)> = (0..m1)
         .map(|i| {
-            let ev = s_diag.get(i);
+            let ev = s_diag[i];
             (i, ev.re)
         })
         .collect();

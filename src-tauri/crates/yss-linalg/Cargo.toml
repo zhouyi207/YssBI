@@ -1,0 +1,9 @@
+[package]
+name = "yss-linalg"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+
+[dependencies]
+faer = "0.24.0"
+ndarray.workspace = true

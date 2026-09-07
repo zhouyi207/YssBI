@@ -1,13 +1,13 @@
-﻿// Panel Random Effects (GLS with variance components)
+// Panel Random Effects (GLS with variance components)
 //
 // Quasi-demeaning: y*_it = y_it - θ_i·ȳ_i, where θ_i = 1 - sqrt(σ²_e/(T_i·σ²_u + σ²_e)).
 // Stata xtreg, re default: consistent variance components (harmonic mean T̄ for σ²_u).
 
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::linalg::solvers::Solve;
-use faer::{Mat, Side};
+
+use yss_linalg::{MatrixExt, Solve};
+
 use ndarray::{Array1, Array2};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use std::collections::HashMap;
@@ -51,11 +51,7 @@ fn between_transform(v: &[f64], entity_id: &[usize]) -> Array1<f64> {
         .map(|i| {
             let eid = entity_id[i];
             let (s, cnt) = sums.get(&eid).copied().unwrap_or((0.0, 0));
-            if cnt > 0 {
-                s / cnt as f64
-            } else {
-                v[i]
-            }
+            if cnt > 0 { s / cnt as f64 } else { v[i] }
         })
         .collect();
     Array1::from_vec(out)
@@ -74,7 +70,11 @@ fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>
     }
     let n = cnt.len();
     let inv_sum: f64 = cnt.values().map(|&t| 1.0 / (t as f64).max(1e-10)).sum();
-    let t_bar_harmonic = if inv_sum > 1e-300 { n as f64 / inv_sum } else { 0.0 };
+    let t_bar_harmonic = if inv_sum > 1e-300 {
+        n as f64 / inv_sum
+    } else {
+        0.0
+    };
     (cnt, t_bar_harmonic)
 }
 
@@ -117,7 +117,10 @@ fn group_means(
     let mut x_means = Vec::new();
     for &gid in &gids {
         let (sy, cy) = sums_y.get(&gid).copied().unwrap_or((0.0, 0));
-        let (sx, cx) = sums_x.get(&gid).cloned().unwrap_or_else(|| (vec![0.0; k], 0));
+        let (sx, cx) = sums_x
+            .get(&gid)
+            .cloned()
+            .unwrap_or_else(|| (vec![0.0; k], 0));
         y_means.push(if cy > 0 { sy / cy as f64 } else { 0.0 });
         x_means.push(if cx > 0 {
             sx.iter().map(|v| v / cx as f64).collect()
@@ -127,4 +130,3 @@ fn group_means(
     }
     (gids, y_means, x_means)
 }
-

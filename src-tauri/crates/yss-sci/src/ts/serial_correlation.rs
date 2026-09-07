@@ -2,10 +2,9 @@
 //!
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{Side, linalg::solvers::Solve};
 use ndarray::Array1;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 /// Durbin-Watson 统计量（Stata estat dwatson）
 /// d = Σ(e_t - e_{t-1})² / Σ(e_t)²
@@ -112,16 +111,16 @@ pub fn breusch_godfrey(
     let z_arr = ndarray::Array2::from_shape_vec((n_aux, p + k), z_data).ok()?;
     let y_arr = Array1::from_vec(y_data);
 
-    let z_faer = z_arr.view().into_faer().to_owned();
-    let y_col = y_arr.view().into_faer_col().to_owned();
+    let z_matrix = z_arr.view().to_owned();
+    let y_col = y_arr.view().to_owned();
 
-    let ztz = z_faer.as_ref().transpose() * z_faer.as_ref();
-    let zty = z_faer.as_ref().transpose() * y_col.as_ref();
+    let ztz = z_matrix.t().matmul(&z_matrix.view());
+    let zty = z_matrix.t().matmul(&y_col.view());
 
-    let ztz_llt = ztz.llt(Side::Lower).ok()?;
-    let gamma = ztz_llt.solve(zty.as_ref());
-    let y_hat = z_faer.as_ref() * gamma.as_ref();
-    let y_hat_nd = y_hat.as_ref().into_ndarray().to_owned();
+    let ztz_llt = ztz.cholesky().ok()?;
+    let gamma = ztz_llt.solve(&zty.view());
+    let y_hat = z_matrix.view().matmul(&gamma.view());
+    let y_hat_nd = y_hat.view().to_owned();
     let y_hat_vec: Vec<f64> = y_hat_nd.iter().copied().collect();
 
     let rss: f64 = y_arr

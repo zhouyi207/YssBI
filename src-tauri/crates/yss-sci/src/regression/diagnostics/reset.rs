@@ -1,4 +1,4 @@
-﻿// ======================== Ramsey RESET 检验 ========================
+// ======================== Ramsey RESET 检验 ========================
 // 对应 Stata estat ovtest 和 estat ovtest, rhs
 // Ramsey (1969) regression specification-error test for omitted variables
 
@@ -44,7 +44,8 @@ fn f_test_restricted_unrestricted(
     let (rss_r, rss_u, df_resid_u) = if let Some(w) = weights {
         let sqrt_w: Array1<f64> = w.mapv(|v| v.sqrt());
         let y_w: Array1<f64> = y.iter().zip(sqrt_w.iter()).map(|(a, b)| a * b).collect();
-        let x_r_w: Array2<f64> = Array2::from_shape_fn((n, k), |(i, j)| x_restricted[[i, j]] * sqrt_w[i]);
+        let x_r_w: Array2<f64> =
+            Array2::from_shape_fn((n, k), |(i, j)| x_restricted[[i, j]] * sqrt_w[i]);
         let mut x_u_w = x_r_w.clone();
         for i in 0..n {
             for j in 0..q {
@@ -84,20 +85,20 @@ fn f_test_restricted_unrestricted(
 }
 
 fn ols_rss(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
-    let y_col = y.view().into_faer_col().to_owned();
-    let x_faer = x.view().into_faer().to_owned();
-    let xtx = x_faer.as_ref().transpose() * x_faer.as_ref();
-    let xty = x_faer.as_ref().transpose() * y_col.as_ref();
+    let y_col = y.view().to_owned();
+    let x_matrix = x.view().to_owned();
+    let xtx = x_matrix.t().matmul(&x_matrix.view());
+    let xty = x_matrix.t().matmul(&y_col.view());
     let xtx_inv = xtx
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "RESET: X'X singular in auxiliary regression".to_string())?
-        .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-    let beta = xtx_inv.as_ref() * xty.as_ref();
-    let y_hat = x_faer.as_ref() * beta.as_ref();
+        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+    let beta = xtx_inv.view().matmul(&xty.view());
+    let y_hat = x_matrix.view().matmul(&beta.view());
     let rss: f64 = y_col
-        .as_ref()
+        .view()
         .iter()
-        .zip(y_hat.as_ref().iter())
+        .zip(y_hat.view().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     Ok(rss)
@@ -139,13 +140,17 @@ pub fn reset_test_rhs(
     let mut z_cols: Vec<Vec<f64>> = Vec::new();
     for j in 0..x.ncols() {
         let col: Vec<f64> = (0..n).map(|i| x[[i, j]]).collect();
-        let (min, max) = col.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| {
-            (a.min(v), b.max(v))
-        });
+        let (min, max) = col
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| {
+                (a.min(v), b.max(v))
+            });
         if (max - min) < 1e-10 {
             continue;
         }
-        let is_binary = col.iter().all(|&v| v.abs() < 1e-10 || (v - 1.0).abs() < 1e-10);
+        let is_binary = col
+            .iter()
+            .all(|&v| v.abs() < 1e-10 || (v - 1.0).abs() < 1e-10);
         if is_binary {
             continue;
         }
@@ -167,4 +172,3 @@ pub fn reset_test_rhs(
     }
     f_test_restricted_unrestricted(y, x, &z, weights)
 }
-

@@ -1,10 +1,12 @@
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
-use faer::{Mat, Side, linalg::solvers::Solve};
+use yss_linalg::SolveLowerTriangular;
+
 use ndarray::{Array1, Array2};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
+use yss_linalg::matrix_rank;
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 pub struct GLSConfig {
     pub constant: bool,
@@ -55,33 +57,34 @@ impl GLS {
         let l = self
             .sigma
             .view()
-            .into_faer()
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "GLS: Sigma is not positive definite".to_string())?
-            .L()
+            .lower()
             .to_owned();
 
-        let mut endog = self.endog.view().into_faer_col().to_owned();
-        let mut exog = self.exog.view().into_faer().to_owned();
+        let mut endog = self.endog.view().to_owned();
+        let mut exog = self.exog.view().to_owned();
 
-        l.as_ref().solve_lower_triangular_in_place(endog.as_mut());
-        l.as_ref().solve_lower_triangular_in_place(exog.as_mut());
+        l.view()
+            .solve_lower_triangular_in_place(&mut endog.view_mut());
+        l.view()
+            .solve_lower_triangular_in_place(&mut exog.view_mut());
 
-        let (rank, cond_no) = matrix_rank(exog.as_ref().to_owned());
+        let (rank, cond_no) = matrix_rank(exog.view()).unwrap_or((0, f64::INFINITY));
         let n = exog.nrows();
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
 
-        let xtx = exog.as_ref().transpose() * exog.as_ref();
-        let xty = exog.as_ref().transpose() * endog.as_ref();
+        let xtx = exog.t().matmul(&exog.view());
+        let xty = exog.t().matmul(&endog.view());
 
         let xtx_inv = xtx
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| "GLS: X'Sigma^{-1}X is not positive definite".to_string())?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let betas = xtx_inv.as_ref() * xty;
-        let y_hat = exog.as_ref() * betas.as_ref();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let betas = xtx_inv.view().matmul(&xty);
+        let y_hat = exog.view().matmul(&betas.view());
 
         let y_mean = endog.iter().mean();
         let ss_total = if self.config.constant {
@@ -89,7 +92,7 @@ impl GLS {
         } else {
             endog.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (endog.as_ref() - y_hat.as_ref())
+        let ss_residual = (&endog.view() - &y_hat.view())
             .iter()
             .map(|v| v.powi(2))
             .sum::<f64>();
@@ -109,9 +112,9 @@ impl GLS {
             FisherSnedecor::new(df1, df2).map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
-        let cov_beta = xtx_inv.as_ref().into_ndarray().to_owned();
+        let cov_beta = xtx_inv.view().to_owned();
         let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
-        let betas_nd = betas.as_ref().into_ndarray().to_owned();
+        let betas_nd = betas.view().to_owned();
         let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())

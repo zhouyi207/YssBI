@@ -31,5 +31,5 @@ pub mod time_series {
 }
 
 pub mod tools {
-    pub use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, StandardizeTransform1D};
+    pub use crate::tools::StandardizeTransform1D;
 }

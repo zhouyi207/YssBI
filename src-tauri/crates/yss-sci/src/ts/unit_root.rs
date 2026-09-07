@@ -6,10 +6,10 @@
 //! - trend: 常数 + 时间趋势
 
 use super::distributions::normal_cdf;
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{Mat, Side, linalg::solvers::Solve};
+
 use ndarray::{Array1, Array2};
 use statrs::distribution::{ContinuousCDF, StudentsT};
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 /// 回归类型（对应 Stata dfuller 选项）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,30 +221,30 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     let endog = Array1::from_vec(y_endog);
 
     // OLS: β = (X'X)^{-1} X'y
-    let x = exog.view().into_faer().to_owned();
-    let y_col = endog.view().into_faer_col().to_owned();
+    let x = exog.view().to_owned();
+    let y_col = endog.view().to_owned();
 
-    let xtx = x.transpose() * x.as_ref();
-    let xty = x.transpose() * y_col.as_ref();
+    let xtx = x.t().matmul(&x.view());
+    let xty = x.t().matmul(&y_col.view());
 
     let xtx_inv = xtx
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "ADF: 设计矩阵秩不足".to_string())?
-        .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
+        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
 
-    let betas = xtx_inv.as_ref() * xty.as_ref();
-    let y_hat = x.as_ref() * betas.as_ref();
-    let u = y_col.as_ref() - y_hat.as_ref();
+    let betas = xtx_inv.view().matmul(&xty.view());
+    let y_hat = x.view().matmul(&betas.view());
+    let u = &y_col.view() - &y_hat.view();
 
     let rss: f64 = u.iter().map(|v| v * v).sum();
     let df_resid = (n_obs - ncols).max(1);
     let sigma2 = rss / df_resid as f64;
 
-    let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
+    let xtx_inv_nd = xtx_inv.view().to_owned();
     let cov_beta = sigma2 * &xtx_inv_nd;
 
     // y_{t-1} 的系数在列 lagged_col
-    let betas_nd = betas.as_ref().into_ndarray().to_owned();
+    let betas_nd = betas.view().to_owned();
     let coef_lagged = betas_nd[lagged_col];
     let var_lagged = cov_beta[[lagged_col, lagged_col]];
     let std_err_lagged = if var_lagged > 0.0 {

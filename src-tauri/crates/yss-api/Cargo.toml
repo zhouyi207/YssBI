@@ -35,7 +35,7 @@ yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-graph-registry = { path = "../yss-graph-registry" }
 yss-julia-runtime = { path = "../yss-julia-runtime" }
 yss-julia-worker = { path = "../yss-julia-worker" }
-yss-math = { path = "../yss-math" }
+yss-math-expr = { path = "../yss-math-expr" }
 yss-project = { path = "../yss-project" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }

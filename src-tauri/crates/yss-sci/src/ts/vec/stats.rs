@@ -1,4 +1,4 @@
-﻿/// 协整方程 chi2 (Stata Cointegrating equations 表): Wald 检验自由参数
+/// 协整方程 chi2 (Stata Cointegrating equations 表): Wald 检验自由参数
 fn compute_cointegrating_equations_chi2(
     beta: &Array2<f64>,
     alpha: &Array2<f64>,
@@ -21,30 +21,38 @@ fn compute_cointegrating_equations_chi2(
             .collect();
     }
 
-    let omega_faer = omega.view().into_faer().to_owned();
-    let omega_inv = match omega_faer.as_ref().llt(Side::Lower) {
-        Ok(llt) => llt.solve(Mat::identity(k, k)),
-        Err(_) => return (0..r).map(|j| VECCointegratingEquationStats {
-            eq_name: format!("_ce{}", j + 1),
-            parms: n_free,
-            chi2: 0.0,
-            p_chi2: 1.0,
-        }).collect(),
+    let omega_matrix = omega.view().to_owned();
+    let omega_inv = match omega_matrix.view().cholesky() {
+        Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(k)),
+        Err(_) => {
+            return (0..r)
+                .map(|j| VECCointegratingEquationStats {
+                    eq_name: format!("_ce{}", j + 1),
+                    parms: n_free,
+                    chi2: 0.0,
+                    p_chi2: 1.0,
+                })
+                .collect();
+        }
     };
 
     // A = α' Ω^{-1} α (r×r)
     let alpha_t = alpha.t();
-    let omega_inv_nd = omega_inv.as_ref().into_ndarray().to_owned();
+    let omega_inv_nd = omega_inv.view().to_owned();
     let alpha_oa_nd = alpha_t.dot(&omega_inv_nd).dot(alpha);
-    let alpha_oa = alpha_oa_nd.view().into_faer().to_owned();
-    let a_inv = match alpha_oa.as_ref().llt(Side::Lower) {
-        Ok(llt) => llt.solve(Mat::identity(r, r)),
-        Err(_) => return (0..r).map(|j| VECCointegratingEquationStats {
-            eq_name: format!("_ce{}", j + 1),
-            parms: n_free,
-            chi2: 0.0,
-            p_chi2: 1.0,
-        }).collect(),
+    let alpha_oa = alpha_oa_nd.view().to_owned();
+    let a_inv = match alpha_oa.view().cholesky() {
+        Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(r)),
+        Err(_) => {
+            return (0..r)
+                .map(|j| VECCointegratingEquationStats {
+                    eq_name: format!("_ce{}", j + 1),
+                    parms: n_free,
+                    chi2: 0.0,
+                    p_chi2: 1.0,
+                })
+                .collect();
+        }
     };
 
     let s11_bottom = s11.slice(ndarray::s![r..k, r..k]).to_owned();
@@ -53,7 +61,7 @@ fn compute_cointegrating_equations_chi2(
     let mut result = Vec::with_capacity(r);
     for j in 0..r {
         let beta_free: Array1<f64> = Array1::from_iter((r..k).map(|i| beta[[i, j]]));
-        let a_inv_jj = a_inv.as_ref()[(j, j)].max(1e-300);
+        let a_inv_jj = a_inv.view()[(j, j)].max(1e-300);
         let b_beta = b_mat.dot(&beta_free);
         let chi2 = (n - d) as f64 * (1.0 / a_inv_jj) * beta_free.dot(&b_beta);
         let chi2 = chi2.max(0.0);
@@ -98,32 +106,32 @@ fn compute_beta_ce_stats(
         return (std_err, z_val, p_val, ci_lo, ci_hi);
     }
 
-    let omega_faer = omega.view().into_faer().to_owned();
-    let omega_inv = match omega_faer.as_ref().llt(Side::Lower) {
-        Ok(llt) => llt.solve(Mat::identity(k, k)),
+    let omega_matrix = omega.view().to_owned();
+    let omega_inv = match omega_matrix.view().cholesky() {
+        Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(k)),
         Err(_) => return (std_err, z_val, p_val, ci_lo, ci_hi),
     };
 
     let alpha_t = alpha.t();
-    let omega_inv_nd = omega_inv.as_ref().into_ndarray().to_owned();
+    let omega_inv_nd = omega_inv.view().to_owned();
     let alpha_oa_nd = alpha_t.dot(&omega_inv_nd).dot(alpha);
-    let alpha_oa = alpha_oa_nd.view().into_faer().to_owned();
-    let a_inv = match alpha_oa.as_ref().llt(Side::Lower) {
-        Ok(llt) => llt.solve(Mat::identity(r, r)),
+    let alpha_oa = alpha_oa_nd.view().to_owned();
+    let a_inv = match alpha_oa.view().cholesky() {
+        Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(r)),
         Err(_) => return (std_err, z_val, p_val, ci_lo, ci_hi),
     };
 
     let s11_bottom = s11.slice(ndarray::s![r..k, r..k]).to_owned();
-    let s11_bottom_faer = s11_bottom.view().into_faer().to_owned();
-    let b_inv = match s11_bottom_faer.as_ref().llt(Side::Lower) {
-        Ok(llt) => llt.solve(Mat::identity(n_free, n_free)),
+    let s11_bottom_matrix = s11_bottom.view().to_owned();
+    let b_inv = match s11_bottom_matrix.view().cholesky() {
+        Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(n_free)),
         Err(_) => return (std_err, z_val, p_val, ci_lo, ci_hi),
     };
-    let b_inv_nd = b_inv.as_ref().into_ndarray().to_owned();
+    let b_inv_nd = b_inv.view().to_owned();
 
     let scale = 1.0 / ((n - d) as f64).max(1.0);
     for j in 0..r {
-        let a_inv_jj = a_inv.as_ref()[(j, j)].max(1e-300);
+        let a_inv_jj = a_inv.view()[(j, j)].max(1e-300);
         for (ii, i) in (r..k).enumerate() {
             let coef = beta[[i, j]];
             let var_ii = scale * a_inv_jj * b_inv_nd[[ii, ii]].max(0.0);

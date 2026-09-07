@@ -1,13 +1,13 @@
-﻿// VEC (Vector Error-Correction) 协整模型
+// VEC (Vector Error-Correction) 协整模型
 //
 // 按 Stata vec 命令的 Johansen (1995) 方法实现。
 // 支持 trend(none), trend(constant), trend(trend)。
 
 use super::distributions::{chi_squared_sf, normal_cdf, normal_two_sided_p};
 use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{linalg::solvers::Solve, Mat, Side};
-use faer::linalg::solvers::Eigen;
+
+use yss_linalg::{MatMul, MatrixExt, Solve};
+
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 
@@ -138,4 +138,3 @@ pub struct VECEquationStats {
     pub chi2: f64,
     pub p_chi2: f64,
 }
-

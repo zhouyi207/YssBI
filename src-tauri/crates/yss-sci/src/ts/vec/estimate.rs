@@ -1,4 +1,3 @@
-﻿
 /// VEC 估计：Johansen 方法
 pub fn vec_estimate(
     y: &Array2<f64>,
@@ -40,35 +39,42 @@ pub fn vec_estimate(
     let m_si = sindicators.map(|s| s.ncols()).unwrap_or(0);
 
     let n_lag_dy = k * (p - 1);
-    let s11_faer = s11.view().into_faer().to_owned();
+    let s11_matrix = s11.view().to_owned();
 
-    let mut beta_tilde = Mat::zeros(m1, r);
+    let mut beta_tilde = ndarray::Array2::<f64>::zeros((m1, r));
     for (col, &(idx, _)) in evals.iter().take(r).enumerate() {
         for row in 0..m1 {
-            beta_tilde.as_mut()[(row, col)] = u_eigen[[row, idx]];
+            beta_tilde.view_mut()[(row, col)] = u_eigen[[row, idx]];
         }
     }
 
     // Johansen 归一化: 前 r×r 块为 I_r
-    let beta_1 = beta_tilde.as_ref().submatrix(0, 0, r, r);
-    let beta_1_inv = beta_1.partial_piv_lu().solve(Mat::identity(r, r));
+    let beta_1 = beta_tilde.slice(ndarray::s![0..r, 0..r]);
+    let beta_1_inv = beta_1
+        .lu()
+        .map_err(|error| error.to_string())?
+        .solve(&ndarray::Array2::<f64>::eye(r));
 
-    let beta_norm = beta_tilde.as_ref() * beta_1_inv.as_ref();
+    let beta_norm = beta_tilde.view().matmul(&beta_1_inv.view());
 
-    let beta_s11_beta = (beta_norm.as_ref().transpose() * s11_faer.as_ref() * beta_norm.as_ref()).to_owned();
+    let beta_s11_beta = beta_norm
+        .t()
+        .matmul(&s11_matrix.view())
+        .matmul(&beta_norm.view())
+        .to_owned();
     let beta_s11_beta_inv = beta_s11_beta
-        .as_ref()
-        .llt(Side::Lower)
+        .view()
+        .cholesky()
         .map_err(|_| "VEC: beta' S11 beta not positive definite".to_string())?
-        .solve(Mat::identity(r, r));
+        .solve(&ndarray::Array2::<f64>::eye(r));
 
-    let s01_beta = s01.view().into_faer().to_owned() * beta_norm.as_ref();
-    let alpha_mat = s01_beta.as_ref() * beta_s11_beta_inv.as_ref();
+    let s01_beta = s01.view().to_owned().matmul(&beta_norm.view());
+    let alpha_mat = s01_beta.view().matmul(&beta_s11_beta_inv.view());
 
-    let alpha_beta_s10 = alpha_mat.as_ref() * beta_norm.as_ref().transpose() * s10.view().into_faer();
-    let omega = (s00.view().into_faer().to_owned() - alpha_beta_s10.as_ref()).to_owned();
+    let alpha_beta_s10 = alpha_mat.view().matmul(&beta_norm.t()).matmul(&s10.view());
+    let omega = (&s00.view().to_owned() - &alpha_beta_s10.view()).to_owned();
 
-    let omega_nd = omega.as_ref().into_ndarray().to_owned();
+    let omega_nd = omega.view().to_owned();
     let mut omega_chol = omega_nd.clone();
     cholesky_lower_in_place(&mut omega_chol)
         .map_err(|_| "VEC: Omega not positive definite".to_string())?;
@@ -92,10 +98,10 @@ pub fn vec_estimate(
             beta_y_data.push(beta_norm[(i, j)]);
         }
     }
-    let beta_y = Array2::from_shape_vec((k, r), beta_y_data)
-        .map_err(|_| "VEC: beta_y shape".to_string())?;
+    let beta_y =
+        Array2::from_shape_vec((k, r), beta_y_data).map_err(|_| "VEC: beta_y shape".to_string())?;
 
-    let alpha_nd = alpha_mat.as_ref().into_ndarray().to_owned();
+    let alpha_nd = alpha_mat.view().to_owned();
 
     let mut mu_rho: Vec<f64> = Vec::new();
     if has_const || has_trend {
@@ -110,18 +116,18 @@ pub fn vec_estimate(
                 x_ce[[i, r + j]] = z2[[i, j]];
             }
         }
-        let x_faer = x_ce.view().into_faer().to_owned();
-        let xt = x_faer.as_ref().transpose();
-        let xtx = xt.as_ref() * x_faer.as_ref();
+        let x_matrix = x_ce.view().to_owned();
+        let xt = x_matrix.t();
+        let xtx = xt.view().matmul(&x_matrix.view());
         let xtx_inv = xtx
-            .as_ref()
-            .llt(Side::Lower)
+            .view()
+            .cholesky()
             .map_err(|_| "VEC: X'X not positive definite in short-run regression".to_string())?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let z0_faer = z0.view().into_faer().to_owned();
-        let xty = xt.as_ref() * z0_faer.as_ref();
-        let gamma_full = xtx_inv.as_ref() * xty.as_ref();
-        let gamma_nd = gamma_full.as_ref().into_ndarray().to_owned();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let z0_matrix = z0.view().to_owned();
+        let xty = xt.view().matmul(&z0_matrix.view());
+        let gamma_full = xtx_inv.view().matmul(&xty.view());
+        let gamma_nd = gamma_full.view().to_owned();
 
         let const_row = r + n_lag_dy;
         let trend_row = r + n_lag_dy + 1;
@@ -138,22 +144,22 @@ pub fn vec_estimate(
         };
 
         let alpha_aa = alpha_nd.t().dot(&alpha_nd);
-        let alpha_aa_faer = alpha_aa.view().into_faer().to_owned();
-        let alpha_aa_inv = alpha_aa_faer
-            .as_ref()
-            .llt(Side::Lower)
+        let alpha_aa_matrix = alpha_aa.view().to_owned();
+        let alpha_aa_inv = alpha_aa_matrix
+            .view()
+            .cholesky()
             .map_err(|_| "VEC: alpha'alpha singular".to_string())?
-            .solve(Mat::identity(r, r));
+            .solve(&ndarray::Array2::<f64>::eye(r));
         if has_const && config.trend_spec == VecTrendSpec::Constant {
             let alpha_t_v = alpha_nd.t().dot(&v_hat);
-            let v_col = Mat::from_fn(r, 1, |i, _| alpha_t_v[i]);
-            let mu_col = alpha_aa_inv.as_ref() * v_col.as_ref();
+            let v_col = ndarray::Array2::from_shape_fn((r, 1), |(i, _)| alpha_t_v[i]);
+            let mu_col = alpha_aa_inv.view().matmul(&v_col.view());
             mu_rho.extend((0..r).map(|i| mu_col[(i, 0)]));
         }
         if has_trend {
             let alpha_t_d = alpha_nd.t().dot(&delta_hat);
-            let d_col = Mat::from_fn(r, 1, |i, _| alpha_t_d[i]);
-            let rho_col = alpha_aa_inv.as_ref() * d_col.as_ref();
+            let d_col = ndarray::Array2::from_shape_fn((r, 1), |(i, _)| alpha_t_d[i]);
+            let rho_col = alpha_aa_inv.view().matmul(&d_col.view());
             mu_rho.extend((0..r).map(|i| rho_col[(i, 0)]));
         }
     }
@@ -185,14 +191,14 @@ pub fn vec_estimate(
         }
     }
 
-    let x_faer = x_sr.view().into_faer().to_owned();
-    let xt = x_faer.as_ref().transpose();
-    let xtx = xt.as_ref() * x_faer.as_ref();
+    let x_matrix = x_sr.view().to_owned();
+    let xt = x_matrix.t();
+    let xtx = xt.view().matmul(&x_matrix.view());
     let xtx_inv = xtx
-        .as_ref()
-        .llt(Side::Lower)
+        .view()
+        .cholesky()
         .map_err(|_| "VEC: short-run X'X not positive definite".to_string())?
-        .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
+        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
 
     let mut coefficients = Vec::with_capacity(k);
     let mut std_errs = Vec::with_capacity(k);
@@ -206,12 +212,12 @@ pub fn vec_estimate(
 
     for eq in 0..k {
         let y_col = z0.column(eq).into_owned();
-        let y_faer = y_col.view().into_faer_col().to_owned();
-        let xty = xt.as_ref() * y_faer.as_ref();
-        let beta_sr = xtx_inv.as_ref() * xty.as_ref();
-        let y_hat = x_faer.as_ref() * beta_sr.as_ref();
-        let u = y_faer.as_ref() - y_hat.as_ref();
-        let u_nd = u.as_ref().into_ndarray().to_owned();
+        let y_vector = y_col.view().to_owned();
+        let xty = xt.view().matmul(&y_vector.view());
+        let beta_sr = xtx_inv.view().matmul(&xty.view());
+        let y_hat = x_matrix.view().matmul(&beta_sr.view());
+        let u = &y_vector.view() - &y_hat.view();
+        let u_nd = u.view().to_owned();
 
         let ss_r: f64 = u_nd.iter().map(|x| x * x).sum();
         let y_mean = y_col.mean().unwrap_or(0.0);
@@ -220,7 +226,7 @@ pub fn vec_estimate(
         let ss_t_final: f64 = ss_t;
 
         let sigma2_eq = ss_r / sigma2_divisor;
-        let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
+        let xtx_inv_nd = xtx_inv.view().to_owned();
         let cov_eq = sigma2_eq * &xtx_inv_nd;
         cov_beta.push(cov_eq.clone());
         let se: Array1<f64> = cov_eq.diag().mapv(f64::sqrt);
@@ -231,7 +237,10 @@ pub fn vec_estimate(
         }
         for lag in 1..p {
             for j in 0..k {
-                let name = var_names.get(j).cloned().unwrap_or_else(|| format!("y{}", j));
+                let name = var_names
+                    .get(j)
+                    .cloned()
+                    .unwrap_or_else(|| format!("y{}", j));
                 // Stata notation: LD = lag of difference, L2D = lag 2 of difference
                 let lag_prefix = if lag == 1 {
                     "LD.".to_string()
@@ -251,7 +260,7 @@ pub fn vec_estimate(
             labels.push(format!("sind{}", j));
         }
 
-        let beta_nd = beta_sr.as_ref().into_ndarray().to_owned();
+        let beta_nd = beta_sr.view().to_owned();
         coefficients.push(beta_nd.to_vec());
         std_errs.push(se.to_vec());
         residuals.push(u_nd.to_vec());
@@ -281,12 +290,12 @@ pub fn vec_estimate(
         let chi2 = {
             let beta = Array1::from_vec(coefficients[eq].clone());
             let v = &cov_beta[eq];
-            let v_faer = v.view().into_faer().to_owned();
-            let beta_faer = beta.view().into_faer_col().to_owned();
-            match v_faer.as_ref().llt(Side::Lower) {
+            let v_matrix = v.view().to_owned();
+            let beta_vector = beta.view().to_owned();
+            match v_matrix.view().cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(beta_faer.as_ref());
-                    let x_nd = x.as_ref().into_ndarray().to_owned();
+                    let x = llt.solve(&beta_vector.view());
+                    let x_nd = x.view().to_owned();
                     beta.dot(&x_nd)
                 }
                 Err(_) => n as f64 * r_sq / (1.0 - r_sq.max(1e-10)),
@@ -318,7 +327,10 @@ pub fn vec_estimate(
 
         let eq_name = format!(
             "D_{}",
-            var_names.get(eq).cloned().unwrap_or_else(|| format!("y{}", eq))
+            var_names
+                .get(eq)
+                .cloned()
+                .unwrap_or_else(|| format!("y{}", eq))
         );
         equations.push(VECEquationStats {
             eq_name,
@@ -330,26 +342,25 @@ pub fn vec_estimate(
         });
     }
 
-    let mut beta_out: Vec<Vec<f64>> = (0..k).map(|i| (0..r).map(|j| beta_y[[i, j]]).collect()).collect();
+    let mut beta_out: Vec<Vec<f64>> = (0..k)
+        .map(|i| (0..r).map(|j| beta_y[[i, j]]).collect())
+        .collect();
     if has_const && mu_rho.len() >= r {
         beta_out.push((0..r).map(|j| mu_rho[j]).collect());
     }
 
     // Cointegrating equations chi2 (Stata formula: Wald on free params in beta)
-    let cointegrating_equations = compute_cointegrating_equations_chi2(
-        &beta_y,
-        &alpha_nd,
-        &omega_nd,
-        &s11,
-        n,
-        d,
-        r,
-        k,
-    );
+    let cointegrating_equations =
+        compute_cointegrating_equations_chi2(&beta_y, &alpha_nd, &omega_nd, &s11, n, d, r, k);
 
     // beta 表 Stata 风格：Std. err., z, P>|z|, [95% conf. interval]（Stata 公式 15）
-    let (mut beta_std_err, mut beta_z_value, mut beta_p_value, mut beta_ci_lower, mut beta_ci_upper) =
-        compute_beta_ce_stats(&beta_y, &alpha_nd, &omega_nd, &s11, n, d, r, k);
+    let (
+        mut beta_std_err,
+        mut beta_z_value,
+        mut beta_p_value,
+        mut beta_ci_lower,
+        mut beta_ci_upper,
+    ) = compute_beta_ce_stats(&beta_y, &alpha_nd, &omega_nd, &s11, n, d, r, k);
     if has_const {
         beta_std_err.push(vec![None; r]);
         beta_z_value.push(vec![None; r]);
@@ -385,30 +396,32 @@ pub fn vec_estimate(
             break;
         }
         let mut x_aug = Array2::zeros((n, n_z_aug_base));
-        x_aug.slice_mut(ndarray::s![.., ..n_z_sr]).assign(&x_sr.view());
+        x_aug
+            .slice_mut(ndarray::s![.., ..n_z_sr])
+            .assign(&x_sr.view());
         for j in 0..k {
             for i in 0..n {
                 x_aug[[i, n_z_sr + j]] = if i >= s { residuals[j][i - s] } else { 0.0 };
             }
         }
 
-        let x_aug_faer = x_aug.view().into_faer().to_owned();
-        let xt_aug = x_aug_faer.as_ref().transpose();
-        let xtx_aug = xt_aug.as_ref() * x_aug_faer.as_ref();
-        let xtx_aug_inv = match xtx_aug.as_ref().llt(Side::Lower) {
-            Ok(llt) => llt.solve(Mat::identity(xtx_aug.nrows(), xtx_aug.ncols())),
+        let x_aug_matrix = x_aug.view().to_owned();
+        let xt_aug = x_aug_matrix.t();
+        let xtx_aug = xt_aug.view().matmul(&x_aug_matrix.view());
+        let xtx_aug_inv = match xtx_aug.view().cholesky() {
+            Ok(llt) => llt.solve(&ndarray::Array2::<f64>::eye(xtx_aug.nrows())),
             Err(_) => continue,
         };
 
         let mut u_aug = Array2::zeros((n, k));
         for eq in 0..k {
             let y_col = z0.column(eq).into_owned();
-            let y_faer = y_col.view().into_faer_col().to_owned();
-            let xty = xt_aug.as_ref() * y_faer.as_ref();
-            let beta_aug = xtx_aug_inv.as_ref() * xty.as_ref();
-            let y_hat = x_aug_faer.as_ref() * beta_aug.as_ref();
-            let u = y_faer.as_ref() - y_hat.as_ref();
-            let u_nd = u.as_ref().into_ndarray().to_owned();
+            let y_vector = y_col.view().to_owned();
+            let xty = xt_aug.view().matmul(&y_vector.view());
+            let beta_aug = xtx_aug_inv.view().matmul(&xty.view());
+            let y_hat = x_aug_matrix.view().matmul(&beta_aug.view());
+            let u = &y_vector.view() - &y_hat.view();
+            let u_nd = u.view().to_owned();
             for i in 0..n {
                 u_aug[[i, eq]] = u_nd[i];
             }
@@ -424,7 +437,8 @@ pub fn vec_estimate(
             Err(()) => continue,
         };
 
-        let lm_stat = (n as f64 - n_z_aug_base as f64 - 0.5) * (det_sigma_hat / det_sigma_tilde).ln();
+        let lm_stat =
+            (n as f64 - n_z_aug_base as f64 - 0.5) * (det_sigma_hat / det_sigma_tilde).ln();
         let lm_stat = lm_stat.max(0.0);
         let df_lm = k * k;
         let p_lm = chi_squared_sf(df_lm as f64, lm_stat);
@@ -466,26 +480,26 @@ pub fn vec_estimate(
     a_mats.push((-&gamma_mats[p - 1]).to_owned());
 
     let kp = k * p;
-    let mut companion = Mat::zeros(kp, kp);
+    let mut companion = ndarray::Array2::<f64>::zeros((kp, kp));
     for (lag_idx, a) in a_mats.iter().skip(1).enumerate() {
         for i in 0..k {
             for j in 0..k {
-                companion.as_mut()[(i, lag_idx * k + j)] = a[[i, j]];
+                companion.view_mut()[(i, lag_idx * k + j)] = a[[i, j]];
             }
         }
     }
     for block in 0..(p - 1) {
         for i in 0..k {
-            companion.as_mut()[(k + block * k + i, block * k + i)] = 1.0;
+            companion.view_mut()[(k + block * k + i, block * k + i)] = 1.0;
         }
     }
 
-    let vecstable = match Eigen::new_from_real(companion.as_ref()) {
+    let vecstable = match yss_linalg::Eigen::factor(companion.view()) {
         Ok(evd) => {
-            let s_diag = evd.S().column_vector();
+            let s_diag = evd.values();
             (0..kp)
                 .map(|i| {
-                    let ev = s_diag.get(i);
+                    let ev = s_diag[i];
                     let re = ev.re;
                     let im = ev.im;
                     let modulus = (re * re + im * im).sqrt();

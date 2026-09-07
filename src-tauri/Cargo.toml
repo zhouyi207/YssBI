@@ -53,7 +53,8 @@ members = [
   "crates/yss-graph-type-mapping",
   "crates/yss-julia-runtime",
   "crates/yss-julia-worker",
-  "crates/yss-math",
+  "crates/yss-linalg",
+  "crates/yss-math-expr",
   "crates/yss-path-display",
   "crates/yss-project",
   "crates/yss-project-change",
@@ -96,7 +97,6 @@ duckdb = { version = "1.10504.0", default-features = false, features = [
   "bundled",
   "appender-arrow",
 ] }
-faer = "0.24.0"
 mathlex = "=0.4.2"
 ndarray = "0.17.2"
 notify = "8.2.0"

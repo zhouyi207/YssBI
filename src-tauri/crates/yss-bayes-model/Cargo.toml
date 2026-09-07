@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 serde.workspace = true
-yss-math = { path = "../yss-math" }
+yss-math-expr = { path = "../yss-math-expr" }
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -3,9 +3,9 @@
 //! When X has rank deficiency (strict multicollinearity), iteratively drop columns
 //! until full rank. Removal priority: continuous > dummy > intercept.
 
-use crate::tools::{IntoFaer, matrix_rank};
 use ndarray::Array2;
 use std::collections::BTreeSet;
+use yss_linalg::matrix_rank;
 
 /// Column type for removal priority: continuous (remove first), dummy, intercept (remove last).
 fn removal_priority(j: usize, col_is_dummy: &[bool], intercept_col: Option<usize>) -> u8 {
@@ -60,8 +60,8 @@ pub fn drop_collinear_columns(
     loop {
         let keep_vec: Vec<usize> = keep.iter().copied().collect();
         let x_sub = exog.select(ndarray::Axis(1), &keep_vec);
-        let x_faer = x_sub.view().into_faer().to_owned();
-        let (rank, _) = matrix_rank(x_faer);
+        let x_matrix = x_sub.view().to_owned();
+        let (rank, _) = matrix_rank(x_matrix.view()).unwrap_or((0, f64::INFINITY));
 
         if rank == keep.len() {
             break;
@@ -82,8 +82,8 @@ pub fn drop_collinear_columns(
                 return Err("drop_collinear_columns: cannot drop all columns".to_string());
             }
             let x_new = exog.select(ndarray::Axis(1), &keep_new);
-            let x_new_faer = x_new.view().into_faer().to_owned();
-            let (rank_new, _) = matrix_rank(x_new_faer);
+            let x_new_matrix = x_new.view().to_owned();
+            let (rank_new, _) = matrix_rank(x_new_matrix.view()).unwrap_or((0, f64::INFINITY));
 
             if rank_new == keep_new.len() {
                 // Full rank achieved with this removal

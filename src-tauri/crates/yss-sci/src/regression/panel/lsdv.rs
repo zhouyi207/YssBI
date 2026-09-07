@@ -10,6 +10,7 @@ use crate::regression::covariance::CovParams;
 use crate::regression::linear_model::{OLS, OLSConfig};
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
+use yss_linalg::{MatrixExt, Solve};
 
 /// Panel LSDV estimator (Stata areg style)
 /// exog: [1, x1, x2, ...] with constant in column 0
@@ -158,19 +159,17 @@ pub fn fit_panel_lsdv(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-        use faer::{Side, linalg::solvers::Solve};
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
         let beta_s = result.betas.slice(ndarray::s![1..n_report]);
         let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
         let wald = if beta_s.len() > 0 {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            match v_faer.as_ref().llt(Side::Lower) {
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            match v_matrix.view().cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(beta_faer.as_ref());
-                    beta_s.dot(&x.as_ref().into_ndarray())
+                    let x = llt.solve(&beta_vector.view());
+                    beta_s.dot(&x.view())
                 }
                 Err(_) => {
                     // Cov not PD (e.g. cluster-robust with few clusters); fallback
@@ -378,19 +377,17 @@ pub fn fit_panel_lsdv_time(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-        use faer::{Side, linalg::solvers::Solve};
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
         let beta_s = result.betas.slice(ndarray::s![1..n_report]);
         let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
         let wald = if beta_s.len() > 0 {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            match v_faer.as_ref().llt(Side::Lower) {
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            match v_matrix.view().cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(beta_faer.as_ref());
-                    beta_s.dot(&x.as_ref().into_ndarray())
+                    let x = llt.solve(&beta_vector.view());
+                    beta_s.dot(&x.view())
                 }
                 Err(_) => {
                     // Cov not PD (e.g. cluster-robust with few clusters); fallback
@@ -610,19 +607,17 @@ pub fn fit_panel_lsdv_twoway(
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
-        use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-        use faer::{Side, linalg::solvers::Solve};
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
         let beta_s = result.betas.slice(ndarray::s![1..n_report]);
         let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
         let wald = if beta_s.len() > 0 {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            match v_faer.as_ref().llt(Side::Lower) {
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            match v_matrix.view().cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(beta_faer.as_ref());
-                    beta_s.dot(&x.as_ref().into_ndarray())
+                    let x = llt.solve(&beta_vector.view());
+                    beta_s.dot(&x.view())
                 }
                 Err(_) => 0.0,
             }

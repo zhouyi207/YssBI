@@ -1,5 +1,5 @@
 [package]
-name = "yss-math"
+name = "yss-math-expr"
 version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true

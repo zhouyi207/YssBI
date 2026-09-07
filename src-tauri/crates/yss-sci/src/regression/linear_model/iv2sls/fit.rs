@@ -3,13 +3,14 @@ use super::types::{
     EndogenousTest, FirstStageResult, HausmanTest, IV2SLS, IV2SLSModel, IV2SLSResult, OveridTest,
 };
 use crate::regression::covariance::compute_cov_beta;
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray, matrix_rank};
-use faer::{Mat, Side, linalg::solvers::Solve};
+
 use ndarray::{Array1, Array2};
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT},
     statistics::Statistics,
 };
+use yss_linalg::matrix_rank;
+use yss_linalg::{MatMul, MatrixExt, Solve};
 
 impl IV2SLS {
     pub fn fit(&self) -> Result<IV2SLSResult, String> {
@@ -47,27 +48,27 @@ impl IV2SLS {
             .map_err(|e| format!("IV2SLS: failed to build Z: {}", e))?;
 
         // Stage 1: endog_hat = Z * (Z'Z)^{-1} Z' * endog for each endogenous
-        let z_faer = z.view().into_faer().to_owned();
-        let ztz = z_faer.transpose() * z_faer.as_ref();
+        let z_matrix = z.view().to_owned();
+        let ztz = z_matrix.t().matmul(&z_matrix.view());
         let ztz_inv = ztz
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| {
                 "IV2SLS: Z'Z is not positive definite (stage 1). Check instruments and exog for collinearity.".to_string()
             })?
-            .solve(Mat::identity(ztz.nrows(), ztz.ncols()));
+            .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
 
-        let ztz_inv_nd = ztz_inv.as_ref().into_ndarray().to_owned();
+        let ztz_inv_nd = ztz_inv.view().to_owned();
         let df_z = n.saturating_sub(k_z);
 
         let mut endog_hat = Array2::zeros((n, k_endog));
         let mut first_stage: Vec<FirstStageResult> = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
             let endog_col = self.endog_reg.column(j).into_owned();
-            let endog_faer = endog_col.view().into_faer_col().to_owned();
-            let zty = z_faer.transpose() * endog_faer.as_ref();
-            let gamma = ztz_inv.as_ref() * zty;
-            let hat = z_faer.as_ref() * gamma.as_ref();
-            let hat_arr = hat.as_ref().into_ndarray().to_owned();
+            let endog_vector = endog_col.view().to_owned();
+            let zty = z_matrix.t().matmul(&endog_vector.view());
+            let gamma = ztz_inv.view().matmul(&zty);
+            let hat = z_matrix.view().matmul(&gamma.view());
+            let hat_arr = hat.view().to_owned();
             for i in 0..n {
                 endog_hat[[i, j]] = hat_arr[i];
             }
@@ -101,7 +102,7 @@ impl IV2SLS {
             };
             let cov_gamma = sigma2 * &ztz_inv_nd;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[[i, i]].sqrt()).collect();
-            let gamma_nd = gamma.as_ref().into_ndarray().to_owned();
+            let gamma_nd = gamma.view().to_owned();
             let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
                 .unwrap_or(StudentsT::new(0.0, 1.0, 1.0).unwrap());
             let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
@@ -162,7 +163,7 @@ impl IV2SLS {
         let x = Array2::from_shape_vec((n, k_x), x_raw)
             .map_err(|e| format!("IV2SLS: failed to build X: {}", e))?;
 
-        let (rank, cond_no) = matrix_rank(x.view().into_faer().to_owned());
+        let (rank, cond_no) = matrix_rank(x.view()).unwrap_or((0, f64::INFINITY));
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
@@ -174,19 +175,19 @@ impl IV2SLS {
         };
 
         // OLS on second stage: β = (X'X)^{-1} X'y
-        let x_faer = x.view().into_faer().to_owned();
-        let y_faer = self.endog.view().into_faer_col().to_owned();
-        let xtx = x_faer.transpose() * x_faer.as_ref();
-        let xty = x_faer.transpose() * y_faer.as_ref();
+        let x_matrix = x.view().to_owned();
+        let y_vector = self.endog.view().to_owned();
+        let xtx = x_matrix.t().matmul(&x_matrix.view());
+        let xty = x_matrix.t().matmul(&y_vector.view());
         let xtx_inv = xtx
-            .llt(Side::Lower)
+            .cholesky()
             .map_err(|_| {
                 "IV2SLS: X'X is not positive definite (stage 2). Check for collinearity."
                     .to_string()
             })?
-            .solve(Mat::identity(xtx.nrows(), xtx.ncols()));
-        let betas_faer = xtx_inv.as_ref() * xty;
-        let betas_nd = betas_faer.as_ref().into_ndarray().to_owned();
+            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        let betas_vector = xtx_inv.view().matmul(&xty);
+        let betas_nd = betas_vector.view().to_owned();
 
         // ESS and VCE must use structural residuals: u = y - X_struct * β
         // where X_struct = [exog, endog] (actual endogenous, not endog_hat).
@@ -207,11 +208,11 @@ impl IV2SLS {
             .map_err(|e| format!("IV2SLS: failed to build X_struct: {}", e))?;
         let u_structural: Array1<f64> = &self.endog - &x_struct.dot(&betas_nd);
 
-        let y_mean = y_faer.iter().mean();
+        let y_mean = y_vector.iter().mean();
         let ss_total = if self.config.constant {
-            y_faer.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
+            y_vector.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
         } else {
-            y_faer.iter().map(|v| v.powi(2)).sum::<f64>()
+            y_vector.iter().map(|v| v.powi(2)).sum::<f64>()
         };
         let ss_residual = u_structural.dot(&u_structural);
         let ss_model = ss_total - ss_residual;
@@ -230,8 +231,8 @@ impl IV2SLS {
             0.0
         };
 
-        let x_nd = x_faer.as_ref().into_ndarray().to_owned();
-        let xtx_inv_nd = xtx_inv.as_ref().into_ndarray().to_owned();
+        let x_nd = x_matrix.view().to_owned();
+        let xtx_inv_nd = xtx_inv.view().to_owned();
 
         // Stata: s² = ESS/(n-k) if small, else ESS/n. Affects VCE and robust scale.
         let sigma2_df = if self.config.small { df_residual } else { n };
@@ -278,15 +279,15 @@ impl IV2SLS {
                 let v_s = cov_beta.clone();
                 (beta_s, v_s, k)
             };
-            let v_s_faer = v_s.view().into_faer().to_owned();
-            let beta_s_faer = beta_s.view().into_faer_col().to_owned();
+            let v_s_matrix = v_s.view().to_owned();
+            let beta_s_vector = beta_s.view().to_owned();
             // Solve V_s * x = beta_s => x = V_s^{-1} * beta_s; then wald = beta_s' * x (more stable than explicit inverse)
-            let x = v_s_faer
-                .as_ref()
-                .llt(Side::Lower)
+            let x = v_s_matrix
+                .view()
+                .cholesky()
                 .map_err(|_| "IV2SLS: V_s not pd for Wald".to_string())?
-                .solve(beta_s_faer.as_ref());
-            let x_nd = x.as_ref().into_ndarray();
+                .solve(&beta_s_vector.view());
+            let x_nd = x.view();
             let wald = beta_s.dot(&x_nd);
             let chi2_dist =
                 ChiSquared::new(df_wald as f64).map_err(|e| format!("IV2SLS Wald: {}", e))?;
@@ -332,12 +333,11 @@ impl IV2SLS {
                 let wtw = w_mat.t().dot(w_mat);
                 let wtw_inv = wtw
                     .view()
-                    .into_faer()
                     .to_owned()
-                    .llt(Side::Lower)
+                    .cholesky()
                     .map_err(|_| "IV2SLS Wooldridge overid: W'W not positive definite".to_string())?
-                    .solve(Mat::identity(wtw.nrows(), wtw.ncols()));
-                let wtw_inv_nd = wtw_inv.as_ref().into_ndarray().to_owned();
+                    .solve(&ndarray::Array2::<f64>::eye(wtw.nrows()));
+                let wtw_inv_nd = wtw_inv.view().to_owned();
 
                 // Build K: n × m, columns k̂_j = (Q_j - W*γ_j) .* u, where γ_j = (W'W)^{-1} W' Q_j
                 let mut k_mat = Array2::zeros((n, m));
@@ -358,12 +358,11 @@ impl IV2SLS {
                 let kt1 = k_mat.t().dot(&ones);
                 let ktk_inv = ktk
                     .view()
-                    .into_faer()
                     .to_owned()
-                    .llt(Side::Lower)
+                    .cholesky()
                     .map_err(|_| "IV2SLS Wooldridge overid: K'K not positive definite".to_string())?
-                    .solve(Mat::identity(ktk.nrows(), ktk.ncols()));
-                let theta = ktk_inv.as_ref().into_ndarray().to_owned().dot(&kt1);
+                    .solve(&ndarray::Array2::<f64>::eye(ktk.nrows()));
+                let theta = ktk_inv.view().to_owned().dot(&kt1);
                 let fitted = k_mat.dot(&theta);
                 let rss: f64 = ones
                     .iter()
@@ -419,16 +418,15 @@ impl IV2SLS {
         let (hausman, endogenous) = if !is_robust_cov_type(&covariance_type) {
             // OLS on y ~ X_struct (treating endog as exogenous): β_ols, u_ols
             let x_struct_tx = x_struct.t().dot(&x_struct);
-            let x_struct_tx_inv: Option<faer::Mat<f64>> = x_struct_tx
+            let x_struct_tx_inv: Option<ndarray::Array2<f64>> = x_struct_tx
                 .view()
-                .into_faer()
                 .to_owned()
-                .llt(Side::Lower)
+                .cholesky()
                 .ok()
-                .map(|llt| llt.solve(Mat::identity(x_struct_tx.nrows(), x_struct_tx.ncols())));
+                .map(|llt| llt.solve(&ndarray::Array2::<f64>::eye(x_struct_tx.nrows())));
             let (beta_ols, u_ols, sigma2_ols, xtx_struct_inv_nd) =
                 if let Some(ref inv) = x_struct_tx_inv {
-                    let inv_nd = inv.as_ref().into_ndarray().to_owned();
+                    let inv_nd = inv.view().to_owned();
                     let xty_struct = x_struct.t().dot(&self.endog);
                     let beta_ols_nd = inv_nd.dot(&xty_struct);
                     let u_ols: Array1<f64> = &self.endog - &x_struct.dot(&beta_ols_nd);
@@ -450,12 +448,12 @@ impl IV2SLS {
                 let v_ols = sigma2_ols * &xtx_struct_inv_nd;
                 let v_diff: Array2<f64> = &v_iv - &v_ols;
                 let diff_beta = &betas_nd - &beta_ols;
-                let v_diff_faer = v_diff.view().into_faer().to_owned();
-                let svd = v_diff_faer.as_ref().svd().ok();
+                let v_diff_matrix = v_diff.view().to_owned();
+                let svd = v_diff_matrix.view().svd().ok();
                 let (h_stat, h_df) = if let Some(svd) = svd {
-                    let s = svd.S().column_vector();
-                    let u = svd.U();
-                    let v = svd.V();
+                    let s = svd.values();
+                    let u = svd.left_vectors();
+                    let v = svd.right_vectors();
                     let max_s = s.iter().cloned().fold(0.0f64, f64::max);
                     let tol = max_s * (k_x as f64) * f64::EPSILON;
                     let rank = s.iter().filter(|&&si| si > tol).count();
@@ -463,17 +461,19 @@ impl IV2SLS {
                         (0.0, 0)
                     } else {
                         // H = diff' * V_diff^{-} * diff via SVD: V_diff = U S V', inv = V S^{-1} U' (Moore-Penrose)
-                        let diff_col = diff_beta.view().into_faer_col().to_owned();
-                        let ut_diff = u.get(.., ..k_x).transpose() * diff_col.as_ref();
-                        let ut_diff_nd = ut_diff.as_ref().into_ndarray().to_owned();
-                        let mut st_inv_ut_diff = Mat::zeros(k_x, 1);
+                        let diff_col = diff_beta.view().to_owned();
+                        let ut_diff = u.slice(ndarray::s![.., ..k_x]).t().matmul(&diff_col.view());
+                        let ut_diff_nd = ut_diff.view().to_owned();
+                        let mut st_inv_ut_diff = ndarray::Array2::<f64>::zeros((k_x, 1));
                         for i in 0..k_x {
                             let si = s[i];
                             let val = if si > tol { ut_diff_nd[i] / si } else { 0.0 };
-                            st_inv_ut_diff.as_mut()[(i, 0)] = val;
+                            st_inv_ut_diff.view_mut()[(i, 0)] = val;
                         }
-                        let vinv_diff = v.get(.., ..k_x) * st_inv_ut_diff.as_ref();
-                        let h: f64 = diff_beta.dot(&vinv_diff.as_ref().into_ndarray().column(0));
+                        let vinv_diff = v
+                            .slice(ndarray::s![.., ..k_x])
+                            .matmul(&st_inv_ut_diff.view());
+                        let h: f64 = diff_beta.dot(&vinv_diff.view().column(0));
                         (h.max(0.0), rank)
                     }
                 } else {
@@ -517,15 +517,15 @@ impl IV2SLS {
                 }
                 let zy1 = Array2::from_shape_vec((n, k_z + k_endog), zy1_raw)
                     .unwrap_or_else(|_| Array2::zeros((n, (k_z + k_endog).max(1))));
-                let zy1_faer = zy1.view().into_faer().to_owned();
-                let zy1t_zy1 = zy1_faer.transpose() * zy1_faer.as_ref();
-                let zy1t_zy1_inv: Option<faer::Mat<f64>> = zy1t_zy1
-                    .llt(Side::Lower)
+                let zy1_matrix = zy1.view().to_owned();
+                let zy1t_zy1 = zy1_matrix.t().matmul(&zy1_matrix.view());
+                let zy1t_zy1_inv: Option<ndarray::Array2<f64>> = zy1t_zy1
+                    .cholesky()
                     .ok()
-                    .map(|llt| llt.solve(Mat::identity(zy1t_zy1.nrows(), zy1t_zy1.ncols())));
+                    .map(|llt| llt.solve(&ndarray::Array2::<f64>::eye(zy1t_zy1.nrows())));
 
                 let (num, u_ols_sq) = if let Some(zy1_inv) = zy1t_zy1_inv {
-                    let zy1_inv_nd = zy1_inv.as_ref().into_ndarray().to_owned();
+                    let zy1_inv_nd = zy1_inv.view().to_owned();
                     let p_zy1_u_ols = zy1.dot(&zy1_inv_nd.dot(&zy1.t().dot(&u_ols)));
                     let p_z_u_iv = z.dot(&ztz_inv_nd.dot(&z.t().dot(&u_structural)));
                     let num = u_ols.dot(&p_zy1_u_ols) - u_structural.dot(&p_z_u_iv);

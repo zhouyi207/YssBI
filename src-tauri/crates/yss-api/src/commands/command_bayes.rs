@@ -90,9 +90,9 @@ pub fn parse_bayes_expression(
     known_symbols.sort();
     known_symbols.dedup();
     let options = if input.formula.contains('\\') {
-        yss_math::ParseOptions::latex(&known_symbols)
+        yss_math_expr::ParseOptions::latex(&known_symbols)
     } else {
-        yss_math::ParseOptions::plain(&known_symbols)
+        yss_math_expr::ParseOptions::plain(&known_symbols)
     };
     parse_model_expression(&input.formula, options)
         .map_err(|_| CommandError::expected("bayes_expression_parse_failed"))

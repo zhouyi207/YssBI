@@ -7,10 +7,10 @@
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::covariance::CovParams;
 use crate::regression::linear_model::{OLS, OLSConfig};
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-use faer::{Side, linalg::solvers::Solve};
+
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
+use yss_linalg::{MatrixExt, Solve};
 
 /// Compute FE-specific stats (Stata xtreg, fe style)
 fn compute_fe_stats(
@@ -615,16 +615,16 @@ pub fn fit_panel_fe(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            let x = v_faer
-                .as_ref()
-                .llt(Side::Lower)
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            let x = v_matrix
+                .view()
+                .cholesky()
                 .map_err(|_| {
                     "Panel FE: cluster cov_beta not positive definite for Wald F".to_string()
                 })?
-                .solve(beta_faer.as_ref());
-            let x_nd = x.as_ref().into_ndarray();
+                .solve(&beta_vector.view());
+            let x_nd = x.view();
             beta_s.dot(&x_nd)
         };
         let f = if df_model > 0 {
@@ -890,14 +890,14 @@ pub fn fit_panel_fe_time(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            let x = v_faer
-                .as_ref()
-                .llt(Side::Lower)
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            let x = v_matrix
+                .view()
+                .cholesky()
                 .map_err(|_| "Panel FE (Time): cluster cov_beta not pd for Wald F".to_string())?
-                .solve(beta_faer.as_ref());
-            let x_nd = x.as_ref().into_ndarray();
+                .solve(&beta_vector.view());
+            let x_nd = x.view();
             beta_s.dot(&x_nd)
         };
         let f = if df_model > 0 {
@@ -1152,14 +1152,14 @@ pub fn fit_panel_fe_twoway(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_faer = v_s.view().into_faer().to_owned();
-            let beta_faer = beta_s.view().into_faer_col().to_owned();
-            let x = v_faer
-                .as_ref()
-                .llt(Side::Lower)
+            let v_matrix = v_s.view().to_owned();
+            let beta_vector = beta_s.view().to_owned();
+            let x = v_matrix
+                .view()
+                .cholesky()
                 .map_err(|_| "Panel FE (Two-Way): cluster cov_beta not pd for Wald F".to_string())?
-                .solve(beta_faer.as_ref());
-            let x_nd = x.as_ref().into_ndarray();
+                .solve(&beta_vector.view());
+            let x_nd = x.view();
             beta_s.dot(&x_nd)
         };
         let f = if df_model > 0 {

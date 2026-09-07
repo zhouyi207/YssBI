@@ -1,4 +1,4 @@
-﻿/// χ² 检验结果（chi2, df, p_value），用于 IM-test 各分量
+/// χ² 检验结果（chi2, df, p_value），用于 IM-test 各分量
 #[derive(Debug, Clone)]
 pub struct Chi2TestResult {
     pub chi2: f64,
@@ -17,14 +17,14 @@ pub struct ImTestResult {
 }
 
 /// 辅助回归 y 对 Z，LM = n×(1 - RSS/USS)，df = rank(Z) - 1
-fn lm_chi2_aux(y: &Array1<f64>, z_faer: &faer::Mat<f64>) -> Result<(f64, usize), String> {
+fn lm_chi2_aux(y: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64, usize), String> {
     let n = y.len();
     let uss: f64 = y.iter().map(|v| v * v).sum();
     if uss <= 0.0 {
         return Ok((0.0, 0));
     }
-    let s_sv = z_faer
-        .as_ref()
+    let s_sv = z_matrix
+        .view()
         .singular_values()
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
     let max_sv = s_sv.first().copied().unwrap_or(0.0);
@@ -34,27 +34,31 @@ fn lm_chi2_aux(y: &Array1<f64>, z_faer: &faer::Mat<f64>) -> Result<(f64, usize),
     if df == 0 {
         return Ok((0.0, 0));
     }
-    let svd = z_faer
-        .as_ref()
+    let svd = z_matrix
+        .view()
         .svd()
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
-    let u = svd.U();
-    let v = svd.V();
-    let size = Ord::min(z_faer.nrows(), z_faer.ncols());
-    let b_col = y.view().into_faer_col().to_owned();
-    let tmp = u.get(.., ..size).transpose() * b_col.as_ref();
-    let mut tmp2 = Mat::zeros(size, 1);
-    let tmp_nd = tmp.as_ref().into_ndarray().to_owned();
+    let u = svd.left_vectors();
+    let v = svd.right_vectors();
+    let size = Ord::min(z_matrix.nrows(), z_matrix.ncols());
+    let b_col = y.view().to_owned();
+    let tmp = u.slice(ndarray::s![.., ..size]).t().matmul(&b_col.view());
+    let mut tmp2 = ndarray::Array2::<f64>::zeros((size, 1));
+    let tmp_nd = tmp.view().to_owned();
     for i in 0..size {
         let si = s_sv[i];
         let ti = tmp_nd[i];
-        tmp2.as_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
+        tmp2.view_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
     }
-    let gamma = v.get(.., ..size) * tmp2.as_ref();
-    let y_hat = z_faer.as_ref() * gamma;
-    let y_hat_mat = y_hat.as_ref().into_ndarray().to_owned();
+    let gamma = v.slice(ndarray::s![.., ..size]).matmul(&tmp2.view());
+    let y_hat = z_matrix.view().matmul(&gamma);
+    let y_hat_mat = y_hat.view().to_owned();
     let y_hat_nd: Array1<f64> = y_hat_mat.column(0).into_owned();
-    let rss: f64 = y.iter().zip(y_hat_nd.iter()).map(|(a, b)| (a - b).powi(2)).sum();
+    let rss: f64 = y
+        .iter()
+        .zip(y_hat_nd.iter())
+        .map(|(a, b)| (a - b).powi(2))
+        .sum();
     let chi2 = n as f64 * (1.0 - rss / uss);
     Ok((chi2, df))
 }
@@ -65,7 +69,11 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
     let n = x.nrows();
     let k = x.ncols();
     if residuals.len() != n {
-        return Err(format!("im_test: residuals length {} != n {}", residuals.len(), n));
+        return Err(format!(
+            "im_test: residuals length {} != n {}",
+            residuals.len(),
+            n
+        ));
     }
     if k < 2 {
         return Err("im_test: need at least 2 columns in X (constant + 1 regressor)".to_string());
@@ -81,10 +89,10 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
         let u = residuals[i];
         u * u * u - 3.0 * s2 * u
     });
-    let x_faer = x.view().into_faer().to_owned();
-    let (chi2_s, df_s) = lm_chi2_aux(&y_s, &x_faer)?;
-    let chi2_skew = ChiSquared::new(df_s as f64)
-        .map_err(|e| format!("im_test skewness: ChiSquared: {}", e))?;
+    let x_matrix = x.view().to_owned();
+    let (chi2_s, df_s) = lm_chi2_aux(&y_s, &x_matrix)?;
+    let chi2_skew =
+        ChiSquared::new(df_s as f64).map_err(|e| format!("im_test skewness: ChiSquared: {}", e))?;
     let p_s = if df_s > 0 {
         1.0 - chi2_skew.cdf(chi2_s)
     } else {
@@ -106,8 +114,8 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
         0.0
     };
     let df_k = 1;
-    let chi2_kurt = ChiSquared::new(df_k as f64)
-        .map_err(|e| format!("im_test kurtosis: ChiSquared: {}", e))?;
+    let chi2_kurt =
+        ChiSquared::new(df_k as f64).map_err(|e| format!("im_test kurtosis: ChiSquared: {}", e))?;
     let p_k = 1.0 - chi2_kurt.cdf(chi2_k);
 
     let total_chi2 = hetero.lm_stat + chi2_s + chi2_k;
@@ -165,4 +173,3 @@ pub fn im_test_weighted(
     };
     Ok(base)
 }
-

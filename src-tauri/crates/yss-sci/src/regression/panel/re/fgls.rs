@@ -1,4 +1,4 @@
-﻿/// Panel Random Effects FGLS (Swamy-Arora variance components)
+/// Panel Random Effects FGLS (Swamy-Arora variance components)
 pub fn fit_panel_re_fgls(
     endog: &Array1<f64>,
     exog: &Array2<f64>,
@@ -23,7 +23,11 @@ pub fn fit_panel_re_fgls(
         ));
     }
 
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 {
         return Err("Panel RE (FGLS): need at least 2 entities".to_string());
     }
@@ -71,18 +75,17 @@ pub fn fit_panel_re_fgls(
             cov_params: None,
         },
     };
-    let res_w = ols_w.fit().map_err(|e| format!("Panel RE within step: {}", e))?;
+    let res_w = ols_w
+        .fit()
+        .map_err(|e| format!("Panel RE within step: {}", e))?;
     // Stata: σ²_e = Σe²_it / (N - n - K + 1), K = 1 + k_slopes (within has constant)
     // Our within has k_w slopes (no const), so df = N - n - k_w
     let df_e = (n as i64 - n_entities as i64 - k_w as i64).max(1) as usize;
     let sigma2_e = res_w.ss_residual / df_e as f64;
 
     // Step 2: Between regression (entity means) to get sigma_u^2
-    let (_, y_b_vec, x_b_vec) = entity_means(
-        &endog.iter().cloned().collect::<Vec<_>>(),
-        exog,
-        entity_id,
-    );
+    let (_, y_b_vec, x_b_vec) =
+        entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
     for i in 0..n_b {
@@ -110,10 +113,16 @@ pub fn fit_panel_re_fgls(
             cov_params: None,
         },
     };
-    let res_b = ols_b.fit().map_err(|e| format!("Panel RE between step: {}", e))?;
+    let res_b = ols_b
+        .fit()
+        .map_err(|e| format!("Panel RE between step: {}", e))?;
     let df_b = res_b.df_residual;
     // Stata: σ²_u = max(0, SSR_b/(n-K) - σ²_e/T̄), T̄ = harmonic mean of T_i
-    let t_bar = if t_bar_harmonic > 1e-300 { t_bar_harmonic } else { n as f64 / n_entities as f64 };
+    let t_bar = if t_bar_harmonic > 1e-300 {
+        t_bar_harmonic
+    } else {
+        n as f64 / n_entities as f64
+    };
     let sigma2_u = if df_b > 0 {
         (res_b.ss_residual / df_b as f64 - sigma2_e / t_bar).max(0.0)
     } else {
@@ -193,7 +202,10 @@ pub fn fit_panel_re_fgls(
         *obs_per_entity.entry(eid).or_insert(0) += 1;
     }
     let eids: Vec<usize> = obs_per_entity.keys().copied().collect();
-    let obs_per_group: Vec<usize> = eids.iter().map(|&eid| obs_per_entity.get(&eid).copied().unwrap_or(0)).collect();
+    let obs_per_group: Vec<usize> = eids
+        .iter()
+        .map(|&eid| obs_per_entity.get(&eid).copied().unwrap_or(0))
+        .collect();
     let obs_min = obs_per_group.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_group.iter().copied().max().unwrap_or(0);
     let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_entities as f64;
@@ -219,8 +231,11 @@ pub fn fit_panel_re_fgls(
             y_w.iter().sum::<f64>() / n as f64,
             xb_w.iter().sum::<f64>() / n as f64,
         );
-        let cov = y_w.iter().zip(xb_w.iter())
-            .map(|(y, x)| (y - y_mean) * (x - xb_mean)).sum::<f64>()
+        let cov = y_w
+            .iter()
+            .zip(xb_w.iter())
+            .map(|(y, x)| (y - y_mean) * (x - xb_mean))
+            .sum::<f64>()
             / (n as f64 - 1.0).max(1.0);
         let (var_y, var_xb) = (
             y_w.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -235,11 +250,8 @@ pub fn fit_panel_re_fgls(
 
     // R² Between: regress ȳ on x̄ with FGLS betas
     let r2_between = {
-        let (_, y_b_vec, x_b_vec) = entity_means(
-            &endog.iter().cloned().collect::<Vec<_>>(),
-            exog,
-            entity_id,
-        );
+        let (_, y_b_vec, x_b_vec) =
+            entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
         let n_b = y_b_vec.len();
         let y_mean = y_b_vec.iter().sum::<f64>() / n_b as f64;
         let xb_b: Vec<f64> = (0..n_b)
@@ -252,8 +264,11 @@ pub fn fit_panel_re_fgls(
             })
             .collect();
         let xb_mean = xb_b.iter().sum::<f64>() / n_b as f64;
-        let cov = y_b_vec.iter().zip(xb_b.iter())
-            .map(|(y, x)| (y - y_mean) * (x - xb_mean)).sum::<f64>()
+        let cov = y_b_vec
+            .iter()
+            .zip(xb_b.iter())
+            .map(|(y, x)| (y - y_mean) * (x - xb_mean))
+            .sum::<f64>()
             / (n_b as f64 - 1.0).max(1.0);
         let (var_y, var_xb) = (
             y_b_vec.iter().map(|y| (y - y_mean).powi(2)).sum::<f64>() / (n_b as f64 - 1.0).max(1.0),
@@ -281,8 +296,11 @@ pub fn fit_panel_re_fgls(
             xb_obs.iter().sum::<f64>() / n as f64,
             endog.iter().sum::<f64>() / n as f64,
         );
-        let cov = xb_obs.iter().zip(endog.iter())
-            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean)).sum::<f64>()
+        let cov = xb_obs
+            .iter()
+            .zip(endog.iter())
+            .map(|(xb, y)| (xb - xb_mean) * (y - y_mean))
+            .sum::<f64>()
             / (n as f64 - 1.0).max(1.0);
         let (var_xb, var_y) = (
             xb_obs.iter().map(|xb| (xb - xb_mean).powi(2)).sum::<f64>() / (n as f64 - 1.0).max(1.0),
@@ -300,20 +318,39 @@ pub fn fit_panel_re_fgls(
     let rho = sigma2_u / (sigma2_u + sigma2_e);
 
     let theta = {
-        let thetas: Vec<f64> = obs_per_entity.values().map(|&t_i| {
-            let denom = t_i as f64 * sigma2_u + sigma2_e;
-            1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
-        }).collect();
+        let thetas: Vec<f64> = obs_per_entity
+            .values()
+            .map(|&t_i| {
+                let denom = t_i as f64 * sigma2_u + sigma2_e;
+                1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
+            })
+            .collect();
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        super::ThetaStats { min: mn, avg, max: mx }
+        super::ThetaStats {
+            min: mn,
+            avg,
+            max: mx,
+        }
     };
 
     let fe_stats = Some(super::PanelFEStats {
-        r2: Some(super::PanelR2Stats { r2_within, r2_between, r2_overall }),
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        r2: Some(super::PanelR2Stats {
+            r2_within,
+            r2_between,
+            r2_overall,
+        }),
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: Some(theta),
     });
@@ -330,16 +367,17 @@ pub fn fit_panel_re_fgls(
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_faer = v_s.view().into_faer().to_owned();
-        let beta_s_faer = beta_s.view().into_faer_col().to_owned();
-        let x = v_s_faer
-            .as_ref()
-            .llt(Side::Lower)
+        let v_s_matrix = v_s.view().to_owned();
+        let beta_s_vector = beta_s.view().to_owned();
+        let x = v_s_matrix
+            .view()
+            .cholesky()
             .map_err(|_| "Panel RE FGLS: V not pd for Wald".to_string())?
-            .solve(beta_s_faer.as_ref());
-        let x_nd = x.as_ref().into_ndarray();
+            .solve(&beta_s_vector.view());
+        let x_nd = x.view();
         let wald = beta_s.dot(&x_nd);
-        let chi2_dist = ChiSquared::new(df_wald as f64).map_err(|e| format!("Panel RE FGLS Wald: {}", e))?;
+        let chi2_dist =
+            ChiSquared::new(df_wald as f64).map_err(|e| format!("Panel RE FGLS Wald: {}", e))?;
         let wald_p = 1.0 - chi2_dist.cdf(wald);
         (wald, wald_p)
     };
@@ -396,4 +434,3 @@ pub fn fit_panel_re_fgls(
         mle_iter_log_lik: None,
     })
 }
-

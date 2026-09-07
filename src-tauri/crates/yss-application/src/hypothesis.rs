@@ -3,7 +3,7 @@
 use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
-use yss_math::{
+use yss_math_expr::{
     BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
 use yss_sci_contract::SciError;
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn rejects_excessive_constraints_before_matrix_allocation() {
-        let input = std::iter::repeat_n("x1 = 0", yss_math::MAX_RELATIONS + 1)
+        let input = std::iter::repeat_n("x1 = 0", yss_math_expr::MAX_RELATIONS + 1)
             .collect::<Vec<_>>()
             .join(", ");
         let error = resolve_linear_hypothesis(&input, &names()).unwrap_err();

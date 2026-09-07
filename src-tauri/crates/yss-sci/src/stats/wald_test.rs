@@ -6,8 +6,6 @@ use ndarray::{Array1, Array2};
 use serde::Serialize;
 use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
-use crate::tools::{IntoFaer, IntoFaerCol, IntoNdarray};
-
 use super::common::Alternative;
 
 /// Wald 假设检验结果
@@ -37,7 +35,7 @@ pub fn wald_test(
     alternative: Alternative,
     constraint_desc: impl Into<String>,
 ) -> Result<WaldTestResult, String> {
-    use faer::{Side, linalg::solvers::Solve};
+    use yss_linalg::{MatMul, MatrixExt, Solve};
 
     let q = r.nrows();
     let k = r.ncols();
@@ -52,24 +50,24 @@ pub fn wald_test(
         return Err(format!("r_vec 长度 {} 与 R 行数 {} 不一致", r_vec.len(), q));
     }
 
-    let r_faer = r.view().into_faer();
-    let cov_faer = cov_beta.view().into_faer();
+    let r_matrix = r.view();
+    let cov_matrix = cov_beta.view();
 
-    // contrast = R @ betas - r_vec（用 ndarray 计算避免 faer 减法 API）
+    // contrast = R @ betas - r_vec
     let contrast = r.dot(betas) - r_vec;
-    let contrast_faer = contrast.view().into_faer_col().to_owned();
+    let contrast_vector = contrast.view().to_owned();
 
     // r_cov_r = R @ cov_beta @ R'
-    let r_cov = r_faer * cov_faer;
-    let r_cov_r = r_cov.as_ref() * r_faer.transpose();
+    let r_cov = r_matrix.matmul(&cov_matrix);
+    let r_cov_r = r_cov.view().matmul(&r_matrix.t());
 
     // 解 r_cov_r @ x = contrast，则 W = contrast' @ x
     let x = r_cov_r
-        .llt(Side::Lower)
+        .cholesky()
         .map_err(|_| "R Σ R' 矩阵奇异，约束可能冗余".to_string())?
-        .solve(contrast_faer.as_ref());
+        .solve(&contrast_vector.view());
 
-    let x_nd = x.as_ref().into_ndarray().to_owned();
+    let x_nd = x.view().to_owned();
     let w: f64 = contrast.iter().zip(x_nd.iter()).map(|(c, xi)| c * xi).sum();
 
     let f_stat = w / q as f64;

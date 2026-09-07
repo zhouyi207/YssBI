@@ -9336,7 +9336,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-julia-runtime",
  "yss-julia-worker",
- "yss-math",
+ "yss-math-expr",
  "yss-project",
  "yss-project-filesystem",
  "yss-project-history",
@@ -9398,7 +9398,7 @@ dependencies = [
  "yss-graph-resource-contract",
  "yss-graph-runtime",
  "yss-graph-type-mapping",
- "yss-math",
+ "yss-math-expr",
  "yss-path-display",
  "yss-project",
  "yss-project-change",
@@ -9454,7 +9454,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "yss-math",
+ "yss-math-expr",
 ]
 
 [[package]]
@@ -9838,7 +9838,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-math"
+name = "yss-linalg"
+version = "0.1.0"
+dependencies = [
+ "faer",
+ "ndarray",
+]
+
+[[package]]
+name = "yss-math-expr"
 version = "0.1.0"
 dependencies = [
  "mathlex",
@@ -10054,12 +10062,12 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "csv",
- "faer",
  "ndarray",
  "num-traits",
  "polars",
  "serde",
  "statrs",
+ "yss-linalg",
 ]
 
 [[package]]
@@ -10081,6 +10089,7 @@ dependencies = [
  "serde_json",
  "statrs",
  "thiserror 2.0.20",
+ "yss-linalg",
  "yss-sci",
  "yss-sci-contract",
 ]

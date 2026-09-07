@@ -1,4 +1,4 @@
-﻿/// RE MLE log likelihood (Stata xtreg, mle formula). Generic over group_id (entity or time).
+/// RE MLE log likelihood (Stata xtreg, mle formula). Generic over group_id (entity or time).
 fn re_mle_log_lik(
     endog: &[f64],
     exog: &Array2<f64>,
@@ -65,7 +65,16 @@ fn re_mle_neg_ll_from_params(
     let ln_sigma2_e = params[n_beta + 1];
     let sigma2_u = ln_sigma2_u.exp().clamp(1e-12, 1e10);
     let sigma2_e = ln_sigma2_e.exp().clamp(1e-12, 1e10);
-    -re_mle_log_lik(endog, exog, group_id, &betas, kept, sigma2_u, sigma2_e, obs_per_group)
+    -re_mle_log_lik(
+        endog,
+        exog,
+        group_id,
+        &betas,
+        kept,
+        sigma2_u,
+        sigma2_e,
+        obs_per_group,
+    )
 }
 
 /// Central difference numerical gradient of neg_ll.
@@ -91,7 +100,8 @@ fn re_mle_numerical_gradient(
         let mut p_minus = params.to_vec();
         p_minus[i] -= step;
         let f_plus = re_mle_neg_ll_from_params(&p_plus, endog, exog, group_id, kept, obs_per_group);
-        let f_minus = re_mle_neg_ll_from_params(&p_minus, endog, exog, group_id, kept, obs_per_group);
+        let f_minus =
+            re_mle_neg_ll_from_params(&p_minus, endog, exog, group_id, kept, obs_per_group);
         grad[i] = (f_plus - f_minus) / (2.0 * step);
     }
     grad
@@ -145,12 +155,13 @@ fn re_mle_newton_step(
         let neg_ll = re_mle_neg_ll_from_params(params, endog, exog, group_id, kept, obs_per_group);
         return Ok((params.to_vec(), neg_ll, true));
     }
-    let hess_mat = Mat::from_fn(d, d, |i, j| hess[i][j]);
-    let g_col = Mat::from_fn(d, 1, |i, _| -g[i]);
+    let hess_mat = ndarray::Array2::from_shape_fn((d, d), |(i, j)| hess[i][j]);
+    let g_col = ndarray::Array2::from_shape_fn((d, 1), |(i, _)| -g[i]);
     let step = hess_mat
-        .as_ref()
-        .partial_piv_lu()
-        .solve(g_col.as_ref());
+        .view()
+        .lu()
+        .map_err(|error| error.to_string())?
+        .solve(&g_col.view());
     let mut new_params = params.to_vec();
     let mut step_scale = 1.0;
     let neg_ll0 = re_mle_neg_ll_from_params(params, endog, exog, group_id, kept, obs_per_group);
@@ -158,7 +169,8 @@ fn re_mle_newton_step(
         for i in 0..d {
             new_params[i] = params[i] + step_scale * step[(i, 0)];
         }
-        let neg_ll = re_mle_neg_ll_from_params(&new_params, endog, exog, group_id, kept, obs_per_group);
+        let neg_ll =
+            re_mle_neg_ll_from_params(&new_params, endog, exog, group_id, kept, obs_per_group);
         if neg_ll <= neg_ll0 + 1e-12 {
             let converged = g_norm < 1e-5;
             return Ok((new_params, neg_ll, converged));
@@ -181,7 +193,11 @@ pub fn fit_panel_re_mle(
     if exog.nrows() != n || entity_id.len() != n {
         return Err("Panel RE (MLE): lengths must match".to_string());
     }
-    let n_entities = entity_id.iter().copied().collect::<std::collections::HashSet<_>>().len();
+    let n_entities = entity_id
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     if n_entities < 2 {
         return Err("Panel RE (MLE): need at least 2 entities".to_string());
     }
@@ -189,7 +205,11 @@ pub fn fit_panel_re_mle(
     let (obs_per_entity, t_bar_harmonic) = obs_per_entity_and_harmonic_mean(entity_id);
     let k = exog.ncols();
     let endog_vec: Vec<f64> = endog.iter().cloned().collect();
-    let t_bar = if t_bar_harmonic > 1e-300 { t_bar_harmonic } else { n as f64 / n_entities as f64 };
+    let t_bar = if t_bar_harmonic > 1e-300 {
+        t_bar_harmonic
+    } else {
+        n as f64 / n_entities as f64
+    };
 
     // 1. Fit constant-only model for ll_null (Stata "Fitting constant-only model")
     let y_global_mean = endog_vec.iter().sum::<f64>() / n as f64;
@@ -241,7 +261,9 @@ pub fn fit_panel_re_mle(
                 })
                 .collect();
             let y_bar = between_transform(endog_vec, entity_id);
-            let y_star: Vec<f64> = (0..n).map(|i| endog_vec[i] - theta_arr[i] * y_bar[i]).collect();
+            let y_star: Vec<f64> = (0..n)
+                .map(|i| endog_vec[i] - theta_arr[i] * y_bar[i])
+                .collect();
             // Quasi-demeaned constant: 1 - θ (not 1), so OLS gives α = ȳ
             let x_star_const: Vec<f64> = (0..n).map(|i| 1.0 - theta_arr[i]).collect();
             let x_const = Array2::from_shape_vec((n, 1), x_star_const).unwrap();
@@ -337,11 +359,7 @@ pub fn fit_panel_re_mle(
         mle_iter_log_lik_const.push(ll_init);
         // Newton-Raphson on (α, ln σ²_u, ln σ²_e) for constant-only model
         let kept_const: Vec<usize> = vec![0];
-        let mut params_const = vec![
-            alpha_init,
-            sigma2_u_init.ln(),
-            sigma2_e_init.ln(),
-        ];
+        let mut params_const = vec![alpha_init, sigma2_u_init.ln(), sigma2_e_init.ln()];
         let h_num = 1e-6;
         for _ in 0..max_iter_null {
             match re_mle_newton_step(
@@ -395,7 +413,8 @@ pub fn fit_panel_re_mle(
             })
             .collect();
         let y_bar = between_transform(&endog_vec, entity_id);
-        let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
+        let y_star: Array1<f64> =
+            Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
         let mut x_star = Array2::zeros((n, k));
         for c in 0..k {
             let col: Vec<f64> = exog.column(c).iter().cloned().collect();
@@ -420,7 +439,9 @@ pub fn fit_panel_re_mle(
                 cov_params: None,
             },
         };
-        let res0 = ols_re.fit().map_err(|e| format!("Panel RE (MLE) iter 0: {}", e))?;
+        let res0 = ols_re
+            .fit()
+            .map_err(|e| format!("Panel RE (MLE) iter 0: {}", e))?;
         betas = res0.betas.to_vec();
         let ll0_full = re_mle_log_lik(
             &endog_vec,
@@ -535,7 +556,10 @@ pub fn fit_panel_re_mle(
         *obs_per_entity.entry(eid).or_insert(0) += 1;
     }
     let eids: Vec<usize> = obs_per_entity.keys().copied().collect();
-    let obs_per_group: Vec<usize> = eids.iter().map(|&eid| obs_per_entity.get(&eid).copied().unwrap_or(0)).collect();
+    let obs_per_group: Vec<usize> = eids
+        .iter()
+        .map(|&eid| obs_per_entity.get(&eid).copied().unwrap_or(0))
+        .collect();
     let obs_min = obs_per_group.iter().copied().min().unwrap_or(0);
     let obs_max = obs_per_group.iter().copied().max().unwrap_or(0);
     let obs_avg = obs_per_group.iter().sum::<usize>() as f64 / n_entities as f64;
@@ -557,12 +581,21 @@ pub fn fit_panel_re_mle(
         sigma2_e,
         &obs_per_entity,
     );
-    let k_slopes = if constant && kept.len() > 1 { kept.len() - 1 } else { kept.len() };
+    let k_slopes = if constant && kept.len() > 1 {
+        kept.len() - 1
+    } else {
+        kept.len()
+    };
     let lr_chi2 = {
         let raw = 2.0 * (log_likelihood - ll_null);
-        if raw.is_nan() || raw.is_infinite() { 0.0 } else { raw.max(0.0) }
+        if raw.is_nan() || raw.is_infinite() {
+            0.0
+        } else {
+            raw.max(0.0)
+        }
     };
-    let chi2_lr = ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE MLE LR: {}", e))?;
+    let chi2_lr =
+        ChiSquared::new(k_slopes as f64).map_err(|e| format!("Panel RE MLE LR: {}", e))?;
     let prob_lr_chi2 = 1.0 - chi2_lr.cdf(lr_chi2);
 
     // chibar2(01) for H0: sigma_u=0. Restricted model = pooled OLS.
@@ -582,7 +615,9 @@ pub fn fit_panel_re_mle(
                 cov_params: None,
             },
         };
-        let res_ols = ols_pooled.fit().map_err(|e| format!("Panel RE MLE OLS: {}", e))?;
+        let res_ols = ols_pooled
+            .fit()
+            .map_err(|e| format!("Panel RE MLE OLS: {}", e))?;
         let ols_betas: Vec<f64> = res_ols.betas.iter().cloned().collect();
         let ols_kept: Vec<usize> = (0..k).filter(|j| !ols_omitted.contains(j)).collect();
         let sigma2_e_ols = (res_ols.ss_residual / n as f64).max(1e-12);
@@ -599,26 +634,45 @@ pub fn fit_panel_re_mle(
     };
     let chibar2 = {
         let raw = 2.0 * (log_likelihood - ll_ols);
-        if raw.is_nan() || raw.is_infinite() { 0.0 } else { raw.max(0.0) }
+        if raw.is_nan() || raw.is_infinite() {
+            0.0
+        } else {
+            raw.max(0.0)
+        }
     };
     let chi2_1 = ChiSquared::new(1.0).map_err(|e| format!("Panel RE MLE chibar2: {}", e))?;
     let prob_chibar2 = 0.5 * (1.0 - chi2_1.cdf(chibar2));
 
     let mle_theta = {
-        let thetas: Vec<f64> = obs_per_entity.values().map(|&t_i| {
-            let denom = t_i as f64 * sigma2_u + sigma2_e;
-            1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
-        }).collect();
+        let thetas: Vec<f64> = obs_per_entity
+            .values()
+            .map(|&t_i| {
+                let denom = t_i as f64 * sigma2_u + sigma2_e;
+                1.0 - (sigma2_e / denom.max(1e-300)).sqrt()
+            })
+            .collect();
         let mn = thetas.iter().cloned().fold(f64::INFINITY, f64::min);
         let mx = thetas.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let avg = thetas.iter().sum::<f64>() / thetas.len().max(1) as f64;
-        super::ThetaStats { min: mn, avg, max: mx }
+        super::ThetaStats {
+            min: mn,
+            avg,
+            max: mx,
+        }
     };
 
     let fe_stats = Some(super::PanelFEStats {
         r2: None,
-        obs_per_group: super::ObsPerGroupStats { min: obs_min, avg: obs_avg, max: obs_max },
-        sigma: super::SigmaStats { sigma_u, sigma_e, rho },
+        obs_per_group: super::ObsPerGroupStats {
+            min: obs_min,
+            avg: obs_avg,
+            max: obs_max,
+        },
+        sigma: super::SigmaStats {
+            sigma_u,
+            sigma_e,
+            rho,
+        },
         corr_u_i_xb: 0.0,
         theta: Some(mle_theta),
     });
@@ -677,4 +731,3 @@ pub fn fit_panel_re_mle(
 }
 
 // ============== Two-Way Random Effects ==============
-
