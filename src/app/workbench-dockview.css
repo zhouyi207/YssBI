@@ -490,28 +490,6 @@
 [data-yssbi-root-dockview]
   .dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container
-  .dv-tabs-container.dv-vertical
-  > .dv-tab:has([data-workbench-activity-separator]) {
-  margin-top: 8px;
-}
-
-[data-yssbi-root-dockview]
-  .dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
-  .dv-tabs-container.dv-vertical
-  > .dv-tab:has([data-workbench-activity-separator])::before {
-  position: absolute;
-  top: -5px;
-  left: 8px;
-  width: 24px;
-  height: 1px;
-  background: var(--strong-border);
-  content: "";
-}
-
-[data-yssbi-root-dockview]
-  .dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
   [data-workbench-activity-tab] {
   display: flex;
   width: 100%;

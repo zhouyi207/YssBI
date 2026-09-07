@@ -267,7 +267,6 @@ export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabR
         ref={tabContentRef}
         className="dv-default-tab"
         data-workbench-activity-tab
-        data-workbench-activity-separator={metadata.viewId === "commands" ? "true" : undefined}
         data-workbench-tab-edge-collapsed={isEdgeCollapsed ? "true" : undefined}
         data-panel-instance-id={props.api.id}
         aria-label={title}
