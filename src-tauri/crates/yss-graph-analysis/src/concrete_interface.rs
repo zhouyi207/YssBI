@@ -64,7 +64,11 @@ pub(crate) fn sort_concrete_ports(
                 .map_or_else(|| "~orphan".to_owned(), |index| format!("{index:010}"))
         } else if instance {
             binding
-                .map(|binding| crate::binding_order(binding).as_str().to_owned())
+                .map(|binding| {
+                    crate::port_projection::binding_order(binding)
+                        .as_str()
+                        .to_owned()
+                })
                 .unwrap_or_default()
         } else {
             String::new()
