@@ -9,16 +9,10 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(),
 }));
 
-vi.mock("@/features/core/dataStore", () => ({
+vi.mock("@/features/application/project/projectHydration", () => ({
   loadActivatedProject: vi.fn(async () => null),
-  useProjectIOStore: {
-    getState: () => ({
-      loadProject: async () => null,
-      refreshResourceIndex: async () => false,
-      loadGraph: async () => false,
-    }),
-    setState: vi.fn(),
-  },
+  loadCurrentProject: vi.fn(async () => null),
+  refreshProjectResourceIndex: vi.fn(async () => false),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

@@ -9,10 +9,8 @@ import {
   registerPendingProjectLifecycleOperation,
   resetProjectLifecycleReceiptHandlerForTests,
 } from "@/features/application/projectLifecycleReceipt";
-import {
-  loadActivatedProject,
-  useProjectIOStore,
-} from "@/features/application/project/projectIOStore";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { loadActivatedProject } from "@/features/application/project/projectHydration";
 import { useEditorStore } from "@/features/core/editor";
 import { useResourceStore } from "@/features/core/resource";
 import { uiStore } from "@/features/core/ui/UIStore";

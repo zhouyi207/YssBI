@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { loadActivatedProject } from "@/features/application/project/projectIOStore";
+import { loadActivatedProject } from "@/features/application/project/projectHydration";
 import { resolveActiveProjectPath } from "@/features/application/project/projectSession";
 import {
   captureProjectIdentity,
@@ -213,8 +213,8 @@ export function useProjectOperations() {
 
       const activation = await ProjectService.loadProjectToState(path);
 
-      const projectData = await loadActivatedProject(activation);
-      if (!projectData) {
+      const loadReceipt = await loadActivatedProject(activation);
+      if (!loadReceipt) {
         showBlockingMessage(t("notifications.project.loadFailed"));
         return;
       }

@@ -1,13 +1,14 @@
+import { clearProjectProjection } from "@/features/application/project/projectHydration";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import {
   ProjectLifecycleProtocolError,
   type ProjectLifecycleReceiptDependencies,
 } from "@/features/application/projectLifecycleReceipt";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   commitPreparedAuthoritativeProjectLoad,
   prepareAuthoritativeProjectLoad,
-  useProjectIOStore,
-} from "@/features/application/project/projectIOStore";
+} from "@/features/application/project/projectHydration";
 import { ProjectService } from "@/services/project/projectService";
 import {
   captureProjectIdentity,
@@ -41,7 +42,7 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
         isPlaying: false,
       });
       if (!isProjectLifecycleStateCurrent(owner)) return;
-      await useProjectIOStore.getState().clearProjectProjection(owner);
+      await clearProjectProjection(owner);
       if (
         isProjectLifecycleStateCurrent(owner) &&
         useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId

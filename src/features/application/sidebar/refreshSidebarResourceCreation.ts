@@ -1,5 +1,5 @@
+import { refreshProjectResourceIndex } from "@/features/application/project/projectHydration";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useVariableStore } from "@/features/core/dataStore/variableStore";
 
 type SidebarResourceKind = "variable" | "database";
@@ -16,7 +16,7 @@ export async function refreshMissingSidebarResourcePath(options: {
   hasCurrentDescriptor(resourcePath: string): boolean;
   refreshCatalog(): void;
 }): Promise<void> {
-  const refreshed = await useProjectIOStore.getState().refreshResourceIndex();
+  const refreshed = await refreshProjectResourceIndex();
   if (!refreshed) return;
 
   const resourcePath = currentResourcePath(options.kind, options.id);

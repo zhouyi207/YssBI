@@ -1,4 +1,4 @@
-import type { ProjectData, Variable } from "@/shared/types";
+import type { Variable } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabases } from "@/features/application/dataManagement/databaseRecords";
 import type { ProjectGraphIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
@@ -27,7 +27,6 @@ export interface AuthoritativeProjectLoadSource {
 }
 
 export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLoadSource {
-  readonly projectData: ProjectData;
   readonly storeState: {
     readonly databases: Record<string, DatabaseRecord>;
     readonly databaseRevisions: Record<string, number>;
@@ -201,17 +200,8 @@ export function buildAuthoritativeProjectLoadPlan(
     source.index.projectInstanceId,
     source.index.publicationRevision,
   );
-  const projectData = {
-    variables: variableState.variables,
-    databases: source.databases,
-    graphs: {},
-    metadata: {
-      exportTime: source.index.exportTime,
-    },
-  } as ProjectData;
   return {
     ...source,
-    projectData,
     storeState: {
       databases,
       databaseRevisions,

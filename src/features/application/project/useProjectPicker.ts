@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  loadActivatedProject,
-  useProjectIOStore,
-} from "@/features/application/project/projectIOStore";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { loadActivatedProject } from "@/features/application/project/projectHydration";
 import {
   applyCleanupProgressEvent,
   applyScanProgressEvent,
@@ -378,8 +376,8 @@ export function useProjectPicker() {
               pathFileName(result.path),
               result.path,
             );
-            const projectData = await loadActivatedProject(result);
-            if (!projectData) {
+            const loadReceipt = await loadActivatedProject(result);
+            if (!loadReceipt) {
               if (!useProjectIOStore.getState().error) return { status: "stale" };
               throw new ProjectPickerOperationError("project_activation_failed");
             }

@@ -1,9 +1,11 @@
+import {
+  loadCurrentProject,
+  refreshProjectResourceIndex,
+} from "@/features/application/project/projectHydration";
 import { useEffect } from "react";
 
-import {
-  loadActivatedProject,
-  useProjectIOStore,
-} from "@/features/application/project/projectIOStore";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { loadActivatedProject } from "@/features/application/project/projectHydration";
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   createProjectEventIngress,
@@ -37,11 +39,11 @@ let runtime: ProjectSyncRuntime | null = null;
 function hydrationDependencies(): ProjectEventConsumerDependencies["hydration"] {
   return {
     loadCurrentProject: async () =>
-      (await useProjectIOStore.getState().loadProject())
+      (await loadCurrentProject())
         ? { status: "published" as const }
         : { status: "failed" as const },
     refreshResourceIndex: async () =>
-      (await useProjectIOStore.getState().refreshResourceIndex())
+      (await refreshProjectResourceIndex())
         ? { status: "published" as const }
         : { status: "failed" as const },
     replaceProject: () => {
@@ -72,7 +74,7 @@ function createConsumer(): ProjectEventConsumer {
     },
     publishProjectSaved: () => undefined,
     publishResourceMutationCommitted: async () => {
-      await useProjectIOStore.getState().refreshResourceIndex();
+      await refreshProjectResourceIndex();
     },
   });
 }
@@ -81,7 +83,7 @@ function createRuntime(): ProjectSyncRuntime {
   const stream = createProjectEventStream();
   const ingress = createProjectEventIngress(createConsumer(), {
     requestAuthoritativeSnapshot: async () => {
-      await useProjectIOStore.getState().loadProject();
+      await loadCurrentProject();
     },
     publishIssue: (issue) => {
       if (issue.reason === "recoveryRequested") return;

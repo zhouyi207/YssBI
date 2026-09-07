@@ -1,4 +1,4 @@
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import { refreshProjectResourceIndex } from "@/features/application/project/projectHydration";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -22,7 +22,7 @@ function identityKey(identity: ProjectIdentitySnapshot): string {
 
 function refreshResourceIndex(identity: ProjectIdentitySnapshot): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return Promise.resolve(false);
-  return useProjectIOStore.getState().refreshResourceIndex();
+  return refreshProjectResourceIndex();
 }
 
 async function refreshInvalidatedVersions(state: InvalidationState): Promise<boolean> {

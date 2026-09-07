@@ -1,10 +1,11 @@
 import { LoadStatus } from "@/shared/types/ui/common";
 import { ProjectService } from "@/services/project/projectService";
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import {
   loadActivatedProject,
-  useProjectIOStore,
-} from "@/features/application/project/projectIOStore";
+  loadCurrentProject,
+} from "@/features/application/project/projectHydration";
 import { hydrateProjectPath } from "@/features/application/project/projectSession";
 
 /** Hydrate the current backend project for a window through the Application entrance. */
@@ -14,11 +15,11 @@ export async function initializeProjectForCurrentWindow(): Promise<void> {
     return;
   }
 
-  const { status, currentPath, loadProject } = useProjectIOStore.getState();
+  const { status, currentPath } = useProjectIOStore.getState();
   if (status === LoadStatus.Ready) {
     if (currentPath) return;
     const hydrated = await hydrateProjectPath();
     if (!hydrated) return;
   }
-  await loadProject();
+  await loadCurrentProject();
 }

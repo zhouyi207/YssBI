@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import * as projectHydration from "@/features/application/project/projectHydration";
 import {
   captureProjectIdentity,
   clearProjectLifecycle,
@@ -27,10 +27,9 @@ describe("resourceIndexCoordinator", () => {
 
   it("refreshes immediately after a successful command", async () => {
     const refreshResourceIndex = vi.fn().mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
-      ...useProjectIOStore.getState(),
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
       refreshResourceIndex,
-    });
+    );
 
     await commitAfterCommand();
 
@@ -39,10 +38,9 @@ describe("resourceIndexCoordinator", () => {
 
   it("coalesces repeated external invalidations into one refresh", async () => {
     const refreshResourceIndex = vi.fn().mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
-      ...useProjectIOStore.getState(),
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
       refreshResourceIndex,
-    });
+    );
 
     const identity = captureProjectIdentity();
     void notifyIndexInvalidated(identity, 1);
@@ -62,10 +60,9 @@ describe("resourceIndexCoordinator", () => {
       .fn()
       .mockImplementationOnce(() => commandRefreshPending)
       .mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
-      ...useProjectIOStore.getState(),
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
       refreshResourceIndex,
-    });
+    );
 
     const commandRefresh = commitAfterCommand();
     startProjectLifecycle("project-instance-b");
@@ -88,10 +85,9 @@ describe("resourceIndexCoordinator", () => {
       .fn()
       .mockImplementationOnce(() => firstRefreshPending)
       .mockResolvedValue(true);
-    vi.spyOn(useProjectIOStore, "getState").mockReturnValue({
-      ...useProjectIOStore.getState(),
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
       refreshResourceIndex,
-    });
+    );
     const identity = captureProjectIdentity();
 
     const firstInvalidation = notifyIndexInvalidated(identity, 1);

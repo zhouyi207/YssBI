@@ -1,3 +1,7 @@
+import {
+  loadCurrentProject,
+  refreshProjectResourceIndex,
+} from "@/features/application/project/projectHydration";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectService } from "@/services/project/projectService";
 import { normalizeIpcError } from "@/services/ipc";
@@ -82,7 +86,7 @@ describe("projectIOStore error references", () => {
       exportTime: "",
     });
 
-    await expect(useProjectIOStore.getState().loadProject()).resolves.not.toBeNull();
+    await expect(loadCurrentProject()).resolves.not.toBeNull();
 
     expect(removeProjectScopedWorkbenchPanels).not.toHaveBeenCalled();
     expect(useProjectIOStore.getState()).toMatchObject({
@@ -96,7 +100,7 @@ describe("projectIOStore error references", () => {
       new Error("private project index parser prose"),
     );
 
-    await expect(useProjectIOStore.getState().loadProject()).resolves.toBeNull();
+    await expect(loadCurrentProject()).resolves.toBeNull();
 
     const state = useProjectIOStore.getState();
     expect(state.status).toBe(LoadStatus.Error);
@@ -112,7 +116,7 @@ describe("projectIOStore error references", () => {
       normalizeIpcError("get_project_path", new Error("private project transport prose")),
     );
 
-    await expect(useProjectIOStore.getState().loadProject()).resolves.toBeNull();
+    await expect(loadCurrentProject()).resolves.toBeNull();
 
     expect(useProjectIOStore.getState().error).toEqual({
       code: "ipc_transport_failure",
@@ -132,7 +136,7 @@ describe("projectIOStore error references", () => {
       }),
     );
 
-    await expect(useProjectIOStore.getState().loadProject()).resolves.toBeNull();
+    await expect(loadCurrentProject()).resolves.toBeNull();
 
     expect(useProjectIOStore.getState().error).toEqual({
       code: "project_io_failed",
@@ -148,7 +152,7 @@ describe("projectIOStore error references", () => {
       new Error("private resource index parser prose"),
     );
 
-    await expect(useProjectIOStore.getState().refreshResourceIndex()).resolves.toBe(false);
+    await expect(refreshProjectResourceIndex()).resolves.toBe(false);
 
     expect(useProjectIOStore.getState().error).toEqual({
       code: "project_resource_index_contract_error",
