@@ -143,19 +143,17 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     });
   });
 
-  it("rejects project rows whose type disagrees with the path kind or suffix", async () => {
-    for (const path of [
-      "events/Wrong.yssbi-event",
-      "functions/Wrong.yssbi-event",
-      "functions/Wrong.txt",
-    ]) {
-      const index = projectIndex();
-      functionRow(index).path = path;
-      ipc.response = index;
-      await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(
-        "Invalid project index response",
-      );
-    }
+  it("uses the explicit graph type while preserving an opaque path", async () => {
+    const index = projectIndex();
+    functionRow(index).path = "events/opaque-function-identity";
+    ipc.response = index;
+    await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
+      graphs: [{ path: "events/opaque-function-identity", type: "function" }],
+    });
+    functionRow(index).path = "";
+    await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(
+      "Invalid project index response",
+    );
   });
 
   it("rejects a function editor projection missing inputs", async () => {

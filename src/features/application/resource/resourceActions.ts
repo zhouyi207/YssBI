@@ -44,15 +44,16 @@ function chartRevision(chartPath: string): number {
 }
 
 function mutationGraphPath(result: ResourceMutationResultDto): string {
-  const paths =
-    result.projectionStatus.status === "complete"
-      ? result.projectionStatus.expectedGraphPaths
-      : result.projectionStatus.invalidatedGraphPaths;
-  const path = paths.find(
-    (candidate) => candidate.startsWith("events/") || candidate.startsWith("functions/"),
-  );
-  if (!path) throw new Error("Resource mutation result omitted its graph path");
-  return path;
+  for (const delta of result.deltas) {
+    if (
+      delta.resource.kind === "graph" &&
+      delta.payload.kind === "resource_lifecycle" &&
+      delta.payload.patch.after
+    ) {
+      return delta.payload.patch.after.path;
+    }
+  }
+  throw new Error("Resource mutation result omitted its created graph");
 }
 
 async function submitCurrentResult(

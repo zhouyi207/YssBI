@@ -5,7 +5,7 @@ import { useExecutionStore } from "@/features/core/execution";
 import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
 import { markResourceLoaded } from "@/features/core/resource";
 import { releaseGraphViewport } from "@/features/core/viewport";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import { GraphService } from "@/services/graph/graphService";
 import { logger } from "@/features/application/observability/appLogger";
 import { shouldRetainGraphDocument } from "./graphDocumentRetention";
@@ -32,7 +32,7 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
   useExecutionStore.getState().releaseGraphExecutionState(graphPath);
   releaseGraphViewport(graphPath);
 
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind) {
     markResourceLoaded({ id: graphPath, kind }, false);
   }

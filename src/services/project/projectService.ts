@@ -105,7 +105,6 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
   const common = path !== null && typeof value.name === "string" && isSafeRevision(value.revision);
   if (
     value.type === "event" &&
-    path?.startsWith("events/") &&
     common &&
     hasExactKeys(value, ["path", "name", "type", "revision"])
   ) {
@@ -113,7 +112,6 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
   }
   if (
     value.type === "function" &&
-    path?.startsWith("functions/") &&
     common &&
     hasExactKeys(value, [
       "path",

@@ -1,3 +1,4 @@
+import * as projectHydration from "@/features/application/project/projectHydration";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useDatabaseStore,
@@ -201,9 +202,9 @@ describe("renameResource project ownership", () => {
       },
       revisions: { sales: 4 },
     });
+    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     useProjectIOStore.setState({
       projectInstanceId: "project-instance-current",
-      refreshResourceIndex: vi.fn(async () => true),
     });
     startProjectLifecycle("project-instance-current");
   });

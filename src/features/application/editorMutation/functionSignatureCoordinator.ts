@@ -1,7 +1,5 @@
-import {
-  currentProjectionLocale,
-  hydrateGraphProjection,
-} from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
+import { hydrateGraphProjection } from "@/features/application/graphProjection/graphProjectionLifecycle";
 
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { captureRevisionedProjectCommandSnapshot } from "@/features/application/projectCommandContext";

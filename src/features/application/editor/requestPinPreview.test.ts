@@ -1,3 +1,4 @@
+import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -65,6 +66,7 @@ function installGraph(
     useGraphDraftStore.getState().sessions[graphPath].compileRequest!,
   );
   const kind = graphPath.startsWith("events/") ? "event" : "function";
+  useResourceStore.getState().upsertResource(buildGraphResourceMeta(kind, graphPath, "Graph"));
   markResourceLoaded({ id: graphPath, kind });
   useGraphSessionStore.getState().setFocusedSession("editor-a", graphPath);
   return {
@@ -103,6 +105,7 @@ describe("requestPinPreview", () => {
     useGraphSessionStore.getState().reset();
     useGraphDraftStore.getState().clear();
     useDocumentStateStore.getState().clear();
+    useResourceStore.getState().clear();
     useExecutionStore.setState({
       graphs: {},
       playbackGraphPath: null,
@@ -311,6 +314,7 @@ describe("requestPinPreview", () => {
       prepare: () => {
         const graph = installGraph();
         useDocumentStateStore.getState().clear();
+        useResourceStore.getState().clear();
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,

@@ -1,7 +1,6 @@
 import type { WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 import { ensureEditorViewport, editorViewportScope } from "@/features/core/viewport";
 import { logger } from "@/features/application/observability/appLogger";
-import { isValidGraphResourceTabId } from "@/shared/types/domain/graphResourcePath";
 
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
 import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
@@ -25,9 +24,6 @@ export async function openGraphInEditor(
     "EditorPanelCommands",
   );
 
-  if (!isValidGraphResourceTabId(graphPath, type)) {
-    throw new Error(`Invalid graph resource path for ${type}: ${graphPath}`);
-  }
   const pinned = options?.pinned !== false;
   const target = { resourceRef: graphPath, resourceKind: type, pinned } as const;
   let panel: WorkbenchEditorPanelInfo;

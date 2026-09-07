@@ -6,7 +6,7 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
 import { enqueueGraphDraftTask } from "./graphDraftCoordinator";
 import {
@@ -15,7 +15,7 @@ import {
   useGraphDraftStore,
 } from "@/features/core/graphDraft";
 import { markResourceDirty } from "@/features/core/resource";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 
 export type HistoryDirection = "undo" | "redo";
 
@@ -67,7 +67,7 @@ async function installHistoryProjection(
     throw new Error(`Graph draft ${direction} projection could not be installed`);
   if (!useGraphDraftStore.getState()[direction](graphPath, projection)) return false;
   commitPreparedGraphProjectionReplacements(prepared.plan);
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind) markResourceDirty({ id: graphPath, kind }, isGraphDraftDirty(graphPath));
   return true;
 }

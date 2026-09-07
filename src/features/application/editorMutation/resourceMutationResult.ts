@@ -1,4 +1,4 @@
-import { invalidateGraphResults } from "@/features/application/results";
+import { invalidateGraphResults } from "@/features/application/results/runtime";
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
@@ -13,7 +13,7 @@ import { useVariableStore } from "@/features/core/dataStore/variableStore";
 import { validateResourceMutationResult } from "@/features/domain/resource/resourceMutationValidation";
 import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { lookupGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type { DatabaseDocumentDto, DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabaseRecord } from "@/features/application/dataManagement/databaseRecords";
 import { normalizeVariableFromBackend } from "@/shared/types/domain/variable";
@@ -94,7 +94,7 @@ export function collectResourceMutationGraphPaths(
   if (!isRecord(result)) return paths;
   const moves = Array.isArray(result.moves) ? result.moves : [result.moves];
   for (const move of moves) {
-    if (!isRecord(move)) continue;
+    if (!isRecord(move) || (move.kind !== "event" && move.kind !== "function")) continue;
     if (isGraphResourcePath(move.from)) paths.add(move.from);
     if (isGraphResourcePath(move.to)) paths.add(move.to);
   }
@@ -742,7 +742,7 @@ export function prepareSynchronousPublicationCommit(
   for (const delta of result.deltas) {
     if (delta.resource.kind !== "graph") continue;
     const graphPath = delta.resource.key;
-    const kind = inferGraphResourceKind(graphPath);
+    const kind = lookupGraphResourceKind(aggregate.resources, graphPath);
     if (!kind) continue;
     const key = resourceKey({ id: graphPath, kind });
     const resource = aggregate.resources[key];

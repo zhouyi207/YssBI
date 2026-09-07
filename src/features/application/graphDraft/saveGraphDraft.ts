@@ -1,4 +1,4 @@
-import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { waitForGraphDraftMutations } from "@/features/application/graphDraft/graphDraftCoordinator";
 import {
   prepareGraphProjectionReplacements,

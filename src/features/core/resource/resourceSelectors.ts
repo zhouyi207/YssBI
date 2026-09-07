@@ -29,6 +29,10 @@ export function lookupGraphResourceKind(
   return undefined;
 }
 
+export function getGraphResourceKind(graphPath: string): "event" | "function" | undefined {
+  return lookupGraphResourceKind(useResourceStore.getState().resources, graphPath);
+}
+
 export function selectGraphResourcesByKind(
   resources: Record<ResourceKey, ProjectResourceMeta>,
   kind: "event" | "function",

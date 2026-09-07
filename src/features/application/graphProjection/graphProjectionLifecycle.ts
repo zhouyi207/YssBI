@@ -1,10 +1,9 @@
-import i18n from "i18next";
-import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
+import { currentProjectionLocale } from "./projectionLocale";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import { getDocumentState } from "@/features/core/resource";
@@ -27,7 +26,7 @@ function startGraphLifecycle(graphPath: string): number {
 }
 
 function setGraphProjectionStale(graphPath: string, stale: boolean): void {
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind) markResourceStale({ id: graphPath, kind }, stale);
 }
 
@@ -77,10 +76,6 @@ async function requestGraphProjection(
     [operation === "hydrate" ? "hydrate" : "install"](graphPath, session);
   setGraphProjectionStale(graphPath, false);
   return true;
-}
-
-export function currentProjectionLocale(): string {
-  return i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
 }
 
 export function beginGraphLoadLifecycle(graphPath: string): number {
@@ -160,7 +155,7 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
     setGraphProjectionStale(graphPath, true);
     return Promise.resolve(false);
   }
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind && getDocumentState({ id: graphPath, kind })?.dirty) {
     setGraphProjectionStale(graphPath, true);
     return resolveCurrentGraphDraft(graphPath, locale)

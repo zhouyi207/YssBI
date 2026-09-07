@@ -4,7 +4,7 @@ import { useProjectIOStore } from "@/features/application/project/projectIOStore
 import { markResourceLoaded } from "@/features/core/resource";
 import { ensureEditorViewport } from "@/features/core/viewport";
 import { editorViewportScope } from "@/features/core/viewport/viewportScope";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { logger } from "@/features/application/observability/appLogger";
 import { enforceGraphDocumentCacheLimit, touchGraphDocument } from "./graphDocumentCachePolicy";
@@ -26,7 +26,7 @@ function scheduleGraphCleanup(previousGraphPath?: string): void {
 }
 
 function finishGraphEditorActivation(groupId: string, graphPath: string): void {
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind) {
     markResourceLoaded({ id: graphPath, kind }, true);
   }

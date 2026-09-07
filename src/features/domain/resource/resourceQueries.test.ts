@@ -1,3 +1,4 @@
+import { toGraphResourceUri } from "@/shared/types/domain/graphResourcePath";
 import { describe, expect, it } from "vitest";
 import type { ProjectResourceMeta } from "./resourceTypes";
 import { lookupGraphResource } from "./resourceQueries";
@@ -5,10 +6,10 @@ import { lookupGraphResource } from "./resourceQueries";
 describe("resourceQueries", () => {
   it("looks up graph resources by their opaque path", () => {
     const event = {
-      id: "events/Main.yssbi-event",
+      id: "opaque graph A",
       kind: "event",
       name: "Main",
-      uri: "yssbi://graph/event/events::Main.yssbi-event",
+      uri: toGraphResourceUri("event", "opaque graph A"),
       exists: true,
       loaded: false,
       hasDirtyDocument: false,
@@ -16,10 +17,10 @@ describe("resourceQueries", () => {
       hasConflictDocument: false,
     } satisfies ProjectResourceMeta;
     const functionResource = {
-      id: "functions/Helper.yssbi-function",
+      id: "events/still-a-function",
       kind: "function",
       name: "Helper",
-      uri: "yssbi://graph/function/functions::Helper.yssbi-function",
+      uri: toGraphResourceUri("function", "events/still-a-function"),
       exists: true,
       loaded: false,
       hasDirtyDocument: false,

@@ -1,24 +1,30 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { useGraphProjectionStore } from "./graphProjectionStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
-import { markResourceLoaded, resourceKey } from "@/features/core/resource";
+import {
+  buildGraphResourceMeta,
+  markResourceLoaded,
+  resourceKey,
+  useResourceStore,
+} from "@/features/core/resource";
 import { isGraphCachedInMemory } from "./graphDocumentLoadPolicy";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 
 describe("graphDocumentLoadPolicy", () => {
-  const graphPath = "events/Main.yssbi-event";
+  const graphPath = "opaque graph resource";
   const docKey = resourceKey({ id: graphPath, kind: "event" });
 
   beforeEach(() => {
     useGraphProjectionStore.setState({ graphEntities: {} });
     useDocumentStateStore.getState().clear();
+    useResourceStore.getState().setResources([buildGraphResourceMeta("event", graphPath, "Main")]);
   });
 
   it("returns false when graph is not in memory", () => {
     expect(isGraphCachedInMemory("events/Missing.yssbi-event")).toBe(false);
   });
 
-  it("returns false when path kind cannot be inferred", () => {
+  it("returns false when no authoritative resource metadata exists", () => {
     const fixture = makeEditorProjectionFixture({ graphPath: "evt-1" });
     useGraphProjectionStore.getState().replaceProjection("evt-1", fixture.projection);
     expect(isGraphCachedInMemory("evt-1")).toBe(false);

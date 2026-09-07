@@ -18,7 +18,7 @@ import { openInspectableResult } from "@/features/application/execution/openInsp
 import { resultRef } from "@/features/application/results";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 
 import {
   observeGraphRunEvent,
@@ -58,7 +58,7 @@ export function isPinPreviewActionAvailable(
 ): boolean {
   return Boolean(
     graphPath &&
-    inferGraphResourceKind(graphPath) === "event" &&
+    getGraphResourceKind(graphPath) === "event" &&
     pin.direction === "output" &&
     !pin.orphan &&
     pin.status !== "orphan",
@@ -97,7 +97,7 @@ function capturePreviewRequest(
     return "stale-project-lifecycle";
   }
 
-  const graphKind = inferGraphResourceKind(graphPath);
+  const graphKind = getGraphResourceKind(graphPath);
   if (graphKind === "function") return "nested-function";
   if (graphKind !== "event") return "missing-resource";
   if (!useGraphSessionStore.getState().isFocusedGraphPath(graphPath)) return "missing-session";

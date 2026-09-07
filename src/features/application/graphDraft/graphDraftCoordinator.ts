@@ -1,6 +1,6 @@
-import { currentProjectionLocale } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { markResourceDirty, markResourceStale } from "@/features/core/resource";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
+import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type {
   EditorGraphMutationDto,
   GraphDraftTransformDto,
@@ -61,7 +61,7 @@ function installDraftProjection(graphPath: string, result: GraphDraftTransformDt
   useGraphDraftStore.getState().applyTransform(graphPath, result);
   const draft = useGraphDraftStore.getState().sessions[graphPath];
   commitPreparedGraphProjectionReplacements(prepared.plan);
-  const kind = inferGraphResourceKind(graphPath);
+  const kind = getGraphResourceKind(graphPath);
   if (kind) {
     markResourceDirty({ id: graphPath, kind }, draft.saveDirty);
     markResourceStale({ id: graphPath, kind }, false);
