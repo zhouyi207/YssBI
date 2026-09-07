@@ -9,16 +9,10 @@ const ctx: StatusBarRenderContext = {
   selectedCount: 2,
   nodeCount: 5,
   connectionCount: 3,
-  executionStatus: "idle",
-  juliaWorkerState: "ready",
-  juliaWorkerLabel: "Julia ready",
-  juliaWorkerTooltip: "Julia worker is ready",
 };
 
 const noopActions = {
-  openLogsPanel: () => {},
   resetCanvasViewport: () => {},
-  executionTooltip: "execution",
   viewportTooltip: "viewport",
   renderViewportStatus: () => "X 0 Y 0 100%",
 };
@@ -29,11 +23,9 @@ describe("built-in status bar items", () => {
 
     expect(snapshot.left).toEqual([]);
     expect(snapshot.right.map((item) => item.id)).toEqual([
-      "julia-worker",
       "node-count",
       "connection-count",
       "selected-nodes",
-      "execution-status",
       "viewport-status",
     ]);
   });

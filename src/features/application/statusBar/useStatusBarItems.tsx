@@ -9,7 +9,6 @@ import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjecti
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
 import { useDockviewPortSnapshot } from "@/modules/workbench/public";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
-import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   getViewport,
   subscribeToViewport,
@@ -23,7 +22,6 @@ import {
   type StatusBarRenderContext,
 } from "@/features/core/statusBar";
 import { useStatusBarActions } from "./useStatusBarActions";
-import { useJuliaWorkerStatus } from "./useJuliaWorkerStatus";
 
 function formatViewportStatus(scope: ViewportScope | null) {
   if (!scope) return "X 0 Y 0 100%";
@@ -49,7 +47,6 @@ function ViewportStatus({ scope }: { scope: ViewportScope | null }) {
 export function useStatusBarItems(): StatusBarItemsSnapshot {
   const { t } = useTranslation();
   const actions = useStatusBarActions();
-  const juliaWorker = useJuliaWorkerStatus();
 
   useDockviewPortSnapshot(workbenchDockviewRead);
   const capturedTarget = captureActiveEditorCommandTarget();
@@ -96,10 +93,6 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     }),
   );
 
-  const executionStatus = useExecutionStore((state) =>
-    editor.activeResourceRef ? (state.graphs[editor.activeResourceRef]?.status ?? "idle") : "idle",
-  );
-
   const ctx = useMemo<StatusBarRenderContext>(
     () => ({
       t,
@@ -108,20 +101,14 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       selectedCount: editor.selectedCount,
       nodeCount: graphStats.nodeCount,
       connectionCount: graphStats.connectionCount,
-      executionStatus,
-      juliaWorkerState: juliaWorker.state,
-      juliaWorkerLabel: juliaWorker.label,
-      juliaWorkerTooltip: juliaWorker.tooltip,
     }),
-    [t, editor, graphStats, executionStatus, juliaWorker],
+    [t, editor, graphStats],
   );
 
   const builtIn = useMemo(
     () =>
       createBuiltInStatusBarItems({
-        openLogsPanel: actions.openLogsPanel,
         resetCanvasViewport: actions.resetCanvasViewport,
-        executionTooltip: actions.executionTooltip,
         viewportTooltip: actions.viewportTooltip,
         renderViewportStatus: (groupId, graphPath) => (
           <ViewportStatus
@@ -129,12 +116,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
           />
         ),
       }),
-    [
-      actions.openLogsPanel,
-      actions.resetCanvasViewport,
-      actions.executionTooltip,
-      actions.viewportTooltip,
-    ],
+    [actions.resetCanvasViewport, actions.viewportTooltip],
   );
 
   return useStatusBarSnapshot(ctx, builtIn);

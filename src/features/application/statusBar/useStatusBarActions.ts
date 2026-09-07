@@ -5,16 +5,11 @@ import {
   captureActiveEditorCommandTarget,
   isEditorCommandTargetCurrent,
 } from "@/features/application/editor/editorCommandFocus";
-import { revealWorkbenchView } from "@/modules/workbench/public";
 import { setViewportLive, editorViewportScope } from "@/features/core/viewport";
 
 /** Status bar command handlers — keeps StatusBar presentational. */
 export function useStatusBarActions() {
   const { t } = useTranslation();
-
-  const openLogsPanel = useCallback(() => {
-    void revealWorkbenchView("logs");
-  }, []);
 
   const resetCanvasViewport = useCallback(() => {
     const target = captureActiveEditorCommandTarget();
@@ -26,9 +21,7 @@ export function useStatusBarActions() {
   }, []);
 
   return {
-    openLogsPanel,
     resetCanvasViewport,
-    executionTooltip: t("bottomBar.openLogsPanel"),
     viewportTooltip: t("bottomBar.resetViewport"),
   };
 }
