@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next";
 import { VscFolderOpened, VscNewFile, VscSymbolMethod } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { BrandMark } from "@/shared/ui/BrandMark";
 
 export interface WatermarkCommands {
   addEvent(name?: string, options?: { readonly openAfterCreate?: boolean }): Promise<void>;
@@ -60,13 +59,6 @@ export const WatermarkView = ({ commands }: { readonly commands: WatermarkComman
       </svg>
 
       <div className="relative z-10 flex w-full max-w-[620px] flex-col items-center">
-        <div className="relative mb-6">
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 scale-[2.2] rounded-full bg-[var(--accent-color)]/15 blur-2xl"
-          />
-          <BrandMark className="size-14 rounded-xl shadow-[0_0_0_1px_color-mix(in_srgb,var(--accent-color)_55%,transparent),0_16px_42px_color-mix(in_srgb,var(--accent-color)_28%,transparent)]" />
-        </div>
         <div className="mb-5 text-center">
           <p className="font-heading text-lg font-semibold tracking-[-0.035em] text-foreground">
             YssBI
