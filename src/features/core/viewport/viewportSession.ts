@@ -1,3 +1,4 @@
+import { readLiveViewport, writeLiveViewport } from "./liveViewportState";
 import type { EditorViewport } from "./editorViewport";
 import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 import { useViewportStore } from "./useViewportStore";
@@ -12,7 +13,6 @@ function storeViewport(scope: ViewportScope): EditorViewport {
   return useViewportStore.getState().viewports[viewportScopeKey(scope)] ?? DEFAULT_VIEWPORT;
 }
 
-const liveByScope = new Map<string, EditorViewport>();
 const listenersByScope = new Map<string, Set<(viewport: EditorViewport) => void>>();
 
 function notify(scope: ViewportScope, viewport: EditorViewport): void {
@@ -21,8 +21,7 @@ function notify(scope: ViewportScope, viewport: EditorViewport): void {
 
 /** Authoritative in-memory viewport for one editor pane (live preview ⊃ committed store). */
 export function getViewport(scope: ViewportScope): EditorViewport {
-  const key = viewportScopeKey(scope);
-  return liveByScope.get(key) ?? storeViewport(scope);
+  return readLiveViewport(scope) ?? storeViewport(scope);
 }
 
 export function setViewportLive(
@@ -32,21 +31,15 @@ export function setViewportLive(
   const prev = getViewport(scope);
   const next = typeof updater === "function" ? updater(prev) : { ...prev, ...updater };
   if (viewportEqual(prev, next)) return;
-  liveByScope.set(viewportScopeKey(scope), next);
+  writeLiveViewport(scope, next);
   notify(scope, next);
 }
 
 /** Flush live viewport into zustand (persistence / cross-panel reads). */
 export function commitViewport(scope: ViewportScope): void {
-  const key = viewportScopeKey(scope);
-  const live = liveByScope.get(key);
+  const live = readLiveViewport(scope);
   if (!live) return;
   useViewportStore.getState().setViewport(scope, live);
-}
-
-export function resetLiveViewports(scope?: ViewportScope): void {
-  if (scope) liveByScope.delete(viewportScopeKey(scope));
-  else liveByScope.clear();
 }
 
 export function subscribeToViewport(
@@ -63,12 +56,13 @@ export function subscribeToViewport(
     const next = state.viewports[key] ?? DEFAULT_VIEWPORT;
     const prev = prevState.viewports[key] ?? DEFAULT_VIEWPORT;
     if (viewportEqual(next, prev)) return;
-    liveByScope.set(key, next);
+    writeLiveViewport(scope, next);
     listener(next);
   });
 
   return () => {
     set.delete(listener);
+    if (set.size === 0) listenersByScope.delete(key);
     unsubStore();
   };
 }

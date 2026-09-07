@@ -4,7 +4,7 @@ import { DEFAULT_VIEWPORT } from "@/shared/config-default";
 
 import type { EditorViewport } from "./editorViewport";
 import { resolveInitialGraphViewport } from "./resolveInitialGraphViewport";
-import { resetLiveViewports } from "./viewportSession";
+import { resetLiveViewports } from "./liveViewportState";
 import type { ViewportScope } from "./viewportScope";
 import { parseViewportScopeKey, viewportScopeKey } from "./viewportScope";
 
@@ -59,15 +59,6 @@ export function remapGraphViewport(from: string, to: string): void {
     }
     return changed ? { viewports } : state;
   });
-}
-
-export function normalizeEditorViewport(viewport?: EditorViewport | null): EditorViewport {
-  if (!viewport) return { ...DEFAULT_VIEWPORT };
-  return {
-    x: viewport.x ?? 0,
-    y: viewport.y ?? 0,
-    scale: viewport.scale ?? DEFAULT_VIEWPORT.scale,
-  };
 }
 
 /** Seed pane viewport on first open in a group; project memento seeds per graph path. */

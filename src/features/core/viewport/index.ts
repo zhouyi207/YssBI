@@ -5,7 +5,6 @@ export { editorViewportScope, viewportScopeKey, parseViewportScopeKey } from "./
 export {
   useViewportStore,
   remapGraphViewport,
-  normalizeEditorViewport,
   ensureEditorViewport,
   releaseEditorViewport,
   releaseGraphViewport,
@@ -15,7 +14,6 @@ export {
   setViewportLive,
   commitViewport,
   subscribeToViewport,
-  resetLiveViewports,
 } from "./viewportSession";
 export { persistGraphViewport } from "./persistGraphViewport";
 export {
@@ -32,3 +30,5 @@ export {
   viewportGridStyle,
 } from "./viewportTransform";
 export { applyWheelZoomToViewport, attachCanvasWheelZoom } from "./canvasWheelZoom";
+export { normalizeEditorViewport } from "./editorViewport";
+export { resetLiveViewports } from "./liveViewportState";
