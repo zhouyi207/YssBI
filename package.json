@@ -50,7 +50,6 @@
     "dockview-react": "^8.2.0",
     "i18next": "^26.0.8",
     "katex": "^0.18.4",
-    "marked": "^18.0.9",
     "pinyin-pro": "3.29.1",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",

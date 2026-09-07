@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@/features/application/stats/statsActions", () => ({
+vi.mock("@/features/application/stats/useDidFakeGroupRi", () => ({
   useDidFakeGroupRi: () => mocks.hookState,
 }));
 
