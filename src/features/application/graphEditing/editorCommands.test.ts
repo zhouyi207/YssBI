@@ -11,16 +11,13 @@ const applyGraphDraftMutation = vi.hoisted(() => vi.fn());
 vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
   applyGraphDraftMutation,
 }));
-vi.mock(
-  "@/features/application/graphProjection/graphProjectionLifecycle",
-  async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import("@/features/application/graphProjection/graphProjectionLifecycle")
-    >()),
-    currentProjectionLocale: () => "en-US",
-    hydrateGraphProjection: vi.fn(async () => true),
-  }),
-);
+vi.mock("@/features/application/graphProjection/projectionLocale", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/features/application/graphProjection/projectionLocale")
+  >()),
+  currentProjectionLocale: () => "en-US",
+  hydrateGraphProjection: vi.fn(async () => true),
+}));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
