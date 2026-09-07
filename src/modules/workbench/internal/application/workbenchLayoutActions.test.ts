@@ -618,7 +618,6 @@ describe("semantic workbench layout actions", () => {
       groupId: "workbench-edge-left",
       visible: false,
       collapsed: false,
-      size: 292,
     };
     mocks.panels.push(
       viewPanel("project", "project", "workbench-edge-left", edgeLocation("left")),
@@ -696,7 +695,6 @@ describe("semantic workbench layout actions", () => {
       groupId: "edge-bottom",
       visible: true,
       collapsed: false,
-      size: 200,
     };
     mocks.panels.push(viewPanel("output-bottom", "output", "edge-bottom"));
 
@@ -718,7 +716,6 @@ describe("semantic workbench layout actions", () => {
       groupId: "edge-bottom",
       visible: true,
       collapsed: false,
-      size: 200,
     };
     mocks.panels.push(viewPanel("logs-grid", "logs", "grid-a", gridLocation));
 

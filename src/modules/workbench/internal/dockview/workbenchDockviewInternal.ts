@@ -1,4 +1,9 @@
-import type { DockviewApi, DockviewGroupPanel, IDockviewPanel } from "dockview-react";
+import type {
+  DockviewApi,
+  DockviewGroupPanel,
+  DockviewGroupPanelApi,
+  IDockviewPanel,
+} from "dockview-react";
 
 import {
   canMoveWorkbenchPanel,
@@ -95,8 +100,11 @@ export function createWorkbenchDockviewRuntime(): {
   const hydrationWaiters = new Set<(result: { readonly status: "hydrated" | "unbound" }) => void>();
   const idleWaiters = new Set<() => void>();
   const rootDisposables: Disposable[] = [];
-  const edgeDisposables = new Map<WorkbenchEdgePosition, Disposable>();
-  const panelDisposables = new Map<string, Disposable>();
+  const edgeDisposables = new Map<
+    WorkbenchEdgePosition,
+    Disposable & { readonly edge: DockviewGroupPanelApi }
+  >();
+  const panelDisposables = new Map<string, Disposable & { readonly panel: IDockviewPanel }>();
   type PendingOperation = {
     readonly operationGeneration: number;
     readonly bindingGeneration?: number;
@@ -170,16 +178,15 @@ export function createWorkbenchDockviewRuntime(): {
   };
 
   const rebindEdgeListeners = (): void => {
-    for (const disposable of edgeDisposables.values()) disposable.dispose();
-    edgeDisposables.clear();
-    if (!api) return;
     for (const position of EDGE_POSITIONS) {
-      const edge = api.getEdgeGroup(position);
+      const edge = api?.getEdgeGroup(position);
+      const existing = edgeDisposables.get(position);
+      if (existing?.edge === edge) continue;
+      existing?.dispose();
+      edgeDisposables.delete(position);
       if (!edge) continue;
-      edgeDisposables.set(
-        position,
-        edge.onDidCollapsedChange(() => publish()),
-      );
+      const disposable = edge.onDidCollapsedChange(() => publish());
+      edgeDisposables.set(position, { edge, dispose: () => disposable.dispose() });
     }
   };
 
@@ -192,11 +199,15 @@ export function createWorkbenchDockviewRuntime(): {
   };
 
   const rebindPanelListeners = (): void => {
-    for (const disposable of panelDisposables.values()) disposable.dispose();
-    panelDisposables.clear();
-    if (!api) return;
+    const panels = new Set(api?.panels);
+    for (const [id, disposable] of panelDisposables) {
+      if (panels.has(disposable.panel)) continue;
+      disposable.dispose();
+      panelDisposables.delete(id);
+    }
 
-    for (const panel of api.panels) {
+    for (const panel of panels) {
+      if (panelDisposables.has(panel.id)) continue;
       const disposables: Disposable[] = [];
       if (typeof panel.api.onDidVisibilityChange === "function") {
         disposables.push(panel.api.onDidVisibilityChange(() => publish()));
@@ -206,6 +217,7 @@ export function createWorkbenchDockviewRuntime(): {
       }
       if (disposables.length > 0) {
         panelDisposables.set(panel.id, {
+          panel,
           dispose: () => disposables.forEach((disposable) => disposable.dispose()),
         });
       }

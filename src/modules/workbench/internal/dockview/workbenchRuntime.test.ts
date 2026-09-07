@@ -669,7 +669,7 @@ describe("workbench Dockview port", () => {
     expect(fake.edge("bottom").addPanel).toHaveBeenCalledOnce();
   });
 
-  it("publishes native layout, active, and collapse events and rebinds edge listeners", async () => {
+  it("publishes native events while retaining subscriptions to unchanged edge instances", async () => {
     const fake = createFakeWorkbenchDockview();
     const { port, internal } = createDockviewHarness();
     internal.bind(fake.api);
@@ -696,8 +696,9 @@ describe("workbench Dockview port", () => {
 
     const collapseSubscriptions =
       fake.edge("bottom").group.collapsedChange.subscribe.mock.calls.length;
+    for (let step = 0; step < 12; step += 1) fake.layoutChange.emit();
     fake.layoutFromJson.emit();
-    expect(fake.edge("bottom").group.collapsedChange.subscribe.mock.calls.length).toBeGreaterThan(
+    expect(fake.edge("bottom").group.collapsedChange.subscribe.mock.calls.length).toBe(
       collapseSubscriptions,
     );
 
@@ -759,9 +760,9 @@ describe("workbench Dockview port", () => {
     expect(await port.setEdgeCollapsed("bottom", false)).toBe(true);
     expect(port.getEdgeState("bottom")).toMatchObject({
       exists: true,
-      size: 260,
       collapsed: false,
     });
+    expect((await port.serialize()).edgeGroups?.bottom?.size).toBe(260);
   });
 
   it("does not call moveTo for a same-group move whose effective index is unchanged", async () => {
@@ -1324,9 +1325,9 @@ describe("workbench Dockview port", () => {
       viewId: "logs",
     });
     expect(port.getEdgeState("bottom")).toMatchObject({
-      size: 240,
       collapsed: true,
     });
+    expect((await port.serialize()).edgeGroups?.bottom?.size).toBe(240);
     expect(fake.fromJSON).not.toHaveBeenCalled();
   });
 

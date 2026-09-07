@@ -202,7 +202,7 @@ export class PendingWorkbenchTransaction {
         groupId: group.id,
         visible: api.isEdgeGroupVisible(position),
         collapsed: group.isCollapsed(),
-        size: edgeSize(api, position, group),
+        size: edgeSize(api, position, group, this.baseLayout),
         headerPosition: group.getHeaderPosition(),
       });
     }

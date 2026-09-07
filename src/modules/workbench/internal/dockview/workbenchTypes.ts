@@ -45,12 +45,12 @@ export interface WorkbenchEdgeState {
   readonly groupId?: string;
   readonly visible: boolean;
   readonly collapsed: boolean;
-  readonly size?: number;
 }
 
 export interface ConfiguredWorkbenchEdgeState extends WorkbenchEdgeState {
   readonly exists: true;
   readonly groupId: string;
+  readonly size: number;
 }
 
 export interface WorkbenchPanelCommitToken {

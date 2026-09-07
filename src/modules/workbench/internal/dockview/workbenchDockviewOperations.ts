@@ -4,6 +4,7 @@ import type {
   DockviewGroupPanelApi,
   IDockviewGroupPanel,
   IDockviewPanel,
+  SerializedDockview,
 } from "dockview-react";
 
 import { WORKBENCH_EDGE_GROUP_IDS, WORKBENCH_EDGE_SIZES } from "./workbenchDockviewDefaults";
@@ -175,9 +176,10 @@ export function edgeSize(
   api: DockviewApi,
   position: WorkbenchEdgePosition,
   group: DockviewGroupPanelApi,
+  layout?: SerializedDockview,
 ): number {
   try {
-    const serializedSize = api.toJSON().edgeGroups?.[position]?.size;
+    const serializedSize = (layout ?? api.toJSON()).edgeGroups?.[position]?.size;
     if (typeof serializedSize === "number" && Number.isFinite(serializedSize)) {
       return serializedSize;
     }
@@ -206,7 +208,6 @@ export function readEdgeState(
     groupId: group.id,
     visible: api.isEdgeGroupVisible(position),
     collapsed: group.isCollapsed(),
-    size: edgeSize(api, position, group),
   };
 }
 
@@ -218,7 +219,12 @@ export function configuredEdgeState(
   if (!state.exists || !state.groupId) {
     throw new WorkbenchLayoutError("layout_restore_failed", { position });
   }
-  return { ...state, exists: true, groupId: state.groupId };
+  return {
+    ...state,
+    exists: true,
+    groupId: state.groupId,
+    size: edgeSize(api, position, api.getEdgeGroup(position)!),
+  };
 }
 
 export function throwAsLayoutError<T>(
