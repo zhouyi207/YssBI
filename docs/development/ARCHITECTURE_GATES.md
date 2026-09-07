@@ -85,6 +85,8 @@ Rust origin 只能是 repository declaration、repository asset、language built
 
 Frontend origin 只能是 repository declaration、repository asset 或 external package。Alias、barrel 和 re-export 要解析到真实 declaration；type-only/runtime、module/stylesheet resource kind 和 external package subpath 分别审计。Development dependency 不自动授权 production import。
 
+Frontend resolver 在同一个 `TypeScriptAuditProject` 快照内复用完整项目路径索引和每个 source 的成功解析结果，供 dependency/semantic audits 共用。缓存绑定快照上下文及其 source root，不跨新快照或 isolated fixture 复用；解析失败不写入结果缓存，也不改变原有 fail-closed 规则。
+
 Missing、escaping、remote、non-literal、cyclic 或未登记 target 都 fail closed。finding identity 使用 stable rule ID、repository-relative source、owner、dependency kind 和 canonical target；line/column 只用于诊断。
 
 ## 5. Policy and semantic checks

@@ -72,6 +72,13 @@ export interface ResolvedModuleDependency extends ModuleDependency {
   symbolDeclarationTarget: string | null;
 }
 
+// Each context owns one immutable snapshot and source root; caches must not outlive it.
+const programPathIndexes = new WeakMap<TypeScriptAuditProject, ReadonlySet<string>>();
+const resolvedDependencies = new WeakMap<
+  TypeScriptAuditProject,
+  Map<string, readonly ResolvedModuleDependency[]>
+>();
+
 export type ModuleDependencyResolutionErrorKind =
   | "nonliteral-module-specifier"
   | "invalid-external-specifier"
@@ -488,12 +495,16 @@ function repositoryModuleTarget(
     posix.join(base, "index.ts"),
     posix.join(base, "index.tsx"),
   ];
-  const programPaths = new Set(
-    context.project.program
-      .getSourceFileNames()
-      .map((path) => repositoryRelativeDeclarationPath(context, path))
-      .filter((path): path is string => path !== null),
-  );
+  let programPaths = programPathIndexes.get(context);
+  if (!programPaths) {
+    programPaths = new Set(
+      context.project.program
+        .getSourceFileNames()
+        .map((path) => repositoryRelativeDeclarationPath(context, path))
+        .filter((path): path is string => path !== null),
+    );
+    programPathIndexes.set(context, programPaths);
+  }
   return candidates.find((candidate) => programPaths.has(candidate)) ?? null;
 }
 
@@ -564,8 +575,13 @@ export function resolvedModuleDependencies(
   context: TypeScriptAuditProject,
   source: ArchitectureSource,
 ): readonly ResolvedModuleDependency[] {
+  let dependenciesBySource = resolvedDependencies.get(context);
+  const cached = dependenciesBySource?.get(source.path);
+  if (cached) return cached;
+
   const sourceFile = context.sourceFile(source.path);
-  return collectModuleDependencies(sourceFile).map((dependency) => {
+  const collected = collectModuleDependencies(sourceFile);
+  const dependencies = collected.map<ResolvedModuleDependency>((dependency) => {
     if (dependency.specifier === null) {
       throw resolutionFailure("nonliteral-module-specifier", source.path, dependency);
     }
@@ -656,6 +672,12 @@ export function resolvedModuleDependencies(
       symbolDeclarationTarget,
     };
   });
+  if (!dependenciesBySource) {
+    dependenciesBySource = new Map();
+    resolvedDependencies.set(context, dependenciesBySource);
+  }
+  dependenciesBySource.set(source.path, dependencies);
+  return dependencies;
 }
 
 export function moduleDependencies(path: string, source: string): ModuleDependency[] {
