@@ -55,13 +55,13 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 全局近似比较容差已移除，计算设置当前仅保存缺失值偏好。设置存储读取 v1 时丢弃废弃的 `numeric` 字段、保留其他设置与 revision，下次保存写入 v2；当前 IPC 和 v2 文件仍使用严格字段契约。现有算法的判秩、收敛和数值保护阈值由各算法管理。Graph OLS 当前固定采用 Reject，尚未消费全局缺失值偏好；相关数值与配置后续工作见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
 
-变量增删改通过同一个 resource publication 协调器更新变量与资源 revision；命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
+命名常量属于 GraphDocument，在 Event/Function 的 Details 中通过 Graph Draft 编辑，并随图保存。没有独立全局变量资源或变量 revision。资源命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
 
 节点编辑由 Application 的 `graphEditing` 直接提交 Graph Draft mutation，并返回统一的 `GraphEditOutcome`。Draft 自身保存撤销/重做记录；Project 内部事务 history 不再作为独立前端状态或 IPC 字段发布。
 
-身份必须按语义分离。Project instance/session、resource path、Graph session、node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...`、`variables/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
+身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
 ## 3. Layer and dependency direction
 

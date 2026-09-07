@@ -84,7 +84,17 @@ Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识�
 
 未知但被文档引用的端口以有 canonical address 的 orphan fact 展示，便于定位和断开损坏连接。Template 只表示新增能力。普通连接错误保留在 canonical Problems 中；只有附有阻断连接诊断的错误方向连接才可通过 frontend projection 验证。
 
-Analysis Graph 只含数据依赖。Print、Control/Effect、Variable Set 等副作用仍属于 Workflow。
+Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Workflow。
+
+命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 Graph Draft FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
+
+前端共享数据类型层定义图文档使用的 `SerializedDataValue` 及其与编辑值的纯转换；传输层校验 Rust 返回的值结构。常量编辑不依赖 IPC 编码器，也不维护另一份已提交数据。
+
+节点目录只有一个 `yssbi.constant.get`，其 `constant` 参数引用当前图内的常量。Details 面板可直接插入引用节点，也可在 Get 节点的参数中选择常量。尚未选择或已删除的引用可保留在草稿中，Compile 会阻断不完整的类型解析。单次使用的输入值仍可通过端口 literal 编辑。
+
+常量类型和值由 Graph Document 校验；DataFrame/DataSeries 将列数据持久化为常量内的 `TabularSnapshot`，句柄由 ConstantId 派生。Graph Analysis 解析输出类型及表格列 Schema；Compiler 捕获不可变值，Application 在执行包中将数列转换为值列表、数据框转换为列记录，运行过程不读取可变项目变量。常量内容参与语义 fingerprint，名称、说明和标签不使编译缓存失效。
+
+Clipboard 仅携带选中 Get 节点引用的常量。目标图已有同一身份且内容相同的常量时复用；身份或名称冲突时复制定义并重写引用。常量和节点进入同一个可撤销补丁。复制整张图则生成独立常量身份。
 
 节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 Draft document 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。节点参数没有项目设置继承/覆盖模式；应用级 computation settings 由 Rust settings service 独立管理。
 
