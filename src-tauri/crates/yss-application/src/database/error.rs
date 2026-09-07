@@ -75,7 +75,7 @@ impl DatabaseApplicationInternalError {
 struct InternalMessage(String);
 
 #[derive(Debug, thiserror::Error)]
-pub enum DatabaseApplicationError {
+pub enum DatabaseOperationError {
     #[error("database was not found")]
     NotFound { database_id: String },
     #[error("project instance is stale")]
@@ -139,15 +139,15 @@ pub enum DatabaseApplicationError {
     },
     #[error("database export cleanup failed after another failure")]
     CleanupAfterFailure {
-        primary: Box<DatabaseApplicationError>,
+        primary: Box<DatabaseOperationError>,
         #[source]
-        cleanup: Box<DatabaseApplicationError>,
+        cleanup: Box<DatabaseOperationError>,
     },
     #[error(transparent)]
     Internal(#[from] DatabaseApplicationInternalError),
 }
 
-impl DatabaseApplicationError {
+impl DatabaseOperationError {
     #[cfg(any(test, feature = "test-support"))]
     pub fn internal_for_test(
         operation: DatabaseApplicationOperation,

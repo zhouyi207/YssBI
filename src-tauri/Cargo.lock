@@ -9368,7 +9368,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "windows-sys 0.61.2",
  "yss-automation-contract",
  "yss-bayes-artifact-contract",
  "yss-bayes-model",
@@ -9385,6 +9384,7 @@ dependencies = [
  "yss-duckdb",
  "yss-execution",
  "yss-execution-sci-adapter",
+ "yss-file-replace",
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
@@ -9634,6 +9634,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-file-replace"
+version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "yss-function-editor-projection"
 version = "0.1.0"
 dependencies = [
@@ -9826,7 +9833,7 @@ dependencies = [
  "serde_json",
  "tracing",
  "uuid",
- "windows-sys 0.61.2",
+ "yss-file-replace",
  "yss-julia-runtime",
 ]
 
@@ -10202,7 +10209,7 @@ dependencies = [
  "tauri",
  "thiserror 2.0.20",
  "uuid",
- "windows-sys 0.61.2",
+ "yss-file-replace",
 ]
 
 [[package]]

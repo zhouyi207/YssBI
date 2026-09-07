@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use crate::error::CommandError;
-use yss_application::database::{DatabaseApplicationError, DatabaseApplicationOperation};
+use yss_application::database::{DatabaseApplicationOperation, DatabaseOperationError};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 
@@ -96,21 +96,21 @@ struct PrimaryErrorDetails<'a> {
     primary_error: CommandErrorSummary<'a>,
 }
 
-pub(super) fn database_command_error(error: DatabaseApplicationError) -> CommandError {
+pub(super) fn database_command_error(error: DatabaseOperationError) -> CommandError {
     match error {
-        DatabaseApplicationError::NotFound { database_id } => {
+        DatabaseOperationError::NotFound { database_id } => {
             CommandError::expected("database_not_found").with_details(DatabaseResourceDetails {
                 database_id: &database_id,
             })
         }
-        DatabaseApplicationError::StaleProject {
+        DatabaseOperationError::StaleProject {
             project_instance_id,
         } => {
             CommandError::expected("stale_project_lifecycle").with_details(ProjectIdentityDetails {
                 project_instance_id: &project_instance_id,
             })
         }
-        DatabaseApplicationError::StaleRevision {
+        DatabaseOperationError::StaleRevision {
             database_id,
             expected_revision,
         } => CommandError::expected("stale_database_revision").with_details(
@@ -119,7 +119,7 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
                 expected_revision,
             },
         ),
-        DatabaseApplicationError::InvalidAccess {
+        DatabaseOperationError::InvalidAccess {
             database_id,
             operation,
         } => CommandError::expected("database_access_failed").with_details(
@@ -128,7 +128,7 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
                 operation: operation_name(operation),
             },
         ),
-        DatabaseApplicationError::RowLimitExceeded {
+        DatabaseOperationError::RowLimitExceeded {
             database_id,
             operation,
             requested_rows,
@@ -141,40 +141,40 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
                 max_rows,
             },
         ),
-        DatabaseApplicationError::ExportUnsupported { format } => {
+        DatabaseOperationError::ExportUnsupported { format } => {
             CommandError::expected("database_export_unsupported")
                 .with_details(ExportFormatDetails { format: &format })
         }
-        DatabaseApplicationError::SqlEngineUnsupported { engine } => {
+        DatabaseOperationError::SqlEngineUnsupported { engine } => {
             CommandError::expected("unsupported_sql_engine")
                 .with_details(EngineDetails { engine: &engine })
         }
-        DatabaseApplicationError::ImportUnsupported { engine } => {
+        DatabaseOperationError::ImportUnsupported { engine } => {
             CommandError::expected("unsupported_database_import")
                 .with_details(EngineDetails { engine })
         }
-        DatabaseApplicationError::InvalidName {
+        DatabaseOperationError::InvalidName {
             database_id,
             requested_name,
         } => CommandError::expected("invalid_database_name").with_details(DatabaseNameDetails {
             database_id: &database_id,
             requested_name: &requested_name,
         }),
-        DatabaseApplicationError::NameConflict {
+        DatabaseOperationError::NameConflict {
             database_id,
             requested_name,
         } => CommandError::expected("database_name_conflict").with_details(DatabaseNameDetails {
             database_id: &database_id,
             requested_name: &requested_name,
         }),
-        DatabaseApplicationError::AlreadyExists { database_id } => {
+        DatabaseOperationError::AlreadyExists { database_id } => {
             let error = CommandError::expected("database_already_exists");
             match database_id.as_deref() {
                 Some(database_id) => error.with_details(DatabaseResourceDetails { database_id }),
                 None => error,
             }
         }
-        DatabaseApplicationError::InvalidInput {
+        DatabaseOperationError::InvalidInput {
             database_id,
             operation,
             field,
@@ -183,7 +183,7 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
             operation: operation_name(operation),
             field,
         }),
-        DatabaseApplicationError::OperationUnsupported {
+        DatabaseOperationError::OperationUnsupported {
             database_id,
             operation,
         } => {
@@ -196,10 +196,10 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
                 None => error,
             }
         }
-        DatabaseApplicationError::InvalidExportDestination => {
+        DatabaseOperationError::InvalidExportDestination => {
             CommandError::expected("database_export_temp_reservation_failed")
         }
-        DatabaseApplicationError::Project {
+        DatabaseOperationError::Project {
             project_instance_id,
             database_id,
             source,
@@ -212,10 +212,10 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
                 recovery_required,
             })
         }
-        DatabaseApplicationError::CleanupAfterFailure { primary, cleanup } => {
+        DatabaseOperationError::CleanupAfterFailure { primary, cleanup } => {
             map_cleanup_failure(*primary, *cleanup)
         }
-        DatabaseApplicationError::Internal(error) => {
+        DatabaseOperationError::Internal(error) => {
             let code = internal_error_code(error.operation());
             if code == "internal_error" {
                 CommandError::internal(error)
@@ -227,8 +227,8 @@ pub(super) fn database_command_error(error: DatabaseApplicationError) -> Command
 }
 
 fn map_cleanup_failure(
-    primary: DatabaseApplicationError,
-    cleanup: DatabaseApplicationError,
+    primary: DatabaseOperationError,
+    cleanup: DatabaseOperationError,
 ) -> CommandError {
     let primary = database_command_error(primary);
     let cleanup = database_command_error(cleanup);

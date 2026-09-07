@@ -149,6 +149,18 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::Application,
+        repository_relative_source_file: "src-tauri/crates/yss-application/src/database/export.rs",
+        fully_qualified_owner: "yss_application::database::export",
+        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::BackendAdapter,
+        repository_relative_source_file: "src-tauri/crates/yss-julia-worker/src/assets.rs",
+        fully_qualified_owner: "yss_julia_worker::assets",
+        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-api/src/schema/database.rs",
         fully_qualified_owner: "yss_api::schema::database",
@@ -336,7 +348,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_dataframe/error.rs",
         fully_qualified_owner: "yss_api::commands::command_dataframe::error",
         canonical_origin_targets: &[
-            "yss_application::database::error::DatabaseApplicationError",
+            "yss_application::database::error::DatabaseOperationError",
             "yss_application::database::error::DatabaseApplicationOperation",
             "yss_api::error::CommandError",
         ],
@@ -348,7 +360,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::database::DatabaseMutation",
             "yss_application::database::LoadDatabaseResult",
-            "yss_application::database::error::DatabaseApplicationError",
+            "yss_application::database::error::DatabaseOperationError",
             "yss_application::database::error::DatabaseApplicationOperation::Delete",
             "yss_application::database::error::DatabaseApplicationOperation::Load",
             "yss_application::database::error::DatabaseApplicationOperation::Rename",
@@ -367,7 +379,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::database::rename_database",
             "yss_application::database::save_database_changes",
             "yss_application::database",
-            "yss_application::database::ApplicationDatabaseError",
+            "yss_application::database::DatabaseUseCaseError",
             "yss_application::database::DatabaseMetaResult",
             "yss_application::database::DatabaseMutationResult",
             "yss_application::database::DatabaseRowsResult",
@@ -1602,7 +1614,10 @@ fn non_build_memberships(
         layers.insert(RustLayer::Execution);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
-    } else if matches!(package, "yss-project-watcher-notify" | "yss-window-state") {
+    } else if matches!(
+        package,
+        "yss-project-watcher-notify" | "yss-window-state" | "yss-file-replace"
+    ) {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,

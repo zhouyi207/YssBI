@@ -4,9 +4,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod error;
+mod export;
+mod import;
+use export::export_database_in_captured_session;
+use import::load_database_in_captured_session;
 
 pub use self::error::{
-    DatabaseApplicationError, DatabaseApplicationInternalError, DatabaseApplicationOperation,
+    DatabaseApplicationInternalError, DatabaseApplicationOperation, DatabaseOperationError,
 };
 use crate::database_mutation::{
     DatabaseMutationRequest as RuntimeDatabaseMutationRequest, PreparedProjectDatabaseMutation,
@@ -91,7 +95,7 @@ impl From<crate::database_mutation::DatabaseMutationApplicationError> for Databa
 }
 
 #[derive(Debug, Error)]
-pub enum ApplicationDatabaseError {
+pub enum DatabaseUseCaseError {
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error("captured application session changed during database operation")]
@@ -99,7 +103,7 @@ pub enum ApplicationDatabaseError {
     #[error("application database session refresh failed")]
     SessionRefresh(#[source] ApplicationSessionRefreshError),
     #[error(transparent)]
-    Database(#[from] DatabaseApplicationError),
+    Database(#[from] DatabaseOperationError),
     #[error("database mutation failed")]
     Mutation(#[source] Box<DatabaseMutationFailure>),
 }
@@ -179,7 +183,7 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
         engine: DatabaseEngine,
-    ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let result = load_database_in_captured_session(&captured, operation_id, engine)?;
         self.refresh_database_session()?;
@@ -193,33 +197,31 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
         name: String,
         operation_id: OperationId,
-    ) -> Result<DatabaseMutationResult<()>, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMutationResult<()>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let declaration = captured
             .project()
             .get_data()
             .map_err(|error| {
-                ApplicationDatabaseError::Database(
-                    DatabaseApplicationError::from_project_filesystem(
-                        error,
-                        DatabaseApplicationOperation::Rename,
-                        &project_instance_id,
-                        Some(&id),
-                    ),
-                )
+                DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
+                    error,
+                    DatabaseApplicationOperation::Rename,
+                    &project_instance_id,
+                    Some(&id),
+                ))
             })?
             .databases
             .get(&id)
             .cloned()
             .ok_or_else(|| {
-                ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
+                DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                     database_id: id.clone(),
                 })
             })?;
         let name = name.trim().to_owned();
         if name.is_empty() {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::InvalidName {
+            return Err(DatabaseUseCaseError::Database(
+                DatabaseOperationError::InvalidName {
                     database_id: id,
                     requested_name: name,
                 },
@@ -229,21 +231,19 @@ impl ApplicationState {
             .project()
             .get_data()
             .map_err(|error| {
-                ApplicationDatabaseError::Database(
-                    DatabaseApplicationError::from_project_filesystem(
-                        error,
-                        DatabaseApplicationOperation::Rename,
-                        &project_instance_id,
-                        None,
-                    ),
-                )
+                DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
+                    error,
+                    DatabaseApplicationOperation::Rename,
+                    &project_instance_id,
+                    None,
+                ))
             })?
             .databases
             .iter()
             .any(|(other_id, other)| other_id != &id && other.name.as_ref() == name)
         {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::NameConflict {
+            return Err(DatabaseUseCaseError::Database(
+                DatabaseOperationError::NameConflict {
                     database_id: id,
                     requested_name: name,
                 },
@@ -276,7 +276,7 @@ impl ApplicationState {
         id: String,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
-    ) -> Result<DatabaseMutationResult<()>, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMutationResult<()>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let result = delete_database_in_captured_session(
             self,
@@ -296,26 +296,24 @@ impl ApplicationState {
         expected_revision: ResourceRevision,
         operation_id: OperationId,
         mutation: DatabaseMutation,
-    ) -> Result<DatabaseMutationResult<EditState>, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMutationResult<EditState>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let declaration = captured
             .project()
             .get_data()
             .map_err(|error| {
-                ApplicationDatabaseError::Database(
-                    DatabaseApplicationError::from_project_filesystem(
-                        error,
-                        DatabaseApplicationOperation::EditCell,
-                        &project_instance_id,
-                        Some(&id),
-                    ),
-                )
+                DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
+                    error,
+                    DatabaseApplicationOperation::EditCell,
+                    &project_instance_id,
+                    Some(&id),
+                ))
             })?
             .databases
             .get(&id)
             .cloned()
             .ok_or_else(|| {
-                ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
+                DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                     database_id: id.clone(),
                 })
             })?;
@@ -342,7 +340,7 @@ impl ApplicationState {
         id: String,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
-    ) -> Result<DatabaseMutationResult<EditState>, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMutationResult<EditState>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let result = save_database_in_captured_session(
             self,
@@ -359,7 +357,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<DatabaseMetaResult, ApplicationDatabaseError> {
+    ) -> Result<DatabaseMetaResult, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -387,7 +385,7 @@ impl ApplicationState {
             )
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -397,11 +395,11 @@ impl ApplicationState {
         id: String,
         offset: usize,
         limit: usize,
-    ) -> Result<DatabaseRowsResult, ApplicationDatabaseError> {
+    ) -> Result<DatabaseRowsResult, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         if limit > MAX_GET_DATAFRAME_ROWS {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::RowLimitExceeded {
+            return Err(DatabaseUseCaseError::Database(
+                DatabaseOperationError::RowLimitExceeded {
                     database_id: id,
                     operation: DatabaseApplicationOperation::ReadRows,
                     requested_rows: limit,
@@ -428,7 +426,7 @@ impl ApplicationState {
             map_database_runtime_error(error, DatabaseApplicationOperation::ReadRows, &id)
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -436,7 +434,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, ApplicationDatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnStats>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -461,7 +459,7 @@ impl ApplicationState {
             map_database_runtime_error(error, DatabaseApplicationOperation::ColumnStatistics, &id)
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -469,7 +467,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, ApplicationDatabaseError> {
+    ) -> Result<Vec<yss_dataset_profile::ColumnDistribution>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -494,7 +492,7 @@ impl ApplicationState {
             map_database_runtime_error(error, DatabaseApplicationOperation::ColumnDistribution, &id)
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -502,7 +500,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<yss_dataset_profile::DatasetOverview, ApplicationDatabaseError> {
+    ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -527,7 +525,7 @@ impl ApplicationState {
             map_database_runtime_error(error, DatabaseApplicationOperation::DatasetOverview, &id)
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -535,7 +533,7 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         id: String,
-    ) -> Result<EditState, ApplicationDatabaseError> {
+    ) -> Result<EditState, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         let database = database_id(&id);
         let basis = captured
@@ -551,7 +549,7 @@ impl ApplicationState {
             map_database_runtime_error(error, DatabaseApplicationOperation::ReadEditState, &id)
         })?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
+            .map_err(DatabaseUseCaseError::SessionChanged)?;
         Ok(result)
     }
 
@@ -561,21 +559,21 @@ impl ApplicationState {
         id: String,
         path: String,
         format: String,
-    ) -> Result<(), ApplicationDatabaseError> {
+    ) -> Result<(), DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
         export_database_in_captured_session(self, &captured, &id, &path, &format)?;
         self.revalidate_captured_session(&captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)
+            .map_err(DatabaseUseCaseError::SessionChanged)
     }
 
     fn capture_database_session(
         &self,
         project_instance_id: &ProjectInstanceId,
-    ) -> Result<Arc<ApplicationSession>, ApplicationDatabaseError> {
+    ) -> Result<Arc<ApplicationSession>, DatabaseUseCaseError> {
         let captured = self.capture_session()?;
         if captured.project_instance_id() != project_instance_id {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::StaleProject {
+            return Err(DatabaseUseCaseError::Database(
+                DatabaseOperationError::StaleProject {
                     project_instance_id: project_instance_id.clone(),
                 },
             ));
@@ -583,9 +581,9 @@ impl ApplicationState {
         Ok(captured)
     }
 
-    fn refresh_database_session(&self) -> Result<(), ApplicationDatabaseError> {
+    fn refresh_database_session(&self) -> Result<(), DatabaseUseCaseError> {
         self.rebuild_application_session()
-            .map_err(ApplicationDatabaseError::SessionRefresh)
+            .map_err(DatabaseUseCaseError::SessionRefresh)
     }
 }
 
@@ -599,13 +597,13 @@ fn delete_database_in_captured_session(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<DatabaseMutationResult<()>, ApplicationDatabaseError> {
+) -> Result<DatabaseMutationResult<()>, DatabaseUseCaseError> {
     let project_instance_id = captured.project_instance_id().clone();
     let reservation = captured
         .project()
         .reserve_database_operation(&project_instance_id, operation_id)
         .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_database(
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
                 error,
                 DatabaseApplicationOperation::Delete,
                 &project_instance_id,
@@ -618,7 +616,7 @@ fn delete_database_in_captured_session(
         .project()
         .capture_project_session()
         .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
                 error,
                 DatabaseApplicationOperation::Delete,
                 &project_instance_id,
@@ -629,7 +627,7 @@ fn delete_database_in_captured_session(
         .project()
         .validate_project_session(&session)
         .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
                 error,
                 DatabaseApplicationOperation::Delete,
                 &project_instance_id,
@@ -638,8 +636,8 @@ fn delete_database_in_captured_session(
         })?;
     let database = database_id(&id);
     if captured.database().runtime_revision(&database).is_none() {
-        return Err(ApplicationDatabaseError::Database(
-            DatabaseApplicationError::NotFound {
+        return Err(DatabaseUseCaseError::Database(
+            DatabaseOperationError::NotFound {
                 database_id: id.clone(),
             },
         ));
@@ -648,7 +646,7 @@ fn delete_database_in_captured_session(
         .database()
         .remove_physical_database(&database, session.root.as_path())
         .map_err(|error| {
-            ApplicationDatabaseError::Database(map_database_runtime_error(
+            DatabaseUseCaseError::Database(map_database_runtime_error(
                 error,
                 DatabaseApplicationOperation::Delete,
                 &id,
@@ -663,7 +661,7 @@ fn delete_database_in_captured_session(
             operation_id,
         )
         .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_database(
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
                 error,
                 DatabaseApplicationOperation::Delete,
                 &project_instance_id,
@@ -686,13 +684,13 @@ fn save_database_in_captured_session(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<DatabaseMutationResult<EditState>, ApplicationDatabaseError> {
+) -> Result<DatabaseMutationResult<EditState>, DatabaseUseCaseError> {
     let project_instance_id = captured.project_instance_id().clone();
     let declaration = captured
         .project()
         .get_data()
         .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
                 error,
                 DatabaseApplicationOperation::Save,
                 &project_instance_id,
@@ -703,7 +701,7 @@ fn save_database_in_captured_session(
         .get(&id)
         .cloned()
         .ok_or_else(|| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
+            DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                 database_id: id.clone(),
             })
         })?;
@@ -724,358 +722,6 @@ fn save_database_in_captured_session(
     })
 }
 
-fn export_database_in_captured_session(
-    state: &ApplicationState,
-    captured: &Arc<ApplicationSession>,
-    id: &str,
-    path: &str,
-    format: &str,
-) -> Result<(), ApplicationDatabaseError> {
-    let export_format = format.parse::<DatabaseExportFormat>().map_err(|_| {
-        DatabaseApplicationError::ExportUnsupported {
-            format: format.to_owned(),
-        }
-    })?;
-    let database = database_id(id);
-    let basis = captured
-        .database()
-        .capture_query_basis(&database)
-        .map_err(|error| {
-            map_database_runtime_error(error, DatabaseApplicationOperation::ExportRead, id)
-        })?;
-    let destination = Path::new(path);
-    let temporary = reserve_export_temporary_file(destination)?;
-    let result: Result<(), ApplicationDatabaseError> = (|| {
-        captured
-            .database()
-            .export_physical_to_path(&database, &temporary, export_format)
-            .map_err(|error| {
-                ApplicationDatabaseError::Database(map_database_runtime_error(
-                    error,
-                    DatabaseApplicationOperation::ExportSerialize,
-                    id,
-                ))
-            })?;
-        session_api::revalidate_query_basis(captured.database(), &basis).map_err(|error| {
-            ApplicationDatabaseError::Database(map_database_runtime_error(
-                error,
-                DatabaseApplicationOperation::ExportRead,
-                id,
-            ))
-        })?;
-        state
-            .revalidate_captured_session(captured)
-            .map_err(ApplicationDatabaseError::SessionChanged)?;
-        atomic_replace_export(&temporary, destination).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal(
-                DatabaseApplicationOperation::ExportPublish,
-                error,
-            ))
-        })
-    })();
-    match result {
-        Ok(()) => Ok(()),
-        Err(error) => Err(cleanup_after_export_error(&temporary, error)),
-    }
-}
-
-fn load_database_in_captured_session(
-    captured: &Arc<ApplicationSession>,
-    operation_id: OperationId,
-    engine: DatabaseEngine,
-) -> Result<DatabaseMutationResult<LoadDatabaseResult>, ApplicationDatabaseError> {
-    let project_instance_id = captured.project_instance_id().clone();
-    let reservation = captured
-        .project()
-        .reserve_database_operation(&project_instance_id, operation_id)
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_database(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-                None,
-                None,
-            ))
-        })?;
-    let session = captured
-        .project()
-        .capture_project_session()
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-            ))
-        })?;
-    let lease = captured
-        .project()
-        .acquire_filesystem_lease(session.root.clone())
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-            ))
-        })?;
-    captured
-        .project()
-        .validate_project_session(&session)
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-            ))
-        })?;
-
-    let (declaration, data) = match engine {
-        DatabaseEngine::Csv {
-            path,
-            delimiter,
-            has_header,
-            infer_schema_length,
-        } => ingest_csv_for_application(
-            captured.project(),
-            &session,
-            path,
-            delimiter,
-            has_header,
-            infer_schema_length,
-        )?,
-        DatabaseEngine::Parquet { path, columns } => {
-            ingest_parquet_for_application(captured.project(), &session, path, columns)?
-        }
-        DatabaseEngine::Excel { path, sheet } => {
-            ingest_excel_for_application(captured.project(), &session, path, sheet)?
-        }
-        DatabaseEngine::Sql {
-            engine,
-            connection_string,
-            table,
-        } => ingest_sql_for_application(
-            captured.project(),
-            &session,
-            engine,
-            connection_string,
-            table,
-        )?,
-        DatabaseEngine::DuckDb { .. } => {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::internal_message(
-                    DatabaseApplicationOperation::Load,
-                    "DuckDb datasets are discovered from the active Database session",
-                ),
-            ));
-        }
-        DatabaseEngine::InMemory { .. } => {
-            return Err(ApplicationDatabaseError::Database(
-                DatabaseApplicationError::internal_message(
-                    DatabaseApplicationOperation::Load,
-                    "InMemory datasets cannot be loaded through the project importer",
-                ),
-            ));
-        }
-    };
-    captured
-        .project()
-        .validate_project_session(&session)
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_filesystem(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-            ))
-        })?;
-    drop(lease);
-
-    let mutation = captured
-        .project()
-        .commit_database_declaration_add(&project_instance_id, declaration, operation_id)
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::from_project_database(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-                None,
-                None,
-            ))
-        })?;
-    reservation.complete();
-    Ok(DatabaseMutationResult {
-        data,
-        mutation: crate::events::committed_resource_mutation_from_project(mutation),
-    })
-}
-
-fn ingest_csv_for_application(
-    project: &ProjectState,
-    session: &ProjectSession,
-    path: String,
-    delimiter: char,
-    has_header: bool,
-    infer_schema_length: Option<usize>,
-) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
-    let (id, table, duckdb_abs, relative_path) =
-        prepare_duckdb_ingest_paths(session).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error.to_string(),
-            ))
-        })?;
-    let meta = ingest_csv_to_duckdb(
-        Path::new(&path),
-        &duckdb_abs,
-        &table,
-        delimiter,
-        has_header,
-        infer_schema_length,
-    )
-    .map_err(|error| {
-        ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-            DatabaseApplicationOperation::Load,
-            error.to_string(),
-        ))
-    })?;
-    build_import_declaration(project, path, id, table, duckdb_abs, relative_path, meta)
-}
-
-fn ingest_parquet_for_application(
-    project: &ProjectState,
-    session: &ProjectSession,
-    path: String,
-    columns: Option<Vec<String>>,
-) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
-    let (id, table, duckdb_abs, relative_path) =
-        prepare_duckdb_ingest_paths(session).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error.to_string(),
-            ))
-        })?;
-    let meta = ingest_parquet_to_duckdb(Path::new(&path), &duckdb_abs, &table, columns.as_deref())
-        .map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error,
-            ))
-        })?;
-    build_import_declaration(project, path, id, table, duckdb_abs, relative_path, meta)
-}
-
-fn ingest_excel_for_application(
-    project: &ProjectState,
-    session: &ProjectSession,
-    path: String,
-    sheet: String,
-) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
-    let (id, table, duckdb_abs, relative_path) =
-        prepare_duckdb_ingest_paths(session).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error.to_string(),
-            ))
-        })?;
-    let meta =
-        ingest_excel_to_duckdb(Path::new(&path), &sheet, &duckdb_abs, &table).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error,
-            ))
-        })?;
-    build_import_declaration(project, path, id, table, duckdb_abs, relative_path, meta)
-}
-
-fn ingest_sql_for_application(
-    project: &ProjectState,
-    session: &ProjectSession,
-    engine: DatabaseEngineSql,
-    connection_string: String,
-    table_name: String,
-) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
-    let mut dataframe =
-        read_table_to_dataframe(&engine, &connection_string, &table_name).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error.to_string(),
-            ))
-        })?;
-    let (id, table, duckdb_abs, relative_path) =
-        prepare_duckdb_ingest_paths(session).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error.to_string(),
-            ))
-        })?;
-    let meta =
-        ingest_dataframe_to_duckdb(&mut dataframe, &duckdb_abs, &table).map_err(|error| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-                DatabaseApplicationOperation::Load,
-                error,
-            ))
-        })?;
-    build_import_declaration(
-        project,
-        table_name,
-        id,
-        table,
-        duckdb_abs,
-        relative_path,
-        meta,
-    )
-}
-
-fn build_import_declaration(
-    project: &ProjectState,
-    source_name: String,
-    id: String,
-    table: String,
-    duckdb_abs: PathBuf,
-    relative_path: String,
-    meta: DuckDbTableMeta,
-) -> Result<(DatabaseDecl, LoadDatabaseResult), ApplicationDatabaseError> {
-    let name = unique_database_name(project, &name_from_path(&source_name));
-    write_display_name(&duckdb_abs, &table, &name).map_err(|error| {
-        ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-            DatabaseApplicationOperation::Load,
-            error.to_string(),
-        ))
-    })?;
-    let database_id = database_id(&id);
-    let fact = DatabaseSchemaFact::from_duckdb(&database_id, &meta.columns).map_err(|error| {
-        ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
-            DatabaseApplicationOperation::Load,
-            error.to_string(),
-        ))
-    })?;
-    let columns = fact.columns().to_vec();
-    let declaration = DatabaseDecl {
-        id: database_id,
-        engine: DatabaseEngine::DuckDb {
-            path: relative_path,
-            table,
-        },
-        schema_version: 1,
-        required: false,
-        name: name.clone().into_boxed_str(),
-    };
-    Ok((
-        declaration,
-        LoadDatabaseResult {
-            id,
-            name,
-            row_count: meta.row_count,
-            column_count: columns.len(),
-            columns,
-        },
-    ))
-}
-
 #[allow(
     clippy::too_many_arguments,
     reason = "the coordinator keeps the complete Project/Database authority tuple explicit"
@@ -1090,15 +736,14 @@ fn apply_database_mutation_in_session(
     operation: yss_database_runtime::session_api::DatabaseMutationOperation,
     after: DatabaseDecl,
     application_operation: DatabaseApplicationOperation,
-) -> Result<crate::database_mutation::DatabaseMutationApplicationReceipt, ApplicationDatabaseError>
-{
+) -> Result<crate::database_mutation::DatabaseMutationApplicationReceipt, DatabaseUseCaseError> {
     let database = database_id(&id);
     let runtime_revision = captured
         .database()
         .runtime_revision(&database)
         .map(|revision| revision.get())
         .ok_or_else(|| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
+            DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                 database_id: id.clone(),
             })
         })?;
@@ -1108,7 +753,7 @@ fn apply_database_mutation_in_session(
         .find(|(database_id, _)| *database_id == &database)
         .map(|(_, observation)| observation.clone())
         .ok_or_else(|| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::NotFound {
+            DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                 database_id: id.clone(),
             })
         })?;
@@ -1117,7 +762,7 @@ fn apply_database_mutation_in_session(
         .get()
         .checked_add(1)
         .ok_or_else(|| {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::internal_message(
+            DatabaseUseCaseError::Database(DatabaseOperationError::internal_message(
                 application_operation,
                 "database revision exhausted",
             ))
@@ -1146,24 +791,24 @@ fn apply_database_mutation_in_session(
         runtime_request,
         &authority,
     )
-    .map_err(|source| ApplicationDatabaseError::Mutation(Box::new(source.into())))
+    .map_err(|source| DatabaseUseCaseError::Mutation(Box::new(source.into())))
 }
 
 fn map_database_runtime_error(
     error: DatabaseError,
     operation: DatabaseApplicationOperation,
     database_id: &str,
-) -> DatabaseApplicationError {
+) -> DatabaseOperationError {
     let resource = error
         .resource()
         .map(|resource| resource.as_str())
         .unwrap_or(database_id)
         .to_owned();
     match error.code() {
-        DatabaseErrorCode::NotFound => DatabaseApplicationError::NotFound {
+        DatabaseErrorCode::NotFound => DatabaseOperationError::NotFound {
             database_id: resource,
         },
-        DatabaseErrorCode::InvalidRequest => DatabaseApplicationError::InvalidInput {
+        DatabaseErrorCode::InvalidRequest => DatabaseOperationError::InvalidInput {
             database_id: resource,
             operation,
             field: "databaseId",
@@ -1171,26 +816,25 @@ fn map_database_runtime_error(
         DatabaseErrorCode::AdmissionClosed
         | DatabaseErrorCode::Conflict
         | DatabaseErrorCode::Schema
-        | DatabaseErrorCode::Unsupported => DatabaseApplicationError::InvalidAccess {
+        | DatabaseErrorCode::Unsupported => DatabaseOperationError::InvalidAccess {
             database_id: resource,
             operation,
         },
         DatabaseErrorCode::Constraint
         | DatabaseErrorCode::Driver
         | DatabaseErrorCode::Cancelled
-        | DatabaseErrorCode::Deadline => DatabaseApplicationError::internal(operation, error),
+        | DatabaseErrorCode::Deadline => DatabaseOperationError::internal(operation, error),
     }
 }
 
 fn runtime_database_mutation(
     database_id: &str,
     mutation: DatabaseMutation,
-) -> Result<yss_database_runtime::session_api::DatabaseMutationOperation, ApplicationDatabaseError>
-{
+) -> Result<yss_database_runtime::session_api::DatabaseMutationOperation, DatabaseUseCaseError> {
     use yss_database_runtime::session_api::DatabaseMutationOperation;
     let operation = mutation.operation();
     let invalid = |field| {
-        ApplicationDatabaseError::Database(DatabaseApplicationError::InvalidInput {
+        DatabaseUseCaseError::Database(DatabaseOperationError::InvalidInput {
             database_id: database_id.to_owned(),
             operation,
             field,
@@ -1273,10 +917,10 @@ fn prepare_duckdb_ingest_paths(
     Ok((id, table, duckdb_abs, relative_path))
 }
 
-pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
+pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseOperationError> {
     list_sql_source_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, path).map_err(
         |error| {
-            DatabaseApplicationError::internal_message(
+            DatabaseOperationError::internal_message(
                 DatabaseApplicationOperation::ListTables,
                 error.to_string(),
             )
@@ -1287,143 +931,30 @@ pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseApplication
 pub fn list_sql_tables(
     engine: &str,
     connection_string: &str,
-) -> Result<Vec<String>, DatabaseApplicationError> {
+) -> Result<Vec<String>, DatabaseOperationError> {
     let engine = match engine {
         "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
         "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
             charset: "utf8mb4".to_string(),
         },
         engine => {
-            return Err(DatabaseApplicationError::SqlEngineUnsupported {
+            return Err(DatabaseOperationError::SqlEngineUnsupported {
                 engine: engine.to_owned(),
             });
         }
     };
     list_sql_source_tables(&engine, connection_string).map_err(|error| {
-        DatabaseApplicationError::internal_message(
+        DatabaseOperationError::internal_message(
             DatabaseApplicationOperation::ListTables,
             error.to_string(),
         )
     })
 }
 
-pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
+pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseOperationError> {
     list_workbook_sheets(Path::new(path)).map_err(|error| {
-        DatabaseApplicationError::internal(DatabaseApplicationOperation::ListSheets, error)
+        DatabaseOperationError::internal(DatabaseApplicationOperation::ListSheets, error)
     })
-}
-
-fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, DatabaseApplicationError> {
-    let parent = destination
-        .parent()
-        .ok_or(DatabaseApplicationError::InvalidExportDestination)?;
-    let file_name = destination
-        .file_name()
-        .ok_or(DatabaseApplicationError::InvalidExportDestination)?;
-    for _ in 0..8 {
-        let temporary = parent.join(format!(
-            ".{}.{}.tmp",
-            file_name.to_string_lossy(),
-            Uuid::new_v4()
-        ));
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-        {
-            Ok(file) => {
-                drop(file);
-                return Ok(temporary);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(error) => {
-                return Err(DatabaseApplicationError::internal(
-                    DatabaseApplicationOperation::ExportReserve,
-                    error,
-                ));
-            }
-        }
-    }
-    Err(DatabaseApplicationError::internal_message(
-        DatabaseApplicationOperation::ExportReserve,
-        "unable to reserve a unique sibling export path",
-    ))
-}
-
-pub(crate) fn cleanup_export_temporary_file(
-    temporary: &Path,
-) -> Result<(), DatabaseApplicationError> {
-    match std::fs::remove_file(temporary) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(DatabaseApplicationError::internal(
-            DatabaseApplicationOperation::ExportCleanup,
-            error,
-        )),
-    }
-}
-
-fn cleanup_after_export_error(
-    temporary: &Path,
-    primary: ApplicationDatabaseError,
-) -> ApplicationDatabaseError {
-    let Err(cleanup) = cleanup_export_temporary_file(temporary) else {
-        return primary;
-    };
-    match primary {
-        ApplicationDatabaseError::Database(primary) => {
-            ApplicationDatabaseError::Database(DatabaseApplicationError::CleanupAfterFailure {
-                primary: Box::new(primary),
-                cleanup: Box::new(cleanup),
-            })
-        }
-        primary => {
-            tracing::error!(
-                target: "yssbi::database",
-                diagnostic_domain = "application",
-                diagnostic_event = "databaseExportCleanupFailed",
-                error = ?cleanup,
-                "database export cleanup failed after a session transition"
-            );
-            primary
-        }
-    }
-}
-
-#[cfg(not(windows))]
-fn atomic_replace_export(temporary: &Path, destination: &Path) -> std::io::Result<()> {
-    std::fs::rename(temporary, destination)
-}
-
-#[cfg(windows)]
-fn atomic_replace_export(temporary: &Path, destination: &Path) -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
-
-    let source = temporary
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let target = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let replaced = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            target.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if replaced == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }
 
 fn unique_database_name(state: &ProjectState, base_name: &str) -> String {

@@ -7,8 +7,8 @@ use crate::schema::{
 };
 use tauri::{AppHandle, State};
 use yss_application::database::{
-    self, ApplicationDatabaseError, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult,
-    DatabaseRowsResult, LoadDatabaseResult,
+    self, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult, DatabaseRowsResult,
+    DatabaseUseCaseError, LoadDatabaseResult,
 };
 use yss_database_edit::EditState;
 use yss_project_identity::ProjectInstanceId;
@@ -28,9 +28,9 @@ where
         .map_err(CommandError::internal)?
 }
 
-fn map_application_database_error(error: ApplicationDatabaseError) -> CommandError {
+fn map_application_database_error(error: DatabaseUseCaseError) -> CommandError {
     match error {
-        ApplicationDatabaseError::SessionCapture(error) => match error {
+        DatabaseUseCaseError::SessionCapture(error) => match error {
             yss_application::execution::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
             }
@@ -42,14 +42,14 @@ fn map_application_database_error(error: ApplicationDatabaseError) -> CommandErr
                     .with_details(serde_json::json!({ "recoveryRequired": true }))
             }
         },
-        ApplicationDatabaseError::SessionChanged(error) => {
+        DatabaseUseCaseError::SessionChanged(error) => {
             CommandError::diagnosed("database_session_changed", error)
         }
-        ApplicationDatabaseError::SessionRefresh(error) => {
+        DatabaseUseCaseError::SessionRefresh(error) => {
             CommandError::diagnosed("database_session_refresh_failed", error)
         }
-        ApplicationDatabaseError::Database(error) => database_command_error(error),
-        ApplicationDatabaseError::Mutation(error) => {
+        DatabaseUseCaseError::Database(error) => database_command_error(error),
+        DatabaseUseCaseError::Mutation(error) => {
             CommandError::diagnosed("database_mutation_failed", error)
         }
     }

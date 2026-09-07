@@ -23,7 +23,8 @@ where
         .write_all(&json)
         .and_then(|()| temporary_file.sync_all());
     drop(temporary_file);
-    let persist_result = write_result.and_then(|()| atomic_replace(&temporary_path, destination));
+    let persist_result =
+        write_result.and_then(|()| yss_file_replace::atomic_replace(&temporary_path, destination));
     if let Err(source) = persist_result {
         return match fs::remove_file(&temporary_path) {
             Ok(()) => Err(WindowStateError::Persist(source)),
@@ -68,40 +69,4 @@ fn reserve_temporary_file(destination: &Path) -> io::Result<(PathBuf, fs::File)>
         io::ErrorKind::AlreadyExists,
         "unable to reserve a unique window state temporary file",
     ))
-}
-
-#[cfg(not(windows))]
-fn atomic_replace(temporary: &Path, destination: &Path) -> io::Result<()> {
-    fs::rename(temporary, destination)
-}
-
-#[cfg(windows)]
-fn atomic_replace(temporary: &Path, destination: &Path) -> io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
-
-    let source = temporary
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let target = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let replaced = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            target.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if replaced == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
 }

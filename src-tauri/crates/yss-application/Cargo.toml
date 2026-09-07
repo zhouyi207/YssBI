@@ -15,6 +15,7 @@ test-support = [
 ]
 
 [dependencies]
+yss-file-replace = { path = "../yss-file-replace" }
 ndarray.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -80,6 +81,3 @@ yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"]
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }
 yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true

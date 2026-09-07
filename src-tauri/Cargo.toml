@@ -36,6 +36,7 @@ members = [
   "crates/yss-duckdb",
   "crates/yss-execution",
   "crates/yss-execution-sci-adapter",
+  "crates/yss-file-replace",
   "crates/yss-function-editor-projection",
   "crates/yss-graph-analysis",
   "crates/yss-graph-analysis-contract",

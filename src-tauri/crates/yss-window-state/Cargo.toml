@@ -6,11 +6,9 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+yss-file-replace = { path = "../yss-file-replace" }
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-
-[target.'cfg(windows)'.dependencies]
-windows-sys.workspace = true

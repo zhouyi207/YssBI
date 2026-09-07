@@ -2659,7 +2659,11 @@ fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallba
 
     let application =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/database.rs"))
-            .expect("the database application must be readable");
+            .expect("the database application must be readable")
+            + &std::fs::read_to_string(
+                root.join("src-tauri/crates/yss-application/src/database/import.rs"),
+            )
+            .expect("the database import use case must be readable");
     assert!(
         application.contains("use yss_sql_source::{")
             && application.contains("list_sql_source_tables")
@@ -3187,11 +3191,12 @@ fn database_export_uses_contract_and_engine_owners_without_root_facade() {
         );
     }
 
-    let application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/database.rs"))
-            .expect("the database application must be readable");
+    let application = std::fs::read_to_string(
+        root.join("src-tauri/crates/yss-application/src/database/export.rs"),
+    )
+    .expect("the database application must be readable");
     assert!(
-        application.contains("format.parse::<DatabaseExportFormat>()")
+        application.contains(".parse::<DatabaseExportFormat>()")
             && !application.contains("DatabaseExportFormat::parse"),
         "the application must parse the canonical export contract without a root helper"
     );
@@ -7091,7 +7096,7 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
         "tracing.workspace = true",
         "uuid.workspace = true",
         "yss-julia-runtime = { path = \"../yss-julia-runtime\" }",
-        "windows-sys.workspace = true",
+        "yss-file-replace = { path = \"../yss-file-replace\" }",
     ] {
         assert!(
             manifest.contains(dependency),

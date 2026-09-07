@@ -29,6 +29,12 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-file-replace",
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+        target_condition: Some("cfg(windows)"),
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-automation-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "schemars",
@@ -159,12 +165,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         mode: RustDependencyMode::Runtime,
         package_name: "uuid",
         target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-application",
-        mode: RustDependencyMode::Runtime,
-        package_name: "windows-sys",
-        target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
@@ -633,12 +633,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         mode: RustDependencyMode::Runtime,
         package_name: "uuid",
         target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-julia-worker",
-        mode: RustDependencyMode::Runtime,
-        package_name: "windows-sys",
-        target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-graph-protocol",
@@ -1167,12 +1161,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         mode: RustDependencyMode::Runtime,
         package_name: "uuid",
         target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "windows-sys",
-        target_condition: Some("cfg(windows)"),
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-chart-document",

@@ -81,7 +81,7 @@ pub(super) fn write_asset(path: &Path, contents: &str) -> Result<(), JuliaWorker
             )
         })?;
         drop(file);
-        atomic_replace_asset(&temporary, path).map_err(|error| {
+        yss_file_replace::atomic_replace(&temporary, path).map_err(|error| {
             JuliaWorkerError::new(
                 JuliaWorkerErrorCode::AssetUpdateFailed,
                 format!("Failed to publish Julia worker asset: {error}"),
@@ -147,41 +147,5 @@ fn cleanup_asset_temporary(temporary: &Path) -> std::io::Result<()> {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
-    }
-}
-
-#[cfg(not(windows))]
-fn atomic_replace_asset(temporary: &Path, destination: &Path) -> std::io::Result<()> {
-    fs::rename(temporary, destination)
-}
-
-#[cfg(windows)]
-fn atomic_replace_asset(temporary: &Path, destination: &Path) -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
-
-    let source = temporary
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let target = destination
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let replaced = unsafe {
-        MoveFileExW(
-            source.as_ptr(),
-            target.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    };
-    if replaced == 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
     }
 }
