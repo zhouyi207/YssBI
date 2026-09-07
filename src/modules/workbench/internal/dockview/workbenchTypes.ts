@@ -149,3 +149,24 @@ export interface WorkbenchDockviewControlContract {
   remapResource(from: string, to: string): Promise<number>;
   serialize(): Promise<SerializedDockview>;
 }
+
+export interface WorkbenchDockviewTransaction {
+  listPanels(): readonly WorkbenchPanelInfo[];
+  remapResource(from: string, to: string): number;
+  removePanels(panelInstanceIds: readonly string[]): void;
+}
+
+export interface WorkbenchLayoutTransaction {
+  serialize(): SerializedDockview;
+  getPanel(panelInstanceId: string): WorkbenchPanelInfo | undefined;
+  getActivePanel(): WorkbenchPanelInfo | undefined;
+  listPanels(): readonly WorkbenchPanelInfo[];
+  listGroups(): readonly WorkbenchGroupInfo[];
+  listGroupPanels(groupId: string): readonly WorkbenchPanelInfo[];
+  ensureCentralGroup(): string;
+  ensureView(request: EnsureViewRequest): WorkbenchPanelInfo;
+  move(request: MoveWorkbenchPanelRequest): boolean;
+  configureEdge(request: ConfigureWorkbenchEdgeRequest): ConfiguredWorkbenchEdgeState;
+  activate(panelInstanceId: string): boolean;
+  removePanels(panelInstanceIds: readonly string[]): void;
+}

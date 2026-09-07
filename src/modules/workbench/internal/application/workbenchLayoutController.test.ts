@@ -6,10 +6,8 @@ import {
   LOGS_DOCKVIEW_COMPONENT_ID,
 } from "../dockview/logsDockviewLayout";
 import { createLogsDockviewRuntime } from "../dockview/logsRuntime";
-import type {
-  WorkbenchDockviewInternal,
-  WorkbenchLayoutTransaction,
-} from "../dockview/workbenchDockviewInternal";
+import type { WorkbenchDockviewInternal } from "../dockview/workbenchDockviewInternal";
+import type { WorkbenchLayoutTransaction } from "../dockview/workbenchTypes";
 import type { WorkbenchDockviewControl } from "../dockview/workbenchControl";
 import type { WorkbenchDockviewRead, WorkbenchPanelInfo } from "../dockview/workbenchRead";
 import type { WorkbenchComponentId, WorkbenchViewId } from "../dockview/workbenchPanelModel";

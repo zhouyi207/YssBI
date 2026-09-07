@@ -19,8 +19,8 @@ import {
   createWorkbenchDockviewRuntime,
   workbenchDockviewInternal,
   type WorkbenchDockviewInternal,
-  type WorkbenchLayoutTransaction,
 } from "../dockview/workbenchDockviewInternal";
+import { type WorkbenchLayoutTransaction } from "../dockview/workbenchTypes";
 import {
   workbenchDockviewRead,
   type WorkbenchDockviewRead,

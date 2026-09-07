@@ -1,7 +1,7 @@
 import type { SerializedDockview } from "dockview-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchLayoutTransaction } from "../dockview/workbenchDockviewInternal";
+import type { WorkbenchLayoutTransaction } from "../dockview/workbenchTypes";
 import type {
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
