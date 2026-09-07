@@ -310,11 +310,11 @@ const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
     "src-tauri/crates/yss-bayes-worker-julia/src/predictor.rs",
 ];
 const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
-    "src-tauri/crates/yss-execution/src/ports/scientific.rs",
-    "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
+    "src-tauri/crates/yss-sci-contract/src/scientific.rs",
+    "src-tauri/crates/yss-sci-runtime/src/service.rs",
 ];
-const SCIENTIFIC_PORT_FILE: &str = "src-tauri/crates/yss-execution/src/ports/scientific.rs";
-const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs";
+const SCIENTIFIC_PORT_FILE: &str = "src-tauri/crates/yss-sci-contract/src/scientific.rs";
+const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/crates/yss-sci-runtime/src/service.rs";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct WorkerFunction {
     owner: &'static str,
@@ -1549,6 +1549,7 @@ impl JuliaBayesAdapterVisitor<'_> {
         }
         if !self.adapter_source
             && self.source_file != "src-tauri/src/lib.rs"
+            && self.source_file != "src-tauri/crates/yss-sci-runtime/src/lib.rs"
             && path
                 .segments
                 .iter()
@@ -1729,6 +1730,7 @@ impl ScientificAdapterVisitor<'_> {
         }
         if !self.adapter_source
             && self.source_file != "src-tauri/src/lib.rs"
+            && self.source_file != "src-tauri/crates/yss-sci-runtime/src/lib.rs"
             && segments
                 .iter()
                 .any(|segment| segment == "SciRuntimeBackend")

@@ -875,7 +875,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci",
+        owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",
         target_condition: None,
@@ -905,7 +905,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci",
+        owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
         package_name: "polars",
         target_condition: None,

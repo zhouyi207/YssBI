@@ -46,10 +46,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     (
-        "src-tauri/crates/yss-execution/src/settings.rs",
-        RustLayer::Execution,
-    ),
-    (
         "src-tauri/crates/yss-execution/src/plan/mod.rs",
         RustLayer::Execution,
     ),
@@ -122,10 +118,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Application,
     ),
     (
-        "src-tauri/crates/yss-execution/src/ports/scientific.rs",
-        RustLayer::Execution,
-    ),
-    (
         "src-tauri/crates/yss-execution/src/ports/resources.rs",
         RustLayer::Execution,
     ),
@@ -189,35 +181,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
-        fully_qualified_owner: "yss_execution_sci_adapter",
-        canonical_origin_targets: &[
-            "yss_execution::ports::scientific::AcfPacfRequest",
-            "yss_execution::ports::scientific::AcfPacfResult",
-            "yss_execution::ports::scientific::OlsCovariance",
-            "yss_execution::ports::scientific::OlsRequest",
-            "yss_execution::ports::scientific::OlsResult",
-            "yss_execution::ports::scientific::BackendExecutionControl",
-            "yss_execution::ports::scientific::ScientificBackend",
-            "yss_execution::ports::scientific::ScientificBackendError",
-            "yss_execution::ports::scientific::ScientificInputViolation",
-            "yss_sci_runtime::api::time_series::acf_pacf::AcfPacfInput",
-            "yss_sci_runtime::api::time_series::acf_pacf::compute_acf_pacf",
-            "yss_sci_runtime::api::node_statistics::fit_ols",
-            "yss_sci_runtime::api::node_statistics::regression_report",
-            "yss_sci_runtime::models::regression::OLSConfigure",
-            "yss_sci_runtime::models::regression::OLSCovarianceConfig",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
         repository_relative_source_file: "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
         fully_qualified_owner: "yss_bayes_artifact_polars",
         canonical_origin_targets: &[
             "yss_bayes_artifact_contract::BayesArtifactReadError",
             "yss_bayes_artifact_contract::BayesArtifactReader",
-            "yss_sci_runtime::api::density::KernelDensityInput",
-            "yss_sci_runtime::api::density::compute_kernel_density",
+            "yss_sci_runtime::density::KernelDensityInput",
+            "yss_sci_runtime::density::compute_kernel_density",
         ],
     },
     InternalDependencyCapability {
@@ -238,7 +208,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::bayes::BayesInferenceService::with_worker",
             "yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new",
-            "yss_execution_sci_adapter::SciRuntimeBackend::new",
+            "yss_sci_runtime::service::SciRuntimeBackend::new",
             "yss_julia_worker::JuliaWorkerManager::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
@@ -252,7 +222,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationState::from_composition",
             "yss_application::execution::session_slot::SessionCaptureError",
             "yss_bayes_artifact_polars::PolarsBayesArtifactReader::new",
-            "yss_execution::ports::scientific::ScientificBackend",
+            "yss_sci_contract::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
             "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
             "yss_api::invoke_handler",
@@ -754,9 +724,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yss_api::commands::command_panel_did",
         canonical_origin_targets: &[
             "yss_api::error::CommandError",
-            "yss_sci_runtime::models::panel_did::ComputeDidFakeGroupRequest",
-            "yss_sci_runtime::models::panel_did::DidPlaceboFakeGroupBlock",
-            "yss_sci_runtime::models::panel_did::compute_fake_group_ri",
+            "yss_sci_runtime::panel::did::ComputeDidFakeGroupRequest",
+            "yss_sci_runtime::panel::did::DidPlaceboFakeGroupBlock",
+            "yss_sci_runtime::panel::did::compute_fake_group_ri",
         ],
     },
     InternalDependencyCapability {
@@ -924,13 +894,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::SessionCaptureError::Inactive",
             "yss_application::execution::session_slot::SessionCaptureError::Recovering",
             "yss_application::execution::session_slot::SessionCaptureError::Replacing",
-            "yss_execution::ports::scientific::AcfPacfResult",
-            "yss_execution::ports::scientific::ScientificBackendError",
-            "yss_execution::ports::scientific::ScientificBackendError::Cancelled",
-            "yss_execution::ports::scientific::ScientificBackendError::ComputationFailed",
-            "yss_execution::ports::scientific::ScientificBackendError::DeadlineExceeded",
-            "yss_execution::ports::scientific::ScientificBackendError::InvalidInput",
-            "yss_execution::ports::scientific::ScientificBackendError::Unavailable",
+            "yss_sci_contract::scientific::AcfPacfResult",
+            "yss_sci_contract::scientific::ScientificBackendError",
+            "yss_sci_contract::scientific::ScientificBackendError::Cancelled",
+            "yss_sci_contract::scientific::ScientificBackendError::ComputationFailed",
+            "yss_sci_contract::scientific::ScientificBackendError::DeadlineExceeded",
+            "yss_sci_contract::scientific::ScientificBackendError::InvalidInput",
+            "yss_sci_contract::scientific::ScientificBackendError::Unavailable",
             "yss_api::error::CommandError",
             "yss_api::schema::statistics::AcfPacfRequestDto",
             "yss_api::schema::statistics::AcfPacfResponseDto",
@@ -1625,7 +1595,6 @@ fn non_build_memberships(
         "yss-bayes-artifact-polars"
             | "yss-agent-rig"
             | "yss-bayes-worker-julia"
-            | "yss-execution-sci-adapter"
             | "yss-julia-runtime"
             | "yss-julia-worker"
             | "yss-project-registry-sqlite"

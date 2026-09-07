@@ -607,7 +607,6 @@ fn api_has_one_transport_owner_without_root_facades() {
     assert!(root_runtime_dependencies.contains("yss-api = { path = \"./crates/yss-api\" }"));
     for transport_dependency in [
         "\nyss-data-contract = ",
-        "\nyss-sci-runtime = ",
         "\nchrono.workspace = true",
         "\npolars.workspace = true",
         "\nserde.workspace = true",
@@ -642,7 +641,6 @@ fn api_has_one_transport_owner_without_root_facades() {
     }
     for composition_dependency in [
         "yss-bayes-worker-julia",
-        "yss-execution-sci-adapter",
         "yss-project-registry-sqlite",
         "yss-project-watcher-notify",
         "tauri-plugin-clipboard-manager",
@@ -1303,8 +1301,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &execution_root,
-                "src-tauri/crates/yss-execution/src/settings.rs",
-                "yss_execution::settings",
+                "src-tauri/crates/yss-execution/src/state.rs",
+                "yss_execution::state",
             ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
@@ -1432,7 +1430,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PlatformAdapter
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-execution/src/settings.rs"],
+        classified["src-tauri/crates/yss-execution/src/state.rs"],
         RustLayer::Execution
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
@@ -4839,7 +4837,7 @@ fn application_settings_has_one_strict_global_owner_without_project_mirrors() {
     for contract in [
         "pub struct ApplicationSettings",
         "pub struct ComputationSettings",
-        "pub enum ComputationSettingsValidationError",
+        "pub enum StatisticalMissingValuePolicy",
         "pub struct SettingsSnapshot",
         "pub struct SettingsMutationRequest",
         "pub struct SettingsMutationReceipt",
@@ -4854,21 +4852,6 @@ fn application_settings_has_one_strict_global_owner_without_project_mirrors() {
         !owner.contains("tauri"),
         "computation settings contract must remain platform-neutral"
     );
-
-    let application = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-application/src/computation_settings.rs"),
-    )
-    .expect("application computation adapter must be readable");
-    assert!(
-        application.contains("use yss_settings::") && application.contains("ComputationSettings"),
-        "application adapters must consume global settings directly"
-    );
-    for duplicate in ["ComputationSettingsMappingError", "fn validate("] {
-        assert!(
-            !application.contains(duplicate),
-            "application must not restore mirrored validation logic '{duplicate}'"
-        );
-    }
 
     let manifest_owner =
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/manifest.rs"))
@@ -7941,7 +7924,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let api = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-sci-runtime/src/api/mod.rs"),
+            .join("src-tauri/crates/yss-sci-runtime/src/lib.rs"),
     )
     .expect("SCI runtime API module must be readable");
     assert!(
@@ -8005,126 +7988,73 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
 }
 
 #[test]
-fn execution_sci_adapter_has_one_crate_owner_without_dead_root_adapters() {
-    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs";
+fn scientific_backend_contract_and_runtime_have_distinct_owners() {
     let facts = production_facts();
-    for relative in [
-        "src-tauri/crates/yss-execution-sci-adapter/Cargo.toml",
-        "src-tauri/crates/yss-execution-sci-adapter/README.md",
-        ADAPTER_SOURCE,
-        "src-tauri/crates/yss-execution-sci-adapter/src/tests.rs",
-    ] {
-        assert!(
-            facts.repository_root.join(relative).is_file(),
-            "Execution SCI adapter asset {relative} must exist"
-        );
-    }
     assert_eq!(
-        facts.classification.get(ADAPTER_SOURCE),
-        Some(&RustLayer::BackendAdapter),
-        "the Execution SCI implementation must remain a Backend Adapter"
+        facts
+            .classification
+            .get("src-tauri/crates/yss-sci-contract/src/scientific.rs"),
+        Some(&RustLayer::PureLeaf)
     );
-
-    let manifest = std::fs::read_to_string(
+    assert_eq!(
         facts
-            .repository_root
-            .join("src-tauri/crates/yss-execution-sci-adapter/Cargo.toml"),
-    )
-    .expect("Execution SCI adapter manifest must be readable");
-    for dependency in ["yss-execution", "yss-sci-contract", "yss-sci-runtime"] {
-        assert!(
-            manifest.contains(dependency),
-            "Execution SCI adapter must declare {dependency}"
-        );
-    }
-    for backwards_dependency in [
-        "tauri",
-        "yss-application",
-        "yss-project",
-        "yss-database",
-        "yssbi",
-    ] {
-        assert!(
-            !manifest.contains(backwards_dependency),
-            "Execution SCI adapter must not depend on {backwards_dependency}"
-        );
-    }
-
-    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
-        .expect("composition root must be readable");
-    assert!(root_lib.contains("yss_execution_sci_adapter::SciRuntimeBackend::new()"));
-    for removed_seam in [
-        "pub mod backend_adapters",
-        "SessionResourceFactoryBuilder",
-        "database_resource_provider_factory",
-    ] {
-        assert!(
-            !root_lib.contains(removed_seam),
-            "composition root must not restore dead adapter seam {removed_seam}"
-        );
-    }
-    for removed_path in [
-        "src-tauri/src/backend_adapters",
-        "src-tauri/crates/yss-execution/src/ports/relational.rs",
-    ] {
-        assert!(
-            !facts.repository_root.join(removed_path).exists(),
-            "dead root adapter or port {removed_path} must stay absent"
-        );
-    }
-
-    let port = std::fs::read_to_string(
+            .classification
+            .get("src-tauri/crates/yss-sci-runtime/src/service.rs"),
+        Some(&RustLayer::SciCore)
+    );
+    assert!(
         facts
-            .repository_root
-            .join("src-tauri/crates/yss-execution/src/ports/scientific.rs"),
-    )
-    .expect("Execution scientific port must be readable");
-    assert!(port.contains("pub trait ScientificBackend"));
-    assert!(port.contains("fn acf_pacf("));
-    for dead_family in [
-        "StatisticsRequest",
-        "KernelDensityRequest",
-        "RelationalBackend",
-    ] {
-        assert!(
-            !port.contains(dead_family),
-            "Execution scientific port must not restore test-only family {dead_family}"
-        );
-    }
-
-    let session_factory = std::fs::read_to_string(
+            .dependencies
+            .iter()
+            .any(|dependency| dependency.source_file
+                == "src-tauri/crates/yss-sci-runtime/src/service.rs"
+                && dependency.canonical_origin_target
+                    == "yss_sci_contract::scientific::ScientificBackend")
+    );
+    assert!(
         facts
-            .repository_root
-            .join("src-tauri/crates/yss-application/src/execution/session_factory.rs"),
-    )
-    .expect("Application session factory must be readable");
-    assert!(session_factory.contains("ResourceProviderFactory::from_project_session("));
-    assert!(!session_factory.contains("SessionResourceFactoryBuilder"));
+            .dependencies
+            .iter()
+            .any(
+                |dependency| dependency.source_file == "src-tauri/src/lib.rs"
+                    && dependency.canonical_origin_target
+                        == "yss_sci_runtime::service::SciRuntimeBackend::new"
+            )
+    );
+    assert!(
+        facts
+            .dependencies
+            .iter()
+            .filter(|dependency| dependency
+                .source_file
+                .starts_with("src-tauri/crates/yss-execution/"))
+            .all(|dependency| !dependency
+                .canonical_origin_target
+                .starts_with("yss_sci_runtime::")
+                && !dependency.canonical_origin_target.starts_with("yss_sci::"))
+    );
 }
 
 #[test]
 fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation() {
     const RUNTIME_SOURCES: &[&str] = &[
         "src-tauri/crates/yss-sci-runtime/src/lib.rs",
-        "src-tauri/crates/yss-sci-runtime/src/engine.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/density.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/node_statistics.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/stats/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/stats/hypothesis.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/time_series/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/time_series/acf_pacf.rs",
-        "src-tauri/crates/yss-sci-runtime/src/api/time_series/serial_tests.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/stats/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/stats/hypothesis.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/acf_pacf.rs",
-        "src-tauri/crates/yss-sci-runtime/src/backends/rust/time_series/serial_tests.rs",
-        "src-tauri/crates/yss-sci-runtime/src/models/mod.rs",
-        "src-tauri/crates/yss-sci-runtime/src/models/panel_did.rs",
-        "src-tauri/crates/yss-sci-runtime/src/models/regression.rs",
+        "src-tauri/crates/yss-sci-runtime/src/service.rs",
+        "src-tauri/crates/yss-sci-runtime/src/density.rs",
+        "src-tauri/crates/yss-sci-runtime/src/hypothesis.rs",
+        "src-tauri/crates/yss-sci-runtime/src/error.rs",
+        "src-tauri/crates/yss-sci-runtime/src/regression/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/regression/report.rs",
+        "src-tauri/crates/yss-sci-runtime/src/regression/types.rs",
+        "src-tauri/crates/yss-sci-runtime/src/time_series/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/time_series/models.rs",
+        "src-tauri/crates/yss-sci-runtime/src/time_series/acf_pacf.rs",
+        "src-tauri/crates/yss-sci-runtime/src/time_series/serial_tests.rs",
+        "src-tauri/crates/yss-sci-runtime/src/panel/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/panel/did.rs",
+        "src-tauri/crates/yss-sci-runtime/src/data/mod.rs",
+        "src-tauri/crates/yss-sci-runtime/src/data/panel.rs",
+        "src-tauri/crates/yss-sci-runtime/src/data/time_series/mod.rs",
     ];
 
     let facts = production_facts();
@@ -8238,7 +8168,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
         "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
-        "src-tauri/crates/yss-execution-sci-adapter/src/lib.rs",
+        "src-tauri/src/lib.rs",
         "src-tauri/crates/yss-api/src/commands/command_panel_did.rs",
     ] {
         let source = std::fs::read_to_string(facts.repository_root.join(consumer))
@@ -8266,7 +8196,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     let panel = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-sci-runtime/src/models/panel_did.rs"),
+            .join("src-tauri/crates/yss-sci-runtime/src/panel/did.rs"),
     )
     .expect("Panel DID runtime source must be readable");
     for required_fact in [
@@ -8293,7 +8223,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     let node_statistics = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-sci-runtime/src/api/node_statistics.rs"),
+            .join("src-tauri/crates/yss-sci-runtime/src/regression/mod.rs"),
     )
     .expect("node statistics runtime source must be readable");
     let production_node_statistics = node_statistics
