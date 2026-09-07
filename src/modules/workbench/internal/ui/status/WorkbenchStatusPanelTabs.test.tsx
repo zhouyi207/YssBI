@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 
-import { act } from "react";
+import { act, Profiler } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { DockviewReact, type DockviewApi } from "dockview-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useIsActiveEditorPanel } from "@/features/application/editor/useIsActiveEditorPanel";
 import { workbenchDockviewInternal } from "../../dockview/workbenchDockviewInternal";
 import { bindWorkbenchStatusBarLayout } from "../../application/workbenchStatusBarLayout";
 import type { WorkbenchPanelParams } from "../../dockview/workbenchPanelModel";
@@ -24,6 +25,14 @@ function Panel() {
   return null;
 }
 
+const editorRender = vi.fn();
+const statusRender = vi.fn();
+
+function EditorPanel() {
+  editorRender(useIsActiveEditorPanel("editor"));
+  return null;
+}
+
 describe("Workbench status panel tabs", () => {
   let root: Root | undefined;
   let api: DockviewApi;
@@ -36,6 +45,7 @@ describe("Workbench status panel tabs", () => {
       root?.unmount();
       workbenchUi.setSettingsOpen(false);
     });
+    vi.restoreAllMocks();
     document.body.replaceChildren();
   });
 
@@ -57,7 +67,7 @@ describe("Workbench status panel tabs", () => {
           <div data-yssbi-root-dockview style={{ width: 900, height: 600 }}>
             <DockviewReact
               components={{
-                EditorResource: Panel,
+                EditorResource: EditorPanel,
                 Problems: Panel,
                 Output: Panel,
                 Logs: Panel,
@@ -100,7 +110,9 @@ describe("Workbench status panel tabs", () => {
               }}
             />
           </div>
-          <StatusBar ariaLabel="status" left={[]} right={[]} />
+          <Profiler id="status" onRender={statusRender}>
+            <StatusBar ariaLabel="status" left={[]} right={[]} />
+          </Profiler>
         </TooltipProvider>,
       );
     });
@@ -109,6 +121,37 @@ describe("Workbench status panel tabs", () => {
   function button(viewId: string): HTMLButtonElement {
     return document.querySelector(`footer [data-workbench-status-panel="${viewId}"]`)!;
   }
+
+  it("handles unrelated layout events without serializing or rerendering unchanged chrome and editors", async () => {
+    await renderWorkbench();
+    await update(() => undefined);
+    const serialize = vi.spyOn(api, "toJSON");
+    const layoutChanged = vi.fn();
+    const layoutSubscription = api.onDidLayoutChange(layoutChanged);
+    const workbench = document.querySelector<HTMLElement>("[data-yssbi-workbench]")!;
+    const rootStyle = vi.spyOn(workbench.style, "setProperty");
+    const statusStyle = vi.spyOn(document.querySelector("footer")!.style, "setProperty");
+    editorRender.mockClear();
+    statusRender.mockClear();
+
+    for (let step = 0; step < 12; step += 1) {
+      await update(() => api.getPanel("editor")!.api.setTitle(`Main ${step}`));
+    }
+
+    layoutSubscription.dispose();
+    expect(layoutChanged.mock.calls.length).toBeGreaterThanOrEqual(12);
+    expect.soft(serialize).not.toHaveBeenCalled();
+    expect.soft(editorRender).not.toHaveBeenCalled();
+    expect.soft(statusRender).not.toHaveBeenCalled();
+    expect.soft(rootStyle).not.toHaveBeenCalled();
+    expect.soft(statusStyle).not.toHaveBeenCalled();
+
+    await update(() => button("output").click());
+    expect(button("output").getAttribute("aria-pressed")).toBe("true");
+    expect(editorRender).toHaveBeenLastCalledWith(false);
+    await update(() => api.getPanel("editor")!.api.setActive());
+    expect(editorRender).toHaveBeenLastCalledWith(true);
+  });
 
   it("keeps the visible panel selected while editing and collapses or reveals from the status bar", async () => {
     await renderWorkbench();
@@ -137,6 +180,26 @@ describe("Workbench status panel tabs", () => {
     await update(() => button("logs").click());
     expect(button("logs").getAttribute("aria-pressed")).toBe("true");
     expect(api.panels).toHaveLength(4);
+  });
+
+  it("keeps alignment variables local to the status bar and updates changed offsets", async () => {
+    await renderWorkbench();
+    const workbench = document.querySelector<HTMLElement>("[data-yssbi-workbench]")!;
+    const column = workbench.querySelector<HTMLElement>(".dv-shell-middle-column")!;
+    const footer = workbench.querySelector("footer")!;
+    vi.spyOn(workbench, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 0, 900, 600));
+    const bounds = vi.spyOn(column, "getBoundingClientRect");
+    bounds.mockReturnValue(new DOMRect(220, 0, 500, 600));
+
+    await update(() => api.getPanel("editor")!.api.setTitle("Resized"));
+    expect(footer.style.getPropertyValue("--workbench-center-offset")).toBe("210px");
+    expect(footer.style.getPropertyValue("--workbench-center-right-offset")).toBe("190px");
+    expect(workbench.style.getPropertyValue("--workbench-center-offset")).toBe("");
+
+    bounds.mockReturnValue(new DOMRect(54, 0, 666, 600));
+    await update(() => api.getPanel("editor")!.api.setTitle("Collapsed"));
+    expect(footer.style.getPropertyValue("--workbench-center-offset")).toBe("44px");
+    expect(footer.style.getPropertyValue("--workbench-center-right-offset")).toBe("190px");
   });
 
   it("removes a restored collapsed strip and restores native tabs for mixed groups", async () => {

@@ -33,76 +33,71 @@ function ViewportStatus({ scope }: { scope: ViewportScope | null }) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!scope) return;
+    let frame: number | undefined;
     const update = () => {
-      if (ref.current) ref.current.textContent = formatViewportStatus(scope);
+      frame = undefined;
+      const text = formatViewportStatus(scope);
+      if (ref.current && ref.current.textContent !== text) ref.current.textContent = text;
     };
+    // React may retain its original text after live DOM updates, including on a null scope.
     update();
-    return subscribeToViewport(scope, update);
+    if (!scope) return;
+    const unsubscribe = subscribeToViewport(scope, () => {
+      if (frame === undefined) frame = requestAnimationFrame(update);
+    });
+    return () => {
+      unsubscribe();
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
   }, [scope?.groupId, scope?.graphPath]);
 
-  return <span ref={ref}>{formatViewportStatus(scope)}</span>;
+  return (
+    <span ref={ref} className="tabular-nums">
+      {formatViewportStatus(scope)}
+    </span>
+  );
 }
 
 export function useStatusBarItems(): StatusBarItemsSnapshot {
   const { t } = useTranslation();
   const actions = useStatusBarActions();
 
-  useDockviewPortSnapshot(workbenchDockviewRead);
-  const capturedTarget = captureActiveEditorCommandTarget();
-  const editorTarget =
-    capturedTarget && isEditorCommandTargetCurrent(capturedTarget) ? capturedTarget : null;
-  const graphTarget =
-    editorTarget &&
-    (editorTarget.resourceKind === "event" || editorTarget.resourceKind === "function")
-      ? editorTarget
-      : null;
-  const selectedNodeIds = useEditorPaneStateStore((state) =>
-    graphTarget ? state.selections[graphTarget.panelInstanceId]?.selectedNodeIds : undefined,
-  );
-  const editor = useMemo(
-    () => ({
-      activeEditorGroupId: graphTarget?.groupId ?? null,
-      activeResourceRef: graphTarget?.resourceRef ?? null,
-      selectedCount: selectedNodeIds?.length ?? 0,
+  const graphTarget = useDockviewPortSnapshot(
+    workbenchDockviewRead,
+    useShallow(() => {
+      const target = captureActiveEditorCommandTarget();
+      return target &&
+        isEditorCommandTargetCurrent(target) &&
+        (target.resourceKind === "event" || target.resourceKind === "function")
+        ? target
+        : null;
     }),
-    [graphTarget, selectedNodeIds],
   );
-
-  const graphStats = useGraphProjectionStore(
-    useShallow((state) => {
-      if (!editor.activeResourceRef) return { nodeCount: 0, connectionCount: 0 };
-
-      const nodeIds = state.getGraphNodeIds(editor.activeResourceRef);
-      const connectionIds = new Set<string>();
-      for (const nodeId of nodeIds) {
-        for (const pinId of state.getGraphNodePins(editor.activeResourceRef, nodeId)) {
-          for (const connectionId of state.getGraphPinConnections(
-            editor.activeResourceRef,
-            pinId,
-          )) {
-            connectionIds.add(connectionId);
-          }
-        }
-      }
-
-      return {
-        nodeCount: nodeIds.length,
-        connectionCount: connectionIds.size,
-      };
-    }),
+  const selectedCount = useEditorPaneStateStore((state) =>
+    graphTarget ? (state.selections[graphTarget.panelInstanceId]?.selectedNodeIds.length ?? 0) : 0,
+  );
+  const graphPath = graphTarget?.resourceRef;
+  const nodeCount = useGraphProjectionStore((state) =>
+    graphPath ? (state.graphEntities[graphPath]?.graphNodes.length ?? 0) : 0,
+  );
+  const connections = useGraphProjectionStore((state) =>
+    graphPath ? state.graphEntities[graphPath]?.connections : undefined,
+  );
+  const connectionCount = useMemo(
+    () => (connections ? Object.keys(connections).length : 0),
+    [connections],
   );
 
   const ctx = useMemo<StatusBarRenderContext>(
     () => ({
       t,
-      activeResourceRef: editor.activeResourceRef,
-      activeEditorGroupId: editor.activeEditorGroupId,
-      selectedCount: editor.selectedCount,
-      nodeCount: graphStats.nodeCount,
-      connectionCount: graphStats.connectionCount,
+      activeResourceRef: graphPath ?? null,
+      activeEditorGroupId: graphTarget?.groupId ?? null,
+      selectedCount,
+      nodeCount,
+      connectionCount,
     }),
-    [t, editor, graphStats],
+    [t, graphPath, graphTarget?.groupId, selectedCount, nodeCount, connectionCount],
   );
 
   const builtIn = useMemo(

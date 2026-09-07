@@ -3,9 +3,10 @@ import { useDockviewPortSnapshot } from "@/modules/workbench/public";
 
 /** True only for the physically active editor panel. */
 export function useIsActiveEditorPanel(panelInstanceId?: string | null): boolean {
-  useDockviewPortSnapshot(workbenchDockviewRead);
-  return (
-    panelInstanceId != null &&
-    workbenchDockviewRead.getActiveEditorPanel()?.panelInstanceId === panelInstanceId
+  return useDockviewPortSnapshot(
+    workbenchDockviewRead,
+    () =>
+      panelInstanceId != null &&
+      workbenchDockviewRead.getActiveEditorPanel()?.panelInstanceId === panelInstanceId,
   );
 }

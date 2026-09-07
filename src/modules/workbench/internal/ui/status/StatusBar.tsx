@@ -21,6 +21,7 @@ export function StatusBar({
 
   return (
     <footer
+      data-workbench-status-bar
       className="relative flex h-(--statusbar-height) shrink-0 items-center justify-between overflow-hidden border-t border-(--strong-border) bg-(--panel-header-bg) text-[11px] font-medium text-foreground"
       aria-label={ariaLabel}
     >

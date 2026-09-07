@@ -6,8 +6,11 @@ import { readMetadata } from "../dockview/workbenchDockviewOperations";
 /** Derive chrome placement from the live Dockview, including restored and resized groups. */
 export function bindWorkbenchStatusBarLayout(api: DockviewApi, host: HTMLElement): () => void {
   const workbench = host.closest<HTMLElement>("[data-yssbi-workbench]");
+  let statusBar: HTMLElement | null = null;
   let frame: number | undefined;
   let observedColumn: HTMLElement | null = null;
+  let previousLeft: number | undefined;
+  let previousRight: number | undefined;
 
   const update = () => {
     frame = undefined;
@@ -25,6 +28,9 @@ export function bindWorkbenchStatusBarLayout(api: DockviewApi, host: HTMLElement
       if (bottom.header.hidden !== hidden) {
         bottom.header.hidden = hidden;
         bottom.relayout();
+        // Let Dockview finish its writes before measuring the new geometry.
+        schedule();
+        return;
       }
     }
 
@@ -34,13 +40,27 @@ export function bindWorkbenchStatusBarLayout(api: DockviewApi, host: HTMLElement
       if (middleColumn) observer.observe(middleColumn);
       observedColumn = middleColumn;
     }
-    if (workbench) {
+    const nextStatusBar =
+      workbench?.querySelector<HTMLElement>("[data-workbench-status-bar]") ?? null;
+    if (nextStatusBar !== statusBar) {
+      statusBar = nextStatusBar;
+      previousLeft = undefined;
+      previousRight = undefined;
+    }
+    if (workbench && statusBar) {
       const workbenchBounds = workbench.getBoundingClientRect();
       const columnBounds = middleColumn?.getBoundingClientRect();
       const left = columnBounds ? Math.max(0, columnBounds.left - workbenchBounds.left) : 0;
       const right = columnBounds ? Math.max(0, workbenchBounds.right - columnBounds.right) : 0;
-      workbench.style.setProperty("--workbench-center-offset", `${left}px`);
-      workbench.style.setProperty("--workbench-center-right-offset", `${right}px`);
+      // These inherited variables belong to the footer, not the entire editor tree.
+      if (left !== previousLeft) {
+        statusBar.style.setProperty("--workbench-center-offset", `${left}px`);
+        previousLeft = left;
+      }
+      if (right !== previousRight) {
+        statusBar.style.setProperty("--workbench-center-right-offset", `${right}px`);
+        previousRight = right;
+      }
     }
   };
   const schedule = () => {
@@ -55,7 +75,7 @@ export function bindWorkbenchStatusBarLayout(api: DockviewApi, host: HTMLElement
     disposable.dispose();
     observer.disconnect();
     if (frame !== undefined) cancelAnimationFrame(frame);
-    workbench?.style.removeProperty("--workbench-center-offset");
-    workbench?.style.removeProperty("--workbench-center-right-offset");
+    statusBar?.style.removeProperty("--workbench-center-offset");
+    statusBar?.style.removeProperty("--workbench-center-right-offset");
   };
 }

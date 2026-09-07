@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { WORKBENCH_BOTTOM_DEFAULT_ORDER } from "../dockview/workbenchDockviewDefaults";
 import { workbenchDockviewControl } from "../dockview/workbenchControl";
@@ -7,8 +7,8 @@ import { useDockviewPortSnapshot } from "../dockview/useDockviewPortSnapshot";
 import { revealWorkbenchView } from "./workbenchLayoutActions";
 import { showWorkbenchLayoutError } from "./workbenchLayoutErrorFeedback";
 
-export function useWorkbenchStatusPanelTabs(position: "bottom" | "right") {
-  const { hydrated } = useDockviewPortSnapshot(workbenchDockviewRead);
+function readStatusPanelTabs(position: "bottom" | "right") {
+  const { hydrated } = workbenchDockviewRead.getSnapshot();
   const panels = workbenchDockviewRead.listPanels();
   const groups = workbenchDockviewRead.listGroups();
   const targetEdge = workbenchDockviewRead.getEdgeState(position);
@@ -27,16 +27,7 @@ export function useWorkbenchStatusPanelTabs(position: "bottom" | "right") {
     return indexOf(left) - indexOf(right);
   });
 
-  useEffect(() => {
-    // Restored layouts can still reserve the former collapsed tab strip.
-    if (position === "bottom" && hydrated && targetEdge.collapsed && targetEdge.visible) {
-      void workbenchDockviewControl
-        .setEdgeCollapsed("bottom", true)
-        .catch(showWorkbenchLayoutError);
-    }
-  }, [position, hydrated, targetEdge.collapsed, targetEdge.visible]);
-
-  return orderedViews.map((viewId) => {
+  const tabs = orderedViews.map((viewId) => {
     const panel = panels.find(
       (candidate) => candidate.metadata.role === "view" && candidate.metadata.viewId === viewId,
     );
@@ -55,15 +46,64 @@ export function useWorkbenchStatusPanelTabs(position: "bottom" | "right") {
       viewId,
       selected,
       disabled: !hydrated,
-      onSelect: () => {
-        if (selected && panel?.location.type === "edge" && panel.location.position === position) {
-          void workbenchDockviewControl
-            .setEdgeCollapsed(position, true)
-            .catch(showWorkbenchLayoutError);
-        } else {
-          void revealWorkbenchView(viewId);
-        }
-      },
+      collapseOnSelect:
+        selected && panel?.location.type === "edge" && panel.location.position === position,
     };
   });
+
+  return {
+    tabs,
+    hideCollapsedBottom:
+      position === "bottom" && hydrated && targetEdge.collapsed && targetEdge.visible,
+  };
+}
+
+export function useWorkbenchStatusPanelTabs(position: "bottom" | "right") {
+  const select = useMemo(() => {
+    let previous: ReturnType<typeof readStatusPanelTabs> | undefined;
+    return () => {
+      const next = readStatusPanelTabs(position);
+      if (
+        previous &&
+        previous.hideCollapsedBottom === next.hideCollapsedBottom &&
+        previous.tabs.length === next.tabs.length &&
+        previous.tabs.every((tab, index) => {
+          const other = next.tabs[index];
+          return (
+            tab.viewId === other.viewId &&
+            tab.selected === other.selected &&
+            tab.disabled === other.disabled &&
+            tab.collapseOnSelect === other.collapseOnSelect
+          );
+        })
+      ) {
+        return previous;
+      }
+      previous = next;
+      return next;
+    };
+  }, [position]);
+  const { tabs, hideCollapsedBottom } = useDockviewPortSnapshot(workbenchDockviewRead, select);
+
+  useEffect(() => {
+    // Restored layouts can still reserve the former collapsed tab strip.
+    if (hideCollapsedBottom) {
+      void workbenchDockviewControl
+        .setEdgeCollapsed("bottom", true)
+        .catch(showWorkbenchLayoutError);
+    }
+  }, [hideCollapsedBottom]);
+
+  return tabs.map(({ collapseOnSelect, ...tab }) => ({
+    ...tab,
+    onSelect: () => {
+      if (collapseOnSelect) {
+        void workbenchDockviewControl
+          .setEdgeCollapsed(position, true)
+          .catch(showWorkbenchLayoutError);
+      } else {
+        void revealWorkbenchView(tab.viewId);
+      }
+    },
+  }));
 }

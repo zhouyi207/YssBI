@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscError, VscInfo, VscOutput, VscSparkle, VscTerminal } from "react-icons/vsc";
 
@@ -12,7 +13,11 @@ const STATUS_VIEWS = {
   assistant: { Icon: VscSparkle, titleKey: "panel.assistant" },
 } as const;
 
-export function WorkbenchStatusPanelTabs({ position }: { readonly position: "bottom" | "right" }) {
+export const WorkbenchStatusPanelTabs = memo(function WorkbenchStatusPanelTabs({
+  position,
+}: {
+  readonly position: "bottom" | "right";
+}) {
   const { t } = useTranslation();
   const tabs = useWorkbenchStatusPanelTabs(position);
 
@@ -43,4 +48,4 @@ export function WorkbenchStatusPanelTabs({ position }: { readonly position: "bot
       })}
     </div>
   );
-}
+});
