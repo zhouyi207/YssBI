@@ -1,43 +1,42 @@
-/**
- * Info 报告 IPC 单点窄化：ReportKind → 已校验 payload
- */
-
-import { isRegressionReportKind, type ReportPayloadKind } from "./reportKinds";
+import type { ReportPayloadKind } from "./reportKinds";
+import { parsedField, type ReportField, type ReportFieldResult } from "./fields";
 import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./parseDfadf";
-import { parsePanelDidResultData, parsePanelSummaryResult } from "./parsePanel";
-import { parseBinaryResultData, parseRegressionResultData } from "./parseRegression";
-import { parseVarSocResultData, parseVarSummaryResultData } from "./parseVar";
-import { parseVecRankResultData, parseVecSummaryResultData } from "./parseVec";
+import { panelDidResultDataField, panelSummaryField } from "./parsePanel";
+import {
+  binaryRegressionReportField,
+  canonicalOlsReportField,
+  linearRegressionReportField,
+} from "./parseRegression";
+import { varSocResultDataField, varSummaryResultDataField } from "./parseVar";
+import { vecRankResultDataField, vecSummaryResultDataField } from "./parseVec";
 
-/**
- * 在报告进入 InfoView 前窄化 JSON。
- * 返回 null 表示格式无效（漂移、缺字段、类型错误）。
- */
+const reportFields = {
+  olsSummary: canonicalOlsReportField,
+  binarySummary: binaryRegressionReportField,
+  iv2slsSummary: linearRegressionReportField,
+  ivLimlSummary: linearRegressionReportField,
+  praisSummary: linearRegressionReportField,
+  varSummary: varSummaryResultDataField,
+  varSoc: varSocResultDataField,
+  panelSummary: panelSummaryField,
+  panelDid: panelDidResultDataField,
+  dfAdfSummary: parsedField(parseDfAdfSummaryResultData, "DF/ADF report"),
+  dfAdfSummaryList: parsedField(parseDfAdfSummaryListResultData, "DF/ADF reports"),
+  vecSummary: vecSummaryResultDataField,
+  vecRankSummary: vecRankResultDataField,
+} satisfies Record<ReportPayloadKind, ReportField<unknown>>;
+
+export function parseReportPayloadResult(
+  report: ReportPayloadKind,
+  raw: unknown,
+): ReportFieldResult<unknown> {
+  if (!Object.prototype.hasOwnProperty.call(reportFields, report)) {
+    return { ok: false, issue: { fieldPath: "$", reason: "expected a known report kind" } };
+  }
+  return reportFields[report].read(raw, "$");
+}
+
 export function parseReportPayload(report: ReportPayloadKind, raw: unknown): unknown | null {
-  if (raw === null || raw === undefined) return null;
-
-  if (report === "binarySummary") return parseBinaryResultData(raw);
-  if (isRegressionReportKind(report)) {
-    return parseRegressionResultData(raw);
-  }
-  switch (report) {
-    case "varSummary":
-      return parseVarSummaryResultData(raw);
-    case "varSoc":
-      return parseVarSocResultData(raw);
-    case "panelSummary":
-      return parsePanelSummaryResult(raw);
-    case "panelDid":
-      return parsePanelDidResultData(raw);
-    case "dfAdfSummary":
-      return parseDfAdfSummaryResultData(raw);
-    case "dfAdfSummaryList":
-      return parseDfAdfSummaryListResultData(raw);
-    case "vecSummary":
-      return parseVecSummaryResultData(raw);
-    case "vecRankSummary":
-      return parseVecRankResultData(raw);
-    default:
-      return null;
-  }
+  const parsed = parseReportPayloadResult(report, raw);
+  return parsed.ok ? parsed.value : null;
 }

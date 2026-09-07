@@ -1,190 +1,120 @@
-/**
- * VAR / varsoc 报告 IPC 窄化
- */
-
 import {
-  assignPresentKeys,
-  isFiniteNumber,
-  isNonNegativeInteger,
-  isRecord,
-  isString,
-  optionalNonNegativeInteger,
-} from "./guards";
-import { parseStringArray, parseObjectArray } from "./parseCommon";
+  numberField,
+  integerField,
+  stringField,
+  optionalField,
+  nullableField,
+  arrayField,
+  objectField,
+  readReportField,
+} from "./fields";
 import type {
-  VARCoefDisplay,
+  VARSocResultData,
+  VARSocRowData,
+  VARSummaryResultData,
   VAREquationDisplay,
-  VARGrangerDisplay,
+  VARCoefDisplay,
+  VARWleDisplay,
   VARLmarDisplay,
   VARStableRow,
-  VARSocResultData,
-  VARSummaryResultData,
-  VARWleDisplay,
+  VARGrangerDisplay,
 } from "./var";
 
-function parseVarEquation(raw: unknown): VAREquationDisplay | null {
-  if (!isRecord(raw) || !isString(raw.eq_name)) return null;
-  const nums = ["parms", "rmse", "r_sq", "chi2", "p_chi2"] as const;
-  for (const key of nums) {
-    if (!isFiniteNumber(raw[key])) return null;
-  }
-  return {
-    eq_name: raw.eq_name,
-    parms: raw.parms as number,
-    rmse: raw.rmse as number,
-    r_sq: raw.r_sq as number,
-    chi2: raw.chi2 as number,
-    p_chi2: raw.p_chi2 as number,
-  };
+const varSocRowDataField = objectField<VARSocRowData>({
+  lag: numberField,
+  log_likelihood: numberField,
+  lr: optionalField(nullableField(numberField)),
+  lr_df: optionalField(nullableField(numberField)),
+  lr_p: optionalField(nullableField(numberField)),
+  fpe: numberField,
+  aic: numberField,
+  hqic: numberField,
+  sbic: numberField,
+});
+
+export const varSocResultDataField = objectField<VARSocResultData>({
+  title: stringField,
+  var_names: arrayField(stringField),
+  maxlag: integerField,
+  num_observation: numberField,
+  rows: arrayField(varSocRowDataField),
+});
+
+export const varEquationDisplayField = objectField<VAREquationDisplay>({
+  eq_name: stringField,
+  parms: numberField,
+  rmse: numberField,
+  r_sq: numberField,
+  chi2: numberField,
+  p_chi2: numberField,
+});
+
+export const varCoefDisplayField = objectField<VARCoefDisplay>({
+  eq_name: stringField,
+  variable: stringField,
+  coef: numberField,
+  std_err: numberField,
+  z_value: numberField,
+  p_value: numberField,
+  ci_lower: numberField,
+  ci_upper: numberField,
+});
+
+const varWleDisplayField = objectField<VARWleDisplay>({
+  eq_name: stringField,
+  lag: integerField,
+  chi2: numberField,
+  df: numberField,
+  p_value: numberField,
+});
+
+export const varLmarDisplayField = objectField<VARLmarDisplay>({
+  lag: integerField,
+  chi2: numberField,
+  df: numberField,
+  p_value: numberField,
+});
+
+export const varStableRowField = objectField<VARStableRow>({
+  re: numberField,
+  im: numberField,
+  modulus: numberField,
+});
+
+const varGrangerDisplayField = objectField<VARGrangerDisplay>({
+  eq_name: stringField,
+  excluded: stringField,
+  chi2: numberField,
+  df: numberField,
+  p_value: numberField,
+});
+
+export const varSummaryResultDataField = objectField<VARSummaryResultData>({
+  title: stringField,
+  var_names: arrayField(stringField),
+  complete_sample_rows: optionalField(integerField),
+  var_max_lag: optionalField(integerField),
+  num_observation: numberField,
+  log_likelihood: numberField,
+  aic: numberField,
+  fpe: numberField,
+  hqic: numberField,
+  sbic: numberField,
+  det_sigma_ml: numberField,
+  equations: arrayField(varEquationDisplayField),
+  coefficients: arrayField(varCoefDisplayField),
+  sigma: arrayField(arrayField(numberField)),
+  oirf: arrayField(arrayField(arrayField(numberField))),
+  fevd: arrayField(arrayField(arrayField(numberField))),
+  varwle: optionalField(arrayField(varWleDisplayField)),
+  varlmar: optionalField(arrayField(varLmarDisplayField)),
+  varstable: optionalField(arrayField(varStableRowField)),
+  vargranger: optionalField(arrayField(varGrangerDisplayField)),
+});
+
+export function parseVarSocResultData(raw: unknown) {
+  return readReportField(varSocResultDataField, raw);
 }
-
-function parseVarCoef(raw: unknown): VARCoefDisplay | null {
-  if (!isRecord(raw) || !isString(raw.eq_name) || !isString(raw.variable)) return null;
-  const nums = ["coef", "std_err", "z_value", "p_value", "ci_lower", "ci_upper"] as const;
-  for (const key of nums) {
-    if (!isFiniteNumber(raw[key])) return null;
-  }
-  return {
-    eq_name: raw.eq_name,
-    variable: raw.variable,
-    coef: raw.coef as number,
-    std_err: raw.std_err as number,
-    z_value: raw.z_value as number,
-    p_value: raw.p_value as number,
-    ci_lower: raw.ci_lower as number,
-    ci_upper: raw.ci_upper as number,
-  };
-}
-
-export function parseVarStableRow(raw: unknown): VARStableRow | null {
-  if (!isRecord(raw)) return null;
-  if (!isFiniteNumber(raw.re) || !isFiniteNumber(raw.im) || !isFiniteNumber(raw.modulus))
-    return null;
-  return { re: raw.re, im: raw.im, modulus: raw.modulus };
-}
-
-export function parseVarLmar(raw: unknown): VARLmarDisplay | null {
-  if (!isRecord(raw) || !isNonNegativeInteger(raw.lag)) return null;
-  if (!isFiniteNumber(raw.chi2) || !isFiniteNumber(raw.df) || !isFiniteNumber(raw.p_value))
-    return null;
-  return {
-    lag: raw.lag,
-    chi2: raw.chi2,
-    df: raw.df,
-    p_value: raw.p_value,
-  };
-}
-
-function parseVarWle(raw: unknown): VARWleDisplay | null {
-  if (!isRecord(raw) || !isString(raw.eq_name) || !isNonNegativeInteger(raw.lag)) return null;
-  if (!isFiniteNumber(raw.chi2) || !isFiniteNumber(raw.df) || !isFiniteNumber(raw.p_value))
-    return null;
-  return {
-    eq_name: raw.eq_name,
-    lag: raw.lag,
-    chi2: raw.chi2,
-    df: raw.df,
-    p_value: raw.p_value,
-  };
-}
-
-function parseVarGranger(raw: unknown): VARGrangerDisplay | null {
-  if (!isRecord(raw) || !isString(raw.eq_name) || !isString(raw.excluded)) return null;
-  if (!isFiniteNumber(raw.chi2) || !isFiniteNumber(raw.df) || !isFiniteNumber(raw.p_value))
-    return null;
-  return {
-    eq_name: raw.eq_name,
-    excluded: raw.excluded,
-    chi2: raw.chi2,
-    df: raw.df,
-    p_value: raw.p_value,
-  };
-}
-
-export function parseVarSocResultData(raw: unknown): VARSocResultData | null {
-  if (!isRecord(raw) || !isString(raw.title)) return null;
-  const var_names = parseStringArray(raw.var_names);
-  if (!var_names || !isNonNegativeInteger(raw.maxlag) || !isFiniteNumber(raw.num_observation))
-    return null;
-  if (!Array.isArray(raw.rows)) return null;
-  return {
-    title: raw.title,
-    var_names,
-    maxlag: raw.maxlag,
-    num_observation: raw.num_observation,
-    rows: raw.rows,
-  };
-}
-
-const VAR_SUMMARY_OPTIONAL_KEYS = [
-  "complete_sample_rows",
-  "var_max_lag",
-] as const satisfies readonly (keyof VARSummaryResultData)[];
-
-export function parseVarSummaryResultData(raw: unknown): VARSummaryResultData | null {
-  if (!isRecord(raw) || !isString(raw.title)) return null;
-  const var_names = parseStringArray(raw.var_names);
-  const equations = parseObjectArray(raw.equations, parseVarEquation);
-  const coefficients = parseObjectArray(raw.coefficients, parseVarCoef);
-  if (!var_names || !equations || !coefficients) return null;
-  if (!isFiniteNumber(raw.num_observation) || !isFiniteNumber(raw.log_likelihood)) return null;
-  if (
-    !isFiniteNumber(raw.aic) ||
-    !isFiniteNumber(raw.fpe) ||
-    !isFiniteNumber(raw.hqic) ||
-    !isFiniteNumber(raw.sbic)
-  ) {
-    return null;
-  }
-  if (!isFiniteNumber(raw.det_sigma_ml) || !Array.isArray(raw.sigma)) return null;
-  if (!Array.isArray(raw.oirf) || !Array.isArray(raw.fevd)) return null;
-
-  const varstable =
-    raw.varstable === undefined
-      ? undefined
-      : (parseObjectArray(raw.varstable, parseVarStableRow) ?? undefined);
-  if (raw.varstable !== undefined && varstable === undefined) return null;
-
-  const varlmar =
-    raw.varlmar === undefined
-      ? undefined
-      : (parseObjectArray(raw.varlmar, parseVarLmar) ?? undefined);
-  if (raw.varlmar !== undefined && varlmar === undefined) return null;
-
-  const varwle =
-    raw.varwle === undefined ? undefined : (parseObjectArray(raw.varwle, parseVarWle) ?? undefined);
-  if (raw.varwle !== undefined && varwle === undefined) return null;
-
-  const vargranger =
-    raw.vargranger === undefined
-      ? undefined
-      : (parseObjectArray(raw.vargranger, parseVarGranger) ?? undefined);
-  if (raw.vargranger !== undefined && vargranger === undefined) return null;
-
-  return assignPresentKeys(
-    {
-      title: raw.title,
-      var_names,
-      complete_sample_rows: optionalNonNegativeInteger(raw, "complete_sample_rows"),
-      var_max_lag: optionalNonNegativeInteger(raw, "var_max_lag"),
-      num_observation: raw.num_observation,
-      log_likelihood: raw.log_likelihood,
-      aic: raw.aic,
-      fpe: raw.fpe,
-      hqic: raw.hqic,
-      sbic: raw.sbic,
-      det_sigma_ml: raw.det_sigma_ml,
-      equations,
-      coefficients,
-      sigma: raw.sigma,
-      oirf: raw.oirf,
-      fevd: raw.fevd,
-      varstable,
-      varlmar,
-      varwle,
-      vargranger,
-    },
-    raw,
-    VAR_SUMMARY_OPTIONAL_KEYS,
-  );
+export function parseVarSummaryResultData(raw: unknown) {
+  return readReportField(varSummaryResultDataField, raw);
 }

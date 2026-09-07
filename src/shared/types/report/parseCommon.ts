@@ -1,172 +1,95 @@
-/**
- * 报告 JSON 共用窄化（系数、模型摘要等）
- */
-
 import {
-  assignPresentKeys,
-  isFiniteNumber,
-  isNonNegativeInteger,
-  isRecord,
-  isString,
-} from "./guards";
-import type { BinaryModelInfo, Coefficient, LinearModelInfo } from "./regression";
+  numberField,
+  stringField,
+  booleanField,
+  optionalField,
+  arrayField,
+  objectField,
+  readReportField,
+  parsedField,
+} from "./fields";
+import type { Coefficient, LinearModelInfo, BinaryModelInfo } from "./regression";
 
-export function parseCoefficient(raw: unknown): Coefficient | null {
-  if (!isRecord(raw) || !isString(raw.variable) || !isFiniteNumber(raw.coef)) return null;
-  if (typeof raw.is_significant !== "boolean") return null;
-  return {
-    variable: raw.variable,
-    category: typeof raw.category === "string" ? raw.category : undefined,
-    coef: raw.coef,
-    std_err: isFiniteNumber(raw.std_err) ? raw.std_err : undefined,
-    t_value: isFiniteNumber(raw.t_value) ? raw.t_value : undefined,
-    p_value: isFiniteNumber(raw.p_value) ? raw.p_value : undefined,
-    "confidence_interval_0.025": isFiniteNumber(raw["confidence_interval_0.025"])
-      ? raw["confidence_interval_0.025"]
-      : undefined,
-    "confidence_interval_0.975": isFiniteNumber(raw["confidence_interval_0.975"])
-      ? raw["confidence_interval_0.975"]
-      : undefined,
-    is_significant: raw.is_significant,
-  };
+export const coefficientField = objectField<Coefficient>({
+  variable: stringField,
+  category: optionalField(stringField),
+  coef: numberField,
+  std_err: optionalField(numberField),
+  t_value: optionalField(numberField),
+  p_value: optionalField(numberField),
+  "confidence_interval_0.025": optionalField(numberField),
+  "confidence_interval_0.975": optionalField(numberField),
+  is_significant: booleanField,
+});
+
+export const linearModelInfoField = objectField<LinearModelInfo>({
+  model_type: stringField,
+  method: stringField,
+  num_observation: numberField,
+  r_squared: numberField,
+  adj_r_squared: numberField,
+  f_statistic: numberField,
+  prob_f_statistic: numberField,
+  wald_chi2: optionalField(numberField),
+  prob_wald_chi2: optionalField(numberField),
+  log_likelihood: optionalField(numberField),
+  lr_chi2: optionalField(numberField),
+  prob_lr_chi2: optionalField(numberField),
+  chibar2: optionalField(numberField),
+  prob_chibar2: optionalField(numberField),
+  mle_iter_log_lik_const: optionalField(arrayField(numberField)),
+  mle_iter_log_lik: optionalField(arrayField(numberField)),
+  df_model: numberField,
+  df_residual: numberField,
+  df_total: numberField,
+  ss_model: numberField,
+  ss_residual: numberField,
+  ss_total: numberField,
+  ms_model: numberField,
+  ms_residual: numberField,
+  ms_total: numberField,
+  covariance_type: stringField,
+  aic: optionalField(numberField),
+  bic: optionalField(numberField),
+});
+
+export const binaryModelInfoField = objectField<BinaryModelInfo>({
+  model_type: stringField,
+  method: stringField,
+  num_observation: numberField,
+  pseudo_r2: numberField,
+  adjusted_pseudo_r2: numberField,
+  log_likelihood: numberField,
+  lr_chi2: numberField,
+  prob_lr_chi2: numberField,
+  df_model: numberField,
+  df_residual: numberField,
+  covariance_type: stringField,
+  aic: numberField,
+  bic: numberField,
+});
+
+export function parseCoefficient(raw: unknown) {
+  return readReportField(coefficientField, raw);
 }
-
-export function parseCoefficientList(raw: unknown): Coefficient[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: Coefficient[] = [];
-  for (const item of raw) {
-    const coef = parseCoefficient(item);
-    if (!coef) return null;
-    out.push(coef);
-  }
-  return out;
+export function parseCoefficientList(raw: unknown) {
+  return readReportField(arrayField(coefficientField), raw);
 }
-
-const MODEL_BASIC_OPTIONAL_KEYS = [
-  "wald_chi2",
-  "prob_wald_chi2",
-  "log_likelihood",
-  "lr_chi2",
-  "prob_lr_chi2",
-  "chibar2",
-  "prob_chibar2",
-  "mle_iter_log_lik_const",
-  "mle_iter_log_lik",
-  "aic",
-  "bic",
-] as const satisfies readonly (keyof LinearModelInfo)[];
-
-export function parseLinearModelInfo(raw: unknown): LinearModelInfo | null {
-  if (!isRecord(raw)) return null;
-  const requiredNumbers = [
-    "num_observation",
-    "r_squared",
-    "adj_r_squared",
-    "f_statistic",
-    "prob_f_statistic",
-    "df_model",
-    "df_residual",
-    "df_total",
-    "ss_model",
-    "ss_residual",
-    "ss_total",
-    "ms_model",
-    "ms_residual",
-    "ms_total",
-  ] as const;
-  for (const key of requiredNumbers) {
-    if (!isFiniteNumber(raw[key])) return null;
-  }
-  if (!isString(raw.model_type) || !isString(raw.method) || !isString(raw.covariance_type)) {
-    return null;
-  }
-  return assignPresentKeys(
-    {
-      model_type: raw.model_type,
-      method: raw.method,
-      num_observation: raw.num_observation as number,
-      r_squared: raw.r_squared as number,
-      adj_r_squared: raw.adj_r_squared as number,
-      f_statistic: raw.f_statistic as number,
-      prob_f_statistic: raw.prob_f_statistic as number,
-      df_model: raw.df_model as number,
-      df_residual: raw.df_residual as number,
-      df_total: raw.df_total as number,
-      ss_model: raw.ss_model as number,
-      ss_residual: raw.ss_residual as number,
-      ss_total: raw.ss_total as number,
-      ms_model: raw.ms_model as number,
-      ms_residual: raw.ms_residual as number,
-      ms_total: raw.ms_total as number,
-      covariance_type: raw.covariance_type,
-    },
-    raw,
-    MODEL_BASIC_OPTIONAL_KEYS,
-  );
+export function parseLinearModelInfo(raw: unknown) {
+  return readReportField(linearModelInfoField, raw);
 }
-
-export function parseFiniteNumberArray(raw: unknown): number[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (!raw.every(isFiniteNumber)) return null;
-  return raw;
+export function parseBinaryModelInfo(raw: unknown) {
+  return readReportField(binaryModelInfoField, raw);
 }
-
-export function parseStringArray(raw: unknown): string[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (!raw.every(isString)) return null;
-  return raw;
+export function parseFiniteNumberArray(raw: unknown) {
+  return readReportField(arrayField(numberField), raw);
 }
-
-export function parseNonNegativeIntArray(raw: unknown): number[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (!raw.every(isNonNegativeInteger)) return null;
-  return raw;
+export function parseStringArray(raw: unknown) {
+  return readReportField(arrayField(stringField), raw);
 }
-
 export function parseObjectArray<T>(
   raw: unknown,
-  parseItem: (item: unknown) => T | null,
+  parseItem: (raw: unknown) => T | null,
 ): T[] | null {
-  if (!Array.isArray(raw)) return null;
-  const out: T[] = [];
-  for (const item of raw) {
-    const parsed = parseItem(item);
-    if (!parsed) return null;
-    out.push(parsed);
-  }
-  return out;
-}
-
-export function parseBinaryModelInfo(raw: unknown): BinaryModelInfo | null {
-  if (!isRecord(raw)) return null;
-  const numbers = [
-    "num_observation",
-    "pseudo_r2",
-    "adjusted_pseudo_r2",
-    "log_likelihood",
-    "lr_chi2",
-    "prob_lr_chi2",
-    "df_model",
-    "df_residual",
-    "aic",
-    "bic",
-  ] as const;
-  if (!numbers.every((key) => isFiniteNumber(raw[key]))) return null;
-  if (!isString(raw.model_type) || !isString(raw.method) || !isString(raw.covariance_type))
-    return null;
-  return {
-    model_type: raw.model_type,
-    method: raw.method,
-    covariance_type: raw.covariance_type,
-    num_observation: raw.num_observation as number,
-    pseudo_r2: raw.pseudo_r2 as number,
-    adjusted_pseudo_r2: raw.adjusted_pseudo_r2 as number,
-    log_likelihood: raw.log_likelihood as number,
-    lr_chi2: raw.lr_chi2 as number,
-    prob_lr_chi2: raw.prob_lr_chi2 as number,
-    df_model: raw.df_model as number,
-    df_residual: raw.df_residual as number,
-    aic: raw.aic as number,
-    bic: raw.bic as number,
-  };
+  return readReportField(arrayField(parsedField(parseItem, "report object")), raw);
 }

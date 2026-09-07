@@ -1,244 +1,315 @@
-/**
- * 回归类报告 IPC 窄化（OLS / WLS / GLS / Prais / Logit / Probit / IV 共用）
- */
-
+import type { Coefficient, RegressionResultData } from "./regression";
+import { coefficientField, linearModelInfoField, binaryModelInfoField } from "./parseCommon";
 import {
-  assignPresentKeys,
-  isFiniteNumber,
-  isNonNegativeInteger,
-  isRecord,
-  isString,
-  optionalFiniteNumber,
-  optionalString,
-} from "./guards";
-import { parseIv2slsFirstStageResult, type Iv2slsFirstStageResult } from "./iv";
-import {
-  parseBinaryModelInfo,
-  parseCoefficientList,
-  parseFiniteNumberArray,
-  parseLinearModelInfo,
-} from "./parseCommon";
+  numberField,
+  stringField,
+  booleanField,
+  literalField,
+  optionalField,
+  nullableField,
+  arrayField,
+  objectField,
+  readReportField,
+  refineField,
+  type ReportField,
+  type ReportFieldIssue,
+} from "./fields";
+import type {
+  DiagnosticInfo,
+  VifEntry,
+  BreuschPaganTests,
+  BreuschPaganTest,
+  OvTests,
+  OvTest,
+  ImTest,
+  ImTestComponent,
+  NormalityTests,
+  ResidualScatterData,
+  DiagnosticTiming,
+  PraisInfo,
+  ClassificationTable,
+  PanelFEInfo,
+  OmitInfo,
+  OmittedVariable,
+  BinaryModelStatistics,
+} from "./regression";
 import type { PlotPointDTO } from "@/shared/types/domain/plotPayload";
-import type { BinaryModelStatistics, DiagnosticInfo, RegressionResultData } from "./regression";
+import {
+  iv2slsFirstStageResultField,
+  iv2slsFirstStageSummaryField,
+  iv2slsOveridTestField,
+  iv2slsHausmanTestField,
+  iv2slsEndogenousTestField,
+  ivLimlOveridTestField,
+} from "./iv";
 
-const DIAGNOSTIC_OPTIONAL_KEYS = [
-  "vif",
-  "bp_tests",
-  "ov_tests",
-  "im_test",
-  "normality_tests",
-  "fitted_values",
-  "residuals",
-  "leverage",
-  "residual_scatter",
-  "exog",
-  "timing",
-  "prais_info",
-  "iv2sls_first_stage_summary",
-  "iv2sls_overid",
-  "iv2sls_overid_dims",
-  "iv2sls_hausman",
-  "iv2sls_endogenous",
-  "ivliml_kappa",
-  "ivliml_overid",
-  "classification_table",
-  "exog_means",
-  "panel_fe_info",
-  "omit_info",
-] as const satisfies readonly (keyof DiagnosticInfo)[];
+const vifEntryField = objectField<VifEntry>({
+  variable: stringField,
+  category: optionalField(nullableField(stringField)),
+  vif: numberField,
+  tolerance: numberField,
+});
 
-function parseFiniteNumberMatrix(raw: unknown): number[][] | null {
-  if (!Array.isArray(raw)) return null;
-  const matrix: number[][] = [];
-  for (const row of raw) {
-    const parsed = parseFiniteNumberArray(row);
-    if (!parsed) return null;
-    matrix.push(parsed);
-  }
-  return matrix;
-}
+const breuschPaganTestField = objectField<BreuschPaganTest>({
+  lm_stat: numberField,
+  df: numberField,
+  p_value: numberField,
+});
 
-function parseOptionalFiniteNumberArray(raw: unknown): number[] | undefined | null {
-  return raw === undefined ? undefined : parseFiniteNumberArray(raw);
-}
+const breuschPaganTestsField = objectField<BreuschPaganTests>({
+  stata: optionalField(breuschPaganTestField),
+  koenker: optionalField(breuschPaganTestField),
+  stata_rhs: optionalField(breuschPaganTestField),
+  koenker_rhs: optionalField(breuschPaganTestField),
+});
 
-function parseOptionalFiniteNumberMatrix(raw: unknown): number[][] | undefined | null {
-  return raw === undefined ? undefined : parseFiniteNumberMatrix(raw);
-}
+const ovTestField = objectField<OvTest>({
+  f_stat: numberField,
+  df1: numberField,
+  df2: numberField,
+  p_value: numberField,
+});
 
-function isSquareMatrix(matrix: number[][], size: number): boolean {
+const ovTestsField = objectField<OvTests>({
+  default: optionalField(ovTestField),
+  rhs: optionalField(ovTestField),
+});
+
+const imTestComponentField = objectField<ImTestComponent>({
+  chi2: numberField,
+  df: numberField,
+  p_value: numberField,
+});
+
+const imTestField = objectField<ImTest>({
+  heteroskedasticity: imTestComponentField,
+  skewness: imTestComponentField,
+  kurtosis: imTestComponentField,
+  total: imTestComponentField,
+});
+
+const normalityTestsField = objectField<NormalityTests>({
+  skewness: numberField,
+  kurtosis: numberField,
+  omnibus_stat: numberField,
+  omnibus_p_value: numberField,
+  jarque_bera_stat: numberField,
+  jarque_bera_p_value: numberField,
+});
+
+const plotPointDTOField = objectField<PlotPointDTO>({
+  x: numberField,
+  y: numberField,
+});
+
+const residualScatterDataField = objectField<ResidualScatterData>({
+  e: arrayField(numberField),
+  e_lag1: arrayField(numberField),
+  time: optionalField(arrayField(stringField)),
+});
+
+const diagnosticTimingField = objectField<DiagnosticTiming>({
+  fitted_residuals_ms: optionalField(numberField),
+  bp_tests_ms: optionalField(numberField),
+  ov_tests_ms: optionalField(numberField),
+  im_test_ms: optionalField(numberField),
+});
+
+const praisInfoField = objectField<PraisInfo>({
+  rho: numberField,
+  dw_original: numberField,
+  dw_transformed: numberField,
+  iterations: numberField,
+  iteration_log: optionalField(arrayField(stringField)),
+});
+
+const classificationTableField = objectField<ClassificationTable>({
+  tp: numberField,
+  fp: numberField,
+  fn_: numberField,
+  tn: numberField,
+  cutoff: numberField,
+  sensitivity: numberField,
+  specificity: numberField,
+  ppv: numberField,
+  npv: numberField,
+  false_pos_rate: numberField,
+  false_neg_rate: numberField,
+  pct_correct: numberField,
+});
+
+const panelFEInfoField = objectField<PanelFEInfo>({
+  r2_within: optionalField(numberField),
+  r2_between: optionalField(numberField),
+  r2_overall: optionalField(numberField),
+  num_groups: numberField,
+  obs_per_group: objectField({
+    min: numberField,
+    avg: numberField,
+    max: numberField,
+  }),
+  sigma: objectField({
+    sigma_u: numberField,
+    sigma_e: numberField,
+    rho: numberField,
+  }),
+  corr_u_i_Xb: numberField,
+  theta: optionalField(
+    objectField({
+      min: numberField,
+      avg: numberField,
+      max: numberField,
+    }),
+  ),
+  chibar2: optionalField(numberField),
+  prob_chibar2: optionalField(numberField),
+});
+
+const omittedVariableField = objectField<OmittedVariable>({
+  variable: stringField,
+  category: optionalField(stringField),
+  reason: stringField,
+});
+
+const omitInfoField = objectField<OmitInfo>({
+  omitted: arrayField(omittedVariableField),
+});
+
+const diagnosticInfoField = objectField<DiagnosticInfo>({
+  cond_no: numberField,
+  vif: optionalField(arrayField(vifEntryField)),
+  bp_tests: optionalField(breuschPaganTestsField),
+  ov_tests: optionalField(ovTestsField),
+  im_test: optionalField(imTestField),
+  normality_tests: optionalField(normalityTestsField),
+  fitted_values: optionalField(arrayField(numberField)),
+  residuals: optionalField(arrayField(numberField)),
+  leverage: optionalField(arrayField(numberField)),
+  leverage_kde: optionalField(arrayField(plotPointDTOField)),
+  residual_scatter: optionalField(residualScatterDataField),
+  exog: optionalField(arrayField(arrayField(numberField))),
+  timing: optionalField(diagnosticTimingField),
+  prais_info: optionalField(praisInfoField),
+  iv2sls_first_stage: optionalField(arrayField(iv2slsFirstStageResultField)),
+  iv2sls_first_stage_summary: optionalField(iv2slsFirstStageSummaryField),
+  iv2sls_overid: optionalField(iv2slsOveridTestField),
+  iv2sls_overid_dims: optionalField(
+    objectField({
+      k_iv: numberField,
+      k_endog: numberField,
+    }),
+  ),
+  iv2sls_hausman: optionalField(iv2slsHausmanTestField),
+  iv2sls_endogenous: optionalField(iv2slsEndogenousTestField),
+  ivliml_kappa: optionalField(numberField),
+  ivliml_overid: optionalField(ivLimlOveridTestField),
+  classification_table: optionalField(classificationTableField),
+  exog_means: optionalField(arrayField(numberField)),
+  panel_fe_info: optionalField(panelFEInfoField),
+  omit_info: optionalField(omitInfoField),
+});
+
+const binaryModelStatisticsField = objectField<BinaryModelStatistics>({
+  kind: literalField("binary"),
+  link: literalField("logit", "probit"),
+  covariance: arrayField(arrayField(numberField)),
+  standardErrors: arrayField(numberField),
+  statisticValues: arrayField(numberField),
+  pValues: arrayField(numberField),
+  confidenceIntervalLower: arrayField(numberField),
+  confidenceIntervalUpper: arrayField(numberField),
+  logLikelihood: numberField,
+  nullLogLikelihood: numberField,
+  pseudoR2: numberField,
+  adjustedPseudoR2: numberField,
+  lrChi2: numberField,
+  lrPValue: numberField,
+  aic: numberField,
+  bic: numberField,
+  iterations: numberField,
+  converged: booleanField,
+  conditionNumber: numberField,
+});
+
+function matrixSize(matrix: number[][], size: number): boolean {
   return matrix.length === size && matrix.every((row) => row.length === size);
 }
-
-function equalMatrices(left: number[][], right: number[][]): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (row, rowIndex) =>
-        row.length === right[rowIndex]?.length &&
-        row.every((value, columnIndex) => value === right[rowIndex]?.[columnIndex]),
+function validateRegression<ModelInfo>(
+  value: RegressionResultData<ModelInfo>,
+): ReportFieldIssue | null {
+  const { betas, cov_beta: covariance, model_statistics: statistics, coefficients } = value;
+  const issue = (fieldPath: string): ReportFieldIssue => ({
+    fieldPath,
+    reason: "inconsistent regression dimensions or covariance",
+  });
+  if (betas && betas.length !== coefficients.length) return issue("betas");
+  if (covariance && !matrixSize(covariance, betas?.length ?? covariance.length))
+    return issue("cov_beta");
+  if (statistics) {
+    const size = coefficients.length;
+    if (
+      !matrixSize(statistics.covariance, size) ||
+      [
+        statistics.standardErrors,
+        statistics.statisticValues,
+        statistics.pValues,
+        statistics.confidenceIntervalLower,
+        statistics.confidenceIntervalUpper,
+      ].some((values) => values.length !== size)
     )
+      return issue("model_statistics");
+    if (
+      covariance &&
+      covariance.some((row, i) => row.some((value, j) => value !== statistics.covariance[i][j]))
+    )
+      return issue("cov_beta");
+  }
+  return null;
+}
+function regressionReportField<ModelInfo>(
+  model: ReportField<ModelInfo>,
+  coefficient: ReportField<Coefficient> = coefficientField,
+  title: ReportField<string> = stringField,
+): ReportField<RegressionResultData<ModelInfo>> {
+  return refineField(
+    objectField<RegressionResultData<ModelInfo>>({
+      title,
+      endog_name: optionalField(stringField),
+      model_basic_info: model,
+      coefficients: arrayField(coefficient),
+      diagnostic_info: diagnosticInfoField,
+      betas: optionalField(arrayField(numberField)),
+      cov_beta: optionalField(arrayField(arrayField(numberField))),
+      model_statistics: optionalField(binaryModelStatisticsField),
+      executionTimeMs: optionalField(numberField),
+    }),
+    validateRegression,
   );
 }
-
-function parseBinaryModelStatistics(raw: unknown): BinaryModelStatistics | null {
-  if (!isRecord(raw) || raw.kind !== "binary" || (raw.link !== "logit" && raw.link !== "probit")) {
-    return null;
-  }
-  const covariance = parseFiniteNumberMatrix(raw.covariance);
-  const standardErrors = parseFiniteNumberArray(raw.standardErrors);
-  const statisticValues = parseFiniteNumberArray(raw.statisticValues);
-  const pValues = parseFiniteNumberArray(raw.pValues);
-  const confidenceIntervalLower = parseFiniteNumberArray(raw.confidenceIntervalLower);
-  const confidenceIntervalUpper = parseFiniteNumberArray(raw.confidenceIntervalUpper);
-  const coefficientArrays = [
-    standardErrors,
-    statisticValues,
-    pValues,
-    confidenceIntervalLower,
-    confidenceIntervalUpper,
-  ];
-  if (
-    !covariance ||
-    coefficientArrays.some((values) => values === null) ||
-    !standardErrors ||
-    !isSquareMatrix(covariance, standardErrors.length) ||
-    coefficientArrays.some((values) => values?.length !== standardErrors.length)
-  ) {
-    return null;
-  }
-  const numericKeys = [
-    "logLikelihood",
-    "nullLogLikelihood",
-    "pseudoR2",
-    "adjustedPseudoR2",
-    "lrChi2",
-    "lrPValue",
-    "aic",
-    "bic",
-    "conditionNumber",
-  ] as const;
-  if (
-    numericKeys.some((key) => !isFiniteNumber(raw[key])) ||
-    !isNonNegativeInteger(raw.iterations) ||
-    typeof raw.converged !== "boolean"
-  ) {
-    return null;
-  }
-
-  return {
-    kind: "binary",
-    link: raw.link,
-    covariance,
-    standardErrors,
-    statisticValues: statisticValues!,
-    pValues: pValues!,
-    confidenceIntervalLower: confidenceIntervalLower!,
-    confidenceIntervalUpper: confidenceIntervalUpper!,
-    logLikelihood: raw.logLikelihood as number,
-    nullLogLikelihood: raw.nullLogLikelihood as number,
-    pseudoR2: raw.pseudoR2 as number,
-    adjustedPseudoR2: raw.adjustedPseudoR2 as number,
-    lrChi2: raw.lrChi2 as number,
-    lrPValue: raw.lrPValue as number,
-    aic: raw.aic as number,
-    bic: raw.bic as number,
-    iterations: raw.iterations,
-    converged: raw.converged,
-    conditionNumber: raw.conditionNumber as number,
-  };
+export const linearRegressionReportField = regressionReportField(linearModelInfoField);
+export const binaryRegressionReportField = regressionReportField(binaryModelInfoField);
+const olsCoefficientField = objectField<Coefficient>({
+  variable: stringField,
+  category: optionalField(stringField),
+  coef: numberField,
+  std_err: numberField,
+  t_value: numberField,
+  p_value: numberField,
+  "confidence_interval_0.025": numberField,
+  "confidence_interval_0.975": numberField,
+  is_significant: booleanField,
+});
+export const canonicalOlsReportField = regressionReportField(
+  linearModelInfoField,
+  olsCoefficientField,
+  literalField("OLS Summary"),
+);
+export function parseDiagnosticInfo(raw: unknown) {
+  return readReportField(diagnosticInfoField, raw);
 }
-
-function parseOptionalBinaryModelStatistics(
-  raw: unknown,
-): BinaryModelStatistics | undefined | null {
-  return raw === undefined ? undefined : parseBinaryModelStatistics(raw);
+export function parseRegressionResultData(raw: unknown) {
+  return readReportField(linearRegressionReportField, raw);
 }
-
-function parseKdePoints(raw: unknown): PlotPointDTO[] | undefined | null {
-  if (raw === undefined) return undefined;
-  if (!Array.isArray(raw)) return null;
-  const points: PlotPointDTO[] = [];
-  for (const item of raw) {
-    if (!isRecord(item) || !isFiniteNumber(item.x) || !isFiniteNumber(item.y)) return null;
-    points.push({ x: item.x, y: item.y });
-  }
-  return points;
-}
-
-function parseIvFirstStageList(raw: unknown): Iv2slsFirstStageResult[] | undefined | null {
-  if (raw === undefined) return undefined;
-  if (!Array.isArray(raw)) return null;
-  const out: Iv2slsFirstStageResult[] = [];
-  for (const item of raw) {
-    const parsed = parseIv2slsFirstStageResult(item);
-    if (!parsed) return null;
-    out.push(parsed);
-  }
-  return out;
-}
-
-export function parseDiagnosticInfo(raw: unknown): DiagnosticInfo | null {
-  if (!isRecord(raw) || !isFiniteNumber(raw.cond_no)) return null;
-  const iv2sls_first_stage = parseIvFirstStageList(raw.iv2sls_first_stage);
-  const leverage_kde = parseKdePoints(raw.leverage_kde);
-  if (iv2sls_first_stage === null || leverage_kde === null) return null;
-  return assignPresentKeys(
-    {
-      cond_no: raw.cond_no,
-      iv2sls_first_stage,
-      leverage_kde,
-    },
-    raw,
-    DIAGNOSTIC_OPTIONAL_KEYS,
-  );
-}
-
-export function parseRegressionResultData(raw: unknown): RegressionResultData | null {
-  return parseRegressionReport(raw, parseLinearModelInfo);
-}
-
 export function parseBinaryResultData(raw: unknown) {
-  return parseRegressionReport(raw, parseBinaryModelInfo);
-}
-
-function parseRegressionReport<ModelInfo>(
-  raw: unknown,
-  parseModel: (raw: unknown) => ModelInfo | null,
-): RegressionResultData<ModelInfo> | null {
-  if (!isRecord(raw) || !isString(raw.title)) return null;
-  const model_basic_info = parseModel(raw.model_basic_info);
-  const coefficients = parseCoefficientList(raw.coefficients);
-  const diagnostic_info = parseDiagnosticInfo(raw.diagnostic_info);
-  const betas = parseOptionalFiniteNumberArray(raw.betas);
-  const cov_beta = parseOptionalFiniteNumberMatrix(raw.cov_beta);
-  const model_statistics = parseOptionalBinaryModelStatistics(raw.model_statistics);
-  if (
-    !model_basic_info ||
-    !coefficients ||
-    !diagnostic_info ||
-    betas === null ||
-    cov_beta === null ||
-    model_statistics === null
-  ) {
-    return null;
-  }
-  if (betas && betas.length !== coefficients.length) return null;
-  if (cov_beta && !isSquareMatrix(cov_beta, betas?.length ?? cov_beta.length)) return null;
-  if (model_statistics && model_statistics.standardErrors.length !== coefficients.length)
-    return null;
-  if (model_statistics && cov_beta && !equalMatrices(model_statistics.covariance, cov_beta))
-    return null;
-
-  return {
-    title: raw.title,
-    endog_name: optionalString(raw, "endog_name"),
-    model_basic_info,
-    coefficients,
-    diagnostic_info,
-    betas,
-    cov_beta,
-    model_statistics,
-    executionTimeMs: optionalFiniteNumber(raw, "executionTimeMs"),
-  };
+  return readReportField(binaryRegressionReportField, raw);
 }

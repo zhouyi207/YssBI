@@ -1,10 +1,20 @@
+import {
+  numberField,
+  stringField,
+  literalField,
+  optionalField,
+  nullableField,
+  arrayField,
+  objectField,
+  readReportField,
+} from "./fields";
+import { coefficientField } from "./parseCommon";
+
 /**
  * IV / 2SLS / LIML 报告 DTO（对齐 Rust `info_nodes.rs`）
  */
 
-import { isFiniteNumber, isRecord, isString, isStringArray } from "./guards";
 import type { Coefficient } from "./regression";
-import { parseCoefficientList } from "./parseCommon";
 
 export interface IvLimlOveridTest {
   anderson_rubin_stat: number;
@@ -87,16 +97,87 @@ export interface Iv2slsFirstStageResult {
 }
 
 /** 窄化 IV 第一阶段单方程结果（Rust `Iv2slsFirstStageResult`） */
-export function parseIv2slsFirstStageResult(raw: unknown): Iv2slsFirstStageResult | null {
-  if (!isRecord(raw) || !isString(raw.endog_name) || !isStringArray(raw.var_names)) return null;
-  if (!isFiniteNumber(raw.r_squared) || !isFiniteNumber(raw.adj_r_squared)) return null;
-  const coefficients = parseCoefficientList(raw.coefficients);
-  if (!coefficients) return null;
-  return {
-    endog_name: raw.endog_name,
-    var_names: raw.var_names,
-    coefficients,
-    r_squared: raw.r_squared,
-    adj_r_squared: raw.adj_r_squared,
-  };
+
+export const ivLimlOveridTestField = objectField<IvLimlOveridTest>({
+  anderson_rubin_stat: numberField,
+  anderson_rubin_p_value: numberField,
+  basmann_stat: numberField,
+  basmann_p_value: numberField,
+  df: numberField,
+  df_denom: numberField,
+});
+
+export const iv2slsHausmanTestField = objectField<Iv2slsHausmanTest>({
+  stat: numberField,
+  p_value: numberField,
+  df: numberField,
+});
+
+export const iv2slsEndogenousTestField = objectField<Iv2slsEndogenousTest>({
+  durbin_stat: numberField,
+  durbin_p_value: numberField,
+  wu_stat: numberField,
+  wu_p_value: numberField,
+  df: numberField,
+  wu_df_denom: numberField,
+});
+
+const iv2slsStockYogoBiasRowField = objectField<Iv2slsStockYogoBiasRow>({
+  pct_5: numberField,
+  pct_10: numberField,
+  pct_20: numberField,
+  pct_30: numberField,
+});
+
+const iv2slsStockYogoSizeRowField = objectField<Iv2slsStockYogoSizeRow>({
+  pct_10: numberField,
+  pct_15: numberField,
+  pct_20: numberField,
+  pct_25: numberField,
+});
+
+const iv2slsStockYogoCvField = objectField<Iv2slsStockYogoCv>({
+  bias: nullableField(iv2slsStockYogoBiasRowField),
+  size: iv2slsStockYogoSizeRowField,
+});
+
+export const iv2slsOveridTestField = objectField<Iv2slsOveridTest>({
+  test_type: literalField("sargan_basmann", "wooldridge"),
+  sargan_stat: optionalField(numberField),
+  sargan_p_value: optionalField(numberField),
+  basmann_stat: optionalField(numberField),
+  basmann_p_value: optionalField(numberField),
+  wooldridge_stat: optionalField(numberField),
+  wooldridge_p_value: optionalField(numberField),
+  df: numberField,
+});
+
+export const iv2slsFirstStageSummaryField = objectField<Iv2slsFirstStageSummary>({
+  k_included_instruments: numberField,
+  k_excluded_instruments: numberField,
+  k_endogenous_regressors: numberField,
+  r2: optionalField(numberField),
+  r2_adjusted: optionalField(numberField),
+  partial_r2: optionalField(numberField),
+  f_stat: optionalField(numberField),
+  f_p_value: optionalField(numberField),
+  f_df1: optionalField(numberField),
+  f_df2: optionalField(numberField),
+  shea_partial_r2: arrayField(numberField),
+  shea_adj_partial_r2: arrayField(numberField),
+  min_eigenvalue: numberField,
+  min_eigenvalue_cv: optionalField(iv2slsStockYogoCvField),
+  min_eigenvalue_cv_note: optionalField(stringField),
+});
+
+export const iv2slsFirstStageResultField = objectField<Iv2slsFirstStageResult>({
+  endog_name: stringField,
+  var_names: arrayField(stringField),
+  coefficients: arrayField(coefficientField),
+  r_squared: numberField,
+  adj_r_squared: numberField,
+});
+
+export function parseIv2slsFirstStageResult(raw: unknown) {
+  return readReportField(iv2slsFirstStageResultField, raw);
 }

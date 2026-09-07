@@ -12,6 +12,7 @@ import {
 import { parseIv2slsFirstStageResult } from "./iv";
 import { parseBinaryResultData, parseRegressionResultData } from "./parseRegression";
 import { parseReportPayload } from "./parseReportPayload";
+import { parseReportPayloadResult } from "./parseReportPayload";
 
 describe("normalizeSerialTestsResponse", () => {
   it("accepts dw as { d: number }", () => {
@@ -221,8 +222,61 @@ describe("parseRegressionResultData", () => {
 });
 
 describe("parseReportPayload", () => {
+  it("rejects malformed nested report fields and preserves nullable VEC statistics", () => {
+    const vec = {
+      title: "VEC Summary",
+      var_names: ["y"],
+      num_observation: 10,
+      rank: 1,
+      lags: 1,
+      trend_spec: "constant",
+      equations: [],
+      coefficients: [],
+      beta: [[1]],
+      beta_std_err: [[null]],
+      cointegrating_equations: [],
+      log_likelihood: 1,
+      aic: 1,
+      hqic: 1,
+      sbic: 1,
+      det_sigma_ml: 1,
+    };
+    expect(parseReportPayload("vecSummary", vec)).not.toBeNull();
+    expect(parseReportPayloadResult("vecSummary", { ...vec, coefficients: [null] })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "coefficients[0]" },
+    });
+    expect(
+      parseReportPayloadResult("vecSummary", { ...vec, beta_std_err: [["invalid"]] }),
+    ).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "beta_std_err[0][0]" },
+    });
+    expect(
+      parseRegressionResultData({
+        ...MINIMAL_REGRESSION,
+        diagnostic_info: { cond_no: 1, vif: [null] },
+      }),
+    ).toBeNull();
+    expect(
+      parseReportPayload("panelSummary", {
+        title: "Panel",
+        endog_name: "y",
+        selection_tests: [null],
+      }),
+    ).toBeNull();
+    expect(
+      parseReportPayload("varSoc", {
+        title: "Lag selection",
+        var_names: ["y"],
+        maxlag: 2,
+        num_observation: 10,
+        rows: [null],
+      }),
+    ).toBeNull();
+  });
   it("dispatches regression reports through shared parser", () => {
-    expect(parseReportPayload("olsSummary", MINIMAL_REGRESSION)).not.toBeNull();
+    expect(parseReportPayload("praisSummary", MINIMAL_REGRESSION)).not.toBeNull();
   });
 
   it("accepts the Rust OLS Summary report output", () => {

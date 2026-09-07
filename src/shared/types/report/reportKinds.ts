@@ -19,19 +19,3 @@ export const REPORT_PAYLOAD_KINDS = [
 ] as const;
 
 export type ReportPayloadKind = (typeof REPORT_PAYLOAD_KINDS)[number];
-
-const REGRESSION_REPORTS = new Set<ReportPayloadKind>([
-  "olsSummary",
-  "binarySummary",
-  "iv2slsSummary",
-  "ivLimlSummary",
-  "praisSummary",
-]);
-
-export function isRegressionReportKind(kind: ReportPayloadKind): boolean {
-  return REGRESSION_REPORTS.has(kind);
-}
-
-export function isReportPayloadKind(value: string): value is ReportPayloadKind {
-  return (REPORT_PAYLOAD_KINDS as readonly string[]).includes(value);
-}
