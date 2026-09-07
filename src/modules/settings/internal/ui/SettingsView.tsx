@@ -23,23 +23,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
   const { t } = useTranslation();
   const ai = useSettingsRead((s) => s.ai);
   const theme = useSettingsRead((s) => s.theme);
-  const editor = useSettingsRead((s) => s.editor);
   const appearance = useSettingsRead((s) => s.appearance);
-  const project = useSettingsRead((s) => s.project);
   const isLoading = useSettingsRead((s) => s.isLoading);
   const updateTheme = settingsUi.updateTheme;
   const updateAi = settingsUi.updateAi;
-  const updateEditor = settingsUi.updateEditor;
   const updateAppearance = settingsUi.updateAppearance;
-  const updateProject = settingsUi.updateProject;
   const resetAllToDefaults = settingsUi.resetAllToDefaults;
   const resetThemeToDefaults = settingsUi.resetThemeToDefaults;
   const resetAiToDefaults = settingsUi.resetAiToDefaults;
-  const resetEditorToDefaults = settingsUi.resetEditorToDefaults;
   const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
 
   const computation = useApplicationComputationSettings();
-  const [activeSection, setActiveSection] = useState("editor");
+  const [activeSection, setActiveSection] = useState("ai");
   const [isResetting, setIsResetting] = useState(false);
   const [resetAllError, setResetAllError] = useState<string | null>(null);
   const [sectionResetError, setSectionResetError] = useState<{
@@ -49,8 +44,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
   const [searchQuery, setSearchQuery] = useState("");
 
   const sections = [
-    { id: "editor", label: t("settings.sections.editor") },
-    { id: "project", label: t("settings.sections.project") },
     { id: "ai", label: t("settings.sections.ai") },
     { id: "computation", label: t("settings.sections.computation") },
     { id: "appearance", label: t("settings.sections.appearance") },
@@ -115,17 +108,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     { label: t("settings.options.titleBarNative"), value: "native" },
   ];
 
-  const openSideBySideDirectionOptions = [
-    { label: t("settings.options.openSideBySideRight"), value: "right" },
-    { label: t("settings.options.openSideBySideDown"), value: "down" },
-  ];
-
-  const splitSizingOptions = [
-    { label: t("settings.options.splitSizingAuto"), value: "auto" },
-    { label: t("settings.options.splitSizingDistribute"), value: "distribute" },
-    { label: t("settings.options.splitSizingSplit"), value: "split" },
-  ];
-
   const handleResetAll = async () => {
     const confirmed = await ui.confirm({
       title: t("settings.confirmResetAllTitle"),
@@ -153,7 +135,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
 
   const handleResetSection = async (section: string) => {
     const sectionNames: Record<string, string> = {
-      editor: t("settings.sections.editor"),
       ai: t("settings.sections.ai"),
       appearance: t("settings.sections.appearance"),
       color: t("settings.sections.color"),
@@ -172,9 +153,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     setSectionResetError((current) => (current?.section === section ? null : current));
     try {
       switch (section) {
-        case "editor":
-          await resetEditorToDefaults();
-          break;
         case "ai":
           await resetAiToDefaults();
           break;
@@ -248,135 +226,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                   value={ai.openAiApiKey}
                   onChange={(value) => updateAi({ openAiApiKey: value })}
                   placeholder="sk-..."
-                />
-              </div>
-            </div>
-          </div>
-        );
-      case "editor":
-        return (
-          <div className="space-y-8">
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl text-foreground">{t("settings.sections.editor")}</h2>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleResetSection("editor")}
-                  disabled={isResetting}
-                >
-                  {t("common.restoreDefaults")}
-                </Button>
-              </div>
-              <div className="space-y-6">
-                <SettingItem
-                  label={t("settings.labels.showGrid")}
-                  description={t("settings.descriptions.showGrid")}
-                  type="checkbox"
-                  checked={editor.showGrid}
-                  onChange={(val) => updateEditor({ showGrid: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.autoSave")}
-                  description={t("settings.descriptions.autoSave")}
-                  type="checkbox"
-                  checked={editor.autoSave}
-                  onChange={(val) => updateEditor({ autoSave: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.snapToGrid")}
-                  description={t("settings.descriptions.snapToGrid")}
-                  type="checkbox"
-                  checked={editor.snapToGrid}
-                  onChange={(val) => updateEditor({ snapToGrid: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.fontSize")}
-                  description={t("settings.descriptions.fontSize")}
-                  type="number"
-                  value={String(editor.fontSize)}
-                  onChange={(val) => updateEditor({ fontSize: parseInt(val, 10) || 12 })}
-                />
-              </div>
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-foreground mb-4">
-                {t("settings.sections.editorGroups")}
-              </h3>
-              <div className="space-y-6">
-                <SettingItem
-                  label={t("settings.labels.openSideBySideDirection")}
-                  description={t("settings.descriptions.openSideBySideDirection")}
-                  type="select"
-                  options={openSideBySideDirectionOptions}
-                  value={editor.openSideBySideDirection ?? "right"}
-                  onChange={(val) =>
-                    updateEditor({ openSideBySideDirection: val as "right" | "down" })
-                  }
-                />
-                <SettingItem
-                  label={t("settings.labels.splitOnDragAndDrop")}
-                  description={t("settings.descriptions.splitOnDragAndDrop")}
-                  type="checkbox"
-                  checked={editor.splitOnDragAndDrop ?? true}
-                  onChange={(val) => updateEditor({ splitOnDragAndDrop: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.alwaysShowEditorActions")}
-                  description={t("settings.descriptions.alwaysShowEditorActions")}
-                  type="checkbox"
-                  checked={editor.alwaysShowEditorActions ?? false}
-                  onChange={(val) => updateEditor({ alwaysShowEditorActions: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.closeEmptyGroups")}
-                  description={t("settings.descriptions.closeEmptyGroups")}
-                  type="checkbox"
-                  checked={editor.closeEmptyGroups ?? true}
-                  onChange={(val) => updateEditor({ closeEmptyGroups: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.splitSizing")}
-                  description={t("settings.descriptions.splitSizing")}
-                  type="select"
-                  options={splitSizingOptions}
-                  value={editor.splitSizing ?? "auto"}
-                  onChange={(val) =>
-                    updateEditor({ splitSizing: val as "auto" | "distribute" | "split" })
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        );
-      case "project":
-        return (
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-xl text-foreground mb-6">{t("settings.sections.project")}</h2>
-              <div className="space-y-6">
-                <SettingItem
-                  label={t("settings.labels.projectName")}
-                  description={t("settings.descriptions.projectName")}
-                  type="text"
-                  value={project.projectName}
-                  onChange={(val) => updateProject({ projectName: val })}
-                />
-                <SettingItem
-                  label={t("settings.labels.projectVersion")}
-                  description={t("settings.descriptions.projectVersion")}
-                  type="text"
-                  defaultValue="1.0.0"
-                  disabled
-                />
-                <SettingItem
-                  label={t("settings.labels.exportPath")}
-                  description={t("settings.descriptions.exportPath")}
-                  type="text"
-                  value={project.exportPath}
-                  onChange={(val) => updateProject({ exportPath: val })}
-                  placeholder="/path/to/export"
                 />
               </div>
             </div>

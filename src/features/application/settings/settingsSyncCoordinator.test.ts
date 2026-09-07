@@ -1,13 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_AI,
-  DEFAULT_APPEARANCE,
-  DEFAULT_EDITOR,
-  DEFAULT_PROJECT,
-  DEFAULT_THEME,
-} from "@/shared/config-default";
+import { DEFAULT_AI, DEFAULT_APPEARANCE, DEFAULT_THEME } from "@/shared/config-default";
 import type { AppSettings } from "@/shared/types/settings";
 import type { PlatformOutcome } from "@/services/platform/platformTypes";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
@@ -30,9 +24,7 @@ describe("SettingsSyncCoordinator", () => {
     useSettingsStore.setState({
       ai: DEFAULT_AI,
       theme: DEFAULT_THEME,
-      editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,
-      project: DEFAULT_PROJECT,
       isLoading: true,
     });
     mocks.publishSettingsChanged.mockResolvedValue({ ok: true, value: undefined });
@@ -53,18 +45,14 @@ describe("SettingsSyncCoordinator", () => {
       expect.objectContaining({
         ai: DEFAULT_AI,
         theme: DEFAULT_THEME,
-        editor: DEFAULT_EDITOR,
         appearance: DEFAULT_APPEARANCE,
-        project: DEFAULT_PROJECT,
       }),
     );
 
     const remote: AppSettings = {
       ai: DEFAULT_AI,
       theme: { ...DEFAULT_THEME, accentColor: "#123456" },
-      editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,
-      project: DEFAULT_PROJECT,
     };
     receiveSettings?.({ ok: true, value: remote });
 

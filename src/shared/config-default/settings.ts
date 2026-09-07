@@ -1,11 +1,4 @@
-import {
-  ThemeSettings,
-  EditorSettings,
-  AppearanceSettings,
-  ProjectSettings,
-  AppSettings,
-  AiSettings,
-} from "@/shared/types/settings";
+import { ThemeSettings, AppearanceSettings, AiSettings } from "@/shared/types/settings";
 
 export const DEFAULT_AI: AiSettings = {
   openAiApiKey: "",
@@ -43,18 +36,6 @@ export const DEFAULT_LIGHT_THEME: ThemeSettings = {
 
 export const DEFAULT_THEME: ThemeSettings = DEFAULT_DARK_THEME;
 
-export const DEFAULT_EDITOR: EditorSettings = {
-  showGrid: true,
-  autoSave: true,
-  snapToGrid: true,
-  fontSize: 12,
-  openSideBySideDirection: "right",
-  splitOnDragAndDrop: true,
-  alwaysShowEditorActions: false,
-  closeEmptyGroups: true,
-  splitSizing: "auto",
-};
-
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   colorTheme: "Dark Modern (Default)",
   lastLightColorTheme: "Light Modern",
@@ -63,19 +44,6 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
 
   smoothScroll: true,
   titleBarStyle: "custom",
-};
-
-export const DEFAULT_PROJECT: ProjectSettings = {
-  projectName: "YssBI Project",
-  exportPath: "",
-};
-
-export const DEFAULT_SETTINGS: AppSettings = {
-  ai: DEFAULT_AI,
-  theme: DEFAULT_THEME,
-  editor: DEFAULT_EDITOR,
-  appearance: DEFAULT_APPEARANCE,
-  project: DEFAULT_PROJECT,
 };
 
 export const DEFAULT_VIEWPORT = { x: 0, y: 0, scale: 1 };

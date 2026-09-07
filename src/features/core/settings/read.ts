@@ -7,17 +7,13 @@ import type {
   AiSettings,
   AppSettings,
   AppearanceSettings,
-  EditorSettings,
-  ProjectSettings,
   ThemeSettings,
 } from "@/shared/types/settings";
 
 export interface SettingsReadSnapshot {
   readonly ai: DeepReadonly<AiSettings>;
   readonly theme: DeepReadonly<ThemeSettings>;
-  readonly editor: DeepReadonly<EditorSettings>;
   readonly appearance: DeepReadonly<AppearanceSettings>;
-  readonly project: DeepReadonly<ProjectSettings>;
   readonly isLoading: boolean;
 }
 
@@ -31,9 +27,7 @@ function buildSnapshot(): DeepReadonly<SettingsReadSnapshot> {
   const snapshot: SettingsReadSnapshot = {
     ai: state.ai,
     theme: state.theme,
-    editor: state.editor,
     appearance: state.appearance,
-    project: state.project,
     isLoading: state.isLoading,
   };
   return freezeProjectionSnapshot(snapshot);

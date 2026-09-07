@@ -12,7 +12,6 @@ const settings = vi.hoisted(() => ({
   resetAllToDefaults: vi.fn(),
   resetAiToDefaults: vi.fn(),
   resetThemeToDefaults: vi.fn(),
-  resetEditorToDefaults: vi.fn(),
   resetAppearanceToDefaults: vi.fn(),
 }));
 
@@ -103,24 +102,19 @@ vi.mock("@/features/core/settings/settingsStore", () => {
       gridColor: "#222222",
       selectionColor: "#000000",
     },
-    editor: { showGrid: true, autoSave: false, snapToGrid: true, fontSize: 12 },
     appearance: {
       colorTheme: "Dark Modern (Default)",
       language: "en-US",
       titleBarStyle: "custom",
       smoothScroll: true,
     },
-    project: { projectName: "", exportPath: "" },
     isLoading: false,
     updateAi: vi.fn(),
     updateTheme: vi.fn(),
-    updateEditor: vi.fn(),
     updateAppearance: vi.fn(),
-    updateProject: vi.fn(),
     resetAllToDefaults: settings.resetAllToDefaults,
     resetAiToDefaults: settings.resetAiToDefaults,
     resetThemeToDefaults: settings.resetThemeToDefaults,
-    resetEditorToDefaults: settings.resetEditorToDefaults,
     resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
   };
   const useSettingsStore = Object.assign(
@@ -147,7 +141,7 @@ describe("SettingsView computation settings", () => {
     settings.resetAllToDefaults.mockResolvedValue(undefined);
     settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetThemeToDefaults.mockResolvedValue(undefined);
-    settings.resetEditorToDefaults.mockResolvedValue(undefined);
+    settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
     computation.enabled = true;
     computation.isDirty = false;
@@ -280,8 +274,8 @@ describe("SettingsView computation settings", () => {
 
   it("shows a section reset failure with the active section", async () => {
     vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
-    settings.resetEditorToDefaults.mockRejectedValueOnce(
-      normalizeIpcError("reset_editor_settings", {
+    settings.resetAiToDefaults.mockRejectedValueOnce(
+      normalizeIpcError("reset_ai_settings", {
         code: "settings_section_reset_failed",
         details: null,
         incidentId: null,
@@ -313,10 +307,11 @@ describe("SettingsView computation settings", () => {
   });
 
   it("uses the application confirmation modal before dirty close and section changes", async () => {
-    computation.isDirty = true;
     const confirm = vi.spyOn(uiStore, "confirm").mockResolvedValue(false);
     render();
     await openComputation();
+    computation.isDirty = true;
+    render();
 
     click(host.querySelector('button[aria-label="Close settings"]')!);
     await act(async () => {
@@ -329,7 +324,7 @@ describe("SettingsView computation settings", () => {
 
     click(
       [...host.querySelectorAll("button")].find(
-        (item) => item.textContent === "settings.sections.editor",
+        (item) => item.textContent === "settings.sections.appearance",
       )!,
     );
     await act(async () => {

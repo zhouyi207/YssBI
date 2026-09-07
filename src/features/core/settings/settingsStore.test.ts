@@ -1,13 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_AI,
-  DEFAULT_APPEARANCE,
-  DEFAULT_EDITOR,
-  DEFAULT_PROJECT,
-  DEFAULT_THEME,
-} from "@/shared/config-default";
+import { DEFAULT_AI, DEFAULT_APPEARANCE, DEFAULT_THEME } from "@/shared/config-default";
 import { COLOR_THEME_PRESETS } from "@/features/application/settings/colorThemePresets";
 import { setClientSettingsPublisher, useSettingsStore } from "./settingsStore";
 
@@ -56,18 +50,6 @@ const REMOVED_THEME_KEYS = [
   "structColor",
 ];
 
-const EDITOR_KEYS = [
-  "alwaysShowEditorActions",
-  "autoSave",
-  "closeEmptyGroups",
-  "fontSize",
-  "openSideBySideDirection",
-  "showGrid",
-  "snapToGrid",
-  "splitOnDragAndDrop",
-  "splitSizing",
-];
-
 const APPEARANCE_KEYS = [
   "colorTheme",
   "language",
@@ -86,9 +68,7 @@ describe("settingsStore appearance persistence", () => {
     useSettingsStore.setState({
       ai: DEFAULT_AI,
       theme: DEFAULT_THEME,
-      editor: DEFAULT_EDITOR,
       appearance: DEFAULT_APPEARANCE,
-      project: DEFAULT_PROJECT,
       isLoading: true,
     });
   });
@@ -149,42 +129,6 @@ describe("settingsStore appearance persistence", () => {
       expect(Object.keys(preset)).toEqual(expect.arrayContaining(THEME_KEYS));
       expect(Object.keys(preset).some((key) => REMOVED_THEME_KEYS.includes(key))).toBe(false);
     }
-  });
-
-  it("projects known editor fields and removes stored drag-to-window options", async () => {
-    localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        editor: {
-          showGrid: false,
-          autoSave: false,
-          snapToGrid: false,
-          fontSize: 14,
-          openSideBySideDirection: "down",
-          splitOnDragAndDrop: false,
-          alwaysShowEditorActions: true,
-          closeEmptyGroups: false,
-          splitSizing: "distribute",
-          dragToOpenWindow: true,
-          futureEditorField: "discard me",
-        },
-      }),
-    );
-
-    await useSettingsStore.getState().load();
-
-    const loaded = useSettingsStore.getState().editor as unknown as Record<string, unknown>;
-    expect(Object.keys(loaded).sort()).toEqual(EDITOR_KEYS);
-    expect(loaded).not.toHaveProperty("dragToOpenWindow");
-    expect(loaded).not.toHaveProperty("futureEditorField");
-
-    await useSettingsStore.getState().save();
-
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}") as {
-      editor?: Record<string, unknown>;
-    };
-    expect(Object.keys(saved.editor ?? {}).sort()).toEqual(EDITOR_KEYS);
-    expect(saved.editor).not.toHaveProperty("dragToOpenWindow");
   });
 
   it("projects known appearance fields and removes stored panelPosition on save", async () => {

@@ -245,8 +245,6 @@ export const enUS = {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
       view: "View",
-      historyLoading: "Loading history…",
-      historyEmpty: "No result history",
       viewDisabledNoRun: "Run the graph first to generate viewable results",
       viewDisabledNoUpstream: "No upstream result available",
     },
@@ -839,9 +837,7 @@ export const enUS = {
   },
   settings: {
     sections: {
-      editor: "Editor",
-      editorGroups: "Editor Groups",
-      project: "Project",
+      computation: "Computation",
       ai: "AI",
       appearance: "Appearance",
       color: "Color",
@@ -857,18 +853,6 @@ export const enUS = {
     restoredSection: "{{section}} defaults restored",
     restoreSectionFailed: "Failed to restore {{section}} defaults: {{error}}",
     labels: {
-      showGrid: "Show Grid",
-      autoSave: "Auto Save",
-      snapToGrid: "Snap to Grid",
-      fontSize: "Font Size",
-      openSideBySideDirection: "Open Side By Side Direction",
-      splitOnDragAndDrop: "Split On Drag And Drop",
-      alwaysShowEditorActions: "Always Show Editor Actions",
-      closeEmptyGroups: "Close Empty Groups",
-      splitSizing: "Split Sizing",
-      projectName: "Project Name",
-      projectVersion: "Project Version",
-      exportPath: "Export Path",
       openAiModel: "OpenAI Model",
       openAiApiKey: "OpenAI API Key",
       openAiBaseUrl: "OpenAI Base URL",
@@ -888,21 +872,6 @@ export const enUS = {
       gridColor: "Grid Color",
     },
     descriptions: {
-      showGrid: "Controls whether the background grid is visible.",
-      autoSave: "Controls whether changed files are saved automatically after a delay.",
-      snapToGrid: "Controls whether nodes snap to grid corners when dragged.",
-      fontSize: "Controls the font size in pixels for node titles and labels.",
-      openSideBySideDirection:
-        "Default split direction for Alt+split and drag-and-drop (right or down).",
-      splitOnDragAndDrop:
-        "Show split zones when dragging tabs or editor groups over the editor area.",
-      alwaysShowEditorActions:
-        "Show split and close actions on inactive groups instead of the overflow menu.",
-      closeEmptyGroups: "Remove empty editor groups after closing the last tab.",
-      splitSizing: "How adjacent editor group sizes are assigned when creating a split.",
-      projectName: "The name displayed in the title bar and used for exports.",
-      projectVersion: "The project version. This is managed by the system.",
-      exportPath: "Default directory where the project will be exported.",
       openAiModel: "The model used by the statistical analysis assistant.",
       openAiApiKey:
         "The API key is stored in local application settings and sent only to the local Harness runtime.",
@@ -937,11 +906,6 @@ export const enUS = {
       hidden: "Hidden",
       titleBarCustom: "Custom",
       titleBarNative: "Native",
-      openSideBySideRight: "Right",
-      openSideBySideDown: "Down",
-      splitSizingAuto: "Auto",
-      splitSizingDistribute: "Distribute",
-      splitSizingSplit: "Split",
     },
   },
   graphDiagnostics: {

@@ -2,18 +2,10 @@ import { create } from "zustand";
 import {
   AiSettings,
   ThemeSettings,
-  EditorSettings,
   AppearanceSettings,
-  ProjectSettings,
   AppSettings,
 } from "@/shared/types/settings";
-import {
-  DEFAULT_THEME,
-  DEFAULT_EDITOR,
-  DEFAULT_APPEARANCE,
-  DEFAULT_PROJECT,
-  DEFAULT_AI,
-} from "@/shared/config-default";
+import { DEFAULT_THEME, DEFAULT_APPEARANCE, DEFAULT_AI } from "@/shared/config-default";
 import { logger } from "@/features/core/observability/logger";
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
@@ -32,9 +24,7 @@ function clientSettingsFingerprint(s: AppSettings): string {
   return JSON.stringify({
     ai: s.ai,
     theme: s.theme,
-    editor: s.editor,
     appearance: s.appearance,
-    project: s.project,
   });
 }
 
@@ -63,19 +53,6 @@ function mergeSettings(settings: Partial<AppSettings>): AppSettings {
       openAiModel: settings.ai?.openAiModel ?? DEFAULT_AI.openAiModel,
     },
     theme: mergeThemeSettings(settings.theme),
-    editor: {
-      showGrid: settings.editor?.showGrid ?? DEFAULT_EDITOR.showGrid,
-      autoSave: settings.editor?.autoSave ?? DEFAULT_EDITOR.autoSave,
-      snapToGrid: settings.editor?.snapToGrid ?? DEFAULT_EDITOR.snapToGrid,
-      fontSize: settings.editor?.fontSize ?? DEFAULT_EDITOR.fontSize,
-      openSideBySideDirection:
-        settings.editor?.openSideBySideDirection ?? DEFAULT_EDITOR.openSideBySideDirection,
-      splitOnDragAndDrop: settings.editor?.splitOnDragAndDrop ?? DEFAULT_EDITOR.splitOnDragAndDrop,
-      alwaysShowEditorActions:
-        settings.editor?.alwaysShowEditorActions ?? DEFAULT_EDITOR.alwaysShowEditorActions,
-      closeEmptyGroups: settings.editor?.closeEmptyGroups ?? DEFAULT_EDITOR.closeEmptyGroups,
-      splitSizing: settings.editor?.splitSizing ?? DEFAULT_EDITOR.splitSizing,
-    },
     appearance: {
       colorTheme: settings.appearance?.colorTheme ?? DEFAULT_APPEARANCE.colorTheme,
       lastLightColorTheme:
@@ -87,7 +64,6 @@ function mergeSettings(settings: Partial<AppSettings>): AppSettings {
       smoothScroll: settings.appearance?.smoothScroll ?? DEFAULT_APPEARANCE.smoothScroll,
       titleBarStyle: settings.appearance?.titleBarStyle ?? DEFAULT_APPEARANCE.titleBarStyle,
     },
-    project: { ...DEFAULT_PROJECT, ...settings.project },
   };
 }
 
@@ -137,9 +113,7 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
   const currentPayload: AppSettings = {
     ai: cur.ai,
     theme: cur.theme,
-    editor: cur.editor,
     appearance: cur.appearance,
-    project: cur.project,
   };
   if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
     return;
@@ -151,9 +125,7 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
     useSettingsStore.setState({
       ai: merged.ai,
       theme: merged.theme,
-      editor: merged.editor,
       appearance: merged.appearance,
-      project: merged.project,
       isLoading: false,
     });
   } finally {
@@ -164,19 +136,15 @@ export function applyClientSettingsFromRemote(incoming: AppSettings): void {
 interface SettingsStore {
   ai: AiSettings;
   theme: ThemeSettings;
-  editor: EditorSettings;
   appearance: AppearanceSettings;
-  project: ProjectSettings;
   isLoading: boolean;
 
   load: () => Promise<void>;
 
-  // 更新方法（仅更新状态，不保存）
+  // 更新后安排持久化。
   updateTheme: (updates: Partial<ThemeSettings>) => void;
   updateAi: (updates: Partial<AiSettings>) => void;
-  updateEditor: (updates: Partial<EditorSettings>) => void;
   updateAppearance: (updates: Partial<AppearanceSettings>) => void;
-  updateProject: (updates: Partial<ProjectSettings>) => void;
 
   // 保存方法
   save: () => Promise<void>;
@@ -184,9 +152,7 @@ interface SettingsStore {
   // 恢复默认方法
   resetThemeToDefaults: () => Promise<void>;
   resetAiToDefaults: () => Promise<void>;
-  resetEditorToDefaults: () => Promise<void>;
   resetAppearanceToDefaults: () => Promise<void>;
-  resetProjectToDefaults: () => Promise<void>;
 
   // 重新加载设置
   resetAllToDefaults: () => Promise<void>;
@@ -205,9 +171,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     const settings: AppSettings = {
       ai: state.ai,
       theme: state.theme,
-      editor: state.editor,
       appearance: state.appearance,
-      project: state.project,
     };
     persistClientSettings(settings);
   };
@@ -222,9 +186,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   return {
     ai: DEFAULT_AI,
     theme: DEFAULT_THEME,
-    editor: DEFAULT_EDITOR,
     appearance: DEFAULT_APPEARANCE,
-    project: DEFAULT_PROJECT,
     isLoading: true,
 
     load: async () => {
@@ -249,23 +211,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         return next;
       }),
 
-    updateEditor: (updates) =>
-      set((state) => {
-        const next = { editor: { ...state.editor, ...updates } };
-        queueMicrotask(scheduleSave);
-        return next;
-      }),
-
     updateAppearance: (updates) =>
       set((state) => {
         const next = { appearance: { ...state.appearance, ...updates } };
-        queueMicrotask(scheduleSave);
-        return next;
-      }),
-
-    updateProject: (updates) =>
-      set((state) => {
-        const next = { project: { ...state.project, ...updates } };
         queueMicrotask(scheduleSave);
         return next;
       }),
@@ -285,18 +233,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       await saveImmediately();
     },
 
-    resetEditorToDefaults: async () => {
-      set({ editor: DEFAULT_EDITOR });
-      await saveImmediately();
-    },
-
     resetAppearanceToDefaults: async () => {
       set({ appearance: DEFAULT_APPEARANCE });
-      await saveImmediately();
-    },
-
-    resetProjectToDefaults: async () => {
-      set({ project: DEFAULT_PROJECT });
       await saveImmediately();
     },
 
