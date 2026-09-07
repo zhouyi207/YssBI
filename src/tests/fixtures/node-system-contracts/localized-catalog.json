@@ -22,6 +22,13 @@
       "title": "Conversion"
     },
     {
+      "categoryId": "database",
+      "order": 55,
+      "parentCategoryId": null,
+      "searchText": "database",
+      "title": "Database"
+    },
+    {
       "categoryId": "dataframe",
       "order": 60,
       "parentCategoryId": null,
@@ -190,7 +197,7 @@
     {
       "aliases": ["data frame", "table", "source"],
       "backendSearchText": ["data frame", "table", "source"],
-      "categoryId": "dataframe",
+      "categoryId": "database",
       "creation": {
         "createArgs": {
           "kind": "database"

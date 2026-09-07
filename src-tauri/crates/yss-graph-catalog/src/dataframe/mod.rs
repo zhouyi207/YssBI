@@ -661,6 +661,7 @@ fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
 
 fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyError> {
     [
+        ("database", None, 55),
         ("dataframe", None, 60),
         ("dataframe.series", Some("dataframe"), 61),
         ("dataframe.timeseries", Some("dataframe"), 62),
@@ -682,8 +683,8 @@ fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyEr
 
 fn category(kind: InterfaceKind) -> &'static str {
     match kind {
-        InterfaceKind::DataframeSource
-        | InterfaceKind::Limit
+        InterfaceKind::DataframeSource => "database",
+        InterfaceKind::Limit
         | InterfaceKind::Rename
         | InterfaceKind::Project
         | InterfaceKind::FilterRows
@@ -825,6 +826,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "DataFrame Filter Predicate",
             "数据框筛选谓词",
         ),
+        ("categories.database.title", "Database", "数据库"),
         ("categories.dataframe.title", "DataFrame", "数据框"),
         (
             "categories.dataframe.series.title",
