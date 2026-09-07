@@ -243,27 +243,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             <div>
               <h2 className="mb-2 text-xl text-foreground">{t("settings.sections.computation")}</h2>
               <p className="text-sm text-muted-foreground">
-                Application-wide numeric comparison and statistical missing-value behavior.
+                Application-wide statistical missing-value preference.
               </p>
-            </div>
-            <SettingItem
-              label="Absolute tolerance"
-              description="The fixed lower bound used for approximate numeric equality."
-              type="text"
-              value={computation.draft.absolute}
-              onChange={(absolute) => computation.setDraft({ absolute })}
-              disabled={!computation.enabled}
-            />
-            <SettingItem
-              label="Relative tolerance"
-              description="The scale-dependent bound used for approximate numeric equality."
-              type="text"
-              value={computation.draft.relative}
-              onChange={(relative) => computation.setDraft({ relative })}
-              disabled={!computation.enabled}
-            />
-            <div className="rounded-md border border-border bg-muted/20 p-3 font-mono text-xs text-muted-foreground">
-              |a - b| ≤ max(absolute, relative × max(|a|, |b|))
             </div>
             <SettingItem
               label="Statistical missing values"
@@ -281,11 +262,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
               }
               disabled={!computation.enabled}
             />
-            {computation.validationError && (
-              <p role="alert" className="text-sm text-destructive">
-                {computation.validationError}
-              </p>
-            )}
             {computation.error && (
               <p role="alert" className="text-sm text-destructive">
                 {computation.error}
@@ -303,12 +279,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
               <Button
                 type="button"
                 onClick={() => void computation.apply()}
-                disabled={
-                  !computation.enabled ||
-                  !computation.isDirty ||
-                  Boolean(computation.validationError) ||
-                  computation.isApplying
-                }
+                disabled={!computation.enabled || !computation.isDirty || computation.isApplying}
               >
                 {computation.isApplying ? "Applying…" : "Apply"}
               </Button>

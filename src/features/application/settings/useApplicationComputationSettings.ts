@@ -11,43 +11,23 @@ import {
 } from "@/shared/types/dto/applicationSettings";
 
 export interface ApplicationComputationSettingsDraft {
-  absolute: string;
-  relative: string;
   statistics: StatisticalMissingValuePolicy;
 }
 
 function toDraft(settings: ComputationSettingsDto): ApplicationComputationSettingsDraft {
   return {
-    absolute: String(settings.numeric.tolerance.absolute),
-    relative: String(settings.numeric.tolerance.relative),
     statistics: settings.missingValues.statistics,
   };
 }
 
-function draftSettings(draft: ApplicationComputationSettingsDraft): ComputationSettingsDto | null {
-  const absolute = Number(draft.absolute);
-  const relative = Number(draft.relative);
-  if (
-    !Number.isFinite(absolute) ||
-    !Number.isFinite(relative) ||
-    absolute < 0 ||
-    relative < 0 ||
-    (absolute === 0 && relative === 0)
-  ) {
-    return null;
-  }
+function draftSettings(draft: ApplicationComputationSettingsDraft): ComputationSettingsDto {
   return {
-    numeric: { tolerance: { absolute, relative } },
     missingValues: { statistics: draft.statistics },
   };
 }
 
 function settingsEqual(left: ComputationSettingsDto, right: ComputationSettingsDto): boolean {
-  return (
-    left.numeric.tolerance.absolute === right.numeric.tolerance.absolute &&
-    left.numeric.tolerance.relative === right.numeric.tolerance.relative &&
-    left.missingValues.statistics === right.missingValues.statistics
-  );
+  return left.missingValues.statistics === right.missingValues.statistics;
 }
 
 export function useApplicationComputationSettings() {
@@ -81,27 +61,14 @@ export function useApplicationComputationSettings() {
   }, [t]);
 
   const parsedDraft = useMemo(() => draftSettings(draft), [draft]);
-  const validationError = useMemo(() => {
-    const absolute = Number(draft.absolute);
-    const relative = Number(draft.relative);
-    if (!Number.isFinite(absolute) || !Number.isFinite(relative) || absolute < 0 || relative < 0) {
-      return "Numeric tolerances must be finite and nonnegative.";
-    }
-    if (absolute === 0 && relative === 0) {
-      return "Absolute and relative tolerances cannot both be zero.";
-    }
-    return null;
-  }, [draft.absolute, draft.relative]);
-  const isDirty = Boolean(
-    confirmed && parsedDraft && !settingsEqual(parsedDraft, confirmed.settings.computation),
-  );
+  const isDirty = Boolean(confirmed && !settingsEqual(parsedDraft, confirmed.settings.computation));
 
   const setDraft = useCallback((patch: Partial<ApplicationComputationSettingsDraft>) => {
     replaceDraft((current) => ({ ...current, ...patch }));
   }, []);
 
   const apply = useCallback(async () => {
-    if (!confirmed || !parsedDraft || validationError || isLoading) return;
+    if (!confirmed || isLoading) return;
     const operationId = crypto.randomUUID();
     setIsApplying(true);
     setError(null);
@@ -125,7 +92,7 @@ export function useApplicationComputationSettings() {
     } finally {
       setIsApplying(false);
     }
-  }, [confirmed, isLoading, parsedDraft, t, validationError]);
+  }, [confirmed, isLoading, parsedDraft, t]);
 
   const restoreRecommended = useCallback(() => {
     replaceDraft(toDraft(RECOMMENDED_COMPUTATION_SETTINGS));
@@ -138,7 +105,6 @@ export function useApplicationComputationSettings() {
     isLoading,
     isApplying,
     isDirty,
-    validationError,
     error,
     setDraft,
     apply,

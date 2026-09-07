@@ -18,11 +18,10 @@ const settings = vi.hoisted(() => ({
 const computation = vi.hoisted(() => ({
   enabled: true,
   confirmed: { settingsRevision: 3 },
-  draft: { absolute: "1e-12", relative: "1e-9", statistics: "listwise" as const },
+  draft: { statistics: "listwise" as const },
   isLoading: false,
   isApplying: false,
   isDirty: false,
-  validationError: null as string | null,
   error: null as string | null,
   setDraft: vi.fn(),
   apply: vi.fn(async () => undefined),
@@ -145,7 +144,6 @@ describe("SettingsView computation settings", () => {
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
     computation.enabled = true;
     computation.isDirty = false;
-    computation.validationError = null;
     computation.error = null;
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -231,12 +229,11 @@ describe("SettingsView computation settings", () => {
     expect(host.querySelectorAll('input[type="color"]').length).toBe(9);
   });
 
-  it("shows tolerance formula help, Listwise/Reject, Apply, and recommended reset", async () => {
+  it("applies and resets the statistical missing-value preference", async () => {
     computation.isDirty = true;
     vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
     render();
     await openComputation();
-    expect(host.textContent).toContain("|a - b| ≤ max(absolute, relative × max(|a|, |b|))");
     expect(host.textContent).toContain("Listwise");
     expect(host.textContent).toContain("Reject");
     click(

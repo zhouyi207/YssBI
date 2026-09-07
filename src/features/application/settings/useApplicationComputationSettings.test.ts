@@ -25,7 +25,6 @@ function snapshot(
     settingsRevision: 3,
     settings: {
       computation: {
-        numeric: { tolerance: { absolute: 1e-12, relative: 1e-9 } },
         missingValues: { statistics: "listwise" },
       },
     },
@@ -70,30 +69,29 @@ describe("useApplicationComputationSettings", () => {
     expect(current?.enabled).toBe(true);
     expect(current?.confirmed?.settingsRevision).toBe(3);
     expect(current?.draft).toEqual({
-      absolute: "1e-12",
-      relative: "1e-9",
       statistics: "listwise",
     });
   });
 
-  it("validates the global tolerance pair", async () => {
+  it("restores the recommended preference as a draft without persisting it", async () => {
     await render();
 
-    act(() => current?.setDraft({ absolute: "0", relative: "0" }));
-    expect(current?.validationError).toMatch(/cannot both be zero/i);
-    act(() => current?.setDraft({ absolute: "1e-8", relative: "0" }));
-    expect(current?.validationError).toBeNull();
+    act(() => current?.setDraft({ statistics: "reject" }));
+    expect(current?.isDirty).toBe(true);
+    act(() => current?.restoreRecommended());
+    expect(current?.draft).toEqual({ statistics: "listwise" });
+    expect(current?.isDirty).toBe(false);
+    expect(ApplicationSettingsService.update).not.toHaveBeenCalled();
   });
 
   it("applies a revisioned global settings update", async () => {
     await render();
-    act(() => current?.setDraft({ absolute: "1e-8", statistics: "reject" }));
+    act(() => current?.setDraft({ statistics: "reject" }));
     const result: ApplicationSettingsMutationReceiptDto = {
       ...snapshot({ settingsRevision: 4 }),
       operationId: "operation-a",
       settings: {
         computation: {
-          numeric: { tolerance: { absolute: 1e-8, relative: 1e-9 } },
           missingValues: { statistics: "reject" },
         },
       },

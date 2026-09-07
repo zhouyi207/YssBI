@@ -24,9 +24,6 @@ fn map_settings_error(error: SettingsStoreError) -> CommandError {
         SettingsStoreError::RevisionConflict { .. } => {
             CommandError::expected("settings_revision_conflict")
         }
-        SettingsStoreError::Validation(error) => {
-            CommandError::diagnosed("invalid_application_settings", error)
-        }
         error => CommandError::diagnosed("settings_store_unavailable", error),
     }
 }

@@ -1,21 +1,12 @@
 /** Stable IPC contract for application-scoped backend settings. */
 
 export const RECOMMENDED_COMPUTATION_SETTINGS = Object.freeze({
-  numeric: Object.freeze({
-    tolerance: Object.freeze({ absolute: 1e-12, relative: 1e-9 }),
-  }),
   missingValues: Object.freeze({ statistics: "listwise" as const }),
 });
 
 export type StatisticalMissingValuePolicy = "listwise" | "reject";
 
 export interface ComputationSettingsDto {
-  numeric: {
-    tolerance: {
-      absolute: number;
-      relative: number;
-    };
-  };
   missingValues: {
     statistics: StatisticalMissingValuePolicy;
   };
@@ -56,23 +47,11 @@ function isRevision(value: unknown): value is number {
 }
 
 export function parseComputationSettings(value: unknown): ComputationSettingsDto {
-  if (!isRecord(value) || !hasExactKeys(value, ["numeric", "missingValues"])) {
+  if (!isRecord(value) || !hasExactKeys(value, ["missingValues"])) {
     throw new Error("Invalid application computation settings");
   }
-  const numeric = value.numeric;
   const missingValues = value.missingValues;
   if (
-    !isRecord(numeric) ||
-    !hasExactKeys(numeric, ["tolerance"]) ||
-    !isRecord(numeric.tolerance) ||
-    !hasExactKeys(numeric.tolerance, ["absolute", "relative"]) ||
-    typeof numeric.tolerance.absolute !== "number" ||
-    typeof numeric.tolerance.relative !== "number" ||
-    !Number.isFinite(numeric.tolerance.absolute) ||
-    !Number.isFinite(numeric.tolerance.relative) ||
-    numeric.tolerance.absolute < 0 ||
-    numeric.tolerance.relative < 0 ||
-    (numeric.tolerance.absolute === 0 && numeric.tolerance.relative === 0) ||
     !isRecord(missingValues) ||
     !hasExactKeys(missingValues, ["statistics"]) ||
     (missingValues.statistics !== "listwise" && missingValues.statistics !== "reject")

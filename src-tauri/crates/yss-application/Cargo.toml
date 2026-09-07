@@ -26,7 +26,6 @@ yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
 yss-bayes-worker = { path = "../yss-bayes-worker" }
-yss-settings = { path = "../yss-settings" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-edit = { path = "../yss-database-edit" }
@@ -76,7 +75,6 @@ sqlx.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
-yss-execution-sci-adapter = { path = "../yss-execution-sci-adapter" }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

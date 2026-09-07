@@ -11,41 +11,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use yss_project_identity::OperationId;
 
-pub const SETTINGS_SCHEMA_VERSION: u32 = 1;
-pub const DEFAULT_ABSOLUTE_TOLERANCE: f64 = 1e-12;
-pub const DEFAULT_RELATIVE_TOLERANCE: f64 = 1e-9;
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NumericTolerance {
-    pub absolute: f64,
-    pub relative: f64,
-}
-
-impl NumericTolerance {
-    pub fn validate(&self) -> Result<(), ComputationSettingsValidationError> {
-        if !self.absolute.is_finite()
-            || !self.relative.is_finite()
-            || self.absolute < 0.0
-            || self.relative < 0.0
-        {
-            return Err(ComputationSettingsValidationError::InvalidTolerance);
-        }
-        if self.absolute == 0.0 && self.relative == 0.0 {
-            return Err(ComputationSettingsValidationError::ZeroTolerance);
-        }
-        Ok(())
-    }
-}
-
-impl Default for NumericTolerance {
-    fn default() -> Self {
-        Self {
-            absolute: DEFAULT_ABSOLUTE_TOLERANCE,
-            relative: DEFAULT_RELATIVE_TOLERANCE,
-        }
-    }
-}
+pub const SETTINGS_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,12 +23,6 @@ pub enum StatisticalMissingValuePolicy {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct NumericSettings {
-    pub tolerance: NumericTolerance,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MissingValueSettings {
     pub statistics: StatisticalMissingValuePolicy,
 }
@@ -70,34 +30,13 @@ pub struct MissingValueSettings {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettings {
-    pub numeric: NumericSettings,
     pub missing_values: MissingValueSettings,
-}
-
-impl ComputationSettings {
-    pub fn validate(&self) -> Result<(), ComputationSettingsValidationError> {
-        self.numeric.tolerance.validate()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ComputationSettingsValidationError {
-    #[error("numeric tolerances must be finite and nonnegative")]
-    InvalidTolerance,
-    #[error("absolute and relative tolerances cannot both be zero")]
-    ZeroTolerance,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApplicationSettings {
     pub computation: ComputationSettings,
-}
-
-impl ApplicationSettings {
-    pub fn validate(&self) -> Result<(), ComputationSettingsValidationError> {
-        self.computation.validate()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -151,8 +90,6 @@ pub enum SettingsStoreError {
     Serialize(#[source] serde_json::Error),
     #[error("unsupported settings schema version {actual}; expected {expected}")]
     UnsupportedSchema { actual: u32, expected: u32 },
-    #[error(transparent)]
-    Validation(#[from] ComputationSettingsValidationError),
     #[error("settings revision conflict: expected {expected}, current {current}")]
     RevisionConflict { expected: u64, current: u64 },
     #[error("settings revision is exhausted")]
@@ -169,8 +106,7 @@ impl SettingsStore {
         let path = path.into();
         let state = if path.exists() {
             let bytes = std::fs::read(&path).map_err(SettingsStoreError::Io)?;
-            serde_json::from_slice::<PersistedSettings>(&bytes)
-                .map_err(SettingsStoreError::Deserialize)?
+            decode_persisted_settings(&bytes)?
         } else {
             PersistedSettings::default()
         };
@@ -180,7 +116,6 @@ impl SettingsStore {
                 expected: SETTINGS_SCHEMA_VERSION,
             });
         }
-        state.settings.validate()?;
         Ok(Self {
             path,
             state: Mutex::new(state),
@@ -199,7 +134,6 @@ impl SettingsStore {
         &self,
         request: SettingsMutationRequest,
     ) -> Result<SettingsMutationReceipt, SettingsStoreError> {
-        request.settings.validate()?;
         let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         if state.settings_revision != request.expected_revision {
             return Err(SettingsStoreError::RevisionConflict {
@@ -238,6 +172,27 @@ impl SettingsStore {
     }
 }
 
+fn decode_persisted_settings(bytes: &[u8]) -> Result<PersistedSettings, SettingsStoreError> {
+    let mut value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(SettingsStoreError::Deserialize)?;
+    if value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        == Some(1)
+    {
+        // Only the persisted v1 format accepted this retired field. Live requests
+        // and v2 files remain strict; the next successful save writes v2.
+        if let Some(computation) = value
+            .pointer_mut("/settings/computation")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            computation.remove("numeric");
+        }
+        value["schemaVersion"] = SETTINGS_SCHEMA_VERSION.into();
+    }
+    serde_json::from_value(value).map_err(SettingsStoreError::Deserialize)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,7 +206,7 @@ mod tests {
         let path = temporary_path("round-trip");
         let store = SettingsStore::open(&path).unwrap();
         let mut settings = ApplicationSettings::default();
-        settings.computation.numeric.tolerance.absolute = 0.25;
+        settings.computation.missing_values.statistics = StatisticalMissingValuePolicy::Reject;
         let receipt = store
             .update(SettingsMutationRequest {
                 operation_id: OperationId::new(),
@@ -269,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn global_settings_reject_stale_revision_and_zero_tolerance() {
+    fn global_settings_reject_stale_revision() {
         let path = temporary_path("validation");
         let store = SettingsStore::open(&path).unwrap();
         let stale = store.update(SettingsMutationRequest {
@@ -282,17 +237,46 @@ mod tests {
             Err(SettingsStoreError::RevisionConflict { .. })
         ));
 
-        let mut invalid = ApplicationSettings::default();
-        invalid.computation.numeric.tolerance = NumericTolerance {
-            absolute: 0.0,
-            relative: 0.0,
-        };
-        let result = store.update(SettingsMutationRequest {
-            operation_id: OperationId::new(),
-            expected_revision: 0,
-            settings: invalid,
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn legacy_numeric_settings_are_retired_without_losing_other_settings() {
+        let path = temporary_path("v1-upgrade");
+        let legacy = serde_json::json!({
+            "schemaVersion": 1,
+            "settingsRevision": 7,
+            "settings": {
+                "computation": {
+                    "numeric": { "tolerance": { "absolute": 1e-12, "relative": 1e-9 } },
+                    "missingValues": { "statistics": "reject" }
+                }
+            }
         });
-        assert!(matches!(result, Err(SettingsStoreError::Validation(_))));
+        std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let store = SettingsStore::open(&path).unwrap();
+        let snapshot = store.snapshot();
+        assert_eq!(snapshot.settings_revision, 7);
+        assert_eq!(
+            snapshot.settings.computation.missing_values.statistics,
+            StatisticalMissingValuePolicy::Reject
+        );
+        store
+            .update(SettingsMutationRequest {
+                operation_id: OperationId::new(),
+                expected_revision: snapshot.settings_revision,
+                settings: snapshot.settings,
+            })
+            .unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(saved["schemaVersion"], SETTINGS_SCHEMA_VERSION);
+        assert_eq!(saved["settingsRevision"], 8);
+        assert_eq!(
+            saved["settings"]["computation"],
+            serde_json::json!({ "missingValues": { "statistics": "reject" } })
+        );
+        assert!(serde_json::from_value::<ApplicationSettings>(legacy["settings"].clone()).is_err());
         let _ = std::fs::remove_file(path);
     }
 }

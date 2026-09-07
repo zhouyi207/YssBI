@@ -5,7 +5,6 @@ pub mod bayes;
 pub mod catalog_query;
 pub mod chart;
 pub mod chart_plot;
-pub mod computation_settings;
 pub mod database;
 pub(crate) mod database_mutation;
 pub(crate) mod database_session;
