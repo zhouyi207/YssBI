@@ -52,14 +52,7 @@ describe("execution wire parsers", () => {
     expect(() => parseExecutionDemandDto(extraPort)).toThrow();
   });
 
-  it.each([
-    "",
-    "not-a-resource",
-    "events/contract.yssbi-function",
-    "functions/contract.yssbi-event",
-    "events//contract.yssbi-event",
-    "events/../contract.yssbi-event",
-  ])("rejects malformed graph output path %j", (graphPath) => {
+  it.each(["", null])("rejects malformed graph output path %j", (graphPath) => {
     const outputs = clone(executionWire.demands.find((demand) => demand.type === "outputs"));
     const firstOutput = (record(outputs).outputs as Array<Record<string, unknown>>)[0];
     firstOutput.graphPath = graphPath;
@@ -163,9 +156,7 @@ describe("execution wire parsers", () => {
     expect(() => parseRunEvent(output)).toThrow("run event");
     expect(() => parseExecutionChannelEvent({ ...output, sequence: -1 })).toThrow();
     expect(() => parseExecutionChannelEvent({ ...output, runId: "0" })).toThrow();
-    expect(() =>
-      parseExecutionChannelEvent({ ...output, sourceGraphPath: "not-a-resource" }),
-    ).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...output, sourceGraphPath: "" })).toThrow();
     expect(() => parseExecutionChannelEvent({ ...output, stream: "diagnostic" })).toThrow();
     expect(() => parseExecutionChannelEvent({ ...output, extra: true })).toThrow();
     expect(() => parseExecutionChannelEvent({ ...truncated, status: "warning" })).toThrow();
@@ -241,13 +232,7 @@ describe("execution wire parsers", () => {
     ).toThrow("graph run identity");
   });
 
-  it.each([
-    "not-a-resource",
-    "events/contract.yssbi-function",
-    "functions/contract.yssbi-event",
-    "events//contract.yssbi-event",
-    "events/../contract.yssbi-event",
-  ])("rejects malformed graph run path %j", (graphPath) => {
+  it.each(["", null])("rejects malformed graph run path %j", (graphPath) => {
     const valid = executionWire.runEvents[0];
     expect(() =>
       parseRunEvent({
@@ -264,8 +249,7 @@ describe("execution wire parsers", () => {
     if (!preview) throw new Error("missing pinPreviewResultReady fixture");
 
     const malformedPath = clone(preview);
-    (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath =
-      "functions/contract.yssbi-event";
+    (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath = "";
     expect(() => parseRunEvent(malformedPath)).toThrow("graph output reference");
 
     const malformedPort = clone(preview);

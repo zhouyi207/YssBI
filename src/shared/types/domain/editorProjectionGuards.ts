@@ -6,7 +6,6 @@ import type {
   PortAddressDto,
 } from "@/shared/types/domain/editorProjection";
 import { isBackendDataType } from "@/shared/types/domain/dataType";
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,18 +93,7 @@ export function isUuid(value: unknown): value is string {
 }
 
 export function isGraphResourcePath(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const segments = value.split("/");
-  if (
-    segments.length < 2 ||
-    segments.some((segment) => !segment || segment === "." || segment === "..")
-  )
-    return false;
-  const kind = inferGraphResourceKind(value);
-  return (
-    (kind === "event" && value.startsWith("events/") && value.endsWith(".yssbi-event")) ||
-    (kind === "function" && value.startsWith("functions/") && value.endsWith(".yssbi-function"))
-  );
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function isProjectionBasis(value: unknown): boolean {

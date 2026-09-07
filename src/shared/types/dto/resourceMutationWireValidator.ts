@@ -1,4 +1,3 @@
-import { inferGraphResourceKind } from "@/shared/types/domain/graphResourcePath";
 import type { ResourceDeltaDto } from "@/shared/types/dto/editorMutation";
 import { isRustDataValueWire } from "@/shared/types/dto/dataValue";
 import { isGraphResourcePath } from "@/shared/types/domain/editorProjectionGuards";
@@ -359,7 +358,7 @@ function isResourceLifecycleState(
     return false;
   return resourceKind === "chart"
     ? value.kind === "chart"
-    : value.kind === inferGraphResourceKind(path);
+    : value.kind === "event" || value.kind === "function";
 }
 
 function isResourceLifecyclePatch(

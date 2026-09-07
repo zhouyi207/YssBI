@@ -10,10 +10,6 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
           ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
           : T;
 
-export function freezePublished<T extends object>(value: T): Readonly<T> {
-  return Object.freeze(value);
-}
-
 function freezeDeep(value: unknown): unknown {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
     return value;
