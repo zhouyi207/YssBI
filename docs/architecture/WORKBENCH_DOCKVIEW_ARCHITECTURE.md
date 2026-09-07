@@ -24,9 +24,12 @@ WorkbenchWindow
 │     ├─ grid groups：editor、Result 与 tool panels 可混排和分割
 │     ├─ native right edge group：Details（fixed）、Assistant、Inspect、Result 的 home
 │     └─ native bottom edge group
-│        ├─ 上方 content：Logs、Output 或 Problems
-│        └─ 下方 tabs：Logs、Output、Problems
+│        └─ content：Logs、Output 或 Problems
 ├─ StatusBar slot
+│  ├─ 最左侧：Settings 图标，位于 Activity Bar 下方
+│  ├─ 左侧：Problems、Output、Logs 图标入口，与 central grid 左对齐
+│  ├─ 右侧：节点、连线、选择与视口信息，与 central grid 右对齐
+│  └─ 最右侧：Details、Assistant 图标入口
 └─ WorkbenchOverlayHost
 ```
 
@@ -79,7 +82,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 
 - Project、Nodes、Data、Commands：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands；
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
-- bottom edge header 位于底部，因此 content 在上、tabs 在下。
+- bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
 
 right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
 
@@ -222,7 +225,7 @@ Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留�
 - Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
-- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序与 bottom tabs；
+- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，相关 edge 展开；
 - main Logs nested Dockview 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
@@ -268,6 +271,21 @@ Persistence invariant：
 非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
 
 ## 9. 视觉尺寸层级
+
+root 水平标签和 Status Bar 面板图标统一使用蓝色圆角背景表示选中。Problems、Output、Logs
+的图标位于窗口最底部的 Status Bar，提供悬停名称和无障碍标签；再次点击当前 bottom panel 图标
+收起底部区域，折叠时不预留旧标签行。缺失的 panel 可由图标重新打开，移到其他 group 的 panel
+则在其实际位置 reveal。
+
+Status Bar 最右侧提供 Details、Assistant 图标，沿用选中高亮、悬停名称和点击 reveal；再次点击
+当前 right panel 的图标可折叠右侧区域。右侧信息为这两个入口预留空间，避免侧栏折叠时重叠。
+Settings 图标位于状态栏最左侧、Activity Bar 正下方，通过独立的 Workbench UI state 打开设置弹窗。
+Activity 栏原设置入口的位置仅显示插件占位图标，尚无操作逻辑。
+
+Status Bar 通过 Workbench application hook 订阅 root Dockview 的 group 顺序、active panel、visibility
+与 collapsed state，不保存独立的选中或布局状态。图标入口随 main grid 的实时左边缘对齐，右侧信息随其右边缘对齐；Root host
+通过 application layout binding 测量 Dockview 的 middle column 来设置 chrome 偏移，侧栏缩放、折叠和恢复均会更新。Logs 内部的 domain tabs
+继续使用自己的样式。
 
 工作台 chrome 使用以下 token 层级。下表像素值只是 `src/app/App.css` 中的 current default，CSS token 才是调用方 contract：
 
