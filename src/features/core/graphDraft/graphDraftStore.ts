@@ -9,12 +9,13 @@ import type {
   GraphEditorSessionDto,
 } from "@/shared/types/domain/editorMutation";
 
-interface GraphDraftVersion {
+interface GraphHistoryEntry {
   readonly document: GraphDocumentDto;
-  readonly projection: EditorGraphProjectionDto;
 }
 
-export interface GraphDraftSession extends GraphDraftVersion {
+export interface GraphDraftSession {
+  readonly document: GraphDocumentDto;
+  readonly projection: EditorGraphProjectionDto;
   readonly sessionId: number;
   readonly draftGeneration: number;
   readonly semanticInputHash: string;
@@ -27,8 +28,8 @@ export interface GraphDraftSession extends GraphDraftVersion {
   readonly compiledArtifactId: string | null;
   readonly compileCacheHit: boolean;
   readonly savedDocument: GraphDocumentDto;
-  readonly undoStack: readonly GraphDraftVersion[];
-  readonly redoStack: readonly GraphDraftVersion[];
+  readonly undoStack: readonly GraphHistoryEntry[];
+  readonly redoStack: readonly GraphHistoryEntry[];
 }
 
 export interface GraphCompileRequest {
@@ -39,6 +40,15 @@ export interface GraphCompileRequest {
 
 let nextSessionId = 0;
 let nextCompileRequestId = 0;
+
+const GRAPH_HISTORY_LIMIT = 50;
+
+function appendHistory(
+  history: readonly GraphHistoryEntry[],
+  document: GraphDocumentDto,
+): readonly GraphHistoryEntry[] {
+  return [...history.slice(-(GRAPH_HISTORY_LIMIT - 1)), { document: structuredClone(document) }];
+}
 
 function isCurrentCompile(
   session: GraphDraftSession | undefined,
@@ -91,7 +101,10 @@ interface GraphDraftStore {
   clear(): void;
 }
 
-function cloneVersion(version: GraphDraftVersion): GraphDraftVersion {
+function cloneDraftState(version: {
+  readonly document: GraphDocumentDto;
+  readonly projection: EditorGraphProjectionDto;
+}) {
   return {
     document: structuredClone(version.document),
     projection: structuredClone(version.projection),
@@ -138,7 +151,7 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         ...state.sessions,
         [graphPath]: {
           ...current,
-          ...cloneVersion(session),
+          ...cloneDraftState(session),
           ...editedCompileState(current, session.projection),
           savedDocument: structuredClone(session.document),
           saveDirty: false,
@@ -180,7 +193,7 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
             projection: structuredClone(update.projection),
             saving: current.saving,
             savedDocument: current.savedDocument,
-            undoStack: [...current.undoStack, cloneVersion(current)],
+            undoStack: appendHistory(current.undoStack, current.document),
             redoStack: [],
           },
         },
@@ -307,14 +320,14 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
       sessions: {
         ...state.sessions,
         [graphPath]: {
-          ...cloneVersion(previous),
+          ...cloneDraftState(previous),
           sessionId: current.sessionId,
           ...editedCompileState(current, previous.projection),
           saveDirty: JSON.stringify(previous.document) !== JSON.stringify(current.savedDocument),
           saving: false,
           savedDocument: current.savedDocument,
           undoStack: nextUndo,
-          redoStack: [...current.redoStack, cloneVersion(current)],
+          redoStack: appendHistory(current.redoStack, current.document),
         },
       },
     }));
@@ -330,13 +343,13 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
       sessions: {
         ...state.sessions,
         [graphPath]: {
-          ...cloneVersion(next),
+          ...cloneDraftState(next),
           sessionId: current.sessionId,
           ...editedCompileState(current, next.projection),
           saveDirty: JSON.stringify(next.document) !== JSON.stringify(current.savedDocument),
           saving: false,
           savedDocument: current.savedDocument,
-          undoStack: [...current.undoStack, cloneVersion(current)],
+          undoStack: appendHistory(current.undoStack, current.document),
           redoStack: nextRedo,
         },
       },
