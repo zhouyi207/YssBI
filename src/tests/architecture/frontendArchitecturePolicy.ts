@@ -196,18 +196,13 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/settings/ui.ts", ["settingsUi"], {
     settingsUi: [
       "setTheme",
-      "setEditorOption",
       "updateTheme",
       "updateAi",
-      "updateEditor",
       "updateAppearance",
-      "updateProject",
       "resetAllToDefaults",
       "resetThemeToDefaults",
       "resetAiToDefaults",
-      "resetEditorToDefaults",
       "resetAppearanceToDefaults",
-      "resetProjectToDefaults",
     ],
   }),
   viewCoreCapability("src/features/core/sidebar/flatRows/buildDataSidebarModel.ts", [

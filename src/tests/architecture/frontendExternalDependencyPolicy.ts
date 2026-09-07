@@ -29,7 +29,6 @@ const DECLARED_RUNTIME_PACKAGES = [
   "dockview-react",
   "i18next",
   "katex",
-  "marked",
   "pinyin-pro",
   "radix-ui",
   "react",
