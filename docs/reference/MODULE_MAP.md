@@ -23,6 +23,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-bayes-artifact-polars` | `src-tauri/crates/yss-bayes-artifact-polars` | [Cargo.toml](../../src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-artifact-polars/README.md) |
 | `yss-bayes-model` | `src-tauri/crates/yss-bayes-model` | [Cargo.toml](../../src-tauri/crates/yss-bayes-model/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-model/README.md) |
 | `yss-bayes-result` | `src-tauri/crates/yss-bayes-result` | [Cargo.toml](../../src-tauri/crates/yss-bayes-result/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-result/README.md) |
+| `yss-bayes-runtime` | `src-tauri/crates/yss-bayes-runtime` | [Cargo.toml](../../src-tauri/crates/yss-bayes-runtime/Cargo.toml) | — |
 | `yss-bayes-worker` | `src-tauri/crates/yss-bayes-worker` | [Cargo.toml](../../src-tauri/crates/yss-bayes-worker/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-worker/README.md) |
 | `yss-bayes-worker-julia` | `src-tauri/crates/yss-bayes-worker-julia` | [Cargo.toml](../../src-tauri/crates/yss-bayes-worker-julia/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-worker-julia/README.md) |
 | `yss-canonical-hash` | `src-tauri/crates/yss-canonical-hash` | [Cargo.toml](../../src-tauri/crates/yss-canonical-hash/Cargo.toml) | — |
@@ -52,11 +53,15 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-graph-resource-contract` | `src-tauri/crates/yss-graph-resource-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-resource-contract/Cargo.toml) | — |
 | `yss-graph-runtime` | `src-tauri/crates/yss-graph-runtime` | [Cargo.toml](../../src-tauri/crates/yss-graph-runtime/Cargo.toml) | — |
 | `yss-graph-type-mapping` | `src-tauri/crates/yss-graph-type-mapping` | [Cargo.toml](../../src-tauri/crates/yss-graph-type-mapping/Cargo.toml) | — |
+| `yss-julia-extension` | `src-tauri/crates/yss-julia-extension` | [Cargo.toml](../../src-tauri/crates/yss-julia-extension/Cargo.toml) | — |
 | `yss-julia-runtime` | `src-tauri/crates/yss-julia-runtime` | [Cargo.toml](../../src-tauri/crates/yss-julia-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `src-tauri/crates/yss-julia-worker` | [Cargo.toml](../../src-tauri/crates/yss-julia-worker/Cargo.toml) | [README](../../src-tauri/crates/yss-julia-worker/README.md) |
 | `yss-linalg` | `src-tauri/crates/yss-linalg` | [Cargo.toml](../../src-tauri/crates/yss-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-linalg/README.md) |
 | `yss-math-expr` | `src-tauri/crates/yss-math-expr` | [Cargo.toml](../../src-tauri/crates/yss-math-expr/Cargo.toml) | — |
 | `yss-path-display` | `src-tauri/crates/yss-path-display` | [Cargo.toml](../../src-tauri/crates/yss-path-display/Cargo.toml) | — |
+| `yss-plugin-protocol` | `src-tauri/crates/yss-plugin-protocol` | [Cargo.toml](../../src-tauri/crates/yss-plugin-protocol/Cargo.toml) | — |
+| `yss-plugin-runtime` | `src-tauri/crates/yss-plugin-runtime` | [Cargo.toml](../../src-tauri/crates/yss-plugin-runtime/Cargo.toml) | — |
+| `yss-plugin-sdk` | `src-tauri/crates/yss-plugin-sdk` | [Cargo.toml](../../src-tauri/crates/yss-plugin-sdk/Cargo.toml) | — |
 | `yss-project` | `src-tauri/crates/yss-project` | [Cargo.toml](../../src-tauri/crates/yss-project/Cargo.toml) | [README](../../src-tauri/crates/yss-project/README.md) |
 | `yss-project-change` | `src-tauri/crates/yss-project-change` | [Cargo.toml](../../src-tauri/crates/yss-project-change/Cargo.toml) | — |
 | `yss-project-discovery` | `src-tauri/crates/yss-project-discovery` | [Cargo.toml](../../src-tauri/crates/yss-project-discovery/Cargo.toml) | — |
@@ -94,17 +99,18 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | Module | Directory | Public entry |
 | --- | --- | --- |
 | `assistant` | `src/modules/assistant` | [public.ts](../../src/modules/assistant/public.ts) |
-| `bayes` | `src/modules/bayes` | [public.ts](../../src/modules/bayes/public.ts) |
+| `bayes` | `src/modules/bayes` | — |
 | `chart` | `src/modules/chart` | [public.ts](../../src/modules/chart/public.ts) |
 | `commands` | `src/modules/commands` | [public.ts](../../src/modules/commands/public.ts) |
 | `data-explorer` | `src/modules/data-explorer` | [public.ts](../../src/modules/data-explorer/public.ts) |
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
-| `julia` | `src/modules/julia` | [public.ts](../../src/modules/julia/public.ts) |
+| `julia` | `src/modules/julia` | — |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |
+| `plugins` | `src/modules/plugins` | [public.ts](../../src/modules/plugins/public.ts) |
 | `problems` | `src/modules/problems` | [public.ts](../../src/modules/problems/public.ts) |
 | `project-explorer` | `src/modules/project-explorer` | [public.ts](../../src/modules/project-explorer/public.ts) |
 | `results` | `src/modules/results` | [public.ts](../../src/modules/results/public.ts) |

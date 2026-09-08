@@ -118,6 +118,8 @@ Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConst
 
 ## 6. Changing the architecture policy
 
+插件协议与清单属于 Pure Leaf；通用进程/签名安装和 IPC SDK 属于 Backend Adapter。`yss-bayes-runtime` 属于插件内部 Application，只有 Julia extension 的确切 adapter source 可访问其编排入口。宿主 composition root 只构造通用 Plugin Manager 和 HostServices；Julia adapter 构造器只允许出现在外部 extension 中。文件发布、Arrow 适配和签名库权限均为对应 source/package 的显式登记，不开放通配业务桥接。
+
 1. 在 [Change Process](CHANGE_PROCESS.md) 中明确 owner、依赖理由和 acceptance criteria。
 2. 用 isolated fixture 证明新 rule 能检测目标 violation，且 finding identity 稳定。
 3. 修改 real production policy/classification，并保持 every-source-exactly-once。
@@ -126,6 +128,8 @@ Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConst
 6. 通过 [Local Workflow](LOCAL_WORKFLOW.md) 中的 Architecture policy 验证范围交付。
 
 ## 7. Documentation contract
+
+架构文档可为 `Current`，或明确声明 `Contract: Target Architecture` 的 `Accepted Decision`。前者描述生产事实，后者定义已接受的实现契约，二者都必须被文档索引收录。开发工作流文档仍必须为 `Current`；目标架构不能通过状态标签被误当作生产完成证据。
 
 Documentation contract 是轻量 Vitest gate，保护机器可验证的漂移：
 

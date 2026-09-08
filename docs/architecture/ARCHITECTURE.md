@@ -7,6 +7,8 @@
 
 YssBI 是基于 Tauri 2 的桌面数据分析 IDE。用户在 React 工作台中管理项目、数据库、Analysis Graph、统计结果和 Assistant；Rust 负责所有已提交业务状态、持久化、编译执行和科学计算。本文只提供进入系统所需的总览，不维护完整 crate 清单、命令矩阵、门禁实现或重构历史。
 
+插件系统的稳定职责由 [Plugin 架构与契约](PLUGIN.md) 定义。当前宿主通过通用 Plugin Manager 加载签名原生插件包，Julia/Bayes 前后端属于独立发布的 Julia 插件，不链接到宿主生产依赖图。目标契约中的在线目录、标准 UI provider 和 OS sandbox 等能力不因文档已接受而自动成为当前功能。
+
 ## 1. System context
 
 ```mermaid
@@ -19,7 +21,10 @@ flowchart LR
   APP --> GRAPH[Graph semantics]
   APP --> DATABASE[Database runtime]
   APP --> EXECUTION[Execution and Results]
-  APP --> SCI[SCI and Bayes]
+  APP --> SCI[SCI]
+  API --> PLUGINS[Plugin Manager]
+  PLUGINS --> IPC[Framed bidirectional IPC]
+  IPC --> EXT[External Julia / Bayes process]
   UI --> HARNESSUI[Assistant projection]
   HARNESSUI --> API
   API --> HARNESS[Statistical Harness]
@@ -41,7 +46,8 @@ flowchart LR
 | resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection           |
 | Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection          |
 | Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI               |
-| Statistical algorithms 与 Bayes worker result                                | SCI/Bayes owners                                 | report/chart presentation models            |
+| Statistical algorithms 与插件计算                                            | SCI / 独立插件进程；项目结果由 Core 提交         | report/chart presentation models            |
+| 插件安装、启用、任务账本                                                     | Rust Plugin Manager                              | 插件列表与隔离页面                          |
 | Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection       |
 | Root workbench topology、placement、active group/panel 和 edge state         | live root Dockview instance                      | pane-local metadata keyed by panel identity |
 | 本地偏好和临时交互状态                                                       | React `localStorage`、Zustand 或 component state | —                                           |
@@ -167,10 +173,10 @@ Application / Execution → yss-sci-contract
 yss-sci-runtime implements ScientificBackend
   → yss-sci algorithms → yss-linalg → private faer backend
 yss-sci algorithms → shared model options/results in yss-sci-contract
-Bayes worker port → Julia adapter
+Plugin Manager → framed IPC → Julia extension → Bayes worker port → Julia adapter
 ```
 
-Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 各有独立 owner，Application 只编排它们，不让 worker detail 泄漏到 Graph kernel 或 IPC command。
+Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 随独立插件编译；`yss-bayes-runtime` 是插件内部的科学编排，不是宿主 bridge。宿主 Application 只实现通用数据快照和结果提交端口，不包含 Julia/Bayes 专用 command。已提交插件结果位于项目 `extension-results/`，包含内容哈希、包摘要、操作身份、输入快照来源和通用文件；卸载插件不删除它们。
 
 [`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 隔离线性代数后端，对 SCI 和 runtime 的条件数诊断暴露 `ndarray` 数据、分解对象和稳定错误类型。`faer` 只在该 crate 的私有 backend 中使用；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。
 

@@ -37,7 +37,7 @@ function currentDocumentation(): string[] {
 }
 
 describe("documentation contract", () => {
-  it("indexes every current architecture and development document", () => {
+  it("indexes maintained documents and distinguishes accepted target architecture from current behavior", () => {
     const indexPath = resolve(DOCS_ROOT, "README.md");
     const indexedTargets = new Set(
       markdownLinkTargets(readFileSync(indexPath, "utf8"))
@@ -49,7 +49,16 @@ describe("documentation contract", () => {
     );
 
     const wrongStatus = maintained
-      .filter((path) => documentStatus(readFileSync(path, "utf8")) !== "Current")
+      .filter((path) => {
+        const source = readFileSync(path, "utf8");
+        const status = documentStatus(source);
+        if (status === "Current") return /^> Contract: Target Architecture$/mu.test(source);
+        return !(
+          repositoryPath(path).startsWith("docs/architecture/") &&
+          status === "Accepted Decision" &&
+          /^> Contract: Target Architecture$/mu.test(source)
+        );
+      })
       .map(repositoryPath);
     const unindexed = maintained.filter((path) => !indexedTargets.has(path)).map(repositoryPath);
 

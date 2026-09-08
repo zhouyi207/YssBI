@@ -55,6 +55,20 @@ TypeScript check 使用 `tsc`，lint 使用 Oxlint，format 使用 Oxfmt，tests
 
 ## Focused validation
 
+Rust 局部写入格式化使用 `pnpm format:rs:package -p <crate-name>`，可以重复 `-p`，不自动格式化其他包。
+
+独立 Julia/Bayes 插件的构建、签名与安装见 [插件开发说明](../../plugins/julia/README.md)。宿主构建不自动构建或捆绑该插件。
+
+| 目的                     | 根目录命令                                              |
+| ------------------------ | ------------------------------------------------------- |
+| 生成/校验插件投影 schema | `pnpm generate:plugins` / `pnpm generate:plugins:check` |
+| 插件网页类型/行为检查    | `pnpm check:plugin:julia` / `pnpm test:plugin:julia`    |
+| 构建独立网页             | `pnpm plugin:julia:ui`                                  |
+| 构建并签名本地包         | `pnpm plugin:julia:package`                             |
+| 真实插件进程集成测试     | `pnpm test:plugin:native`                               |
+
+原生集成测试需要已构建的包和兼容 Julia，涵盖环境准备、推断、取消、上下文失效和卸载。冷环境准备与 Julia 编译可能耗时数分钟；普通单元测试不会隐式启动它。
+
 单栈 scripts 将其余参数透传给 Vitest 或 Cargo。以下是模板，替换文件、crate、target 和测试名称后执行：
 
 ```sh

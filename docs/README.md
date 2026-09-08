@@ -10,7 +10,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 ## 事实源优先级
 
 1. **Code / tests / manifests**：可执行事实、版本、路径、常量、依赖和 command registry。
-2. **`docs/architecture/`**：当前架构模型与稳定 contract。
+2. **`docs/architecture/`**：当前架构模型与稳定 contract；已接受的目标契约必须显式区分设计约束与生产实现。
 3. **`.rules`**：coding agent 行为和不可破坏的跨系统 guardrails。
 4. **`docs/development/`**：如何修改、检查和交付。
 5. **`docs/decisions/`**：为什么采用当前设计，以及被拒绝的替代方案。
@@ -26,6 +26,10 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Workbench Dockview](architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
 - [Runtime Signals](architecture/RUNTIME_SIGNALS.md)：logging、operational diagnostics、错误、反馈和各类运行信号的语义边界。
 - [Statistical Harness](architecture/STATISTICAL_HARNESS.md)：当前 Harness、Gateway、Rig、SQLite、Tauri 和 Assistant 投影。
+
+## Accepted architecture contracts
+
+- [Plugin 架构与契约](architecture/PLUGIN.md)：通用插件宿主、独立进程、声明式 UI、Webview、IPC、数据、生命周期和验收；状态为已接受的目标设计，不代表当前生产已全部实现。
 
 ## Focused implementation contracts
 
@@ -71,6 +75,6 @@ Canonical owners: 哪个文档或源码拥有具体事实
 Update when: 什么变化要求更新本文
 ```
 
-`Current` 只描述当前生产实现；`Accepted Decision` 记录设计理由；`Planned` 不代表已实现；`Historical` 仅供追溯。容量、阈值、版本和完整模块列表等易变化事实应引用源码或由脚本生成，不手工复制到总架构文档。
+`Current` 只描述当前生产实现；`Accepted Decision` 记录已接受的设计；`Planned` 不代表已实现；`Historical` 仅供追溯。架构目录中的 `Accepted Decision` 文档必须额外声明 `Contract: Target Architecture`，明确其约束未来实现，不能作为已实现功能的证据。开发工作流文档保持 `Current`，设计理由记录仍可放在 `docs/decisions/`。容量、阈值、版本和完整模块列表等易变化事实应引用源码或由脚本生成，不手工复制到总架构文档。
 
 Current 文档应明确已确认的实现缺口，并链接到 Planned/TODO 中的修复目标。模块边界、DTO 或前端测试已具备，不能据此声称生产 producer、端到端恢复或全部语义覆盖已完成；旧提交的审查结论也必须先按当前实现重新核对。

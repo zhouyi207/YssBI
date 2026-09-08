@@ -20,7 +20,9 @@ WorkbenchWindow
 │     │  ├─ Project
 │     │  ├─ Nodes
 │     │  ├─ Data
-│     │  └─ Commands
+│     │  ├─ Commands
+│     │  ├─ Plugins
+│     │  └─ 插件贡献的 sidebar views（包已安装且启用时）
 │     ├─ grid groups：editor、Result 与 tool panels 可混排和分割
 │     ├─ native right edge group：Details（fixed）、Assistant、Inspect、Result 的 home
 │     └─ native bottom edge group
@@ -33,7 +35,7 @@ WorkbenchWindow
 └─ WorkbenchOverlayHost
 ```
 
-Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载五个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
@@ -60,7 +62,7 @@ root Dockview 是以下物理事实的唯一 authority：
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
-Activity 底部的 Julia 入口直接显示后端 runtime/worker 状态；缺少运行时才提供实际安装操作。该入口没有插件目录、安装 ID 列表或本地伪卸载状态。
+Activity 底部固定显示 Plugins 入口，替代原 Julia 入口。Plugins 仍由 root Dockview 管理，顶部原生插件 tab 隐藏，底部按钮只读取 Dockview 可见状态并调用 reveal，不维护第二份选中状态。
 
 ## 2. Root panel 角色与默认 home
 
@@ -83,7 +85,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 
 默认空布局建立 central grid group，并放置：
 
-- Project、Nodes、Data、Commands：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands；
+- Project、Nodes、Data、Commands、Plugins：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands → Plugins；
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
 
@@ -139,8 +141,8 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Data、Commands、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
-- Project、Nodes、Data、Commands 随默认 Activity group 安装且保持存在；
+- Project、Nodes、Data、Commands、Plugins、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
+- Project、Nodes、Data、Commands、Plugins 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
 - Inspect 只在上下文有效时按需创建；
@@ -236,7 +238,7 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留既有 editor、Result 与 panel identities：
 
-- Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
+- Project、Nodes、Data、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；重置完成时不显示其中任何 panel，用户通过 Status Bar 再次打开；
@@ -252,7 +254,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 Result；
 - Inspect。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -295,7 +297,21 @@ Problems、Output、Logs
 Status Bar 最右侧提供 Details、Assistant 图标，沿用选中高亮、悬停名称和点击 reveal；再次点击
 当前 right panel 的图标可折叠右侧区域。右侧信息为这两个入口预留空间，避免侧栏折叠时重叠。
 Settings 图标位于状态栏最左侧、Activity Bar 正下方，通过独立的 Workbench UI state 打开设置弹窗。
-Activity 栏原设置入口的位置仅显示插件占位图标，尚无操作逻辑。
+Plugins 通过 Activity Bar 最下方按钮打开。`src/modules/plugins/` 仅渲染通用包投影：已安装行不可折叠，管理菜单提供打开、启用/禁用与卸载；本地 `.yssplugin` 安装入口仅在顶部工具栏提供。“已安装”分组直接展示全部已安装插件及总数，不提供搜索或过滤功能；无条目时不渲染空状态文案、安装引导或按钮，保留分组标题和计数。不伪造在线市场条目。
+
+`PluginProvider` 从 Rust registry 获取投影，按清单中的 sidebar 贡献补入可选面板，不抢占焦点。面板使用 `{ role: "plugin", pluginId, viewId, title, location }` 元数据；`pluginId + viewId` 决定 singleton，而不是固定的 Julia 组件名。安装状态独立于 Julia 等外部运行时是否存在。
+
+页面内容来自校验后的不可变包，通过只允许脚本的 sandbox iframe 和绑定安装代际的 MessagePort 与宿主交互，不导入宿主 React/Tauri。第一次可见时才激活插件页面。禁用、卸载、重启或项目切换使旧 context 失效；禁用或安装状态尚未确定时保留布局位置并显示占位。页面关闭不取消独立的后台任务。Julia 运行时页贡献 sidebar，贝叶斯编辑器贡献 editor，宿主不含对应业务页面。
+
+插件 panel 的渲染策略固定为 `renderer: "always"`，新建与布局恢复都由 Workbench 归一化；其他 panel 保持原渲染策略。未激活的插件仍只保留占位组件，首次可见才创建 iframe 与会话。普通显隐或同窗口移动不移除 iframe 文档，不触发解绑和重新加载；可见性通过页面 context 单独通知。
+
+每个已激活页面由 `PluginViewSession` 持有一个后端 lease。替换、重试与释放串行执行：等待旧 attach 返回并释放，确认旧 detach 成功后才允许新 attach。失败释放保留原 lease 身份供显式重试，不继续占用名额。非预期 iframe 导航立即撤销端口，显示明确错误并等待用户重新连接；不使用按切换频率计数的自动重载循环。错误投影保留阶段、稳定代码与 incidentId，不展示内部错误 prose 或输入内容。
+
+后端确认卸载成功后，`PluginProvider` 立即撤销该插件的投影，即使后续列表刷新失败也不恢复已卸载项。`syncPluginWorkbenchViews` 在 root Dockview FIFO 事务中按 `pluginId` 移除全部 `role: "plugin"` 面板，包含 sidebar、editor 及用户移动过的位置；tab 随面板物理删除，随后由 layout controller 立即 flush 持久化布局。确认取消或后端失败不执行卸载清理，插件管理入口、其他插件、普通编辑器与项目结果保留。
+
+完整 registry 查询成功后也会清理旧布局中确认未安装的插件贡献面板；查询失败不等于插件不存在，不据此删除布局。并发查询与排队的 open/register 操作都验证投影当前性，不能由迟到响应重新创建已卸载的 tab。
+
+已有布局缺少 Plugins 时，hydration 补入插件浏览面板并保留已有面板 identity。插件的协议、信任边界与持久化职责见 [Plugin 契约](PLUGIN.md)。
 
 Status Bar 通过 Workbench application hook 订阅 root Dockview 的 group 顺序、active panel、visibility
 与 collapsed state，不保存独立的选中或布局状态。订阅投影只在图标顺序、选中或可操作状态改变时
