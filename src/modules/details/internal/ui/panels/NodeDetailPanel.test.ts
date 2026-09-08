@@ -7,7 +7,7 @@ import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAcc
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
-import { NodeDetailPanel, selectNodeDetailNode } from "./NodeDetailPanel";
+import { NodeDetailPanel } from "./NodeDetailPanel";
 import { NodeInspectPanel } from "./NodeInspectPanel";
 
 const katexWarningSpy = vi.hoisted(() => {
@@ -85,15 +85,31 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
 describe("NodeDetailPanel projection selection", () => {
   afterAll(() => katexWarningSpy.mockRestore());
 
-  it("selects an overlapping node id only from the requested graph path", () => {
-    const state = {
+  it("renders an overlapping node id only from the requested graph path", () => {
+    useGraphProjectionStore.setState({
       graphEntities: {
         first: bucket("first", "First"),
         second: bucket("second", "Second"),
       },
-    };
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
 
-    expect(selectNodeDetailNode(state, "second", "shared")?.display.title).toBe("Second");
+    try {
+      act(() =>
+        root.render(createElement(NodeDetailPanel, { graphPath: "second", nodeId: "shared" })),
+      );
+      expect(container.textContent).toContain("Second");
+      expect(container.textContent).not.toContain("First");
+
+      act(() =>
+        root.render(createElement(NodeDetailPanel, { graphPath: "first", nodeId: "shared" })),
+      );
+      expect(container.textContent).toContain("First");
+      expect(container.textContent).not.toContain("Second");
+    } finally {
+      act(() => root.unmount());
+    }
   });
 
   it("renders the shared parameter editor in Details and Inspect", () => {

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
-import type { GraphEntitiesState } from "@/features/core/dataStore/graphEntityAccess";
 import { useGraphRead } from "@/features/core/graph/read";
 import { derivePinConnectionView } from "@/features/core/dataStore/pinLinks";
 import {
@@ -27,10 +26,6 @@ const EMPTY_PIN_CONNECTIONS: string[][] = [];
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
-}
-
-export function selectNodeDetailNode(state: GraphEntitiesState, graphPath: string, nodeId: string) {
-  return state.graphEntities[graphPath]?.nodes[nodeId];
 }
 
 interface NodeDetailPanelProps {
