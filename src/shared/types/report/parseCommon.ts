@@ -69,24 +69,6 @@ export const binaryModelInfoField = objectField<BinaryModelInfo>({
   bic: numberField,
 });
 
-export function parseCoefficient(raw: unknown) {
-  return readReportField(coefficientField, raw);
-}
-export function parseCoefficientList(raw: unknown) {
-  return readReportField(arrayField(coefficientField), raw);
-}
-export function parseLinearModelInfo(raw: unknown) {
-  return readReportField(linearModelInfoField, raw);
-}
-export function parseBinaryModelInfo(raw: unknown) {
-  return readReportField(binaryModelInfoField, raw);
-}
-export function parseFiniteNumberArray(raw: unknown) {
-  return readReportField(arrayField(numberField), raw);
-}
-export function parseStringArray(raw: unknown) {
-  return readReportField(arrayField(stringField), raw);
-}
 export function parseObjectArray<T>(
   raw: unknown,
   parseItem: (raw: unknown) => T | null,

@@ -9,7 +9,6 @@ import {
   nullableField,
   arrayField,
   objectField,
-  readReportField,
   refineField,
   type ReportField,
   type ReportFieldIssue,
@@ -304,12 +303,3 @@ export const canonicalOlsReportField = regressionReportField(
   olsCoefficientField,
   literalField("OLS Summary"),
 );
-export function parseDiagnosticInfo(raw: unknown) {
-  return readReportField(diagnosticInfoField, raw);
-}
-export function parseRegressionResultData(raw: unknown) {
-  return readReportField(linearRegressionReportField, raw);
-}
-export function parseBinaryResultData(raw: unknown) {
-  return readReportField(binaryRegressionReportField, raw);
-}

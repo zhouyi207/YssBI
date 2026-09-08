@@ -9,9 +9,6 @@ import {
   parsePlotCorrelogramBar,
   pacfSeriesToBars,
 } from "./correlogram";
-import { parseIv2slsFirstStageResult } from "./iv";
-import { parseBinaryResultData, parseRegressionResultData } from "./parseRegression";
-import { parseReportPayload } from "./parseReportPayload";
 import { parseReportPayloadResult } from "./parseReportPayload";
 
 describe("normalizeSerialTestsResponse", () => {
@@ -65,9 +62,9 @@ describe("correlogram report DTO", () => {
   });
 });
 
-describe("parseIv2slsFirstStageResult", () => {
+describe("IV first-stage report parsing", () => {
   it("accepts Rust-shaped first stage JSON", () => {
-    const result = parseIv2slsFirstStageResult({
+    const firstStage = {
       endog_name: "y1",
       var_names: ["x1", "z1"],
       r_squared: 0.42,
@@ -82,29 +79,50 @@ describe("parseIv2slsFirstStageResult", () => {
           is_significant: true,
         },
       ],
+    };
+    const result = parseReportPayloadResult("iv2slsSummary", {
+      ...MINIMAL_REGRESSION,
+      title: "2SLS Summary",
+      model_basic_info: { ...MINIMAL_REGRESSION.model_basic_info, model_type: "2SLS" },
+      diagnostic_info: { cond_no: 10, iv2sls_first_stage: [firstStage] },
     });
-    expect(result?.endog_name).toBe("y1");
-    expect(result?.coefficients[0]?.variable).toBe("x1");
+    expect(result).toMatchObject({
+      ok: true,
+      value: { diagnostic_info: { iv2sls_first_stage: [firstStage] } },
+    });
   });
 
   it("rejects missing is_significant on coefficients", () => {
     expect(
-      parseIv2slsFirstStageResult({
-        endog_name: "y1",
-        var_names: ["x1"],
-        r_squared: 0.1,
-        adj_r_squared: 0.05,
-        coefficients: [{ variable: "x1", coef: 1 }],
+      parseReportPayloadResult("iv2slsSummary", {
+        ...MINIMAL_REGRESSION,
+        title: "2SLS Summary",
+        model_basic_info: { ...MINIMAL_REGRESSION.model_basic_info, model_type: "2SLS" },
+        diagnostic_info: {
+          cond_no: 10,
+          iv2sls_first_stage: [
+            {
+              endog_name: "y1",
+              var_names: ["x1"],
+              r_squared: 0.1,
+              adj_r_squared: 0.05,
+              coefficients: [{ variable: "x1", coef: 1 }],
+            },
+          ],
+        },
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.iv2sls_first_stage[0].coefficients[0].is_significant" },
+    });
   });
 });
 
 const MINIMAL_REGRESSION = {
-  title: "OLS",
+  title: "Prais Summary",
   model_basic_info: {
-    model_type: "OLS",
-    method: "Least Squares",
+    model_type: "Prais-Winsten",
+    method: "GLS",
     num_observation: 100,
     r_squared: 0.5,
     adj_r_squared: 0.48,
@@ -125,13 +143,20 @@ const MINIMAL_REGRESSION = {
   diagnostic_info: { cond_no: 10 },
 };
 
-describe("parseRegressionResultData", () => {
-  it("accepts minimal OLS-shaped payload", () => {
-    expect(parseRegressionResultData(MINIMAL_REGRESSION)?.title).toBe("OLS");
+describe("regression report parsing", () => {
+  it("accepts a generic linear report without weakening canonical OLS requirements", () => {
+    expect(parseReportPayloadResult("praisSummary", MINIMAL_REGRESSION)).toEqual({
+      ok: true,
+      value: MINIMAL_REGRESSION,
+    });
+    expect(parseReportPayloadResult("olsSummary", MINIMAL_REGRESSION)).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "title" },
+    });
   });
 
   it("preserves binary model statistics and hypothesis inputs", () => {
-    const parsed = parseBinaryResultData({
+    const parsed = parseReportPayloadResult("binarySummary", {
       ...MINIMAL_REGRESSION,
       model_basic_info: {
         model_type: "Logit",
@@ -174,24 +199,29 @@ describe("parseRegressionResultData", () => {
       },
     });
 
-    expect(parsed?.model_basic_info.pseudo_r2).toBe(0.15);
-    expect(parsed?.model_basic_info.lr_chi2).toBe(3);
-    expect(parseReportPayload("binarySummary", MINIMAL_REGRESSION)).toBeNull();
-    expect(parsed?.betas).toEqual([0.25]);
-    expect(parsed?.cov_beta).toEqual([[0.0625]]);
-    expect(parsed?.model_statistics).toEqual(
-      expect.objectContaining({
-        kind: "binary",
-        link: "logit",
-        covariance: [[0.0625]],
-        logLikelihood: -8.5,
-        converged: true,
-      }),
-    );
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: {
+        model_basic_info: { pseudo_r2: 0.15, lr_chi2: 3 },
+        betas: [0.25],
+        cov_beta: [[0.0625]],
+        model_statistics: {
+          kind: "binary",
+          link: "logit",
+          covariance: [[0.0625]],
+          logLikelihood: -8.5,
+          converged: true,
+        },
+      },
+    });
+    expect(parseReportPayloadResult("binarySummary", MINIMAL_REGRESSION)).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "model_basic_info.pseudo_r2" },
+    });
   });
 
   it("parses backend leverage KDE points", () => {
-    const parsed = parseRegressionResultData({
+    const parsed = parseReportPayloadResult("praisSummary", {
       ...MINIMAL_REGRESSION,
       diagnostic_info: {
         cond_no: 10,
@@ -200,28 +230,39 @@ describe("parseRegressionResultData", () => {
       },
     });
 
-    expect(parsed?.diagnostic_info.leverage_kde).toEqual([{ x: 0, y: 1.25 }]);
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: { diagnostic_info: { leverage_kde: [{ x: 0, y: 1.25 }] } },
+    });
   });
 
   it.each([
-    [{ x: Number.NaN, y: 1 }],
-    [{ x: 0, y: Number.POSITIVE_INFINITY }],
-    [{ x: 0, y: "bad" }],
-  ])("rejects malformed leverage KDE points: %j", (leverage_kde) => {
+    { leverage_kde: [{ x: Number.NaN, y: 1 }], coordinate: "x" },
+    { leverage_kde: [{ x: 0, y: Number.POSITIVE_INFINITY }], coordinate: "y" },
+    { leverage_kde: [{ x: 0, y: "bad" }], coordinate: "y" },
+  ])("rejects malformed leverage KDE points: %j", ({ leverage_kde, coordinate }) => {
     expect(
-      parseRegressionResultData({
+      parseReportPayloadResult("praisSummary", {
         ...MINIMAL_REGRESSION,
         diagnostic_info: { cond_no: 10, leverage_kde },
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      ok: false,
+      issue: { fieldPath: `diagnostic_info.leverage_kde[0].${coordinate}` },
+    });
   });
 
   it("rejects missing cond_no", () => {
-    expect(parseRegressionResultData({ ...MINIMAL_REGRESSION, diagnostic_info: {} })).toBeNull();
+    expect(
+      parseReportPayloadResult("praisSummary", { ...MINIMAL_REGRESSION, diagnostic_info: {} }),
+    ).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.cond_no", reason: "missing required field" },
+    });
   });
 });
 
-describe("parseReportPayload", () => {
+describe("parseReportPayloadResult", () => {
   it("rejects malformed nested report fields and preserves nullable VEC statistics", () => {
     const vec = {
       title: "VEC Summary",
@@ -241,7 +282,7 @@ describe("parseReportPayload", () => {
       sbic: 1,
       det_sigma_ml: 1,
     };
-    expect(parseReportPayload("vecSummary", vec)).not.toBeNull();
+    expect(parseReportPayloadResult("vecSummary", vec)).toEqual({ ok: true, value: vec });
     expect(parseReportPayloadResult("vecSummary", { ...vec, coefficients: [null] })).toMatchObject({
       ok: false,
       issue: { fieldPath: "coefficients[0]" },
@@ -253,30 +294,30 @@ describe("parseReportPayload", () => {
       issue: { fieldPath: "beta_std_err[0][0]" },
     });
     expect(
-      parseRegressionResultData({
+      parseReportPayloadResult("praisSummary", {
         ...MINIMAL_REGRESSION,
         diagnostic_info: { cond_no: 1, vif: [null] },
       }),
-    ).toBeNull();
+    ).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "diagnostic_info.vif[0]" },
+    });
     expect(
-      parseReportPayload("panelSummary", {
+      parseReportPayloadResult("panelSummary", {
         title: "Panel",
         endog_name: "y",
         selection_tests: [null],
       }),
-    ).toBeNull();
+    ).toMatchObject({ ok: false, issue: { fieldPath: "selection_tests[0]" } });
     expect(
-      parseReportPayload("varSoc", {
+      parseReportPayloadResult("varSoc", {
         title: "Lag selection",
         var_names: ["y"],
         maxlag: 2,
         num_observation: 10,
         rows: [null],
       }),
-    ).toBeNull();
-  });
-  it("dispatches regression reports through shared parser", () => {
-    expect(parseReportPayload("praisSummary", MINIMAL_REGRESSION)).not.toBeNull();
+    ).toMatchObject({ ok: false, issue: { fieldPath: "rows[0]" } });
   });
 
   it("accepts the Rust OLS Summary report output", () => {
@@ -287,10 +328,13 @@ describe("parseReportPayload", () => {
       ),
     );
 
-    expect(parseReportPayload("olsSummary", payload)).not.toBeNull();
+    expect(parseReportPayloadResult("olsSummary", payload)).toEqual({ ok: true, value: payload });
   });
 
   it("rejects panel_did without kind discriminator", () => {
-    expect(parseReportPayload("panelDid", { title: "DID" })).toBeNull();
+    expect(parseReportPayloadResult("panelDid", { title: "DID" })).toMatchObject({
+      ok: false,
+      issue: { fieldPath: "kind", reason: "missing required field" },
+    });
   });
 });

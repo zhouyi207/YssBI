@@ -13,7 +13,7 @@ export * from "./parsePanel";
 export * from "./parseVar";
 export * from "./parseVec";
 export * from "./parseDfadf";
-export { parseReportPayload } from "./parseReportPayload";
+export { parseReportPayloadResult } from "./parseReportPayload";
 export {
   type SerialTestsRequestDTO,
   type SerialTestsResponseDTO,

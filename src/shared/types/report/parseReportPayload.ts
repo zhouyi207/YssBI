@@ -35,8 +35,3 @@ export function parseReportPayloadResult(
   }
   return reportFields[report].read(raw, "$");
 }
-
-export function parseReportPayload(report: ReportPayloadKind, raw: unknown): unknown | null {
-  const parsed = parseReportPayloadResult(report, raw);
-  return parsed.ok ? parsed.value : null;
-}

@@ -7,7 +7,6 @@ import {
   nullableField,
   arrayField,
   objectField,
-  readReportField,
 } from "./fields";
 import type {
   VECSummaryResultData,
@@ -84,10 +83,3 @@ export const vecRankResultDataField = objectField<VecRankResultData>({
   rows: arrayField(vecRankRowDataField),
   note: stringField,
 });
-
-export function parseVecSummaryResultData(raw: unknown) {
-  return readReportField(vecSummaryResultDataField, raw);
-}
-export function parseVecRankResultData(raw: unknown) {
-  return readReportField(vecRankResultDataField, raw);
-}

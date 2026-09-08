@@ -6,7 +6,6 @@ import {
   nullableField,
   arrayField,
   objectField,
-  readReportField,
 } from "./fields";
 import { coefficientField } from "./parseCommon";
 
@@ -177,7 +176,3 @@ export const iv2slsFirstStageResultField = objectField<Iv2slsFirstStageResult>({
   r_squared: numberField,
   adj_r_squared: numberField,
 });
-
-export function parseIv2slsFirstStageResult(raw: unknown) {
-  return readReportField(iv2slsFirstStageResultField, raw);
-}

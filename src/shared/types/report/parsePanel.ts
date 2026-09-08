@@ -7,7 +7,6 @@ import {
   nullableField,
   arrayField,
   objectField,
-  readReportField,
   parsedField,
   refineField,
 } from "./fields";
@@ -146,12 +145,6 @@ export const panelDidResultDataField = objectField<PanelDidResultData>({
   ),
 });
 
-export function parsePanelSummaryResult(raw: unknown) {
-  return readReportField(panelSummaryField, raw);
-}
-export function parsePanelDidResultData(raw: unknown) {
-  return readReportField(panelDidResultDataField, raw);
-}
 export const panelSummaryField = refineField(panelSummaryResultField, (value) =>
   value.selection_tests === undefined &&
   !Object.entries(value).some(

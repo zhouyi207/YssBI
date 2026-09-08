@@ -6,7 +6,6 @@ import {
   nullableField,
   arrayField,
   objectField,
-  readReportField,
 } from "./fields";
 import type {
   VARSocResultData,
@@ -111,10 +110,3 @@ export const varSummaryResultDataField = objectField<VARSummaryResultData>({
   varstable: optionalField(arrayField(varStableRowField)),
   vargranger: optionalField(arrayField(varGrangerDisplayField)),
 });
-
-export function parseVarSocResultData(raw: unknown) {
-  return readReportField(varSocResultDataField, raw);
-}
-export function parseVarSummaryResultData(raw: unknown) {
-  return readReportField(varSummaryResultDataField, raw);
-}
