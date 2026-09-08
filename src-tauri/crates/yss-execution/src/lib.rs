@@ -2,7 +2,6 @@
 
 #![deny(unused_must_use)]
 
-pub mod canonical;
 pub mod error;
 pub mod finalization;
 pub mod identity;
