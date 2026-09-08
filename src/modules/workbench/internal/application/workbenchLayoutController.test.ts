@@ -57,6 +57,7 @@ function rootLayout(
     nodes: "Nodes",
     data: "Data",
     commands: "Commands",
+    plugins: "Plugins",
     details: "Details",
     assistant: "Assistant",
     inspect: "Inspect",
@@ -289,6 +290,7 @@ function panelInfo(viewId: WorkbenchViewId): WorkbenchPanelInfo {
     nodes: "Nodes",
     data: "Data",
     commands: "Commands",
+    plugins: "Plugins",
     details: "Details",
     assistant: "Assistant",
     inspect: "Inspect",
@@ -382,6 +384,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
         "nodes",
         "data",
         "commands",
+        "plugins",
         "details",
         "assistant",
         "logs",
@@ -464,6 +467,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
         "nodes",
         "data",
         "commands",
+        "plugins",
         "details",
         "assistant",
         "logs",
@@ -504,6 +508,7 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
     return true;
   });
   const layoutTransaction = {
+    listPanels: () => [],
     serialize: () => structuredClone(serialized),
     getPanel: vi.fn(() => undefined),
     getActivePanel: vi.fn(() => undefined),
@@ -707,6 +712,7 @@ describe("WorkbenchLayoutController hydration", () => {
         "data",
         "nodes",
         "commands",
+        "plugins",
         "details",
         "assistant",
         "logs",
@@ -740,7 +746,7 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.ensureView).not.toHaveBeenCalled();
     expect(harness.fakePort.configureEdge).not.toHaveBeenCalled();
     expect(harness.fakePort.move).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(22);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(24);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === false)).toBe(
       true,
     );
@@ -750,6 +756,7 @@ describe("WorkbenchLayoutController hydration", () => {
         "data",
         "nodes",
         "commands",
+        "plugins",
         "details",
         "assistant",
         "logs",
@@ -768,6 +775,7 @@ describe("WorkbenchLayoutController hydration", () => {
       { panelInstanceId: "view:data", groupId: "edge-left", index: 1 },
       { panelInstanceId: "view:nodes", groupId: "edge-left", index: 2 },
       { panelInstanceId: "view:commands", groupId: "edge-left", index: 3 },
+      { panelInstanceId: "view:plugins", groupId: "edge-left", index: 4 },
       { panelInstanceId: "view:assistant", groupId: "edge-right", index: 1, activate: false },
       { panelInstanceId: "view:problems", groupId: "edge-bottom", index: 0 },
       { panelInstanceId: "view:output", groupId: "edge-bottom", index: 1 },
@@ -801,7 +809,7 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.installHydrationLayout).not.toHaveBeenCalled();
     expect(harness.fakePort.runLayoutTransaction).toHaveBeenCalledOnce();
     expect(harness.fakePort.completeHydration).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(22);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(24);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === true)).toBe(
       true,
     );
@@ -970,6 +978,9 @@ describe("WorkbenchLayoutController persistence", () => {
       "layout.ensureView:details",
       "layout.configureEdge:right",
       "layout.move:view:details",
+      "layout.ensureView:plugins",
+      "layout.activate:project-stable",
+      "layout.configureEdge:left",
       "internal.installHydrationLayout:applied",
       "internal.completeHydration",
       "port.subscribe",

@@ -172,6 +172,49 @@ function missingLogsDomainLayout(): SerializedDockview {
 }
 
 describe("workbench layout persistence", () => {
+  it("restores plugin documents with a stable renderer without changing other panel policies", () => {
+    const root = rootLayout({
+      extension: {
+        component: "Plugin",
+        metadata: {
+          role: "plugin",
+          pluginId: "example.compute",
+          viewId: "analysis",
+          title: "Analysis",
+          location: "editor",
+        },
+      },
+    });
+    root.panels.extension.renderer = "onlyWhenVisible";
+    const parsed = parsePersistedWorkbenchLayout({
+      root,
+      nested: { logs: createDefaultLogsDockviewLayout() },
+    });
+    expect(parsed?.root.status).toBe("valid");
+    if (parsed?.root.status !== "valid") throw Error("invalid fixture");
+    expect(parsed.root.value.panels.extension.renderer).toBe("always");
+    expect(parsed.root.value.panels.project.renderer).toBeUndefined();
+    expect(root.panels.extension.renderer).toBe("onlyWhenVisible");
+    expect(parsed.root.value.grid).toEqual(root.grid);
+  });
+  it("accepts a plugin browser in the Activity edge while retaining layouts without it", () => {
+    const layout = rootLayout({});
+    expect(parsedRootStatus(layout)).toBe("valid");
+    layout.panels.plugins = {
+      id: "plugins",
+      contentComponent: "Plugins",
+      title: "Plugins",
+      params: { metadata: { role: "view", viewId: "plugins" } },
+    };
+    const left = layout.edgeGroups!.left!.group as MutableGroup;
+    left.views.push("plugins");
+    left.activeView = "plugins";
+    expect(parsedRootStatus(layout)).toBe("valid");
+    left.views = left.views.filter((id) => id !== "plugins");
+    left.activeView = "project";
+    getOnlyGridGroup(layout).views.push("plugins");
+    expect(parsedRootStatus(layout)).toBe("invalid");
+  });
   it("uses the current semantic key and exact envelope", () => {
     const root = rootLayout();
     const logs = createDefaultLogsDockviewLayout();

@@ -392,6 +392,17 @@
 }
 
 /* Activity panels use Dockview's native left edge as the old ActivityBar rail. */
+/* Long plugin descriptions must shrink inside the space remaining beside the rail. */
+[data-yssbi-root-dockview] .dv-groupview-edge.dv-groupview-header-left > .dv-content-container {
+  min-width: 0;
+  flex: 1 1 0;
+}
+/* Plugins remain a Dockview panel, with their entry pinned in the bottom actions. */
+[data-yssbi-root-dockview]
+  .dv-tabs-container
+  > .dv-tab:has([data-workbench-pinned-activity="plugins"]) {
+  display: none;
+}
 [data-yssbi-root-dockview]
   .dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container {
@@ -552,21 +563,6 @@
   width: 40px;
   min-height: 40px;
   height: auto;
-}
-
-[data-yssbi-root-dockview]
-  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
-  [data-workbench-julia-actions]
-  [data-workbench-julia-action]:hover
-  [data-workbench-julia-action-surface],
-[data-yssbi-root-dockview]
-  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
-  [data-workbench-julia-action][aria-expanded="true"]
-  [data-workbench-julia-action-surface] {
-  background: var(--interactive-hover);
-  color: var(--foreground);
 }
 
 /* A collapsed root edge has no selected tab in the user-facing chrome. */

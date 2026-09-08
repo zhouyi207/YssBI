@@ -7,6 +7,18 @@ import type { IDockviewHeaderActionsProps } from "dockview-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { workbenchUi } from "../../state/ui";
+const mocks = vi.hoisted(() => ({ reveal: vi.fn() }));
+vi.mock("../../application/workbenchLayoutActions", () => ({ revealWorkbenchView: mocks.reveal }));
+vi.mock("../../dockview/workbenchRead", () => ({
+  workbenchDockviewRead: {
+    subscribe: () => () => {},
+    getEdgeState: () => ({ groupId: "left", visible: true, collapsed: false }),
+    listGroups: () => [{ groupId: "left", activePanelInstanceId: "plugins" }],
+    listPanels: () => [
+      { panelInstanceId: "plugins", metadata: { role: "view", viewId: "plugins" }, visible: true },
+    ],
+  },
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -40,7 +52,7 @@ describe("WorkbenchActivityActions", () => {
     document.body.replaceChildren();
   });
 
-  it("renders an inert plugin placeholder only for the Activity group", () => {
+  it("opens the plugin panel from the bottom Activity action and reflects Dockview selection", () => {
     act(() =>
       root.render(
         <TooltipProvider>
@@ -53,11 +65,12 @@ describe("WorkbenchActivityActions", () => {
     );
 
     const plugins = host.querySelector<HTMLElement>("[data-workbench-activity-plugins]");
-    expect(plugins).not.toBeNull();
-    expect(plugins?.getAttribute("role")).toBe("img");
-    expect(host.querySelector("button")).toBeNull();
+    expect(plugins?.tagName).toBe("BUTTON");
+    expect(plugins?.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector("[data-testid='additional-action']")).not.toBeNull();
 
     act(() => plugins?.click());
+    expect(mocks.reveal).toHaveBeenCalledWith("plugins");
     expect(workbenchUi.getSnapshot().isSettingsOpen).toBe(false);
 
     act(() =>

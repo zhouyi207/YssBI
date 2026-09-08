@@ -41,6 +41,7 @@ export function isRecord(value: unknown): value is UnknownRecord {
 }
 
 export function cloneMetadata(metadata: WorkbenchPanelMetadata): WorkbenchPanelMetadata {
+  if (metadata.role === "plugin") return { ...metadata };
   if (metadata.role === "editor") {
     return {
       role: "editor",
@@ -368,6 +369,7 @@ export function createPanelLive(
   const options: AddPanelOptions<WorkbenchPanelParams> = {
     id: generatedId(),
     component: componentForWorkbenchMetadata(canonical),
+    ...(canonical.role === "plugin" ? { renderer: "always" as const } : {}),
     title,
     params: { metadata: canonical },
     position: {

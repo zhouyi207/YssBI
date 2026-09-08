@@ -7,6 +7,7 @@ import type {
   WorkbenchComponentId,
   WorkbenchPanelMetadata,
   WorkbenchViewId,
+  PluginPanelMetadata,
 } from "./workbenchPanelModel";
 
 export type WorkbenchEdgePosition = "top" | "bottom" | "left" | "right";
@@ -95,6 +96,7 @@ export interface EnsureViewRequest {
   readonly viewId: WorkbenchViewId;
   readonly title: string;
 }
+export type EnsurePluginViewRequest = Omit<PluginPanelMetadata, "role">;
 
 export type UpsertResultRequest = Omit<ResultPanelMetadata, "role">;
 
@@ -157,6 +159,7 @@ export interface WorkbenchDockviewTransaction {
 }
 
 export interface WorkbenchLayoutTransaction {
+  ensurePluginView(request: EnsurePluginViewRequest): WorkbenchPanelInfo;
   serialize(): SerializedDockview;
   getPanel(panelInstanceId: string): WorkbenchPanelInfo | undefined;
   getActivePanel(): WorkbenchPanelInfo | undefined;

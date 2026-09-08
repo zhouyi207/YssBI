@@ -1,63 +1,77 @@
+import { useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { VscExtensions } from "react-icons/vsc";
-import type { ReactNode } from "react";
 import type { IDockviewHeaderActionsProps } from "dockview-react";
-
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WORKBENCH_ACTIVITY_GROUP_ID } from "../../dockview/workbenchDockviewDefaults";
-
-function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
-  event.stopPropagation();
-}
+import { workbenchDockviewRead } from "../../dockview/workbenchRead";
+import { revealWorkbenchView } from "../../application/workbenchLayoutActions";
 
 type WorkbenchActivityActionsProps = IDockviewHeaderActionsProps & {
   readonly additionalActions?: ReactNode;
 };
+
+function pluginsVisible() {
+  const edge = workbenchDockviewRead.getEdgeState("left");
+  const activePanelId = workbenchDockviewRead
+    .listGroups()
+    .find((group) => group.groupId === edge.groupId)?.activePanelInstanceId;
+  return (
+    edge.visible &&
+    !edge.collapsed &&
+    workbenchDockviewRead
+      .listPanels()
+      .some(
+        (panel) =>
+          panel.metadata.role === "view" &&
+          panel.metadata.viewId === "plugins" &&
+          panel.panelInstanceId === activePanelId,
+      )
+  );
+}
 
 export function WorkbenchActivityActions({
   additionalActions,
   ...props
 }: WorkbenchActivityActionsProps) {
   const { t } = useTranslation();
-
-  if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== "left") {
+  const selected = useSyncExternalStore(
+    workbenchDockviewRead.subscribe,
+    pluginsVisible,
+    () => false,
+  );
+  if (props.group.id !== WORKBENCH_ACTIVITY_GROUP_ID || props.headerPosition !== "left")
     return null;
-  }
-
-  const title = t("activityBar.plugins");
-
   return (
     <div
       data-workbench-activity-actions
       className="flex h-auto w-full shrink-0 flex-col items-center justify-end"
-      onPointerDown={stopHeaderControlPropagation}
-      onMouseDown={stopHeaderControlPropagation}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       {additionalActions}
-      {additionalActions ? (
-        <span
-          data-workbench-activity-divider
-          aria-hidden="true"
-          className="my-1 h-px w-6 bg-[var(--strong-border)]"
-        />
-      ) : null}
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            role="img"
+          <button
+            type="button"
             data-workbench-activity-plugins
-            aria-label={title}
-            className="relative flex size-10 items-center justify-center"
+            aria-label={t("activityBar.plugins")}
+            aria-pressed={selected}
+            onClick={() => void revealWorkbenchView("plugins")}
+            className="flex size-10 items-center justify-center text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           >
             <span
-              aria-hidden="true"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground"
+              className={
+                selected
+                  ? "flex size-8 items-center justify-center rounded-md bg-muted text-primary"
+                  : "flex size-8 items-center justify-center rounded-md hover:bg-muted"
+              }
             >
-              <VscExtensions size={18} />
+              <VscExtensions size={18} aria-hidden />
             </span>
-          </span>
+          </button>
         </TooltipTrigger>
-        <TooltipContent side="right">{title}</TooltipContent>
+        <TooltipContent side="right">{t("activityBar.plugins")}</TooltipContent>
       </Tooltip>
     </div>
   );

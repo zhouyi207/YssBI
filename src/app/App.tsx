@@ -32,9 +32,6 @@ const WorkbenchComposition = React.lazy(() =>
     default: m.WorkbenchComposition,
   })),
 );
-const BayesView = React.lazy(() =>
-  import("@/modules/bayes/public").then((m) => ({ default: m.BayesView })),
-);
 const ProjectPickerScreen = React.lazy(() =>
   import("@/modules/project-explorer/public").then((m) => ({
     default: m.ProjectPickerScreen,
@@ -53,7 +50,6 @@ function AppRouter() {
         <Route path="/inspect" element={<SourceInspectorWindow />} />
         <Route path="/logs" element={<LogWindow />} />
         <Route path="/info" element={<InfoWindow />} />
-        <Route path="/bayes" element={<BayesView />} />
         <Route path="*" element={<ProjectPickerScreen />} />
       </Routes>
     </Suspense>

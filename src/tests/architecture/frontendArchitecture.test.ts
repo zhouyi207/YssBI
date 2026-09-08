@@ -965,6 +965,7 @@ describe("frontend architecture model", () => {
 
   it("audits frontend packages and stylesheet assets by layer mode and origin", () => {
     const productionSources = [
+      "src/modules/settings/internal/ui/SettingsView.tsx",
       "src/app/App.tsx",
       "src/app/main.tsx",
       "src/views/fixture.tsx",
@@ -1075,7 +1076,11 @@ describe("frontend architecture model", () => {
       stylesheetExternalDependency("src/app/workbench-dockview.css", "tailwindcss", null),
     ];
     const stylesheetGraph: ResolvedStylesheetGraph = {
-      repositoryStylesheets: ["src/app/App.css", "src/app/workbench-dockview.css"],
+      repositoryStylesheets: [
+        "src/app/App.css",
+        "src/app/workbench-dockview.css",
+        "src/modules/settings/internal/ui/settings.css",
+      ],
       dependencies: stylesheetDependencies,
       errors: [
         {
@@ -1118,6 +1123,14 @@ describe("frontend architecture model", () => {
         resourceKind: "stylesheet",
         consumerSourceFile: "src/app/main.tsx",
         repositoryRelativeAssetPath: "src/app/workbench-dockview.css",
+      },
+      {
+        sourceLayer: "views",
+        mode: "runtime",
+        dependencyKind: "side-effect-import",
+        resourceKind: "stylesheet",
+        consumerSourceFile: "src/modules/settings/internal/ui/SettingsView.tsx",
+        repositoryRelativeAssetPath: "src/modules/settings/internal/ui/settings.css",
       },
     ]);
 

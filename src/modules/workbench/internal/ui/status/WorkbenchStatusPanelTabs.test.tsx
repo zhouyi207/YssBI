@@ -85,6 +85,7 @@ describe("Workbench status panel tabs", () => {
                 Nodes: Panel,
                 Data: Panel,
                 Commands: Panel,
+                Plugins: Panel,
               }}
               onReady={({ api: readyApi }) => {
                 api = readyApi;

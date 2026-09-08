@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "Contributions": {
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/PluginCommand"
+          },
+          "type": "array"
+        },
+        "taskTypes": {
+          "items": {
+            "$ref": "#/$defs/TaskType"
+          },
+          "type": "array"
+        },
+        "views": {
+          "items": {
+            "$ref": "#/$defs/PluginView"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["views", "commands", "taskTypes"],
+      "type": "object"
+    },
+    "ExecutionMode": {
+      "enum": ["trustedNative", "sandboxRequired"],
+      "type": "string"
+    },
+    "PluginCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "title"],
+      "type": "object"
+    },
+    "PluginManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "contributes": {
+          "$ref": "#/$defs/Contributions"
+        },
+        "description": {
+          "type": "string"
+        },
+        "executable": {
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ExecutionMode"
+        },
+        "hostApi": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "permissions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ProtocolRange"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "resourceBudget": {
+          "$ref": "#/$defs/ResourceBudget"
+        },
+        "schemaVersion": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "type": "string"
+        },
+        "uiMethods": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "name",
+        "description",
+        "publisher",
+        "version",
+        "hostApi",
+        "protocol",
+        "target",
+        "executable",
+        "execution",
+        "contributes",
+        "permissions",
+        "uiMethods",
+        "resourceBudget"
+      ],
+      "type": "object"
+    },
+    "PluginView": {
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/ViewLocation"
+        },
+        "scope": {
+          "$ref": "#/$defs/ViewScope"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "title", "entry", "location", "scope"],
+      "type": "object"
+    },
+    "ProtocolRange": {
+      "additionalProperties": false,
+      "properties": {
+        "major": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxMinor": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "minMinor": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requiredFeatures": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["major", "minMinor", "maxMinor", "requiredFeatures"],
+      "type": "object"
+    },
+    "ResourceBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "activeTasks": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frameBytes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pendingRequests": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "privateStorageBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queuedBytes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "snapshotBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "views": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frameBytes",
+        "pendingRequests",
+        "activeTasks",
+        "queuedBytes",
+        "snapshotBytes",
+        "privateStorageBytes",
+        "views"
+      ],
+      "type": "object"
+    },
+    "TaskType": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "producesArtifacts": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id", "producesArtifacts"],
+      "type": "object"
+    },
+    "ViewLocation": {
+      "enum": ["sidebar", "editor"],
+      "type": "string"
+    },
+    "ViewScope": {
+      "enum": ["application", "project"],
+      "type": "string"
+    },
+    "InstalledPlugin": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "installationGeneration": {
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/$defs/PluginManifest"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "processState": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "packageDigest",
+        "installationGeneration",
+        "enabled",
+        "processState"
+      ],
+      "title": "InstalledPlugin",
+      "type": "object"
+    },
+    "PackageInspection": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/PluginManifest"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "signerKey": {
+          "type": "string"
+        }
+      },
+      "required": ["manifest", "packageDigest", "signerKey"],
+      "title": "PackageInspection",
+      "type": "object"
+    },
+    "PluginFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": true,
+        "incidentId": {
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["code"],
+      "type": "object"
+    },
+    "TaskState": {
+      "enum": [
+        "admitted",
+        "running",
+        "cancelRequested",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "outcomeUnknown"
+      ],
+      "type": "string"
+    },
+    "TaskSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginFailure"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "packageDigest": {
+          "type": "string"
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "result": true,
+        "revision": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/TaskState"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": ["taskId", "operationId", "pluginId", "packageDigest", "state", "revision"],
+      "title": "TaskSnapshot",
+      "type": "object"
+    },
+    "ViewSession": {
+      "additionalProperties": false,
+      "properties": {
+        "html": {
+          "type": "string"
+        },
+        "installationGeneration": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": ["sessionId", "html", "installationGeneration"],
+      "title": "ViewSession",
+      "type": "object"
+    }
+  }
+}

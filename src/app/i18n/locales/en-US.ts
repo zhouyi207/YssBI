@@ -829,6 +829,57 @@ export const enUS = {
       restoreFailed: "The workbench layout could not be restored.",
     },
   },
+  plugins: {
+    installPackage: "Install from package",
+    loadFailed: "Could not read extension status. Try checking again.",
+    operationFailed:
+      "The extension operation did not complete. Cancel active tasks or wait for them to finish.",
+    missingView: "This extension is not installed. Its view will return here after installation.",
+    disabledView: "This extension is disabled. Enable it in Extensions.",
+    viewFailed: "Could not load this extension view. Check its status and try again.",
+    viewReleaseFailed:
+      "The previous view session could not be released. Retry will finish cleanup before allocating another view.",
+    viewNavigationBlocked:
+      "Unexpected navigation revoked this view's connection. Reload the view to reconnect safely.",
+    viewBusy: "The extension is being installed, updated or stopped. Try again shortly.",
+    viewCapacityReached:
+      "This extension has reached its view limit. Close an unused extension view and retry.",
+    viewProcessUnavailable:
+      "The extension process could not become ready or its connection was lost. Reconnect to try again.",
+    viewSessionExpired:
+      "The view's project or extension session has expired. Reconnect to continue.",
+    viewConnectionFailed:
+      "The extension view could not connect. Check its status using the error code below.",
+    disabled: "Disabled",
+    enable: "Enable",
+    disable: "Disable",
+    open: "Open view",
+    manage: "Manage {{name}}",
+    uninstall: "Uninstall",
+    uninstallTitle: "Uninstall {{name}}",
+    uninstallMessage:
+      "Uninstall this extension and close all its panels and tabs. Unsaved view state will be lost. Projects, saved results and private extension data will be retained.",
+    trustTitle: "Install {{name}}",
+    trustMessage:
+      "This extension contains a native executable that runs with your user permissions.\n\nPublisher: {{publisher}}\nRequested capabilities: {{permissions}}\nSigning key fingerprint: {{fingerprint}}\n\nInstall only from a source you trust.",
+    available: "Available",
+    availableEmpty: "No other extensions available",
+    install: "Install",
+    openJuliaPanel: "Open Julia sidebar",
+    juliaName: "Julia Computing Support",
+    juliaDescription: "Julia runtime and Bayesian analysis support.",
+    builtin: "Built-in",
+    installRuntime: "Install runtime",
+    openBayes: "Open Bayesian analysis",
+    recheck: "Check again",
+    environmentUnavailable:
+      "Julia is installed, but the compute environment is not ready. Review the runtime logs and check again.",
+    installed: "Installed",
+    recommended: "Recommended",
+    recommendedEmpty: "No recommendations yet",
+    catalogUnavailable:
+      "The extension marketplace is not connected. Online search and recommendations are not available yet.",
+  },
   settings: {
     title: "Settings",
     close: "Close settings",

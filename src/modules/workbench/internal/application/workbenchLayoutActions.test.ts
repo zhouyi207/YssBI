@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   runLayoutTransaction: vi.fn(),
   beginLayoutReset: vi.fn(),
   completeLayoutReset: vi.fn(),
+  flushBeforeWindowClose: vi.fn(),
   resetLogs: vi.fn(),
   showWorkbenchLayoutError: vi.fn(),
   transaction: null as WorkbenchLayoutTransaction | null,
@@ -76,6 +77,7 @@ vi.mock("./workbenchLayoutController", () => ({
   workbenchLayoutController: {
     beginLayoutReset: mocks.beginLayoutReset,
     completeLayoutReset: mocks.completeLayoutReset,
+    flushBeforeWindowClose: mocks.flushBeforeWindowClose,
   },
 }));
 
@@ -136,12 +138,14 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
     return "EditorResource";
   }
   if (metadata.role === "result") return "Result";
+  if (metadata.role === "plugin") return "Plugin";
   return (
     {
       project: "Project",
       nodes: "Nodes",
       data: "Data",
       commands: "Commands",
+      plugins: "Plugins",
       details: "Details",
       assistant: "Assistant",
       inspect: "Inspect",
@@ -166,7 +170,7 @@ function panel(
     title:
       metadata.role === "view"
         ? metadata.viewId
-        : metadata.role === "result"
+        : metadata.role === "result" || metadata.role === "plugin"
           ? metadata.title
           : metadata.resourceRef,
     metadata,
@@ -415,6 +419,35 @@ function createTransactionHarness(
   };
 
   const tx: WorkbenchLayoutTransaction = {
+    ensurePluginView: (request) => {
+      const existing = [...panels.values()].find(
+        (panel) =>
+          panel.metadata.role === "plugin" &&
+          panel.metadata.pluginId === request.pluginId &&
+          panel.metadata.viewId === request.viewId,
+      );
+      if (existing) {
+        setActive(existing.panelInstanceId);
+        return info(existing);
+      }
+      const group = ensureEdge("left");
+      const id = "created:plugin:" + ++generatedId;
+      const metadata: WorkbenchPanelMetadata = { role: "plugin", ...request };
+      const created: MutablePanel = {
+        panelInstanceId: id,
+        groupId: group.groupId,
+        component: "Plugin",
+        title: request.title,
+        metadata,
+        active: false,
+        location: { ...group.location },
+      };
+      panels.set(id, created);
+      panelOrder.push(id);
+      group.panelInstanceIds.push(id);
+      setActive(id);
+      return info(created);
+    },
     serialize: () => structuredClone(serialized),
     getPanel: (panelInstanceId) => {
       const candidate = panels.get(panelInstanceId);
@@ -528,6 +561,21 @@ function createTransactionHarness(
     activate: setActive,
     removePanels: (panelInstanceIds) => {
       removeCalls.push([...panelInstanceIds]);
+      for (const panelId of panelInstanceIds) {
+        const target = panels.get(panelId);
+        if (!target) continue;
+        const group = groups.get(target.groupId);
+        panels.delete(panelId);
+        if (group) {
+          group.panelInstanceIds = group.panelInstanceIds.filter((id) => id !== panelId);
+          if (group.activePanelInstanceId === panelId)
+            group.activePanelInstanceId = group.panelInstanceIds[0];
+        }
+        if (target.active) {
+          const replacement = group?.activePanelInstanceId ?? panels.keys().next().value;
+          if (replacement) setActive(replacement);
+        }
+      }
     },
   };
 
@@ -555,6 +603,7 @@ beforeEach(() => {
     mocks.runLayoutTransaction,
     mocks.beginLayoutReset,
     mocks.completeLayoutReset,
+    mocks.flushBeforeWindowClose,
     mocks.resetLogs,
     mocks.showWorkbenchLayoutError,
   ]) {
@@ -594,10 +643,137 @@ beforeEach(() => {
 });
 
 describe("semantic workbench layout actions", () => {
-  it("exports only the four planned actions and reveals an existing view in place", async () => {
+  it("registers a generic plugin view once without taking editor focus", async () => {
+    const groups: GroupSeed[] = [
+      {
+        groupId: "edge-left",
+        panelInstanceIds: ["project"],
+        activePanelInstanceId: "project",
+        location: edgeLocation("left"),
+      },
+      {
+        groupId: "grid-main",
+        panelInstanceIds: ["editor"],
+        activePanelInstanceId: "editor",
+        active: true,
+        location: gridLocation,
+      },
+    ];
+    const harness = createTransactionHarness(
+      [
+        viewPanel("project", "project", "edge-left", edgeLocation("left")),
+        editorPanel("editor", "Main", "grid-main", gridLocation, true),
+      ],
+      groups,
+    );
+    mocks.transaction = harness.tx;
+    const request = {
+      pluginId: "example.statistics",
+      viewId: "runtime",
+      title: "Statistics",
+      location: "sidebar" as const,
+    };
+    await layoutActions.syncPluginWorkbenchViews([request.pluginId], [request], () => true);
+    await layoutActions.syncPluginWorkbenchViews([request.pluginId], [request], () => true);
+    expect(harness.panelIds().filter((id) => id.startsWith("created:plugin:"))).toHaveLength(1);
+    expect(harness.activePanelId()).toBe("editor");
+  });
+
+  it("removes every uninstalled plugin panel before flushing without touching other panels", async () => {
+    const pluginPanel = (
+      id: string,
+      pluginId: string,
+      viewId: string,
+      groupId: string,
+      location: WorkbenchPanelInfo["location"],
+    ) =>
+      panel(
+        id,
+        groupId,
+        {
+          role: "plugin",
+          pluginId,
+          viewId,
+          title: viewId,
+          location: viewId === "runtime" ? "sidebar" : "editor",
+        },
+        location,
+      );
+    const groups: GroupSeed[] = [
+      {
+        groupId: "edge-left",
+        panelInstanceIds: ["project", "plugins", "removed-sidebar", "other-plugin"],
+        activePanelInstanceId: "plugins",
+        location: edgeLocation("left"),
+      },
+      {
+        groupId: "grid-main",
+        panelInstanceIds: ["editor", "removed-editor"],
+        activePanelInstanceId: "editor",
+        active: true,
+        location: gridLocation,
+      },
+      {
+        groupId: "edge-right",
+        panelInstanceIds: ["result", "removed-moved-editor"],
+        activePanelInstanceId: "result",
+        location: edgeLocation("right"),
+      },
+    ];
+    const harness = createTransactionHarness(
+      [
+        viewPanel("project", "project", "edge-left", edgeLocation("left")),
+        viewPanel("plugins", "plugins", "edge-left", edgeLocation("left")),
+        pluginPanel(
+          "removed-sidebar",
+          "example.removed",
+          "runtime",
+          "edge-left",
+          edgeLocation("left"),
+        ),
+        pluginPanel("other-plugin", "example.kept", "runtime", "edge-left", edgeLocation("left")),
+        editorPanel("editor", "Main", "grid-main", gridLocation, true),
+        pluginPanel("removed-editor", "example.removed", "analysis", "grid-main", gridLocation),
+        resultPanel("result", "saved-result", "edge-right", edgeLocation("right")),
+        pluginPanel(
+          "removed-moved-editor",
+          "example.removed",
+          "plot",
+          "edge-right",
+          edgeLocation("right"),
+        ),
+      ],
+      groups,
+    );
+    mocks.transaction = harness.tx;
+    let persistedIds: string[] = [];
+    mocks.flushBeforeWindowClose.mockImplementation(async () => {
+      persistedIds = [...harness.panelIds()];
+    });
+    await layoutActions.syncPluginWorkbenchViews(["example.kept"], [], () => true);
+    expect(harness.panelIds()).toEqual(["project", "plugins", "other-plugin", "editor", "result"]);
+    expect(persistedIds).toEqual(harness.panelIds());
+    expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
+    expect(harness.activePanelId()).toBe("editor");
+
+    const staleRequest = {
+      pluginId: "example.removed",
+      viewId: "runtime",
+      title: "Runtime",
+      location: "sidebar" as const,
+    };
+    await layoutActions.openPluginWorkbenchView(staleRequest, true, () => false);
+    await layoutActions.syncPluginWorkbenchViews(["example.removed"], [staleRequest], () => false);
+    expect(harness.panelIds()).toEqual(persistedIds);
+    expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
+  });
+
+  it("exports semantic layout actions and reveals an existing view in place", async () => {
     expect(Object.keys(layoutActions).sort()).toEqual([
+      "openPluginWorkbenchView",
       "resetWorkbenchLayout",
       "revealWorkbenchView",
+      "syncPluginWorkbenchViews",
       "toggleActivityWorkbenchGroup",
       "toggleBottomWorkbenchGroup",
       "toggleWorkbenchView",
@@ -624,6 +800,7 @@ describe("semantic workbench layout actions", () => {
       viewPanel("nodes", "nodes", "workbench-edge-left", edgeLocation("left")),
       viewPanel("data", "data", "workbench-edge-left", edgeLocation("left")),
       viewPanel("commands", "commands", "workbench-edge-left", edgeLocation("left")),
+      viewPanel("plugins", "plugins", "workbench-edge-left", edgeLocation("left")),
     );
 
     await toggleActivityWorkbenchGroup();
@@ -834,7 +1011,7 @@ describe("resetWorkbenchLayout", () => {
     await resetWorkbenchLayout();
 
     expect(harness.panelIds().sort()).toEqual(
-      [...beforeIds, "created:assistant:1", "created:problems:2"].sort(),
+      [...beforeIds, "created:plugins:1", "created:assistant:2", "created:problems:3"].sort(),
     );
     expect(harness.groupPanelIds("grid-a")).toEqual([
       "editor-left-a",
@@ -847,11 +1024,17 @@ describe("resetWorkbenchLayout", () => {
       "editor-bottom-a",
       "editor-bottom-b",
     ]);
-    expect(harness.groupPanelIds("edge-left")).toEqual(["project", "data", "nodes", "commands"]);
-    expect(harness.groupPanelIds("edge-bottom")).toEqual(["created:problems:2", "output", "logs"]);
+    expect(harness.groupPanelIds("edge-left")).toEqual([
+      "project",
+      "data",
+      "nodes",
+      "commands",
+      "created:plugins:1",
+    ]);
+    expect(harness.groupPanelIds("edge-bottom")).toEqual(["created:problems:3", "output", "logs"]);
     expect(harness.groupPanelIds("edge-right")).toEqual([
       "details",
-      "created:assistant:1",
+      "created:assistant:2",
       "result-grid",
       "result-right",
       "inspect",

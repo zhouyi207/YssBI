@@ -150,5 +150,6 @@ export function canSplitWorkbenchPanel(
 }
 
 export function canRemoveWorkbenchPanel(metadata: WorkbenchPanelMetadata): boolean {
+  if (metadata.role === "plugin") return true;
   return !isWorkbenchActivityMetadata(metadata) && !isWorkbenchPersistentViewMetadata(metadata);
 }

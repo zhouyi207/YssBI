@@ -5,6 +5,7 @@ import {
   VscCloseAll,
   VscDatabase,
   VscError,
+  VscExtensions,
   VscGraphLine,
   VscInfo,
   VscInspect,
@@ -50,6 +51,7 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
   nodes: VscLibrary,
   data: VscDatabase,
   commands: VscTerminal,
+  plugins: VscExtensions,
   details: VscInfo,
   assistant: VscSparkle,
   inspect: VscInspect,
@@ -63,6 +65,7 @@ const VIEW_TITLE_KEYS = {
   nodes: "activityBar.nodes",
   data: "activityBar.data",
   commands: "activityBar.commands",
+  plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
   inspect: "panel.inspect",
@@ -81,6 +84,7 @@ function iconForMetadata(metadata: WorkbenchPanelMetadata): {
     return { Icon: VscGraphLine, key: "chart" };
   }
   if (metadata.role === "result") return { Icon: VscPreview, key: "result" };
+  if (metadata.role === "plugin") return { Icon: VscExtensions, key: metadata.pluginId };
   return { Icon: VIEW_ICONS[metadata.viewId], key: metadata.viewId };
 }
 
@@ -129,6 +133,7 @@ function titleForMetadata(
   panelTitle: string | undefined,
   translate: (key: string) => string,
 ): string {
+  if (metadata.role === "plugin") return metadata.title;
   if (metadata.role === "result") {
     return metadata.title || panelTitle || metadata.resultId;
   }
@@ -169,7 +174,9 @@ export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabR
   const panelTitle = usePanelTitle(props.api);
   const isEdgeCollapsed = useWorkbenchEdgeCollapsed(props.api);
   const title = titleForMetadata(metadata, panelTitle, t);
-  const isActivityTab = metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId);
+  const isActivityTab =
+    (metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId)) ||
+    (metadata.role === "plugin" && metadata.location === "sidebar");
   const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
   const { contextMenu, setContextMenu, closeActionMenu } =
@@ -267,6 +274,9 @@ export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabR
         ref={tabContentRef}
         className="dv-default-tab"
         data-workbench-activity-tab
+        data-workbench-pinned-activity={
+          metadata.role === "view" && metadata.viewId === "plugins" ? "plugins" : undefined
+        }
         data-workbench-tab-edge-collapsed={isEdgeCollapsed ? "true" : undefined}
         data-panel-instance-id={props.api.id}
         aria-label={title}

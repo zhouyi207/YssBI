@@ -29,6 +29,14 @@ export const FRONTEND_ASSET_DEPENDENCY_POLICY: AssetDependencyPolicy = {
       consumerSourceFile: "src/app/main.tsx",
       repositoryRelativeAssetPath: "src/app/workbench-dockview.css",
     },
+    {
+      sourceLayer: "views",
+      mode: "runtime",
+      dependencyKind: "side-effect-import",
+      resourceKind: "stylesheet",
+      consumerSourceFile: "src/modules/settings/internal/ui/SettingsView.tsx",
+      repositoryRelativeAssetPath: "src/modules/settings/internal/ui/settings.css",
+    },
   ],
 };
 

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_TRANSPORT_FAILURE_CODE, normalizeIpcError } from "@/services/ipc";
-import { openBayesWindow } from "./openBayesWindow";
 import { openDatabaseEditorWindow } from "./openDatabaseEditor";
 import { openLogsWindow } from "./openLogsWindow";
 import { openPresentationWindow } from "./openPresentationWindow";
@@ -17,7 +16,6 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 vi.mock("@/app/i18n", () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
 
 const helpers = [
-  ["Bayes", () => openBayesWindow()],
   ["database editor", () => openDatabaseEditorWindow("database-1")],
   ["logs", () => openLogsWindow()],
 ] as const;

@@ -31,14 +31,16 @@ export const Modal = ({ options, onClose }: { options: DialogOptions; onClose: (
 
   return (
     <Dialog open onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent className="max-w-[420px]">
-        <DialogHeader className="border-b border-border bg-muted/20">
-          <DialogTitle>{options.title}</DialogTitle>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[420px] flex-col">
+        <DialogHeader className="min-w-0 shrink-0 border-b border-border bg-muted/20">
+          <DialogTitle className="[overflow-wrap:anywhere]">{options.title}</DialogTitle>
         </DialogHeader>
-        <div className="px-6 py-5">
-          <DialogDescription className="whitespace-pre-line">{options.message}</DialogDescription>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <DialogDescription className="whitespace-pre-line [overflow-wrap:anywhere]">
+            {options.message}
+          </DialogDescription>
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0 flex-wrap">
           <Button onClick={handleCancel} variant="ghost" size="lg">
             {options.cancelText || t("common.cancel")}
           </Button>

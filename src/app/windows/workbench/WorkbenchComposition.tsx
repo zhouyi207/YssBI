@@ -6,7 +6,6 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
 import { WatermarkView } from "@/modules/graph-editor/public";
 import { NodeDocumentationModal } from "@/modules/node-catalog/public";
-import { JuliaRuntimeActions } from "@/modules/julia/public";
 import { SettingsView } from "@/modules/settings/public";
 import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
@@ -21,6 +20,7 @@ import { WorkbenchMenuContribution } from "./menuContributionRegistry";
 import { rootPanelTabRenderer } from "./rootPanelTabRenderer";
 import { rootPanelRegistry } from "./rootPanelRegistry";
 import { WorkbenchStatusBarContribution } from "./statusBarContributionRegistry";
+import { PluginProvider } from "./integrations/PluginProvider";
 
 const overlayRegistry = {
   settings: SettingsView,
@@ -38,19 +38,20 @@ function WorkbenchReadyComposition() {
   useEditorKeyboard(commands);
 
   return (
-    <WorkbenchWindow
-      panelRegistry={rootPanelRegistry}
-      tabComponent={rootPanelTabRenderer}
-      dndCoordinator={dndCoordinator}
-      onActiveEditorPanelChange={panelActivationCoordinator}
-      dockviewTheme={resolveYssbiDockviewTheme(themeMode)}
-      watermarkComponent={watermarkComponent}
-      menuBar={<WorkbenchMenuContribution commands={commands} />}
-      statusBar={<WorkbenchStatusBarContribution />}
-      dragOverlay={<ActivityEditorDndOverlay />}
-      activityActions={<JuliaRuntimeActions />}
-      overlays={overlayRegistry}
-    />
+    <PluginProvider>
+      <WorkbenchWindow
+        panelRegistry={rootPanelRegistry}
+        tabComponent={rootPanelTabRenderer}
+        dndCoordinator={dndCoordinator}
+        onActiveEditorPanelChange={panelActivationCoordinator}
+        dockviewTheme={resolveYssbiDockviewTheme(themeMode)}
+        watermarkComponent={watermarkComponent}
+        menuBar={<WorkbenchMenuContribution commands={commands} />}
+        statusBar={<WorkbenchStatusBarContribution />}
+        dragOverlay={<ActivityEditorDndOverlay />}
+        overlays={overlayRegistry}
+      />
+    </PluginProvider>
   );
 }
 

@@ -145,6 +145,12 @@ function validateRootPanels(candidate: unknown): ValidatedRootPanels | undefined
       singletonViews.add(metadata.viewId);
       if (isWorkbenchActivityMetadata(metadata)) activityPanelIds.add(panelId);
     }
+    if (metadata.role === "plugin") {
+      const key = JSON.stringify([metadata.pluginId, metadata.viewId]);
+      if (singletonViews.has(key)) return undefined;
+      singletonViews.add(key);
+      if (isWorkbenchActivityMetadata(metadata)) activityPanelIds.add(panelId);
+    }
     panelIds.add(panelId);
   }
   return { panelIds, activityPanelIds };
@@ -351,7 +357,17 @@ function validateEdgeGroups(candidate: unknown, state: TopologyValidationState):
 }
 
 function validateActivityTopology(layout: UnknownRecord, state: TopologyValidationState): boolean {
-  if (state.activityPanelIds.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length) return false;
+  // A saved layout can omit the plugin browser; hydration adds that surface
+  // without discarding the user's existing groups and sizes.
+  const panels = isRecord(layout.panels) ? layout.panels : {};
+  const activityViewIds = new Set(
+    [...state.activityPanelIds].map((id) => {
+      const metadata = readMetadata(panels[id]);
+      return metadata?.role === "view" ? metadata.viewId : undefined;
+    }),
+  );
+  if (WORKBENCH_ACTIVITY_VIEW_IDS.some((id) => id !== "plugins" && !activityViewIds.has(id)))
+    return false;
   const left =
     isRecord(layout.edgeGroups) &&
     isRecord(layout.edgeGroups.left) &&
@@ -370,7 +386,6 @@ function validateActivityTopology(layout: UnknownRecord, state: TopologyValidati
 
   const leftViews = new Set(left.views);
   if (
-    leftViews.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length ||
     leftViews.size !== state.activityPanelIds.size ||
     [...leftViews].some((panelId) => !state.activityPanelIds.has(panelId)) ||
     typeof left.activeView !== "string" ||
@@ -649,12 +664,20 @@ export function parsePersistedWorkbenchLayout(
 
   return {
     root: isValidRootLayout(candidate.root)
-      ? { status: "valid", value: candidate.root }
+      ? { status: "valid", value: normalizePluginRendering(candidate.root) }
       : { status: "invalid" },
     logs: isValidLogsDockviewLayout(candidate.nested.logs)
       ? { status: "valid", value: candidate.nested.logs }
       : { status: "invalid" },
   };
+}
+
+function normalizePluginRendering(layout: SerializedDockview): SerializedDockview {
+  const clone = structuredClone(layout);
+  for (const panel of Object.values(clone.panels)) {
+    if (readMetadata(panel)?.role === "plugin") panel.renderer = "always";
+  }
+  return clone;
 }
 
 export function prepareRootLayoutForPersistence(layout: SerializedDockview): SerializedDockview {

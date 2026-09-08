@@ -18,12 +18,14 @@ import {
 import { closeWorkbenchViewPanel } from "./panelCommands";
 import { workbenchLayoutController } from "./workbenchLayoutController";
 import { showWorkbenchLayoutError } from "./workbenchLayoutErrorFeedback";
+import type { EnsurePluginViewRequest } from "../dockview/workbenchTypes";
 
 const VIEW_TITLE_KEYS = {
   project: "activityBar.project",
   nodes: "activityBar.nodes",
   data: "activityBar.data",
   commands: "activityBar.commands",
+  plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
   inspect: "panel.inspect",
@@ -98,10 +100,101 @@ export async function toggleWorkbenchView(viewId: WorkbenchViewId): Promise<bool
   return (await revealWorkbenchView(viewId)) !== null;
 }
 
+export async function openPluginWorkbenchView(
+  request: EnsurePluginViewRequest,
+  reveal = true,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
+  try {
+    await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+      if (!isCurrent()) return;
+      const existing = tx
+        .listPanels()
+        .find(
+          (panel) =>
+            panel.metadata.role === "plugin" &&
+            panel.metadata.pluginId === request.pluginId &&
+            panel.metadata.viewId === request.viewId,
+        );
+      if (existing && !reveal) return;
+      const active = tx.getActivePanel();
+      const left = tx.serialize().edgeGroups?.left;
+      const leftGroup = left?.group as { activeView?: string } | undefined;
+      tx.ensurePluginView(request);
+      if (!reveal) {
+        if (leftGroup?.activeView) tx.activate(leftGroup.activeView);
+        if (active) tx.activate(active.panelInstanceId);
+        if (left)
+          tx.configureEdge({
+            position: "left",
+            size: left.size,
+            collapsed: left.collapsed ?? false,
+            headerPosition: "left",
+          });
+      }
+    });
+  } catch (error) {
+    showWorkbenchLayoutError(error);
+  }
+}
+
+export async function syncPluginWorkbenchViews(
+  installedPluginIds: readonly string[],
+  sidebarViews: readonly EnsurePluginViewRequest[],
+  isCurrent: () => boolean,
+): Promise<void> {
+  const installed = new Set(installedPluginIds);
+  const removed = await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+    if (!isCurrent()) return false;
+    const stalePanels = tx
+      .listPanels()
+      .filter(
+        (panel) => panel.metadata.role === "plugin" && !installed.has(panel.metadata.pluginId),
+      );
+    if (stalePanels.length > 0) tx.removePanels(stalePanels.map((panel) => panel.panelInstanceId));
+
+    const active = tx.getActivePanel();
+    const left = tx.serialize().edgeGroups?.left;
+    const leftGroup = left?.group as { activeView?: string } | undefined;
+    let added = false;
+    for (const request of sidebarViews) {
+      if (!installed.has(request.pluginId) || request.location !== "sidebar") continue;
+      if (
+        tx
+          .listPanels()
+          .some(
+            (panel) =>
+              panel.metadata.role === "plugin" &&
+              panel.metadata.pluginId === request.pluginId &&
+              panel.metadata.viewId === request.viewId,
+          )
+      )
+        continue;
+      tx.ensurePluginView(request);
+      added = true;
+    }
+    if (added) {
+      if (leftGroup?.activeView && tx.getPanel(leftGroup.activeView))
+        tx.activate(leftGroup.activeView);
+      if (active) tx.activate(active.panelInstanceId);
+      if (left)
+        tx.configureEdge({
+          position: "left",
+          size: left.size,
+          collapsed: left.collapsed ?? false,
+          headerPosition: "left",
+        });
+    }
+    return stalePanels.length > 0;
+  });
+  // Persist the live removal through the layout owner, not a parallel storage edit.
+  if (removed) await workbenchLayoutController.flushBeforeWindowClose();
+}
+
 function activityPanelsInGroup(groupId: string): boolean {
   const panels = workbenchDockviewRead.listGroupPanels(groupId);
   return (
-    panels.length === WORKBENCH_ACTIVITY_DEFAULT_ORDER.length &&
+    panels.length >= WORKBENCH_ACTIVITY_DEFAULT_ORDER.length &&
     panels.every((panel) => isWorkbenchActivityMetadata(panel.metadata))
   );
 }

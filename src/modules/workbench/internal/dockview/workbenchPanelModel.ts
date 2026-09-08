@@ -4,7 +4,13 @@ import {
   type ResultPresentation,
 } from "@/shared/types/domain/result";
 
-export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "data", "nodes", "commands"] as const;
+export const WORKBENCH_ACTIVITY_VIEW_IDS = [
+  "project",
+  "data",
+  "nodes",
+  "commands",
+  "plugins",
+] as const;
 
 export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[number];
 
@@ -32,6 +38,8 @@ export type WorkbenchComponentId =
   | "Nodes"
   | "Data"
   | "Commands"
+  | "Plugins"
+  | "Plugin"
   | "Details"
   | "Assistant"
   | "Inspect"
@@ -58,7 +66,18 @@ export type ResultPanelMetadata = {
   readonly source: GraphOutputRefDto | null;
 };
 
-export type WorkbenchPanelMetadata = EditorPanelMetadata | ViewPanelMetadata | ResultPanelMetadata;
+export type PluginPanelMetadata = {
+  readonly role: "plugin";
+  readonly pluginId: string;
+  readonly viewId: string;
+  readonly title: string;
+  readonly location: "sidebar" | "editor";
+};
+export type WorkbenchPanelMetadata =
+  | EditorPanelMetadata
+  | ViewPanelMetadata
+  | ResultPanelMetadata
+  | PluginPanelMetadata;
 
 export interface WorkbenchPanelParams extends Record<string, unknown> {
   readonly metadata: WorkbenchPanelMetadata;
@@ -90,6 +109,7 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   nodes: "Nodes",
   data: "Data",
   commands: "Commands",
+  plugins: "Plugins",
   details: "Details",
   assistant: "Assistant",
   inspect: "Inspect",
@@ -175,8 +195,13 @@ export function isWorkbenchActivityViewId(value: string): value is WorkbenchActi
 
 export function isWorkbenchActivityMetadata(
   metadata: WorkbenchPanelMetadata | undefined,
-): metadata is ViewPanelMetadata & { readonly viewId: WorkbenchActivityViewId } {
-  return metadata?.role === "view" && isWorkbenchActivityViewId(metadata.viewId);
+): metadata is
+  | (ViewPanelMetadata & { readonly viewId: WorkbenchActivityViewId })
+  | (PluginPanelMetadata & { readonly location: "sidebar" }) {
+  return (
+    (metadata?.role === "view" && isWorkbenchActivityViewId(metadata.viewId)) ||
+    (metadata?.role === "plugin" && metadata.location === "sidebar")
+  );
 }
 
 export function isWorkbenchPersistentViewMetadata(
@@ -189,6 +214,17 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
   if (!isRecord(value) || typeof value.role !== "string") return false;
 
   switch (value.role) {
+    case "plugin":
+      return (
+        hasKnownKeys(value, ["role", "pluginId", "viewId", "title", "location"]) &&
+        [value.pluginId, value.viewId].every(
+          (id) =>
+            typeof id === "string" && /^[a-z0-9][a-z0-9._-]{0,95}$/.test(id) && !id.includes(".."),
+        ) &&
+        typeof value.title === "string" &&
+        value.title.length <= 128 &&
+        (value.location === "sidebar" || value.location === "editor")
+      );
     case "editor":
       return (
         hasKnownKeys(value, ["role", "resourceRef", "resourceKind"], ["pinned", "sticky"]) &&
@@ -223,5 +259,6 @@ export function componentForWorkbenchMetadata(
 ): WorkbenchComponentId {
   if (metadata.role === "editor") return "EditorResource";
   if (metadata.role === "result") return "Result";
+  if (metadata.role === "plugin") return "Plugin";
   return COMPONENT_BY_VIEW_ID[metadata.viewId];
 }

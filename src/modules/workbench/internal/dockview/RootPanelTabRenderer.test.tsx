@@ -131,6 +131,7 @@ describe("RootPanelTabRenderer", () => {
               Nodes: TestPanel,
               Data: TestPanel,
               Commands: TestPanel,
+              Plugins: TestPanel,
               Details: TestPanel,
               Inspect: TestPanel,
               Logs: TestPanel,

@@ -327,6 +327,7 @@ function viewPanel(
     nodes: "Nodes",
     data: "Data",
     commands: "Commands",
+    plugins: "Plugins",
     details: "Details",
     assistant: "Assistant",
     inspect: "Inspect",

@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
 
   test: {
-    exclude: [...configDefaults.exclude, "**/.worktrees/**", "**/.superpowers/**"],
+    exclude: [...configDefaults.exclude, "**/.worktrees/**", "**/.superpowers/**", "plugins/**"],
   },
 
   resolve: {

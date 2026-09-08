@@ -116,6 +116,7 @@ describe("workbench Dockview defaults", () => {
       nodes: "left",
       data: "left",
       commands: "left",
+      plugins: "left",
       details: "right",
       assistant: "right",
       inspect: "right",

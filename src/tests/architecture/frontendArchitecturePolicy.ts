@@ -285,21 +285,6 @@ const VIEW_CORE_CAPABILITIES = [
 ];
 
 const VIEW_DOMAIN_CAPABILITIES = [
-  viewCoreCapability("src/features/domain/bayes/validationFormatting.ts", ["issueTargetStep"]),
-  viewCoreCapability("src/features/domain/bayes/diagnostics.ts", [
-    "diagnosticSeverityClass",
-    "DiagnosticSuggestion",
-    "evaluateInferenceDiagnostics",
-    "parameterDiagnosticStatus",
-  ]),
-  viewCoreCapability("src/features/domain/bayes/expressionAst.ts", [
-    "formatExpression",
-    "formatRawExpressionLatex",
-  ]),
-  viewCoreCapability("src/features/domain/bayes/priorDefaults.ts", [
-    "defaultPriorForConstraint",
-    "formatPrior",
-  ]),
   viewCoreCapability("src/features/domain/canvas/edgeData.ts", ["EdgeData"]),
   viewCoreCapability("src/features/domain/graphDiagnostics/nodeDiagnostics.ts", [
     "collectGraphProblems",

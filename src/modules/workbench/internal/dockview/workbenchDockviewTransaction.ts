@@ -20,6 +20,7 @@ import type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
+  EnsurePluginViewRequest,
   MoveWorkbenchPanelRequest,
   WorkbenchEdgePosition,
   WorkbenchGroupInfo,
@@ -223,6 +224,7 @@ export class PendingWorkbenchTransaction {
     listGroupPanels: (groupId) => this.listGroupPanels(groupId),
     ensureCentralGroup: () => this.ensureCentralGroup(),
     ensureView: (request) => this.ensureView(request),
+    ensurePluginView: (request) => this.ensurePluginView(request),
     move: (request) => this.move(request),
     configureEdge: (request) => this.configureEdge(request),
     activate: (panelInstanceId) => this.activate(panelInstanceId),
@@ -366,6 +368,44 @@ export class PendingWorkbenchTransaction {
     this.setActiveGroupState(groupId);
     this.commands.push({ kind: "add-grid", groupId });
     return groupId;
+  }
+
+  private ensurePluginView(request: EnsurePluginViewRequest): WorkbenchPanelInfo {
+    const existing = [...this.panels.values()].find(
+      (panel) =>
+        panel.metadata?.role === "plugin" &&
+        panel.metadata.pluginId === request.pluginId &&
+        panel.metadata.viewId === request.viewId,
+    );
+    if (existing) {
+      this.reveal(existing.id);
+      return this.toPanelInfo(existing)!;
+    }
+    const metadata = requireValidMetadata({ role: "plugin", ...request });
+    const groupId =
+      request.location === "sidebar" ? this.ensureEdge("left").groupId : this.ensureCentralGroup();
+    const panelId = this.uniqueId();
+    const panel: ShadowPanel = {
+      id: panelId,
+      component: "Plugin",
+      title: request.title,
+      params: { metadata: cloneMetadata(metadata) },
+      metadata,
+      groupId,
+      active: false,
+    };
+    this.panels.set(panelId, panel);
+    this.groups.get(groupId)!.panelIds.push(panelId);
+    this.commands.push({
+      kind: "add-panel",
+      panelId,
+      groupId,
+      component: "Plugin",
+      title: request.title,
+      metadata,
+    });
+    this.reveal(panelId);
+    return this.toPanelInfo(panel)!;
   }
 
   private ensureView(request: EnsureViewRequest): WorkbenchPanelInfo {
@@ -853,6 +893,7 @@ export class PendingWorkbenchTransaction {
         const panel = api.addPanel<WorkbenchPanelParams>({
           id: command.panelId,
           component: command.component,
+          ...(command.metadata.role === "plugin" ? { renderer: "always" as const } : {}),
           title: command.title,
           params: { metadata: cloneMetadata(command.metadata) },
           position: {

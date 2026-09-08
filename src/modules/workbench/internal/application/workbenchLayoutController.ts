@@ -488,6 +488,25 @@ export function createWorkbenchLayoutController(
     try {
       internal.installHydrationLayout(cycle.internalHydrationEpoch, (transaction) => {
         ensurePermanentDetailsSidebar(transaction);
+        if (
+          !transaction
+            .listPanels()
+            .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "plugins")
+        ) {
+          const active = transaction.getActivePanel();
+          const left = transaction.serialize().edgeGroups?.left;
+          const leftGroup = left?.group as { activeView?: string } | undefined;
+          transaction.ensureView({ viewId: "plugins", title: "Plugins" });
+          if (leftGroup?.activeView) transaction.activate(leftGroup.activeView);
+          if (active) transaction.activate(active.panelInstanceId);
+          if (left)
+            transaction.configureEdge({
+              position: "left",
+              size: left.size,
+              collapsed: left.collapsed ?? false,
+              headerPosition: "left",
+            });
+        }
       });
     } catch {
       // A restored root remains usable if permanent-sidebar enforcement fails.

@@ -4,14 +4,7 @@
  */
 
 /** 受持久化管理的窗口种类。 */
-export type WindowKind =
-  | "main"
-  | "databaseEditor"
-  | "sourceInspector"
-  | "logs"
-  | "plot"
-  | "info"
-  | "bayes";
+export type WindowKind = "main" | "databaseEditor" | "sourceInspector" | "logs" | "plot" | "info";
 
 /** 单个窗口的几何状态。 */
 export interface WindowState {

@@ -43,6 +43,8 @@ export {
 } from "./internal/application/panelCommands";
 export {
   resetWorkbenchLayout,
+  openPluginWorkbenchView,
+  syncPluginWorkbenchViews,
   revealWorkbenchView,
   toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,

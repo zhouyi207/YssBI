@@ -80,7 +80,7 @@ function panel(
   const component =
     metadata.role === "editor"
       ? "EditorResource"
-      : metadata.role === "result"
+      : metadata.role === "result" || metadata.role === "plugin"
         ? "Result"
         : (
             {
@@ -88,6 +88,7 @@ function panel(
               nodes: "Nodes",
               data: "Data",
               commands: "Commands",
+              plugins: "Plugins",
               details: "Details",
               assistant: "Assistant",
               inspect: "Inspect",
