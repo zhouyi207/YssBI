@@ -76,10 +76,7 @@ export function SymbolConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent
-        explicitClose
-        className="grid max-h-[85vh] w-[min(calc(100vw-2rem),44rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] rounded-lg"
-      >
+      <DialogContent className="grid max-h-[85vh] w-[min(calc(100vw-2rem),44rem)] max-w-none grid-rows-[auto_minmax(0,1fr)_auto] rounded-lg">
         <DialogHeader className="flex flex-row items-center justify-between gap-3 border-b border-border bg-muted/30">
           <DialogTitle>{t("bayes.symbols.configurationTitle")}</DialogTitle>
           <Button

@@ -11,19 +11,11 @@ export type MenubarMenuItem = {
 export interface MenubarViewState {
   readonly activityGroupOpen: boolean;
   readonly assistantOpen: boolean;
-  readonly inspectOpen: boolean;
-  readonly inspectContextValid: boolean;
-  readonly logsOpen: boolean;
-  readonly outputOpen: boolean;
-  readonly bottomCollapsed: boolean;
 }
 
 export interface MenubarViewMenuActions {
   readonly toggleActivityGroup: () => void;
   readonly toggleAssistant: () => void;
-  readonly toggleInspect: () => void;
-  readonly toggleLogs: () => void;
-  readonly toggleOutput: () => void;
   readonly resetLayout: () => void;
 }
 
@@ -45,24 +37,6 @@ export function buildViewMenuItems(
       type: "checkbox",
       checked: state.assistantOpen,
       onClick: actions.toggleAssistant,
-    },
-    {
-      label: t("panel.inspect"),
-      type: "checkbox",
-      checked: state.inspectOpen,
-      onClick: state.inspectOpen || state.inspectContextValid ? actions.toggleInspect : undefined,
-    },
-    {
-      label: t("panel.logs"),
-      type: "checkbox",
-      checked: state.logsOpen,
-      onClick: actions.toggleLogs,
-    },
-    {
-      label: t("panel.output"),
-      type: "checkbox",
-      checked: state.outputOpen,
-      onClick: actions.toggleOutput,
     },
     { label: "-", type: "separator" },
     {

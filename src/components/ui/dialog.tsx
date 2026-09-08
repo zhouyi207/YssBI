@@ -31,33 +31,20 @@ function DialogOverlay({
   );
 }
 
-type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
-  explicitClose?: boolean;
-};
-
 function DialogContent({
   className,
   children,
-  explicitClose = false,
-  onInteractOutside,
   ...props
-}: DialogContentProps) {
+}: React.ComponentProps<typeof DialogPrimitive.Content>) {
   return (
     <DialogPortal>
-      <DialogOverlay
-        className={explicitClose ? "cursor-move" : undefined}
-        data-tauri-drag-region={explicitClose ? true : undefined}
-      />
+      <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
           "fixed left-1/2 top-1/2 z-[501] grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl outline-none data-[state=open]:animate-zoom-in",
           className,
         )}
-        onInteractOutside={(event) => {
-          onInteractOutside?.(event);
-          if (explicitClose) event.preventDefault();
-        }}
         {...props}
       >
         {children}

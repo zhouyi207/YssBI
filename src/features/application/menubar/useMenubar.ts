@@ -11,7 +11,6 @@ import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application
 
 import { workbenchDockviewRead } from "@/modules/workbench/public";
 import type { WorkbenchViewId } from "@/modules/workbench/public";
-import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import type { MenubarViewState } from "./menubarViewItems";
 
@@ -26,7 +25,6 @@ function openViewIds(): ReadonlySet<WorkbenchViewId> {
 /** Menubar model projected from live root Dockview state and semantic application actions. */
 export function useMenubar() {
   const openSettings = useWorkbenchUiStore((state) => state.openSettings);
-  const inspectContextValid = useEditorStore((state) => state.detailFocus?.kind === "node");
   const dockviewSnapshot = useSyncExternalStore(
     workbenchDockviewRead.subscribe,
     workbenchDockviewRead.getSnapshot,
@@ -43,13 +41,8 @@ export function useMenubar() {
         );
       })(),
       assistantOpen: views.has("assistant"),
-      inspectOpen: views.has("inspect"),
-      inspectContextValid,
-      logsOpen: views.has("logs"),
-      outputOpen: views.has("output"),
-      bottomCollapsed: workbenchDockviewRead.getEdgeState("bottom").collapsed,
     };
-  }, [dockviewSnapshot.revision, inspectContextValid]);
+  }, [dockviewSnapshot.revision]);
 
   const editorCommandAuthorized = captureActiveEditorCommandTarget() !== null;
 
@@ -83,18 +76,6 @@ export function useMenubar() {
     void toggleWorkbenchView("assistant");
   }, []);
 
-  const toggleInspect = useCallback(() => {
-    void toggleWorkbenchView("inspect");
-  }, []);
-
-  const toggleLogs = useCallback(() => {
-    void toggleWorkbenchView("logs");
-  }, []);
-
-  const toggleOutput = useCallback(() => {
-    void toggleWorkbenchView("output");
-  }, []);
-
   const handleResetLayout = useCallback(() => {
     void resetWorkbenchLayout();
   }, []);
@@ -111,9 +92,6 @@ export function useMenubar() {
     viewActions: {
       toggleActivityGroup,
       toggleAssistant,
-      toggleInspect,
-      toggleLogs,
-      toggleOutput,
       resetLayout: handleResetLayout,
     },
   };

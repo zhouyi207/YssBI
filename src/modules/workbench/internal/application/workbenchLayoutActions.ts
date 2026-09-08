@@ -205,7 +205,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const bottom = tx.configureEdge({
         position: "bottom",
         size: WORKBENCH_EDGE_SIZES.bottom,
-        collapsed: false,
+        collapsed: true,
         headerPosition: "bottom",
       });
       const centralGroupId = tx.ensureCentralGroup();
@@ -243,6 +243,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
           panelInstanceId: { logs, output, problems }[viewId].panelInstanceId,
           groupId: bottom.groupId,
           index,
+          activate: false,
         });
       }
 
@@ -272,6 +273,8 @@ export async function resetWorkbenchLayout(): Promise<void> {
       );
       tx.activate(editorToRestore?.panelInstanceId ?? project?.panelInstanceId ?? "");
     });
+    // Hide the bottom strip after Dockview settles panel activation during reset.
+    await workbenchDockviewControl.setEdgeCollapsed("bottom", true);
     logsDockviewControl.resetToDefault();
   } catch (error) {
     showWorkbenchLayoutError(error);

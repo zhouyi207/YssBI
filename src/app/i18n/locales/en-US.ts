@@ -375,7 +375,6 @@ export const enUS = {
     newFunction: "New Function",
     openProject: "Open Project...",
     closeProject: "Close Project",
-    saveProject: "Save Project",
     saveProjectAs: "Save Project As...",
     cut: "Cut",
     copy: "Copy",

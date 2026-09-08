@@ -18,6 +18,18 @@ function menuActions() {
   };
 }
 
+function fileActions() {
+  return {
+    addEvent: vi.fn(),
+    addFunction: vi.fn(),
+    addChart: vi.fn(),
+    openProject: vi.fn(),
+    closeProject: vi.fn(),
+    saveGraph: vi.fn(),
+    saveGraphAs: vi.fn(),
+  };
+}
+
 describe("Menubar editor command authorization", () => {
   it("does not authorize mutations from a stale activeResourceRef", () => {
     const items = buildEditMenuItems(
@@ -43,9 +55,46 @@ describe("Menubar editor command authorization", () => {
     }
   });
 
+  it("creates a chart from the File menu without an active editor", () => {
+    const actions = fileActions();
+    const items = buildFileMenuItems(
+      translate,
+      { projectAvailable: true, editorCommandAuthorized: false },
+      actions,
+    );
+
+    const newChart = items.find((item) => item.label === "menubar.newChart");
+    expect(newChart?.onClick).toBe(actions.addChart);
+    newChart?.onClick?.();
+    expect(actions.addChart).toHaveBeenCalledOnce();
+  });
+
+  it("saves the active editor document only while a project is available", () => {
+    const actions = fileActions();
+    const items = buildFileMenuItems(
+      translate,
+      { projectAvailable: true, editorCommandAuthorized: true },
+      actions,
+    );
+
+    const save = items.find((item) => item.label === "common.save");
+    expect(save).toMatchObject({ shortcut: "Ctrl+S", onClick: actions.saveGraph });
+    save?.onClick?.();
+    expect(actions.saveGraph).toHaveBeenCalledOnce();
+    expect(actions.saveGraphAs).not.toHaveBeenCalled();
+
+    const withoutProject = buildFileMenuItems(
+      translate,
+      { projectAvailable: false, editorCommandAuthorized: true },
+      actions,
+    );
+    expect(withoutProject.find((item) => item.label === "common.save")).toMatchObject({
+      onClick: undefined,
+    });
+  });
+
   it("gates Save and split commands but leaves Save As project-governed", () => {
-    const saveGraph = vi.fn();
-    const saveGraphAs = vi.fn();
+    const actions = fileActions();
     const splitRight = vi.fn();
     const splitDown = vi.fn();
 
@@ -55,14 +104,7 @@ describe("Menubar editor command authorization", () => {
         projectAvailable: true,
         editorCommandAuthorized: false,
       },
-      {
-        addEvent: vi.fn(),
-        addFunction: vi.fn(),
-        openProject: vi.fn(),
-        closeProject: vi.fn(),
-        saveGraph,
-        saveGraphAs,
-      },
+      actions,
     );
     const windowItems = buildWindowMenuItems(translate, false, {
       splitRight,
@@ -70,9 +112,11 @@ describe("Menubar editor command authorization", () => {
       openLogsWindow: vi.fn(),
     });
 
-    expect(fileItems.find((item) => item.label === "menubar.saveProject")?.onClick).toBeUndefined();
+    expect(fileItems.find((item) => item.label === "common.save")).toMatchObject({
+      onClick: undefined,
+    });
     expect(fileItems.find((item) => item.label === "menubar.saveProjectAs")?.onClick).toBe(
-      saveGraphAs,
+      actions.saveGraphAs,
     );
     expect(
       windowItems.find((item) => item.label === "menubar.splitEditorRight")?.onClick,

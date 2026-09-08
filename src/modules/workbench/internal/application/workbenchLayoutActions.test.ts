@@ -859,7 +859,7 @@ describe("resetWorkbenchLayout", () => {
     expect(harness.configureCalls).toEqual([
       { position: "left", size: 292, collapsed: false, headerPosition: "left" },
       { position: "right", size: 320, collapsed: false, headerPosition: "right" },
-      { position: "bottom", size: 200, collapsed: false, headerPosition: "bottom" },
+      { position: "bottom", size: 200, collapsed: true, headerPosition: "bottom" },
     ]);
     expect(harness.activePanelId()).toBe("editor-grid-b");
     expect(harness.removeCalls).toEqual([]);

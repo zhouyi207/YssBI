@@ -90,6 +90,7 @@ export function buildFileMenuItems(
   actions: {
     addEvent: () => void;
     addFunction: () => void;
+    addChart: () => void;
     openProject: () => void;
     closeProject: () => void;
     saveGraph: () => void;
@@ -103,6 +104,7 @@ export function buildFileMenuItems(
       onClick: actions.addEvent,
     },
     { label: translate("menubar.newFunction"), onClick: actions.addFunction },
+    { label: translate("menubar.newChart"), onClick: actions.addChart },
     { label: "-", type: "separator" },
     {
       label: translate("menubar.openProject"),
@@ -112,7 +114,7 @@ export function buildFileMenuItems(
     { label: translate("menubar.closeProject"), onClick: actions.closeProject },
     { label: "-", type: "separator" },
     {
-      label: translate("menubar.saveProject"),
+      label: translate("common.save"),
       shortcut: "Ctrl+S",
       onClick:
         state.projectAvailable && state.editorCommandAuthorized ? actions.saveGraph : undefined,
@@ -209,6 +211,7 @@ export function WorkbenchMenuContribution({
     {
       addEvent: () => void addEvent(undefined, { openAfterCreate: true }),
       addFunction: () => void addFunction(undefined, { openAfterCreate: true }),
+      addChart: () => void addChart(),
       openProject: () => void importGraph(),
       closeProject: () => navigate("/projects"),
       saveGraph: () => void saveGraph(),

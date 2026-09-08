@@ -250,21 +250,8 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
   }
 
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={(nextOpen) => {
-        if (!busy) onOpenChange(nextOpen);
-      }}
-    >
-      <DialogContent
-        onInteractOutside={(event) => {
-          if (busy) event.preventDefault();
-        }}
-        onEscapeKeyDown={(event) => {
-          if (busy) event.preventDefault();
-        }}
-        className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md"
-      >
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("projectPicker.newProjectModal.title")}</DialogTitle>
         </DialogHeader>

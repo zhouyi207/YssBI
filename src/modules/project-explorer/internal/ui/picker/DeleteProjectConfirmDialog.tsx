@@ -106,21 +106,8 @@ export function DeleteProjectConfirmDialog({
   };
 
   return (
-    <Dialog
-      open={project != null}
-      onOpenChange={(open) => {
-        if (!busy) onOpenChange(open);
-      }}
-    >
-      <DialogContent
-        onInteractOutside={(event) => {
-          if (busy) event.preventDefault();
-        }}
-        onEscapeKeyDown={(event) => {
-          if (busy) event.preventDefault();
-        }}
-        className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md"
-      >
+    <Dialog open={project != null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md border-border bg-card text-card-foreground ring-border sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("projectPicker.deleteProjectConfirm.title")}</DialogTitle>
         </DialogHeader>

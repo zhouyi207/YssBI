@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useIsActiveEditorPanel } from "@/features/application/editor/useIsActiveEditorPanel";
 import { workbenchDockviewInternal } from "../../dockview/workbenchDockviewInternal";
+import { resetWorkbenchLayout } from "../../application/workbenchLayoutActions";
 import { bindWorkbenchStatusBarLayout } from "../../application/workbenchStatusBarLayout";
 import type { WorkbenchPanelParams } from "../../dockview/workbenchPanelModel";
 import { StatusBar } from "./StatusBar";
@@ -18,6 +19,13 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("i18next", () => ({ default: { t: (key: string) => key } }));
+
+vi.mock("../../application/workbenchLayoutController", () => ({
+  workbenchLayoutController: {
+    beginLayoutReset: vi.fn(() => 1),
+    completeLayoutReset: vi.fn(),
+  },
+}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -73,6 +81,10 @@ describe("Workbench status panel tabs", () => {
                 Logs: Panel,
                 Details: Panel,
                 Assistant: Panel,
+                Project: Panel,
+                Nodes: Panel,
+                Data: Panel,
+                Commands: Panel,
               }}
               onReady={({ api: readyApi }) => {
                 api = readyApi;
@@ -121,6 +133,35 @@ describe("Workbench status panel tabs", () => {
   function button(viewId: string): HTMLButtonElement {
     return document.querySelector(`footer [data-workbench-status-panel="${viewId}"]`)!;
   }
+
+  it("hides all bottom views after reset and opens only the requested view afterward", async () => {
+    await renderWorkbench();
+    const views = ["problems", "output", "logs"].map((viewId) => api.getPanel(viewId)!);
+    const editorGroup = api.getPanel("editor")!.group;
+    await update(() => api.getPanel("logs")!.api.moveTo({ group: editorGroup }));
+
+    await update(() => resetWorkbenchLayout());
+
+    expect(api.getEdgeGroup("bottom")!.isCollapsed()).toBe(true);
+    expect(api.isEdgeGroupVisible("bottom")).toBe(false);
+    expect(api.activePanel?.id).toBe("editor");
+    for (const panel of views) {
+      expect(api.getPanel(panel.id)).toBe(panel);
+      expect(panel.group.api.location).toEqual({ type: "edge", position: "bottom" });
+      expect(button(panel.id).getAttribute("aria-pressed")).toBe("false");
+    }
+
+    await update(() => button("output").click());
+    expect(api.isEdgeGroupVisible("bottom")).toBe(true);
+    expect(button("output").getAttribute("aria-pressed")).toBe("true");
+    expect(button("problems").getAttribute("aria-pressed")).toBe("false");
+    expect(button("logs").getAttribute("aria-pressed")).toBe("false");
+
+    await update(() => api.removePanel(api.getPanel("editor")!));
+    await update(() => resetWorkbenchLayout());
+    expect(api.isEdgeGroupVisible("bottom")).toBe(false);
+    expect(api.activePanel?.params?.metadata).toEqual({ role: "view", viewId: "project" });
+  });
 
   it("handles unrelated layout events without serializing or rerendering unchanged chrome and editors", async () => {
     await renderWorkbench();
