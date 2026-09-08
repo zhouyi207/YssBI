@@ -30,10 +30,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     (
-        "src-tauri/crates/yss-execution/src/canonical.rs",
-        RustLayer::Execution,
-    ),
-    (
         "src-tauri/crates/yss-execution/src/package_preparation.rs",
         RustLayer::Execution,
     ),
@@ -98,7 +94,7 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Project,
     ),
     (
-        "src-tauri/crates/yss-project/src/project_state/history.rs",
+        "src-tauri/crates/yss-project/src/project_state/function_mutation.rs",
         RustLayer::Project,
     ),
     (
@@ -163,14 +159,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
         fully_qualified_owner: "yss_database_runtime::database_instance",
         canonical_origin_targets: &[
-            "yss_tabular_polars::anyvalue_to_json",
-            "yss_tabular_polars::edit::apply_operation",
-            "yss_tabular_polars::edit::capture_column_data",
-            "yss_tabular_polars::edit::capture_row_data",
-            "yss_tabular_polars::edit::cast_column",
-            "yss_tabular_polars::edit::dtype_from_string",
-            "yss_tabular_polars::edit::dtype_to_string",
-            "yss_tabular_polars::edit::reverse_operation",
+            "yss_tabular_polars::data_type::dtype_from_string",
+            "yss_tabular_polars::data_type::dtype_to_string",
         ],
     },
     InternalDependencyCapability {
@@ -236,26 +226,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_statistical_harness::knowledge::KnowledgeError",
             "yss_statistical_harness::knowledge::install_builtin_statistical_knowledge",
             "yss_statistical_harness_sqlite::SqliteHarnessStore::connect",
-            "yss_settings::SettingsStore::open",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Application,
-        repository_relative_source_file: "src-tauri/crates/yss-settings/src/lib.rs",
-        fully_qualified_owner: "yss_settings",
-        canonical_origin_targets: &["yss_project_identity::OperationId"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_settings.rs",
-        fully_qualified_owner: "yss_api::commands::command_settings",
-        canonical_origin_targets: &[
-            "yss_api::error::CommandError",
-            "yss_settings::SettingsMutationReceipt",
-            "yss_settings::SettingsMutationRequest",
-            "yss_settings::SettingsSnapshot",
-            "yss_settings::SettingsStore",
-            "yss_settings::SettingsStoreError",
         ],
     },
     InternalDependencyCapability {
@@ -365,7 +335,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::event::event_project::EventProject",
             "yss_api::schema::application_event::ResourceMutationCommandResultDto",
             "yss_api::schema::application_event::resource_mutation_to_transport",
-            "yss_api::schema::database::DatabaseEngineDTO",
             "yss_api::schema::database::DatabaseImportSourceDTO",
             "yss_api::schema::database::DatabaseMetaResultDto",
             "yss_api::schema::database::DatabaseRowsResultDto",
@@ -450,7 +419,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::schema::application_event::ResourceMutationResultDto",
             "yss_application::resource_mutation::ResourceMutationApplicationError",
             "yss_application::resource_mutation::ResourceMutationApplicationError::GraphOperation",
-            "yss_application::resource_mutation::ResourceMutationApplicationError::History",
+            "yss_application::resource_mutation::ResourceMutationApplicationError::Resource",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Mutation",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Project",
             "yss_application::resource_mutation::ResourceMutationApplicationError::SessionCapture",
@@ -467,13 +436,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::mutation::MutationConflict::ReferencedResourceUnavailable",
             "yss_graph_editor::mutation::MutationConflict::Document",
             "yss_graph_editor::mutation::MutationConflict::Editor",
-            "yss_project_history::ProjectHistoryMutationError",
-            "yss_project_history::ProjectHistoryMutationError::History",
-            "yss_project_history::ProjectHistoryMutationError::Projection",
-            "yss_project_history::ProjectHistoryMutationError::RecoveryRequired",
-            "yss_project_history::ProjectHistoryMutationError::ResourceMismatch",
-            "yss_project_history::ProjectHistoryMutationError::StaleProjectLifecycle",
-            "yss_project_history::ProjectHistoryMutationError::StaleRevision",
+            "yss_project_history::ProjectResourceMutationError",
+            "yss_project_history::ProjectResourceMutationError::Mutation",
+            "yss_project_history::ProjectResourceMutationError::Projection",
+            "yss_project_history::ProjectResourceMutationError::RecoveryRequired",
+            "yss_project_history::ProjectResourceMutationError::ResourceMismatch",
+            "yss_project_history::ProjectResourceMutationError::StaleProjectLifecycle",
+            "yss_project_history::ProjectResourceMutationError::StaleRevision",
             "yss_project::project_state::graph_operation::ProjectGraphOperationError",
             "yss_project::project_state::graph_operation::ProjectGraphOperationError::GraphUnavailable",
             "yss_project::project_state::graph_operation::ProjectGraphOperationError::ProjectIdentityMismatch",
@@ -515,7 +484,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::event::event_project::EventProject",
             "yss_application::resource_mutation::ResourceMutationApplicationError",
             "yss_application::resource_mutation::ResourceMutationApplicationError::GraphOperation",
-            "yss_application::resource_mutation::ResourceMutationApplicationError::History",
+            "yss_application::resource_mutation::ResourceMutationApplicationError::Resource",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Mutation",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Project",
             "yss_application::resource_mutation::ResourceMutationApplicationError::SessionCapture",
@@ -604,7 +573,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::SessionCaptureError::Recovering",
             "yss_application::execution::session_slot::SessionCaptureError::Replacing",
             "yss_application::resource_mutation::ResourceMutationApplicationError",
-            "yss_application::resource_mutation::ResourceMutationApplicationError::History",
+            "yss_application::resource_mutation::ResourceMutationApplicationError::Resource",
             "yss_api::error::CommandError",
             "yss_api::event::Event",
             "yss_api::event::emit_project_event_result",
@@ -612,8 +581,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::event::event_project::EventProject::ResourceMutationCommitted",
             "yss_api::schema::application_event::resource_mutation_to_transport",
             "yss_api::schema::application_event::ResourceMutationResultDto",
-            "yss_project_history::HistoryMutation",
-            "yss_project_history::HistoryStatusDto",
             "yss_project_history::MutationRequest",
         ],
     },
@@ -625,7 +592,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::resource_mutation::ResourceMutationApplicationError",
             "yss_application::resource_mutation::ResourceMutationApplicationError::GraphOperation",
-            "yss_application::resource_mutation::ResourceMutationApplicationError::History",
+            "yss_application::resource_mutation::ResourceMutationApplicationError::Resource",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Mutation",
             "yss_application::resource_mutation::ResourceMutationApplicationError::Project",
             "yss_application::resource_mutation::ResourceMutationApplicationError::SessionCapture",
@@ -1023,7 +990,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::events::CommittedResourceMutation",
             "yss_application::events::GraphProjectionReplacement",
-            "yss_application::events::HistoryStatus",
             "yss_application::events::LifecycleInvalidation",
             "yss_application::events::LifecycleRecovery",
             "yss_application::events::LifecycleRecoveryAction",
@@ -1036,7 +1002,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::project_query::ProjectActivation",
             "yss_graph_document_edit::GraphDocumentPatch",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yss_project_history::HistoryStatusDto",
             "yss_project_history::ResourceDeltaEvent",
             "yss_project_history::ResourceKey",
             "yss_project_history::ResourceLifecycleKind",
@@ -1188,7 +1153,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::resource_mutation::GraphDraftSave",
             "yss_application::resource_mutation::GraphDraftTransform",
             "yss_graph_document_edit::patch::GraphDocumentPatch",
-            "yss_project_history::HistoryStatusDto",
         ],
     },
     InternalDependencyCapability {
@@ -1228,7 +1192,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-api/src/schema/project.rs",
         fully_qualified_owner: "yss_api::schema::project",
         canonical_origin_targets: &[
-            "yss_project_history::HistoryStatusDto",
             "yss_project_history::ResourceKey",
             "yss_project::project_writers::ProjectSaveResult",
         ],
@@ -1498,7 +1461,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::PureLeaf);
     } else if matches!(
         package,
-        "yss-application" | "yss-project-watcher" | "yss-statistical-harness" | "yss-settings"
+        "yss-application" | "yss-project-watcher" | "yss-statistical-harness"
     ) {
         layers.insert(RustLayer::Application);
     } else if matches!(

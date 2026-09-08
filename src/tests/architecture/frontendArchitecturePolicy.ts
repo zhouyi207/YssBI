@@ -473,21 +473,6 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
       memberCapabilities: null,
     },
     {
-      sourceLayer: "application",
-      canonicalModule: "src/shared/types/dto/applicationSettings.ts",
-      exportedSymbols: [
-        "ApplicationSettingsDto",
-        "ApplicationSettingsMutationReceiptDto",
-        "ApplicationSettingsMutationRequestDto",
-        "ApplicationSettingsSnapshotDto",
-        "ComputationSettingsDto",
-        "RECOMMENDED_COMPUTATION_SETTINGS",
-        "StatisticalMissingValuePolicy",
-      ],
-      exactConsumers: null,
-      memberCapabilities: null,
-    },
-    {
       sourceLayer: "views",
       canonicalModule: "src/features/core/dnd/dndContracts.ts",
       exportedSymbols: [

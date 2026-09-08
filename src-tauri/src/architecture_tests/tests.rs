@@ -2309,7 +2309,6 @@ fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_fac
         "INGEST_CHUNK_ROWS",
         "MAX_DELETE_COLUMN_SNAPSHOT_ROWS",
         "MAX_GET_DATAFRAME_ROWS",
-        "MAX_IN_MEMORY_EDIT_ROWS",
         "PageQueryResult",
         "add_row_with_operation",
         "apply_edit_on_duckdb",
@@ -2794,7 +2793,7 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         "src-tauri/crates/yss-database-edit/Cargo.toml",
         "src-tauri/crates/yss-database-edit/src/lib.rs",
         "src-tauri/crates/yss-tabular-polars/Cargo.toml",
-        "src-tauri/crates/yss-tabular-polars/src/edit.rs",
+        "src-tauri/crates/yss-tabular-polars/src/data_type.rs",
         "src-tauri/crates/yss-tabular-polars/src/lib.rs",
         "src-tauri/crates/yss-tabular-polars/src/tests.rs",
     ] {
@@ -2851,7 +2850,6 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         "polars-dtype.workspace = true",
         "serde_json.workspace = true",
         "thiserror.workspace = true",
-        "yss-database-edit = { path = \"../yss-database-edit\" }",
         "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
     ] {
         assert!(
@@ -2912,30 +2910,25 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
             "the database edit model must not depend on {forbidden}"
         );
     }
-    let database_editor =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/src/edit.rs"))
-            .expect("the Polars database editor must be readable");
+    let data_types =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/src/data_type.rs"))
+            .expect("the Polars dtype mapping must be readable");
     assert!(
-        database_editor.contains("use yss_database_edit::EditOperation;")
-            && database_editor.contains("pub fn apply_operation")
-            && database_editor.contains("pub fn reverse_operation")
-            && !database_editor.contains("yssbi_lib"),
-        "the Polars editor must implement the canonical edit model without a root dependency"
-    );
-    assert!(
-        !database_editor.contains("pub fn anyvalue_to_json"),
-        "the database editor must not retain the extracted JSON projection"
+        data_types.contains("pub fn dtype_from_string")
+            && data_types.contains("pub fn dtype_to_string")
+            && !data_types.contains("yssbi_lib"),
+        "the Polars adapter must own dtype mapping without a root dependency"
     );
     let database_instance = std::fs::read_to_string(
         root.join("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
     )
     .expect("the database runtime instance must be readable");
     assert!(
-        database_instance
-            .contains("use yss_database_edit::{EditHistory, EditOperation, EditState};")
-            && database_instance.contains("use yss_tabular_polars::{")
-            && database_instance.contains("anyvalue_to_json, apply_operation"),
-        "the database instance must consume the canonical JSON projection directly"
+        database_instance.contains("use yss_database_edit::{EditOperation, EditState};")
+            && database_instance
+                .contains("use yss_tabular_polars::{dtype_from_string, dtype_to_string};")
+            && database_instance.contains("apply_edit_on_duckdb"),
+        "the database instance must consume the shared edit contract and SQL edit adapter"
     );
     assert!(
         !root.join("src-tauri/src/database/row_mapping.rs").exists(),
@@ -3085,7 +3078,6 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
     for relative in [
         "src-tauri/crates/yss-application/src/database.rs",
         "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
-        "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
         "src-tauri/crates/yss-duckdb/src/table.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -3137,9 +3129,8 @@ fn database_export_uses_contract_and_engine_owners_without_root_facade() {
     )
     .expect("the database runtime instance must be readable");
     for direct_owner in [
-        "yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat}",
+        "yss_database_contract::{DatabaseDecl, DatabaseExportFormat}",
         "export_duckdb_table",
-        "yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe}",
         "Result<(), DatabaseExportError>",
     ] {
         assert!(
@@ -3159,7 +3150,6 @@ fn database_export_uses_contract_and_engine_owners_without_root_facade() {
         "pub struct DatabaseExportError",
         "enum DatabaseExportSource",
         "impl From<yss_duckdb::DuckDbExportError> for DatabaseExportError",
-        "impl From<yss_tabular_io::TabularIoError> for DatabaseExportError",
         "Export(#[source] DatabaseExportError)",
     ] {
         assert!(
@@ -3252,7 +3242,6 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
         "yss-duckdb = { path = \"../yss-duckdb\" }",
         "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
-        "yss-tabular-io = { path = \"../yss-tabular-io\" }",
         "yss-tabular-polars = { path = \"../yss-tabular-polars\" }",
     ] {
         assert!(
@@ -4622,83 +4611,6 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
 }
 
 #[test]
-fn application_settings_has_one_strict_global_owner_without_project_mirrors() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-settings/Cargo.toml",
-        "src-tauri/crates/yss-settings/src/lib.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "application settings owner must exist at {relative}"
-        );
-    }
-    for retired in [
-        "src-tauri/crates/yss-computation-settings/Cargo.toml",
-        "src-tauri/crates/yss-computation-settings/src/lib.rs",
-    ] {
-        assert!(
-            !root.join(retired).is_file(),
-            "the retired computation-settings crate must not retain {retired}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-settings\"",
-        "yss-settings = { path = \"./crates/yss-settings\" }",
-    ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
-    }
-    assert!(
-        !workspace_manifest.contains("yss-computation-settings"),
-        "the workspace must not retain the retired computation-settings crate"
-    );
-
-    let project_module =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/lib.rs"))
-            .expect("the root project module must be readable");
-    for facade in ["computation_settings", "yss_computation_settings"] {
-        assert!(
-            !project_module.contains(facade),
-            "the root project module must not restore settings facade '{facade}'"
-        );
-    }
-
-    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-settings/src/lib.rs"))
-        .expect("application settings owner must be readable");
-    for contract in [
-        "pub struct ApplicationSettings",
-        "pub struct ComputationSettings",
-        "pub enum StatisticalMissingValuePolicy",
-        "pub struct SettingsSnapshot",
-        "pub struct SettingsMutationRequest",
-        "pub struct SettingsMutationReceipt",
-        "deny_unknown_fields",
-    ] {
-        assert!(
-            owner.contains(contract),
-            "application settings crate must own strict contract '{contract}'"
-        );
-    }
-    assert!(
-        !owner.contains("tauri"),
-        "computation settings contract must remain platform-neutral"
-    );
-
-    let manifest_owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project/src/manifest.rs"))
-            .expect("project manifest owner must be readable");
-    for validation_boundary in ["computation_settings", "yss_computation_settings"] {
-        assert!(
-            !manifest_owner.contains(validation_boundary),
-            "project manifest must not retain global settings '{validation_boundary}'"
-        );
-    }
-}
-
-#[test]
 fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
     let root = repository_root();
     for relative in [
@@ -5137,11 +5049,11 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
     for contract in [
         "pub struct MutationRequest",
         "pub enum ResourceKey",
-        "pub struct ResourcePatch",
-        "pub struct ProjectHistoryTransaction",
-        "pub struct ProjectDocumentState",
-        "pub enum HistoryError",
-        "pub struct ProjectHistory",
+        "pub struct FunctionDocument",
+        "pub struct FunctionDocumentPatch",
+        "pub struct ResourceDeltaEvent",
+        "pub enum ProjectResourceMutationError",
+        "pub enum ProjectGraphResidency",
     ] {
         assert!(
             owner.contains(contract),
@@ -5179,7 +5091,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
 
     for relative in [
         "src-tauri/crates/yss-application/src/resource_mutation.rs",
-        "src-tauri/crates/yss-project/src/history_hydration.rs",
+        "src-tauri/crates/yss-project/src/project_state/function_mutation.rs",
         "src-tauri/crates/yss-project/src/project_state.rs",
         "src-tauri/crates/yss-api/src/schema/application_event.rs",
     ] {
@@ -5461,7 +5373,6 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
     for relative in [
         "src-tauri/crates/yss-application/src/execution/run_graph.rs",
         "src-tauri/crates/yss-application/src/resource_mutation.rs",
-        "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_io.rs",
         "src-tauri/crates/yss-project/src/project_lifecycle.rs",
         "src-tauri/crates/yss-project/src/project_state.rs",
@@ -5517,7 +5428,7 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
         "use yss_project_identity::ResourceRevision",
         "InsertGraph",
         "MoveGraph",
-        "moved_before: Box<GraphResourceDocument>",
+        "moved: GraphResourceDocument",
         "UpsertChart",
     ] {
         assert!(
@@ -5577,8 +5488,7 @@ fn project_data_patch_has_one_model_owner_without_history_name_collision() {
     for relative in [
         "src-tauri/crates/yss-project/src/project_writers.rs",
         "src-tauri/crates/yss-project/src/project_writers/charts.rs",
-        "src-tauri/crates/yss-project/src/project_state/history_moves.rs",
-        "src-tauri/crates/yss-project/src/project_state/resource_history.rs",
+        "src-tauri/crates/yss-project/src/project_state/resource_publication.rs",
         "src-tauri/crates/yss-project/src/project_state/resource_patch.rs",
     ] {
         let consumer = std::fs::read_to_string(root.join(relative))
@@ -6390,7 +6300,6 @@ fn chart_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "src-tauri/crates/yss-application/src/chart.rs",
         "src-tauri/crates/yss-api/src/commands/command_chart.rs",
         "src-tauri/crates/yss-project-history/src/lib.rs",
-        "src-tauri/crates/yss-project/src/history_hydration.rs",
         "src-tauri/crates/yss-project/src/project_activation.rs",
         "src-tauri/crates/yss-project-model/src/lib.rs",
         "src-tauri/crates/yss-project-filesystem/src/error.rs",
