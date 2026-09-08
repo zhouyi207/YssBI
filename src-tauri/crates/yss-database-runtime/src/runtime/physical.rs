@@ -121,7 +121,6 @@ impl DatabaseRuntimePhysicalState {
             DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone()))
         })?;
         let row_count = match &instance.state {
-            DatabaseState::Loaded { dataframe, .. } => dataframe.height(),
             DatabaseState::DuckDb { row_count, .. } => *row_count,
             DatabaseState::Failed { .. } => {
                 return Err(DatabaseError::unsupported(
@@ -340,7 +339,7 @@ impl PreparedDatabasePhysicalMutation {
     }
 
     pub fn rollback(&self) -> Result<(), DatabaseError> {
-        if !matches!(self.before.state, DatabaseState::DuckDb { .. }) {
+        if matches!(self.before.state, DatabaseState::Failed { .. }) {
             self.physical.restore_mutation(self);
             return Ok(());
         }
@@ -399,7 +398,7 @@ fn apply_mutation(
         DatabaseMutationOperation::RenameDatabase { name } => instance.rename_display_name(name),
         DatabaseMutationOperation::Undo => instance.undo_edit(),
         DatabaseMutationOperation::Redo => instance.redo_edit(),
-        DatabaseMutationOperation::Save => instance.save_changes(None),
+        DatabaseMutationOperation::Save => instance.save_changes(),
     }
 }
 
@@ -412,11 +411,6 @@ fn schema_for_instance(
             .map_err(|_| {
                 DatabaseError::schema(DatabaseOperation::DataSnapshot, Some(database.clone()))
             }),
-        DatabaseState::Loaded { dataframe, .. } => {
-            DatabaseSchemaFact::from_dataframe(database, dataframe).map_err(|_| {
-                DatabaseError::schema(DatabaseOperation::DataSnapshot, Some(database.clone()))
-            })
-        }
         DatabaseState::Failed { .. } => Err(DatabaseError::unsupported(
             DatabaseOperation::DataSnapshot,
             Some(database.clone()),

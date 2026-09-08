@@ -1,32 +1,23 @@
 use super::error::DatabaseExportError;
 use crate::DatabaseState;
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat};
-use yss_database_edit::{EditHistory, EditOperation, EditState};
+use yss_database_contract::{DatabaseDecl, DatabaseExportFormat};
+use yss_database_edit::{EditOperation, EditState};
 
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use yss_database_schema::DatabaseSchemaFact;
-use yss_dataset_profile::{
-    ColumnDistribution, ColumnStats, DatasetOverview, compute_all_column_distributions,
-    compute_all_column_stats, compute_dataset_overview,
-};
+use yss_dataset_profile::{ColumnDistribution, ColumnStats, DatasetOverview};
 use yss_duckdb::{
     DatasetProfileColumnRef, DuckDbColumnMeta, PageQueryResult, add_row_with_operation,
     apply_edit_on_duckdb,
     compute_all_column_distributions as compute_all_column_distributions_duckdb,
     compute_all_column_stats as compute_all_column_stats_duckdb,
     compute_dataset_overview as compute_dataset_overview_duckdb, delete_column_with_snapshot,
-    delete_rows_with_operations, duckdb_table_sql, edit_cell_with_operation, export_duckdb_table,
-    ingest_dataframe_to_duckdb, query_columns_to_dataframe, query_page_with_rowids,
-    query_to_dataframe_for_table, refresh_duckdb_meta, reverse_edit_on_duckdb,
-    should_use_in_memory_editing, write_display_name,
+    delete_rows_with_operations, edit_cell_with_operation, export_duckdb_table,
+    query_columns_to_dataframe, query_page_with_rowids, refresh_duckdb_meta,
+    reverse_edit_on_duckdb, write_display_name,
 };
-use yss_tabular_io::{write_csv_dataframe, write_parquet_dataframe};
-use yss_tabular_polars::{
-    anyvalue_to_json, apply_operation, capture_column_data, capture_row_data,
-    cast_column as sci_cast_column, dtype_from_string, dtype_to_string, reverse_operation,
-};
+use yss_tabular_polars::{dtype_from_string, dtype_to_string};
 
 fn duckdb_profile_columns(columns: &[DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
     columns
@@ -46,9 +37,6 @@ impl DatabaseInstance {
         let fact = match &self.state {
             DatabaseState::DuckDb { columns, .. } => {
                 DatabaseSchemaFact::from_duckdb(&self.decl.id, columns)
-            }
-            DatabaseState::Loaded { dataframe, .. } => {
-                DatabaseSchemaFact::from_dataframe(&self.decl.id, dataframe)
             }
             DatabaseState::Failed { error } => {
                 return Err(PolarsError::ComputeError(error.clone().into()));
@@ -76,17 +64,6 @@ impl DatabaseInstance {
                 duckdb_path, table, ..
             } => query_page_with_rowids(Path::new(duckdb_path), table, offset, limit)
                 .map_err(|e| PolarsError::ComputeError(e.into())),
-            DatabaseState::Loaded { dataframe, .. } => {
-                let total = dataframe.height();
-                let start = offset.min(total);
-                let count = limit.min(total.saturating_sub(start));
-                let slice = dataframe.slice(start as i64, count);
-                let row_ids = (start as i64..start as i64 + count as i64).collect();
-                Ok(PageQueryResult {
-                    dataframe: slice,
-                    row_ids,
-                })
-            }
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
@@ -98,9 +75,6 @@ impl DatabaseInstance {
                 duckdb_path, table, ..
             } => query_columns_to_dataframe(Path::new(duckdb_path), table, columns)
                 .map_err(|e| PolarsError::ComputeError(e.into())),
-            DatabaseState::Loaded { dataframe, .. } => {
-                Ok(dataframe.clone().select(columns.to_vec())?)
-            }
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
@@ -132,14 +106,6 @@ impl DatabaseInstance {
             } => {
                 export_duckdb_table(Path::new(duckdb_path), table, path, format).map_err(Into::into)
             }
-            DatabaseState::Loaded { dataframe, .. } => {
-                let mut dataframe = dataframe.as_ref().clone();
-                match format {
-                    DatabaseExportFormat::Csv => write_csv_dataframe(path, &mut dataframe),
-                    DatabaseExportFormat::Parquet => write_parquet_dataframe(path, &mut dataframe),
-                }
-                .map_err(Into::into)
-            }
             DatabaseState::Failed { .. } => Err(DatabaseExportError::unavailable()),
         }
     }
@@ -155,7 +121,7 @@ impl DatabaseInstance {
         Ok(self.edit_state())
     }
 
-    /// 列统计：DuckDB 走 SQL 聚合，其它状态 fallback 到 Polars 整表。
+    /// 列统计：DuckDB 走 SQL 聚合。
     pub fn compute_column_stats(&mut self) -> PolarsResult<Vec<ColumnStats>> {
         match &self.state {
             DatabaseState::DuckDb {
@@ -168,7 +134,6 @@ impl DatabaseInstance {
                 compute_all_column_stats_duckdb(Path::new(duckdb_path), table, &columns)
                     .map_err(|e| PolarsError::ComputeError(e.into()))
             }
-            DatabaseState::Loaded { dataframe, .. } => Ok(compute_all_column_stats(dataframe)),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
     }
@@ -185,9 +150,6 @@ impl DatabaseInstance {
                 let columns = duckdb_profile_columns(columns);
                 compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, &columns)
                     .map_err(|e| PolarsError::ComputeError(e.into()))
-            }
-            DatabaseState::Loaded { dataframe, .. } => {
-                Ok(compute_all_column_distributions(dataframe))
             }
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
         }
@@ -207,51 +169,7 @@ impl DatabaseInstance {
                 compute_dataset_overview_duckdb(Path::new(duckdb_path), table, &columns, *row_count)
                     .map_err(|e| PolarsError::ComputeError(e.into()))
             }
-            DatabaseState::Loaded { dataframe, .. } => Ok(compute_dataset_overview(dataframe)),
             DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
-    }
-
-    pub fn ensure_loaded(&mut self) -> PolarsResult<&DataFrame> {
-        if matches!(self.state, DatabaseState::DuckDb { .. }) {
-            let row_count = match &self.state {
-                DatabaseState::DuckDb { row_count, .. } => *row_count,
-                _ => unreachable!(),
-            };
-            if !should_use_in_memory_editing(row_count) {
-                return Err(PolarsError::ComputeError(
-                    format!(
-                        "Table has {row_count} rows; exceeds in-memory limit for full load. \
-                         Use SQL editing or column-scoped graph nodes."
-                    )
-                    .into(),
-                ));
-            }
-            let df = match &self.state {
-                DatabaseState::DuckDb {
-                    duckdb_path, table, ..
-                } => {
-                    let sql = format!("SELECT * FROM {}", duckdb_table_sql(table));
-                    query_to_dataframe_for_table(Path::new(duckdb_path), &sql, Some(table))
-                        .map_err(|e| PolarsError::ComputeError(e.into()))?
-                }
-                _ => unreachable!(),
-            };
-            let arc_df = Arc::new(df);
-
-            self.state = DatabaseState::Loaded {
-                dataframe: arc_df.clone(),
-                original: arc_df,
-                history: EditHistory::new(),
-            };
-        }
-
-        match &self.state {
-            DatabaseState::Loaded { dataframe, .. } => Ok(dataframe),
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-            _ => Err(PolarsError::ComputeError(
-                "Database must be DuckDb or Loaded before materialization".into(),
-            )),
         }
     }
 
@@ -262,89 +180,43 @@ impl DatabaseInstance {
         new_value: serde_json::Value,
         row_id: Option<i64>,
     ) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            ..
-        } = &mut self.state
-        {
-            let path = PathBuf::from(duckdb_path.clone());
-            let table_name = table.clone();
-            let operation =
-                edit_cell_with_operation(&path, &table_name, row, row_id, col_name, new_value)?;
-            history.push(operation);
-            return Ok(history.state());
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                ..
+            } => {
+                let path = PathBuf::from(duckdb_path.clone());
+                let table_name = table.clone();
+                let operation =
+                    edit_cell_with_operation(&path, &table_name, row, row_id, col_name, new_value)?;
+                history.push(operation);
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let col_idx = df
-            .get_column_index(col_name)
-            .ok_or_else(|| format!("Column '{}' not found", col_name))?;
-        let old_value = df.columns()[col_idx]
-            .get(row)
-            .map(|v| anyvalue_to_json(v))
-            .unwrap_or(serde_json::Value::Null);
-
-        let op = EditOperation::EditCell {
-            row,
-            row_id,
-            col: col_name.to_string(),
-            old_value,
-            new_value,
-        };
-
-        apply_operation(df, &op)?;
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn add_row(&mut self, index: Option<usize>) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            row_count,
-            ..
-        } = &mut self.state
-        {
-            let path = PathBuf::from(duckdb_path.clone());
-            let table_name = table.clone();
-            let idx = index.unwrap_or(*row_count);
-            let operation = add_row_with_operation(&path, &table_name, idx)?;
-            history.push(operation);
-            *row_count += 1;
-            return Ok(history.state());
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                row_count,
+                ..
+            } => {
+                let path = PathBuf::from(duckdb_path.clone());
+                let table_name = table.clone();
+                let idx = index.unwrap_or(*row_count);
+                let operation = add_row_with_operation(&path, &table_name, idx)?;
+                history.push(operation);
+                *row_count += 1;
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let idx = index.unwrap_or(df.height());
-        let op = EditOperation::AddRow {
-            index: idx,
-            row_id: None,
-        };
-
-        apply_operation(df, &op)?;
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn delete_rows(
@@ -352,187 +224,102 @@ impl DatabaseInstance {
         indices: &[usize],
         row_ids: Option<&[i64]>,
     ) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            row_count,
-            ..
-        } = &mut self.state
-        {
-            let path = PathBuf::from(duckdb_path.clone());
-            let table_name = table.clone();
-            let operations = delete_rows_with_operations(&path, &table_name, indices, row_ids)?;
-            let deleted_count = operations.len();
-            for operation in operations {
-                history.push(operation);
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                row_count,
+                ..
+            } => {
+                let path = PathBuf::from(duckdb_path.clone());
+                let table_name = table.clone();
+                let operations = delete_rows_with_operations(&path, &table_name, indices, row_ids)?;
+                let deleted_count = operations.len();
+                for operation in operations {
+                    history.push(operation);
+                }
+                *row_count = row_count.saturating_sub(deleted_count);
+                Ok(history.state())
             }
-            *row_count = row_count.saturating_sub(deleted_count);
-            return Ok(history.state());
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let mut sorted_indices = indices.to_vec();
-        sorted_indices.sort_unstable();
-        sorted_indices.dedup();
-
-        for (offset, &idx) in sorted_indices.iter().enumerate() {
-            let actual_idx = idx - offset;
-            let data = capture_row_data(df, actual_idx);
-            let op = EditOperation::DeleteRow {
-                index: actual_idx,
-                row_id: None,
-                data,
-            };
-            apply_operation(df, &op)?;
-            history.push(op);
-        }
-
-        Ok(history.state())
     }
 
     pub fn add_column(&mut self, name: &str, dtype: &str) -> Result<EditState, String> {
         let dtype = dtype_to_string(&dtype_from_string(dtype)?)?;
 
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let mut op = EditOperation::AddColumn {
-                name: name.to_string(),
-                dtype: dtype.to_string(),
-            };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-            columns.push(DuckDbColumnMeta {
-                name: name.to_string(),
-                dtype: dtype.to_string(),
-            });
-            history.push(op);
-            return Ok(history.state());
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                columns,
+                ..
+            } => {
+                let mut op = EditOperation::AddColumn {
+                    name: name.to_string(),
+                    dtype: dtype.to_string(),
+                };
+                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
+                columns.push(DuckDbColumnMeta {
+                    name: name.to_string(),
+                    dtype: dtype.to_string(),
+                });
+                history.push(op);
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let op = EditOperation::AddColumn {
-            name: name.to_string(),
-            dtype: dtype.to_string(),
-        };
-
-        apply_operation(df, &op)?;
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn delete_column(&mut self, name: &str) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let snapshot = delete_column_with_snapshot(Path::new(duckdb_path), table, name)?;
-            let op = EditOperation::DeleteColumn {
-                name: name.to_string(),
-                dtype: snapshot.dtype,
-                row_ids: snapshot.row_ids,
-                row_fingerprints: snapshot.row_fingerprints,
-                data: snapshot.data,
-            };
-            columns.retain(|c| c.name != name);
-            history.push(op);
-            return Ok(history.state());
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                columns,
+                ..
+            } => {
+                let snapshot = delete_column_with_snapshot(Path::new(duckdb_path), table, name)?;
+                let op = EditOperation::DeleteColumn {
+                    name: name.to_string(),
+                    dtype: snapshot.dtype,
+                    row_ids: snapshot.row_ids,
+                    row_fingerprints: snapshot.row_fingerprints,
+                    data: snapshot.data,
+                };
+                columns.retain(|c| c.name != name);
+                history.push(op);
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let column = df
-            .column(name)
-            .map_err(|_| format!("Column '{name}' not found"))?;
-        let dtype = dtype_to_string(column.dtype())?;
-        let data = capture_column_data(df, name);
-        let op = EditOperation::DeleteColumn {
-            name: name.to_string(),
-            dtype,
-            row_ids: vec![],
-            row_fingerprints: vec![],
-            data,
-        };
-
-        apply_operation(df, &op)?;
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn rename_column(&mut self, old_name: &str, new_name: &str) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let mut op = EditOperation::RenameColumn {
-                old_name: old_name.to_string(),
-                new_name: new_name.to_string(),
-            };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-            if let Some(col) = columns.iter_mut().find(|c| c.name == old_name) {
-                col.name = new_name.to_string();
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                columns,
+                ..
+            } => {
+                let mut op = EditOperation::RenameColumn {
+                    old_name: old_name.to_string(),
+                    new_name: new_name.to_string(),
+                };
+                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
+                if let Some(col) = columns.iter_mut().find(|c| c.name == old_name) {
+                    col.name = new_name.to_string();
+                }
+                history.push(op);
+                Ok(history.state())
             }
-            history.push(op);
-            return Ok(history.state());
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let op = EditOperation::RenameColumn {
-            old_name: old_name.to_string(),
-            new_name: new_name.to_string(),
-        };
-
-        apply_operation(df, &op)?;
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn cast_column(
@@ -546,221 +333,112 @@ impl DatabaseInstance {
             return Err("DuckDB force casting is not supported".into());
         }
 
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let old_dtype = columns
-                .iter()
-                .find(|c| c.name == col_name)
-                .map(|c| c.dtype.clone())
-                .ok_or_else(|| format!("Column '{col_name}' not found"))?;
-            let mut op = EditOperation::CastColumn {
-                col: col_name.to_string(),
-                old_data: vec![],
-                old_dtype: old_dtype.clone(),
-                new_dtype: new_dtype.clone(),
-            };
-            apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-            if let Some(col) = columns.iter_mut().find(|c| c.name == col_name) {
-                col.dtype = new_dtype.clone();
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                columns,
+                ..
+            } => {
+                let old_dtype = columns
+                    .iter()
+                    .find(|c| c.name == col_name)
+                    .map(|c| c.dtype.clone())
+                    .ok_or_else(|| format!("Column '{col_name}' not found"))?;
+                let mut op = EditOperation::CastColumn {
+                    col: col_name.to_string(),
+                    old_data: vec![],
+                    old_dtype: old_dtype.clone(),
+                    new_dtype: new_dtype.clone(),
+                };
+                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
+                if let Some(col) = columns.iter_mut().find(|c| c.name == col_name) {
+                    col.dtype = new_dtype.clone();
+                }
+                history.push(op);
+                Ok(history.state())
             }
-            history.push(op);
-            return Ok(history.state());
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
-
-        self.ensure_loaded().map_err(|e| e.to_string())?;
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let df = Arc::make_mut(dataframe);
-        let old_data = capture_column_data(df, col_name);
-        let col_idx = df
-            .get_column_index(col_name)
-            .ok_or_else(|| format!("Column '{}' not found", col_name))?;
-        let old_dtype = dtype_to_string(df.columns()[col_idx].dtype())?;
-
-        sci_cast_column(df, col_name, &new_dtype, force)?;
-
-        let op = EditOperation::CastColumn {
-            col: col_name.to_string(),
-            old_data,
-            old_dtype,
-            new_dtype,
-        };
-        history.push(op);
-        Ok(history.state())
     }
 
     pub fn undo_edit(&mut self) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            row_count,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let mut op = history.pop_undo().ok_or("Nothing to undo")?;
-            let path = PathBuf::from(duckdb_path.clone());
-            let table_name = table.clone();
-            if let Err(error) = reverse_edit_on_duckdb(&path, &table_name, &mut op) {
-                history.push_undo(op);
-                return Err(error);
-            }
-            history.push_redo(op);
-            let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
-            *row_count = count;
-            *columns = cols;
-            return Ok(history.state());
-        }
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let op = history.pop_undo().ok_or("Nothing to undo")?;
-        let mut candidate = dataframe.as_ref().clone();
-        if let Err(error) = reverse_operation(&mut candidate, &op) {
-            history.push_undo(op);
-            return Err(error);
-        }
-        *dataframe = Arc::new(candidate);
-        history.push_redo(op);
-        Ok(history.state())
-    }
-
-    pub fn redo_edit(&mut self) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path,
-            table,
-            history,
-            row_count,
-            columns,
-            ..
-        } = &mut self.state
-        {
-            let mut op = history.pop_redo().ok_or("Nothing to redo")?;
-            let path = PathBuf::from(duckdb_path.clone());
-            let table_name = table.clone();
-            if let Err(error) = apply_edit_on_duckdb(&path, &table_name, &mut op) {
-                history.push_redo(op);
-                return Err(error);
-            }
-            history.push_undo(op);
-            let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
-            *row_count = count;
-            *columns = cols;
-            return Ok(history.state());
-        }
-
-        let (dataframe, history) = match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe, history, ..
-            } => (dataframe, history),
-            _ => return Err("Database not loaded".into()),
-        };
-
-        let op = history.pop_redo().ok_or("Nothing to redo")?;
-        let mut candidate = dataframe.as_ref().clone();
-        if let Err(error) = apply_operation(&mut candidate, &op) {
-            history.push_redo(op);
-            return Err(error);
-        }
-        *dataframe = Arc::new(candidate);
-        history.push_undo(op);
-        Ok(history.state())
-    }
-
-    pub fn save_changes(&mut self, project_root: Option<&Path>) -> Result<EditState, String> {
-        if let DatabaseEngine::DuckDb { path, table } = &self.decl.engine {
-            let duckdb_abs = project_root
-                .map(|root| root.join(path))
-                .or_else(|| {
-                    matches!(&self.state, DatabaseState::DuckDb { .. }).then(|| match &self.state {
-                        DatabaseState::DuckDb { duckdb_path, .. } => PathBuf::from(duckdb_path),
-                        _ => unreachable!("state was checked as DuckDb"),
-                    })
-                })
-                .ok_or_else(|| "请先打开或创建项目后再保存数据".to_string())?;
-            let table_id = table.clone();
-
-            if let DatabaseState::DuckDb {
+        match &mut self.state {
+            DatabaseState::DuckDb {
                 duckdb_path,
+                table,
                 history,
                 row_count,
                 columns,
                 ..
-            } = &mut self.state
-            {
-                let (count, cols) = refresh_duckdb_meta(Path::new(duckdb_path), &table_id)?;
+            } => {
+                let mut op = history.pop_undo().ok_or("Nothing to undo")?;
+                let path = PathBuf::from(duckdb_path.clone());
+                let table_name = table.clone();
+                if let Err(error) = reverse_edit_on_duckdb(&path, &table_name, &mut op) {
+                    history.push_undo(op);
+                    return Err(error);
+                }
+                history.push_redo(op);
+                let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
+                *row_count = count;
+                *columns = cols;
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
+        }
+    }
+
+    pub fn redo_edit(&mut self) -> Result<EditState, String> {
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                row_count,
+                columns,
+                ..
+            } => {
+                let mut op = history.pop_redo().ok_or("Nothing to redo")?;
+                let path = PathBuf::from(duckdb_path.clone());
+                let table_name = table.clone();
+                if let Err(error) = apply_edit_on_duckdb(&path, &table_name, &mut op) {
+                    history.push_redo(op);
+                    return Err(error);
+                }
+                history.push_undo(op);
+                let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
+                *row_count = count;
+                *columns = cols;
+                Ok(history.state())
+            }
+            DatabaseState::Failed { error } => Err(error.clone()),
+        }
+    }
+
+    pub fn save_changes(&mut self) -> Result<EditState, String> {
+        match &mut self.state {
+            DatabaseState::DuckDb {
+                duckdb_path,
+                table,
+                history,
+                row_count,
+                columns,
+            } => {
+                let (count, cols) = refresh_duckdb_meta(Path::new(duckdb_path), table)?;
                 *row_count = count;
                 *columns = cols;
                 history.clear();
-                return Ok(EditState {
-                    can_undo: false,
-                    can_redo: false,
-                    is_modified: false,
-                    undo_count: 0,
-                    redo_count: 0,
-                });
-            }
-
-            self.ensure_loaded().map_err(|e| e.to_string())?;
-            let meta = match &mut self.state {
-                DatabaseState::Loaded { dataframe, .. } => {
-                    ingest_dataframe_to_duckdb(Arc::make_mut(dataframe), &duckdb_abs, &table_id)?
-                }
-                _ => return Err("Database not loaded".into()),
-            };
-            self.state = DatabaseState::DuckDb {
-                duckdb_path: duckdb_abs.to_string_lossy().to_string(),
-                table: table_id,
-                row_count: meta.row_count,
-                columns: meta.columns,
-                history: EditHistory::new(),
-            };
-            return Ok(EditState {
-                can_undo: false,
-                can_redo: false,
-                is_modified: false,
-                undo_count: 0,
-                redo_count: 0,
-            });
-        }
-
-        match &mut self.state {
-            DatabaseState::Loaded {
-                dataframe,
-                original,
-                history,
-            } => {
-                *original = dataframe.clone();
-                history.clear();
                 Ok(history.state())
             }
-            _ => Err("Database not loaded".into()),
+            DatabaseState::Failed { error } => Err(error.clone()),
         }
     }
 
     pub fn edit_state(&self) -> EditState {
         match &self.state {
-            DatabaseState::DuckDb { history, .. } | DatabaseState::Loaded { history, .. } => {
-                history.state()
-            }
+            DatabaseState::DuckDb { history, .. } => history.state(),
             _ => EditState {
                 can_undo: false,
                 can_redo: false,

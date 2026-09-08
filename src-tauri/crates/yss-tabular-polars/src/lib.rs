@@ -1,11 +1,8 @@
 //! Polars materialization and value conversion for canonical tabular data.
 
-mod edit;
+mod data_type;
 
-pub use edit::{
-    apply_operation, capture_column_data, capture_row_data, cast_column, dtype_from_string,
-    dtype_to_string, reverse_operation,
-};
+pub use data_type::{dtype_from_string, dtype_to_string};
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use polars::prelude::{AnyValue, Column, DataFrame, DataType as PDataType, PlSmallStr, Series};

@@ -12,6 +12,9 @@ mod project_storage;
 pub mod runtime;
 pub mod session_api;
 
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
+
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
 };

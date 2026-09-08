@@ -16,12 +16,7 @@ use crate::{
 };
 use yss_database_edit::EditOperation;
 
-pub const MAX_IN_MEMORY_EDIT_ROWS: usize = 50_000;
 pub const MAX_GET_DATAFRAME_ROWS: usize = 500_000;
-
-pub fn should_use_in_memory_editing(row_count: usize) -> bool {
-    row_count <= MAX_IN_MEMORY_EDIT_ROWS
-}
 
 fn open_conn(duckdb_path: &Path) -> Result<Connection, String> {
     Connection::open(duckdb_path).map_err(|e| e.to_string())

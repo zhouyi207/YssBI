@@ -368,27 +368,15 @@ fn label_for_series(series: &Series) -> Option<Box<str>> {
 mod tests {
     use super::*;
     use crate::runtime::DatabaseRuntimeRegistry;
-    use crate::{DatabaseInstance, DatabaseState};
+    use crate::test_support::DuckDbFixture;
     use polars::prelude::{AnyValue, Column, DataFrame, PlSmallStr, TimeUnit};
     use std::num::NonZeroU64;
-    use std::sync::Arc;
     use yss_database_contract::{
-        DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
-        DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+        DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseSessionIdentity,
+        DatabaseSessionOpenRequest,
     };
-    use yss_database_edit::EditHistory;
-
-    fn session_with_loaded_data(identity: &str) -> DatabaseRuntimeSession {
-        let declaration = DatabaseDecl {
-            id: DatabaseId::from_existing("sales".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "sales".into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: "Sales".into(),
-        };
+    fn session_with_temporal_data(identity: &str) -> (DuckDbFixture, DatabaseRuntimeSession) {
         let date = Series::from_any_values(
             PlSmallStr::from("observed_date"),
             &[AnyValue::Date(1), AnyValue::Date(2)],
@@ -404,18 +392,10 @@ mod tests {
             false,
         )
         .expect("test datetime series is valid");
-        let dataframe = Arc::new(
-            DataFrame::new(2, vec![Column::from(date), Column::from(datetime)])
-                .expect("test dataframe is valid"),
-        );
-        let instance = DatabaseInstance {
-            decl: declaration.clone(),
-            state: DatabaseState::Loaded {
-                dataframe: dataframe.clone(),
-                original: dataframe,
-                history: EditHistory::new(),
-            },
-        };
+        let dataframe = DataFrame::new(2, vec![Column::from(date), Column::from(datetime)])
+            .expect("test dataframe is valid");
+        let fixture = DuckDbFixture::new("sales", dataframe);
+        let declaration = fixture.instance.decl.clone();
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             declaration.id.clone(),
             DatabaseDeclarationObservation::new(
@@ -424,7 +404,7 @@ mod tests {
             ),
         )])
         .expect("test declaration observations are valid");
-        DatabaseRuntimeRegistry::new()
+        let session = DatabaseRuntimeRegistry::new()
             .open_session_with_instances(
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(identity.into()),
@@ -433,26 +413,27 @@ mod tests {
                     vec![declaration].into(),
                     observations,
                 ),
-                [instance],
+                [fixture.instance.clone()],
             )
-            .expect("test database session is valid")
+            .expect("test database session is valid");
+        (fixture, session)
     }
 
     #[test]
-    fn loaded_runtime_materializer_casts_temporal_columns_for_plot_reads() {
-        let session = session_with_loaded_data("plot-session");
+    fn runtime_materializer_preserves_plot_day_and_microsecond_encodings() {
+        let (_fixture, session) = session_with_temporal_data("plot-session");
         let database = DatabaseId::from_existing("sales".into());
         let date_column =
             TabularColumnName::try_from("observed_date").expect("test column name is valid");
         let datetime_column =
             TabularColumnName::try_from("observed_at").expect("test column name is valid");
         let pair = read_numeric_column_pair(&session, &database, &date_column, &datetime_column)
-            .expect("loaded temporal columns materialize");
+            .expect("DuckDB temporal columns materialize");
         assert_eq!(pair.x_label(), Some("observed_date"));
         assert_eq!(pair.y_label(), Some("observed_at"));
         assert_eq!(pair.x_kind(), NumericColumnKind::Date);
         assert_eq!(pair.y_kind(), NumericColumnKind::Datetime);
         assert_eq!(pair.x(), &[Some(1.0), Some(2.0)]);
-        assert_eq!(pair.y(), &[Some(1.0), Some(2.0)]);
+        assert_eq!(pair.y(), &[Some(1_000.0), Some(2_000.0)]);
     }
 }

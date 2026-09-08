@@ -9,7 +9,7 @@ mod observation;
 mod session;
 
 pub use declaration::DatabaseDecl;
-pub use engine::{DatabaseEngine, DatabaseEngineSql};
+pub use engine::{DatabaseEngine, DatabaseEngineSql, DatabaseImportSource};
 pub use export::{DatabaseExportFormat, DatabaseExportFormatParseError};
 pub use identity::{DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseId};
 pub use observation::{

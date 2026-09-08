@@ -32,6 +32,7 @@ use crate::execution::session_slot::{
 use uuid::Uuid;
 use yss_database_contract::{
     DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseId,
+    DatabaseImportSource,
 };
 use yss_database_edit::EditState;
 use yss_database_runtime::error::{DatabaseError, DatabaseErrorCode};
@@ -182,10 +183,10 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
-        engine: DatabaseEngine,
+        source: DatabaseImportSource,
     ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
         let captured = self.capture_database_session(&project_instance_id)?;
-        let result = load_database_in_captured_session(&captured, operation_id, engine)?;
+        let result = load_database_in_captured_session(&captured, operation_id, source)?;
         self.refresh_database_session()?;
         Ok(result)
     }

@@ -167,7 +167,7 @@ pub enum DatabaseEngineDTO {
     InMemory { name: String },
 }
 
-impl From<DatabaseImportSourceDTO> for DatabaseEngineDTO {
+impl From<DatabaseImportSourceDTO> for yss_database_contract::DatabaseImportSource {
     fn from(value: DatabaseImportSourceDTO) -> Self {
         match value {
             DatabaseImportSourceDTO::Sql {
@@ -177,14 +177,16 @@ impl From<DatabaseImportSourceDTO> for DatabaseEngineDTO {
             } => {
                 let engine = match engine {
                     DatabaseImportSqlEngineDTO::Sqlite => {
-                        DatabaseEngineSqlDTO::Sqlite { auto_create: false }
+                        yss_database_contract::DatabaseEngineSql::Sqlite { auto_create: false }
                     }
                     DatabaseImportSqlEngineDTO::Postgres => {
-                        DatabaseEngineSqlDTO::Postgres { ssl: true }
+                        yss_database_contract::DatabaseEngineSql::Postgres { ssl: true }
                     }
-                    DatabaseImportSqlEngineDTO::Mysql => DatabaseEngineSqlDTO::Mysql {
-                        charset: "utf8mb4".into(),
-                    },
+                    DatabaseImportSqlEngineDTO::Mysql => {
+                        yss_database_contract::DatabaseEngineSql::Mysql {
+                            charset: "utf8mb4".into(),
+                        }
+                    }
                 };
                 Self::Sql {
                     engine,
@@ -292,68 +294,6 @@ impl From<&yss_database_contract::DatabaseEngineSql> for DatabaseEngineSqlDTO {
     }
 }
 
-impl TryFrom<DatabaseEngineSqlDTO> for yss_database_contract::DatabaseEngineSql {
-    type Error = String;
-
-    fn try_from(dto: DatabaseEngineSqlDTO) -> Result<Self, Self::Error> {
-        match dto {
-            DatabaseEngineSqlDTO::Sqlite { auto_create } => {
-                Ok(yss_database_contract::DatabaseEngineSql::Sqlite { auto_create })
-            }
-            DatabaseEngineSqlDTO::Postgres { ssl } => {
-                Ok(yss_database_contract::DatabaseEngineSql::Postgres { ssl })
-            }
-            DatabaseEngineSqlDTO::Mysql { charset } => {
-                Ok(yss_database_contract::DatabaseEngineSql::Mysql { charset })
-            }
-        }
-    }
-}
-
-impl TryFrom<DatabaseEngineDTO> for yss_database_contract::DatabaseEngine {
-    type Error = String;
-
-    fn try_from(dto: DatabaseEngineDTO) -> Result<Self, Self::Error> {
-        match dto {
-            DatabaseEngineDTO::Csv {
-                path,
-                delimiter,
-                has_header,
-                infer_schema_length,
-            } => Ok(yss_database_contract::DatabaseEngine::Csv {
-                path,
-                delimiter,
-                has_header,
-                infer_schema_length,
-            }),
-            DatabaseEngineDTO::Parquet { path, columns } => {
-                Ok(yss_database_contract::DatabaseEngine::Parquet { path, columns })
-            }
-            DatabaseEngineDTO::Excel { path, sheet } => {
-                Ok(yss_database_contract::DatabaseEngine::Excel { path, sheet })
-            }
-            DatabaseEngineDTO::DuckDb { path, table } => {
-                Ok(yss_database_contract::DatabaseEngine::DuckDb { path, table })
-            }
-            DatabaseEngineDTO::Sql {
-                engine,
-                connection_string,
-                table,
-            } => {
-                let engine = yss_database_contract::DatabaseEngineSql::try_from(engine)?;
-                Ok(yss_database_contract::DatabaseEngine::Sql {
-                    engine,
-                    connection_string,
-                    table,
-                })
-            }
-            DatabaseEngineDTO::InMemory { name } => {
-                Ok(yss_database_contract::DatabaseEngine::InMemory { name })
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,13 +377,30 @@ mod tests {
             }
         }))
         .unwrap();
-        assert!(matches!(
+        let source: yss_database_contract::DatabaseImportSource = source.into();
+        assert_eq!(
             source,
-            DatabaseImportSourceDTO::Sql {
-                engine: DatabaseImportSqlEngineDTO::Sqlite,
-                ..
+            yss_database_contract::DatabaseImportSource::Sql {
+                engine: yss_database_contract::DatabaseEngineSql::Sqlite { auto_create: false },
+                connection_string: "C:/data/source.sqlite".into(),
+                table: "sales".into(),
             }
-        ));
+        );
+
+        let csv = serde_json::from_value::<DatabaseImportSourceDTO>(json!({
+            "csv": { "path": "data.csv" }
+        }))
+        .unwrap();
+        let csv: yss_database_contract::DatabaseImportSource = csv.into();
+        assert_eq!(
+            csv,
+            yss_database_contract::DatabaseImportSource::Csv {
+                path: "data.csv".into(),
+                delimiter: ',',
+                has_header: true,
+                infer_schema_length: None,
+            }
+        );
 
         for invalid in [
             json!({ "duckDb": { "path": "database/project.duckdb", "table": "sales" } }),

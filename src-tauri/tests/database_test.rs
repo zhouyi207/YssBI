@@ -1,35 +1,16 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use polars::prelude::*;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseId};
 use yss_database_edit::EditHistory;
+use yss_database_runtime::test_support::DuckDbFixture;
 use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use yss_duckdb::{
-    MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, ingest_csv_to_duckdb,
-    ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta, write_display_name,
+    MAX_DELETE_COLUMN_SNAPSHOT_ROWS, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
+    query_page_to_dataframe, read_table_meta, write_display_name,
 };
 use yss_project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
 use yss_project_identity::OperationId;
-
-fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
-    DatabaseInstance {
-        decl: DatabaseDecl {
-            id: DatabaseId::from_existing("test".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "test".into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: "Test".into(),
-        },
-        state: DatabaseState::Loaded {
-            original: Arc::new(dataframe.clone()),
-            dataframe: Arc::new(dataframe),
-            history: EditHistory::new(),
-        },
-    }
-}
 
 fn test_output_path(name: String) -> PathBuf {
     let directory = PathBuf::from("target");
@@ -61,8 +42,67 @@ fn duckdb_instance(duckdb_path: &PathBuf, table: &str) -> DatabaseInstance {
 }
 
 #[test]
+fn save_preserves_data_and_starts_a_new_edit_history() {
+    let mut fixture = DuckDbFixture::new("test", df!("value" => [1_i64]).unwrap());
+    let database = &mut fixture.instance;
+
+    database
+        .edit_cell(0, "value", serde_json::json!(2), None)
+        .unwrap();
+    database.undo_edit().unwrap();
+    assert_eq!(
+        database
+            .query_page(0, 1)
+            .unwrap()
+            .column("value")
+            .unwrap()
+            .i64()
+            .unwrap()
+            .get(0),
+        Some(1)
+    );
+    database.redo_edit().unwrap();
+
+    let saved = database.save_changes().unwrap();
+    assert!(!saved.can_undo);
+    assert!(!saved.can_redo);
+    assert!(!saved.is_modified);
+    assert_eq!(saved.undo_count, 0);
+    assert_eq!(saved.redo_count, 0);
+    assert_eq!(
+        database
+            .query_page(0, 1)
+            .unwrap()
+            .column("value")
+            .unwrap()
+            .i64()
+            .unwrap()
+            .get(0),
+        Some(2)
+    );
+
+    database
+        .edit_cell(0, "value", serde_json::json!(3), None)
+        .unwrap();
+    database.undo_edit().unwrap();
+    assert_eq!(
+        database
+            .query_page(0, 1)
+            .unwrap()
+            .column("value")
+            .unwrap()
+            .i64()
+            .unwrap()
+            .get(0),
+        Some(2)
+    );
+    assert!(!database.edit_state().can_undo);
+}
+
+#[test]
 fn add_column_rejects_unknown_dtype_without_history() {
-    let mut database = loaded_instance(df!("value" => [1_i64]).unwrap());
+    let mut fixture = DuckDbFixture::new("test", df!("value" => [1_i64]).unwrap());
+    let database = &mut fixture.instance;
 
     let error = database.add_column("invalid", "Mystery").unwrap_err();
 
@@ -72,17 +112,18 @@ fn add_column_rejects_unknown_dtype_without_history() {
 }
 
 #[test]
-fn edit_cell_rejects_lossy_integer_json_numbers() {
-    let mut database = loaded_instance(
+fn edit_cell_rejects_out_of_range_integers_without_history() {
+    let mut fixture = DuckDbFixture::new(
+        "test",
         df!(
             "signed" => [7_i8],
             "unsigned" => [9_u8],
         )
         .unwrap(),
     );
+    let database = &mut fixture.instance;
 
     for (column, value) in [
-        ("signed", serde_json::json!(1.5)),
         ("signed", serde_json::json!(128)),
         ("unsigned", serde_json::json!(-1)),
     ] {
@@ -99,14 +140,16 @@ fn edit_cell_rejects_lossy_integer_json_numbers() {
 }
 
 #[test]
-fn polars_delete_column_undo_restores_dtype_and_data() {
-    let mut database = loaded_instance(
+fn dataframe_import_preserves_column_dtype_and_data_through_delete_undo() {
+    let mut fixture = DuckDbFixture::new(
+        "test",
         df!(
             "keep" => [10_i64, 20, 30],
             "removed" => [Some(1_i32), None, Some(-2)],
         )
         .unwrap(),
     );
+    let database = &mut fixture.instance;
 
     database.delete_column("removed").unwrap();
     database.undo_edit().unwrap();
@@ -251,7 +294,7 @@ fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
         uuid::Uuid::new_v4()
     ));
     let table = "export\"table";
-    let row_count = MAX_IN_MEMORY_EDIT_ROWS + 1;
+    let row_count = 50_001;
     let conn = duckdb::Connection::open(&duckdb_path).unwrap();
     conn.execute_batch(&format!(
         "CREATE TABLE \"export\"\"table\" AS \
@@ -536,9 +579,7 @@ fn test_edit_save_persists_to_duckdb() {
     db_instance
         .edit_cell(0, "sepal_length", serde_json::json!(999.0), None)
         .expect("edit");
-    let saved = db_instance
-        .save_changes(Some(project_root.as_path()))
-        .expect("save");
+    let saved = db_instance.save_changes().expect("save");
     assert!(!saved.can_undo);
     assert!(!saved.can_redo);
     assert!(!saved.is_modified);

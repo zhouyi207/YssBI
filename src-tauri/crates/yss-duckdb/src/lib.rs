@@ -12,9 +12,9 @@ pub use column_snapshot::{
     delete_column_with_snapshot,
 };
 pub use edit::{
-    MAX_GET_DATAFRAME_ROWS, MAX_IN_MEMORY_EDIT_ROWS, add_row_with_operation, apply_edit_on_duckdb,
+    MAX_GET_DATAFRAME_ROWS, add_row_with_operation, apply_edit_on_duckdb,
     delete_rows_with_operations, edit_cell_with_operation, refresh_duckdb_meta,
-    reverse_edit_on_duckdb, should_use_in_memory_editing,
+    reverse_edit_on_duckdb,
 };
 pub use export::{DuckDbExportError, DuckDbExportPhase, export_duckdb_table};
 pub use profile::{

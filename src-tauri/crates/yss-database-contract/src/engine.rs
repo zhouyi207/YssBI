@@ -1,5 +1,29 @@
 use serde::{Deserialize, Serialize};
 
+/// External data admitted by the project importer before materialization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DatabaseImportSource {
+    Csv {
+        path: String,
+        delimiter: char,
+        has_header: bool,
+        infer_schema_length: Option<usize>,
+    },
+    Sql {
+        engine: DatabaseEngineSql,
+        connection_string: String,
+        table: String,
+    },
+    Parquet {
+        path: String,
+        columns: Option<Vec<String>>,
+    },
+    Excel {
+        path: String,
+        sheet: String,
+    },
+}
+
 /// Supported database sources persisted in a project declaration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]

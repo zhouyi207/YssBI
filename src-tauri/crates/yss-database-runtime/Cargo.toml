@@ -5,6 +5,9 @@ edition = "2024"
 rust-version.workspace = true
 publish = false
 
+[features]
+test-support = []
+
 [dependencies]
 polars.workspace = true
 serde_json.workspace = true
@@ -16,5 +19,4 @@ yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-duckdb = { path = "../yss-duckdb" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
-yss-tabular-io = { path = "../yss-tabular-io" }
 yss-tabular-polars = { path = "../yss-tabular-polars" }

@@ -2,7 +2,7 @@
 
 `src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
 `DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
-history 与 state projection；`yss-tabular-polars` owns DataFrame apply/reverse/cast；`yss-duckdb` owns
+history 与 state projection；`yss-tabular-polars` owns materialization、value 与 dtype conversion；`yss-duckdb` owns
 transactional SQL edit/reverse 与 bounded column snapshot；`yss-sql-source` owns external
 SQLite/PostgreSQL/MySQL discovery 与 strict typed materialization；`yss-database-schema` owns runtime
 schema facts、revision projection 以及 DuckDB/Polars physical schema normalization。本 crate owns
@@ -30,7 +30,7 @@ IPC import interface 是 source-only typed enum `DatabaseImportSourceDTO`：
 - `Excel { path, sheet }`
 - `Sql { engine: Sqlite | Postgres | Mysql, connectionString, table }`
 
-Frontend 不能通过 import interface 注入 project-internal `DuckDb` 或 runtime-only `InMemory` engine。Command 将 typed source 转换为内部 `DatabaseEngineDTO`，再交给 application module 执行 ingest、authority commit 与 event publication。
+Frontend 不能通过 import interface 注入 project-internal `DuckDb` 或 runtime-only `InMemory` engine。Transport 将 `DatabaseImportSourceDTO` 一次转换为领域 `DatabaseImportSource`，Application 只接收外部来源并执行 ingest、authority commit 与 event publication。持久化声明继续由 `DatabaseEngine` 表达内部存储身份。
 
 ## 2. DuckDB/Polars seam
 
@@ -46,11 +46,10 @@ Frontend 不能通过 import interface 注入 project-internal `DuckDb` 或 runt
 
 ```text
 DuckDb { path, table, row_count, columns, history }
-Loaded { dataframe, original, history }
 Failed { error }
 ```
 
-DuckDB 是普通 production state。只有需要完整 Polars DataFrame 且 table 不超过 50,000 rows 时才进入 `Loaded`。这一 interface 将磁盘列存复杂度隐藏在 module 内，为 page query、graph resource 与 DataView 提供统一 leverage。
+`DatabaseInstance` 使用 DuckDB 表和失败状态。DataView 编辑始终通过 SQL 事务执行，查询按页或按列物化 Polars 数据供计算使用；常驻运行时不维护可编辑的整表 DataFrame。
 
 本 crate 负责 DuckDB/Polars storage metadata routing 与 canonical database schema facts 的会话组合。当前 `ColumnInfoDTO` wire contract 保持不变，其 conversion 位于 `schema/database.rs`；Application DTO enrichment 只消费该 conversion，Project 不通过 Application 获取 schema。
 
@@ -83,7 +82,7 @@ Snapshot 保存：
 
 Cast operation 也在 `EditOperation::CastColumn` 中保存 `old_dtype`。In-memory reverse path 使用 `old_dtype + old_data` 重建原列；DuckDB reverse path 将 column cast 回保存的 dtype。
 
-共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，不保留未使用的 serde wire；实际跨 IPC 的 `EditState` 保持 strict camelCase。Polars 路径由 `yss-tabular-polars::edit` 实现；DuckDB 路径由 `yss-duckdb::edit` 在 transaction 中构造、apply/reverse 同一 operation。多行删除先保持调用方 `(index, rowid)` 配对再排序，任一 SQL 失败都会回滚整批；add-row reverse 的已找到 rowid 不再提前求值 index fallback。
+共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，实际跨 IPC 的 `EditState` 保持 strict camelCase。`yss-duckdb::edit` 在 transaction 中构造、apply/reverse 同一 operation。多行删除先保持调用方 `(index, rowid)` 配对再排序，任一 SQL 失败都会回滚整批；add-row reverse 的已找到 rowid 不再提前求值 index fallback。
 
 ## 4. Identifier 与 checked conversion
 
@@ -117,7 +116,6 @@ DataView 将列 cast 为 Categorical 后保存时，DuckDB 使用 `_yssbi_enum_{
 `DatabaseInstance::export_to_path` 按 state 选择 adapter：
 
 - DuckDB table：执行 `COPY (SELECT * FROM <table>) TO <path>`，CSV 使用 header，Parquet 使用 native format；大表不会先完整进入 Polars。
-- Loaded DataFrame：使用 Polars CSV/Parquet writer。
 
 Application export workflow 不直接覆盖 destination：
 
@@ -134,7 +132,7 @@ Application export workflow 不直接覆盖 destination：
 - `estimatedDataframeMemoryBytes`
 - `duplicatedRows`
 
-Loaded DataFrame 可以计算这些指标。DuckDB-backed table 刻意不做整表 memory estimate 或 full-row duplicate detection，因此返回 `null` 表示 **unavailable**，而不是用 `0` 伪装“没有占用/没有重复”。
+数据库查询不做整表 memory estimate 或 full-row duplicate detection，因此返回 `null` 表示 **unavailable**。独立的 Polars 数据分析能力仍由 `yss-dataset-profile` 等计算模块提供。
 
 DuckDB overview 仍准确提供：
 
@@ -144,25 +142,25 @@ DuckDB overview 仍准确提供：
 
 ## 8. Module map
 
-| File                                   | Responsibility                                                                                           |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `src/database_instance.rs`             | State-dependent query/edit/export interface                                                              |
-| `src/runtime/`                         | Session identity、declaration observations/revisions、admission/drain/recovery 与 physical state routing |
-| `src/session_api.rs`                   | Immutable catalog/data/query snapshots 与 prepared/committed mutation handoff                            |
-| `src/plot_query.rs`                    | Revision-checked numeric plot column query                                                               |
-| `src/project_storage.rs`               | Project-relative DuckDB runtime binding 与 physical table/metadata removal                               |
-| `../../src/schema/database.rs`         | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion                                               |
-| `../yss-database-edit/`                | EditOperation、EditHistory 与 EditState                                                                  |
-| `../yss-database-schema/`              | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization                                  |
-| `../yss-tabular-polars/src/edit.rs`    | checked JSON/Polars edit apply、reverse 与 cast                                                          |
-| `../yss-duckdb/src/edit.rs`            | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits                            |
-| `../yss-duckdb/src/column_snapshot.rs` | Bounded reversible delete-column snapshot                                                                |
-| `../yss-duckdb/src/table.rs`           | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query                                             |
-| `../yss-duckdb/src/profile.rs`         | DuckDB physical stats/distribution/overview SQL                                                          |
-| `../yss-duckdb/src/sql.rs`             | Identifier/literal quoting 与 editable dtype allowlist                                                   |
-| `../yss-duckdb/src/export.rs`          | Typed DuckDB CSV/Parquet `COPY` export                                                                   |
-| `../yss-dataset-profile/`              | Profile DTO 与 Loaded DataFrame profile calculation                                                      |
-| `../yss-sql-source/`                   | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization              |
-| `../yss-tabular-io/`                   | Loaded DataFrame/Excel filesystem I/O                                                                    |
+| File                                     | Responsibility                                                                                           |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/database_instance.rs`               | State-dependent query/edit/export interface                                                              |
+| `src/runtime/`                           | Session identity、declaration observations/revisions、admission/drain/recovery 与 physical state routing |
+| `src/session_api.rs`                     | Immutable catalog/data/query snapshots 与 prepared/committed mutation handoff                            |
+| `src/plot_query.rs`                      | Revision-checked numeric plot column query                                                               |
+| `src/project_storage.rs`                 | Project-relative DuckDB runtime binding 与 physical table/metadata removal                               |
+| `../../src/schema/database.rs`           | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion                                               |
+| `../yss-database-edit/`                  | EditOperation、EditHistory 与 EditState                                                                  |
+| `../yss-database-schema/`                | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization                                  |
+| `../yss-tabular-polars/src/data_type.rs` | Canonical dtype 与 Polars dtype 的转换                                                                   |
+| `../yss-duckdb/src/edit.rs`              | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits                            |
+| `../yss-duckdb/src/column_snapshot.rs`   | Bounded reversible delete-column snapshot                                                                |
+| `../yss-duckdb/src/table.rs`             | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query                                             |
+| `../yss-duckdb/src/profile.rs`           | DuckDB physical stats/distribution/overview SQL                                                          |
+| `../yss-duckdb/src/sql.rs`               | Identifier/literal quoting 与 editable dtype allowlist                                                   |
+| `../yss-duckdb/src/export.rs`            | Typed DuckDB CSV/Parquet `COPY` export                                                                   |
+| `../yss-dataset-profile/`                | Profile DTO 与 Polars DataFrame profile calculation                                                      |
+| `../yss-sql-source/`                     | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization              |
+| `../yss-tabular-io/`                     | 导入和计算使用的 DataFrame/Excel filesystem I/O                                                          |
 
 验证命令以 [`docs/development/LOCAL_WORKFLOW.md`](../../../docs/development/LOCAL_WORKFLOW.md) 为准，从 repository root 通过 `pnpm` scripts 运行。

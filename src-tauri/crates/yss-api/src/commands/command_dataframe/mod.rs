@@ -2,8 +2,7 @@ use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::application_event::ResourceMutationCommandResultDto;
 use crate::schema::{
-    DatabaseEngineDTO, DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto,
-    LoadDatabaseResultDto,
+    DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto, LoadDatabaseResultDto,
 };
 use tauri::{AppHandle, State};
 use yss_application::database::{
@@ -131,13 +130,6 @@ fn database_rows_to_transport(
     })
 }
 
-fn database_engine_from_import(
-    source: DatabaseImportSourceDTO,
-) -> Result<yss_database_contract::DatabaseEngine, CommandError> {
-    yss_database_contract::DatabaseEngine::try_from(DatabaseEngineDTO::from(source))
-        .map_err(|_| CommandError::expected("invalid_database_engine"))
-}
-
 fn serialize_application_database_value<T: serde::Serialize>(
     value: T,
 ) -> Result<serde_json::Value, CommandError> {
@@ -179,11 +171,7 @@ pub async fn load_database(
     let application = application.inner().clone();
     run_on_blocking_pool(move || {
         let result = application
-            .load_database_for_application(
-                project_instance_id,
-                operation_id,
-                database_engine_from_import(engine)?,
-            )
+            .load_database_for_application(project_instance_id, operation_id, engine.into())
             .map_err(map_application_database_error)?;
         let result = load_database_result_to_transport(result);
         emit_application_database_result(&app, &result)?;

@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn load_database_in_captured_session(
     captured: &Arc<ApplicationSession>,
     operation_id: OperationId,
-    engine: DatabaseEngine,
+    source: DatabaseImportSource,
 ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
     let project_instance_id = captured.project_instance_id().clone();
     let reservation = captured
@@ -53,8 +53,8 @@ pub(super) fn load_database_in_captured_session(
             ))
         })?;
 
-    let (declaration, data) = match engine {
-        DatabaseEngine::Csv {
+    let (declaration, data) = match source {
+        DatabaseImportSource::Csv {
             path,
             delimiter,
             has_header,
@@ -67,13 +67,13 @@ pub(super) fn load_database_in_captured_session(
             has_header,
             infer_schema_length,
         )?,
-        DatabaseEngine::Parquet { path, columns } => {
+        DatabaseImportSource::Parquet { path, columns } => {
             ingest_parquet_for_application(captured.project(), &session, path, columns)?
         }
-        DatabaseEngine::Excel { path, sheet } => {
+        DatabaseImportSource::Excel { path, sheet } => {
             ingest_excel_for_application(captured.project(), &session, path, sheet)?
         }
-        DatabaseEngine::Sql {
+        DatabaseImportSource::Sql {
             engine,
             connection_string,
             table,
@@ -84,22 +84,6 @@ pub(super) fn load_database_in_captured_session(
             connection_string,
             table,
         )?,
-        DatabaseEngine::DuckDb { .. } => {
-            return Err(DatabaseUseCaseError::Database(
-                DatabaseOperationError::internal_message(
-                    DatabaseApplicationOperation::Load,
-                    "DuckDb datasets are discovered from the active Database session",
-                ),
-            ));
-        }
-        DatabaseEngine::InMemory { .. } => {
-            return Err(DatabaseUseCaseError::Database(
-                DatabaseOperationError::internal_message(
-                    DatabaseApplicationOperation::Load,
-                    "InMemory datasets cannot be loaded through the project importer",
-                ),
-            ));
-        }
     };
     captured
         .project()

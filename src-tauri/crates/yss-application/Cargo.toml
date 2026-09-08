@@ -69,6 +69,7 @@ yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }
 polars.workspace = true
 sqlx.workspace = true
 tokio.workspace = true

@@ -9550,7 +9550,6 @@ dependencies = [
  "yss-dataset-profile",
  "yss-duckdb",
  "yss-tabular-contract",
- "yss-tabular-io",
  "yss-tabular-polars",
 ]
 
@@ -10145,7 +10144,6 @@ dependencies = [
  "polars-dtype",
  "serde_json",
  "thiserror 2.0.20",
- "yss-database-edit",
  "yss-tabular-contract",
 ]
 

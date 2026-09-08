@@ -629,16 +629,13 @@ mod tests {
     mod ols_configuration;
     use super::*;
     use std::num::NonZeroU64;
-    use std::sync::Arc;
     use yss_data_contract::DataType;
     use yss_database_contract::{
         DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
-        DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+        DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseSessionIdentity,
+        DatabaseSessionOpenRequest,
     };
-    use yss_database_edit::EditHistory;
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_database_runtime::{DatabaseInstance, DatabaseState};
     use yss_graph_resource_contract::FunctionParameterContract;
 
     #[test]
@@ -799,15 +796,13 @@ mod tests {
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
-        let database = DatabaseDecl {
-            id: DatabaseId::from_existing("sales".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "sales".into(),
-            },
-            schema_version: 1,
-            required: true,
-            name: "Sales".into(),
-        };
+        let mut fixture = yss_database_runtime::test_support::DuckDbFixture::new(
+            "sales",
+            polars::df!("amount" => &[1.0_f64]).unwrap(),
+        );
+        fixture.instance.decl.required = true;
+        fixture.instance.decl.name = "Sales".into();
+        let database = fixture.instance.decl.clone();
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             database.id.clone(),
             DatabaseDeclarationObservation::new(
@@ -816,7 +811,6 @@ mod tests {
             ),
         )])
         .unwrap();
-        let dataframe = polars::df!("amount" => &[1.0_f64]).unwrap();
         let runtime = DatabaseRuntimeRegistry::new()
             .open_session_with_instances(
                 DatabaseSessionOpenRequest::new(
@@ -826,14 +820,7 @@ mod tests {
                     vec![database.clone()].into(),
                     observations,
                 ),
-                [DatabaseInstance {
-                    decl: database.clone(),
-                    state: DatabaseState::Loaded {
-                        dataframe: Arc::new(dataframe.clone()),
-                        original: Arc::new(dataframe),
-                        history: EditHistory::new(),
-                    },
-                }],
+                [fixture.instance.clone()],
             )
             .unwrap();
         let schema = yss_database_runtime::session_api::catalog_snapshot(&runtime).unwrap();

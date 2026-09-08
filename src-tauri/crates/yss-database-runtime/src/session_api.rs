@@ -899,13 +899,12 @@ fn map_recovery_claim_error(
 mod tests {
     use super::*;
     use crate::runtime::DatabaseRuntimeRegistry;
-    use crate::{DatabaseInstance, DatabaseState};
+    use crate::test_support::DuckDbFixture;
     use std::time::Instant;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionOpenRequest,
     };
-    use yss_database_edit::EditHistory;
 
     fn declaration(id: &str) -> DatabaseDecl {
         DatabaseDecl {
@@ -942,8 +941,9 @@ mod tests {
             .unwrap()
     }
 
-    fn session_with_loaded_instance(identity: &str) -> DatabaseRuntimeSession {
-        let declaration = declaration("sales");
+    fn session_with_table(identity: &str) -> (DuckDbFixture, DatabaseRuntimeSession) {
+        let fixture = DuckDbFixture::new("sales", polars::df!("value" => &[1_i64]).unwrap());
+        let declaration = fixture.instance.decl.clone();
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             declaration.id.clone(),
             DatabaseDeclarationObservation::new(
@@ -952,16 +952,7 @@ mod tests {
             ),
         )])
         .unwrap();
-        let dataframe = polars::df!("value" => &[1_i64]).expect("test dataframe is valid");
-        let instance = DatabaseInstance {
-            decl: declaration.clone(),
-            state: DatabaseState::Loaded {
-                dataframe: std::sync::Arc::new(dataframe.clone()),
-                original: std::sync::Arc::new(dataframe),
-                history: EditHistory::new(),
-            },
-        };
-        DatabaseRuntimeRegistry::new()
+        let session = DatabaseRuntimeRegistry::new()
             .open_session_with_instances(
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing(identity.into()),
@@ -970,9 +961,10 @@ mod tests {
                     vec![declaration].into(),
                     observations,
                 ),
-                [instance],
+                [fixture.instance.clone()],
             )
-            .unwrap()
+            .unwrap();
+        (fixture, session)
     }
 
     #[test]
@@ -1060,7 +1052,7 @@ mod tests {
 
     #[test]
     fn selected_columns_reject_empty_and_duplicate_requests_before_access() {
-        let session = session_with_loaded_instance("session");
+        let (_fixture, session) = session_with_table("session");
         let empty = data_snapshot(
             &session,
             DatabaseDataSnapshotRequest {

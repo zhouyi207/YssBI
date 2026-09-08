@@ -17,8 +17,6 @@ enum DatabaseExportSource {
     Unavailable,
     #[error("DuckDB export failed")]
     DuckDb(#[source] yss_duckdb::DuckDbExportError),
-    #[error("tabular I/O export failed")]
-    TabularIo(#[source] yss_tabular_io::TabularIoError),
 }
 
 impl DatabaseExportError {
@@ -33,14 +31,6 @@ impl From<yss_duckdb::DuckDbExportError> for DatabaseExportError {
     fn from(source: yss_duckdb::DuckDbExportError) -> Self {
         Self {
             source: DatabaseExportSource::DuckDb(source),
-        }
-    }
-}
-
-impl From<yss_tabular_io::TabularIoError> for DatabaseExportError {
-    fn from(source: yss_tabular_io::TabularIoError) -> Self {
-        Self {
-            source: DatabaseExportSource::TabularIo(source),
         }
     }
 }

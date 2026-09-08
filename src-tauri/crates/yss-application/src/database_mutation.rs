@@ -369,12 +369,10 @@ mod tests {
     use super::*;
     use std::num::NonZeroU64;
     use yss_database_contract::{
-        DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
-        DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+        DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseSessionIdentity,
+        DatabaseSessionOpenRequest,
     };
-    use yss_database_edit::EditHistory;
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_database_runtime::{DatabaseInstance, DatabaseState};
 
     struct RejectingProject;
 
@@ -397,16 +395,15 @@ mod tests {
         }
     }
 
-    fn database_session() -> DatabaseRuntimeSession {
-        let declaration = DatabaseDecl {
-            id: DatabaseId::from_existing("sales".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "sales".into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: "Sales".into(),
-        };
+    fn database_session() -> (
+        yss_database_runtime::test_support::DuckDbFixture,
+        DatabaseRuntimeSession,
+    ) {
+        let fixture = yss_database_runtime::test_support::DuckDbFixture::new(
+            "sales",
+            polars::df!("value" => &[1_i64]).unwrap(),
+        );
+        let declaration = fixture.instance.decl.clone();
         let observations =
             yss_database_contract::DatabaseDeclarationObservationSet::try_from_iter([(
                 declaration.id.clone(),
@@ -416,16 +413,7 @@ mod tests {
                 ),
             )])
             .expect("observation set is valid");
-        let dataframe = polars::df!("value" => &[1_i64]).expect("test dataframe is valid");
-        let instance = DatabaseInstance {
-            decl: declaration.clone(),
-            state: DatabaseState::Loaded {
-                dataframe: Arc::new(dataframe.clone()),
-                original: Arc::new(dataframe),
-                history: EditHistory::new(),
-            },
-        };
-        DatabaseRuntimeRegistry::new()
+        let session = DatabaseRuntimeRegistry::new()
             .open_session_with_instances(
                 DatabaseSessionOpenRequest::new(
                     DatabaseSessionIdentity::from_existing("session".into()),
@@ -434,9 +422,10 @@ mod tests {
                     vec![declaration].into(),
                     observations,
                 ),
-                [instance],
+                [fixture.instance.clone()],
             )
-            .expect("database session is valid")
+            .expect("database session is valid");
+        (fixture, session)
     }
 
     fn request(session: &DatabaseRuntimeSession) -> DatabaseMutationRequest {
@@ -463,7 +452,7 @@ mod tests {
 
     #[test]
     fn project_handoff_failure_consumes_exact_database_owner_into_typed_compensation() {
-        let database = database_session();
+        let (_fixture, database) = database_session();
         let result = coordinate_database_handoff(
             &database,
             request(&database),
