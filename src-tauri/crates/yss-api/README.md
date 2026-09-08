@@ -89,7 +89,7 @@ Execution terminal failures carry `RunErrored { code, phase, source }`, where so
 
 `get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null. Descriptor/value/page commands resolve only current ResultIds. Descriptors represent available results and contain no result-state discriminator or redundant activation ID. There is no history query or result-retention setting. Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` carries the exact output addresses invalidated at admission; completion prompts clients to query current results again. Failed or cancelled runs never expose an older successful payload as current.
 
-Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; durable transaction history stays with the Project owner.
+Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; committed revisions, file transactions and failure recovery stay with the Project owner. Automation graph edit receipts carry the committed revisions and operation identity, with no project undo capability.
 
 ## Frontend adapter
 

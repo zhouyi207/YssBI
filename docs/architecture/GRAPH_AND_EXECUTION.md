@@ -20,7 +20,7 @@
 
 `graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
 
-Project 的 `graph_resource_revisions` 仍服务资源事务、历史和执行资源校验；它与 Draft generation、semantic input hash 不同，见 [Project authority](../../src-tauri/crates/yss-project/README.md#graph-resource-revisions)。
+Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验；它与 Draft generation、semantic input hash 不同，见 [Project authority](../../src-tauri/crates/yss-project/README.md#graph-resource-revisions)。
 
 ## 2. Module ownership
 
@@ -32,7 +32,7 @@ Project 的 `graph_resource_revisions` 仍服务资源事务、历史和执行�
 | yss-graph-resource-contract      | immutable resource facts 与一次 Resolve 的 dependency observations          |
 | yss-graph-runtime                | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                     |
 | yss-graph-compiler               | Ready snapshot 驱动的 immutable package lowering                            |
-| yss-project                      | committed authority、资源版本、文件事务与 history                           |
+| yss-project                      | committed authority、资源版本、文件事务与 publication                       |
 | yss-application                  | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                 |
 | yss-execution                    | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter     |
 | yss-api                          | command/event/channel DTO 与错误映射                                        |
@@ -96,7 +96,7 @@ Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Wo
 
 Clipboard 仅携带选中 Get 节点引用的常量。目标图已有同一身份且内容相同的常量时复用；身份或名称冲突时复制定义并重写引用。常量和节点进入同一个可撤销补丁。复制整张图则生成独立常量身份。
 
-节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 Draft document 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。节点参数没有项目设置继承/覆盖模式；应用级 computation settings 由 Rust settings service 独立管理。
+节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 Draft document 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。计算参数与缺失值策略由具体算法契约和输入校验拥有，节点参数没有项目设置继承/覆盖模式。
 
 节点通过 `ParameterEditorSpec::Configuration(ConfigurationSchema)` 声明 Detail 配置表单。Schema 复用标量 `ParameterSpec`，提供默认值、选项、约束和基于选择项的条件字段；Rust 只投影当前适用字段，React 复用参数控件。配置对象属于当前节点，保存在节点参数中。`SetConfiguration { node_id, key, values }` 在当前候选文档上合并部分字段、补齐默认值、移除不适用字段，并通过已有 Draft history 和 Save 路径支持撤销、重做与持久化。导入的配置参数必须包含完整且适用的字段，验证不会暗中补写文档。
 
@@ -145,7 +145,9 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
-协议默认参数在 semantic snapshot 中保留 typed literal，Compiler 按协议类型 lowering；用于显示的 Decimal 字符串不作为运行时 String。节点计算失败保留稳定原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）及 source identity，RunErrored 传递实际阶段、原因和节点；不传递原始输入值或后端错误文案。
+协议默认参数在 semantic snapshot 中保留 typed literal，Compiler 按协议类型 lowering；用于显示的 Decimal 字符串不作为运行时 String。执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
+
+`RunRegistry` 通过 `RunState` 记录运行状态和终态。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
 

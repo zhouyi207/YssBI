@@ -77,7 +77,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-sci` | `src-tauri/crates/yss-sci` | [Cargo.toml](../../src-tauri/crates/yss-sci/Cargo.toml) | [README](../../src-tauri/crates/yss-sci/README.md) |
 | `yss-sci-contract` | `src-tauri/crates/yss-sci-contract` | [Cargo.toml](../../src-tauri/crates/yss-sci-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-contract/README.md) |
 | `yss-sci-runtime` | `src-tauri/crates/yss-sci-runtime` | [Cargo.toml](../../src-tauri/crates/yss-sci-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-runtime/README.md) |
-| `yss-settings` | `src-tauri/crates/yss-settings` | [Cargo.toml](../../src-tauri/crates/yss-settings/Cargo.toml) | — |
 | `yss-sql-source` | `src-tauri/crates/yss-sql-source` | [Cargo.toml](../../src-tauri/crates/yss-sql-source/Cargo.toml) | — |
 | `yss-statistical-harness` | `src-tauri/crates/yss-statistical-harness` | [Cargo.toml](../../src-tauri/crates/yss-statistical-harness/Cargo.toml) | — |
 | `yss-statistical-harness-sqlite` | `src-tauri/crates/yss-statistical-harness-sqlite` | [Cargo.toml](../../src-tauri/crates/yss-statistical-harness-sqlite/Cargo.toml) | — |

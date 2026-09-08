@@ -35,6 +35,9 @@ WorkbenchWindow
 
 Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
+应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
+调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
+
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
 `editorRendererRegistry.ts` 是唯一把 event/function/chart 映射到具体 editor 的位置。Workbench module
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
@@ -218,6 +221,11 @@ Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
 
 因此 focused session 投影不能替代 physical active panel 判定。
 
+文件菜单提供事件图、函数和图表的新建入口；创建后打开对应编辑器。“保存”与 `Ctrl+S`
+共用当前物理激活 editor 的保存命令，仅保存该文件；无项目或非文件 panel 激活时禁用。
+“项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity、Assistant 的切换和
+布局重置；Problems、Output、Logs 通过 Status Bar 图标访问。
+
 ## 7. Reveal、reset 与 project replacement
 
 ### 7.1 Reveal
@@ -231,8 +239,8 @@ Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留�
 - Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
-- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；
-- left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，相关 edge 展开；
+- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；重置完成时不显示其中任何 panel，用户通过 Status Bar 再次打开；
+- left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起并隐藏，不保留折叠标签条；
 - main Logs nested Dockview 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
 

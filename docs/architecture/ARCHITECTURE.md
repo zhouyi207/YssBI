@@ -36,7 +36,7 @@ flowchart LR
 
 | 状态或事实                                                                   | 唯一 authority                                   | 非 authority 投影                           |
 | ---------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------- |
-| 已提交 Project、资源、revision、history                                      | Rust Project crates                              | React Project stores、Workbench panels      |
+| 已提交 Project、资源、revision                                               | Rust Project crates                              | React Project stores、Workbench panels      |
 | Graph document 的已保存版本                                                  | Rust Project / Graph document owners             | `GraphDraftSession` 中未保存 draft          |
 | resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection           |
 | Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection          |
@@ -44,22 +44,21 @@ flowchart LR
 | Statistical algorithms 与 Bayes worker result                                | SCI/Bayes owners                                 | report/chart presentation models            |
 | Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection       |
 | Root workbench topology、placement、active group/panel 和 edge state         | live root Dockview instance                      | pane-local metadata keyed by panel identity |
-| 应用级 computation settings                                                  | Rust settings service                            | Settings UI draft/projection                |
 | 本地偏好和临时交互状态                                                       | React `localStorage`、Zustand 或 component state | —                                           |
 
 Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
 
 前端 Project hydration 由 `features/application/project/projectHydration.ts` 编排准备、投影提交和清理，并返回包含 project instance 与 publication revision 的 `ProjectLoadReceipt`。`projectIOStore.ts` 只保存已安装投影的状态和图加载运行态；加载回执不携带第二份项目内容。资源类别取自 Rust 索引中的显式字段，客户端资源键编码保留原始 opaque path。
 
-设置页提供 AI、计算和外观。客户端仅持久化 AI 与外观偏好；配色由 `appearance.colorTheme` 选择的只读主题预设统一派生，不保存或跨窗口同步独立颜色值。主题选择与亮／暗模式的主题记忆在同一次状态更新中提交，界面、图表和表格共用主题配色。计算配置由 Rust settings service 管理。图文档通过显式 Save 提交，设置页不声明未接入的自动保存、网格或编辑器布局选项。
+设置页提供 AI 与外观偏好，由客户端持久化。配色由 `appearance.colorTheme` 选择的只读主题预设统一派生；主题选择与亮／暗模式的主题记忆在同一次状态更新中提交，界面、图表和表格共用主题配色。图文档通过显式 Save 提交。
 
-全局近似比较容差已移除，计算设置当前仅保存缺失值偏好。设置存储读取 v1 时丢弃废弃的 `numeric` 字段、保留其他设置与 revision，下次保存写入 v2；当前 IPC 和 v2 文件仍使用严格字段契约。现有算法的判秩、收敛和数值保护阈值由各算法管理。Graph OLS 当前固定采用 Reject，尚未消费全局缺失值偏好；相关数值与配置后续工作见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
+缺失值策略、判秩、收敛和数值保护阈值由各算法的契约与实现管理。Graph OLS 当前仅接收有限数值并采用 Reject 策略，客户端偏好不参与统计计算。相关数值策略见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
 
 命名常量属于 GraphDocument，在 Event/Function 的 Details 中通过 Graph Draft 编辑，并随图保存。没有独立全局变量资源或变量 revision。资源命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
 
-节点编辑由 Application 的 `graphEditing` 直接提交 Graph Draft mutation，并返回统一的 `GraphEditOutcome`。Draft 自身保存撤销/重做记录；Project 内部事务 history 不再作为独立前端状态或 IPC 字段发布。
+节点编辑由 Application 的 `graphEditing` 直接提交 Graph Draft mutation，并返回统一的 `GraphEditOutcome`。Draft 自身保存撤销/重做记录；Project 提交发布资源 revision 和 delta，文件事务仍负责失败回滚。
 
 身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
@@ -111,7 +110,7 @@ Application session
 
 Project replacement 先关闭旧 session 的新任务准入并 drain 或取消活动工作，再构造和验证 candidate session，最后原子替换。旧 session 的 late event、result、database handle 和 Graph projection 因身份或 generation 不匹配而被拒绝；前端在 hydrate 新项目之前先清理旧的 backend-owned projection。
 
-Project 文件、resource revision、history 和提交事务由 Project owner 管理。Graph resource 可以存在于磁盘和 revision index 中但保持 unloaded；create/duplicate 只声明新资源，不为了发布事件而临时加载。需要 resident document 的 load/patch/move 路径统一经过 Project 的受验证安装边界。
+Project 文件、resource revision 和提交事务由 Project owner 管理。Graph resource 可以存在于磁盘和 revision index 中但保持 unloaded；create/duplicate 只声明新资源，不为了发布事件而临时加载。需要 resident document 的 load/patch/move 路径统一经过 Project 的受验证安装边界。
 
 典型打开链路：
 
