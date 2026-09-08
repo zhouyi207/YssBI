@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { VscError } from "react-icons/vsc";
+import {
+  VscClose,
+  VscColorMode,
+  VscError,
+  VscSearch,
+  VscSettingsGear,
+  VscSparkle,
+} from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
 import { useSettingsRead } from "@/features/core/settings/read";
 import { settingsUi } from "@/features/core/settings/ui";
@@ -8,10 +15,11 @@ import { Select } from "@/shared/ui";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
+import "./settings.css";
 
 interface SettingsViewProps {
   onRequestClose?: () => void;
@@ -38,8 +46,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
   const [searchQuery, setSearchQuery] = useState("");
 
   const sections = [
-    { id: "ai", label: t("settings.sections.ai") },
-    { id: "appearance", label: t("settings.sections.appearance") },
+    { id: "ai", label: t("settings.sections.ai"), icon: VscSparkle },
+    { id: "appearance", label: t("settings.sections.appearance"), icon: VscColorMode },
   ];
 
   const visibleSections = useMemo(() => {
@@ -139,8 +147,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
 
   if (isLoading) {
     return (
-      <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex items-center justify-center">
+      <div className="settings-view settings-loading" role="status" aria-busy="true">
         <div className="text-sm text-muted-foreground">{t("settings.loading")}</div>
+        <div aria-hidden="true" className="settings-skeleton" />
+        <div aria-hidden="true" className="settings-skeleton" />
+        <div aria-hidden="true" className="settings-skeleton" />
       </div>
     );
   }
@@ -151,11 +162,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
         return (
           <div className="space-y-8">
             <div>
-              <div className="mb-6 flex items-center justify-between">
-                <h2 className="text-xl text-foreground">{t("settings.sections.ai")}</h2>
+              <div className="settings-section-heading">
+                <div>
+                  <h2>{t("settings.sections.ai")}</h2>
+                  <p>{t("settings.sectionDescriptions.ai")}</p>
+                </div>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   onClick={() => handleResetSection("ai")}
                   disabled={isResetting}
@@ -163,7 +177,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
                   {t("common.restoreDefaults")}
                 </Button>
               </div>
-              <div className="space-y-6">
+              <div className="settings-fields">
                 <SettingItem
                   label={t("settings.labels.openAiModel")}
                   description={t("settings.descriptions.openAiModel")}
@@ -196,11 +210,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
         return (
           <div className="space-y-8">
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl text-foreground">{t("settings.sections.appearance")}</h2>
+              <div className="settings-section-heading">
+                <div>
+                  <h2>{t("settings.sections.appearance")}</h2>
+                  <p>{t("settings.sectionDescriptions.appearance")}</p>
+                </div>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   onClick={() => handleResetSection("appearance")}
                   disabled={isResetting}
@@ -208,7 +225,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
                   {t("common.restoreDefaults")}
                 </Button>
               </div>
-              <div className="space-y-6">
+              <div className="settings-fields">
                 <SettingItem
                   label={t("settings.labels.colorTheme")}
                   description={t("settings.descriptions.colorTheme")}
@@ -257,27 +274,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
   };
 
   return (
-    <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex flex-col overflow-hidden font-sans">
-      {/* Header / Search Area */}
-      <div className="h-12 border-b border-border flex items-center gap-3 px-6 shrink-0 bg-[var(--workbench-bg)]">
-        <div className="flex-1 relative">
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("settings.searchPlaceholder")}
-            className="h-8"
-          />
+    <div className="settings-view">
+      <div className="settings-header">
+        <div className="settings-title">
+          <VscSettingsGear aria-hidden="true" />
+          <h1>{t("settings.title")}</h1>
         </div>
         {onRequestClose && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Close settings"
+            aria-label={t("settings.close")}
+            className="settings-close"
             onClick={onRequestClose}
           >
-            ×
+            <VscClose aria-hidden="true" />
           </Button>
         )}
       </div>
@@ -293,29 +305,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
 
       <div className="flex min-h-0 flex-1 overflow-hidden max-[720px]:flex-col">
         {/* Sidebar Navigation */}
-        <aside className="flex min-h-0 w-64 shrink-0 flex-col border-r border-border bg-[var(--sidebar-bg)] max-[720px]:h-12 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0">
-          <ScrollArea className="min-h-0 flex-1 pt-4 max-[720px]:pt-0" orientation="vertical">
-            <nav className="space-y-0.5 px-4 max-[720px]:flex max-[720px]:gap-1 max-[720px]:space-y-0 max-[720px]:overflow-x-auto max-[720px]:px-2 max-[720px]:py-1">
+        <aside className="settings-sidebar">
+          <div className="settings-search">
+            <VscSearch aria-hidden="true" />
+            <Input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("settings.searchPlaceholder")}
+              aria-label={t("settings.searchPlaceholder")}
+              className="h-7 pl-7"
+            />
+          </div>
+          <ScrollArea className="min-h-0 flex-1" orientation="vertical">
+            <nav aria-label={t("settings.title")} className="settings-nav">
               {visibleSections.map((section) => (
                 <Button
                   type="button"
-                  variant={activeSection === section.id ? "secondary" : "ghost"}
+                  variant="ghost"
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
-                  className="w-full justify-start max-[720px]:w-auto max-[720px]:shrink-0"
+                  aria-current={activeSection === section.id ? "page" : undefined}
+                  className="settings-nav-item"
                 >
+                  <section.icon aria-hidden="true" />
                   {section.label}
                 </Button>
               ))}
             </nav>
           </ScrollArea>
+          <div className="settings-footer">
+            <Button type="button" variant="ghost" onClick={handleResetAll} disabled={isResetting}>
+              {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
+            </Button>
+            <span>{t("settings.applyHint")}</span>
+          </div>
         </aside>
 
         {/* Main Content Area */}
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ScrollArea className="flex-1 min-h-0" orientation="vertical">
-            <div className="w-full max-w-4xl space-y-4 px-12 py-8 max-[720px]:px-4 max-[720px]:py-4">
-              {sectionResetError?.section === activeSection ? (
+            <div className="settings-content">
+              {visibleSections.length > 0 && sectionResetError?.section === activeSection ? (
                 <Alert data-settings-section-reset-error variant="destructive">
                   <VscError aria-hidden="true" />
                   <AlertDescription className="text-destructive">
@@ -323,17 +354,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
                   </AlertDescription>
                 </Alert>
               ) : null}
-              {renderContent()}
+              {visibleSections.length > 0 ? (
+                renderContent()
+              ) : (
+                <div className="settings-empty" role="status">
+                  <VscSearch aria-hidden="true" />
+                  <h2>{t("settings.noResults")}</h2>
+                  <p>{t("settings.noResultsHint")}</p>
+                  <Button variant="outline" onClick={() => setSearchQuery("")}>
+                    {t("settings.clearSearch")}
+                  </Button>
+                </div>
+              )}
             </div>
           </ScrollArea>
         </main>
-      </div>
-
-      {/* 底部全局恢复默认设置按钮 */}
-      <div className="h-12 border-t border-border flex items-center justify-end px-6 shrink-0 bg-[var(--workbench-bg)]">
-        <Button type="button" variant="destructive" onClick={handleResetAll} disabled={isResetting}>
-          {isResetting ? t("common.restoring") : t("common.restoreAllDefaults")}
-        </Button>
       </div>
     </div>
   );
@@ -382,21 +417,24 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
   const controlId = React.useId();
 
   return (
-    <div className="group border-l-2 border-transparent hover:border-[var(--accent-color)] pl-4 transition-colors">
-      <label
-        htmlFor={controlId}
-        className="mb-1 block text-sm font-semibold text-foreground group-hover:text-[var(--accent-color)] transition-colors"
-      >
+    <div className="settings-field">
+      <label htmlFor={controlId} className="mb-1.5 block text-sm font-medium text-foreground">
         {label}
       </label>
-      <div className="text-xs text-muted-foreground mb-3 leading-relaxed max-w-2xl">
+      <div
+        id={`${controlId}-description`}
+        className="text-xs text-muted-foreground mb-3 leading-relaxed max-w-2xl"
+      >
         {description}
       </div>
 
-      <div className="flex items-center">
+      <div className="settings-control">
         {type === "checkbox" && (
-          <Checkbox
+          <Switch
+            className="settings-switch"
             id={controlId}
+            aria-describedby={`${controlId}-description`}
+            disabled={disabled}
             checked={props.checked ?? false}
             onCheckedChange={(value) => props.onChange?.(value === true)}
           />
@@ -405,23 +443,25 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
           <Input
             id={controlId}
             type="text"
+            aria-describedby={`${controlId}-description`}
             value={props.value ?? props.defaultValue ?? ""}
             onChange={(e) => props.onChange?.(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
-            className="max-w-md"
+            className="settings-input"
           />
         )}
         {type === "password" && (
           <Input
             id={controlId}
             type="password"
+            aria-describedby={`${controlId}-description`}
             value={props.value ?? props.defaultValue ?? ""}
             onChange={(e) => props.onChange?.(e.target.value)}
             placeholder={placeholder}
             disabled={disabled}
             autoComplete="off"
-            className="max-w-md"
+            className="settings-input"
           />
         )}
         {type === "number" && (
@@ -434,9 +474,10 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
           />
         )}
         {type === "select" && (
-          <div className="w-full max-w-md">
+          <div className="w-full">
             <Select
               id={controlId}
+              className="settings-input"
               options={props.options || []}
               value={props.value || props.options?.[0]?.value || ""}
               onChange={(val) => props.onChange?.(val)}

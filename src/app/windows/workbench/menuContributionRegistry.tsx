@@ -103,7 +103,7 @@ export function buildFileMenuItems(
       shortcut: "Ctrl+N",
       onClick: actions.addEvent,
     },
-    { label: translate("menubar.newFunction"), onClick: actions.addFunction },
+    { label: translate("menubar.newFunctionGraph"), onClick: actions.addFunction },
     { label: translate("menubar.newChart"), onClick: actions.addChart },
     { label: "-", type: "separator" },
     {

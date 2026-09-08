@@ -116,6 +116,14 @@
   animation: zoomIn 0.2s ease-out forwards;
 }
 
+/* Dialog portals share a container. Keep one visual scrim while retaining every
+   overlay for Radix dismissal and pointer handling. */
+[data-slot="dialog-overlay"] ~ [data-slot="dialog-overlay"] {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 @keyframes pinResultSearchExpand {
   0% {
     width: 2rem;

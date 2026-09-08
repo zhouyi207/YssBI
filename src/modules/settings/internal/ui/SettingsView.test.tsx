@@ -117,6 +117,7 @@ describe("SettingsView preferences", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    while (uiStore.getState().modals.length) uiStore.closeModal();
     vi.restoreAllMocks();
   });
 
@@ -160,6 +161,26 @@ describe("SettingsView preferences", () => {
     expect(host.querySelector('input[type="password"]')).not.toBeNull();
   });
 
+  it("hides unrelated settings for an unmatched search and restores them when cleared", () => {
+    render();
+    const search = host.querySelector('input[aria-label="settings.searchPlaceholder"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        search,
+        "no-matching-category",
+      );
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.querySelector('input[type="password"]')).toBeNull();
+    expect(host.querySelector('[role="status"]')?.textContent).toContain("settings.noResults");
+    const clear = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "settings.clearSearch",
+    )!;
+    click(clear);
+    expect(host.querySelector('input[type="password"]')).not.toBeNull();
+    expect(host.querySelector('[role="status"]')).toBeNull();
+  });
+
   it("changes appearance colors only through the theme selector", async () => {
     render();
     expect(host.textContent).not.toContain("settings.sections.color");
@@ -180,6 +201,19 @@ describe("SettingsView preferences", () => {
     });
     expect(settings.updateAppearance).toHaveBeenCalledWith({ colorTheme: "OLED Black" });
     expect(host.querySelector('input[type="color"]')).toBeNull();
+  });
+
+  it("updates smooth scrolling from the labeled preference switch", async () => {
+    render();
+    await openSection("appearance");
+    const label = [...host.querySelectorAll("label")].find(
+      (item) => item.textContent === "settings.labels.smoothScroll",
+    )!;
+    const control = document.getElementById(label.htmlFor)!;
+    expect(control.getAttribute("role")).toBe("switch");
+    expect(control.getAttribute("aria-checked")).toBe("true");
+    click(control);
+    expect(settings.updateAppearance).toHaveBeenCalledWith({ smoothScroll: false });
   });
 
   it("shows an IPC reset-all failure in a top-level alert without raw backend details", async () => {
@@ -239,13 +273,48 @@ describe("SettingsView preferences", () => {
     expect(host.querySelector("[data-settings-reset-all-error]")).toBeNull();
   });
 
+  it.each([
+    ["common.restoreAllDefaults", "resetAllToDefaults"],
+    ["common.restoreDefaults", "resetAppearanceToDefaults"],
+  ] as const)(
+    "keeps %s pending until confirmed and leaves settings intact on cancel",
+    async (label, action) => {
+      render();
+      await openSection("appearance");
+      const button = [...host.querySelectorAll("button")].find(
+        (item) => item.textContent === label,
+      )!;
+
+      click(button);
+      await flushPromises();
+      expect(settings[action]).not.toHaveBeenCalled();
+      const pendingCancel = uiStore.getState().modals;
+      const canceled = pendingCancel[pendingCancel.length - 1];
+      if (canceled.type !== "confirm") throw new Error("Expected a reset confirmation");
+      canceled.options.onCancel?.();
+      uiStore.closeModal(canceled.id);
+      await flushPromises();
+      expect(settings[action]).not.toHaveBeenCalled();
+      expect(settings.updateAppearance).not.toHaveBeenCalled();
+
+      click(button);
+      const pendingConfirm = uiStore.getState().modals;
+      const confirmed = pendingConfirm[pendingConfirm.length - 1];
+      if (confirmed.type !== "confirm") throw new Error("Expected a reset confirmation");
+      confirmed.options.onConfirm();
+      uiStore.closeModal(confirmed.id);
+      await flushPromises();
+      expect(settings[action]).toHaveBeenCalledOnce();
+    },
+  );
+
   it("closes after switching between immediately applied preference sections", async () => {
     const confirm = vi.spyOn(uiStore, "confirm").mockResolvedValue(false);
     render();
     await openSection("appearance");
     await openSection("ai");
 
-    click(host.querySelector('button[aria-label="Close settings"]')!);
+    click(host.querySelector('button[aria-label="settings.close"]')!);
     expect(onRequestClose).toHaveBeenCalledOnce();
     expect(confirm).not.toHaveBeenCalled();
   });

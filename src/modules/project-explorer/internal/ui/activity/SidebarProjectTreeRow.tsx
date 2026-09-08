@@ -36,7 +36,7 @@ function categoryAddConfig(
     case PROJECT_TREE_CATEGORY_IDS.events:
       return { onAdd: actions.onAddEvent, ariaLabel: t("canvas.newEventGraph") };
     case PROJECT_TREE_CATEGORY_IDS.functions:
-      return { onAdd: actions.onAddFunction, ariaLabel: t("canvas.newFunction") };
+      return { onAdd: actions.onAddFunction, ariaLabel: t("canvas.newFunctionGraph") };
     case PROJECT_TREE_CATEGORY_IDS.charts:
       return {
         onAdd: actions.onAddChart,

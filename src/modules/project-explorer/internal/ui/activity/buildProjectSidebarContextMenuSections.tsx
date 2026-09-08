@@ -73,7 +73,7 @@ export function buildProjectSidebarContextMenuSections(
           {
             id: "new-graph",
             label:
-              target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunction"),
+              target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunctionGraph"),
             icon: <VscAdd size={12} />,
             onClick: () => void actions.createGraph(target.graphType),
           },

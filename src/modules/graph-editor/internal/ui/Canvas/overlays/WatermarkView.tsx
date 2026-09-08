@@ -99,7 +99,7 @@ export const WatermarkView = ({ commands }: { readonly commands: WatermarkComman
               </span>
               <span className="flex min-w-0 flex-col items-start gap-0.5">
                 <span className="font-heading text-xs font-semibold text-foreground">
-                  {t("canvas.newFunction")}
+                  {t("canvas.newFunctionGraph")}
                 </span>
                 <span className="text-[10px] font-normal text-muted-foreground">
                   {t("canvas.reusableRoutine")}
