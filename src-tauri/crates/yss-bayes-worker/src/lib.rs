@@ -217,10 +217,14 @@ pub enum BayesArtifactMediaType {
 pub struct BayesArtifact {
     handle: BayesArtifactHandle,
     media_type: BayesArtifactMediaType,
+    kind: yss_bayes_result::ResultArtifactKind,
     bytes: Arc<[u8]>,
 }
 
 impl BayesArtifact {
+    pub fn kind(&self) -> yss_bayes_result::ResultArtifactKind {
+        self.kind
+    }
     pub fn handle(&self) -> &BayesArtifactHandle {
         &self.handle
     }
@@ -315,11 +319,13 @@ impl BayesWorkerAuthority {
         _authority: &Self,
         handle: BayesArtifactHandle,
         media_type: BayesArtifactMediaType,
+        kind: yss_bayes_result::ResultArtifactKind,
         bytes: Arc<[u8]>,
     ) -> BayesArtifact {
         BayesArtifact {
             handle,
             media_type,
+            kind,
             bytes,
         }
     }

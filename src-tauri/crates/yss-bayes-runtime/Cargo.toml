@@ -1,0 +1,20 @@
+[package]
+name = "yss-bayes-runtime"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
+yss-bayes-model = { path = "../yss-bayes-model" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-bayes-worker = { path = "../yss-bayes-worker" }
+yss-sci-contract = { path = "../yss-sci-contract" }
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tracing-subscriber.workspace = true

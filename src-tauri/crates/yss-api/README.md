@@ -93,6 +93,10 @@ Project index, resource mutation, graph save and project save responses omit fro
 
 ## Frontend adapter
 
+Plugin transport uses `command_plugin.rs` and the generic Rust Plugin Manager. Installation, enabled state, view attachment and task projections never depend on Julia availability. Julia/Bayes commands and DTOs are private to the external plugin; they are not Tauri commands. Generated plugin projections come from `yss-plugin-protocol` through `pnpm generate:plugins`. Plugin frames receive a scoped MessagePort, not Tauri access. The transport retains the exact common error wire; plugin failures expose only a stable `details.pluginCode` category.
+
+View detach acknowledges completion and is idempotent for an already-released session. Cross-window or task-session detach is rejected. The page owner waits for that acknowledgement before replacing its lease. Concurrent activations share the Plugin Manager's bounded startup result; only lifecycle mutations remain `plugin_busy`. View quota failures use `plugin_view_limit`, and expired process instances cannot authorize old contexts. Frontend presentation retains the safe code and phase instead of collapsing every failure into a boolean.
+
 Ordinary frontend invocation goes through `src/services/ipc/invokeCommand.ts`, which validates the common error wire. Domain services under `src/services/` own command-specific request/result parsing. Views and presentation modules do not call Tauri `invoke` directly.
 
 Channel adapters parse strict wire DTOs before publishing to application projections. Malformed payloads and sequence gaps belong to each stream's recovery/status contract. Detection, UI visibility, and recovery are separate capabilities; their current coverage is documented by the stream owner, rather than guaranteed by DTO parsing alone.

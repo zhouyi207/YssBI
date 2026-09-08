@@ -9,6 +9,7 @@ publish = false
 test-support = ["yss-project-filesystem/test-support", "yss-project-identity/test-support"]
 
 [dependencies]
+yss-canonical-hash = { path = "../yss-canonical-hash" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true

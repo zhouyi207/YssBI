@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -6,7 +6,7 @@ use std::thread;
 use std::time::Instant;
 
 use yss_bayes_artifact_contract::{BayesArtifactReadError, BayesArtifactReader};
-use yss_bayes_model::{BayesModelDraft, BayesModelSpec, DatasetSourceType, draft_to_model_spec};
+use yss_bayes_model::{BayesModelDraft, BayesModelSpec, draft_to_model_spec};
 use yss_bayes_result::{
     AutocorrelationPlotData, BayesInferenceTask, DensityPlotData, InferenceResult,
     PosteriorPredictivePage, PosteriorSamplePage, ResultArtifact, ResultArtifactFormat,
@@ -17,34 +17,15 @@ use yss_bayes_worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskId, BayesTaskResult, BayesWorkerClient,
     BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, ValidatedBayesTask,
 };
-use yss_database_contract::{
-    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
-    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
-};
-use yss_database_runtime::error::{DatabaseError, DatabaseOperation};
-use yss_database_runtime::session_api::{
-    DatabaseColumnSelection, DatabaseDataSnapshot, DatabaseDataSnapshotRequest,
-    revalidate_declaration_observations,
-};
 use yss_sci_contract::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
-    StatisticalInput, StatisticalScalar,
-};
-
-use super::execution::{
-    ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
+    StatisticalInput,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum BayesDatasetLoadError {
-    #[error(transparent)]
-    SessionCapture(#[from] SessionCaptureError),
-    #[error("captured application session changed")]
-    SessionChanged,
-    #[error("Bayesian dataset project authority changed")]
-    ProjectAuthorityChanged { database: DatabaseId },
-    #[error(transparent)]
-    Database(#[from] DatabaseError),
+    #[error("invalid dataset snapshot")]
+    InvalidSnapshot,
 }
 
 #[derive(Debug)]
@@ -294,6 +275,7 @@ struct StoredInferenceResult {
 struct BayesWorkerJob {
     task: ValidatedBayesTask,
     cancellation: Arc<SciCancellationSource>,
+    deadline: Instant,
 }
 
 impl BayesInferenceService {
@@ -310,75 +292,47 @@ impl BayesInferenceService {
         }
     }
 
-    pub fn submit_from_application(
+    pub fn submit(
         &self,
-        application: &ApplicationState,
+        task_id: String,
         draft: BayesModelDraft,
+        inputs: Arc<[StatisticalInput]>,
+        budget: std::time::Duration,
     ) -> Result<BayesInferenceTask, BayesApplicationError> {
         let spec = validated_spec(draft)?;
-        if spec.dataset().source_type != DatasetSourceType::Table {
-            return Err(BayesApplicationError::DatasetSourceUnsupported);
-        }
-        let captured = application.capture_session().map_err(|source| {
-            BayesApplicationError::DatasetLoadFailed {
-                source: BayesDatasetLoadError::SessionCapture(source),
-            }
-        })?;
-        let database = DatabaseId::from_existing(spec.dataset().source_id.clone().into());
-        let captured_observations = project_database_observations(&captured, &database)?;
-        let required_columns = required_input_columns(&spec)
-            .into_iter()
-            .map(|name| {
-                yss_tabular_contract::TabularColumnName::try_from(name.as_str()).map_err(|_| {
-                    BayesApplicationError::DatasetLoadFailed {
-                        source: BayesDatasetLoadError::Database(DatabaseError::invalid_request(
-                            DatabaseOperation::DataSnapshot,
-                            Some(database.clone()),
-                        )),
-                    }
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_boxed_slice();
-        let snapshot = yss_database_runtime::session_api::data_snapshot(
-            captured.database(),
-            DatabaseDataSnapshotRequest {
-                database: database.clone(),
-                columns: DatabaseColumnSelection::Selected(required_columns.clone()),
-                offset: 0,
-                limit: usize::MAX,
-            },
-        )
-        .map_err(|source| BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::Database(source),
-        })?;
-        let inputs = statistical_inputs_from_snapshot(&snapshot, &required_columns, &database)?;
-
-        application
-            .revalidate_captured_session(&captured)
-            .map_err(|error| BayesApplicationError::DatasetLoadFailed {
-                source: bayes_dataset_load_error_from_session_revalidation(error),
-            })?;
-        let current_observations = project_database_observations(&captured, &database)?;
-        if current_observations != captured_observations {
-            return Err(BayesApplicationError::DatasetLoadFailed {
-                source: BayesDatasetLoadError::ProjectAuthorityChanged { database },
-            });
-        }
-        revalidate_declaration_observations(captured.database(), &captured_observations).map_err(
-            |source| BayesApplicationError::DatasetLoadFailed {
-                source: BayesDatasetLoadError::Database(source),
-            },
-        )?;
-        self.submit_worker_spec(spec, inputs)
+        self.submit_spec(task_id, spec, inputs, budget)
     }
 
+    pub fn has_active_tasks(&self) -> bool {
+        self.inner.lock().map_or(true, |state| {
+            state.worker_runner_active || !state.worker_queue.is_empty()
+        })
+    }
+
+    #[cfg(test)]
     fn submit_worker_spec(
         &self,
         spec: BayesModelSpec,
         inputs: Arc<[StatisticalInput]>,
     ) -> Result<BayesInferenceTask, BayesApplicationError> {
-        let task_id = new_task_id();
+        self.submit_spec(
+            new_task_id(),
+            spec,
+            inputs,
+            std::time::Duration::from_secs(60),
+        )
+    }
+
+    fn submit_spec(
+        &self,
+        task_id: String,
+        spec: BayesModelSpec,
+        inputs: Arc<[StatisticalInput]>,
+        budget: std::time::Duration,
+    ) -> Result<BayesInferenceTask, BayesApplicationError> {
+        let deadline = Instant::now()
+            .checked_add(budget)
+            .ok_or(BayesApplicationError::ValidationFailed)?;
         let worker_task_id = BayesTaskId::try_from(task_id.as_str())
             .map_err(|_| BayesApplicationError::ValidationFailed)?;
         let task = ValidatedBayesTask::try_new(worker_task_id, spec, inputs)
@@ -387,13 +341,18 @@ impl BayesInferenceService {
         let queued = queued_task(task_id.clone());
         let should_start_runner = {
             let mut state = self.lock_state()?;
+            if state.tasks.contains_key(&task_id) || state.worker_queue.len() >= 4 {
+                return Err(BayesApplicationError::TaskActive);
+            }
             state.tasks.insert(task_id.clone(), queued.clone());
             state
                 .worker_sources
                 .insert(task_id, Arc::clone(&cancellation));
-            state
-                .worker_queue
-                .push_back(BayesWorkerJob { task, cancellation });
+            state.worker_queue.push_back(BayesWorkerJob {
+                task,
+                cancellation,
+                deadline,
+            });
             if state.worker_runner_active {
                 false
             } else {
@@ -639,14 +598,8 @@ fn run_worker_queue(
 ) {
     while let Some(job) = pop_next_worker_job(&inner) {
         let task_id = job.task.task_id().as_str().to_owned();
-        let control = ExecutionControl::new(
-            job.cancellation.token(),
-            AbsoluteDeadline::at(
-                Instant::now()
-                    .checked_add(std::time::Duration::from_secs(24 * 60 * 60))
-                    .unwrap_or_else(Instant::now),
-            ),
-        );
+        let control =
+            ExecutionControl::new(job.cancellation.token(), AbsoluteDeadline::at(job.deadline));
         let started = worker.start(job.task, &control);
         let result = match started {
             Ok(handle) => {
@@ -774,12 +727,8 @@ fn materialize_worker_result(
     let materialized = (|| {
         for artifact in result.artifacts() {
             let name = artifact.artifact_id().as_str();
-            let kind = result_artifact_kind(name).ok_or_else(|| {
-                BayesWorkerError::ArtifactFormatUnsupported {
-                    artifact: artifact.clone(),
-                }
-            })?;
             let media = worker.read_artifact(artifact, control)?;
+            let kind = media.kind();
             let path = result_dir.join(name);
             owned_paths.push(path.clone());
             std::fs::write(&path, media.bytes()).map_err(|_| artifact_io_error())?;
@@ -815,23 +764,6 @@ fn materialize_worker_result(
 fn artifact_io_error() -> BayesWorkerError {
     BayesWorkerError::WorkerUnavailable {
         phase: BayesWorkerPhase::ReadArtifact,
-    }
-}
-
-fn result_artifact_kind(name: &str) -> Option<ResultArtifactKind> {
-    let name = name.to_ascii_lowercase();
-    if name.contains("predictive") {
-        Some(ResultArtifactKind::PosteriorPredictive)
-    } else if name.contains("sample") || name.contains("draw") {
-        Some(ResultArtifactKind::PosteriorSamples)
-    } else if name.contains("summary") {
-        Some(ResultArtifactKind::Summary)
-    } else if name.contains("metadata") {
-        Some(ResultArtifactKind::Metadata)
-    } else if name.contains("log") {
-        Some(ResultArtifactKind::Log)
-    } else {
-        None
     }
 }
 
@@ -944,7 +876,7 @@ fn validated_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, BayesApplica
     draft_to_model_spec(draft).map_err(|_| BayesApplicationError::ValidationFailed)
 }
 
-fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
+pub fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
     let mut columns = spec
         .response()
         .data_variables
@@ -959,126 +891,7 @@ fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
     columns
 }
 
-fn project_database_observations(
-    session: &ApplicationSession,
-    database: &DatabaseId,
-) -> Result<DatabaseDeclarationObservationSet, BayesApplicationError> {
-    let data =
-        session
-            .project()
-            .get_data()
-            .map_err(|_| BayesApplicationError::DatasetLoadFailed {
-                source: BayesDatasetLoadError::ProjectAuthorityChanged {
-                    database: database.clone(),
-                },
-            })?;
-    let index = session
-        .project()
-        .read_project_index(session.project_instance_id())
-        .map_err(|_| BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::ProjectAuthorityChanged {
-                database: database.clone(),
-            },
-        })?;
-    let revisions = index
-        .databases
-        .into_iter()
-        .map(|entry| (entry.id, entry.revision.get()))
-        .collect::<BTreeMap<_, _>>();
-    if !data.databases.contains_key(database.as_str()) {
-        return Err(BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::ProjectAuthorityChanged {
-                database: database.clone(),
-            },
-        });
-    }
-    DatabaseDeclarationObservationSet::try_from_iter(data.databases.values().map(|declaration| {
-        let revision = revisions.get(declaration.id.as_str()).copied().unwrap_or(0);
-        (
-            declaration.id.clone(),
-            DatabaseDeclarationObservation::new(
-                DatabaseDeclarationRevision::from_existing(revision),
-                DatabaseDeclarationFingerprint::from_decl(declaration),
-            ),
-        )
-    }))
-    .map_err(|_| BayesApplicationError::DatasetLoadFailed {
-        source: BayesDatasetLoadError::ProjectAuthorityChanged {
-            database: database.clone(),
-        },
-    })
-}
-
-fn bayes_dataset_load_error_from_session_revalidation(
-    error: SessionRevalidationError,
-) -> BayesDatasetLoadError {
-    match error {
-        SessionRevalidationError::Unavailable(source) => {
-            BayesDatasetLoadError::SessionCapture(source)
-        }
-        SessionRevalidationError::Changed => BayesDatasetLoadError::SessionChanged,
-    }
-}
-
-fn statistical_inputs_from_snapshot(
-    snapshot: &DatabaseDataSnapshot,
-    required_columns: &[yss_tabular_contract::TabularColumnName],
-    database: &DatabaseId,
-) -> Result<Arc<[StatisticalInput]>, BayesApplicationError> {
-    let columns = snapshot.rows().columns();
-    if columns.len() != required_columns.len()
-        || columns
-            .iter()
-            .zip(required_columns)
-            .any(|(column, required)| column.name() != required)
-    {
-        return Err(BayesApplicationError::DatasetLoadFailed {
-            source: BayesDatasetLoadError::Database(DatabaseError::schema(
-                DatabaseOperation::DataSnapshot,
-                Some(database.clone()),
-            )),
-        });
-    }
-    columns
-        .iter()
-        .map(|column| {
-            let values = column
-                .values()
-                .iter()
-                .map(|value| match value {
-                    yss_tabular_contract::TabularScalar::Null => None,
-                    yss_tabular_contract::TabularScalar::Bool(value) => {
-                        Some(StatisticalScalar::Category(value.to_string().into()))
-                    }
-                    yss_tabular_contract::TabularScalar::Integer(value) => {
-                        Some(StatisticalScalar::Numeric(*value as f64))
-                    }
-                    yss_tabular_contract::TabularScalar::Unsigned(value) => {
-                        Some(StatisticalScalar::Numeric(*value as f64))
-                    }
-                    yss_tabular_contract::TabularScalar::Decimal(value) => {
-                        Some(StatisticalScalar::Numeric(value.as_f64()))
-                    }
-                    yss_tabular_contract::TabularScalar::String(value) => {
-                        Some(StatisticalScalar::Category(value.clone()))
-                    }
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            StatisticalInput::try_new(column.name().as_str().into(), values, None).map_err(|_| {
-                BayesApplicationError::DatasetLoadFailed {
-                    source: BayesDatasetLoadError::Database(DatabaseError::schema(
-                        DatabaseOperation::DataSnapshot,
-                        Some(database.clone()),
-                    )),
-                }
-            })
-        })
-        .collect::<Result<Vec<_>, BayesApplicationError>>()
-        .map(Vec::into_boxed_slice)
-        .map(Arc::from)
-}
-
+#[cfg(test)]
 fn new_task_id() -> String {
     format!("bayes-{}", uuid::Uuid::new_v4())
 }

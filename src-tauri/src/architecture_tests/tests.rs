@@ -823,7 +823,7 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application source must be readable");
     let adapter = std::fs::read_to_string(
@@ -856,9 +856,13 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
         !application.contains("polars::"),
         "Bayes Application source must not retain Polars-backed adapter or test-mirror logic"
     );
-    let root_lib = std::fs::read_to_string(facts.repository_root.join("src-tauri/src/lib.rs"))
-        .expect("composition root must be readable");
-    assert!(root_lib.contains("yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()"));
+    let extension = std::fs::read_to_string(
+        facts
+            .repository_root
+            .join("src-tauri/crates/yss-julia-extension/src/main.rs"),
+    )
+    .expect("plugin composition must be readable");
+    assert!(extension.contains("yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()"));
 
     let contract_sources = facts
         .classification
@@ -2949,14 +2953,14 @@ fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
         );
     }
     let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/bayes.rs"))
-            .expect("the Bayes application must be readable");
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/plugins.rs"))
+            .expect("the plugin data application must be readable");
     assert!(
         bayes_application.contains("DatabaseDataSnapshot")
-            && bayes_application.contains("statistical_inputs_from_snapshot")
-            && bayes_application.contains("yss_tabular_contract::TabularScalar")
+            && bayes_application.contains("yss_tabular_io::write_ipc_snapshot")
+            && bayes_application.contains("DatabaseColumnSelection::Selected")
             && !bayes_application.contains("yss_tabular_polars::column_to_series"),
-        "the Bayes application must consume typed database snapshots without a Polars adapter"
+        "plugin data access must consume selected typed snapshots through the Arrow adapter"
     );
     assert!(
         !bayes_application.contains("fn tabular_scalar_to_any_value")
@@ -3088,13 +3092,13 @@ fn tabular_io_has_one_database_owner_without_root_facade() {
         );
     }
     let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/bayes.rs"))
-            .expect("the Bayes application must be readable");
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/plugins.rs"))
+            .expect("the plugin data application must be readable");
     assert!(
         bayes_application.contains("yss_database_runtime::session_api")
             && bayes_application.contains("DatabaseDataSnapshot")
-            && !bayes_application.contains("yss_tabular_io"),
-        "the Bayes application must consume the database snapshot contract instead of file I/O"
+            && bayes_application.contains("yss_tabular_io::write_ipc_snapshot"),
+        "the plugin data application must serialize Core-owned snapshots through tabular I/O"
     );
     assert!(
         !root.join("src-tauri/src/database").exists(),
@@ -6728,10 +6732,7 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
         );
     }
 
-    for consumer in [
-        "src-tauri/crates/yss-api/src/commands/command_julia.rs",
-        "src-tauri/crates/yss-julia-worker/src/lib.rs",
-    ] {
+    for consumer in ["src-tauri/crates/yss-julia-worker/src/lib.rs"] {
         let source = std::fs::read_to_string(root.join(consumer))
             .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
         assert!(
@@ -6852,8 +6853,7 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
     }
 
     for consumer in [
-        "src-tauri/src/lib.rs",
-        "src-tauri/crates/yss-api/src/commands/command_julia.rs",
+        "src-tauri/crates/yss-julia-extension/src/main.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
@@ -6913,10 +6913,7 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
 
     let workspace = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-bayes-worker-julia\"",
-        "yss-bayes-worker-julia = { path = \"./crates/yss-bayes-worker-julia\" }",
-    ] {
+    for declaration in ["\"crates/yss-bayes-worker-julia\""] {
         assert!(
             workspace.contains(declaration),
             "workspace must declare the Julia Bayes adapter through {declaration}"
@@ -6969,12 +6966,13 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
         "Julia Bayes tracing must use one target owned by the extracted crate"
     );
 
-    let composition = std::fs::read_to_string(root.join("src-tauri/src/lib.rs"))
-        .expect("composition root must be readable");
+    let composition =
+        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-extension/src/main.rs"))
+            .expect("plugin composition must be readable");
     assert!(
         composition.contains("yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new")
             && !composition.contains("pub mod julia"),
-        "the composition root must construct the adapter directly without a Julia facade"
+        "the plugin entry must construct the adapter directly without a host Julia facade"
     );
 }
 
@@ -7211,10 +7209,20 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
                 | CanonicalOrigin::External(_) => None,
             })
             .collect::<BTreeSet<_>>();
-        assert_eq!(
-            actual_origins,
-            BTreeSet::from([expected_origin]),
-            "{symbol} must have one canonical Bayes model owner"
+        let owner = std::fs::read_to_string(facts.repository_root.join(expected_origin)).unwrap();
+        let syntax = syn::parse_file(&owner).unwrap();
+        assert!(
+            syntax
+                .items
+                .iter()
+                .any(|item| matches!(item,syn::Item::Struct(item) if item.ident==symbol)),
+            "{symbol} must remain declared by its canonical model owner"
+        );
+        assert!(
+            actual_origins
+                .iter()
+                .all(|origin| *origin == expected_origin),
+            "{symbol} consumers must resolve to {expected_origin}, got {actual_origins:?}"
         );
     }
 }
@@ -7306,7 +7314,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application workflow must be readable");
     assert!(application.contains("owned_artifacts: Vec<PathBuf>"));
@@ -7527,7 +7535,7 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
     }
 
     for direct_consumer in [
-        "src-tauri/crates/yss-application/src/bayes.rs",
+        "src-tauri/crates/yss-bayes-runtime/src/lib.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
         "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
@@ -7648,7 +7656,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application source must be readable");
     for required in [
@@ -7686,7 +7694,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let command = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-api/src/commands/command_bayes.rs"),
+            .join("src-tauri/crates/yss-julia-extension/src/commands.rs"),
     )
     .expect("Bayes command source must be readable");
     for forbidden in [
@@ -7898,7 +7906,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     let bayes_application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-application/src/bayes.rs"),
+            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes Application source must be readable");
     assert!(

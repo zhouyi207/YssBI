@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::JuliaTaskCompletion;
 use super::predictor::{JuliaGeneratedModel, JuliaModelGenerationError, generate_julia_model};
 use yss_bayes_model::{Expression, InferenceConfig, LikelihoodSpec, ParameterSpec};
-use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
+use yss_bayes_result::{InferenceDiagnostics, ParameterSummary, ResultArtifactKind};
 use yss_bayes_worker::{
     ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult,
     BayesWorkerAuthority, BayesWorkerError, BayesWorkerTerminalCode, ValidatedBayesTask,
@@ -305,6 +305,7 @@ pub(super) struct CompletedJuliaTask {
 pub(super) struct OwnedArtifact {
     pub(super) path: PathBuf,
     pub(super) media_type: BayesArtifactMediaType,
+    pub(super) kind: ResultArtifactKind,
 }
 
 #[derive(Deserialize)]
@@ -325,6 +326,7 @@ struct JuliaArtifactManifest {
 #[derive(Deserialize)]
 struct JuliaArtifactRecord {
     path: PathBuf,
+    kind: ResultArtifactKind,
 }
 
 pub(super) fn finish_task(
@@ -362,7 +364,14 @@ pub(super) fn finish_task(
             })?;
         let media_type = artifact_media_type(&artifact)?;
         if artifacts
-            .insert(artifact.clone(), OwnedArtifact { path, media_type })
+            .insert(
+                artifact.clone(),
+                OwnedArtifact {
+                    path,
+                    media_type,
+                    kind: record.kind,
+                },
+            )
             .is_some()
         {
             return Err(BayesWorkerError::ArtifactNotOwned { artifact });

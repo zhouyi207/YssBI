@@ -1,14 +1,16 @@
-use polars::prelude::{Column, DataFrame};
 use serde::Deserialize;
 use yss_bayes_model::{
     BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, ParameterConstraint, PriorSpec,
 };
 
-const SIMPLE_LINEAR_NORMAL: &str = include_str!("sci/fixtures/bayes/linear_normal/simple.json");
+const SIMPLE_LINEAR_NORMAL: &str =
+    include_str!("../../../tests/sci/fixtures/bayes/linear_normal/simple.json");
 const EXPONENTIAL_DECAY_NORMAL: &str =
-    include_str!("sci/fixtures/bayes/nonlinear_normal/exponential_decay.json");
-const SIMPLE_BERNOULLI_LOGIT: &str = include_str!("sci/fixtures/bayes/bernoulli_logit/simple.json");
-const SIMPLE_POISSON_LOG: &str = include_str!("sci/fixtures/bayes/poisson_log/simple.json");
+    include_str!("../../../tests/sci/fixtures/bayes/nonlinear_normal/exponential_decay.json");
+const SIMPLE_BERNOULLI_LOGIT: &str =
+    include_str!("../../../tests/sci/fixtures/bayes/bernoulli_logit/simple.json");
+const SIMPLE_POISSON_LOG: &str =
+    include_str!("../../../tests/sci/fixtures/bayes/poisson_log/simple.json");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -139,9 +141,22 @@ fn nonlinear_normal_fixture_defines_generic_expression_protocol() {
         PriorSpec::Exponential([1.0])
     ));
 
-    let dataframe = fixture_input_table(&fixture);
-    assert_eq!(dataframe.height(), 8);
-    assert_eq!(dataframe.get_column_names(), ["x", "y"]);
+    assert!(
+        fixture
+            .data
+            .columns
+            .iter()
+            .all(|column| column.values.len() == 8)
+    );
+    assert_eq!(
+        fixture
+            .data
+            .columns
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>(),
+        ["x", "y"]
+    );
 }
 
 #[test]
@@ -160,7 +175,13 @@ fn bernoulli_logit_fixture_defines_model_family_protocol() {
         Some("x")
     );
     assert!(spec.sampler().save_samples);
-    assert_eq!(fixture_input_table(&fixture).height(), 8);
+    assert!(
+        fixture
+            .data
+            .columns
+            .iter()
+            .all(|column| column.values.len() == 8)
+    );
 }
 
 #[test]
@@ -179,7 +200,13 @@ fn poisson_log_fixture_defines_model_family_protocol() {
         Some("x")
     );
     assert!(spec.sampler().save_samples);
-    assert_eq!(fixture_input_table(&fixture).height(), 8);
+    assert!(
+        fixture
+            .data
+            .columns
+            .iter()
+            .all(|column| column.values.len() == 8)
+    );
 }
 
 fn simple_linear_normal_fixture() -> BayesGoldenFixture {
@@ -196,16 +223,6 @@ fn simple_bernoulli_logit_fixture() -> BayesGoldenFixture {
 
 fn simple_poisson_log_fixture() -> BayesGoldenFixture {
     serde_json::from_str(SIMPLE_POISSON_LOG).expect("valid poisson log fixture")
-}
-
-fn fixture_input_table(fixture: &BayesGoldenFixture) -> DataFrame {
-    let columns = fixture
-        .data
-        .columns
-        .iter()
-        .map(|column| Column::new(column.name.clone().into(), column.values.as_slice()))
-        .collect::<Vec<_>>();
-    DataFrame::new(fixture.data.columns[0].values.len(), columns).expect("fixture dataframe")
 }
 
 fn assert_posterior_mean_expectation(

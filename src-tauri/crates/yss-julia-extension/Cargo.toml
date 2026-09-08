@@ -1,0 +1,23 @@
+[package]
+name = "yss-julia-extension"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+yss-plugin-protocol = { path = "../yss-plugin-protocol" }
+yss-plugin-sdk = { path = "../yss-plugin-sdk" }
+yss-bayes-runtime = { path = "../yss-bayes-runtime" }
+yss-bayes-model = { path = "../yss-bayes-model" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-bayes-worker-julia = { path = "../yss-bayes-worker-julia" }
+yss-bayes-artifact-polars = { path = "../yss-bayes-artifact-polars" }
+yss-julia-runtime = { path = "../yss-julia-runtime" }
+yss-julia-worker = { path = "../yss-julia-worker" }
+yss-sci-contract = { path = "../yss-sci-contract" }
+yss-math-expr = { path = "../yss-math-expr" }
+polars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true

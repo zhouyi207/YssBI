@@ -134,6 +134,21 @@ pub fn write_ipc_dataframe(path: &Path, dataframe: &mut DataFrame) -> Result<(),
         })
 }
 
+pub fn write_ipc_snapshot(
+    path: &Path,
+    snapshot: &yss_tabular_contract::TabularSnapshot,
+) -> Result<(), TabularIoError> {
+    let mut dataframe = yss_tabular_polars::to_dataframe(snapshot).map_err(|_| {
+        dataframe_error(
+            TabularIoOperation::Write,
+            TabularIoFormat::ArrowIpc,
+            TabularIoPhase::Encode,
+            PolarsError::ComputeError("snapshot materialization failed".into()),
+        )
+    })?;
+    write_ipc_dataframe(path, &mut dataframe)
+}
+
 pub fn write_csv_dataframe(path: &Path, dataframe: &mut DataFrame) -> Result<(), TabularIoError> {
     create_parent_directory(path, TabularIoFormat::Csv)?;
     let file = File::create(path).map_err(|error| {

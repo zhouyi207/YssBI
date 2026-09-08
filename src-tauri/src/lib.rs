@@ -141,9 +141,6 @@ fn initialize_application_state(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let julia_worker = yss_julia_worker::JuliaWorkerManager::new();
-    let bayes_worker = julia_worker.clone();
-
     if let Err(error) = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -154,7 +151,6 @@ pub fn run() {
             std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
         ))
         .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
-        .manage(julia_worker)
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
             let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize()
@@ -182,8 +178,9 @@ pub fn run() {
             app.manage(application_state.clone());
 
             let app_dir = app.path().app_data_dir()?;
-            let harness_state = initialize_harness_state(app_dir.clone(), application_state)
-                .map_err(Box::<dyn std::error::Error>::from)?;
+            let harness_state =
+                initialize_harness_state(app_dir.clone(), application_state.clone())
+                    .map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(harness_state);
             let registry_store = tauri::async_runtime::block_on(
                 yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(app_dir.clone()),
@@ -194,26 +191,13 @@ pub fn run() {
                 registry_path,
             );
             app.manage(project_registry);
-            let bayes_adapter = yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new(
-                app_dir.clone(),
-                bayes_worker.clone(),
+            let plugins = yss_plugin_runtime::PluginManager::initialize(
+                &app_dir,
+                Arc::new(yss_application::plugins::PluginHostServices::new(
+                    application_state,
+                )),
             );
-            app.manage(yss_application::bayes::BayesInferenceService::with_worker(
-                app_dir.clone(),
-                std::sync::Arc::new(bayes_adapter),
-                std::sync::Arc::new(yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()),
-            ));
-            let warmup_worker = bayes_worker.clone();
-            tauri::async_runtime::spawn_blocking(move || {
-                if let Err(error) = warmup_worker.warm_up(&app_dir) {
-                    tracing::warn!(
-                        target: "yssbi::julia::worker",
-                        diagnostic_domain = "execution",
-                        error = %error,
-                        "Failed to warm up Julia worker"
-                    );
-                }
-            });
+            app.manage(plugins);
 
             // 加载并应用主窗口几何状态：先 set_size/set_position/maximize，
             // 再 show()。tauri.conf.json 中主窗口需配置为 `visible: false`，

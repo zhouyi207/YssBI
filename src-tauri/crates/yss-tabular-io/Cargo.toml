@@ -9,3 +9,5 @@ publish = false
 calamine = "0.36"
 polars.workspace = true
 thiserror.workspace = true
+yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-tabular-polars = { path = "../yss-tabular-polars" }

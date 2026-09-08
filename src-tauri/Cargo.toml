@@ -12,6 +12,11 @@ rust-version.workspace = true
 resolver = "3"
 members = [
   ".",
+  "crates/yss-plugin-protocol",
+  "crates/yss-plugin-sdk",
+  "crates/yss-plugin-runtime",
+  "crates/yss-bayes-runtime",
+  "crates/yss-julia-extension",
   "crates/yss-api",
   "crates/yss-agent-rig",
   "crates/yss-application",
@@ -157,17 +162,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+yss-plugin-protocol = { path = "./crates/yss-plugin-protocol" }
+yss-plugin-runtime = { path = "./crates/yss-plugin-runtime" }
 yss-sci-contract = { path = "./crates/yss-sci-contract" }
 yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-api = { path = "./crates/yss-api" }
 yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }
-yss-bayes-artifact-polars = { path = "./crates/yss-bayes-artifact-polars" }
-yss-bayes-worker-julia = { path = "./crates/yss-bayes-worker-julia" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
 yss-execution = { path = "./crates/yss-execution" }
-yss-julia-worker = { path = "./crates/yss-julia-worker" }
 yss-project = { path = "./crates/yss-project" }
 yss-project-identity = { path = "./crates/yss-project-identity" }
 yss-project-progress = { path = "./crates/yss-project-progress" }
@@ -195,7 +199,6 @@ serde.workspace = true
 serde_json.workspace = true
 syn = { version = "3", features = ["full", "visit"] }
 uuid.workspace = true
-yss-bayes-model = { path = "./crates/yss-bayes-model" }
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
 yss-database-runtime = { path = "./crates/yss-database-runtime", features = ["test-support"] }

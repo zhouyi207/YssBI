@@ -29,6 +29,144 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-protocol",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-protocol",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-protocol",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-protocol",
+        mode: RustDependencyMode::Runtime,
+        package_name: "schemars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-protocol",
+        mode: RustDependencyMode::Runtime,
+        package_name: "semver",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-sdk",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-sdk",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-sdk",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sha2",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "zip",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "ed25519-dalek",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_jcs",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-julia-extension",
+        mode: RustDependencyMode::Runtime,
+        package_name: "polars",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-julia-extension",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-julia-extension",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-julia-extension",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+        target_condition: Some("cfg(windows)"),
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-file-replace",
         mode: RustDependencyMode::Runtime,
         package_name: "windows-sys",
@@ -1129,6 +1267,31 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "semver",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "ed25519-dalek",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "sha2",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_jcs",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "zip",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,

@@ -445,7 +445,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 artifact: artifact.clone(),
             });
         }
-        let (path, media_type) = {
+        let (path, media_type, kind) = {
             let state = self
                 .state
                 .lock()
@@ -459,7 +459,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                             artifact: artifact.clone(),
                         }
                     })?;
-                    (owned.path.clone(), owned.media_type)
+                    (owned.path.clone(), owned.media_type, owned.kind)
                 }
                 AdapterTaskState::Cancelled => {
                     return Err(BayesWorkerError::Cancelled {
@@ -485,6 +485,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
             authority,
             artifact.clone(),
             media_type,
+            kind,
             Arc::from(bytes),
         ))
     }
@@ -610,7 +611,7 @@ mod tests {
             for (name, bytes) in run.artifacts {
                 let path = directory.path().join(name);
                 fs::write(&path, bytes).expect("fake artifact must be written");
-                artifact_records.push(serde_json::json!({ "path": path }));
+                artifact_records.push(serde_json::json!({ "path": path, "kind": "metadata" }));
             }
             let metadata_path = directory.path().join("metadata.json");
             fs::write(

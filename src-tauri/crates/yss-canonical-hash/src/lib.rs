@@ -56,6 +56,11 @@ pub fn hash_canonical<T: Serialize + ?Sized>(
     Ok(Sha256::digest(&bytes).into())
 }
 
+/// SHA-256 of an artifact's exact bytes, independent of JSON/domain encoding.
+pub fn content_sha256(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::hash_canonical;

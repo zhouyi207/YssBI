@@ -33,7 +33,6 @@ fn kind_contract_preserves_wire_storage_defaults_and_load() {
         (WindowKind::Logs, "logs", 1000, 600),
         (WindowKind::Plot, "plot", 960, 800),
         (WindowKind::Info, "info", 960, 800),
-        (WindowKind::Bayes, "bayes", 960, 800),
     ];
     assert_eq!(
         WindowKind::all().collect::<Vec<_>>(),
@@ -90,8 +89,7 @@ fn kind_contract_preserves_wire_storage_defaults_and_load() {
             },
             "logs": null,
             "plot": null,
-            "info": null,
-            "bayes": null
+            "info": null
         }),
     );
 

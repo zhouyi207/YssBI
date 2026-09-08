@@ -432,6 +432,7 @@ impl BayesWorkerPort for FakeWorker {
             authority,
             artifact.clone(),
             media_type,
+            yss_bayes_result::ResultArtifactKind::Summary,
             bytes,
         ))
     }
@@ -501,6 +502,7 @@ impl BayesWorkerPort for CrossTaskWorker {
             authority,
             wrong_artifact,
             BayesArtifactMediaType::Json,
+            yss_bayes_result::ResultArtifactKind::Summary,
             Arc::from(&b"{}"[..]),
         ))
     }
@@ -676,6 +678,7 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
         &authority,
         matching_artifact.clone(),
         BayesArtifactMediaType::Json,
+        yss_bayes_result::ResultArtifactKind::Summary,
         Arc::from(&b"{}"[..]),
     );
     assert_eq!(artifact.handle(), &matching_artifact);

@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+yss-plugin-protocol = { path = "../yss-plugin-protocol" }
+yss-plugin-runtime = { path = "../yss-plugin-runtime" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
 serde_json.workspace = true
@@ -15,8 +17,6 @@ tracing.workspace = true
 uuid.workspace = true
 yss-application = { path = "../yss-application" }
 yss-automation-contract = { path = "../yss-automation-contract" }
-yss-bayes-model = { path = "../yss-bayes-model" }
-yss-bayes-result = { path = "../yss-bayes-result" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-edit = { path = "../yss-database-edit" }
@@ -33,8 +33,6 @@ yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-editor = { path = "../yss-graph-editor" }
 yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-graph-registry = { path = "../yss-graph-registry" }
-yss-julia-runtime = { path = "../yss-julia-runtime" }
-yss-julia-worker = { path = "../yss-julia-worker" }
 yss-math-expr = { path = "../yss-math-expr" }
 yss-project = { path = "../yss-project" }
 yss-project-history = { path = "../yss-project-history" }
@@ -52,7 +50,6 @@ yss-chart-document = { path = "../yss-chart-document" }
 [dev-dependencies]
 tracing-subscriber.workspace = true
 yss-application = { path = "../yss-application", features = ["test-support"] }
-yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-duckdb = { path = "../yss-duckdb" }
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }

@@ -200,7 +200,9 @@ impl JuliaWorkerManager {
         let executable = system_julia_executable().map_err(|error| {
             JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error.to_string())
         })?;
-        let status = background_command(executable)
+        let mut command = background_command(executable);
+        configure_dependency_cache(&mut command, &worker_dir);
+        let status = command
             .arg(format!("--project={}", worker_dir.display()))
             .args(["--startup-file=no", "-e", "using Pkg; Pkg.instantiate()"])
             .stdin(Stdio::null())
@@ -452,7 +454,9 @@ impl WorkerProcess {
             JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error.to_string())
         })?;
         let script = worker_dir.join("worker.jl");
-        let mut child = background_command(executable)
+        let mut command = background_command(executable);
+        configure_dependency_cache(&mut command, worker_dir);
+        let mut child = command
             .arg(format!("--project={}", worker_dir.display()))
             .args(["--startup-file=no", "--history-file=no"])
             .arg(script)
@@ -629,6 +633,17 @@ impl WorkerProcess {
 impl Drop for WorkerProcess {
     fn drop(&mut self) {
         self.terminate();
+    }
+}
+
+fn configure_dependency_cache(command: &mut std::process::Command, worker_dir: &Path) {
+    command.env("JULIA_NUM_PRECOMPILE_TASKS", "2");
+    let mut depots = vec![worker_dir.join("depot")];
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        depots.push(PathBuf::from(profile).join(".julia"));
+    }
+    if let Ok(depots) = std::env::join_paths(depots) {
+        command.env("JULIA_DEPOT_PATH", depots);
     }
 }
 

@@ -407,6 +407,10 @@ const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     },
     WorkerFunction {
         owner: "BayesArtifact",
+        method: "kind",
+    },
+    WorkerFunction {
+        owner: "BayesArtifact",
         method: "bytes",
     },
     WorkerFunction {
@@ -1561,8 +1565,7 @@ impl JuliaBayesAdapterVisitor<'_> {
             }
         }
         if !self.adapter_source
-            && self.source_file != "src-tauri/src/lib.rs"
-            && self.source_file != "src-tauri/crates/yss-sci-runtime/src/lib.rs"
+            && self.source_file != "src-tauri/crates/yss-julia-extension/src/main.rs"
             && path
                 .segments
                 .iter()
@@ -1683,11 +1686,17 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {}
     );
 
     let production_constructor = julia_bayes_adapter_source_violations(
-        "src-tauri/src/lib.rs",
+        "src-tauri/crates/yss-julia-extension/src/main.rs",
         "fn compose() { let _ = JuliaBayesWorkerAdapter::new(root, worker); }",
     )
     .expect("production constructor fixture must parse");
     assert!(production_constructor.is_empty());
+    let host_constructor = julia_bayes_adapter_source_violations(
+        "src-tauri/src/lib.rs",
+        "fn compose() { let _ = JuliaBayesWorkerAdapter::new(root, worker); }",
+    )
+    .unwrap();
+    assert_eq!(host_constructor.len(), 1);
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

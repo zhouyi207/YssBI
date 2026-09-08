@@ -137,6 +137,42 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::BackendAdapter,
+        repository_relative_source_file: "src-tauri/crates/yss-julia-extension/src/commands.rs",
+        fully_qualified_owner: "yss_julia_extension::commands",
+        canonical_origin_targets: &[
+            "yss_bayes_runtime::BayesApplicationError",
+            "yss_bayes_runtime::BayesInferenceService",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::BackendAdapter,
+        repository_relative_source_file: "src-tauri/crates/yss-julia-extension/src/main.rs",
+        fully_qualified_owner: "yss_julia_extension",
+        canonical_origin_targets: &[
+            "yss_bayes_runtime::BayesInferenceService",
+            "yss_bayes_runtime::required_input_columns",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::BackendAdapter,
+        repository_relative_source_file: "src-tauri/crates/yss-plugin-runtime/src/lib.rs",
+        fully_qualified_owner: "yss_plugin_runtime",
+        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::BackendAdapter,
+        repository_relative_source_file: "src-tauri/crates/yss-plugin-runtime/src/package.rs",
+        fully_qualified_owner: "yss_plugin_runtime::package",
+        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::DatabaseCore,
+        repository_relative_source_file: "src-tauri/crates/yss-tabular-io/src/lib.rs",
+        fully_qualified_owner: "yss_tabular_io",
+        canonical_origin_targets: &["yss_tabular_polars::to_dataframe"],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::Application,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/database/export.rs",
         fully_qualified_owner: "yss_application::database::export",
@@ -196,10 +232,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/src/lib.rs",
         fully_qualified_owner: "yssbi_lib",
         canonical_origin_targets: &[
-            "yss_application::bayes::BayesInferenceService::with_worker",
-            "yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new",
+            "yss_application::plugins::PluginHostServices::new",
+            "yss_plugin_runtime::PluginManager::initialize",
             "yss_sci_runtime::service::SciRuntimeBackend::new",
-            "yss_julia_worker::JuliaWorkerManager::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yss_project::project_state::state::ProjectState",
@@ -211,7 +246,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::ApplicationState::from_composition",
             "yss_application::execution::session_slot::SessionCaptureError",
-            "yss_bayes_artifact_polars::PolarsBayesArtifactReader::new",
             "yss_sci_contract::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
             "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
@@ -274,12 +308,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_bayes.rs",
-        fully_qualified_owner: "yss_api::commands::command_bayes",
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_plugin.rs",
+        fully_qualified_owner: "yss_api::commands::command_plugin",
         canonical_origin_targets: &[
-            "yss_application::bayes::BayesApplicationError",
-            "yss_application::bayes::BayesInferenceService",
-            "yss_application::execution::session_slot::ApplicationState",
+            "yss_plugin_runtime::PluginManager",
             "yss_api::error::CommandError",
         ],
     },
@@ -364,19 +396,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::hypothesis::HypothesisTestOutput",
             "yss_application::hypothesis::run_hypothesis_test",
             "yss_api::error::CommandError",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_julia.rs",
-        fully_qualified_owner: "yss_api::commands::command_julia",
-        canonical_origin_targets: &[
-            "yss_api::error::CommandError",
-            "yss_julia_runtime::JuliaRuntimeStatus",
-            "yss_julia_runtime::get_runtime_status",
-            "yss_julia_runtime::install_latest_julia",
-            "yss_julia_worker::JuliaWorkerManager",
-            "yss_julia_worker::JuliaWorkerStatus",
         ],
     },
     InternalDependencyCapability {
@@ -1434,6 +1453,7 @@ fn non_build_memberships(
         package,
         "yss-bayes-artifact-contract"
             | "yss-automation-contract"
+            | "yss-plugin-protocol"
             | "yss-bayes-model"
             | "yss-bayes-result"
             | "yss-bayes-worker"
@@ -1461,7 +1481,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::PureLeaf);
     } else if matches!(
         package,
-        "yss-application" | "yss-project-watcher" | "yss-statistical-harness"
+        "yss-application" | "yss-project-watcher" | "yss-statistical-harness" | "yss-bayes-runtime"
     ) {
         layers.insert(RustLayer::Application);
     } else if matches!(
@@ -1519,6 +1539,9 @@ fn non_build_memberships(
             | "yss-bayes-worker-julia"
             | "yss-julia-runtime"
             | "yss-julia-worker"
+            | "yss-julia-extension"
+            | "yss-plugin-runtime"
+            | "yss-plugin-sdk"
             | "yss-project-registry-sqlite"
             | "yss-statistical-harness-sqlite"
             | "yss-tabular-polars"

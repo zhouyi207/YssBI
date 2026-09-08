@@ -13,7 +13,6 @@ pub enum WindowKind {
     Logs,
     Plot,
     Info,
-    Bayes,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -24,7 +23,7 @@ struct WindowKindDescriptor {
     default_height: u32,
 }
 
-const WINDOW_KIND_DESCRIPTORS: [WindowKindDescriptor; 7] = [
+const WINDOW_KIND_DESCRIPTORS: [WindowKindDescriptor; 6] = [
     WindowKindDescriptor {
         kind: WindowKind::Main,
         key: "main",
@@ -58,12 +57,6 @@ const WINDOW_KIND_DESCRIPTORS: [WindowKindDescriptor; 7] = [
     WindowKindDescriptor {
         kind: WindowKind::Info,
         key: "info",
-        default_width: 960,
-        default_height: 800,
-    },
-    WindowKindDescriptor {
-        kind: WindowKind::Bayes,
-        key: "bayes",
         default_width: 960,
         default_height: 800,
     },

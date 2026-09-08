@@ -20,6 +20,7 @@ pub mod project_writers;
 pub mod project_store;
 
 pub mod chart_io;
+pub mod external_resources;
 pub mod resource_reveal;
 
 pub use graph_resource_index::*;

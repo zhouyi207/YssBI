@@ -1,0 +1,12 @@
+[package]
+name = "yss-plugin-sdk"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+yss-plugin-protocol = { path = "../yss-plugin-protocol" }
+serde_json.workspace = true
+serde.workspace = true
+uuid.workspace = true
