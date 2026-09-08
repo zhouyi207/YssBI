@@ -15,23 +15,6 @@ const settings = vi.hoisted(() => ({
   updateAppearance: vi.fn(),
 }));
 
-const computation = vi.hoisted(() => ({
-  enabled: true,
-  confirmed: { settingsRevision: 3 },
-  draft: { statistics: "listwise" as const },
-  isLoading: false,
-  isApplying: false,
-  isDirty: false,
-  error: null as string | null,
-  setDraft: vi.fn(),
-  apply: vi.fn(async () => undefined),
-  restoreRecommended: vi.fn(),
-}));
-
-vi.mock("@/features/application/settings/useApplicationComputationSettings", () => ({
-  useApplicationComputationSettings: () => computation,
-}));
-
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: vi.fn() },
   useTranslation: () => ({
@@ -116,7 +99,7 @@ function click(element: Element): void {
   act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 }
 
-describe("SettingsView computation settings", () => {
+describe("SettingsView preferences", () => {
   let host: HTMLDivElement;
   let root: Root;
   const onRequestClose = vi.fn();
@@ -126,9 +109,6 @@ describe("SettingsView computation settings", () => {
     settings.resetAllToDefaults.mockResolvedValue(undefined);
     settings.resetAiToDefaults.mockResolvedValue(undefined);
     settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
-    computation.enabled = true;
-    computation.isDirty = false;
-    computation.error = null;
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -161,22 +141,6 @@ describe("SettingsView computation settings", () => {
       await Promise.resolve();
     });
   }
-
-  async function openComputation(): Promise<void> {
-    await openSection("computation");
-  }
-
-  it("keeps the computation group available without an active project", async () => {
-    render();
-    await openComputation();
-    const group = host.querySelector(
-      '[role="group"][aria-label="settings.computation.groupLabel"]',
-    );
-    expect(group?.getAttribute("aria-disabled")).toBe("false");
-    expect(
-      group?.querySelectorAll("input:not(:disabled), select:not(:disabled)").length,
-    ).toBeGreaterThan(0);
-  });
 
   it("does not offer the removed panel-position appearance setting", async () => {
     render();
@@ -216,23 +180,6 @@ describe("SettingsView computation settings", () => {
     });
     expect(settings.updateAppearance).toHaveBeenCalledWith({ colorTheme: "OLED Black" });
     expect(host.querySelector('input[type="color"]')).toBeNull();
-  });
-
-  it("applies and resets the statistical missing-value preference", async () => {
-    computation.isDirty = true;
-    vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
-    render();
-    await openComputation();
-    expect(host.textContent).toContain("Listwise");
-    expect(host.textContent).toContain("Reject");
-    click(
-      [...host.querySelectorAll("button")].find(
-        (item) => item.textContent === "Restore Recommended Values",
-      )!,
-    );
-    click([...host.querySelectorAll("button")].find((item) => item.textContent === "Apply")!);
-    expect(computation.restoreRecommended).toHaveBeenCalledOnce();
-    expect(computation.apply).toHaveBeenCalledOnce();
   });
 
   it("shows an IPC reset-all failure in a top-level alert without raw backend details", async () => {
@@ -292,31 +239,14 @@ describe("SettingsView computation settings", () => {
     expect(host.querySelector("[data-settings-reset-all-error]")).toBeNull();
   });
 
-  it("uses the application confirmation modal before dirty close and section changes", async () => {
+  it("closes after switching between immediately applied preference sections", async () => {
     const confirm = vi.spyOn(uiStore, "confirm").mockResolvedValue(false);
     render();
-    await openComputation();
-    computation.isDirty = true;
-    render();
+    await openSection("appearance");
+    await openSection("ai");
 
     click(host.querySelector('button[aria-label="Close settings"]')!);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(confirm).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Discard computation changes?" }),
-    );
-    expect(onRequestClose).not.toHaveBeenCalled();
-
-    click(
-      [...host.querySelectorAll("button")].find(
-        (item) => item.textContent === "settings.sections.appearance",
-      )!,
-    );
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(confirm).toHaveBeenCalledTimes(2);
-    expect(host.textContent).toContain("settings.sections.computation");
+    expect(onRequestClose).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
   });
 });

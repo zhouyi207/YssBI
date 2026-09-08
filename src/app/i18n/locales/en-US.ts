@@ -832,7 +832,6 @@ export const enUS = {
   },
   settings: {
     sections: {
-      computation: "Computation",
       ai: "AI",
       appearance: "Appearance",
     },

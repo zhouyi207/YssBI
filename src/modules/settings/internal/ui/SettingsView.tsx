@@ -11,15 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
-import { useApplicationComputationSettings } from "@/features/application/settings/useApplicationComputationSettings";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 
 interface SettingsViewProps {
   onRequestClose?: () => void;
-  onDirtyChange?: (dirty: boolean) => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDirtyChange }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) => {
   const { t } = useTranslation();
   const ai = useSettingsRead((s) => s.ai);
   const appearance = useSettingsRead((s) => s.appearance);
@@ -30,7 +28,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
   const resetAiToDefaults = settingsUi.resetAiToDefaults;
   const resetAppearanceToDefaults = settingsUi.resetAppearanceToDefaults;
 
-  const computation = useApplicationComputationSettings();
   const [activeSection, setActiveSection] = useState("ai");
   const [isResetting, setIsResetting] = useState(false);
   const [resetAllError, setResetAllError] = useState<string | null>(null);
@@ -42,7 +39,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
 
   const sections = [
     { id: "ai", label: t("settings.sections.ai") },
-    { id: "computation", label: t("settings.sections.computation") },
     { id: "appearance", label: t("settings.sections.appearance") },
   ];
 
@@ -60,33 +56,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
       setActiveSection(visibleSections[0].id);
     }
   }, [activeSection, visibleSections]);
-
-  useEffect(() => {
-    onDirtyChange?.(computation.isDirty);
-    return () => onDirtyChange?.(false);
-  }, [computation.isDirty, onDirtyChange]);
-
-  const confirmDiscardComputation = async (): Promise<boolean> => {
-    if (!computation.isDirty) return true;
-    return ui.confirm({
-      title: "Discard computation changes?",
-      message: "Your unapplied global computation settings will be lost.",
-      confirmText: "Discard",
-      cancelText: "Keep Editing",
-      type: "danger",
-    });
-  };
-
-  const requestSection = async (section: string) => {
-    if (section === activeSection) return;
-    if (!(await confirmDiscardComputation())) return;
-    setActiveSection(section);
-  };
-
-  const requestClose = async () => {
-    if (!(await confirmDiscardComputation())) return;
-    onRequestClose?.();
-  };
 
   const languageOptions = [
     { label: t("language.zhCN"), value: "zh-CN" },
@@ -223,61 +192,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             </div>
           </div>
         );
-      case "computation":
-        return (
-          <fieldset
-            role="group"
-            aria-label="settings.computation.groupLabel"
-            aria-disabled={!computation.enabled}
-            disabled={!computation.enabled || computation.isLoading || computation.isApplying}
-            className="space-y-6"
-          >
-            <div>
-              <h2 className="mb-2 text-xl text-foreground">{t("settings.sections.computation")}</h2>
-              <p className="text-sm text-muted-foreground">
-                Application-wide statistical missing-value preference.
-              </p>
-            </div>
-            <SettingItem
-              label="Statistical missing values"
-              description="Listwise removes rows containing missing values; Reject reports an error."
-              type="select"
-              value={computation.draft.statistics}
-              options={[
-                { label: "Listwise", value: "listwise" },
-                { label: "Reject", value: "reject" },
-              ]}
-              onChange={(statistics) =>
-                computation.setDraft({
-                  statistics: statistics as "listwise" | "reject",
-                })
-              }
-              disabled={!computation.enabled}
-            />
-            {computation.error && (
-              <p role="alert" className="text-sm text-destructive">
-                {computation.error}
-              </p>
-            )}
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={computation.restoreRecommended}
-                disabled={!computation.enabled || computation.isApplying}
-              >
-                Restore Recommended Values
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void computation.apply()}
-                disabled={!computation.enabled || !computation.isDirty || computation.isApplying}
-              >
-                {computation.isApplying ? "Applying…" : "Apply"}
-              </Button>
-            </div>
-          </fieldset>
-        );
       case "appearance":
         return (
           <div className="space-y-8">
@@ -361,7 +275,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             variant="ghost"
             size="icon"
             aria-label="Close settings"
-            onClick={() => void requestClose()}
+            onClick={onRequestClose}
           >
             ×
           </Button>
@@ -387,7 +301,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                   type="button"
                   variant={activeSection === section.id ? "secondary" : "ghost"}
                   key={section.id}
-                  onClick={() => void requestSection(section.id)}
+                  onClick={() => setActiveSection(section.id)}
                   className="w-full justify-start max-[720px]:w-auto max-[720px]:shrink-0"
                 >
                   {section.label}

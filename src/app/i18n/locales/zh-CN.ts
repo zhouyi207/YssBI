@@ -775,7 +775,6 @@ export const zhCN = {
   },
   settings: {
     sections: {
-      computation: "计算",
       ai: "AI",
       appearance: "外观",
     },
