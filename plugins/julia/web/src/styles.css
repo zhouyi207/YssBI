@@ -1,0 +1,68 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+@import "katex/dist/katex.min.css";
+@source "./";
+@custom-variant dark (&:is(.dark *));
+:root {
+  --background: #11151c;
+  --foreground: #e7ebf3;
+  --card: #171d27;
+  --card-foreground: #e7ebf3;
+  --popover: #171d27;
+  --popover-foreground: #e7ebf3;
+  --primary: #5b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #1c2430;
+  --secondary-foreground: #e7ebf3;
+  --muted: #1c2430;
+  --muted-foreground: #929db0;
+  --accent: #24314f;
+  --accent-foreground: #e7ebf3;
+  --destructive: #f97066;
+  --border: #334155;
+  --input: #334155;
+  --ring: #5b82f6;
+}
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: "Inter Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
