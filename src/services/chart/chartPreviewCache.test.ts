@@ -5,7 +5,6 @@ import {
   getChartPreview as getChartPreviewForPath,
   getCachedChartPreview as getCachedChartPreviewForPath,
   getChartPreviewCacheSnapshotForTests,
-  invalidateChartPreviewCacheForDatabase,
   invalidateChartPreviewCacheForMove,
   chartPreviewCacheKey as chartPreviewCacheKeyForPath,
 } from "./chartPreviewCache";
@@ -123,7 +122,7 @@ describe("getChartPreview", () => {
     expect(calls).toBe(1);
   });
 
-  it("invalidates cached previews by database id", async () => {
+  it("reloads a preview after its chart path is invalidated by a move", async () => {
     clearChartPreviewCache();
     let calls = 0;
 
@@ -132,7 +131,7 @@ describe("getChartPreview", () => {
       return { kind: "empty" };
     });
 
-    invalidateChartPreviewCacheForDatabase(DOCUMENT.databaseId);
+    invalidateChartPreviewCacheForMove(PROJECT_A, CHART_PATH, "charts/Moved.yssbi-chart");
 
     await getChartPreview(PROJECT_A, DOCUMENT, async () => {
       calls += 1;
@@ -161,7 +160,7 @@ describe("getChartPreview", () => {
       };
       const oldCompletion = getChartPreview(PROJECT_A, DOCUMENT, () => oldRequest.promise);
 
-      invalidateChartPreviewCacheForDatabase(DOCUMENT.databaseId);
+      invalidateChartPreviewCacheForMove(PROJECT_A, CHART_PATH, "charts/Moved.yssbi-chart");
       let newLoaderCalls = 0;
       const newCompletion = getChartPreview(PROJECT_A, DOCUMENT, () => {
         newLoaderCalls += 1;
@@ -201,7 +200,7 @@ describe("getChartPreview", () => {
     const oldPayload: ChartPreviewPayload = { kind: "empty" };
     const oldCompletion = getChartPreview(PROJECT_A, DOCUMENT, () => oldRequest.promise);
 
-    invalidateChartPreviewCacheForDatabase(DOCUMENT.databaseId);
+    invalidateChartPreviewCacheForMove(PROJECT_A, CHART_PATH, "charts/Moved.yssbi-chart");
     oldRequest.resolve(oldPayload);
 
     await expect(oldCompletion).resolves.toBe(oldPayload);
@@ -221,7 +220,6 @@ describe("getChartPreview", () => {
     expect(getCachedChartPreviewForPath(PROJECT_A, from, DOCUMENT)).toBeUndefined();
     expect(getCachedChartPreviewForPath(PROJECT_A, to, DOCUMENT)).toBeUndefined();
     const snapshot = getChartPreviewCacheSnapshotForTests();
-    expect(snapshot.databaseKeys.get(DOCUMENT.databaseId)?.size ?? 0).toBe(0);
     expect(snapshot.chartKeys.size).toBe(0);
     expect(snapshot.keyOwnerKeys.size).toBe(0);
   });
@@ -238,19 +236,13 @@ describe("getChartPreview", () => {
     }
 
     const snapshot = getChartPreviewCacheSnapshotForTests();
-    const databaseReferences = [...snapshot.databaseKeys.values()].reduce(
-      (count, keys) => count + keys.size,
-      0,
-    );
     const chartReferences = [...snapshot.chartKeys.values()].reduce(
       (count, keys) => count + keys.size,
       0,
     );
     expect(snapshot.previewKeys.size).toBe(32);
-    expect(snapshot.databaseKeys.size).toBe(32);
     expect(snapshot.chartKeys.size).toBe(32);
     expect(snapshot.keyOwnerKeys.size).toBe(32);
-    expect(databaseReferences).toBe(32);
     expect(chartReferences).toBe(32);
     expect(snapshot.keyOwnerKeys).toEqual(snapshot.previewKeys);
   });

@@ -6,9 +6,8 @@ type PreviewLoader = () => Promise<ChartPreviewPayload>;
 
 const previewCache = new Map<string, ChartPreviewPayload>();
 const inFlight = new Map<string, Promise<ChartPreviewPayload>>();
-const databaseKeys = new Map<string, Set<string>>();
 const chartKeys = new Map<string, Set<string>>();
-const keyOwners = new Map<string, { databaseId: string; chartOwner: string }>();
+const keyOwners = new Map<string, string>();
 let cacheGeneration = 0;
 
 function stableEncodingsKey(encodings: ChartDocument["encodings"]): string {
@@ -56,34 +55,18 @@ function rememberChartKey(projectInstanceId: string, chartPath: string, key: str
   chartKeys.set(owner, keys);
 }
 
-function rememberDatabaseKey(databaseId: string, key: string) {
-  if (!databaseKeys.has(databaseId)) {
-    databaseKeys.set(databaseId, new Set());
-  }
-  databaseKeys.get(databaseId)!.add(key);
-}
-
-function rememberKeyOwners(
-  projectInstanceId: string,
-  chartPath: string,
-  databaseId: string,
-  key: string,
-): void {
+function rememberKeyOwners(projectInstanceId: string, chartPath: string, key: string): void {
   const chartOwner = chartOwnerKey(projectInstanceId, chartPath);
-  rememberDatabaseKey(databaseId, key);
   rememberChartKey(projectInstanceId, chartPath, key);
-  keyOwners.set(key, { databaseId, chartOwner });
+  keyOwners.set(key, chartOwner);
 }
 
 function forgetKeyOwners(key: string): void {
-  const owners = keyOwners.get(key);
-  if (!owners) return;
-  const databaseOwnerKeys = databaseKeys.get(owners.databaseId);
-  databaseOwnerKeys?.delete(key);
-  if (databaseOwnerKeys?.size === 0) databaseKeys.delete(owners.databaseId);
-  const chartOwnerKeys = chartKeys.get(owners.chartOwner);
+  const chartOwner = keyOwners.get(key);
+  if (!chartOwner) return;
+  const chartOwnerKeys = chartKeys.get(chartOwner);
   chartOwnerKeys?.delete(key);
-  if (chartOwnerKeys?.size === 0) chartKeys.delete(owners.chartOwner);
+  if (chartOwnerKeys?.size === 0) chartKeys.delete(chartOwner);
   keyOwners.delete(key);
 }
 
@@ -139,7 +122,7 @@ export async function getChartPreview(
       }
     });
   inFlight.set(key, request);
-  rememberKeyOwners(projectInstanceId, chartPath, document.databaseId, key);
+  rememberKeyOwners(projectInstanceId, chartPath, key);
   return request;
 }
 
@@ -159,18 +142,10 @@ export function invalidateChartPreviewCacheForMove(
   }
 }
 
-export function invalidateChartPreviewCacheForDatabase(databaseId: string) {
-  const keys = databaseKeys.get(databaseId);
-  if (!keys) return;
-  invalidateKeys(keys);
-  databaseKeys.delete(databaseId);
-}
-
 export function clearChartPreviewCache() {
   cacheGeneration += 1;
   previewCache.clear();
   inFlight.clear();
-  databaseKeys.clear();
   chartKeys.clear();
   keyOwners.clear();
 }
@@ -179,7 +154,6 @@ export function getChartPreviewCacheSnapshotForTests() {
   return {
     previewKeys: new Set(previewCache.keys()),
     inFlightKeys: new Set(inFlight.keys()),
-    databaseKeys: new Map([...databaseKeys].map(([owner, keys]) => [owner, new Set(keys)])),
     chartKeys: new Map([...chartKeys].map(([owner, keys]) => [owner, new Set(keys)])),
     keyOwnerKeys: new Set(keyOwners.keys()),
   };
