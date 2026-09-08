@@ -25,12 +25,6 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import {
-  completePendingBackendMutation,
-  invalidatePendingBackendMutation,
-  registerPendingBackendMutation,
-  type PendingBackendMutationRecord,
-} from "./pendingBackendMutationRegistry";
 import { isGraphDraftSaving } from "@/features/core/graphDraft";
 
 export interface ExecuteFunctionSignatureMutationInput {
@@ -98,23 +92,22 @@ function buildSignature(
 }
 
 function validateDirectSignatureResult(
-  pending: PendingBackendMutationRecord,
-  requestPatch: FunctionDocumentPatchDto,
+  request: MutationRequestDto<FunctionDocumentPatchDto>,
   result: ResourceMutationResultDto,
 ): string | undefined {
-  if (result.deltas.some((delta) => delta.causedBy !== pending.operationId)) {
+  if (result.deltas.some((delta) => delta.causedBy !== request.operationId)) {
     return "operation correlation does not match the pending request";
   }
   const signatureDelta = result.deltas.find(
-    (delta) => delta.resource.kind === "function" && delta.resource.key === pending.graphPath,
+    (delta) => delta.resource.kind === "function" && delta.resource.key === request.resource.key,
   );
   if (!signatureDelta) return "function signature delta is missing";
-  if (signatureDelta.fromRevision !== pending.baseRevision) {
+  if (signatureDelta.fromRevision !== request.baseRevision) {
     return "function signature revision does not match the request";
   }
   if (
     signatureDelta.payload.kind !== "function" ||
-    JSON.stringify(signatureDelta.payload.patch) !== JSON.stringify(requestPatch)
+    JSON.stringify(signatureDelta.payload.patch) !== JSON.stringify(request.payload)
   ) {
     return "function signature delta does not match the request payload";
   }
@@ -154,11 +147,6 @@ export async function executeFunctionSignatureMutation(
     before: meta.functionSignature,
     after: buildSignature(meta.functionSignature, input.patch),
   };
-  const pending: PendingBackendMutationRecord = {
-    operationId,
-    graphPath: input.functionPath,
-    baseRevision: meta.functionRevision,
-  };
   const request: MutationRequestDto<FunctionDocumentPatchDto> = {
     resource: { kind: "function", key: input.functionPath },
     baseRevision: meta.functionRevision,
@@ -170,7 +158,9 @@ export async function executeFunctionSignatureMutation(
     projectInstanceId: context.projectInstanceId,
     epoch: context.projectEpoch,
   };
-  registerPendingBackendMutation(pending);
+  if (pendingSignatureOperations.has(operationId)) {
+    throw new Error(`backend mutation operation '${operationId}' is already pending`);
+  }
   pendingSignatureOperations.add(operationId);
 
   try {
@@ -203,7 +193,7 @@ export async function executeFunctionSignatureMutation(
       await projectPublicationCoordinator.submit({
         result,
         fallbackPaths: [input.functionPath],
-        validate: (candidate) => validateDirectSignatureResult(pending, requestPatch, candidate),
+        validate: (candidate) => validateDirectSignatureResult(request, candidate),
       });
     } catch (error) {
       if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle") {
@@ -214,8 +204,7 @@ export async function executeFunctionSignatureMutation(
     if (epoch !== coordinatorEpoch) return { status: "stale", result };
     return { status: "applied", result };
   } finally {
-    completePendingBackendMutation(operationId);
-    pendingSignatureOperations.delete(operationId);
+    if (epoch === coordinatorEpoch) pendingSignatureOperations.delete(operationId);
   }
 }
 
@@ -232,8 +221,5 @@ export function commitFunctionSignature(
 
 export function resetFunctionSignatureCoordinator(): void {
   coordinatorEpoch += 1;
-  for (const operationId of pendingSignatureOperations) {
-    invalidatePendingBackendMutation(operationId);
-  }
   pendingSignatureOperations.clear();
 }

@@ -96,25 +96,25 @@ pub(super) fn resource_mutation_to_command_error(
         ResourceMutationApplicationError::Mutation(error) => {
             mutation_conflict_to_command_error(error)
         }
-        ResourceMutationApplicationError::History(error) => match error {
-            yss_project_history::ProjectHistoryMutationError::StaleProjectLifecycle(_) => {
+        ResourceMutationApplicationError::Resource(error) => match error {
+            yss_project_history::ProjectResourceMutationError::StaleProjectLifecycle(_) => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            yss_project_history::ProjectHistoryMutationError::RecoveryRequired(_) => {
+            yss_project_history::ProjectResourceMutationError::RecoveryRequired(_) => {
                 CommandError::expected("project_recovery_required").with_details(
                     RecoveryRequiredDetails {
                         recovery_required: true,
                     },
                 )
             }
-            yss_project_history::ProjectHistoryMutationError::StaleRevision { .. } => {
+            yss_project_history::ProjectResourceMutationError::StaleRevision { .. } => {
                 CommandError::expected(revision_conflict_code)
             }
-            yss_project_history::ProjectHistoryMutationError::ResourceMismatch { .. } => {
+            yss_project_history::ProjectResourceMutationError::ResourceMismatch { .. } => {
                 CommandError::expected("history_resource_mismatch")
             }
-            yss_project_history::ProjectHistoryMutationError::Projection(_)
-            | yss_project_history::ProjectHistoryMutationError::History(_) => {
+            yss_project_history::ProjectResourceMutationError::Projection(_)
+            | yss_project_history::ProjectResourceMutationError::Mutation(_) => {
                 CommandError::diagnosed("history_mutation_failed", error)
             }
         },

@@ -75,7 +75,6 @@ pub struct CommittedResourceMutation {
     pub moves: Vec<ResourceMove>,
     pub deltas: Vec<ResourceDeltaEvent>,
     pub projection_status: ResourceProjectionStatus,
-    pub history: HistoryStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,12 +108,6 @@ impl ResourceProjectionStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HistoryStatus {
-    pub can_undo: bool,
-    pub can_redo: bool,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphProjectionReplacement {
     pub graph_path: Box<str>,
@@ -132,7 +125,6 @@ pub(crate) fn committed_resource_mutation_from_project(
         moves,
         deltas,
         projection_status,
-        history,
     } = facts.into_parts();
     CommittedResourceMutation {
         operation_id,
@@ -160,10 +152,6 @@ pub(crate) fn committed_resource_mutation_from_project(
             } => ResourceProjectionStatus::Incomplete {
                 invalidated_graph_paths: invalidated_graph_paths.into_vec(),
             },
-        },
-        history: HistoryStatus {
-            can_undo: history.can_undo,
-            can_redo: history.can_redo,
         },
     }
 }

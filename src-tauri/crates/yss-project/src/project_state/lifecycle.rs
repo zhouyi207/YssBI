@@ -40,9 +40,9 @@ impl ProjectState {
         }
     }
 
-    pub(super) fn ensure_mutation_operational(&self) -> Result<(), ProjectHistoryMutationError> {
+    pub(super) fn ensure_mutation_operational(&self) -> Result<(), ProjectResourceMutationError> {
         self.ensure_project_operational().map_err(|error| {
-            ProjectHistoryMutationError::RecoveryRequired(error.to_string().into())
+            ProjectResourceMutationError::RecoveryRequired(error.to_string().into())
         })
     }
 
@@ -95,7 +95,7 @@ impl ProjectState {
     pub(crate) fn coherent_project_read_snapshot(
         &self,
         session: &ProjectSession,
-    ) -> Result<(String, u64, HistoryStatusDto, ProjectData), ProjectFilesystemError> {
+    ) -> Result<(String, u64, ProjectData), ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         let path = self.project_path.read().unwrap();
@@ -110,12 +110,10 @@ impl ProjectState {
             });
         }
         let data = self.project_data.read().unwrap().clone();
-        let history = self.history.read().unwrap().status();
         self.ensure_project_operational()?;
         Ok((
             publication.project_instance_id.clone(),
             publication.resource_revision,
-            history,
             data,
         ))
     }

@@ -6,10 +6,7 @@ use yss_project_filesystem::{
     ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
     StagedFilesystemMutation,
 };
-use yss_project_history::{
-    ProjectGraphHistoryChange, ProjectGraphHistoryState, ProjectGraphResidency,
-    ProjectHistoryTransaction,
-};
+use yss_project_history::ProjectGraphResidency;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_operation::ProjectOperationReservation;
 
@@ -43,15 +40,8 @@ pub struct GraphOperationAuthority {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProjectHistoryStatus {
-    pub can_undo: bool,
-    pub can_redo: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphInvalidationSet {
     pub graph: bool,
-    pub history: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,8 +50,6 @@ pub struct GraphCommitReceipt {
     pub operation_id: yss_project_identity::OperationId,
     pub from_revision: ResourceRevision,
     pub to_revision: ResourceRevision,
-    pub history: ProjectHistoryStatus,
-    pub history_change: Option<ProjectGraphHistoryChange>,
     pub invalidations: GraphInvalidationSet,
 }
 
@@ -317,12 +305,6 @@ impl ProjectState {
             });
         }
         drop(identity);
-        let history_before = self
-            .history
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .status();
-
         let result = (|| {
             let mut publication = self
                 .mutation_publication
@@ -386,15 +368,8 @@ impl ProjectState {
                         operation_id,
                         from_revision: revision,
                         to_revision: revision,
-                        history: ProjectHistoryStatus {
-                            can_undo: history_before.can_undo,
-                            can_redo: history_before.can_redo,
-                        },
-                        history_change: None,
-                        invalidations: GraphInvalidationSet {
-                            graph: false,
-                            history: false,
-                        },
+
+                        invalidations: GraphInvalidationSet { graph: false },
                     },
                     reservation,
                 ));
@@ -411,21 +386,7 @@ impl ProjectState {
                     revision,
                 }
             })?;
-            let before_document = graph.document.clone();
             let after_document = candidate_document.as_ref().clone();
-            let history_change = ProjectGraphHistoryChange {
-                graph_path: graph_path.clone(),
-                before: ProjectGraphHistoryState {
-                    document: before_document,
-                    revision,
-                    residency: ProjectGraphResidency::Loaded,
-                },
-                after: ProjectGraphHistoryState {
-                    document: after_document.clone(),
-                    revision: next_revision,
-                    residency: ProjectGraphResidency::Loaded,
-                },
-            };
             let mut resource = graph.clone();
             resource.document = after_document;
             Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
@@ -437,16 +398,6 @@ impl ProjectState {
             graph_resource_revisions.insert(graph_path.clone(), next_revision);
             drop(graph_resource_revisions);
 
-            let mut history = self
-                .history
-                .write()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            history.record_committed_transaction(ProjectHistoryTransaction::graph_change(
-                operation_id,
-                history_change.clone(),
-            ));
-            let history_status = history.status();
-
             publication.commit_prepared(publication_advance);
             Ok((
                 GraphCommitReceipt {
@@ -454,15 +405,8 @@ impl ProjectState {
                     operation_id,
                     from_revision: revision,
                     to_revision: next_revision,
-                    history: ProjectHistoryStatus {
-                        can_undo: history_status.can_undo,
-                        can_redo: history_status.can_redo,
-                    },
-                    history_change: Some(history_change),
-                    invalidations: GraphInvalidationSet {
-                        graph: true,
-                        history: true,
-                    },
+
+                    invalidations: GraphInvalidationSet { graph: true },
                 },
                 reservation,
             ))

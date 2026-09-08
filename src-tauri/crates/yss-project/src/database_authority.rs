@@ -215,13 +215,6 @@ impl ProjectState {
             crate::project_writers::ProjectProjectionStatus::Complete {
                 expected_graph_paths: Vec::new().into(),
             },
-            {
-                let history = self.history.read().unwrap().status();
-                crate::project_writers::ProjectHistoryStatus {
-                    can_undo: history.can_undo,
-                    can_redo: history.can_redo,
-                }
-            },
         )
     }
 

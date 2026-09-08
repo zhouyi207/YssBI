@@ -722,7 +722,6 @@ pub struct GraphEditReceipt {
     pub to_revision: u64,
     pub operation_id: String,
     pub client_key: String,
-    pub can_undo: bool,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]

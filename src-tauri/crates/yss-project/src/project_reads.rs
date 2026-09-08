@@ -24,7 +24,7 @@ impl ProjectState {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let (_, _, _, data) = self.coherent_project_read_snapshot(&session)?;
+        let (_, _, data) = self.coherent_project_read_snapshot(&session)?;
         let document = data.charts.get(chart_path).cloned().ok_or_else(|| {
             ProjectFilesystemError::ChartNotFound {
                 path: chart_path.clone(),

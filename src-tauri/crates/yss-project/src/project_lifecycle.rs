@@ -101,7 +101,7 @@ impl ProjectState {
         let basis_before = self
             .capture_prepared_authority_basis(&session.root)?
             .ok_or_else(|| stale("save-as source authority is no longer active"))?;
-        let (_, _, _, authority) = self.coherent_project_read_snapshot(&session)?;
+        let (_, _, authority) = self.coherent_project_read_snapshot(&session)?;
         let authority_basis = self
             .capture_prepared_authority_basis(&session.root)?
             .filter(|basis| basis == &basis_before)

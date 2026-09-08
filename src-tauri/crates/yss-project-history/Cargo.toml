@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 serde.workspace = true
-serde_json.workspace = true
 thiserror.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
 yss-graph-document = { path = "../yss-graph-document" }
@@ -15,4 +14,5 @@ yss-project-identity = { path = "../yss-project-identity" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+serde_json.workspace = true
 uuid.workspace = true

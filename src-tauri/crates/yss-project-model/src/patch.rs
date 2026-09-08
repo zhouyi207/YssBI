@@ -7,8 +7,8 @@ use yss_project_identity::ResourceRevision;
 /// An atomic candidate change to the in-memory [`crate::ProjectData`] aggregate.
 ///
 /// This is deliberately distinct from
-/// [`yss_project_history::ResourceDocumentPatch`], which describes persisted
-/// history payloads rather than the complete state transition being committed.
+/// [`yss_project_history::ResourceDocumentPatch`], which describes published
+/// resource deltas rather than the complete state transition being committed.
 #[derive(Clone, Debug)]
 pub enum ProjectDataPatch {
     InsertGraph {
@@ -30,9 +30,7 @@ pub enum ProjectDataPatch {
     MoveGraph {
         from: GraphResourcePath,
         to: GraphResourcePath,
-        moved_before: Box<GraphResourceDocument>,
         moved: GraphResourceDocument,
-        referenced_graphs_before: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         referenced_graphs: BTreeMap<GraphResourcePath, GraphResourceDocument>,
         loaded_referenced_graphs: BTreeSet<GraphResourcePath>,
     },

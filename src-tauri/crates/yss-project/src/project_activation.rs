@@ -122,22 +122,7 @@ impl ProjectState {
             return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false);
         };
         let root = NormalizedProjectRoot::from_project_path(path)?;
-        let mut lease = self.filesystem().acquire(root.clone())?;
-        let migration = crate::constant_migration::prepare_constant_migration(root.as_path())?;
-        if !migration.is_empty() {
-            yss_project_filesystem::ProjectFilesystemTransaction::prepare(
-                yss_project_filesystem::ProjectFilesystemTransactionContext {
-                    root: root.clone(),
-                    operation_id: yss_project_identity::OperationId::new(),
-                    recovery_marker: Some(self.project_recovery_marker()),
-                },
-                lease,
-                migration,
-            )?
-            .commit()?
-            .finalize();
-            lease = self.filesystem().acquire(root.clone())?;
-        }
+        let lease = self.filesystem().acquire(root.clone())?;
         let authority_before = self.capture_prepared_authority_basis(&root)?;
         let data = self.read_activation_data(&root)?;
         let authority_after = self.capture_prepared_authority_basis(&root)?;
@@ -214,6 +199,44 @@ impl ProjectState {
 mod tests {
     use super::*;
     use yss_data_contract::{DataType, DataValue};
+
+    #[test]
+    fn activation_rejects_unsupported_schema_without_changing_files_or_session() {
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            "events/Main.yssbi-event".parse().unwrap(),
+            yss_project_model::GraphResourceDocument::new(
+                "Main",
+                yss_graph_document::GraphResourceKind::Event,
+            ),
+        );
+        let fixture = crate::fixtures::TempProject::activate("unsupported-project-schema", data);
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let root = session.root.as_path();
+        let manifest_path = root.join(yss_project_layout::PROJECT_METADATA_FILE);
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["schemaVersion"] = serde_json::json!(3);
+        let manifest = serde_json::to_vec(&manifest).unwrap();
+        std::fs::write(&manifest_path, &manifest).unwrap();
+        let variables_path = root.join("variables.yssbi-vars");
+        let variables = br#"{"variables":{}}"#;
+        std::fs::write(&variables_path, variables).unwrap();
+        let graph_path = root.join("events/Main.yssbi-event");
+        let graph = std::fs::read(&graph_path).unwrap();
+
+        let error = state.activate_project_from_path(root).unwrap_err();
+
+        assert_eq!(error.code(), "transaction_prepare_failed");
+        assert_eq!(std::fs::read(&manifest_path).unwrap(), manifest);
+        assert_eq!(std::fs::read(&variables_path).unwrap(), variables);
+        assert_eq!(std::fs::read(&graph_path).unwrap(), graph);
+        assert_eq!(
+            state.capture_project_session().unwrap().instance_id,
+            session.instance_id
+        );
+    }
 
     #[test]
     fn activation_rejects_invalid_tabular_value_instead_of_silently_publishing_it() {

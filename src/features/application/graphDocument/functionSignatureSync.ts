@@ -1,41 +1,8 @@
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
-import type { FunctionSignaturePin, GraphType } from "@/shared/types";
 import type { FunctionSignatureDto } from "@/shared/types/domain/editorMutation";
 import type { FunctionEditorProjectionDto } from "@/shared/types/domain/editorProjection";
 import type { ProjectGraphIndexRow } from "@/shared/types/domain/project";
 import type { PreparedFunctionDeltaInstall } from "@/features/application/editorMutation/projectPublicationCoordinator";
-
-/** 从后端图 DTO / 领域图读取签名并写入 graphMetaStore（UI 签名唯一来源，见 functionResourceView）。 */
-export type FunctionSignatureSource = {
-  path: string;
-  name: string;
-  type: GraphType;
-  functionInputs?: FunctionSignaturePin[];
-  functionOutputs?: FunctionSignaturePin[];
-};
-
-export function syncFunctionSignatureFromGraph(graph: FunctionSignatureSource): void {
-  if (graph.type !== "function") return;
-
-  const graphMetaStore = useGraphMetaStore.getState();
-  const existing = graphMetaStore.graphs[graph.path];
-  const signaturePatch = {
-    functionInputs: graph.functionInputs ?? existing?.functionInputs ?? [],
-    functionOutputs: graph.functionOutputs ?? existing?.functionOutputs ?? [],
-  };
-
-  if (existing) {
-    graphMetaStore.updateGraph(graph.path, signaturePatch);
-    return;
-  }
-
-  graphMetaStore.addGraph({
-    path: graph.path,
-    name: graph.name,
-    type: graph.type,
-    ...signaturePatch,
-  });
-}
 
 export function installFunctionEditorProjection(
   graphPath: string,

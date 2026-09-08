@@ -31,7 +31,6 @@ macro_rules! uuid_id {
 }
 
 uuid_id!(OperationId);
-uuid_id!(HistoryEntryId);
 
 impl OperationId {
     pub const fn from_uuid(value: Uuid) -> Self {

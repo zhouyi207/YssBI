@@ -2,7 +2,6 @@
 
 pub mod execution_authority;
 pub mod graph_resource_index;
-mod history_hydration;
 mod manifest;
 pub(crate) mod project_change_reconciliation;
 pub mod project_error;
@@ -164,4 +163,3 @@ pub mod fixtures {
         )
     }
 }
-mod constant_migration;

@@ -238,18 +238,12 @@ pub(super) fn chart_lifecycle_state(
     }
 }
 
-pub(super) fn chart_history_publication(
+pub(super) fn chart_publication_deltas(
     operation_id: OperationId,
     patch: &ProjectDataPatch,
     data: &ProjectData,
     revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
-) -> Result<
-    (
-        Vec<yss_project_history::ResourceDeltaEvent>,
-        Option<ProjectHistoryTransaction>,
-    ),
-    ProjectFilesystemError,
-> {
+) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectFilesystemError> {
     let chart_key = |path: &ChartResourcePath| {
         ResourceKey::Chart(yss_project_history::ChartResourceKey(path.as_str().into()))
     };
@@ -261,82 +255,56 @@ pub(super) fn chart_history_publication(
                 Some(retained) => checked_resource_revision(path.as_str(), retained)?,
                 None => ResourceRevision::INITIAL,
             };
-            let mut after = document.clone();
-            after.revision = revision;
-            let (from_revision, payload, transaction) = if let Some(before) = before {
-                let forward = yss_project_history::ChartDocumentPatch {
-                    before: chart_document_state(before),
-                    after: chart_document_state(&after),
-                };
+            let (from_revision, payload) = if let Some(before) = before {
                 (
                     before.revision,
-                    yss_project_history::ResourceDocumentPatch::Chart(forward.clone()),
-                    ProjectHistoryTransaction::new(
-                        operation_id,
-                        vec![yss_project_history::ResourcePatch::chart(
-                            yss_project_history::ChartResourceKey(path.as_str().into()),
-                            before.revision,
-                            forward,
-                        )],
+                    yss_project_history::ResourceDocumentPatch::Chart(
+                        yss_project_history::ChartDocumentPatch {
+                            before: chart_document_state(before),
+                            after: chart_document_state(document),
+                        },
                     ),
                 )
             } else {
-                let forward = yss_project_history::ResourceLifecyclePatch {
-                    before: None,
-                    after: Some(chart_lifecycle_state(path, revision)),
-                };
                 (
                     retained.unwrap_or(revision),
-                    yss_project_history::ResourceDocumentPatch::ResourceLifecycle(forward.clone()),
-                    ProjectHistoryTransaction::resource_lifecycle(
-                        operation_id,
-                        forward,
-                        yss_project_history::ResourceLifecycleHistoryPayload::Chart {
-                            document: after.clone(),
+                    yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                        yss_project_history::ResourceLifecyclePatch {
+                            before: None,
+                            after: Some(chart_lifecycle_state(path, revision)),
                         },
                     ),
                 )
             };
-            Ok((
-                vec![yss_project_history::ResourceDeltaEvent {
-                    resource: chart_key(path),
-                    from_revision,
-                    to_revision: revision,
-                    caused_by: Some(operation_id),
-                    payload,
-                }],
-                Some(transaction),
-            ))
+            Ok(vec![yss_project_history::ResourceDeltaEvent {
+                resource: chart_key(path),
+                from_revision,
+                to_revision: revision,
+                caused_by: Some(operation_id),
+                payload,
+            }])
         }
         ProjectDataPatch::RemoveChart { path, revision } => {
-            let document = data.charts.get(path).cloned().ok_or_else(|| {
-                ProjectFilesystemError::ResourceRevisionConflict {
+            if !data.charts.contains_key(path) {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
                     message: format!("chart '{}' is absent", path.as_str()),
-                }
-            })?;
-            let forward = yss_project_history::ResourceLifecyclePatch {
-                before: Some(chart_lifecycle_state(path, *revision)),
-                after: None,
-            };
-            Ok((
-                vec![yss_project_history::ResourceDeltaEvent {
-                    resource: chart_key(path),
-                    from_revision: *revision,
-                    to_revision: checked_resource_revision(path.as_str(), *revision)?,
-                    caused_by: Some(operation_id),
-                    payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
-                        forward.clone(),
-                    ),
-                }],
-                Some(ProjectHistoryTransaction::resource_lifecycle(
-                    operation_id,
-                    forward,
-                    yss_project_history::ResourceLifecycleHistoryPayload::Chart { document },
-                )),
-            ))
+                });
+            }
+            Ok(vec![yss_project_history::ResourceDeltaEvent {
+                resource: chart_key(path),
+                from_revision: *revision,
+                to_revision: checked_resource_revision(path.as_str(), *revision)?,
+                caused_by: Some(operation_id),
+                payload: yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
+                    yss_project_history::ResourceLifecyclePatch {
+                        before: Some(chart_lifecycle_state(path, *revision)),
+                        after: None,
+                    },
+                ),
+            }])
         }
-        ProjectDataPatch::MoveChart { from, to, moved } => Ok((
-            vec![yss_project_history::ResourceDeltaEvent {
+        ProjectDataPatch::MoveChart { from, to, moved } => {
+            Ok(vec![yss_project_history::ResourceDeltaEvent {
                 resource: chart_key(to),
                 from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
                 to_revision: moved.revision,
@@ -347,15 +315,9 @@ pub(super) fn chart_history_publication(
                         to: to.as_str().into(),
                     },
                 ),
-            }],
-            Some(ProjectHistoryTransaction::chart_resource_move(
-                operation_id,
-                from.as_str(),
-                to.as_str(),
-                moved.clone(),
-            )),
-        )),
-        _ => Ok((Vec::new(), None)),
+            }])
+        }
+        _ => Ok(Vec::new()),
     }
 }
 

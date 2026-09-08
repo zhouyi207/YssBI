@@ -9,4 +9,3 @@ function resourceNodeSpawnTemplate(
 }
 
 export const dataFrameNodeSpawnTemplate = resourceNodeSpawnTemplate;
-export const functionCallNodeSpawnTemplate = resourceNodeSpawnTemplate;

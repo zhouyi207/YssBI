@@ -11,8 +11,7 @@ mod project_root_identity;
 mod project_session_id;
 
 pub use identity::{
-    HistoryEntryId, OperationId, ProjectResourcePath, ProjectRevision, ResourceRevision,
-    RevisionExhausted,
+    OperationId, ProjectResourcePath, ProjectRevision, ResourceRevision, RevisionExhausted,
 };
 pub use project_instance_id::ProjectInstanceId;
 pub use project_registration_id::ProjectRegistrationId;

@@ -271,7 +271,7 @@ mod tests {
     use crate::schema::application_event::ResourceMutationResultDto;
     use serde_json::json;
     use yss_application::events::{
-        CommittedResourceMutation, HistoryStatus, LifecycleInvalidation, LifecycleRecovery,
+        CommittedResourceMutation, LifecycleInvalidation, LifecycleRecovery,
         LifecycleRecoveryAction, ProjectLifecycleApplicationEvent, ProjectLifecycleKind,
         ProjectLifecycleOutcome, ProjectLifecyclePhase, ResourceMove, ResourceProjectionStatus,
     };
@@ -360,10 +360,6 @@ mod tests {
                     yss_graph_document::GraphResourcePath::new("events/After.yssbi-event")
                         .expect("fixture graph path is valid"),
                 ],
-            },
-            history: HistoryStatus {
-                can_undo: true,
-                can_redo: false,
             },
         };
 

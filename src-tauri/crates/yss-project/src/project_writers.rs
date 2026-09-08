@@ -26,7 +26,6 @@ pub struct ProjectSaveResult {
     pub(crate) publication_revision: u64,
     pub(crate) affected_resources: Box<[ResourceKey]>,
     pub(crate) index_invalidated: bool,
-    pub(crate) history: ProjectHistoryStatus,
 }
 
 impl ProjectSaveResult {
@@ -38,7 +37,6 @@ impl ProjectSaveResult {
         u64,
         Box<[ResourceKey]>,
         bool,
-        ProjectHistoryStatus,
     ) {
         (
             self.project_instance_id,
@@ -46,7 +44,6 @@ impl ProjectSaveResult {
             self.publication_revision,
             self.affected_resources,
             self.index_invalidated,
-            self.history,
         )
     }
 }
@@ -59,7 +56,6 @@ pub struct ProjectResourceMutationFacts {
     moves: Box<[ProjectResourceMove]>,
     deltas: Box<[yss_project_history::ResourceDeltaEvent]>,
     projection_status: ProjectProjectionStatus,
-    history: ProjectHistoryStatus,
 }
 
 impl ProjectResourceMutationFacts {
@@ -70,7 +66,6 @@ impl ProjectResourceMutationFacts {
         moves: impl Into<Box<[ProjectResourceMove]>>,
         deltas: impl Into<Box<[yss_project_history::ResourceDeltaEvent]>>,
         projection_status: ProjectProjectionStatus,
-        history: ProjectHistoryStatus,
     ) -> Self {
         Self {
             operation_id,
@@ -79,7 +74,6 @@ impl ProjectResourceMutationFacts {
             moves: moves.into(),
             deltas: deltas.into(),
             projection_status,
-            history,
         }
     }
 }
@@ -102,12 +96,6 @@ pub enum ProjectProjectionStatus {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProjectHistoryStatus {
-    pub can_undo: bool,
-    pub can_redo: bool,
-}
-
 impl ProjectResourceMutationFacts {
     pub fn into_parts(self) -> ProjectResourceMutationParts {
         ProjectResourceMutationParts {
@@ -117,7 +105,6 @@ impl ProjectResourceMutationFacts {
             moves: self.moves,
             deltas: self.deltas,
             projection_status: self.projection_status,
-            history: self.history,
         }
     }
 }
@@ -129,7 +116,6 @@ pub struct ProjectResourceMutationParts {
     pub moves: Box<[ProjectResourceMove]>,
     pub deltas: Box<[yss_project_history::ResourceDeltaEvent]>,
     pub projection_status: ProjectProjectionStatus,
-    pub history: ProjectHistoryStatus,
 }
 
 fn chart_document_state(document: &ChartDocument) -> yss_project_history::ChartDocumentState {
@@ -238,7 +224,6 @@ struct CommittedProjectSave {
     operation_id: OperationId,
     publication_revision: u64,
     affected_resources: Vec<ResourceKey>,
-    history: ProjectHistoryStatus,
 }
 
 impl CommittedProjectSave {
@@ -249,7 +234,6 @@ impl CommittedProjectSave {
             publication_revision: self.publication_revision,
             affected_resources: self.affected_resources.into_boxed_slice(),
             index_invalidated: true,
-            history: self.history,
         }
     }
 }
@@ -372,7 +356,6 @@ impl ProjectState {
     ) -> Result<CommittedProjectSave, ProjectFilesystemError> {
         self.validate_writer_context(context, authority_generation)?;
         let publication = self.mutation_publication.lock().unwrap();
-        let history = self.history.read().unwrap().status();
         Ok(CommittedProjectSave {
             project_instance_id: ProjectInstanceId::from_existing(
                 publication.project_instance_id.clone(),
@@ -380,10 +363,6 @@ impl ProjectState {
             operation_id: context.operation_id,
             publication_revision: publication.resource_revision,
             affected_resources: context.affected_resources.clone(),
-            history: ProjectHistoryStatus {
-                can_undo: history.can_undo,
-                can_redo: history.can_redo,
-            },
         })
     }
 

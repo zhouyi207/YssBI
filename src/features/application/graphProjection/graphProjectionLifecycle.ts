@@ -184,10 +184,6 @@ export function hydrateGraphProjection(graphPath: string, locale: string): Promi
   );
 }
 
-export function invalidateGraphProjection(graphPath: string): Promise<boolean> {
-  return hydrateGraphProjection(graphPath, currentProjectionLocale());
-}
-
 export async function hydrateGraphProjections(
   graphPaths: Iterable<string>,
   locale: string,
@@ -195,10 +191,6 @@ export async function hydrateGraphProjections(
   await Promise.all(
     [...new Set(graphPaths)].map((graphPath) => hydrateGraphProjection(graphPath, locale)),
   );
-}
-
-export async function invalidateGraphProjections(graphPaths: Iterable<string>): Promise<void> {
-  await hydrateGraphProjections(graphPaths, currentProjectionLocale());
 }
 
 export function resetGraphProjectionLifecycle(): void {

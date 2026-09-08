@@ -2,55 +2,48 @@
 
 use crate::{
     PreparedProjectActivation, ProjectSession, ProjectStore, ProjectTransactionContext,
-    ResourceRenameOwnershipLease, load_project_graph_from_file,
+    ResourceRenameOwnershipLease,
 };
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_graph_document::GraphResourcePath;
 use yss_project_filesystem::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemError,
-    ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
-use yss_project_history::{
-    HistoryMutation, HistoryStatusDto, MutationRequest, ProjectDocumentState, ProjectHistory,
-    ProjectHistoryMutationError, ProjectHistoryTransaction, ResourceKey,
-};
+use yss_project_history::{MutationRequest, ProjectResourceMutationError, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
-use yss_project_identity::{HistoryEntryId, OperationId, ResourceRevision};
+use yss_project_identity::{OperationId, ResourceRevision};
 use yss_project_model::{GraphResourceDocument, ProjectData};
 use yss_resource_lifecycle::ResourceLifecycleRegistry;
 
 mod activation;
 mod authority;
+mod function_mutation;
 #[path = "project_state/graph_lifecycle.rs"]
 mod graph_lifecycle;
 mod graph_operation;
-mod history;
 mod lifecycle;
-mod resource_history;
 mod resource_patch;
+mod resource_publication;
 #[allow(unused_imports)]
 pub(super) use activation::PublishedProjectActivation;
 pub(super) use authority::{
     ActivationGenerationTransition, MutationPublication, PreparedPublicationAdvance,
-    ProjectAuthorityExpectation, ProjectAuthoritySnapshot,
+    ProjectAuthorityExpectation,
 };
 pub use graph_operation::{
     GraphCommitReceipt, GraphInvalidationSet, GraphOperationAuthority, GraphOperationCapture,
     ProjectGraphCommitError, ProjectGraphOperationError, ProjectGraphOperationSource,
-    ProjectGraphSaveError, ProjectHistoryStatus,
+    ProjectGraphSaveError,
 };
-use history::GraphMoveHistoryPayload;
-pub(super) use history::{project_documents, replace_project_documents};
-use resource_history::{
+use resource_patch::CommittedResourceMutation;
+use resource_publication::{
     affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, chart_history_publication,
+    canonical_resource_lifecycle_events, chart_publication_deltas,
     normalize_function_patch_revisions, patch_projection_paths, preflight_resource_patch_graphs,
     validate_chart_path_insertion,
 };
-pub(super) use resource_history::{checked_resource_revision, validate_context_revisions};
-use resource_patch::CommittedResourceMutation;
+pub(super) use resource_publication::{checked_resource_revision, validate_context_revisions};
 
 mod state;
 pub use state::ProjectState;
@@ -88,26 +81,6 @@ impl ProjectState {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .project_session_id
             .clone()
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn history_status(&self) -> HistoryStatusDto {
-        let _publication = self.mutation_publication.lock().unwrap();
-        self.history.read().unwrap().status()
-    }
-
-    pub fn history_status_for_project(
-        &self,
-        project_instance_id: &ProjectInstanceId,
-    ) -> Result<HistoryStatusDto, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != project_instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "caller project changed before History status read".into(),
-            });
-        }
-        Ok(self.history.read().unwrap().status())
     }
 
     #[cfg(any(test, feature = "test-support"))]

@@ -21,7 +21,6 @@ impl From<ProjectSaveResult> for ProjectSaveResultDto {
             publication_revision,
             affected_resources,
             index_invalidated,
-            _,
         ) = value.into_parts();
         Self {
             project_instance_id: project_instance_id.to_string(),

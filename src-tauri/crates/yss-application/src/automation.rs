@@ -208,7 +208,6 @@ fn apply_graph_edit(
         to_revision: receipt.to_revision.get(),
         operation_id: receipt.operation_id.to_string(),
         client_key: request.client_key,
-        can_undo: receipt.history.can_undo,
     })
 }
 

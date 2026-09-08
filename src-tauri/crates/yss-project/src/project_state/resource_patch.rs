@@ -7,7 +7,6 @@ pub(super) struct CommittedResourceMutation {
     pub(in crate::project_state) publication_revision: u64,
     pub(in crate::project_state) moves: Vec<crate::project_writers::ProjectResourceMove>,
     pub(in crate::project_state) deltas: Vec<yss_project_history::ResourceDeltaEvent>,
-    pub(in crate::project_state) history: crate::project_writers::ProjectHistoryStatus,
     pub(in crate::project_state) expected_graph_paths: Vec<String>,
 }
 
@@ -19,7 +18,6 @@ impl CommittedResourceMutation {
             publication_revision,
             moves,
             deltas,
-            history,
             expected_graph_paths,
         } = self;
         crate::project_writers::ProjectResourceMutationFacts::new(
@@ -35,10 +33,6 @@ impl CommittedResourceMutation {
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             },
-            crate::project_writers::ProjectHistoryStatus {
-                can_undo: history.can_undo,
-                can_redo: history.can_redo,
-            },
         )
     }
 }
@@ -50,7 +44,7 @@ impl ProjectState {
         patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<crate::project_writers::ProjectResourceMutationFacts, ProjectFilesystemError> {
-        self.apply_resource_document_patch_internal(context, patch, None, rename_ownership)
+        self.apply_resource_document_patch_internal(context, patch, rename_ownership)
             .map(CommittedResourceMutation::into_project_facts)
     }
 
@@ -58,7 +52,6 @@ impl ProjectState {
         &self,
         context: &ProjectTransactionContext,
         mut patch: ProjectDataPatch,
-        history_head: Option<(bool, HistoryEntryId)>,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
         self.ensure_project_operational()?;
@@ -82,7 +75,6 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             let mut graph_resource_revisions = self.graph_resource_revisions.write().unwrap();
             let mut chart_revisions = self.chart_revisions.write().unwrap();
-            let mut history = self.history.write().unwrap();
             self.ensure_project_operational()?;
             validate_context_revisions(
                 context,
@@ -91,8 +83,8 @@ impl ProjectState {
                 &chart_revisions,
             )?;
             normalize_function_patch_revisions(&mut patch, &data, &graph_resource_revisions)?;
-            let (chart_deltas, chart_history) =
-                chart_history_publication(context.operation_id, &patch, &data, &chart_revisions)?;
+            let chart_deltas =
+                chart_publication_deltas(context.operation_id, &patch, &data, &chart_revisions)?;
             let publication_advance = publication.prepare_resource_revision()?;
             let mut deltas =
                 canonical_resource_lifecycle_events(context, &patch, &graph_resource_revisions)?;
@@ -123,47 +115,7 @@ impl ProjectState {
                 }
                 _ => Vec::new(),
             };
-            let resource_history = match &patch {
-                ProjectDataPatch::MoveGraph {
-                    from,
-                    to,
-                    moved_before,
-                    moved,
-                    referenced_graphs_before,
-                    referenced_graphs,
-                    ..
-                } => Some(yss_project_history::ProjectHistoryTransaction::graph_move(
-                    context.operation_id,
-                    from.clone(),
-                    to.clone(),
-                    serde_json::to_value(GraphMoveHistoryPayload {
-                        moved_before: moved_before.as_ref().clone(),
-                        moved_after: moved.clone(),
-                        referenced_graphs_before: referenced_graphs_before.clone(),
-                        referenced_graphs_after: referenced_graphs.clone(),
-                    })
-                    .map_err(|error| {
-                        ProjectFilesystemError::TransactionPrepareFailed {
-                            message: error.to_string(),
-                        }
-                    })?,
-                )),
-                _ => chart_history,
-            };
             let projection_paths = patch_projection_paths(&patch, &data);
-            if let Some((undo, expected_history_id)) = &history_head {
-                let current = if *undo {
-                    history.next_undo()
-                } else {
-                    history.next_redo()
-                };
-                if current.map(|entry| &entry.history_id) != Some(expected_history_id) {
-                    return Err(ProjectFilesystemError::TransactionCommitFailed {
-                        message: "history head changed during filesystem transaction".into(),
-                    });
-                }
-            }
-
             if let Some(ownership) = rename_ownership {
                 ownership.commit_with_boundary(&mut lifecycle)?;
             }
@@ -295,44 +247,6 @@ impl ProjectState {
                 }
             }
 
-            if let Some((undo, expected_history_id)) = history_head {
-                history
-                    .move_resource_head(undo, &expected_history_id)
-                    .map_err(|error| ProjectFilesystemError::TransactionCommitFailed {
-                        message: error.to_string(),
-                    })?;
-            } else if let Some(transaction) = resource_history {
-                history.record_committed_transaction(transaction);
-            } else if deltas.iter().any(|delta| {
-                !matches!(
-                    &delta.payload,
-                    yss_project_history::ResourceDocumentPatch::ResourceLifecycle(_)
-                )
-            }) {
-                let changes = deltas
-                    .iter()
-                    .filter(|delta| {
-                        !matches!(
-                            &delta.payload,
-                            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(_)
-                        )
-                    })
-                    .map(|delta| yss_project_history::ResourcePatch {
-                        resource: delta.resource.clone(),
-                        before_revision: delta.from_revision,
-                        after_revision: delta.to_revision,
-                        forward: delta.payload.clone(),
-                        inverse: delta.payload.inverse(),
-                    })
-                    .collect::<Vec<_>>();
-                history.record_committed_transaction(
-                    yss_project_history::ProjectHistoryTransaction::new(
-                        context.operation_id,
-                        changes,
-                    ),
-                );
-            }
-            let history = history.status();
             let publication_revision = publication.commit_prepared(publication_advance);
             CommittedResourceMutation {
                 operation_id: context.operation_id,
@@ -340,10 +254,6 @@ impl ProjectState {
                 publication_revision,
                 moves,
                 deltas,
-                history: crate::project_writers::ProjectHistoryStatus {
-                    can_undo: history.can_undo,
-                    can_redo: history.can_redo,
-                },
                 expected_graph_paths: projection_paths,
             }
         };

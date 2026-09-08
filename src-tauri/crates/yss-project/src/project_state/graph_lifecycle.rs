@@ -16,17 +16,8 @@ use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
 use crate::project_writers::{
-    ProjectHistoryStatus, ProjectProjectionStatus, ProjectResourceMove,
-    ProjectResourceMutationFacts,
+    ProjectProjectionStatus, ProjectResourceMove, ProjectResourceMutationFacts,
 };
-
-pub(crate) struct GraphRenameDiskPlan {
-    pub(in crate::project_state) mutations: Vec<StagedFilesystemMutation>,
-    pub(in crate::project_state) referenced_graphs_before:
-        std::collections::BTreeMap<GraphResourcePath, GraphResourceDocument>,
-    pub(in crate::project_state) referenced_graphs_after:
-        std::collections::BTreeMap<GraphResourcePath, GraphResourceDocument>,
-}
 
 impl ProjectState {
     pub fn read_graph_resource_snapshot(
@@ -371,13 +362,6 @@ impl ProjectState {
             publication_revision: publication.resource_revision,
             affected_resources: Vec::new().into(),
             index_invalidated: false,
-            history: {
-                let status = publication_history_status(self);
-                crate::project_writers::ProjectHistoryStatus {
-                    can_undo: status.can_undo,
-                    can_redo: status.can_redo,
-                }
-            },
         })
     }
 
@@ -976,20 +960,6 @@ impl ProjectState {
                             .collect::<Vec<_>>()
                             .into_boxed_slice(),
                     },
-                    ProjectHistoryStatus {
-                        can_undo: self
-                            .history
-                            .read()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .status()
-                            .can_undo,
-                        can_redo: self
-                            .history
-                            .read()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .status()
-                            .can_redo,
-                    },
                 ))
             }
             Err(error) => match committed.rollback() {
@@ -997,77 +967,6 @@ impl ProjectState {
                 Err(rollback) => Err(rollback),
             },
         }
-    }
-
-    pub(crate) fn graph_rename_mutations(
-        root: &std::path::Path,
-        source: &GraphResourcePath,
-        target: &GraphResourcePath,
-        moved: &GraphResourceDocument,
-        excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
-    ) -> Result<GraphRenameDiskPlan, ProjectFilesystemError> {
-        let mut plan = GraphRenameDiskPlan {
-            mutations: Vec::new(),
-            referenced_graphs_before: BTreeMap::new(),
-            referenced_graphs_after: BTreeMap::new(),
-        };
-        for entry in crate::scan_graph_resource_index(root)
-            .map_err(graph_rename_plan_error)?
-            .entries()
-        {
-            if entry.path == *source || excluded_graphs.contains(&entry.path) {
-                continue;
-            }
-            let relative_path = std::path::PathBuf::from(entry.path.as_str());
-            let contents = yss_project_filesystem::read_secure_project_file(root, &relative_path)
-                .map_err(graph_rename_plan_error)?;
-            let before: crate::project_io::GraphResourceFile =
-                serde_json::from_slice(&contents).map_err(graph_rename_plan_error)?;
-            let mut after = before.clone();
-            let changed =
-                remap_document_references(&mut after.document, source.as_str(), target.as_str());
-            if !changed {
-                continue;
-            }
-            plan.referenced_graphs_before.insert(
-                entry.path.clone(),
-                GraphResourceDocument {
-                    name: before.name,
-                    kind: before.kind,
-                    document: before.document,
-                    function: before.function,
-                },
-            );
-            plan.referenced_graphs_after.insert(
-                entry.path.clone(),
-                GraphResourceDocument {
-                    name: after.name.clone(),
-                    kind: after.kind,
-                    document: after.document.clone(),
-                    function: after.function.clone(),
-                },
-            );
-            plan.mutations.push(StagedFilesystemMutation::Write {
-                relative_path,
-                contents: serde_json::to_vec_pretty(&after).map_err(graph_rename_plan_error)?,
-            });
-        }
-
-        plan.mutations.push(StagedFilesystemMutation::Write {
-            relative_path: target.as_str().into(),
-            contents: crate::project_io::serialize_graph_resource_document(moved)
-                .map_err(graph_rename_plan_error)?,
-        });
-        plan.mutations.push(StagedFilesystemMutation::RemoveFile {
-            relative_path: source.as_str().into(),
-        });
-        Ok(plan)
-    }
-}
-
-fn graph_rename_plan_error(error: impl std::fmt::Display) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
-        message: error.to_string(),
     }
 }
 
@@ -1282,18 +1181,6 @@ fn duplicate_locator(
     }
 }
 
-fn publication_history_status(state: &ProjectState) -> ProjectHistoryStatus {
-    let status = state
-        .history
-        .read()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .status();
-    ProjectHistoryStatus {
-        can_undo: status.can_undo,
-        can_redo: status.can_redo,
-    }
-}
-
 fn resource_lifecycle_result(
     project_instance_id: &ProjectInstanceId,
     operation_id: yss_project_identity::OperationId,
@@ -1320,7 +1207,6 @@ fn resource_lifecycle_result(
                 Default::default()
             },
         },
-        publication_history_status(state),
     )
 }
 
@@ -1345,7 +1231,6 @@ fn resource_removal_result(
         ProjectProjectionStatus::Incomplete {
             invalidated_graph_paths: vec![path.clone()].into_boxed_slice(),
         },
-        publication_history_status(state),
     )
 }
 
@@ -1368,75 +1253,4 @@ fn document_references(document: &GraphDocument, target: &str) -> bool {
             .values()
             .any(|value| value.as_str() == Some(target))
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::{Path, PathBuf};
-    use yss_graph_document::GraphResourceKind;
-
-    struct TemporaryProjectRoot(PathBuf);
-
-    impl TemporaryProjectRoot {
-        fn new() -> Self {
-            let root = std::env::temp_dir().join(format!(
-                "yssbi-project-graph-rename-{}",
-                uuid::Uuid::new_v4()
-            ));
-            std::fs::create_dir_all(root.join(yss_project_layout::EVENTS_DIR)).unwrap();
-            std::fs::create_dir_all(root.join(yss_project_layout::FUNCTIONS_DIR)).unwrap();
-            Self(root)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TemporaryProjectRoot {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn graph_rename_disk_plan_is_constructable_without_references() {
-        let root = TemporaryProjectRoot::new();
-        let source = GraphResourcePath::new(format!(
-            "{}/Source.{}",
-            yss_project_layout::EVENTS_DIR,
-            yss_project_layout::EVENT_EXTENSION
-        ))
-        .unwrap();
-        let target = GraphResourcePath::new(format!(
-            "{}/Target.{}",
-            yss_project_layout::EVENTS_DIR,
-            yss_project_layout::EVENT_EXTENSION
-        ))
-        .unwrap();
-        std::fs::write(root.path().join(source.as_str()), b"source").unwrap();
-
-        let plan = ProjectState::graph_rename_mutations(
-            root.path(),
-            &source,
-            &target,
-            &GraphResourceDocument::new("Target", GraphResourceKind::Event),
-            &std::collections::BTreeSet::new(),
-        )
-        .unwrap();
-
-        assert!(plan.referenced_graphs_before.is_empty());
-        assert!(plan.referenced_graphs_after.is_empty());
-        assert!(plan.mutations.iter().any(|mutation| matches!(
-            mutation,
-            StagedFilesystemMutation::Write { relative_path, .. }
-                if relative_path == Path::new(target.as_str())
-        )));
-        assert!(plan.mutations.iter().any(|mutation| matches!(
-            mutation,
-            StagedFilesystemMutation::RemoveFile { relative_path }
-                if relative_path == Path::new(source.as_str())
-        )));
-    }
 }

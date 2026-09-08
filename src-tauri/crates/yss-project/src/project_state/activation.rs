@@ -13,7 +13,6 @@ struct ActivationGarbage {
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectAuthorityExpectation,
     _recovery_message: Option<String>,
-    _history: ProjectHistory,
 }
 
 pub(crate) struct PublishedProjectActivation {
@@ -155,10 +154,6 @@ impl ProjectState {
                 Err(error) => (error.into_inner(), true),
             };
             let (mut recovery, recovery_recovered) = self.recovery_marker.boundary_recovering();
-            let (mut history, history_recovered) = match self.history.write() {
-                Ok(guard) => (guard, false),
-                Err(error) => (error.into_inner(), true),
-            };
 
             if authority_basis.as_ref().is_some_and(|basis| {
                 publication.project_instance_id != basis.project_instance_id.as_str()
@@ -195,7 +190,6 @@ impl ProjectState {
                 _chart_revisions: std::mem::replace(&mut *current_chart_revisions, chart_revisions),
                 _identity: std::mem::replace(&mut *current_identity, next_identity),
                 _recovery_message: std::mem::take(&mut *recovery),
-                _history: std::mem::take(&mut *history),
             };
             postcommit_panic = run_test_hooks
                 .then(|| self.run_activation_store_replaced_test_hook())
@@ -234,9 +228,6 @@ impl ProjectState {
             }
             if recovery_recovered {
                 self.recovery_marker.clear_poison();
-            }
-            if history_recovered {
-                self.history.clear_poison();
             }
         }
 

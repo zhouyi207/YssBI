@@ -1396,7 +1396,6 @@ mod tests {
                         to_revision: 2,
                         operation_id: "operation-1".to_owned(),
                         client_key: "assistant-edit-1".to_owned(),
-                        can_undo: true,
                     },
                 ))
             })

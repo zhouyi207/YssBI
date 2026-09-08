@@ -14,10 +14,6 @@ import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionSer
 import { ProjectService } from "@/services/project/projectService";
 import { normalizeIpcError } from "@/services/ipc";
 import {
-  getPendingBackendMutation,
-  resetPendingBackendMutations,
-} from "./pendingBackendMutationRegistry";
-import {
   executeFunctionSignatureMutation,
   resetFunctionSignatureCoordinator,
   type FunctionSignatureCoordinatorDependencies,
@@ -146,10 +142,63 @@ describe("executeFunctionSignatureMutation", () => {
     vi.mocked(GraphProjectionService.loadGraph).mockImplementation(async (graphPath) =>
       makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection),
     );
-    resetPendingBackendMutations();
     resetFunctionSignatureCoordinator();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     installState();
+  });
+
+  it("rejects duplicate pending IDs and releases the ID after a failed request", async () => {
+    let rejectPending!: (error: Error) => void;
+    const pending = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
+      rejectPending = reject;
+    });
+    const mutateSignature = vi
+      .fn()
+      .mockReturnValueOnce(pending)
+      .mockRejectedValue(backendError("stale_project_lifecycle"));
+    const overrides = dependencies(mutateSignature);
+    const input = { functionPath, locale: "en-US", patch: { inputs: [] } };
+    const first = executeFunctionSignatureMutation(input, overrides);
+    const failure = expect(first).rejects.toThrow("request failed");
+
+    await expect(executeFunctionSignatureMutation(input, overrides)).rejects.toThrow(
+      "already pending",
+    );
+    expect(mutateSignature).toHaveBeenCalledOnce();
+
+    rejectPending(new Error("request failed"));
+    await failure;
+    await expect(executeFunctionSignatureMutation(input, overrides)).resolves.toEqual({
+      status: "stale",
+    });
+    expect(mutateSignature).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a reused ID pending when a request from an earlier coordinator epoch settles", async () => {
+    let rejectOld!: (error: Error) => void;
+    let rejectCurrent!: (error: Error) => void;
+    const old = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
+      rejectOld = reject;
+    });
+    const current = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
+      rejectCurrent = reject;
+    });
+    const mutateSignature = vi.fn().mockReturnValueOnce(old).mockReturnValueOnce(current);
+    const overrides = dependencies(mutateSignature);
+    const input = { functionPath, locale: "en-US", patch: { inputs: [] } };
+    const oldRequest = executeFunctionSignatureMutation(input, overrides);
+    resetFunctionSignatureCoordinator();
+    const currentRequest = executeFunctionSignatureMutation(input, overrides);
+
+    rejectOld(backendError("stale_project_lifecycle"));
+    await expect(oldRequest).resolves.toEqual({ status: "stale" });
+    await expect(executeFunctionSignatureMutation(input, overrides)).rejects.toThrow(
+      "already pending",
+    );
+    expect(mutateSignature).toHaveBeenCalledTimes(2);
+
+    rejectCurrent(backendError("stale_project_lifecycle"));
+    await expect(currentRequest).resolves.toEqual({ status: "stale" });
   });
 
   it("does not invoke, publish, or mutate when project replacement occurs inside authority read", async () => {
@@ -180,7 +229,6 @@ describe("executeFunctionSignatureMutation", () => {
     expect(submit).not.toHaveBeenCalled();
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
   it("treats a backend stale lifecycle rejection as stale without publication effects", async () => {
@@ -206,7 +254,6 @@ describe("executeFunctionSignatureMutation", () => {
     expect(submit).not.toHaveBeenCalled();
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
   it("rejects missing signature authority before invoke or publication effects", async () => {
@@ -227,21 +274,18 @@ describe("executeFunctionSignatureMutation", () => {
 
     expect(mutateSignature).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
-  it("registers before invoke and atomically applies a complete authoritative result", async () => {
+  it("atomically applies a complete authoritative result", async () => {
     const committed = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
     const eventHandler = {
       handle: (payload: { result: ResourceMutationResultDto }) => {
         void projectPublicationCoordinator.submit(payload);
       },
     };
-    let pendingDuringInvoke = false;
     let graphTitleDuringInvoke: string | undefined;
     let signatureRevisionDuringInvoke: number | undefined;
-    const mutateSignature = vi.fn(async (_project, _path, _locale, request) => {
-      pendingDuringInvoke = getPendingBackendMutation(request.operationId) != null;
+    const mutateSignature = vi.fn(async () => {
       graphTitleDuringInvoke =
         useGraphProjectionStore.getState().graphEntities[functionPath].nodes["local-node"]?.display
           .title;
@@ -269,7 +313,6 @@ describe("executeFunctionSignatureMutation", () => {
       operationId,
       payload: { before: beforeSignature, after: afterSignature },
     });
-    expect(pendingDuringInvoke).toBe(true);
     expect(graphTitleDuringInvoke).toBe("Current graph projection");
     expect(signatureRevisionDuringInvoke).toBe(2);
     expect(outcome).toEqual({ status: "applied", result: committed });
@@ -282,8 +325,6 @@ describe("executeFunctionSignatureMutation", () => {
       functionInputs: authoritativeFunctionProjection.inputs,
       functionOutputs: authoritativeFunctionProjection.outputs,
     });
-
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
   it("preserves function authority until an incomplete result receives authoritative projection metadata", async () => {
@@ -404,8 +445,6 @@ describe("executeFunctionSignatureMutation", () => {
     expect(loadFunctionResources).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledWith(functionPath, "en-US");
-
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 
   it("ignores a delayed old-project direct result when identities and publication numbers collide", async () => {
@@ -498,6 +537,5 @@ describe("executeFunctionSignatureMutation", () => {
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
     expect(loadFunctionResources).not.toHaveBeenCalled();
     expect(hydrateGraph).not.toHaveBeenCalled();
-    expect(getPendingBackendMutation(operationId)).toBeUndefined();
   });
 });

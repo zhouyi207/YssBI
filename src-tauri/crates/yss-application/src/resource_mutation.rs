@@ -7,8 +7,7 @@ use super::editor_projection::{
     EditorProjectionError, EditorProjectionInput, build_editor_projection,
 };
 use super::events::{
-    CommittedResourceMutation, GraphProjectionReplacement, HistoryStatus,
-    committed_resource_mutation_from_project,
+    CommittedResourceMutation, GraphProjectionReplacement, committed_resource_mutation_from_project,
 };
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
@@ -41,8 +40,8 @@ pub enum ResourceMutationApplicationError {
     Project(#[from] ProjectFilesystemError),
     #[error("graph resource mutation conflicted")]
     Mutation(#[source] MutationConflict),
-    #[error("project history mutation conflicted")]
-    History(#[source] yss_project_history::ProjectHistoryMutationError),
+    #[error("project resource mutation conflicted")]
+    Resource(#[source] yss_project_history::ProjectResourceMutationError),
     #[error("graph operation capture failed")]
     GraphOperation(#[source] yss_project::ProjectGraphOperationError),
     #[error("graph operation commit failed")]
@@ -75,7 +74,6 @@ pub struct GraphDraftSave {
     pub resource_revision: ResourceRevision,
     pub document: GraphDocument,
     pub projection_replacement: GraphProjectionReplacement,
-    pub history: HistoryStatus,
 }
 
 fn map_graph_save_error(
@@ -501,10 +499,6 @@ impl ApplicationState {
             resource_revision: receipt.to_revision,
             document,
             projection_replacement: projection,
-            history: HistoryStatus {
-                can_undo: receipt.history.can_undo,
-                can_redo: receipt.history.can_redo,
-            },
         })
     }
 
@@ -632,7 +626,7 @@ impl ApplicationState {
         let result = captured
             .project()
             .update_function_signature(&project_instance_id, &function_path, request)
-            .map_err(ResourceMutationApplicationError::History)?;
+            .map_err(ResourceMutationApplicationError::Resource)?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         let result = committed_resource_mutation_from_project(result);
