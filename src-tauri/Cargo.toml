@@ -75,7 +75,6 @@ members = [
   "crates/yss-sci",
   "crates/yss-sci-contract",
   "crates/yss-sci-runtime",
-  "crates/yss-settings",
   "crates/yss-sql-source",
   "crates/yss-tabular-contract",
   "crates/yss-tabular-io",
@@ -178,7 +177,6 @@ yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-statistical-harness = { path = "./crates/yss-statistical-harness" }
 yss-statistical-harness-sqlite = { path = "./crates/yss-statistical-harness-sqlite" }
-yss-settings = { path = "./crates/yss-settings" }
 yss-tracing = { path = "./crates/yss-tracing" }
 yss-window-state = { path = "./crates/yss-window-state" }
 tauri.workspace = true

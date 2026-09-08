@@ -17,7 +17,6 @@ yss-application = { path = "../yss-application" }
 yss-automation-contract = { path = "../yss-automation-contract" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
-yss-settings = { path = "../yss-settings" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-edit = { path = "../yss-database-edit" }

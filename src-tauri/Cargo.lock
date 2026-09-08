@@ -9348,7 +9348,6 @@ dependencies = [
  "yss-project-watcher",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-settings",
  "yss-statistical-harness",
  "yss-tabular-contract",
  "yss-tracing",
@@ -10086,17 +10085,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-settings"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "yss-project-identity",
-]
-
-[[package]]
 name = "yss-sql-source"
 version = "0.1.0"
 dependencies = [
@@ -10230,7 +10218,6 @@ dependencies = [
  "yss-project-watcher-notify",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-settings",
  "yss-statistical-harness",
  "yss-statistical-harness-sqlite",
  "yss-tracing",

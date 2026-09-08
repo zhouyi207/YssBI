@@ -182,10 +182,6 @@ pub fn run() {
             app.manage(application_state.clone());
 
             let app_dir = app.path().app_data_dir()?;
-            let settings_path = app.path().app_config_dir()?.join("settings.json");
-            let settings = yss_settings::SettingsStore::open(settings_path)
-                .map_err(Box::<dyn std::error::Error>::from)?;
-            app.manage(settings);
             let harness_state = initialize_harness_state(app_dir.clone(), application_state)
                 .map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(harness_state);
