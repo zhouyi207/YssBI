@@ -110,8 +110,7 @@ describe("SidebarGraphRow", () => {
       "events/Main.yssbi-event",
       "Main",
       "event",
-      undefined,
-      { pinned: false },
     );
+    expect(mocks.listItemProps[0]?.onDoubleClick).toBeUndefined();
   });
 });

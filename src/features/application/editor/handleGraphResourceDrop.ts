@@ -15,7 +15,6 @@ export async function handleGraphResourceDrop(
   },
 ): Promise<void> {
   const opened = await openGraphInEditor(resource.id, resource.name, resource.type, targetGroupId, {
-    pinned: true,
     insertIndex: options?.insertIndex,
   });
   if (!opened || !options?.edge) return;

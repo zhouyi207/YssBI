@@ -6,8 +6,6 @@ import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel
 import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 
 export interface OpenGraphInEditorOptions {
-  /** `false` = preview tab (sidebar single-click). Default: pinned. */
-  pinned?: boolean;
   /** Insert a newly opened editor at this TabBar index. */
   insertIndex?: number;
 }
@@ -24,8 +22,7 @@ export async function openGraphInEditor(
     "EditorPanelCommands",
   );
 
-  const pinned = options?.pinned !== false;
-  const target = { resourceRef: graphPath, resourceKind: type, pinned } as const;
+  const target = { resourceRef: graphPath, resourceKind: type } as const;
   let panel: WorkbenchEditorPanelInfo;
   try {
     panel = await openEditorPanel(target, {

@@ -15,7 +15,6 @@ import { logger } from "@/features/application/observability/appLogger";
 import { resourceKey, useResourceStore } from "@/features/core/resource";
 
 type OpenGraphOptions = {
-  pinned?: boolean;
   targetGroupId?: string;
 };
 
@@ -44,7 +43,7 @@ export function useGraphManagement(openGraph: OpenGraphFn) {
     [openGraph],
   );
 
-  /** 创建后是否自动打开（WatermarkView/Menubar 为 true，Sidebar 为 false） */
+  /** 创建后是否自动打开。 */
   type AddGraphOptions = { openAfterCreate?: boolean };
 
   // Events

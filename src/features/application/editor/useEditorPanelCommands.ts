@@ -10,9 +10,9 @@ export function useEditorPanelCommands() {
       id: string,
       name: string,
       type: "event" | "function",
-      options?: { pinned?: boolean; targetGroupId?: string },
+      options?: { targetGroupId?: string },
     ): Promise<void> => {
-      await openGraphInEditor(id, name, type, options?.targetGroupId, { pinned: options?.pinned });
+      await openGraphInEditor(id, name, type, options?.targetGroupId);
     },
     [],
   );

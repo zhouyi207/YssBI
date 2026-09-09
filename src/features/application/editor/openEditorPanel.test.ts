@@ -108,74 +108,31 @@ describe("openEditorPanel", () => {
     vi.spyOn(workbenchDockviewControl, "openEditor").mockImplementation(mocks.openEditor);
   });
 
-  it("preserves an existing pinned and sticky editor during a preview open", async () => {
-    const existing = editorPanel("panel-main", "group-main", "events/Main.yssbi-event", {
-      pinned: true,
-      sticky: true,
+  it("always opens editor resources as fixed tabs without preview replacement", async () => {
+    const existing = editorPanel("panel-preview", "group-main", "events/Preview.yssbi-event", {
+      pinned: false,
     });
     mocks.panels = [existing];
     mocks.groups = [group(existing.groupId, [existing.panelInstanceId])];
-    mocks.openEditor.mockResolvedValue(existing);
-
-    await openEditorPanel(
-      {
-        resourceRef: "events/Main.yssbi-event",
-        resourceKind: "event",
-        pinned: false,
-      },
-      {
-        targetGroupId: "group-main",
-      },
-    );
-
-    expect(mocks.openEditor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resourceRef: "events/Main.yssbi-event",
-        pinned: true,
-        sticky: true,
-        mode: "reuse-resource",
-      }),
-    );
-    expect(mocks.requestCloseEditorPanels).not.toHaveBeenCalled();
-  });
-
-  it("re-resolves to an ensured central group after closing the sole preview group", async () => {
-    const preview = editorPanel("panel-preview", "group-preview", "events/Preview.yssbi-event", {
-      pinned: false,
-    });
-    const opened = editorPanel("panel-next", "central-group", "events/Next.yssbi-event", {
-      pinned: false,
-    });
-    mocks.panels = [preview];
-    mocks.groups = [group(preview.groupId, [preview.panelInstanceId])];
-    mocks.requestCloseEditorPanels.mockImplementationOnce(async () => {
-      mocks.panels = [];
-      mocks.groups = [];
-      return true;
+    const opened = editorPanel("panel-main", "group-main", "events/Main.yssbi-event", {
+      pinned: true,
     });
     mocks.openEditor.mockResolvedValue(opened);
 
     await expect(
       openEditorPanel(
-        {
-          resourceRef: "events/Next.yssbi-event",
-          resourceKind: "event",
-          pinned: false,
-        },
-        {
-          targetGroupId: preview.groupId,
-        },
+        { resourceRef: "events/Main.yssbi-event", resourceKind: "event" },
+        { targetGroupId: "group-main" },
       ),
     ).resolves.toBe(opened);
 
-    expect(mocks.requestCloseEditorPanels).toHaveBeenCalledWith([preview.panelInstanceId]);
-    expect(mocks.ensureCentralGroup).toHaveBeenCalledOnce();
     expect(mocks.openEditor).toHaveBeenCalledWith(
       expect.objectContaining({
-        resourceRef: "events/Next.yssbi-event",
-        targetGroupId: "central-group",
-        pinned: false,
+        resourceRef: "events/Main.yssbi-event",
+        pinned: true,
+        mode: "reuse-resource",
       }),
     );
+    expect(mocks.requestCloseEditorPanels).not.toHaveBeenCalled();
   });
 });

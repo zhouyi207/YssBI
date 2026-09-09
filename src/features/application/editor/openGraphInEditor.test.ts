@@ -54,7 +54,6 @@ describe("openGraphInEditor", () => {
       {
         resourceRef: "events/Main.yssbi-event",
         resourceKind: "event",
-        pinned: true,
       },
       {
         targetGroupId: "requested-group",

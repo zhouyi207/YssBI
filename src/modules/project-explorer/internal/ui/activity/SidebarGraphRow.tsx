@@ -50,12 +50,8 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
       onClick={async (e) => {
         e.stopPropagation();
         const revealing = revealDetails({ kind: graphType, path: id });
-        void openGraphInEditor(id, name, graphType, undefined, { pinned: false });
-        await revealing;
-      }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
         void openGraphInEditor(id, name, graphType);
+        await revealing;
       }}
       onContextMenu={onContextMenu}
       trailing={
