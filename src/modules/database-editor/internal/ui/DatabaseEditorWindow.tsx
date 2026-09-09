@@ -1,18 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useProjectSync } from "@/features/application/initialization";
 import { initializeProjectForCurrentWindow } from "@/features/application/project";
-import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManagement/databaseRecords";
 import { useCurrentWindowActions, usePersistedWindow } from "@/features/application/window";
 import { useDatabaseRead } from "@/features/core/database/read";
-import {
-  useDataLoader,
-  useSelection,
-  useDatabaseEditorKeyboard,
-  getGridSelectionPrimaryCellText,
-  useDatabaseExport,
-} from "@/features/application/databaseEditor";
-import { TitleBar, Toolbar, type DataframeOption } from "./Layout";
-import { DataTable } from "./Table";
+import { TitleBar, type DataframeOption } from "./Layout";
+import { DatabaseEditorContent } from "./DatabaseEditorContent";
 import { reportViewIssue } from "@/features/application/observability/reportViewIssue";
 
 function getDatabaseIdFromUrl(): string | null {
@@ -34,28 +26,7 @@ export const DatabaseEditorWindow: React.FC = () => {
 
   useProjectSync();
 
-  // Derived state
-  const selectedDf = selectedDfId ? dataframes[selectedDfId] : null;
-  const columns =
-    (selectedDf as { columns?: Array<{ name: string; type: string }> })?.columns ?? [];
-  const totalRowCount = (selectedDf as { rowCount?: number })?.rowCount ?? 0;
-
-  // Data loading
-  const dataLoader = useDataLoader(selectedDfId);
-  const exportDatabase = useDatabaseExport(selectedDfId);
   const windowActions = useCurrentWindowActions();
-
-  // Selection
-  const sel = useSelection({
-    columnCount: columns.length,
-    rowCount: dataLoader.loadedRows.length,
-  });
-
-  // Keyboard shortcuts
-  useDatabaseEditorKeyboard({
-    selectAll: sel.selectAll,
-    clearSelection: sel.clearSelection,
-  });
 
   // 首次有数据时选中 URL 指定或第一个 DataFrame；之后仅在当前选中被删除时回退
   useEffect(() => {
@@ -63,7 +34,6 @@ export const DatabaseEditorWindow: React.FC = () => {
     if (ids.length === 0) {
       hasInitializedDfRef.current = false;
       setSelectedDfId(null);
-      dataLoader.setLoadedRows([]);
       return;
     }
     const dbFromUrl = getDatabaseIdFromUrl();
@@ -79,34 +49,6 @@ export const DatabaseEditorWindow: React.FC = () => {
       setSelectedDfId(ids[0] ?? null);
     }
   }, [dataframes, selectedDfId]);
-
-  // Load data when dataframe changes
-  useEffect(() => {
-    if (selectedDfId) {
-      dataLoader.loadInitialRows(selectedDfId);
-    } else {
-      dataLoader.setLoadedRows([]);
-    }
-    sel.clearSelection();
-  }, [selectedDfId]);
-
-  /** 分页或列结构变化后，保留旧选择会与当前页/列错位 */
-  useEffect(() => {
-    sel.clearSelection();
-  }, [dataLoader.pageIndex, columns.length, sel.clearSelection]);
-
-  // Auto-fetch meta if missing
-  useEffect(() => {
-    if (!selectedDfId) return;
-    const df = dataframes[selectedDfId];
-    if (!df) return;
-    if (df.name && (df.columns?.length ?? 0) > 0) return;
-    let cancelled = false;
-    void hydrateDatabaseEditorMetadata(selectedDfId, () => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDfId, dataframes]);
 
   // 子窗口独立 WebView：先从后端同步项目，再展示窗口
   useEffect(() => {
@@ -150,51 +92,19 @@ export const DatabaseEditorWindow: React.FC = () => {
     [dataframes],
   );
 
-  const selectedCellPreview = useMemo(
-    () =>
-      getGridSelectionPrimaryCellText(
-        sel.selection,
-        columns.length,
-        dataLoader.loadedRows.length,
-        dataLoader.loadedRows,
-      ),
-    [sel.selection, columns.length, dataLoader.loadedRows],
-  );
-
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground font-sans">
-      <TitleBar
-        dataframes={dfOptions}
-        selectedDataframeId={selectedDfId}
-        onSelectDataframe={setSelectedDfId}
-        selectedCellText={selectedCellPreview}
-      />
-
-      <div className="flex min-h-0 flex-1 overflow-hidden bg-muted/30">
-        <DataTable
-          columns={columns}
-          loadedRows={dataLoader.loadedRows}
-          loadedRowIds={dataLoader.loadedRowIds}
-          pageStartIndex={dataLoader.pageStartIndex}
-          loading={dataLoader.loading}
-          selection={sel.selection}
-          onSelectionChange={sel.setSelection}
-        />
-      </div>
-
-      <Toolbar
-        loading={dataLoader.loading}
-        totalRowCount={totalRowCount}
-        columnCount={(selectedDf as { columnCount?: number })?.columnCount ?? 0}
-        pageIndex={dataLoader.pageIndex}
-        pageSize={dataLoader.pageSize}
-        totalPages={dataLoader.totalPages}
-        lastFetchMs={dataLoader.lastFetchMs}
-        exportEnabled={Boolean(selectedDfId)}
-        onPreviousPage={dataLoader.goToPreviousPage}
-        onNextPage={dataLoader.goToNextPage}
-        onRefresh={dataLoader.refreshData}
-        onExport={exportDatabase}
+      <DatabaseEditorContent
+        databaseId={selectedDfId}
+        refreshProjectOnRefresh
+        renderHeader={(selectedCellText) => (
+          <TitleBar
+            dataframes={dfOptions}
+            selectedDataframeId={selectedDfId}
+            onSelectDataframe={setSelectedDfId}
+            selectedCellText={selectedCellText}
+          />
+        )}
       />
     </div>
   );

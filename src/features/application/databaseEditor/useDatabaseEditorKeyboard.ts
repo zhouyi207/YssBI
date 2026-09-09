@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import { isAppModalOpen } from "@/features/core/keyboard";
 
 interface useDatabaseEditorKeyboardParams {
+  containerRef: RefObject<HTMLElement | null>;
   selectAll: () => void;
   clearSelection: () => void;
 }
@@ -23,6 +24,11 @@ export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParam
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (
+        !(e.target instanceof Node) ||
+        !paramsRef.current.containerRef.current?.contains(e.target)
+      )
+        return;
       if (isAppModalOpen() || isTextEntryTarget(e.target)) {
         return;
       }

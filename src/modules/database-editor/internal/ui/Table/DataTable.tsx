@@ -66,7 +66,7 @@ const BASE_COLUMN_DEF: ColDef<DatabaseGridRow> = {
 };
 
 interface DataTableProps {
-  columns: ColumnInfo[];
+  columns: readonly ColumnInfo[];
   loadedRows: DatabaseRow[];
   loadedRowIds: number[];
   pageStartIndex: number;

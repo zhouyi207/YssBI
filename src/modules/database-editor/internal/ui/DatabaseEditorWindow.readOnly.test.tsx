@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot, type Root } from "react-dom/client";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { DatabaseEditorContent } from "./DatabaseEditorContent";
 
 const mocks = vi.hoisted(() => ({
   initProjectSync: vi.fn(),
@@ -38,13 +39,20 @@ vi.mock("@/features/application/window/useWindowDecorations", () => ({
   useCustomTitleBar: mocks.useCustomTitleBar,
 }));
 
-vi.mock("@/features/application/databaseEditor", () => ({
+vi.mock("@/features/application/databaseEditor", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/application/databaseEditor")>()),
   getGridSelectionPrimaryCellText: mocks.getGridSelectionPrimaryCellText,
-  useDatabaseEditorKeyboard: mocks.useDatabaseEditorKeyboard,
+  useDatabaseEditorKeyboard: (params: Parameters<typeof actualKeyboard>[0]) => {
+    mocks.useDatabaseEditorKeyboard(params);
+    // The real hook protects the other panels in the shared workbench window.
+    return actualKeyboard(params);
+  },
   useDatabaseExport: mocks.useDatabaseExport,
   useDataLoader: mocks.useDataLoader,
   useSelection: mocks.useSelection,
 }));
+
+import { useDatabaseEditorKeyboard as actualKeyboard } from "@/features/application/databaseEditor/useDatabaseEditorKeyboard";
 
 vi.mock("./Table", () => ({
   DataTable: () => createElement("div", { "data-testid": "read-only-table" }),
@@ -84,11 +92,12 @@ describe("DatabaseEditorWindow read-only composition", () => {
       loadedRowIds: [1],
       loadedRows: [[1]],
       loading: false,
-      loadInitialRows: vi.fn(),
+      loadInitialRows: vi.fn().mockResolvedValue(undefined),
       pageIndex: 0,
       pageSize: 100,
       pageStartIndex: 0,
       refreshData: vi.fn(),
+      reloadAllData: vi.fn(),
       setLoadedRows: vi.fn(),
       totalPages: 1,
     });
@@ -102,9 +111,6 @@ describe("DatabaseEditorWindow read-only composition", () => {
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
-    act(() =>
-      root.render(createElement(TooltipProvider, null, createElement(DatabaseEditorWindow))),
-    );
   });
 
   afterEach(() => {
@@ -113,6 +119,9 @@ describe("DatabaseEditorWindow read-only composition", () => {
   });
 
   it("keeps inspection, paging, and export controls without mutation controls", () => {
+    act(() =>
+      root.render(createElement(TooltipProvider, null, createElement(DatabaseEditorWindow))),
+    );
     expect(host.querySelector('[data-testid="read-only-table"]')).not.toBeNull();
     const buttonLabels = Array.from(host.querySelectorAll("button"))
       .map((button) => `${button.textContent} ${button.getAttribute("aria-label") ?? ""}`)
@@ -127,5 +136,46 @@ describe("DatabaseEditorWindow read-only composition", () => {
         selectAll: expect.any(Function),
       }),
     );
+  });
+
+  it("embeds the table without window initialization and handles only its own keyboard events", () => {
+    act(() =>
+      root.render(
+        createElement(
+          TooltipProvider,
+          null,
+          createElement(DatabaseEditorContent, { databaseId: "sales" }),
+        ),
+      ),
+    );
+    expect(host.querySelector('[data-testid="read-only-table"]')).not.toBeNull();
+    expect(mocks.useProjectSync).not.toHaveBeenCalled();
+    expect(mocks.usePersistedWindow).not.toHaveBeenCalled();
+    expect(mocks.useCurrentWindowActions).not.toHaveBeenCalled();
+    const loader = mocks.useDataLoader.mock.results[0].value;
+    expect(loader.loadInitialRows).toHaveBeenCalledWith("sales");
+    const selection = mocks.useSelection.mock.results[0].value;
+    act(() =>
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "a",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    expect(selection.selectAll).not.toHaveBeenCalled();
+    act(() =>
+      host.querySelector('[data-testid="read-only-table"]')!.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "a",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    expect(selection.selectAll).toHaveBeenCalledOnce();
   });
 });
