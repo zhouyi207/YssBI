@@ -6,16 +6,16 @@ describe("node catalog tree store", () => {
     useNodeCatalogTreeStore.getState().reset();
   });
 
-  it("stores only manual category expansion and query state", () => {
+  it("stores manual category expansion", () => {
     const store = useNodeCatalogTreeStore.getState();
 
-    store.setQuery("regression");
     store.setCategoryExpanded("statistics", true);
 
     expect(useNodeCatalogTreeStore.getState()).toMatchObject({
-      query: "regression",
       expandedCategoryIds: new Set(["statistics"]),
     });
+    store.setCategoryExpanded("statistics", false);
+    expect(useNodeCatalogTreeStore.getState().expandedCategoryIds).toEqual(new Set());
   });
 
   it("can replace stale expansion state when the Catalog scope changes", () => {
@@ -23,25 +23,11 @@ describe("node catalog tree store", () => {
 
     store.setScope("project-1:zh-CN");
     store.setCategoryExpanded("statistics", true);
-    store.setQuery("logit");
     store.setScope("project-2:en-US");
 
     expect(useNodeCatalogTreeStore.getState()).toMatchObject({
       scopeKey: "project-2:en-US",
-      query: "",
       expandedCategoryIds: new Set(),
     });
-  });
-
-  it("can expand and collapse a set of categories together", () => {
-    const store = useNodeCatalogTreeStore.getState();
-
-    store.setCategoriesExpanded(["statistics", "math"], true);
-    expect(useNodeCatalogTreeStore.getState().expandedCategoryIds).toEqual(
-      new Set(["statistics", "math"]),
-    );
-
-    store.setCategoriesExpanded(["statistics", "math"], false);
-    expect(useNodeCatalogTreeStore.getState().expandedCategoryIds).toEqual(new Set());
   });
 });

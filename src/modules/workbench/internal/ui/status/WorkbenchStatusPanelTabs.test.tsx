@@ -83,7 +83,6 @@ describe("Workbench status panel tabs", () => {
                 Assistant: Panel,
                 Project: Panel,
                 Nodes: Panel,
-                Data: Panel,
                 Commands: Panel,
                 Plugins: Panel,
               }}

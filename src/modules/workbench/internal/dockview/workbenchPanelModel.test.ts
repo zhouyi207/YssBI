@@ -38,7 +38,6 @@ describe("workbench panel metadata", () => {
     }[] = [
       { metadata: { role: "view", viewId: "project" }, component: "Project" },
       { metadata: { role: "view", viewId: "nodes" }, component: "Nodes" },
-      { metadata: { role: "view", viewId: "data" }, component: "Data" },
       { metadata: { role: "view", viewId: "commands" }, component: "Commands" },
       { metadata: { role: "view", viewId: "details" }, component: "Details" },
       { metadata: { role: "view", viewId: "inspect" }, component: "Inspect" },

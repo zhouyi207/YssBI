@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import {
   VscClose,
   VscCloseAll,
-  VscDatabase,
   VscError,
   VscExtensions,
   VscGraphLine,
@@ -49,7 +48,6 @@ export interface RootPanelTabRendererProps extends IDockviewPanelHeaderProps<Wor
 const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
   project: VscProject,
   nodes: VscLibrary,
-  data: VscDatabase,
   commands: VscTerminal,
   plugins: VscExtensions,
   details: VscInfo,
@@ -63,7 +61,6 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
 const VIEW_TITLE_KEYS = {
   project: "activityBar.project",
   nodes: "activityBar.nodes",
-  data: "activityBar.data",
   commands: "activityBar.commands",
   plugins: "activityBar.plugins",
   details: "panel.details",

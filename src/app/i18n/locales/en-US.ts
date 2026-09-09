@@ -1049,7 +1049,6 @@ export const enUS = {
     plugins: "Plugins",
     project: "Project",
     nodes: "Nodes",
-    data: "Data",
     commands: "Commands",
   },
   chartsSidebar: {
@@ -1107,10 +1106,7 @@ export const enUS = {
     viewInDatabaseEditor: "View in Database Editor",
 
     projectTree: {
-      searchPlaceholder: "Search project resources...",
-      expandAll: "Expand all project categories",
-      collapseAll: "Collapse all project categories",
-      noMatches: "No matching project resources",
+      empty: "No project resources",
       categories: {
         events: "Events",
         functions: "Functions",
@@ -1118,7 +1114,7 @@ export const enUS = {
       },
     },
 
-    nodeSearchNoMatches: "No matching nodes",
+    noNodes: "No nodes available",
     noActiveGraph: "No active graph open",
     noActiveGraphDescription: "Open an Event or Function to view command status",
     noData: "No data yet",

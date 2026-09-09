@@ -114,7 +114,6 @@ describe("workbench Dockview defaults", () => {
     expect(WORKBENCH_HOME_EDGE).toEqual({
       project: "left",
       nodes: "left",
-      data: "left",
       commands: "left",
       plugins: "left",
       details: "right",

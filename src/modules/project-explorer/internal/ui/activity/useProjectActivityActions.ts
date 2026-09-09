@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useGraphManagement } from "@/features/application/dataManagement";
+import { useDatabaseManagement, useGraphManagement } from "@/features/application/dataManagement";
 import { deleteChartWithConfirm } from "@/features/application/editor/chartDelete";
 import {
   useChartManagement,
@@ -13,6 +13,9 @@ import {
   revealProjectResourceInExplorer,
 } from "@/features/application/sidebar/sidebarResourceActions";
 import type { GraphResourceType } from "./projectSidebarTypes";
+import { renameResource } from "@/features/application/resource/resourceActions";
+import { openDatabaseEditorWindow } from "@/features/application/window";
+import { ui } from "@/features/core/ui/ui";
 
 type OpenInputDialog = (
   title: string,
@@ -35,6 +38,36 @@ export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
   } = useGraphManagement(openGraph);
   const openChart = useOpenChart();
   const { duplicateChart, addChart } = useChartManagement(openChart);
+  const { deleteDataFrame, triggerImportData } = useDatabaseManagement();
+
+  const renameDatabaseItem = useCallback(
+    (id: string, name: string) => {
+      openInputDialog(
+        t("contextMenu.dialog.renameDataTitle"),
+        name,
+        async (nextName) => {
+          await renameResource({ id, kind: "database" }, nextName);
+        },
+        t("contextMenu.dialog.renameSubmit"),
+      );
+    },
+    [openInputDialog, t],
+  );
+
+  const deleteDatabaseItem = useCallback(
+    async (id: string, name: string) => {
+      const confirmed = await ui.confirm({
+        title: t("sidebar.deleteDataTitle"),
+        message: t("sidebar.deleteDataMessage", { name }),
+        confirmText: t("contextMenu.sidebar.delete"),
+        cancelText: t("common.cancel"),
+        type: "danger",
+      });
+      if (!confirmed) return;
+      await deleteDataFrame(id);
+    },
+    [deleteDataFrame, t],
+  );
 
   const renameGraphItem = useCallback(
     (id: string, name: string, type: GraphResourceType) => {
@@ -107,5 +140,9 @@ export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
     openChart,
     duplicateChart,
     addChart,
+    renameDatabaseItem,
+    deleteDatabaseItem,
+    triggerImportData,
+    openDatabaseEditorWindow,
   };
 }

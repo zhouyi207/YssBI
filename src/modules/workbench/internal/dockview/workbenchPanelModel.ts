@@ -4,13 +4,7 @@ import {
   type ResultPresentation,
 } from "@/shared/types/domain/result";
 
-export const WORKBENCH_ACTIVITY_VIEW_IDS = [
-  "project",
-  "data",
-  "nodes",
-  "commands",
-  "plugins",
-] as const;
+export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "nodes", "commands", "plugins"] as const;
 
 export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[number];
 
@@ -36,7 +30,6 @@ export type WorkbenchComponentId =
   | "EditorResource"
   | "Project"
   | "Nodes"
-  | "Data"
   | "Commands"
   | "Plugins"
   | "Plugin"
@@ -107,7 +100,6 @@ const RESULT_REPORT_KINDS = new Set([
 const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentId>> = {
   project: "Project",
   nodes: "Nodes",
-  data: "Data",
   commands: "Commands",
   plugins: "Plugins",
   details: "Details",

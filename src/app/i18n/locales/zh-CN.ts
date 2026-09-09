@@ -981,7 +981,6 @@ export const zhCN = {
     plugins: "插件",
     project: "项目",
     nodes: "节点",
-    data: "数据",
     commands: "命令",
   },
   chartsSidebar: {
@@ -1039,10 +1038,7 @@ export const zhCN = {
     viewInDatabaseEditor: "在数据库编辑器中查看",
 
     projectTree: {
-      searchPlaceholder: "搜索项目资源...",
-      expandAll: "展开所有项目分类",
-      collapseAll: "折叠所有项目分类",
-      noMatches: "没有匹配的项目资源",
+      empty: "暂无项目资源",
       categories: {
         events: "事件",
         functions: "函数",
@@ -1050,7 +1046,7 @@ export const zhCN = {
       },
     },
 
-    nodeSearchNoMatches: "未找到匹配的节点",
+    noNodes: "暂无可用节点",
     noActiveGraph: "未打开活动图",
     noActiveGraphDescription: "打开一个 Event 或 Function 后可查看命令状态",
     noData: "暂无数据",

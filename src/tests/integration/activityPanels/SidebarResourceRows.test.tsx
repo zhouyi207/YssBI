@@ -6,7 +6,9 @@ import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatal
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import * as projectHydration from "@/features/application/project/projectHydration";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { SidebarDataRow } from "@/modules/data-explorer/internal/ui/activity/SidebarDataRow";
+import { SidebarDataRow } from "@/modules/project-explorer/internal/ui/activity/SidebarDataRow";
+import { SidebarProjectTab } from "@/modules/project-explorer/internal/ui/activity/SidebarProjectTab";
+import { useSidebarStore, PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,6 +29,19 @@ vi.mock("@dnd-kit/core", () => ({
     };
   },
 }));
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
+    getTotalSize: () => options.count * 28,
+    getVirtualItems: () =>
+      Array.from({ length: options.count }, (_, index) => ({
+        index,
+        key: options.getItemKey(index),
+        start: index * 28,
+        size: 28,
+      })),
+    measureElement: vi.fn(),
+  }),
+}));
 vi.mock("@/features/application/nodeCatalog/useLocalizedNodeCatalog", () => ({
   useLocalizedNodeCatalog: () => mocks.catalogState,
 }));
@@ -34,7 +49,8 @@ vi.mock("@/features/application/editor/rightSidebarActions", () => ({
   revealDetails: mocks.revealDetails,
 }));
 vi.mock("@/features/application/window", () => ({ openDatabaseEditorWindow: vi.fn() }));
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("@/components/ui/tooltip", () => ({
@@ -127,6 +143,50 @@ describe("resource sidebar rows", () => {
       ),
     );
   }
+
+  it("shows live data in the Project tree with category expansion and no search input", () => {
+    useSidebarStore.getState().setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.data, true);
+    useDatabaseStore.getState().addDatabase("database-id", {
+      id: "database-id",
+      name: "Sales",
+      resourcePath: databasePath,
+    });
+    act(() =>
+      root.render(
+        <SidebarProjectTab
+          actions={{
+            onAddEvent: vi.fn(),
+            onAddFunction: vi.fn(),
+            onAddChart: vi.fn(),
+            onImportData: vi.fn(),
+            onCategoryContextMenu: vi.fn(),
+            onGraphContextMenu: vi.fn(),
+            onChartContextMenu: vi.fn(),
+            onOpenChart: vi.fn(),
+            onDatabaseContextMenu: vi.fn(),
+          }}
+        />,
+      ),
+    );
+
+    expect(host.textContent).toContain("Sales");
+    expect(host.querySelector("input")).toBeNull();
+    const dataCategory = () =>
+      host.querySelector<HTMLButtonElement>('[data-sidebar-tree-category-id="project.data"]')!;
+    act(() => dataCategory().click());
+    expect(host.textContent).not.toContain("Sales");
+
+    act(() => dataCategory().click());
+    expect(host.textContent).toContain("Sales");
+    expect(dataCategory().disabled).toBe(false);
+    expect(host.querySelectorAll("[data-sidebar-tree-category-id]")).toHaveLength(4);
+    expect(
+      useSidebarStore.getState().projectTreeExpandedCategories[PROJECT_TREE_CATEGORY_IDS.data],
+    ).toBe(true);
+
+    act(() => useDatabaseStore.getState().updateDatabase("database-id", { name: "Sales updated" }));
+    expect(host.textContent).toContain("Sales updated");
+  });
 
   it("forwards pointer down to the dnd-kit drag listener", () => {
     renderDatabase();

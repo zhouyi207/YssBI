@@ -1245,7 +1245,6 @@ describe("workbench Dockview port", () => {
       transaction.ensureCentralGroup();
       const project = transaction.ensureView({ viewId: "project", title: "Project" });
       const nodes = transaction.ensureView({ viewId: "nodes", title: "Nodes" });
-      const data = transaction.ensureView({ viewId: "data", title: "Data" });
       const commands = transaction.ensureView({ viewId: "commands", title: "Commands" });
       const logs = transaction.ensureView({ viewId: "logs", title: "Logs" });
       const output = transaction.ensureView({ viewId: "output", title: "Output" });
@@ -1261,7 +1260,7 @@ describe("workbench Dockview port", () => {
         collapsed: false,
         headerPosition: "bottom",
       });
-      [project, nodes, data, commands].forEach((panel, index) => {
+      [project, nodes, commands].forEach((panel, index) => {
         transaction.move({
           panelInstanceId: panel.panelInstanceId,
           groupId: left.groupId,
@@ -1279,7 +1278,7 @@ describe("workbench Dockview port", () => {
         index: 1,
       });
       expect(port.isHydrated).toBe(false);
-      return { project, nodes, data, commands, logs, output };
+      return { project, nodes, commands, logs, output };
     });
 
     expect(externalSettled).toBe(false);
@@ -1287,7 +1286,6 @@ describe("workbench Dockview port", () => {
     expect(port.listPanels().map((panel) => panel.panelInstanceId)).toEqual([
       defaults.project.panelInstanceId,
       defaults.nodes.panelInstanceId,
-      defaults.data.panelInstanceId,
       defaults.commands.panelInstanceId,
       defaults.logs.panelInstanceId,
       defaults.output.panelInstanceId,

@@ -15,5 +15,4 @@ export {
   SIDEBAR_ROW_HEIGHT_CLASS,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
   SIDEBAR_ROW_TRAILING_SLOT_CLASS,
-  sidebarTreeSearchShellClass,
 } from "./sidebarStyles";

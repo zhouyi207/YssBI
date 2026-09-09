@@ -55,12 +55,6 @@ function readyCatalogState(): LocalizedNodeCatalogState {
   };
 }
 
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
 vi.mock("@dnd-kit/core", () => ({
   useDraggable: (input: { data: unknown; disabled?: boolean }) => {
     draggableInputs.push(input);
@@ -138,9 +132,9 @@ describe("Sidebar tab-level empty states", () => {
       ),
     );
 
-    const input = host.querySelector("input");
-    expect(input).not.toBeNull();
-    act(() => setInputValue(input!, "add"));
+    expect(host.querySelector("input")).toBeNull();
+    const math = host.querySelector<HTMLButtonElement>('[data-sidebar-tree-category-id="math"]')!;
+    act(() => math.click());
 
     expect(host.textContent).toContain("Add");
     expect(host.textContent).not.toContain("yssbi.numeric.add");

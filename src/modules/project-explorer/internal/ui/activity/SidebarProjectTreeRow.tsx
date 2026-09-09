@@ -13,11 +13,13 @@ import {
 import type { GraphResourceType } from "./projectSidebarTypes";
 import { SidebarGraphRow } from "./SidebarGraphRow";
 import { SidebarChartRow } from "./SidebarChartRow";
+import { SidebarDataRow } from "./SidebarDataRow";
 
 export interface SidebarProjectTreeActions {
   onAddEvent: () => void;
   onAddFunction: () => void;
   onAddChart: () => void;
+  onImportData: () => void;
   onCategoryContextMenu: (event: React.MouseEvent, categoryId: ProjectTreeCategoryId) => void;
   onGraphContextMenu: (
     event: React.MouseEvent,
@@ -25,6 +27,7 @@ export interface SidebarProjectTreeActions {
   ) => void;
   onChartContextMenu: (event: React.MouseEvent, path: string, name: string) => void;
   onOpenChart: (path: string, name: string) => void;
+  onDatabaseContextMenu: (event: React.MouseEvent, id: string, name: string) => void;
 }
 
 function categoryAddConfig(
@@ -42,6 +45,8 @@ function categoryAddConfig(
         onAdd: actions.onAddChart,
         ariaLabel: t("contextMenu.sidebar.newChart"),
       };
+    case PROJECT_TREE_CATEGORY_IDS.data:
+      return { onAdd: actions.onImportData, ariaLabel: t("contextMenu.sidebar.importData") };
   }
 }
 
@@ -50,14 +55,12 @@ export function SidebarProjectTreeRow({
   actions,
   detailTarget,
   graphDiagnosticCounts,
-  categoryInteractionDisabled,
   onCategoryExpandedChange,
 }: {
   row: ProjectResourceBrowserRow;
   actions: SidebarProjectTreeActions;
   detailTarget: DetailTarget | null;
   graphDiagnosticCounts: Record<string, number>;
-  categoryInteractionDisabled: boolean;
   onCategoryExpandedChange: (categoryId: ProjectTreeCategoryId, expanded: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -71,7 +74,6 @@ export function SidebarProjectTreeRow({
           label={row.label}
           depth={row.level}
           expanded={row.expanded}
-          interactionDisabled={categoryInteractionDisabled}
           onExpandedChange={(expanded) => onCategoryExpandedChange(row.categoryId, expanded)}
           onContextMenu={(event) => actions.onCategoryContextMenu(event, row.categoryId)}
           trailing={
@@ -131,6 +133,18 @@ export function SidebarProjectTreeRow({
           isSelected={detailTarget?.kind === "chart" && detailTarget.chartPath === row.chartPath}
           onOpen={actions.onOpenChart}
           onContextMenu={(event) => actions.onChartContextMenu(event, row.chartPath, row.name)}
+        />
+      );
+    case "database":
+      return (
+        <SidebarDataRow
+          id={row.id}
+          resourcePath={row.resourcePath}
+          name={row.name}
+          data={row.data}
+          indentDepth={row.level}
+          isSelected={detailTarget?.kind === "data" && detailTarget.id === row.id}
+          onContextMenu={(event) => actions.onDatabaseContextMenu(event, row.id, row.name)}
         />
       );
     default: {

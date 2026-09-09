@@ -129,7 +129,6 @@ describe("RootPanelTabRenderer", () => {
               EditorResource: TestPanel,
               Project: TestPanel,
               Nodes: TestPanel,
-              Data: TestPanel,
               Commands: TestPanel,
               Plugins: TestPanel,
               Details: TestPanel,

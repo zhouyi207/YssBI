@@ -14,10 +14,11 @@ const labels: ProjectResourceBrowserInput["labels"] = {
   events: "Events",
   functions: "Functions",
   charts: "Charts",
-
+  data: "Data",
   noEvents: "No events",
   noFunctions: "No functions",
   noCharts: "No charts",
+  noData: "No data",
 };
 
 function input(overrides: Partial<ProjectResourceBrowserInput> = {}): ProjectResourceBrowserInput {
@@ -25,8 +26,7 @@ function input(overrides: Partial<ProjectResourceBrowserInput> = {}): ProjectRes
     events: {},
     functions: {},
     charts: [],
-
-    query: "",
+    databases: {},
     expandedCategoryIds: new Set<ProjectTreeCategoryId>(
       Object.entries(PROJECT_TREE_EXPANSION_DEFAULTS)
         .filter(([, expanded]) => expanded)
@@ -38,13 +38,14 @@ function input(overrides: Partial<ProjectResourceBrowserInput> = {}): ProjectRes
 }
 
 describe("project resource browser", () => {
-  it("keeps graph and chart categories in fixed order", () => {
+  it("keeps data alongside graph and chart categories with its resource identity", () => {
+    const database = { name: "Sales", resourcePath: "databases/Sales" };
     const projection = buildProjectResourceBrowser(
       input({
         events: { "events/Main": { name: "Main event" } },
         functions: { "functions/Compute": { name: "Compute" } },
         charts: [{ chartPath: "charts/Chart", name: "Chart" }],
-
+        databases: { "database-id": database },
         expandedCategoryIds: new Set(Object.values(PROJECT_TREE_CATEGORY_IDS)),
       }),
     );
@@ -55,7 +56,17 @@ describe("project resource browser", () => {
       PROJECT_TREE_CATEGORY_IDS.events,
       PROJECT_TREE_CATEGORY_IDS.functions,
       PROJECT_TREE_CATEGORY_IDS.charts,
+      PROJECT_TREE_CATEGORY_IDS.data,
     ]);
+    expect(projection.rows.find((row) => row.kind === "database")).toEqual({
+      kind: "database",
+      rowKey: "database:database-id",
+      level: 1,
+      id: "database-id",
+      name: "Sales",
+      resourcePath: "databases/Sales",
+      data: database,
+    });
   });
 
   it("resolves only active Event and Function editors to project graphs", () => {
@@ -84,24 +95,24 @@ describe("project resource browser", () => {
     ).toBeNull();
   });
 
-  it("searches visible leaf names without mutating manual expansion", () => {
+  it("keeps every category visible and follows manual expansion", () => {
     const expandedCategoryIds = new Set([PROJECT_TREE_CATEGORY_IDS.functions]);
     const projection = buildProjectResourceBrowser(
       input({
-        events: { "events/Match": { name: "Matching event" } },
-        functions: { "functions/Nope": { name: "Nope" } },
-
-        query: "  MATCH  ",
+        events: { "events/Main": { name: "Main event" } },
+        functions: { "functions/Compute": { name: "Compute" } },
+        databases: { "database-id": { name: "Sales" } },
         expandedCategoryIds,
       }),
     );
 
     expect(
       projection.rows.filter((row) => row.kind === "category").map((row) => row.categoryId),
-    ).toEqual([PROJECT_TREE_CATEGORY_IDS.events]);
-    expect(projection.expandedCategoryIds).toEqual(new Set([PROJECT_TREE_CATEGORY_IDS.events]));
+    ).toEqual(Object.values(PROJECT_TREE_CATEGORY_IDS));
+    expect(projection.rows.filter((row) => row.kind === "graph")).toMatchObject([
+      { id: "functions/Compute", name: "Compute" },
+    ]);
+    expect(projection.rows.filter((row) => row.kind === "database")).toHaveLength(0);
     expect(expandedCategoryIds).toEqual(new Set([PROJECT_TREE_CATEGORY_IDS.functions]));
-    expect(projection.allCategoriesExpanded).toBe(true);
-    expect(projection.canToggleAllCategories).toBe(false);
   });
 });

@@ -143,7 +143,6 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
     {
       project: "Project",
       nodes: "Nodes",
-      data: "Data",
       commands: "Commands",
       plugins: "Plugins",
       details: "Details",
@@ -798,7 +797,6 @@ describe("semantic workbench layout actions", () => {
     mocks.panels.push(
       viewPanel("project", "project", "workbench-edge-left", edgeLocation("left")),
       viewPanel("nodes", "nodes", "workbench-edge-left", edgeLocation("left")),
-      viewPanel("data", "data", "workbench-edge-left", edgeLocation("left")),
       viewPanel("commands", "commands", "workbench-edge-left", edgeLocation("left")),
       viewPanel("plugins", "plugins", "workbench-edge-left", edgeLocation("left")),
     );
@@ -934,7 +932,6 @@ describe("resetWorkbenchLayout", () => {
         panelInstanceIds: [
           "project",
           "nodes",
-          "data",
           "commands",
           "output",
           "editor-left-a",
@@ -977,7 +974,6 @@ describe("resetWorkbenchLayout", () => {
     const initial = [
       viewPanel("project", "project", "edge-left", edgeLocation("left")),
       viewPanel("nodes", "nodes", "edge-left", edgeLocation("left")),
-      viewPanel("data", "data", "edge-left", edgeLocation("left")),
       viewPanel("commands", "commands", "edge-left", edgeLocation("left")),
       viewPanel("output", "output", "edge-left", edgeLocation("left")),
       editorPanel("editor-left-a", "events/LeftA.yssbi-event", "edge-left", edgeLocation("left")),
@@ -1026,7 +1022,6 @@ describe("resetWorkbenchLayout", () => {
     ]);
     expect(harness.groupPanelIds("edge-left")).toEqual([
       "project",
-      "data",
       "nodes",
       "commands",
       "created:plugins:1",
@@ -1159,7 +1154,7 @@ describe("resetWorkbenchLayout", () => {
     const groups: GroupSeed[] = [
       {
         groupId: "grid-only",
-        panelInstanceIds: ["project", "nodes", "data", "commands"],
+        panelInstanceIds: ["project", "nodes", "commands"],
         activePanelInstanceId: "project",
         active: true,
         location: gridLocation,
@@ -1169,7 +1164,6 @@ describe("resetWorkbenchLayout", () => {
       [
         viewPanel("project", "project", "grid-only", gridLocation, true),
         viewPanel("nodes", "nodes", "grid-only", gridLocation),
-        viewPanel("data", "data", "grid-only", gridLocation),
         viewPanel("commands", "commands", "grid-only", gridLocation),
       ],
       groups,

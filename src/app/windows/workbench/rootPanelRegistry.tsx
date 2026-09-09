@@ -3,7 +3,6 @@ import { PluginsPanel, PluginViewFrame } from "@/modules/plugins/public";
 import { usePlugins } from "./integrations/PluginProvider";
 import { useEffect, useState } from "react";
 import { commandsActivityPanelContribution } from "@/modules/commands/public";
-import { dataActivityPanelContribution } from "@/modules/data-explorer/public";
 import { DetailsPane, InspectPane } from "@/modules/details/public";
 import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/public";
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
@@ -82,7 +81,6 @@ export const rootPanelRegistry = {
   EditorResource: EditorResourcePanel,
   Project: projectActivityPanelContribution,
   Nodes: nodeCatalogActivityPanelContribution,
-  Data: dataActivityPanelContribution,
   Commands: commandsActivityPanelContribution,
   Plugins: PluginsDockPanel,
   Plugin: PluginDockPanel,

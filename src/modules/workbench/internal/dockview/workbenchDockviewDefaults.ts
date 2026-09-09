@@ -19,7 +19,6 @@ export const WORKBENCH_EDGE_SIZES = {
 export const WORKBENCH_HOME_EDGE = {
   project: "left",
   nodes: "left",
-  data: "left",
   commands: "left",
   plugins: "left",
   details: "right",

@@ -7,12 +7,10 @@ import { LocalizedCatalogTreeRow } from "./LocalizedCatalogTreeRow";
 export function SidebarCatalogTreeRow({
   row,
   expanded,
-  interactionDisabled,
   onExpandedChange,
 }: {
   row: LocalizedCatalogBrowserRow;
   expanded: boolean;
-  interactionDisabled: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }) {
   const dragData =
@@ -30,7 +28,6 @@ export function SidebarCatalogTreeRow({
     <LocalizedCatalogTreeRow
       row={row}
       expanded={expanded}
-      interactionDisabled={interactionDisabled}
       onExpandedChange={onExpandedChange}
       dragData={dragData}
       dragId={row.kind === "item" ? `node-${catalogItemKey(row.item)}` : undefined}

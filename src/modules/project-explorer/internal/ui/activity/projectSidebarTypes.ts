@@ -7,7 +7,9 @@ export type ProjectSidebarContextMenuTarget =
   | { type: "graph"; id: string; name: string; graphType: GraphResourceType }
   | { type: "section"; graphType: GraphResourceType }
   | { type: "chartSection" }
-  | { type: "chart"; chartPath: string; name: string };
+  | { type: "chart"; chartPath: string; name: string }
+  | { type: "dataSection" }
+  | { type: "database"; id: string; name: string };
 
 export type ProjectSidebarContextMenuState =
   PositionedActionMenuState<ProjectSidebarContextMenuTarget>;
@@ -23,5 +25,9 @@ export interface ProjectSidebarContextMenuActions {
   duplicateChart: (chartPath: string) => unknown | Promise<unknown>;
   deleteChart: (chartPath: string) => unknown | Promise<unknown>;
   addChart: () => unknown | Promise<unknown>;
+  openDatabase: (id: string) => void;
+  renameDatabaseItem: (id: string, name: string) => void;
+  deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
+  importData: () => void;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }

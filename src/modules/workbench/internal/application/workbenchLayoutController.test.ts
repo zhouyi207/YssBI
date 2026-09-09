@@ -55,7 +55,6 @@ function rootLayout(
   const components: Record<WorkbenchViewId, string> = {
     project: "Project",
     nodes: "Nodes",
-    data: "Data",
     commands: "Commands",
     plugins: "Plugins",
     details: "Details",
@@ -77,12 +76,6 @@ function rootLayout(
       contentComponent: "Nodes",
       title: "Nodes",
       params: { metadata: { role: "view", viewId: "nodes" } },
-    },
-    "data-stable": {
-      id: "data-stable",
-      contentComponent: "Data",
-      title: "Data",
-      params: { metadata: { role: "view", viewId: "data" } },
     },
     "commands-stable": {
       id: "commands-stable",
@@ -125,7 +118,7 @@ function rootLayout(
         collapsed: false,
         group: {
           id: "workbench-edge-left",
-          views: ["project-stable", "nodes-stable", "data-stable", "commands-stable"],
+          views: ["project-stable", "nodes-stable", "commands-stable"],
           activeView: "project-stable",
           headerPosition: "left",
         },
@@ -180,12 +173,6 @@ function projectRootLayout(): SerializedDockview {
         title: "Nodes",
         params: { metadata: { role: "view", viewId: "nodes" } },
       },
-      "data-stable": {
-        id: "data-stable",
-        contentComponent: "Data",
-        title: "Data",
-        params: { metadata: { role: "view", viewId: "data" } },
-      },
       "commands-stable": {
         id: "commands-stable",
         contentComponent: "Commands",
@@ -215,7 +202,7 @@ function projectRootLayout(): SerializedDockview {
         collapsed: false,
         group: {
           id: "workbench-edge-left",
-          views: ["project-stable", "nodes-stable", "data-stable", "commands-stable"],
+          views: ["project-stable", "nodes-stable", "commands-stable"],
           activeView: "project-stable",
           headerPosition: "left",
         },
@@ -288,7 +275,6 @@ function panelInfo(viewId: WorkbenchViewId): WorkbenchPanelInfo {
   const components = {
     project: "Project",
     nodes: "Nodes",
-    data: "Data",
     commands: "Commands",
     plugins: "Plugins",
     details: "Details",
@@ -382,7 +368,6 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
       ![
         "project",
         "nodes",
-        "data",
         "commands",
         "plugins",
         "details",
@@ -465,7 +450,6 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
       ![
         "project",
         "nodes",
-        "data",
         "commands",
         "plugins",
         "details",
@@ -709,7 +693,6 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId)).toEqual(
       [
         "project",
-        "data",
         "nodes",
         "commands",
         "plugins",
@@ -746,14 +729,13 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.ensureView).not.toHaveBeenCalled();
     expect(harness.fakePort.configureEdge).not.toHaveBeenCalled();
     expect(harness.fakePort.move).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(24);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(22);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === false)).toBe(
       true,
     );
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId)).toEqual(
       [
         "project",
-        "data",
         "nodes",
         "commands",
         "plugins",
@@ -772,10 +754,9 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.layoutMove.mock.calls.map(([request]) => request)).toEqual([
       { panelInstanceId: "view:details", groupId: "edge-right", index: 0, activate: false },
       { panelInstanceId: "view:project", groupId: "edge-left", index: 0 },
-      { panelInstanceId: "view:data", groupId: "edge-left", index: 1 },
-      { panelInstanceId: "view:nodes", groupId: "edge-left", index: 2 },
-      { panelInstanceId: "view:commands", groupId: "edge-left", index: 3 },
-      { panelInstanceId: "view:plugins", groupId: "edge-left", index: 4 },
+      { panelInstanceId: "view:nodes", groupId: "edge-left", index: 1 },
+      { panelInstanceId: "view:commands", groupId: "edge-left", index: 2 },
+      { panelInstanceId: "view:plugins", groupId: "edge-left", index: 3 },
       { panelInstanceId: "view:assistant", groupId: "edge-right", index: 1, activate: false },
       { panelInstanceId: "view:problems", groupId: "edge-bottom", index: 0 },
       { panelInstanceId: "view:output", groupId: "edge-bottom", index: 1 },
@@ -809,7 +790,7 @@ describe("WorkbenchLayoutController hydration", () => {
     expect(harness.fakePort.installHydrationLayout).not.toHaveBeenCalled();
     expect(harness.fakePort.runLayoutTransaction).toHaveBeenCalledOnce();
     expect(harness.fakePort.completeHydration).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(24);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(22);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === true)).toBe(
       true,
     );
@@ -1045,7 +1026,6 @@ describe("WorkbenchLayoutController persistence", () => {
     expect(Object.keys(restoredRoot.panels)).toEqual([
       "project-stable",
       "nodes-stable",
-      "data-stable",
       "commands-stable",
       "logs-stable",
       "output-stable",

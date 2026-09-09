@@ -19,7 +19,6 @@ WorkbenchWindow
 │     ├─ native left Activity edge group
 │     │  ├─ Project
 │     │  ├─ Nodes
-│     │  ├─ Data
 │     │  ├─ Commands
 │     │  ├─ Plugins
 │     │  └─ 插件贡献的 sidebar views（包已安装且启用时）
@@ -35,7 +34,9 @@ WorkbenchWindow
 └─ WorkbenchOverlayHost
 ```
 
-Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载五个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+
+Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，共用一棵虚拟化树和分类展开状态。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口，数据行保留拖拽、详情、数据库编辑窗口与右键管理操作；数据来自既有数据库投影，不再注册独立 Data Activity panel。
 
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
@@ -62,7 +63,7 @@ root Dockview 是以下物理事实的唯一 authority：
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
-Activity 底部固定显示 Plugins 入口，替代原 Julia 入口。Plugins 仍由 root Dockview 管理，顶部原生插件 tab 隐藏，底部按钮只读取 Dockview 可见状态并调用 reveal，不维护第二份选中状态。
+Activity 底部固定显示 Plugins 原生 tab，替代原 Julia 入口。仅通过 CSS 将该 tab 排在标签列最下方，样式、选中状态与点击逻辑均复用上方 Activity tabs：点击已展开的当前 tab 收起 left edge；折叠时点击展开对应面板，点击其他 tab 则切换面板。不另设入口按钮或选中状态订阅。
 
 ## 2. Root panel 角色与默认 home
 
@@ -73,7 +74,6 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 | `editor`         | Graph/Function/Chart editor | 当前 central grid group             |
 | `view:project`   | Project activity panel      | left Activity edge                  |
 | `view:nodes`     | Nodes activity panel        | left Activity edge                  |
-| `view:data`      | Data activity panel         | left Activity edge                  |
 | `view:commands`  | Commands activity panel     | left Activity edge                  |
 | `view:details`   | permanent fixed Details     | right edge index 0                  |
 | `view:assistant` | movable/closable Assistant  | right edge index 1 on default/reset |
@@ -85,7 +85,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 
 默认空布局建立 central grid group，并放置：
 
-- Project、Nodes、Data、Commands、Plugins：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Data → Commands → Plugins；
+- Project、Nodes、Commands、Plugins：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Commands → Plugins；
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
 
@@ -141,8 +141,8 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Data、Commands、Plugins、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
-- Project、Nodes、Data、Commands、Plugins 随默认 Activity group 安装且保持存在；
+- Project、Nodes、Commands、Plugins、Details、Assistant、Inspect、Logs、Output、Problems 由 `viewId` 保证 singleton；
+- Project、Nodes、Commands、Plugins 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
 - Inspect 只在上下文有效时按需创建；
@@ -238,7 +238,7 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留既有 editor、Result 与 panel identities：
 
-- Project、Nodes、Data、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
+- Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；重置完成时不显示其中任何 panel，用户通过 Status Bar 再次打开；
@@ -254,7 +254,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 Result；
 - Inspect。
 
-随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。Problems panel 保留与否不影响 `GraphProjectionStore` 生命周期；Canvas、Details 和 Run Gate 仍从同一完整 projection 更新。
 
 ## 8. Persistence contract
 
@@ -286,6 +286,8 @@ Persistence invariant：
 
 非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
 
+`view:data` 已移除；包含该旧 panel identity 的 root snapshot 按现有验证规则回退默认布局，不影响项目资源或有效的 Logs nested snapshot。
+
 ## 9. 视觉尺寸层级
 
 root 水平标签使用蓝色圆角背景表示选中；Status Bar 面板图标使用强调色表示选中，不再增加背景。
@@ -297,7 +299,7 @@ Problems、Output、Logs
 Status Bar 最右侧提供 Details、Assistant 图标，沿用选中高亮、悬停名称和点击 reveal；再次点击
 当前 right panel 的图标可折叠右侧区域。右侧信息为这两个入口预留空间，避免侧栏折叠时重叠。
 Settings 图标位于状态栏最左侧、Activity Bar 正下方，通过独立的 Workbench UI state 打开设置弹窗。
-Plugins 通过 Activity Bar 最下方按钮打开。`src/modules/plugins/` 仅渲染通用包投影：已安装行不可折叠，管理菜单提供打开、启用/禁用与卸载；本地 `.yssplugin` 安装入口仅在顶部工具栏提供。“已安装”分组直接展示全部已安装插件及总数，不提供搜索或过滤功能；无条目时不渲染空状态文案、安装引导或按钮，保留分组标题和计数。不伪造在线市场条目。
+Plugins 通过 Activity Bar 最下方原生 tab 打开。`src/modules/plugins/` 仅渲染通用包投影：已安装行不可折叠，管理菜单提供打开、启用/禁用与卸载；本地 `.yssplugin` 安装入口仅在顶部工具栏提供。“已安装”分组直接展示全部已安装插件及总数，不提供搜索或过滤功能；无条目时不渲染空状态文案、安装引导或按钮，保留分组标题和计数。不伪造在线市场条目。
 
 `PluginProvider` 从 Rust registry 获取投影，按清单中的 sidebar 贡献补入可选面板，不抢占焦点。面板使用 `{ role: "plugin", pluginId, viewId, title, location }` 元数据；`pluginId + viewId` 决定 singleton，而不是固定的 Julia 组件名。安装状态独立于 Julia 等外部运行时是否存在。
 

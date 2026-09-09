@@ -40,10 +40,7 @@ vi.mock("react-i18next", () => ({
       ({
         "common.loading": "Loading...",
         "nodeCatalog.loadError": "Node catalog unavailable",
-        "canvas.nodePalette.searchPlaceholder": "Search nodes...",
-        "canvas.nodePalette.collapseAll": "Collapse All",
-        "canvas.nodePalette.expandAll": "Expand All",
-        "sidebar.nodeSearchNoMatches": "No matching nodes",
+        "sidebar.noNodes": "No nodes available",
         "activityBar.nodes": "Nodes",
       })[key] ?? key,
   }),
@@ -160,12 +157,6 @@ function readyState(): LocalizedNodeCatalogState {
   };
 }
 
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
 describe("SidebarNodesTab", () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -184,7 +175,7 @@ describe("SidebarNodesTab", () => {
     host.remove();
   });
 
-  it("uses the shared localized search semantics and expands matching ancestors", () => {
+  it("renders the catalog without search controls and keeps categories expandable", () => {
     act(() =>
       root.render(
         <TooltipProvider>
@@ -193,56 +184,28 @@ describe("SidebarNodesTab", () => {
       ),
     );
 
-    expect(host.querySelector("[data-sidebar-tree-search]")).not.toBeNull();
+    expect(host.querySelector("[data-sidebar-tree-search]")).toBeNull();
+    expect(host.querySelector("input")).toBeNull();
     expect(host.textContent).toContain("Statistics");
     expect(host.textContent).not.toContain("Logit fit");
 
-    const input = host.querySelector("input");
-    expect(input).not.toBeNull();
-    expect(input?.getAttribute("placeholder")).toBe("Search nodes...");
-    act(() => setInputValue(input!, "logit"));
+    const statistics = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-tree-category-id="statistics"]',
+    )!;
+    act(() => statistics.click());
+    const regression = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-tree-category-id="statistics.regression"]',
+    )!;
+    act(() => regression.click());
 
     expect(host.textContent).toContain("Statistics");
     expect(host.textContent).toContain("Regression");
     expect(host.textContent).toContain("Logit fit");
     expect(host.textContent).not.toContain("statistics.logit.fit");
     expect(host.textContent).not.toContain("Call Helper");
-  });
-
-  it("toggles all categories and disables the toggle while searching", () => {
-    act(() =>
-      root.render(
-        <TooltipProvider>
-          <SidebarNodesTab />
-        </TooltipProvider>,
-      ),
-    );
-
-    const toggle = host.querySelector<HTMLButtonElement>("[data-sidebar-tree-expand-toggle]");
-    const statistics = host.querySelector<HTMLButtonElement>(
-      '[data-sidebar-tree-category-id="statistics"]',
-    );
-    expect(toggle?.disabled).toBe(false);
-    expect(statistics?.disabled).toBe(false);
+    act(() => statistics.click());
     expect(host.textContent).not.toContain("Logit fit");
-
-    act(() => toggle?.click());
-    expect(host.textContent).toContain("Logit fit");
-    expect(host.textContent).toContain("Call Helper");
-    expect(host.textContent).toContain("Call Other");
-    expect(toggle?.getAttribute("aria-label")).toBe("Collapse All");
-
-    act(() => toggle?.click());
-    expect(host.textContent).not.toContain("Logit fit");
-    expect(host.textContent).not.toContain("Call Helper");
-    expect(host.textContent).not.toContain("Call Other");
-    expect(toggle?.getAttribute("aria-label")).toBe("Expand All");
-
-    const input = host.querySelector("input")!;
-    act(() => setInputValue(input, "logit"));
-    expect(toggle?.disabled).toBe(true);
-    expect(statistics?.disabled).toBe(true);
-    expect(statistics?.getAttribute("aria-disabled")).toBe("true");
+    act(() => statistics.click());
     expect(host.textContent).toContain("Logit fit");
   });
 
@@ -254,8 +217,10 @@ describe("SidebarNodesTab", () => {
         </TooltipProvider>,
       ),
     );
-    const input = host.querySelector("input")!;
-    act(() => setInputValue(input, "resource"));
+    const output = host.querySelector<HTMLButtonElement>(
+      '[data-sidebar-tree-category-id="output"]',
+    )!;
+    act(() => output.click());
 
     const nodeInputs = draggableInputs.filter(
       ({ data }) => (data as { type?: string }).type === "node-template",

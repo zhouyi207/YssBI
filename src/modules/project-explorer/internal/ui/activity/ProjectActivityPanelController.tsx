@@ -49,6 +49,10 @@ function ProjectActivityPanelController() {
           duplicateChart: actions.duplicateChart,
           deleteChart: actions.deleteChartItem,
           addChart: actions.addChart,
+          openDatabase: actions.openDatabaseEditorWindow,
+          renameDatabaseItem: actions.renameDatabaseItem,
+          deleteDatabaseItem: actions.deleteDatabaseItem,
+          importData: actions.triggerImportData,
           revealInExplorer: actions.revealInExplorer,
         },
         t,
@@ -83,6 +87,9 @@ function ProjectActivityPanelController() {
         case PROJECT_TREE_CATEGORY_IDS.charts:
           openActionMenu(event, { type: "chartSection" });
           return;
+        case PROJECT_TREE_CATEGORY_IDS.data:
+          openActionMenu(event, { type: "dataSection" });
+          return;
       }
     },
     [openActionMenu],
@@ -93,12 +100,21 @@ function ProjectActivityPanelController() {
       onAddEvent: () => void actions.addEvent(),
       onAddFunction: () => void actions.addFunction(),
       onAddChart: () => void actions.addChart(),
+      onImportData: actions.triggerImportData,
       onCategoryContextMenu: openProjectCategoryContextMenu,
       onGraphContextMenu: openGraphContextMenu,
       onChartContextMenu: openChartContextMenu,
       onOpenChart: actions.openChart,
+      onDatabaseContextMenu: (event, id, name) =>
+        openActionMenu(event, { type: "database", id, name }),
     }),
-    [actions, openChartContextMenu, openGraphContextMenu, openProjectCategoryContextMenu],
+    [
+      actions,
+      openActionMenu,
+      openChartContextMenu,
+      openGraphContextMenu,
+      openProjectCategoryContextMenu,
+    ],
   );
 
   return (

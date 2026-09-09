@@ -23,7 +23,6 @@ import type { EnsurePluginViewRequest } from "../dockview/workbenchTypes";
 const VIEW_TITLE_KEYS = {
   project: "activityBar.project",
   nodes: "activityBar.nodes",
-  data: "activityBar.data",
   commands: "activityBar.commands",
   plugins: "activityBar.plugins",
   details: "panel.details",

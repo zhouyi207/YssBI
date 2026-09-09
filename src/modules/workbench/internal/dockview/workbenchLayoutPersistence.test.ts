@@ -39,10 +39,6 @@ const ACTIVITY_PANELS: Readonly<Record<string, TestPanel>> = {
     component: "Nodes",
     metadata: { role: "view", viewId: "nodes" },
   },
-  data: {
-    component: "Data",
-    metadata: { role: "view", viewId: "data" },
-  },
   commands: {
     component: "Commands",
     metadata: { role: "view", viewId: "commands" },
@@ -81,7 +77,7 @@ function rootLayout(
     .filter(
       ([, panel]) =>
         panel.metadata.role === "view" &&
-        ["project", "nodes", "data", "commands"].includes(String(panel.metadata.viewId)),
+        ["project", "nodes", "commands"].includes(String(panel.metadata.viewId)),
     )
     .map(([id]) => id);
   const gridPanelIds = panelIds.filter((id) => !activityPanelIds.includes(id));
@@ -322,12 +318,13 @@ describe("workbench layout persistence", () => {
       },
     });
 
-    expect([unknownMetadata, duplicateSingleton, inspect, result].map(parsedRootStatus)).toEqual([
-      "invalid",
-      "invalid",
-      "invalid",
-      "invalid",
-    ]);
+    const retiredData = rootLayout({
+      data: { component: "Data", metadata: { role: "view", viewId: "data" } },
+    });
+
+    expect(
+      [unknownMetadata, duplicateSingleton, inspect, result, retiredData].map(parsedRootStatus),
+    ).toEqual(["invalid", "invalid", "invalid", "invalid", "invalid"]);
   });
 
   it("rejects floating, popout, dangling, duplicate, and inconsistent root references", () => {
@@ -545,7 +542,7 @@ describe("workbench layout persistence", () => {
         collapsed: false,
         group: {
           id: "workbench-edge-left",
-          views: ["project", "nodes", "data", "commands"],
+          views: ["project", "nodes", "commands"],
           activeView: "project",
           headerPosition: "left",
         },
@@ -583,7 +580,6 @@ describe("workbench layout persistence", () => {
       "logs",
       "project",
       "nodes",
-      "data",
       "commands",
     ]);
     expect(persisted.grid.root).toEqual({
@@ -607,7 +603,7 @@ describe("workbench layout persistence", () => {
     });
     expect(persisted.edgeGroups?.left?.group).toEqual({
       id: "workbench-edge-left",
-      views: ["project", "nodes", "data", "commands"],
+      views: ["project", "nodes", "commands"],
       activeView: "project",
       headerPosition: "left",
     });
@@ -685,7 +681,7 @@ describe("workbench layout persistence", () => {
         collapsed: false,
         group: {
           id: "workbench-edge-left",
-          views: ["project", "nodes", "data", "commands"],
+          views: ["project", "nodes", "commands"],
           activeView: "project",
           headerPosition: "left",
         },
@@ -732,7 +728,6 @@ describe("workbench layout persistence", () => {
       "output",
       "project",
       "nodes",
-      "data",
       "commands",
     ]);
     expect(scrubbed.grid.root).toEqual({ type: "branch", data: [] });
@@ -744,7 +739,7 @@ describe("workbench layout persistence", () => {
         collapsed: false,
         group: {
           id: "workbench-edge-left",
-          views: ["project", "nodes", "data", "commands"],
+          views: ["project", "nodes", "commands"],
           activeView: "project",
           headerPosition: "left",
         },

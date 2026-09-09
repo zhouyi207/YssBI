@@ -1,7 +1,6 @@
 import type { TFunction } from "i18next";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildDataSidebarContextMenuSections } from "@/modules/data-explorer/internal/ui/activity/buildDataSidebarContextMenuSections";
 import { buildProjectSidebarContextMenuSections } from "@/modules/project-explorer/internal/ui/activity/buildProjectSidebarContextMenuSections";
 
 const t = ((key: string) => key) as TFunction;
@@ -19,6 +18,10 @@ function projectActions() {
     duplicateChart: vi.fn(),
     deleteChart: vi.fn(),
     addChart: vi.fn(),
+    openDatabase: vi.fn(),
+    renameDatabaseItem: vi.fn(),
+    deleteDatabaseItem: vi.fn(),
+    importData: vi.fn(),
     revealInExplorer: vi.fn(),
   };
 }
@@ -53,15 +56,9 @@ describe("activity context menu sections", () => {
     expect(actions.renameChartItem).toHaveBeenCalledWith("charts/Report.yssbi-chart", "Report");
   });
 
-  it("keeps data actions out of the Project contribution", () => {
-    const actions = {
-      openDatabase: vi.fn(),
-      renameDatabaseItem: vi.fn(),
-      deleteDatabaseItem: vi.fn(),
-      importData: vi.fn(),
-      revealInExplorer: vi.fn(),
-    };
-    const sections = buildDataSidebarContextMenuSections(
+  it("routes data import and resource management through the Project contribution", () => {
+    const actions = projectActions();
+    const sections = buildProjectSidebarContextMenuSections(
       { x: 10, y: 20, target: { type: "dataSection" } },
       actions,
       t,
@@ -69,5 +66,21 @@ describe("activity context menu sections", () => {
 
     sections[0]?.items[0]?.onClick?.();
     expect(actions.importData).toHaveBeenCalledOnce();
+
+    const items = buildProjectSidebarContextMenuSections(
+      { x: 10, y: 20, target: { type: "database", id: "database-id", name: "Sales" } },
+      actions,
+      t,
+    ).flatMap((section) => section.items);
+    for (const id of ["open", "reveal-in-explorer", "rename", "delete"]) {
+      items.find((item) => item.id === id)?.onClick?.();
+    }
+    expect(actions.openDatabase).toHaveBeenCalledWith("database-id");
+    expect(actions.revealInExplorer).toHaveBeenCalledWith({
+      kind: "database",
+      resourceId: "database-id",
+    });
+    expect(actions.renameDatabaseItem).toHaveBeenCalledWith("database-id", "Sales");
+    expect(actions.deleteDatabaseItem).toHaveBeenCalledWith("database-id", "Sales");
   });
 });

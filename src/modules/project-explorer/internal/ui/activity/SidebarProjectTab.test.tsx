@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ProjectResourceBrowserRow } from "@/features/application/sidebar/projectResourceBrowser";
-import type { ActiveProjectGraph } from "@/features/application/sidebar/projectResourceBrowser";
 import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
 import type { useProjectResourceBrowser } from "@/features/application/sidebar/useProjectResourceBrowser";
@@ -42,12 +41,14 @@ const actions = {
   onAddEvent: vi.fn(),
   onAddFunction: vi.fn(),
   onAddChart: vi.fn(),
+  onImportData: vi.fn(),
 
   onCategoryContextMenu: vi.fn(),
   onGraphContextMenu: vi.fn(),
 
   onChartContextMenu: vi.fn(),
   onOpenChart: vi.fn(),
+  onDatabaseContextMenu: vi.fn(),
 };
 
 function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserRow {
@@ -62,31 +63,19 @@ function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserR
   };
 }
 
-function renderBrowser({
-  activeGraph = { path: "events/Main.yssbi-event", kind: "event", name: "Main" },
-}: {
-  activeGraph?: ActiveProjectGraph | null;
-} = {}) {
+function renderBrowser() {
   const categoryIds = [
     PROJECT_TREE_CATEGORY_IDS.events,
     PROJECT_TREE_CATEGORY_IDS.functions,
     PROJECT_TREE_CATEGORY_IDS.charts,
+    PROJECT_TREE_CATEGORY_IDS.data,
   ];
   const rows = categoryIds.map(categoryRow);
 
   browserState.current = {
     rows,
-    categoryIds: new Set(categoryIds),
-    expandedCategoryIds: new Set(categoryIds),
-    allCategoriesExpanded: true,
-    canToggleAllCategories: true,
-    query: "",
-    queryIsActive: false,
-    activeGraph,
-    setQuery: vi.fn(),
-    resetQuery: vi.fn(),
+    activeGraph: null,
     setCategoryExpanded: vi.fn(),
-    toggleAllCategories: vi.fn(),
   } as ReturnType<typeof useProjectResourceBrowser>;
 }
 
@@ -115,7 +104,7 @@ describe("SidebarProjectTab", () => {
     host.remove();
   });
 
-  it("renders the Project projection categories and search", () => {
+  it("renders Project categories without a search input and preserves category actions", () => {
     renderBrowser();
     act(() =>
       root.render(
@@ -131,57 +120,26 @@ describe("SidebarProjectTab", () => {
       `Projected ${PROJECT_TREE_CATEGORY_IDS.events}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.functions}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.charts}`,
+      `Projected ${PROJECT_TREE_CATEGORY_IDS.data}`,
     ]);
-    expect(host.querySelector("input")?.getAttribute("placeholder")).toBe(
-      "Search project resources...",
-    );
+    expect(host.querySelector("input")).toBeNull();
+    expect(host.querySelector("[data-sidebar-tree-search]")).toBeNull();
 
-    renderBrowser({ activeGraph: null });
-    act(() =>
-      root.render(
-        <I18nextProvider i18n={i18n}>
-          <TooltipProvider>
-            <SidebarProjectTab actions={actions} />
-          </TooltipProvider>
-        </I18nextProvider>,
-      ),
+    const data = host.querySelector<HTMLButtonElement>(
+      `[data-sidebar-tree-category-id="${PROJECT_TREE_CATEGORY_IDS.data}"]`,
+    )!;
+    act(() => data.click());
+    expect(browserState.current!.setCategoryExpanded).toHaveBeenCalledWith(
+      PROJECT_TREE_CATEGORY_IDS.data,
+      false,
     );
-
-    renderBrowser({
-      activeGraph: { path: "events/Main.yssbi-event", kind: "event", name: "Main" },
-    });
-    act(() =>
-      root.render(
-        <I18nextProvider i18n={i18n}>
-          <TooltipProvider>
-            <SidebarProjectTab actions={actions} />
-          </TooltipProvider>
-        </I18nextProvider>,
-      ),
+    act(() => data.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
+    expect(actions.onCategoryContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      PROJECT_TREE_CATEGORY_IDS.data,
     );
-  });
-
-  it("disables category triggers while searching", () => {
-    renderBrowser();
-    browserState.current = {
-      ...browserState.current!,
-      query: "event",
-      queryIsActive: true,
-      canToggleAllCategories: false,
-    };
-    act(() =>
-      root.render(
-        <I18nextProvider i18n={i18n}>
-          <TooltipProvider>
-            <SidebarProjectTab actions={actions} />
-          </TooltipProvider>
-        </I18nextProvider>,
-      ),
-    );
-    const events = host.querySelector<HTMLButtonElement>(
-      `[data-sidebar-tree-category-id="${PROJECT_TREE_CATEGORY_IDS.events}"]`,
-    );
-    expect(events?.disabled).toBe(true);
-    expect(events?.getAttribute("aria-disabled")).toBe("true");
+    const importButton = host.querySelector<HTMLButtonElement>('[aria-label="Import Data"]')!;
+    act(() => importButton.click());
+    expect(actions.onImportData).toHaveBeenCalledOnce();
   });
 });

@@ -2,12 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
 import { useProjectResourceBrowser } from "@/features/application/sidebar/useProjectResourceBrowser";
 import { useDetailTarget } from "@/features/application/editor";
-import {
-  SidebarTabPanel,
-  SidebarTreeSearchInput,
-  SidebarVirtualTree,
-  sidebarTreeSearchShellClass,
-} from "@/modules/workbench/public";
+import { SidebarTabPanel, SidebarVirtualTree } from "@/modules/workbench/public";
 import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 
 const PROJECT_TREE_ROW_HEIGHT = 28;
@@ -16,35 +11,14 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
   const { t } = useTranslation();
   const detailTarget = useDetailTarget();
   const graphDiagnosticCounts = useGraphDiagnosticCounts();
-  const {
-    rows,
-    query,
-    queryIsActive,
-    allCategoriesExpanded,
-    canToggleAllCategories,
-    setQuery,
-    setCategoryExpanded,
-    toggleAllCategories,
-  } = useProjectResourceBrowser();
+  const { rows, setCategoryExpanded } = useProjectResourceBrowser();
 
   return (
     <SidebarTabPanel>
-      <div className={sidebarTreeSearchShellClass()}>
-        <SidebarTreeSearchInput
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("sidebar.projectTree.searchPlaceholder")}
-          expandAllLabel={t("sidebar.projectTree.expandAll")}
-          collapseAllLabel={t("sidebar.projectTree.collapseAll")}
-          allCategoriesExpanded={allCategoriesExpanded}
-          canToggleAllCategories={canToggleAllCategories}
-          onToggleAllCategories={toggleAllCategories}
-        />
-      </div>
       <SidebarVirtualTree
         rows={rows}
         ariaLabel={t("activityBar.project")}
-        emptyMessage={t("sidebar.projectTree.noMatches")}
+        emptyMessage={t("sidebar.projectTree.empty")}
         getRowKey={(row) => row.rowKey}
         getRowDepth={(row) => row.level}
         estimateSize={() => PROJECT_TREE_ROW_HEIGHT}
@@ -54,7 +28,6 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
             actions={actions}
             detailTarget={detailTarget}
             graphDiagnosticCounts={graphDiagnosticCounts}
-            categoryInteractionDisabled={queryIsActive}
             onCategoryExpandedChange={setCategoryExpanded}
           />
         )}

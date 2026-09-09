@@ -92,7 +92,6 @@ export {
   SIDEBAR_ROW_ICON_SIZE,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
   SIDEBAR_ROW_TRAILING_SLOT_CLASS,
-  sidebarTreeSearchShellClass,
   type SidebarTreeCategoryRowProps,
   type SidebarTreeSearchInputProps,
   type SidebarVirtualTreeProps,

@@ -14,15 +14,17 @@ export interface ProjectResourceBrowserInput {
   events: Readonly<Record<string, { name: string }>>;
   functions: Readonly<Record<string, { name: string }>>;
   charts: readonly { chartPath: string; name: string }[];
-  query: string;
+  databases: Readonly<Record<string, { name: string; resourcePath?: string }>>;
   expandedCategoryIds: ReadonlySet<ProjectTreeCategoryId>;
   labels: {
     events: string;
     functions: string;
     charts: string;
+    data: string;
     noEvents: string;
     noFunctions: string;
     noCharts: string;
+    noData: string;
   };
 }
 
@@ -60,18 +62,25 @@ export type ProjectResourceChartRow = {
   name: string;
 };
 
+export type ProjectResourceDatabaseRow = {
+  kind: "database";
+  rowKey: string;
+  level: number;
+  id: string;
+  name: string;
+  resourcePath?: string;
+  data: unknown;
+};
+
 export type ProjectResourceBrowserRow =
   | ProjectResourceBrowserCategoryRow
   | ProjectResourceBrowserEmptyRow
   | ProjectResourceGraphRow
-  | ProjectResourceChartRow;
+  | ProjectResourceChartRow
+  | ProjectResourceDatabaseRow;
 
 export interface ProjectResourceBrowserProjection {
   rows: ProjectResourceBrowserRow[];
-  categoryIds: ReadonlySet<ProjectTreeCategoryId>;
-  expandedCategoryIds: ReadonlySet<ProjectTreeCategoryId>;
-  allCategoriesExpanded: boolean;
-  canToggleAllCategories: boolean;
 }
 
 export function resolveActiveProjectGraph(input: {
@@ -103,36 +112,20 @@ interface Category {
   id: ProjectTreeCategoryId;
   label: string;
   emptyMessage?: string;
-  leaves: Array<ProjectResourceGraphRow | ProjectResourceChartRow>;
+  leaves: Array<ProjectResourceGraphRow | ProjectResourceChartRow | ProjectResourceDatabaseRow>;
   children?: Category[];
 }
 
 export function buildProjectResourceBrowser(
   input: ProjectResourceBrowserInput,
 ): ProjectResourceBrowserProjection {
-  const searching = input.query.trim().length > 0;
-  const normalizedQuery = input.query.trim().toLocaleLowerCase();
-  const categories = buildCategories(input)
-    .map((category) => filterCategory(category, searching, normalizedQuery))
-    .filter((category): category is Category => category !== null);
-  const categoryIds = new Set<ProjectTreeCategoryId>();
-  for (const category of categories) collectCategoryIds(category, categoryIds);
-  const expandedCategoryIds = searching ? new Set(categoryIds) : input.expandedCategoryIds;
   const rows: ProjectResourceBrowserRow[] = [];
 
-  for (const category of categories) {
-    appendCategoryRows(category, 0, expandedCategoryIds, rows);
+  for (const category of buildCategories(input)) {
+    appendCategoryRows(category, 0, input.expandedCategoryIds, rows);
   }
 
-  return {
-    rows,
-    categoryIds,
-    expandedCategoryIds,
-    allCategoriesExpanded:
-      categoryIds.size > 0 &&
-      [...categoryIds].every((categoryId) => expandedCategoryIds.has(categoryId)),
-    canToggleAllCategories: !searching && categoryIds.size > 0,
-  };
+  return { rows };
 }
 
 function buildCategories(input: ProjectResourceBrowserInput): Category[] {
@@ -161,30 +154,23 @@ function buildCategories(input: ProjectResourceBrowserInput): Category[] {
         name: chart.name,
       })),
     },
+    {
+      id: PROJECT_TREE_CATEGORY_IDS.data,
+      label: input.labels.data,
+      emptyMessage: input.labels.noData,
+      leaves: Object.entries(input.databases).map(([id, data]): ProjectResourceDatabaseRow => ({
+        kind: "database",
+        rowKey: `database:${id}`,
+        level: 0,
+        id,
+        name: data.name,
+        resourcePath: data.resourcePath,
+        data,
+      })),
+    },
   ];
 
   return categories;
-}
-
-function filterCategory(
-  category: Category,
-  searching: boolean,
-  normalizedQuery: string,
-): Category | null {
-  const leaves = searching
-    ? category.leaves.filter((leaf) => leaf.name.toLocaleLowerCase().includes(normalizedQuery))
-    : category.leaves;
-  const children = category.children
-    ?.map((child) => filterCategory(child, searching, normalizedQuery))
-    .filter((child): child is Category => child !== null);
-  const hasVisibleContent = leaves.length > 0 || (children?.length ?? 0) > 0;
-  if (searching && !hasVisibleContent) return null;
-  return { ...category, leaves, children };
-}
-
-function collectCategoryIds(category: Category, categoryIds: Set<ProjectTreeCategoryId>): void {
-  categoryIds.add(category.id);
-  for (const child of category.children ?? []) collectCategoryIds(child, categoryIds);
 }
 
 function appendCategoryRows(

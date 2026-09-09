@@ -8,7 +8,7 @@ export const SIDEBAR_ROW_ICON_SIZE = 12 as const;
 export const SIDEBAR_ROW_LEADING_SLOT_CLASS =
   "flex size-3 shrink-0 items-center justify-center" as const;
 
-/** Standard row height (28px) — must match SIDEBAR_FLAT_ROW_HEIGHT. */
+/** Standard sidebar row height (28px). */
 export const SIDEBAR_ROW_HEIGHT_CLASS = "h-7" as const;
 
 /** Fixed trailing slot for section headers (add button or spacer). */
@@ -51,9 +51,4 @@ export function sidebarRowActionClass(isSelected = false) {
     "shrink-0 opacity-0 transition-opacity group-hover:opacity-100",
     isSelected ? "text-sidebar-foreground" : "text-muted-foreground",
   );
-}
-
-/** Top search bar shell in a sidebar tree. */
-export function sidebarTreeSearchShellClass() {
-  return "min-w-0 shrink-0 border-b border-border/60 bg-[var(--sidebar-bg)] px-2 py-2";
 }

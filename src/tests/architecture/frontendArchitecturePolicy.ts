@@ -203,35 +203,10 @@ const VIEW_CORE_CAPABILITIES = [
       "resetAppearanceToDefaults",
     ],
   }),
-  viewCoreCapability("src/features/core/sidebar/flatRows/buildDataSidebarModel.ts", [
-    "buildDataSidebarModel",
-  ]),
-  viewCoreCapability("src/features/core/sidebar/flatRows/sidebarPanelModel.ts", [
-    "SidebarPanelModel",
-  ]),
-  viewCoreCapability("src/features/core/sidebar/flatRows/types.ts", [
-    "SIDEBAR_FLAT_ROW_HEIGHT",
-    "SidebarItemRow",
-    "SidebarSectionActionConfig",
-  ]),
   viewCoreCapability("src/features/core/sidebar/projectTreeState.ts", [
     "PROJECT_TREE_CATEGORY_IDS",
     "ProjectTreeCategoryId",
   ]),
-  viewCoreCapability("src/features/core/sidebar/sidebarSectionState.ts", ["SidebarSectionKey"]),
-  viewCoreCapability("src/features/core/sidebar/ui.ts", ["sidebarUi"], {
-    sidebarUi: [
-      "getSnapshot",
-      "subscribe",
-      "toggleSection",
-      "setSectionExpanded",
-      "setProjectTreeQuery",
-      "setProjectTreeCategoryExpanded",
-      "setProjectTreeCategoriesExpanded",
-      "resetProjectTreeQuery",
-    ],
-  }),
-  viewCoreCapability("src/features/core/sidebar/ui.ts", ["useSidebarUi"]),
   viewCoreCapability("src/features/core/sidebarDrag/ui.ts", ["sidebarDragUi"], {
     sidebarDragUi: [
       "getSnapshot",

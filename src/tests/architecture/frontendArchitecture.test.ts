@@ -632,7 +632,6 @@ describe("frontend architecture model", () => {
       const contributions = [
         "projectActivityPanelContribution",
         "nodeCatalogActivityPanelContribution",
-        "dataActivityPanelContribution",
         "commandsActivityPanelContribution",
       ];
       const multiPanelConsumers = sources.filter(

@@ -73,7 +73,9 @@ export function buildProjectSidebarContextMenuSections(
           {
             id: "new-graph",
             label:
-              target.graphType === "event" ? t("canvas.newEventGraph") : t("canvas.newFunctionGraph"),
+              target.graphType === "event"
+                ? t("canvas.newEventGraph")
+                : t("canvas.newFunctionGraph"),
             icon: <VscAdd size={12} />,
             onClick: () => void actions.createGraph(target.graphType),
           },
@@ -136,6 +138,66 @@ export function buildProjectSidebarContextMenuSections(
             icon: <VscTrash size={12} />,
             danger: true,
             onClick: () => void actions.deleteChart(target.chartPath),
+          },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "database") {
+    return [
+      {
+        items: [
+          {
+            id: "open",
+            label: t("contextMenu.sidebar.open"),
+            icon: <VscChevronRight size={12} />,
+            onClick: () => actions.openDatabase(target.id),
+          },
+          {
+            id: "view-editor",
+            label: t("sidebar.viewInDatabaseEditor"),
+            icon: <VscChevronRight size={12} />,
+            onClick: () => actions.openDatabase(target.id),
+          },
+          {
+            id: "reveal-in-explorer",
+            label: t("contextMenu.sidebar.revealInExplorer"),
+            icon: <VscFolderOpened size={12} />,
+            onClick: () =>
+              void actions.revealInExplorer({ kind: "database", resourceId: target.id }),
+          },
+          {
+            id: "rename",
+            label: t("contextMenu.sidebar.rename"),
+            icon: <VscEdit size={12} />,
+            onClick: () => actions.renameDatabaseItem(target.id, target.name),
+          },
+        ],
+      },
+      {
+        items: [
+          {
+            id: "delete",
+            label: t("contextMenu.sidebar.delete"),
+            icon: <VscTrash size={12} />,
+            danger: true,
+            onClick: () => void actions.deleteDatabaseItem(target.id, target.name),
+          },
+        ],
+      },
+    ];
+  }
+
+  if (target.type === "dataSection") {
+    return [
+      {
+        items: [
+          {
+            id: "import-data",
+            label: t("contextMenu.sidebar.importData"),
+            icon: <VscAdd size={12} />,
+            onClick: () => actions.importData(),
           },
         ],
       },

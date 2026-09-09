@@ -86,7 +86,6 @@ function panel(
             {
               project: "Project",
               nodes: "Nodes",
-              data: "Data",
               commands: "Commands",
               plugins: "Plugins",
               details: "Details",
@@ -185,7 +184,6 @@ describe("project workbench lifecycle", () => {
       panel("inspect-old", { role: "view", viewId: "inspect" }),
       panel("project-stable", { role: "view", viewId: "project" }),
       panel("nodes-stable", { role: "view", viewId: "nodes" }),
-      panel("data-stable", { role: "view", viewId: "data" }),
       panel("commands-stable", { role: "view", viewId: "commands" }),
       panel("logs-stable", { role: "view", viewId: "logs" }),
       panel("output-stable", { role: "view", viewId: "output" }),
@@ -198,7 +196,6 @@ describe("project workbench lifecycle", () => {
       "details-old",
       "project-stable",
       "nodes-stable",
-      "data-stable",
       "commands-stable",
       "logs-stable",
       "output-stable",
