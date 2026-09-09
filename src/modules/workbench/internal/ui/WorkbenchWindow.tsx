@@ -15,7 +15,6 @@ export interface WorkbenchWindowProps {
   readonly menuBar: ReactNode;
   readonly statusBar: ReactNode;
   readonly dragOverlay?: ReactNode;
-  readonly activityActions?: ReactNode;
   readonly overlays: WorkbenchOverlayRegistry;
 }
 
@@ -29,7 +28,6 @@ export function WorkbenchWindow({
   menuBar,
   statusBar,
   dragOverlay,
-  activityActions,
   overlays,
 }: WorkbenchWindowProps) {
   return (
@@ -47,7 +45,6 @@ export function WorkbenchWindow({
           dockviewTheme={dockviewTheme}
           watermarkComponent={watermarkComponent}
           dragOverlay={dragOverlay}
-          activityActions={activityActions}
         />
       </div>
       {statusBar}

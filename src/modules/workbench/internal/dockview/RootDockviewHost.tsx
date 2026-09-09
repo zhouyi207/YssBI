@@ -7,12 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import {
-  DockviewReact,
-  type DockviewReadyEvent,
-  type DockviewTheme,
-  type IDockviewHeaderActionsProps,
-} from "dockview-react";
+import { DockviewReact, type DockviewReadyEvent, type DockviewTheme } from "dockview-react";
 import {
   DndContext,
   DragOverlay,
@@ -26,7 +21,6 @@ import {
 import { useWorkbenchLayout } from "../application/useWorkbenchLayout";
 import { workbenchLayoutController } from "../application/workbenchLayoutController";
 import { snapTopLeftToCursor } from "../ui/dnd/snapTopLeftToCursorModifier";
-import { WorkbenchActivityActions } from "../ui/activity/WorkbenchActivityActions";
 import { workbenchDockviewRead } from "./workbenchRead";
 import { bindWorkbenchStatusBarLayout } from "../application/workbenchStatusBarLayout";
 import type {
@@ -52,7 +46,6 @@ export interface RootDockviewHostProps {
   readonly dockviewTheme: DockviewTheme;
   readonly watermarkComponent: FunctionComponent;
   readonly dragOverlay?: ReactNode;
-  readonly activityActions?: ReactNode;
 }
 
 function preventDockviewNativeTabClose(event: KeyboardEvent<HTMLDivElement>): void {
@@ -75,7 +68,6 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
       dockviewTheme,
       watermarkComponent,
       dragOverlay,
-      activityActions,
     },
     ref,
   ) => {
@@ -115,13 +107,6 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
       [bindWorkbenchLayout, onActiveEditorPanelChange],
     );
 
-    const rightHeaderActionsComponent = useCallback(
-      (props: IDockviewHeaderActionsProps) => (
-        <WorkbenchActivityActions {...props} additionalActions={activityActions} />
-      ),
-      [activityActions],
-    );
-
     return (
       <DndContext
         sensors={sensors}
@@ -140,7 +125,6 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
               className="yssbi-root-dockview-instance h-full w-full"
               components={panelRegistry}
               defaultTabComponent={tabComponent}
-              rightHeaderActionsComponent={rightHeaderActionsComponent}
               watermarkComponent={watermarkComponent}
               disableFloatingGroups
               theme={dockviewTheme}

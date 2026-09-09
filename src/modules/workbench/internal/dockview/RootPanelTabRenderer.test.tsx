@@ -41,7 +41,7 @@ vi.mock("@/features/application/editor/editorPanelTabMenu", () => ({
 
 vi.mock("./index", () => ({
   isWorkbenchActivityViewId: (viewId: string) =>
-    ["project", "nodes", "data", "commands"].includes(viewId),
+    ["project", "nodes", "commands", "plugins"].includes(viewId),
   isWorkbenchPersistentViewMetadata: (metadata: { role: string; viewId?: string }) =>
     metadata.role === "view" && metadata.viewId === "details",
 }));
@@ -450,7 +450,7 @@ describe("RootPanelTabRenderer", () => {
     expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(problemsTab).margin);
   });
 
-  it("collapses the left Activity edge when its active tab is clicked again", () => {
+  it("pins native Plugins with shared Activity styling and collapse, expand, and switch behavior", () => {
     renderDockview((readyApi) => {
       readyApi.addEdgeGroup("left", {
         id: "activity-edge",
@@ -461,23 +461,60 @@ describe("RootPanelTabRenderer", () => {
 
       readyApi.addPanel<WorkbenchPanelParams>({
         id: "project-a",
-        component: "Details",
+        component: "Project",
         title: "Project",
         params: { metadata: { role: "view", viewId: "project" } },
         position: { referenceGroup: activityGroup, direction: "within" },
+      });
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: "plugins-a",
+        component: "Plugins",
+        title: "Plugins",
+        params: { metadata: { role: "view", viewId: "plugins" } },
+        position: { referenceGroup: activityGroup, direction: "within" },
+        inactive: true,
       });
     });
 
     const leftGroup = api?.getEdgeGroup("left");
     if (!leftGroup) throw new Error("Missing left edge group");
-    const activityTab = host.querySelector<HTMLElement>('[data-panel-instance-id="project-a"]');
-    if (!activityTab) throw new Error("Missing project activity tab");
+    const project = host.querySelector<HTMLElement>('[data-panel-instance-id="project-a"]')!;
+    const plugins = host.querySelector<HTMLElement>('[data-panel-instance-id="plugins-a"]')!;
+    const projectTab = tabShell("project-a");
+    const pluginsTab = tabShell("plugins-a");
+    const iconStyle = (tab: HTMLElement) =>
+      getComputedStyle(tab.querySelector<HTMLElement>("[data-workbench-activity-icon]")!);
+    const selectedColor = iconStyle(project).color;
+    const selectedBackground = iconStyle(project).backgroundColor;
 
+    expect(getComputedStyle(pluginsTab).display).not.toBe("none");
+    expect(getComputedStyle(pluginsTab).order).toBe("1");
+    expect(getComputedStyle(pluginsTab).marginTop).toBe("auto");
+    expect(getComputedStyle(pluginsTab).width).toBe(getComputedStyle(projectTab).width);
+    expect(getComputedStyle(pluginsTab).height).toBe(getComputedStyle(projectTab).height);
+
+    act(() => plugins.click());
     expect(leftGroup.isCollapsed()).toBe(false);
+    expect(api?.activePanel?.id).toBe("plugins-a");
+    expect(iconStyle(plugins).color).toBe(selectedColor);
+    expect(iconStyle(plugins).backgroundColor).toBe(selectedBackground);
 
-    act(() => activityTab.click());
-
+    act(() => plugins.click());
     expect(leftGroup.isCollapsed()).toBe(true);
+    expect(plugins.dataset.workbenchTabEdgeCollapsed).toBe("true");
+
+    act(() => plugins.click());
+    expect(leftGroup.isCollapsed()).toBe(false);
+    expect(plugins.dataset.workbenchTabEdgeCollapsed).toBeUndefined();
+
+    act(() => project.click());
+    expect(leftGroup.isCollapsed()).toBe(false);
+    expect(api?.activePanel?.id).toBe("project-a");
+    act(() => project.click());
+    expect(leftGroup.isCollapsed()).toBe(true);
+    act(() => plugins.click());
+    expect(leftGroup.isCollapsed()).toBe(false);
+    expect(api?.activePanel?.id).toBe("plugins-a");
   });
 
   it("closes one physical mixed group through one batch request", () => {

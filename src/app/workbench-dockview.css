@@ -397,12 +397,6 @@
   min-width: 0;
   flex: 1 1 0;
 }
-/* Plugins remain a Dockview panel, with their entry pinned in the bottom actions. */
-[data-yssbi-root-dockview]
-  .dv-tabs-container
-  > .dv-tab:has([data-workbench-pinned-activity="plugins"]) {
-  display: none;
-}
 [data-yssbi-root-dockview]
   .dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container {
@@ -416,9 +410,24 @@
 [data-yssbi-root-dockview]
   .dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container
+  > .dv-scrollable {
+  flex: 1;
+  min-height: 0;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  > .dv-void-container {
+  display: none;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
   .dv-tabs-container.dv-tabs-container-vertical {
   width: 100%;
-  height: fit-content;
+  height: 100%;
   max-height: none;
   flex-direction: column;
   align-items: center;
@@ -445,6 +454,16 @@
   background: transparent;
   writing-mode: horizontal-tb;
   color: var(--muted-foreground);
+}
+
+/* Pin the native Plugins tab so it shares Activity styling and click behavior. */
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-pinned-activity="plugins"]) {
+  order: 1;
+  margin-top: auto;
 }
 
 [data-yssbi-root-dockview]
@@ -540,29 +559,6 @@
   > .dv-tabs-and-actions-container
   .dv-tabs-overflow-dropdown-root {
   display: none;
-}
-
-[data-yssbi-root-dockview]
-  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
-  > .dv-right-actions-container {
-  width: 44px;
-  min-height: 40px;
-  height: auto;
-  flex: 0 0 auto;
-  overflow: visible;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 2px;
-}
-
-[data-yssbi-root-dockview]
-  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
-  > .dv-tabs-and-actions-container
-  [data-workbench-activity-actions] {
-  width: 40px;
-  min-height: 40px;
-  height: auto;
 }
 
 /* A collapsed root edge has no selected tab in the user-facing chrome. */

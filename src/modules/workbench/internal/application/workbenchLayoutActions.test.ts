@@ -183,7 +183,7 @@ function viewPanel(
   viewId: WorkbenchViewId,
   groupId = `edge-${viewId}`,
   location: WorkbenchPanelInfo["location"] = edgeLocation(
-    ["project", "nodes", "data", "commands"].includes(viewId)
+    ["project", "nodes", "commands", "plugins"].includes(viewId)
       ? "left"
       : viewId === "logs" || viewId === "output" || viewId === "problems"
         ? "bottom"
@@ -391,7 +391,7 @@ function createTransactionHarness(
       return info(existing);
     }
 
-    const position = ["project", "nodes", "data", "commands"].includes(request.viewId)
+    const position = ["project", "nodes", "commands", "plugins"].includes(request.viewId)
       ? "left"
       : request.viewId === "logs" || request.viewId === "output" || request.viewId === "problems"
         ? "bottom"
