@@ -73,8 +73,6 @@ add or commit them unless explicitly requested.
 
 ## Testing and validation
 
-* Add the smallest focused regression test that proves the requested behavior or
-  distinct failure mode. Prefer stable public seams over private implementation.
 * Do not add speculative matrices, duplicate coverage, tests for unchanged
   framework behavior, or tests that only prove a historical refactor occurred.
 * Before adding more than two tests, identify the distinct regression each
