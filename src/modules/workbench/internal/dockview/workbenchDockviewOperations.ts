@@ -47,7 +47,6 @@ export function cloneMetadata(metadata: WorkbenchPanelMetadata): WorkbenchPanelM
       role: "editor",
       resourceRef: metadata.resourceRef,
       resourceKind: metadata.resourceKind,
-      ...(metadata.pinned === undefined ? {} : { pinned: metadata.pinned }),
       ...(metadata.sticky === undefined ? {} : { sticky: metadata.sticky }),
     };
   }

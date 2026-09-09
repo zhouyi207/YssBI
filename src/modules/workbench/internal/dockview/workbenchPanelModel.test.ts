@@ -15,7 +15,6 @@ describe("workbench panel metadata", () => {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
       resourceKind: "event",
-      pinned: false,
       sticky: true,
     } as const;
 
@@ -121,6 +120,12 @@ describe("workbench panel metadata", () => {
         resourceRef: "events/Main.yssbi-event",
         resourceKind: "event",
         legacyId: "old",
+      },
+      {
+        role: "editor",
+        resourceRef: "events/Main.yssbi-event",
+        resourceKind: "event",
+        pinned: true,
       },
       { role: "view", viewId: "result" },
       { role: "view", viewId: "settings" },

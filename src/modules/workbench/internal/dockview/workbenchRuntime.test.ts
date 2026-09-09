@@ -595,7 +595,6 @@ const editorRequest = {
   resourceRef: "events/shared.yssbi-event",
   resourceKind: "event",
   title: "Shared event",
-  pinned: false,
   mode: "new-instance",
 } as const;
 
@@ -796,6 +795,9 @@ describe("workbench Dockview port", () => {
     const panel = await port.openEditor(editorRequest);
     const record = fake.panel(panel.panelInstanceId);
 
+    expect(record.pinned).toBe(true);
+    expect(record.setPinned).toHaveBeenCalledWith(true);
+
     expect(
       await port.move({
         panelInstanceId: panel.panelInstanceId,
@@ -809,7 +811,7 @@ describe("workbench Dockview port", () => {
     expect(port.listGroups().some((group) => group.groupId === "grid-main")).toBe(true);
   });
 
-  it("keeps duplicate editor identity, canonical remaps, pinning, and role filters separate", async () => {
+  it("keeps duplicate editor identity, canonical remaps, and role filters separate", async () => {
     const fake = createFakeWorkbenchDockview();
     const { port, internal } = createDockviewHarness();
     internal.bind(fake.api);
@@ -854,11 +856,6 @@ describe("workbench Dockview port", () => {
       layoutTab: { id: editorRequest.resourceRef },
       metadata: { resourceRef: "events/renamed.yssbi-event" },
     });
-
-    expect(await port.setEditorPinned(first.panelInstanceId, true)).toBe(true);
-    expect(port.getPanel(first.panelInstanceId)?.metadata).toMatchObject({ pinned: true });
-    expect(fake.panel(first.panelInstanceId).pinned).toBe(true);
-    expect(fake.panel(first.panelInstanceId).setPinned).toHaveBeenCalledWith(true);
 
     const reused = await port.openEditor({
       ...editorRequest,

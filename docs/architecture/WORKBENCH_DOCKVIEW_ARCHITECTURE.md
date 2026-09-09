@@ -126,7 +126,7 @@ Logs layout 有两种明确生命周期：
 `WorkbenchPanelMetadata` 是 root panel 的 canonical metadata：
 
 ```text
-editor → { role, resourceRef, resourceKind, pinned?, sticky? }
+editor → { role, resourceRef, resourceKind, sticky? }
 view   → { role, viewId }
 result → { role, resultKey, resultId, title, presentation, source }
 ```
@@ -163,7 +163,7 @@ Result panel 通过 `source` 的 output address 订阅当前结果；重算时�
 `workbenchDockviewControl` 和 `workbenchDockviewRootBinding`。它们提供 role-aware semantic
 operations：
 
-- `openEditor`、`setEditorPinned`；
+- `openEditor`；
 - `ensureView`、`upsertResult`；
 - `activate`、`reveal`、`move`、`split`；
 - `configureEdge`、`setEdgeCollapsed`、`setEdgeSize`；
@@ -290,7 +290,7 @@ Persistence invariant：
 
 非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
 
-`view:data` 已移除；包含该旧 panel identity 的 root snapshot 按现有验证规则回退默认布局，不影响项目资源或有效的 Logs nested snapshot。
+`view:data` 已移除；包含该旧 panel identity 的 root snapshot 按现有验证规则回退默认布局，不影响项目资源或有效的 Logs nested snapshot。包含旧 `params.metadata.pinned` 的 editor snapshot 同样不再是 canonical 格式，会回退默认布局。项目不再在 editor metadata 中镜像 Dockview 的 pinned 状态；Root Dockview 启用原生 `pinnedTabs`，新打开的 editor 通过 `panel.api.setPinned(true)` 设置原生状态，布局序列化保留 Dockview 自己的 `panels[id].pinned` 字段。
 
 ## 9. 视觉尺寸层级
 

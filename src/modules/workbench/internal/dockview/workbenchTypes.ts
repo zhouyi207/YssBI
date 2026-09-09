@@ -85,7 +85,6 @@ export interface OpenEditorRequest {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
   readonly title: string;
-  readonly pinned: boolean;
   readonly sticky?: boolean;
   readonly targetGroupId?: string;
   readonly index?: number;
@@ -138,7 +137,6 @@ export interface WorkbenchDockviewReadContract {
 export interface WorkbenchDockviewControlContract {
   ensureCentralGroup(): Promise<string>;
   openEditor(request: OpenEditorRequest): Promise<WorkbenchPanelInfo>;
-  setEditorPinned(panelInstanceId: string, pinned: boolean): Promise<boolean>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
   activate(panelInstanceId: string): Promise<boolean>;

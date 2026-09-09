@@ -70,7 +70,6 @@ describe("openDatabaseInEditor", () => {
       role: "editor",
       resourceKind: "database",
       resourceRef: "sales",
-      pinned: true,
     });
     expect(editorUi.getSnapshot().detailFocus).toEqual({ kind: "data", id: "sales" });
 

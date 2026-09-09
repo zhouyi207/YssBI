@@ -790,7 +790,6 @@ describe("workbench panel close coordinator", () => {
       await mutationGate;
       const panel = mocks.panels[0];
       panel.groupId = "group-b";
-      panel.metadata = { ...(panel.metadata as object), pinned: true };
     });
     await mutationStarted;
 
@@ -814,7 +813,7 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.panels[0]).toMatchObject({
       panelInstanceId: "editor-a",
       groupId: "group-b",
-      metadata: { pinned: true },
+      metadata: { role: "editor", resourceRef: graphPath, resourceKind: "event" },
     });
     expect(mocks.releasePane).not.toHaveBeenCalled();
     expect(mocks.releaseEditorViewport).not.toHaveBeenCalled();

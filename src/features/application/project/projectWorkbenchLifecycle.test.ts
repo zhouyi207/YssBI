@@ -117,7 +117,6 @@ function openEditor(resourceRef: string): WorkbenchPanelInfo {
     role: "editor",
     resourceRef,
     resourceKind: "event",
-    pinned: true,
   });
   lifecycleMocks.state.panels.push(created);
   return created;

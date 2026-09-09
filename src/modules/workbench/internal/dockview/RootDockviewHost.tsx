@@ -125,6 +125,7 @@ export const RootDockviewHost = forwardRef<HTMLDivElement, RootDockviewHostProps
               className="yssbi-root-dockview-instance h-full w-full"
               components={panelRegistry}
               defaultTabComponent={tabComponent}
+              pinnedTabs={{ enabled: true }}
               watermarkComponent={watermarkComponent}
               disableFloatingGroups
               theme={dockviewTheme}

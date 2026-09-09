@@ -15,7 +15,6 @@ const openedPanel: WorkbenchEditorPanelInfo = {
     role: "editor",
     resourceRef: "events/Main.yssbi-event",
     resourceKind: "event",
-    pinned: true,
   },
   active: true,
   location: { type: "grid" },

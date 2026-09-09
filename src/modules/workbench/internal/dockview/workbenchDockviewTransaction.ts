@@ -103,7 +103,6 @@ type BufferedCommand =
       readonly metadata: WorkbenchPanelMetadata;
       readonly title?: string;
       readonly updateTitle: boolean;
-      readonly pinned?: boolean;
     }
   | {
       readonly kind: "move";
@@ -786,6 +785,9 @@ export class PendingWorkbenchTransaction {
         id: panel.id,
         contentComponent: panel.component,
         title: panel.title,
+        ...(panel.metadata?.role === "editor" && existing.pinned === undefined
+          ? { pinned: true }
+          : {}),
         params: panel.metadata
           ? { ...panel.params, metadata: cloneMetadata(panel.metadata) }
           : { ...panel.params },
@@ -903,7 +905,7 @@ export class PendingWorkbenchTransaction {
           inactive: true,
         } as AddPanelOptions<WorkbenchPanelParams>);
         if (command.metadata.role === "editor") {
-          panel.api.setPinned(command.metadata.pinned ?? false);
+          panel.api.setPinned(true);
         }
         return;
       }
@@ -915,7 +917,6 @@ export class PendingWorkbenchTransaction {
           });
         updatePanelMetadata(panel, command.metadata);
         if (command.updateTitle && command.title !== undefined) panel.api.setTitle(command.title);
-        if (command.pinned !== undefined) panel.api.setPinned(command.pinned);
         return;
       }
       case "move": {

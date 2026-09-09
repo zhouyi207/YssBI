@@ -68,7 +68,6 @@ function editorParams(): WorkbenchPanelParams {
       role: "editor",
       resourceRef: "events/Main.yssbi-event",
       resourceKind: "event",
-      pinned: true,
     },
   };
 }

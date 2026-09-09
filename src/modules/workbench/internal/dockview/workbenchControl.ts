@@ -15,7 +15,6 @@ import type {
 export interface WorkbenchDockviewControl {
   ensureCentralGroup(): Promise<string>;
   openEditor(request: OpenEditorRequest): Promise<WorkbenchPanelInfo>;
-  setEditorPinned(panelInstanceId: string, pinned: boolean): Promise<boolean>;
   ensureView(request: EnsureViewRequest): Promise<WorkbenchPanelInfo>;
   upsertResult(request: UpsertResultRequest): Promise<WorkbenchPanelInfo>;
   activate(panelInstanceId: string): Promise<boolean>;

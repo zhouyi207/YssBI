@@ -12,7 +12,7 @@ import {
   vetoInvalidWorkbenchActivityDrop,
 } from "./workbenchActivityGroup";
 import { WORKBENCH_HOME_EDGE } from "./workbenchDockviewDefaults";
-import { componentForWorkbenchMetadata, type EditorPanelMetadata } from "./workbenchPanelModel";
+import { componentForWorkbenchMetadata } from "./workbenchPanelModel";
 import type {
   WorkbenchDockviewReadContract,
   WorkbenchDockviewControlContract,
@@ -388,7 +388,6 @@ export function createWorkbenchDockviewRuntime(): {
               role: "editor",
               resourceRef: request.resourceRef,
               resourceKind: request.resourceKind,
-              pinned: request.pinned,
               ...(request.sticky === undefined ? {} : { sticky: request.sticky }),
             });
             if (request.mode === "reuse-resource") {
@@ -413,7 +412,7 @@ export function createWorkbenchDockviewRuntime(): {
                 }
                 updatePanelMetadata(existing, metadata);
                 if (existing.title !== request.title) existing.api.setTitle(request.title);
-                existing.api.setPinned(request.pinned);
+                existing.api.setPinned(true);
                 revealPanel(boundApi, existing);
                 const info = panelInfo(existing);
                 if (info) return info;
@@ -429,24 +428,12 @@ export function createWorkbenchDockviewRuntime(): {
               groupId,
               request.index,
             );
-            panel.api.setPinned(request.pinned);
+            panel.api.setPinned(true);
             const info = panelInfo(panel);
             if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
             return info;
           },
         ),
-      ),
-    setEditorPinned: (panelInstanceId, pinned) =>
-      enqueue((boundApi) =>
-        throwAsLayoutError("panel_open_failed", { panelInstanceId }, () => {
-          const panel = boundApi.getPanel(panelInstanceId);
-          const metadata = panel ? readMetadata(panel) : undefined;
-          if (!panel || metadata?.role !== "editor") return false;
-          const next: EditorPanelMetadata = { ...metadata, pinned };
-          updatePanelMetadata(panel, next);
-          panel.api.setPinned(pinned);
-          return true;
-        }),
       ),
     ensureView: (request) =>
       enqueue((boundApi) =>

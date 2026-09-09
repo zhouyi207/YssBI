@@ -76,7 +76,6 @@ function panelProps(
         role: "editor",
         resourceRef: `${resourceKind}/Main`,
         resourceKind,
-        pinned: true,
       },
     },
   } as unknown as IDockviewPanelProps<WorkbenchPanelParams>;

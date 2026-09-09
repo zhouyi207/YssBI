@@ -50,7 +50,6 @@ export async function openEditorPanel(
         { id: target.resourceRef, kind: target.resourceKind },
         target.resourceRef,
       ),
-      pinned: true,
       ...(target.sticky === undefined ? {} : { sticky: target.sticky }),
       targetGroupId,
       index: options?.insertIndex,

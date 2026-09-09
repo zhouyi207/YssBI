@@ -23,7 +23,6 @@ export type EditorResourceKind = "event" | "function" | "chart" | "database";
 export interface EditorResourceTarget {
   readonly resourceRef: string;
   readonly resourceKind: EditorResourceKind;
-  readonly pinned?: boolean;
   readonly sticky?: boolean;
 }
 export type WorkbenchComponentId =
@@ -224,11 +223,10 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
       );
     case "editor":
       return (
-        hasKnownKeys(value, ["role", "resourceRef", "resourceKind"], ["pinned", "sticky"]) &&
+        hasKnownKeys(value, ["role", "resourceRef", "resourceKind"], ["sticky"]) &&
         isNonEmptyString(value.resourceRef) &&
         typeof value.resourceKind === "string" &&
         EDITOR_RESOURCE_KINDS.has(value.resourceKind as EditorResourceKind) &&
-        (value.pinned === undefined || typeof value.pinned === "boolean") &&
         (value.sticky === undefined || typeof value.sticky === "boolean")
       );
     case "view":

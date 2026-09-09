@@ -335,7 +335,6 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
     readonly resourceRef: string;
     readonly resourceKind: "event";
     readonly title: string;
-    readonly pinned: boolean;
   };
   type PendingEditorOpen = {
     readonly request: FakeEditorOpenRequest;
@@ -423,7 +422,6 @@ function createFakePort(order: string[], outputMoveGate?: Deferred<void>) {
         role: "editor",
         resourceRef: request.resourceRef,
         resourceKind: request.resourceKind,
-        pinned: request.pinned,
       },
       active: true,
       location: { type: "grid" },
@@ -712,7 +710,6 @@ describe("WorkbenchLayoutController hydration", () => {
       resourceRef: "events/queued-during-hydration.yssbi-event",
       resourceKind: "event",
       title: "Queued event",
-      pinned: false,
       mode: "new-instance",
     });
     let hydrated = false;

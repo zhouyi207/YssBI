@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
   groups: [] as WorkbenchGroupInfo[],
   openEditor: vi.fn(),
   ensureCentralGroup: vi.fn(async () => "central-group"),
-  requestCloseEditorPanels: vi.fn(async () => true),
   showWorkbenchLayoutError: vi.fn(),
 }));
 
@@ -34,17 +33,13 @@ vi.mock("./rightSidebarActions", () => ({
   revealDetails: vi.fn(async () => undefined),
 }));
 
-vi.mock("./editorPanelCloseCommands", () => ({
-  requestCloseEditorPanels: mocks.requestCloseEditorPanels,
-}));
-
 import { openEditorPanel } from "./openEditorPanel";
 
 function editorPanel(
   panelInstanceId: string,
   groupId: string,
   resourceRef: string,
-  metadata: { pinned?: boolean; sticky?: boolean } = {},
+  metadata: { sticky?: boolean } = {},
 ): WorkbenchEditorPanelInfo {
   return {
     panelInstanceId,
@@ -80,8 +75,6 @@ describe("openEditorPanel", () => {
     mocks.openEditor.mockReset();
     mocks.ensureCentralGroup.mockReset();
     mocks.ensureCentralGroup.mockResolvedValue("central-group");
-    mocks.requestCloseEditorPanels.mockReset();
-    mocks.requestCloseEditorPanels.mockResolvedValue(true);
     mocks.showWorkbenchLayoutError.mockReset();
 
     vi.spyOn(workbenchDockviewRead, "listGroups").mockImplementation(() => mocks.groups);
@@ -109,14 +102,10 @@ describe("openEditorPanel", () => {
   });
 
   it("always opens editor resources as fixed tabs without preview replacement", async () => {
-    const existing = editorPanel("panel-preview", "group-main", "events/Preview.yssbi-event", {
-      pinned: false,
-    });
+    const existing = editorPanel("panel-existing", "group-main", "events/Existing.yssbi-event");
     mocks.panels = [existing];
     mocks.groups = [group(existing.groupId, [existing.panelInstanceId])];
-    const opened = editorPanel("panel-main", "group-main", "events/Main.yssbi-event", {
-      pinned: true,
-    });
+    const opened = editorPanel("panel-main", "group-main", "events/Main.yssbi-event");
     mocks.openEditor.mockResolvedValue(opened);
 
     await expect(
@@ -129,10 +118,8 @@ describe("openEditorPanel", () => {
     expect(mocks.openEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceRef: "events/Main.yssbi-event",
-        pinned: true,
         mode: "reuse-resource",
       }),
     );
-    expect(mocks.requestCloseEditorPanels).not.toHaveBeenCalled();
   });
 });

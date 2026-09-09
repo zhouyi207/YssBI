@@ -169,7 +169,7 @@ export function useOpenChart() {
 
     try {
       await openEditorPanel(
-        { resourceRef: chartPath, resourceKind: "chart", pinned: true },
+        { resourceRef: chartPath, resourceKind: "chart" },
         {
           focusDetail: { kind: "chart", chartPath },
         },

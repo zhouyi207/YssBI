@@ -91,7 +91,6 @@ const openedPanel: WorkbenchPanelInfo = {
     role: "editor",
     resourceRef: "charts/Summary.yssbi-chart",
     resourceKind: "chart",
-    pinned: true,
   },
   active: true,
   location: { type: "grid" },

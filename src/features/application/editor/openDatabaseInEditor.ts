@@ -6,7 +6,6 @@ export async function openDatabaseInEditor(databaseId: string): Promise<void> {
     const panel = await openEditorPanel({
       resourceRef: databaseId,
       resourceKind: "database",
-      pinned: true,
     });
     await activateEditorPanelAndSyncSession(panel);
   } catch (error) {
