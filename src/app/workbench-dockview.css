@@ -408,6 +408,12 @@
 }
 
 [data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container {
+  border-right: 0;
+}
+
+[data-yssbi-root-dockview]
   .dv-groupview-edge.dv-groupview-header-left
   > .dv-tabs-and-actions-container
   > .dv-scrollable {
