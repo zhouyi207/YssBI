@@ -1,31 +1,17 @@
 // @vitest-environment happy-dom
 import { act } from "react";
-import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
 import { createRoot, type Root } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { ActivityPanelDocument } from "@/shared/types/domain/activityPanel";
-import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import * as activityService from "@/services/workbench/activityPanelService";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
-import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
 
 import { SidebarProjectTab } from "./SidebarProjectTab";
-
-const browserState = vi.hoisted(() => ({
-  current: null as ActivityPanelDocument | null,
-}));
-
-vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
-  useActivityPanelDocument: () => ({
-    document: browserState.current,
-    error: null,
-    refresh: vi.fn(),
-    ...useActivityPanelExpansion("project"),
-  }),
-}));
 
 vi.mock("@dnd-kit/core", () => ({
   useDraggable: () => ({ attributes: {}, listeners: {}, setNodeRef: vi.fn() }),
@@ -45,20 +31,9 @@ const actions = {
   onDatabaseContextMenu: vi.fn(),
 };
 
-function renderBrowser() {
-  const rows = Object.values(PROJECT_TREE_CATEGORY_IDS).map((id: ProjectTreeCategoryId) =>
-    categoryFixture(id, `Projected ${id}`, 0, true),
-  );
-  rows[3] = {
-    ...rows[3],
-    tools: [{ id: "importData", label: { key: "contextMenu.sidebar.importData" }, icon: "add" }],
-  };
-  browserState.current = activityPanelFixture("project", rows);
-}
-
-function categoryLabels(host: HTMLElement): string[] {
-  return Array.from(host.querySelectorAll("[data-sidebar-tree-category-id]")).map(
-    (category) => category.textContent?.trim() ?? "",
+function categoryIds(host: HTMLElement): Array<string | null> {
+  return Array.from(host.querySelectorAll("[data-sidebar-tree-category-id]")).map((category) =>
+    category.getAttribute("data-sidebar-tree-category-id"),
   );
 }
 
@@ -71,6 +46,8 @@ describe("SidebarProjectTab", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     useSidebarStore.setState({ expandedCategories: {} });
+    useResourceStore.getState().clear();
+    useProjectIOStore.setState({ projectInstanceId: "project-1" });
     await i18n.changeLanguage("en-US");
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -80,10 +57,13 @@ describe("SidebarProjectTab", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    useResourceStore.getState().clear();
+    useProjectIOStore.setState({ projectInstanceId: null });
+    vi.restoreAllMocks();
   });
 
   it("renders Project categories without a search input and preserves category actions", () => {
-    renderBrowser();
+    const query = vi.spyOn(activityService, "getActivityPanelDocument");
     act(() =>
       root.render(
         <I18nextProvider i18n={i18n}>
@@ -94,12 +74,7 @@ describe("SidebarProjectTab", () => {
       ),
     );
 
-    expect(categoryLabels(host)).toEqual([
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.events}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.functions}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.charts}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.data}`,
-    ]);
+    expect(categoryIds(host)).toEqual(Object.values(PROJECT_TREE_CATEGORY_IDS));
     expect(host.querySelector("input")).toBeNull();
     expect(host.querySelector("[data-sidebar-tree-search]")).toBeNull();
 
@@ -118,5 +93,21 @@ describe("SidebarProjectTab", () => {
     const importButton = host.querySelector<HTMLButtonElement>('[aria-label="Import Data"]')!;
     act(() => importButton.click());
     expect(actions.onImportData).toHaveBeenCalledOnce();
+
+    const event = buildGraphResourceMeta("event", "events/First.yssbi-event", "First Event");
+    act(() =>
+      useResourceStore.getState().setSnapshot({ resources: [event], publicationRevision: 1 }),
+    );
+    expect(host.textContent).toContain("First Event");
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    act(() =>
+      useResourceStore.getState().setSnapshot({
+        resources: [{ ...event, loaded: true, exists: false }],
+        publicationRevision: 2,
+      }),
+    );
+    expect(host.textContent).not.toContain("First Event");
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(query).not.toHaveBeenCalled();
   });
 });

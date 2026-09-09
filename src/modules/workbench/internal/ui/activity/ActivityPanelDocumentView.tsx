@@ -39,7 +39,7 @@ export function ActivityPanelDocumentView({
   expanded: Readonly<Record<string, boolean>>;
   onExpandedChange: (categoryId: string, expanded: boolean) => void;
   busy?: boolean;
-  onRetry: () => void;
+  onRetry?: () => void;
   actions?: Partial<Record<ActivityActionId, () => void>>;
   renderItem: (item: ActivityItem, depth: number) => ReactNode;
   onContextMenu?: (event: MouseEvent, row: ActivityPanelRow) => void;

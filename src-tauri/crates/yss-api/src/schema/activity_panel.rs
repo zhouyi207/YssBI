@@ -42,20 +42,6 @@ impl From<app::ActivityTool> for ActivityToolDto {
     rename_all_fields = "camelCase"
 )]
 pub enum ActivityItemDto {
-    Graph {
-        path: String,
-        name: String,
-        graph_type: &'static str,
-    },
-    Chart {
-        path: String,
-        name: String,
-    },
-    Database {
-        id: String,
-        resource_path: String,
-        name: String,
-    },
     Node {
         key: String,
         title: String,
@@ -76,24 +62,6 @@ pub enum ActivityItemDto {
 impl From<app::ActivityItem> for ActivityItemDto {
     fn from(item: app::ActivityItem) -> Self {
         match item {
-            app::ActivityItem::Graph { path, name, kind } => Self::Graph {
-                path,
-                name,
-                graph_type: match kind {
-                    yss_graph_document::GraphResourceKind::Event => "event",
-                    yss_graph_document::GraphResourceKind::Function => "function",
-                },
-            },
-            app::ActivityItem::Chart { path, name } => Self::Chart { path, name },
-            app::ActivityItem::Database {
-                id,
-                resource_path,
-                name,
-            } => Self::Database {
-                id,
-                resource_path,
-                name,
-            },
             app::ActivityItem::Node {
                 key,
                 title,

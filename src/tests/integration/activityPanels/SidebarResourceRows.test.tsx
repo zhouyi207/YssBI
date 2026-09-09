@@ -32,8 +32,8 @@ vi.mock("@dnd-kit/core", () => ({
     };
   },
 }));
-vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
-  useActivityPanelDocument: () => ({
+vi.mock("@/features/application/sidebar/useProjectActivityPanelDocument", () => ({
+  useProjectActivityPanelDocument: () => ({
     document: mocks.document,
     error: null,
     refresh: vi.fn(),

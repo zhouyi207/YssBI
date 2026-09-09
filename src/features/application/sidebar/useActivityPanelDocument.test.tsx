@@ -24,11 +24,11 @@ it("retains the visible tree, coalesces changes and discards replaced or unmount
   );
   let current: ReturnType<typeof useActivityPanelDocument> | undefined;
   function Probe() {
-    current = useActivityPanelDocument("project");
+    current = useActivityPanelDocument("nodes");
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  const first = { cursor: "first", document: activityPanelFixture("project", []) };
+  const first = { cursor: "first", document: activityPanelFixture("nodes", []) };
   const second = {
     cursor: "second",
     document: { ...first.document, projectInstanceId: "project-2" },
@@ -48,16 +48,16 @@ it("retains the visible tree, coalesces changes and discards replaced or unmount
     act(() => current!.setExpanded("project.events", false));
     expect(backend).toHaveBeenCalledTimes(2);
 
-    act(() => useResourceStore.getState().setResources([]));
+    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
     expect(current!.document).toBe(second.document);
     expect(backend).toHaveBeenLastCalledWith(
-      "project",
+      "nodes",
       { projectInstanceId: "project-2" },
       "en-US",
       second,
     );
-    act(() => useResourceStore.getState().setResources([]));
-    act(() => useResourceStore.getState().setResources([]));
+    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
+    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
     expect(backend).toHaveBeenCalledTimes(3);
     const intermediate = {
       cursor: "intermediate",
@@ -67,7 +67,7 @@ it("retains the visible tree, coalesces changes and discards replaced or unmount
     expect(current!.document).toBe(second.document);
     expect(backend).toHaveBeenCalledTimes(4);
     expect(backend).toHaveBeenLastCalledWith(
-      "project",
+      "nodes",
       { projectInstanceId: "project-2" },
       "en-US",
       intermediate,

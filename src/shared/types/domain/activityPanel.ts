@@ -1,6 +1,7 @@
 import type { NodeCreationDescriptorDto } from "./nodeCreationDescriptor";
 
 export type ActivityPanelId = "project" | "nodes" | "commands" | "plugins";
+export type BackendActivityPanelId = Exclude<ActivityPanelId, "project">;
 export type ActivityText = { readonly key: string } | { readonly text: string };
 export type ActivityActionId =
   | "newEvent"

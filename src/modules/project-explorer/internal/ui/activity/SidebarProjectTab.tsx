@@ -1,5 +1,5 @@
 import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
-import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
+import { useProjectActivityPanelDocument } from "@/features/application/sidebar/useProjectActivityPanelDocument";
 import { useDetailTarget } from "@/features/application/editor";
 import { ActivityPanelDocumentView } from "@/modules/workbench/public";
 import {
@@ -9,17 +9,15 @@ import {
 import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 
 export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
-  const query = useActivityPanelDocument("project");
+  const query = useProjectActivityPanelDocument();
   const detailTarget = useDetailTarget();
   const graphDiagnosticCounts = useGraphDiagnosticCounts();
   return (
     <ActivityPanelDocumentView
       panelId="project"
       document={query.document}
-      error={query.error}
       expanded={query.expanded}
       onExpandedChange={query.setExpanded}
-      onRetry={query.refresh}
       actions={{
         newEvent: actions.onAddEvent,
         newFunction: actions.onAddFunction,

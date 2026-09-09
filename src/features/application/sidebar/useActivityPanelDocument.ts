@@ -8,17 +8,20 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { getActivityPanelDocument } from "@/services/workbench/activityPanelService";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import type { ActivityPanelId, ActivityPanelSnapshot } from "@/shared/types/domain/activityPanel";
+import type {
+  BackendActivityPanelId,
+  ActivityPanelSnapshot,
+} from "@/shared/types/domain/activityPanel";
 import { useActivityPanelExpansion } from "./useActivityPanelExpansion";
 import { formatInlineUserError } from "../userErrorSummary";
 
 /** Existing projections only invalidate this query; Rust supplies snapshots and row operations. */
-export function useActivityPanelDocument(panelId: ActivityPanelId, invalidation?: unknown) {
+export function useActivityPanelDocument(panelId: BackendActivityPanelId, invalidation?: unknown) {
   const { i18n, t } = useTranslation();
   const expansion = useActivityPanelExpansion(panelId);
-  const scoped = panelId === "project" || panelId === "nodes";
+  const scoped = panelId === "nodes";
   const projectInstanceId = useProjectIOStore((state) => (scoped ? state.projectInstanceId : null));
-  const resources = useResourceStore((state) => (scoped ? state.resources : null));
+  const indexGeneration = useResourceStore((state) => (scoped ? state.indexGeneration : 0));
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
   const epoch = scoped ? captureProjectLifecycleState().epoch : 0;
   const binding = useMemo<{ refresh: (() => void) | null }>(
@@ -80,7 +83,7 @@ export function useActivityPanelDocument(panelId: ActivityPanelId, invalidation?
 
   useEffect(() => {
     binding.refresh?.();
-  }, [binding, resources, invalidation]);
+  }, [binding, indexGeneration, invalidation]);
   const current = result?.binding === binding ? result : null;
   return {
     document: current?.snapshot?.document ?? null,

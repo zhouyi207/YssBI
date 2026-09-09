@@ -259,7 +259,7 @@ mod tests {
         json!({"id":id,"kind":"message","depth":0,"label":{"text":label},"description":null})
     }
     fn document(rows: Vec<Value>, revision: u64) -> Value {
-        json!({"schema":"yssbi.activity-panel.v1","panelId":"project","projectInstanceId":"p1","publicationRevision":revision,"title":{"key":"activityBar.project"},"tools":[],"rows":rows,"emptyState":null})
+        json!({"schema":"yssbi.activity-panel.v1","panelId":"nodes","projectInstanceId":"p1","publicationRevision":revision,"title":{"key":"activityBar.project"},"tools":[],"rows":rows,"emptyState":null})
     }
     fn publish(cache: &ActivityPanelSyncState, cursor: Option<&str>, document: Value) -> Value {
         serde_json::to_value(

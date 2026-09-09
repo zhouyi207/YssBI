@@ -18,20 +18,20 @@ it("applies ID patches atomically, preserves unchanged references and recovers a
     label: { text: "Old result" },
     description: null,
   };
-  const document = activityPanelFixture("project", [
+  const document = activityPanelFixture("nodes", [
     categoryFixture("project.events", "Server title", 0, true),
     summary,
     { ...summary, id: "kept" },
   ]);
   invoke.mockResolvedValue({ kind: "snapshot", cursor: "c1", document });
   const first = await getActivityPanelDocument(
-    "project",
+    "nodes",
     { projectInstanceId: "project-1" },
     "en-US",
   );
   expect(first.document).toBe(document);
   expect(invoke).toHaveBeenCalledWith("get_activity_panel_document", {
-    panelId: "project",
+    panelId: "nodes",
     projectInstanceId: "project-1",
     locale: "en-US",
     cursor: null,
@@ -45,13 +45,13 @@ it("applies ID patches atomically, preserves unchanged references and recovers a
   };
   invoke.mockResolvedValueOnce(change);
   const second = await getActivityPanelDocument(
-    "project",
+    "nodes",
     { projectInstanceId: "project-1" },
     "en-US",
     first,
   );
   expect(invoke).toHaveBeenLastCalledWith("get_activity_panel_document", {
-    panelId: "project",
+    panelId: "nodes",
     projectInstanceId: "project-1",
     locale: "en-US",
     cursor: "c1",
@@ -101,17 +101,17 @@ it("applies ID patches atomically, preserves unchanged references and recovers a
     document: { ...document, publicationRevision: 3 },
   });
   expect(
-    (await getActivityPanelDocument("project", { projectInstanceId: "project-1" }, "en-US", second))
+    (await getActivityPanelDocument("nodes", { projectInstanceId: "project-1" }, "en-US", second))
       .cursor,
   ).toBe("reset");
   expect(invoke).toHaveBeenLastCalledWith("get_activity_panel_document", {
-    panelId: "project",
+    panelId: "nodes",
     projectInstanceId: "project-1",
     locale: "en-US",
     cursor: null,
   });
   await expect(
-    getActivityPanelDocument("project", { projectInstanceId: "project-2" }, "en-US"),
+    getActivityPanelDocument("nodes", { projectInstanceId: "project-2" }, "en-US"),
   ).rejects.toThrow();
   expect(
     parseActivityPanelDocument({ ...document, rows: [...document.rows, ...document.rows] }),

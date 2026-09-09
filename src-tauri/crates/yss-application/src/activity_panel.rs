@@ -2,14 +2,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use yss_graph_catalog::{LocalizedCatalog, NodeCreation};
-use yss_graph_document::GraphResourceKind;
 use yss_plugin_protocol::InstalledPlugin;
-use yss_project::ProjectIndex;
 use yss_project_identity::ProjectInstanceId;
 
 use crate::catalog_query::{CatalogQueryApplicationError, LocalizedCatalogRequest};
 use crate::execution::ApplicationState;
-use crate::project_query::ProjectQueryApplicationError;
 
 #[derive(Debug)]
 pub enum ActivityText {
@@ -26,20 +23,6 @@ pub struct ActivityTool {
 
 #[derive(Debug)]
 pub enum ActivityItem {
-    Graph {
-        path: String,
-        name: String,
-        kind: GraphResourceKind,
-    },
-    Chart {
-        path: String,
-        name: String,
-    },
-    Database {
-        id: String,
-        resource_path: String,
-        name: String,
-    },
     Node {
         key: String,
         title: String,
@@ -106,14 +89,6 @@ impl ActivityPanelDocument {
 }
 
 impl ApplicationState {
-    pub fn project_activity_panel(
-        &self,
-        project: Option<ProjectInstanceId>,
-    ) -> Result<ActivityPanelDocument, ProjectQueryApplicationError> {
-        let index = project.map(|id| self.query_project_index(id)).transpose()?;
-        Ok(project_document(index))
-    }
-
     pub fn nodes_activity_panel(
         &self,
         project: Option<ProjectInstanceId>,
@@ -147,118 +122,6 @@ fn message(id: &str, depth: usize, label: &'static str) -> ActivityRow {
             description: None,
         },
     }
-}
-
-fn project_document(index: Option<ProjectIndex>) -> ActivityPanelDocument {
-    let mut document = ActivityPanelDocument::new("project", "activityBar.project");
-    if let Some(index) = &index {
-        document.project_instance_id = Some(index.project_instance_id.clone());
-        document.publication_revision = index.publication_revision;
-    }
-    for (id, label, expanded, action, action_label, empty) in [
-        (
-            "project.events",
-            "sidebar.projectTree.categories.events",
-            true,
-            "newEvent",
-            "canvas.newEventGraph",
-            "sidebar.noEvents",
-        ),
-        (
-            "project.functions",
-            "sidebar.projectTree.categories.functions",
-            false,
-            "newFunction",
-            "canvas.newFunctionGraph",
-            "sidebar.noFunctions",
-        ),
-        (
-            "project.charts",
-            "sidebar.projectTree.categories.charts",
-            true,
-            "newChart",
-            "contextMenu.sidebar.newChart",
-            "chartsSidebar.noCharts",
-        ),
-        (
-            "project.data",
-            "sidebar.sections.data",
-            true,
-            "importData",
-            "contextMenu.sidebar.importData",
-            "sidebar.noData",
-        ),
-    ] {
-        document.rows.push(ActivityRow {
-            id: id.into(),
-            depth: 0,
-            content: ActivityRowContent::Category {
-                label: ActivityText::Key(label),
-                default_expanded: expanded,
-                tools: vec![ActivityTool {
-                    id: action,
-                    label: ActivityText::Key(action_label),
-                    icon: "add",
-                }],
-                count: None,
-            },
-        });
-        let start = document.rows.len();
-        if let Some(index) = &index {
-            match id {
-                "project.events" | "project.functions" => {
-                    for graph in &index.graphs {
-                        if (graph.graph_type == GraphResourceKind::Event)
-                            != (id == "project.events")
-                        {
-                            continue;
-                        }
-                        document.rows.push(ActivityRow {
-                            id: format!("graph:{}", graph.path),
-                            depth: 1,
-                            content: ActivityRowContent::Item(ActivityItem::Graph {
-                                path: graph.path.clone(),
-                                name: graph.name.clone(),
-                                kind: graph.graph_type,
-                            }),
-                        });
-                    }
-                }
-                "project.charts" => {
-                    for chart in &index.charts {
-                        document.rows.push(ActivityRow {
-                            id: format!("chart:{}", chart.chart_path.as_str()),
-                            depth: 1,
-                            content: ActivityRowContent::Item(ActivityItem::Chart {
-                                path: chart.chart_path.as_str().into(),
-                                name: chart.name.clone(),
-                            }),
-                        });
-                    }
-                }
-                "project.data" => {
-                    for database in &index.databases {
-                        document.rows.push(ActivityRow {
-                            id: format!("database:{}", database.id),
-                            depth: 1,
-                            content: ActivityRowContent::Item(ActivityItem::Database {
-                                id: database.id.clone(),
-                                resource_path: database.resource_path.as_str().into(),
-                                name: database.name.clone().unwrap_or_else(|| database.id.clone()),
-                            }),
-                        });
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-        if document.rows.len() == start {
-            document
-                .rows
-                .push(message(&format!("{id}.empty"), 1, empty));
-        }
-    }
-    document
 }
 
 fn catalog_rows(catalog: LocalizedCatalog) -> Vec<ActivityRow> {

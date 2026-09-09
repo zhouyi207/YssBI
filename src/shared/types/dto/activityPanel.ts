@@ -2,6 +2,7 @@ import type {
   ActivityPanelDocument,
   ActivityPanelRow,
   ActivityPanelSnapshot,
+  BackendActivityPanelId,
 } from "../domain/activityPanel";
 import { isNodeCreationDescriptorDto } from "../domain/nodeCreationDescriptor";
 
@@ -24,7 +25,7 @@ function text(value: unknown): boolean {
 function integer(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
-const actions = ["newEvent", "newFunction", "newChart", "importData", "install", "refresh"];
+const actions = ["install", "refresh"];
 function tools(value: unknown): boolean {
   return (
     Array.isArray(value) &&
@@ -44,19 +45,6 @@ function item(value: unknown): boolean {
   if (!record(value)) return false;
   const strings = (keys: string[]) => keys.every((key) => typeof value[key] === "string");
   switch (value.kind) {
-    case "graph":
-      return (
-        exact(value, ["kind", "path", "name", "graphType"]) &&
-        strings(["path", "name"]) &&
-        ["event", "function"].includes(value.graphType as string)
-      );
-    case "chart":
-      return exact(value, ["kind", "path", "name"]) && strings(["path", "name"]);
-    case "database":
-      return (
-        exact(value, ["kind", "id", "resourcePath", "name"]) &&
-        strings(["id", "resourcePath", "name"])
-      );
     case "node":
       return (
         exact(value, ["kind", "key", "title", "creation"]) &&
@@ -105,7 +93,7 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
     return null;
   if (
     value.schema !== "yssbi.activity-panel.v1" ||
-    !["project", "nodes", "commands", "plugins"].includes(value.panelId as string)
+    !["nodes", "commands", "plugins"].includes(value.panelId as string)
   )
     return null;
   if (value.projectInstanceId !== null && typeof value.projectInstanceId !== "string") return null;
@@ -145,11 +133,10 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
         if (
           !record(row.item) ||
           !{
-            project: ["graph", "chart", "database"],
             nodes: ["node"],
             commands: ["command"],
             plugins: ["plugin"],
-          }[value.panelId as ActivityPanelDocument["panelId"]].includes(row.item.kind as string)
+          }[value.panelId as BackendActivityPanelId].includes(row.item.kind as string)
         )
           return null;
         break;

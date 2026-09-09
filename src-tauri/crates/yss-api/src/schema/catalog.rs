@@ -451,32 +451,5 @@ mod tests {
             .unwrap();
         assert_eq!(function["item"]["creation"], item["creation"]);
         assert!(rows.iter().any(|row| row["kind"] == "category"));
-        let project = application
-            .project_activity_panel(Some(project_id))
-            .unwrap();
-        let project = serde_json::to_value(
-            crate::schema::activity_panel::ActivityPanelDocumentDto::try_from(project).unwrap(),
-        )
-        .unwrap();
-        let rows = project["rows"].as_array().unwrap();
-        assert_eq!(
-            rows.iter().filter(|row| row["kind"] == "category").count(),
-            4
-        );
-        assert!(rows.iter().any(
-            |row| row["item"]["path"] == "functions/Opaque.yssbi-function"
-                && row["item"]["graphType"] == "function"
-        ));
-        assert!(
-            rows.iter()
-                .any(|row| row["id"] == "project.functions" && row["defaultExpanded"] == false)
-        );
-        assert!(
-            application
-                .project_activity_panel(Some(
-                    yss_project_identity::ProjectInstanceId::from_existing("other-project".into())
-                ))
-                .is_err()
-        );
     }
 }

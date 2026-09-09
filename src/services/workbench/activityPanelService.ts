@@ -1,10 +1,13 @@
 import { invokeCommand } from "@/services/ipc";
 import { parseActivityPanelUpdate } from "@/shared/types/dto/activityPanel";
-import type { ActivityPanelId, ActivityPanelSnapshot } from "@/shared/types/domain/activityPanel";
+import type {
+  BackendActivityPanelId,
+  ActivityPanelSnapshot,
+} from "@/shared/types/domain/activityPanel";
 import { IpcError } from "@/services/ipc/ipcError";
 
 export async function getActivityPanelDocument(
-  panelId: ActivityPanelId,
+  panelId: BackendActivityPanelId,
   project: { projectInstanceId: string } | null,
   locale: string,
   previous: ActivityPanelSnapshot | null = null,

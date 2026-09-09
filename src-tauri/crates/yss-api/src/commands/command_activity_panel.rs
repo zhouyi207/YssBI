@@ -10,7 +10,6 @@ use crate::{error::CommandError, schema::activity_panel::ActivityPanelDocumentDt
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ActivityPanelId {
-    Project,
     Nodes,
     Commands,
     Plugins,
@@ -41,9 +40,6 @@ pub async fn get_activity_panel_document(
     let window_label = window.label().to_owned();
     tauri::async_runtime::spawn_blocking(move || {
         let document = match panel_id {
-            ActivityPanelId::Project => application
-                .project_activity_panel(project_instance_id)
-                .map_err(super::command_project::query::map_project_query_error)?,
             ActivityPanelId::Nodes => application
                 .nodes_activity_panel(project_instance_id, locale.clone())
                 .map_err(super::command_node_system::catalog_query_command_error)?,
