@@ -2,13 +2,8 @@ import { useDocumentStateStore, type DocumentState } from "./documentStateStore"
 import type { ProjectResourceMeta, ResourceKey } from "./resourceTypes";
 import { resourceKey } from "./resourceTypes";
 
-export interface ResourceSnapshot {
-  resources: ProjectResourceMeta[];
-  graphOrder: string[];
-}
-
 function snapshotMetaFingerprint(resource: ProjectResourceMeta): string {
-  return `${resource.name}\0${resource.uri}`;
+  return `${resource.name}\0${resource.uri}\0${resource.revision ?? ""}`;
 }
 
 export interface PreparedResourceProjectionSnapshot {
@@ -36,7 +31,7 @@ export function prepareResourceProjectionSnapshot(
     const doc = documents[key];
 
     const loaded = doc?.loaded ?? previous?.loaded ?? resource.loaded;
-    let hasDirtyDocument = doc?.dirty ?? previous?.hasDirtyDocument ?? false;
+    const hasDirtyDocument = doc?.dirty ?? previous?.hasDirtyDocument ?? false;
     let hasStaleDocument = doc?.stale ?? false;
     let hasConflictDocument = doc?.conflict ?? false;
 
@@ -92,26 +87,4 @@ export function prepareResourceProjectionSnapshot(
   }
 
   return { resources, documentPatches };
-}
-
-export function applySnapshotDocumentPatches(
-  patches: PreparedResourceProjectionSnapshot["documentPatches"],
-): void {
-  const store = useDocumentStateStore.getState();
-  for (const { key, patch } of patches) {
-    const previous = store.documents[key];
-    if (!previous) {
-      store.upsertDocument({
-        resourceKey: key,
-        loaded: true,
-        dirty: patch.conflict ?? false,
-        stale: patch.stale ?? false,
-        missing: patch.missing ?? false,
-        conflict: patch.conflict ?? false,
-        version: 0,
-      });
-      continue;
-    }
-    store.patchDocument(key, patch);
-  }
 }

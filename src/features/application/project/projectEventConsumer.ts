@@ -3,10 +3,6 @@ import type {
   ResourceMutationResultDto,
 } from "@/shared/types/domain/editorMutation";
 import type { LifecycleMutationResultDto } from "@/shared/types/domain/project";
-import type {
-  ProjectHydrationCoordinator,
-  ProjectHydrationOutcome,
-} from "./projectHydrationCoordinator";
 
 type Awaitable<T> = T | PromiseLike<T>;
 
@@ -44,7 +40,7 @@ export interface ResourceMutationCommittedPayload {
   readonly result: ResourceMutationResultDto;
 }
 
-/** Low-rate Rust facts. Resource commands publish through their response only. */
+/** Low-rate Rust facts; resource receipts share the command publication owner. */
 export type ProjectEvent =
   | { readonly type: "ProjectLoaded"; readonly payload: ProjectLoadedPayload }
   | { readonly type: "ProjectCleared"; readonly payload: undefined }
@@ -68,11 +64,8 @@ export type ProjectEventConsumptionOutcome =
   | { readonly status: "recoveryRequested" };
 
 export interface ProjectEventConsumerDependencies {
-  readonly hydration: Pick<
-    ProjectHydrationCoordinator,
-    "loadCurrentProject" | "refreshResourceIndex" | "replaceProject"
-  >;
-  readonly activateProject?: (result: ProjectLoadedPayload["result"]) => Awaitable<boolean>;
+  readonly refreshResourceIndex: () => Awaitable<boolean>;
+  readonly activateProject: (result: ProjectLoadedPayload["result"]) => Awaitable<boolean>;
   readonly currentProjectInstanceId: () => string | null;
   readonly publishProjectCleared?: () => Awaitable<void>;
   readonly publishLifecycleCommitted?: (result: LifecycleMutationResultDto) => Awaitable<void>;
@@ -86,31 +79,17 @@ export interface ProjectEventConsumer {
   acceptEvent(event: ProjectEvent): Promise<ProjectEventConsumptionOutcome>;
 }
 
-function hydrationOutcomeToConsumption(
-  outcome: ProjectHydrationOutcome,
-): ProjectEventConsumptionOutcome {
-  if (outcome.status === "published") return { status: "applied" };
-  if (outcome.status === "failed") return { status: "recoveryRequested" };
-  return { status: "ignored" };
-}
-
 export function createProjectEventConsumer(
   dependencies: ProjectEventConsumerDependencies,
 ): ProjectEventConsumer {
   const acceptEvent = async (event: ProjectEvent): Promise<ProjectEventConsumptionOutcome> => {
     try {
       switch (event.type) {
-        case "ProjectLoaded": {
-          if (dependencies.activateProject) {
-            return (await dependencies.activateProject(event.payload.result))
-              ? { status: "applied" }
-              : { status: "ignored" };
-          }
-          dependencies.hydration.replaceProject();
-          return hydrationOutcomeToConsumption(await dependencies.hydration.loadCurrentProject());
-        }
+        case "ProjectLoaded":
+          return (await dependencies.activateProject(event.payload.result))
+            ? { status: "applied" }
+            : { status: "ignored" };
         case "ProjectCleared":
-          dependencies.hydration.replaceProject();
           await dependencies.publishProjectCleared?.();
           return { status: "applied" };
         case "ProjectLifecycleCommitted":
@@ -126,7 +105,9 @@ export function createProjectEventConsumer(
           if (dependencies.currentProjectInstanceId() !== event.payload.projectInstanceId) {
             return { status: "ignored" };
           }
-          return hydrationOutcomeToConsumption(await dependencies.hydration.refreshResourceIndex());
+          return (await dependencies.refreshResourceIndex())
+            ? { status: "applied" }
+            : { status: "recoveryRequested" };
         case "ResourceMutationCommitted":
           if (dependencies.currentProjectInstanceId() !== event.payload.result.projectInstanceId) {
             return { status: "ignored" };

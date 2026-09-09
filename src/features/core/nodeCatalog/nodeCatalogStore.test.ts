@@ -266,5 +266,12 @@ describe("useNodeCatalogStore", () => {
     expect(
       store.storeResponse(later, catalog({ locale: "fr-FR", resourcePublicationRevision: 7 })),
     ).toBe(false);
+    // External file discovery may publish a new index without changing this Rust watermark.
+    expect(store.observeResourcePublication("project-1", 8, true)).toBe(true);
+    expect(useNodeCatalogStore.getState().requests['["project-1","en-US"]'].status).toBe("idle");
+    expect(
+      store.storeResponse(later, catalog({ locale: "fr-FR", resourcePublicationRevision: 8 })),
+    ).toBe(false);
+    expect(store.observeResourcePublication("project-1", 8)).toBe(false);
   });
 });

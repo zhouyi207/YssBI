@@ -14,13 +14,11 @@ import {
 import {
   createProjectEventConsumer,
   type ProjectEventConsumer,
-  type ProjectEventConsumerDependencies,
 } from "@/features/application/project/projectEventConsumer";
 import {
   createProjectEventStream,
   type ProjectEventStream,
 } from "@/services/project/projectEventStream";
-import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { applyProjectLifecycleReceipt } from "@/features/application/projectLifecycleReceipt";
 import { createProjectLifecycleReceiptDependencies } from "@/features/application/projectLifecycleReceiptDependencies";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
@@ -36,26 +34,9 @@ interface ProjectSyncRuntime {
 
 let runtime: ProjectSyncRuntime | null = null;
 
-function hydrationDependencies(): ProjectEventConsumerDependencies["hydration"] {
-  return {
-    loadCurrentProject: async () =>
-      (await loadCurrentProject())
-        ? { status: "published" as const }
-        : { status: "failed" as const },
-    refreshResourceIndex: async () =>
-      (await refreshProjectResourceIndex())
-        ? { status: "published" as const }
-        : { status: "failed" as const },
-    replaceProject: () => {
-      resetGraphProjectionLifecycle();
-    },
-  };
-}
-
 function createConsumer(): ProjectEventConsumer {
-  const hydration = hydrationDependencies();
   return createProjectEventConsumer({
-    hydration,
+    refreshResourceIndex: refreshProjectResourceIndex,
     activateProject: async (result) => Boolean(await loadActivatedProject(result)),
     currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
     publishProjectCleared: () => {
@@ -73,8 +54,8 @@ function createConsumer(): ProjectEventConsumer {
       if (result.invalidation.project) resetResultQueryProject();
     },
     publishProjectSaved: () => undefined,
-    publishResourceMutationCommitted: async () => {
-      await refreshProjectResourceIndex();
+    publishResourceMutationCommitted: async (result) => {
+      await projectPublicationCoordinator.submit({ result });
     },
   });
 }

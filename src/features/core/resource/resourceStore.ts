@@ -5,7 +5,13 @@ import { resourceKey } from "./resourceTypes";
 interface ResourceStore {
   resources: Record<ResourceKey, ProjectResourceMeta>;
   graphOrder: string[];
-  setSnapshot(snapshot: { resources: ProjectResourceMeta[]; graphOrder?: string[] }): void;
+  indexGeneration: number;
+  indexRevision: number;
+  setSnapshot(snapshot: {
+    resources: ProjectResourceMeta[];
+    graphOrder?: string[];
+    publicationRevision?: number;
+  }): void;
   setResources(resources: ProjectResourceMeta[]): void;
   upsertResource(resource: ProjectResourceMeta): void;
   patchResource(ref: ResourceRef, patch: Partial<ProjectResourceMeta>): void;
@@ -16,9 +22,13 @@ interface ResourceStore {
 export const useResourceStore = create<ResourceStore>((set) => ({
   resources: {},
   graphOrder: [],
+  indexGeneration: 0,
+  indexRevision: 0,
 
-  setSnapshot: ({ resources, graphOrder }) =>
-    set({
+  setSnapshot: ({ resources, graphOrder, publicationRevision }) =>
+    set((state) => ({
+      indexGeneration: state.indexGeneration + 1,
+      indexRevision: publicationRevision ?? state.indexRevision,
       resources: Object.fromEntries(
         resources.map((resource) => [resourceKey(resource), resource]),
       ) as Record<ResourceKey, ProjectResourceMeta>,
@@ -27,7 +37,7 @@ export const useResourceStore = create<ResourceStore>((set) => ({
         resources
           .filter((resource) => resource.kind === "event" || resource.kind === "function")
           .map((resource) => resource.id),
-    }),
+    })),
 
   setResources: (resources) =>
     set({
@@ -74,5 +84,11 @@ export const useResourceStore = create<ResourceStore>((set) => ({
       };
     }),
 
-  clear: () => set({ resources: {}, graphOrder: [] }),
+  clear: () =>
+    set((state) => ({
+      resources: {},
+      graphOrder: [],
+      indexRevision: 0,
+      indexGeneration: state.indexGeneration + 1,
+    })),
 }));

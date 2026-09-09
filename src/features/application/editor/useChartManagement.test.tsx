@@ -70,10 +70,6 @@ vi.mock("@/features/application/projectCommandContext", () => ({
   captureProjectCommandContext: vi.fn(),
 }));
 
-vi.mock("@/features/application/resource/resourceActions", () => ({
-  commitFileFirstResourceIndex: vi.fn(),
-}));
-
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
   projectPublicationCoordinator: { submit: vi.fn() },
 }));

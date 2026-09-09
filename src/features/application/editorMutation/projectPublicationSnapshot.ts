@@ -1,21 +1,28 @@
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ProjectDatabaseIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
-import { isProjectDatabaseIndexRow } from "@/services/project/projectService";
+import { parseProjectIndexRow } from "@/services/project/projectService";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { displayNameFromEngine } from "@/features/application/dataManagement/databaseRecords";
 import type {
-  PreparedProjectRecovery,
-  ProjectRecoveryPreparation,
+  PreparedProjectSnapshot,
+  ProjectSnapshotPreparation,
 } from "./projectPublicationCoordinator";
 import { useDatabaseStore, useGraphMetaStore } from "@/features/core/dataStore";
 import {
-  commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
   useGraphProjectionStore,
 } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  isGraphDraftDirty,
+  isGraphDraftSaving,
+  useGraphDraftStore,
+} from "@/features/core/graphDraft";
+import {
+  assertCurrentProjectIdentity,
+  isCurrentProjectIdentity,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
-  buildGraphResourceMeta,
   prepareResourceProjectionSnapshot,
   resourceKey,
   useDocumentStateStore,
@@ -34,94 +41,17 @@ import {
 } from "@/features/application/editor/cascadeGraphPathReferences";
 import { invalidateChartPreviewCacheForMove } from "@/services/chart/chartPreviewCache";
 import { commitEditorDockviewPublication } from "./editorDockviewPublicationCommit";
+import { buildProjectResourceState } from "@/features/application/project/authoritativeProjectLoadPlan";
 
-function publicationPaths(result: ResourceMutationResultDto): string[] {
-  const statusPaths =
-    result.projectionStatus.status === "complete"
-      ? result.projectionStatus.expectedGraphPaths
-      : result.projectionStatus.invalidatedGraphPaths;
-  const lifecyclePaths = result.deltas.flatMap((delta) => {
-    if (delta.resource.kind !== "graph" || delta.payload.kind !== "resource_lifecycle") return [];
-    const { before, after } = delta.payload.patch;
-    return [before?.path, after?.path].filter((path): path is string => path != null);
-  });
-  return [
-    ...statusPaths,
-    ...result.moves.filter((move) => move.kind !== "chart").map((move) => move.to),
-    ...lifecyclePaths,
-  ];
-}
-
-function validFunctionSignature(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) return false;
-  const signature = value as { parameters?: unknown; return_type?: unknown };
-  return (
-    Array.isArray(signature.parameters) &&
-    signature.parameters.every((parameter) => {
-      if (typeof parameter !== "object" || parameter === null) return false;
-      const row = parameter as Record<string, unknown>;
-      return (
-        typeof row.id === "string" &&
-        typeof row.name === "string" &&
-        typeof row.type_name === "string"
-      );
-    }) &&
-    (signature.return_type === null || typeof signature.return_type === "string")
-  );
-}
-
-export function validateProjectRecoveryIndex(
+export function validateProjectSnapshotIndex(
   index: ProjectIndexRow,
   projectInstanceId: string,
 ): string | undefined {
-  if (index.projectInstanceId !== projectInstanceId) return "recovery project identity is stale";
-  if (!Number.isSafeInteger(index.publicationRevision) || index.publicationRevision < 0) {
-    return "recovery publication revision is malformed";
-  }
-  if (
-    !Array.isArray(index.graphs) ||
-    index.graphs.some(
-      (graph) =>
-        typeof graph.path !== "string" ||
-        typeof graph.name !== "string" ||
-        (graph.type !== "event" && graph.type !== "function") ||
-        (graph.type === "function" &&
-          (!Number.isSafeInteger(graph.functionRevision) ||
-            (graph.functionRevision as number) < 0 ||
-            !validFunctionSignature(graph.functionSignature))),
-    )
-  ) {
-    return "recovery graph metadata is malformed";
-  }
-  if (new Set(index.graphs.map((graph) => graph.path)).size !== index.graphs.length) {
-    return "recovery graph metadata contains duplicate paths";
-  }
-  if (!Array.isArray(index.charts)) {
-    return "recovery resource index is incomplete";
-  }
-  if (
-    !Array.isArray(index.databases) ||
-    index.databases.some((database) => !isProjectDatabaseIndexRow(database)) ||
-    new Set(index.databases.map((database) => database.id)).size !== index.databases.length
-  ) {
-    return "recovery database metadata is malformed";
-  }
-  if (
-    index.charts.some(
-      (chart) =>
-        typeof chart.chartPath !== "string" ||
-        !chart.chartPath ||
-        typeof chart.name !== "string" ||
-        typeof chart.databaseId !== "string" ||
-        !Number.isSafeInteger(chart.revision) ||
-        chart.revision < 0 ||
-        (chart.chartType !== "histogram" &&
-          chart.chartType !== "scatter" &&
-          chart.chartType !== "line"),
-    ) ||
-    new Set(index.charts.map((chart) => chart.chartPath)).size !== index.charts.length
-  ) {
-    return "recovery chart metadata is malformed";
+  if (index.projectInstanceId !== projectInstanceId) return "snapshot project identity is stale";
+  try {
+    parseProjectIndexRow(index);
+  } catch {
+    return "project index contract is malformed";
   }
   return undefined;
 }
@@ -164,7 +94,7 @@ function authoritativeTerminals(
   return terminals;
 }
 
-function buildRecoveryPathRemaps(
+function buildSnapshotPathRemaps(
   authoritativePaths: ReadonlySet<string>,
   queuedResults: readonly ResourceMutationResultDto[],
   accepts: (move: ResourceMutationResultDto["moves"][number]) => boolean,
@@ -203,86 +133,31 @@ function buildRecoveryPathRemaps(
   return pathRemaps;
 }
 
-export function buildProjectRecoveryPathRemaps(
+export function buildProjectSnapshotPathRemaps(
   authoritativeGraphPaths: ReadonlySet<string>,
   queuedResults: readonly ResourceMutationResultDto[],
 ): ReadonlyMap<string, string> {
-  return buildRecoveryPathRemaps(
+  return buildSnapshotPathRemaps(
     authoritativeGraphPaths,
     queuedResults,
     (move) => move.kind === "event" || move.kind === "function",
   );
 }
 
-export function buildProjectRecoveryChartPathRemaps(
+export function buildProjectSnapshotChartPathRemaps(
   authoritativeChartPaths: ReadonlySet<string>,
   queuedResults: readonly ResourceMutationResultDto[],
 ): ReadonlyMap<string, string> {
-  return buildRecoveryPathRemaps(
+  return buildSnapshotPathRemaps(
     authoritativeChartPaths,
     queuedResults,
     (move) => move.kind === "chart",
   );
 }
 
-export function collectProjectRecoveryGraphPaths(
-  index: ProjectIndexRow,
-  graphPathsLoadedAtStart: ReadonlySet<string>,
-  queuedResults: readonly ResourceMutationResultDto[],
-): ReadonlySet<string> {
-  const authoritative = new Set(index.graphs.map((graph) => graph.path));
-  const pathRemaps = buildProjectRecoveryPathRemaps(authoritative, queuedResults);
-  const rewrite = (path: string): string => pathRemaps.get(path) ?? path;
-  const candidates = new Set<string>();
-  for (const path of graphPathsLoadedAtStart) candidates.add(rewrite(path));
-  for (const result of queuedResults) {
-    for (const path of publicationPaths(result)) candidates.add(rewrite(path));
-  }
-
-  return new Set([...candidates].filter((path) => authoritative.has(path)));
-}
-
-function recoveryResources(
-  index: ProjectIndexRow,
-  chartDocuments: Readonly<Record<string, unknown>>,
-  databases: Readonly<Record<string, { name?: unknown }>>,
-): ProjectResourceMeta[] {
-  const resources: ProjectResourceMeta[] = index.graphs.map((graph) =>
-    buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }),
-  );
-  resources.push(
-    ...index.charts.map((chart) => ({
-      id: chart.chartPath,
-      kind: "chart" as const,
-      name: chart.name,
-      uri: `yssbi://chart/${chart.chartPath}`,
-      revision: chart.revision,
-      exists: true,
-      loaded: Boolean(chartDocuments[chart.chartPath]),
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    })),
-  );
-  for (const [id, database] of Object.entries(databases)) {
-    resources.push({
-      id,
-      kind: "database",
-      name: typeof database.name === "string" ? database.name : id,
-      uri: `yssbi://database/${id}`,
-      exists: true,
-      loaded: true,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
-  }
-  return resources;
-}
-
 function remapDocuments(
   current: Readonly<Record<ResourceKey, DocumentState>>,
-  plan: ProjectRecoveryPreparation,
+  plan: ProjectSnapshotPreparation,
 ): Record<ResourceKey, DocumentState> {
   const documents = structuredClone(current) as Record<ResourceKey, DocumentState>;
   const graphKind = new Map(plan.index.graphs.map((graph) => [graph.path, graph.type]));
@@ -296,7 +171,7 @@ function remapDocuments(
     documents[toKey] = { ...source, resourceKey: toKey };
     delete documents[fromKey];
   }
-  for (const [from, to] of plan.chartPathRemaps ?? []) {
+  for (const [from, to] of plan.chartPathRemaps) {
     const fromKey = resourceKey({ id: from, kind: "chart" });
     const toKey = resourceKey({ id: to, kind: "chart" });
     const source = documents[fromKey];
@@ -309,7 +184,7 @@ function remapDocuments(
 
 function remapResources(
   current: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
-  plan: ProjectRecoveryPreparation,
+  plan: ProjectSnapshotPreparation,
 ): Record<ResourceKey, ProjectResourceMeta> {
   const resources = structuredClone(current) as Record<ResourceKey, ProjectResourceMeta>;
   const graphByPath = new Map(plan.index.graphs.map((graph) => [graph.path, graph]));
@@ -324,7 +199,7 @@ function remapResources(
     delete resources[fromKey];
   }
   const chartByPath = new Map(plan.index.charts.map((chart) => [chart.chartPath, chart]));
-  for (const [from, to] of plan.chartPathRemaps ?? []) {
+  for (const [from, to] of plan.chartPathRemaps) {
     const chart = chartByPath.get(to);
     if (!chart) continue;
     const fromKey = resourceKey({ id: from, kind: "chart" });
@@ -409,15 +284,16 @@ function databaseFromIndex(
   };
 }
 
-export function prepareProjectRecoveryCommit(
-  plan: ProjectRecoveryPreparation,
-): PreparedProjectRecovery {
+export function prepareProjectSnapshotCommit(
+  plan: ProjectSnapshotPreparation,
+): PreparedProjectSnapshot {
   const currentDatabases = useDatabaseStore.getState().databases;
   const databaseRows = plan.index.databases;
   const databases = Object.fromEntries(
     databaseRows.map((row) => [row.id, databaseFromIndex(row, currentDatabases[row.id])]),
   );
   const databaseRevisions = Object.fromEntries(databaseRows.map((row) => [row.id, row.revision]));
+  const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
   const chartState = useChartDocumentStore.getState();
   const chartIndex = plan.index.charts.map((chart) => ({
     chartPath: chart.chartPath,
@@ -428,17 +304,23 @@ export function prepareProjectRecoveryCommit(
   }));
   const authoritativeChartPaths = new Set(chartIndex.map((chart) => chart.chartPath));
   const remappedChartDocuments = structuredClone(chartState.documents);
-  for (const [from, to] of plan.chartPathRemaps ?? []) {
+  for (const [from, to] of plan.chartPathRemaps) {
     const source = remappedChartDocuments[from];
     if (!source) continue;
     remappedChartDocuments[to] = source;
     delete remappedChartDocuments[from];
   }
   const chartDocuments = Object.fromEntries(
-    Object.entries(remappedChartDocuments).filter(([chartPath]) =>
-      authoritativeChartPaths.has(chartPath),
+    Object.entries(remappedChartDocuments).filter(
+      ([chartPath]) =>
+        authoritativeChartPaths.has(chartPath) ||
+        remappedDocuments[resourceKey({ id: chartPath, kind: "chart" })]?.dirty,
     ),
   );
+  for (const [path, document] of plan.chartDocuments) {
+    if (!remappedDocuments[resourceKey({ id: path, kind: "chart" })]?.dirty)
+      chartDocuments[path] = document;
+  }
 
   const graphMeta = Object.fromEntries(
     plan.index.graphs.map((graph) => {
@@ -463,55 +345,60 @@ export function prepareProjectRecoveryCommit(
     }),
   );
 
-  const remappedDocuments = remapDocuments(useDocumentStateStore.getState().documents, plan);
   const remappedResources = remapResources(useResourceStore.getState().resources, plan);
-  const incoming = recoveryResources(plan.index, chartDocuments, databases);
+  const incoming = Object.values(
+    buildProjectResourceState({
+      graphs: plan.index.graphs,
+      charts: plan.index.charts,
+      databases,
+      loadedChartPaths: new Set(Object.keys(chartDocuments)),
+    }).resources,
+  );
   const { resources: projectedResources, documentPatches } = prepareResourceProjectionSnapshot(
     incoming,
     remappedResources,
     remappedDocuments,
   );
-  const authoritativeKeys = new Set(incoming.map((resource) => resourceKey(resource)));
   const resources = Object.fromEntries(
-    projectedResources
-      .filter((resource) => authoritativeKeys.has(resourceKey(resource)))
-      .map((resource) => [resourceKey(resource), resource]),
+    projectedResources.map((resource) => [resourceKey(resource), resource]),
   ) as Record<ResourceKey, ProjectResourceMeta>;
-  applyDocumentPatches(
-    remappedDocuments,
-    documentPatches.filter(({ key }) => authoritativeKeys.has(key)),
-  );
-  const previousPathOwnedKeys = new Set(
-    Object.values(remappedResources)
-      .filter(
-        (resource) =>
-          resource.kind === "event" || resource.kind === "function" || resource.kind === "chart",
-      )
-      .map((resource) => resourceKey(resource)),
-  );
-  const documents = Object.fromEntries(
-    Object.entries(remappedDocuments).filter(
-      ([key]) =>
-        !previousPathOwnedKeys.has(key as ResourceKey) || authoritativeKeys.has(key as ResourceKey),
-    ),
-  ) as Record<ResourceKey, DocumentState>;
-
+  applyDocumentPatches(remappedDocuments, documentPatches);
+  const documents = remappedDocuments;
   const authoritativeGraphPaths = new Set(plan.index.graphs.map((graph) => graph.path));
-  const replacements = [...plan.projections].map(([graphPath, projection]) => ({
-    graphPath,
-    projection,
-  }));
-  const loadedAtStartTerminals = new Set(
-    [...plan.graphPathsLoadedAtStart].map((path) => plan.pathRemaps.get(path) ?? path),
-  );
-  const concurrentGraphEntities = Object.fromEntries(
+  const replacements = [...plan.graphSessions]
+    .filter(([path]) => {
+      const previousPath = [...plan.pathRemaps].find(([, to]) => to === path)?.[0] ?? path;
+      return !isGraphDraftDirty(previousPath) && !isGraphDraftSaving(previousPath);
+    })
+    .map(([graphPath, session]) => ({ graphPath, projection: session.projection }));
+  const retainedGraphEntities = Object.fromEntries(
     Object.entries(useGraphProjectionStore.getState().graphEntities).filter(
-      ([path]) => authoritativeGraphPaths.has(path) && !loadedAtStartTerminals.has(path),
+      ([path]) =>
+        authoritativeGraphPaths.has(path) || isGraphDraftDirty(path) || isGraphDraftSaving(path),
     ),
   );
-  const preparedGraphs = prepareGraphProjectionReplacements(replacements, concurrentGraphEntities);
+  const preparedGraphs = prepareGraphProjectionReplacements(replacements, retainedGraphEntities);
+  const refreshedKeys = [
+    ...replacements.map(({ graphPath }) => {
+      const kind = plan.index.graphs.find((graph) => graph.path === graphPath)!.type;
+      return resourceKey({ id: graphPath, kind });
+    }),
+    ...[...plan.chartDocuments.keys()].map((id) => resourceKey({ id, kind: "chart" })),
+  ];
+  for (const key of refreshedKeys) {
+    if (documents[key]?.dirty) continue;
+    if (documents[key])
+      documents[key] = { ...documents[key], stale: false, missing: false, conflict: false };
+    if (resources[key])
+      resources[key] = {
+        ...resources[key],
+        loaded: true,
+        hasStaleDocument: false,
+        hasConflictDocument: false,
+      };
+  }
   if (!preparedGraphs.prepared) {
-    throw new Error(`recovery projection preparation failed for '${preparedGraphs.graphPath}'`);
+    throw new Error(`snapshot projection preparation failed for '${preparedGraphs.graphPath}'`);
   }
 
   const focused = useGraphSessionStore.getState().focusedSession;
@@ -546,40 +433,54 @@ export function prepareProjectRecoveryCommit(
   };
 }
 
-export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): void | Promise<void> {
+export function commitPreparedProjectSnapshot(
+  prepared: PreparedProjectSnapshot,
+): void | Promise<void> {
   const moves = [
-    ...[...plan.pathRemaps].map(([from, to]) => ({ from, to })),
-    ...[...(plan.chartPathRemaps ?? [])].map(([from, to]) => ({ from, to })),
+    ...[...prepared.pathRemaps].map(([from, to]) => ({ from, to })),
+    ...[...prepared.chartPathRemaps].map(([from, to]) => ({ from, to })),
   ];
-  return commitEditorDockviewPublication(moves, plan.storeState.resources, () => {
-    useDatabaseStore.setState({
-      databases: plan.storeState.databases,
-      revisions: plan.storeState.databaseRevisions,
-    });
-    useChartDocumentStore.setState({
-      index: plan.storeState.chartIndex,
-      documents: plan.storeState.chartDocuments,
-    });
-    useDocumentStateStore.setState({ documents: plan.storeState.documents });
-    useResourceStore.setState({
-      resources: plan.storeState.resources,
-      graphOrder: plan.storeState.graphOrder,
-    });
-    useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
-    commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
-    useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
-    useViewportStore.setState({ viewports: plan.storeState.viewports });
-    for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
-    for (const [from, to] of plan.chartPathRemaps ?? []) {
-      remapChartNonViewportUiState(from, to);
-      invalidateChartPreviewCacheForMove(plan.projectInstanceId, from, to);
-    }
-    const detailFocus = useEditorStore.getState().detailFocus;
-    if (
-      detailFocus?.kind === "chart" &&
-      !plan.index.charts.some((chart) => chart.chartPath === detailFocus.chartPath)
-    ) {
-      useEditorStore.getState().clearDetailFocus();
-    }
-  });
+  return commitEditorDockviewPublication(
+    moves,
+    prepared.storeState.resources,
+    () => {
+      assertCurrentProjectIdentity(prepared);
+      const plan = prepareProjectSnapshotCommit(prepared);
+      useDatabaseStore.setState({
+        databases: plan.storeState.databases,
+        revisions: plan.storeState.databaseRevisions,
+      });
+      useChartDocumentStore.setState({
+        index: plan.storeState.chartIndex,
+        documents: plan.storeState.chartDocuments,
+      });
+      useDocumentStateStore.setState({ documents: plan.storeState.documents });
+      useResourceStore.getState().setSnapshot({
+        resources: Object.values(plan.storeState.resources),
+        graphOrder: plan.storeState.graphOrder,
+        publicationRevision: plan.publicationRevision,
+      });
+      useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
+      useGraphProjectionStore.setState({ graphEntities: plan.graphProjectionPlan.graphEntities });
+      for (const path of plan.graphProjectionPlan.graphPaths) {
+        const session = plan.graphSessions.get(path);
+        if (session) useGraphDraftStore.getState().hydrate(path, session);
+      }
+      useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
+      useViewportStore.setState({ viewports: plan.storeState.viewports });
+      for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
+      for (const [from, to] of plan.chartPathRemaps) {
+        remapChartNonViewportUiState(from, to);
+        invalidateChartPreviewCacheForMove(plan.projectInstanceId, from, to);
+      }
+      const detailFocus = useEditorStore.getState().detailFocus;
+      if (
+        detailFocus?.kind === "chart" &&
+        !plan.index.charts.some((chart) => chart.chartPath === detailFocus.chartPath)
+      ) {
+        useEditorStore.getState().clearDetailFocus();
+      }
+    },
+    () => isCurrentProjectIdentity(prepared),
+  );
 }

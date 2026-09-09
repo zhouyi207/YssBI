@@ -41,7 +41,11 @@ export interface NodeCatalogState {
   beginRequest(projectInstanceId: string, locale: string): CatalogRequestIdentity | null;
   storeResponse(identity: CatalogRequestIdentity, response: LocalizedCatalogResponse): boolean;
   storeError(identity: CatalogRequestIdentity, error: ErrorReference): boolean;
-  observeResourcePublication(projectInstanceId: string, revision: number): boolean;
+  observeResourcePublication(
+    projectInstanceId: string,
+    revision: number,
+    indexInvalidated?: boolean,
+  ): boolean;
   requestRefresh(projectInstanceId: string, locale: string): void;
   clear(): void;
 }
@@ -215,23 +219,24 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     return stored;
   },
 
-  observeResourcePublication: (projectInstanceId, revision) => {
+  observeResourcePublication: (projectInstanceId, revision, indexInvalidated = false) => {
     let advanced = false;
     set((state) => {
       const currentRevision = state.projectWatermarks[projectInstanceId] ?? 0;
       if (!Number.isSafeInteger(revision) || revision < 0) return state;
       const minimumRevision = Math.max(revision, currentRevision);
-      advanced = minimumRevision > currentRevision;
+      advanced = minimumRevision > currentRevision || indexInvalidated;
       const requests = { ...state.requests };
       for (const [key, request] of Object.entries(requests)) {
         const [requestProject] = JSON.parse(key) as [string, string];
         if (
           requestProject !== projectInstanceId ||
-          request.minimumResourcePublicationRevision >= minimumRevision
+          (request.minimumResourcePublicationRevision >= minimumRevision && !indexInvalidated)
         )
           continue;
         const cached = request.responseKey ? state.responses[request.responseKey] : null;
         const fresh =
+          !indexInvalidated &&
           request.status === "ready" &&
           cached &&
           cached.resourcePublicationRevision >= minimumRevision;

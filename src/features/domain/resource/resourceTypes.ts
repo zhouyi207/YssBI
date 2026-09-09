@@ -15,6 +15,8 @@ export interface ProjectResourceMeta {
   kind: ResourceKind;
   name: string;
   uri: string;
+  /** Opaque backend path for database creation descriptors. */
+  resourcePath?: string;
   parentId?: string;
   scope?: { type: "global" | "event" | "function"; graphPath?: string };
   revision?: number;

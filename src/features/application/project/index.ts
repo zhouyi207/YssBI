@@ -12,13 +12,6 @@ export type {
   ProjectPickerRecoveryPresentation,
 } from "./projectPickerOutcomes";
 
-export { createProjectHydrationCoordinator } from "./projectHydrationCoordinator";
-export type {
-  ProjectHydrationCoordinator,
-  ProjectHydrationDependencies,
-  ProjectHydrationIdentity,
-  ProjectHydrationOutcome,
-} from "./projectHydrationCoordinator";
 export {
   createProjectEventIngress,
   DEFAULT_PROJECT_EVENT_QUEUE_CAPACITY,

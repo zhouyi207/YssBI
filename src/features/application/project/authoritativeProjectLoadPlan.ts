@@ -109,6 +109,7 @@ export function buildProjectResourceState(input: {
       kind: "database",
       name: typeof database.name === "string" ? database.name : id,
       uri: `yssbi://database/${id}`,
+      resourcePath: database.resourcePath,
       exists: true,
       loaded: true,
       hasDirtyDocument: false,

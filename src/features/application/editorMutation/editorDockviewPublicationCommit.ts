@@ -10,11 +10,13 @@ export function commitEditorDockviewPublication(
   moves: Iterable<DockviewResourceMove>,
   authoritativeResources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   commitBusinessStores: () => void,
+  isCurrent?: () => boolean,
 ): void | Promise<void> {
   return commitEditorPanelPublication(
     moves,
     (resourceKind, resourceRef) =>
-      Boolean(authoritativeResources[resourceKey({ id: resourceRef, kind: resourceKind })]),
+      authoritativeResources[resourceKey({ id: resourceRef, kind: resourceKind })]?.exists === true,
     commitBusinessStores,
+    isCurrent,
   );
 }

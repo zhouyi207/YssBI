@@ -4,7 +4,6 @@ import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
-import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import { getDocumentState } from "@/features/core/resource";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
@@ -98,11 +97,11 @@ export function isGraphLifecycleCurrent(graphPath: string, lifecycleToken: numbe
   return lifecycleTokenByGraph.get(graphPath) === lifecycleToken;
 }
 
-export async function prepareGraphProjectionForPublication(
+export async function prepareGraphSessionForPublication(
   graphPath: string,
   projectInstanceId: string,
   publicationEpoch: number,
-): Promise<EditorGraphProjectionDto | false> {
+): Promise<GraphEditorSessionDto | false> {
   const identity = { projectInstanceId, epoch: publicationEpoch };
   if (!isCurrentProjectIdentity(identity)) return false;
   const lifecycleToken = startGraphLifecycle(graphPath);
@@ -119,7 +118,7 @@ export async function prepareGraphProjectionForPublication(
     ) {
       return false;
     }
-    return session.projection;
+    return session;
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;
     logger.graph.error(

@@ -153,7 +153,7 @@ function parseProjectChartIndexRow(value: unknown): ProjectChartIndexRow {
   return value as unknown as ProjectChartIndexRow;
 }
 
-function parseProjectIndexRow(value: unknown): ProjectIndexRow {
+export function parseProjectIndexRow(value: unknown): ProjectIndexRow {
   if (
     !isRecord(value) ||
     Array.isArray(value) ||
@@ -178,13 +178,21 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
     throw new Error("Invalid project index response");
   }
   try {
+    const graphs = value.graphs.map(parseProjectGraphIndexRow);
+    const charts = value.charts.map(parseProjectChartIndexRow);
+    if (
+      new Set(graphs.map((graph) => graph.path)).size !== graphs.length ||
+      new Set(charts.map((chart) => chart.chartPath)).size !== charts.length ||
+      new Set(value.databases.map((database) => database.id)).size !== value.databases.length
+    )
+      throw new Error("Duplicate project resource identity");
     return {
       projectInstanceId: value.projectInstanceId,
       publicationRevision: value.publicationRevision,
       projectName: value.projectName,
       exportTime: value.exportTime,
-      graphs: value.graphs.map(parseProjectGraphIndexRow),
-      charts: value.charts.map(parseProjectChartIndexRow),
+      graphs,
+      charts,
       databases: value.databases,
     };
   } catch {

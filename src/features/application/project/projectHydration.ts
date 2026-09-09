@@ -4,21 +4,11 @@ import { ProjectService, type ProjectActivationResult } from "@/services/project
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { logger } from "@/features/application/observability/appLogger";
 
-import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
 
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
-import {
-  buildGraphResourceMeta,
-  useResourceStore,
-  type ProjectResourceMeta,
-} from "@/features/core/resource";
-import {
-  applySnapshotDocumentPatches,
-  prepareResourceProjectionSnapshot,
-} from "@/features/core/resource/resourceSnapshotProjection";
+import { useResourceStore } from "@/features/core/resource";
 import { resetClientProjectState } from "@/features/application/project/projectReset";
 import { synchronizeProjectPresentation } from "@/features/application/project/projectPresentationSync";
 import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
@@ -27,7 +17,6 @@ import { resetFunctionSignatureCoordinator } from "@/features/application/editor
 import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
 import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
 import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
-import { hydrateFunctionSignaturesFromProjectIndex } from "@/features/application/graphDocument/functionSignatureSync";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
@@ -81,134 +70,11 @@ function logProjectIOError(context: string, reference: ErrorReference): void {
   }
 }
 
-function buildResourceIndex(params: {
-  graphs: Array<{ path: string; name: string; type: "event" | "function"; revision?: number }>;
-  charts: Array<{
-    chartPath: string;
-    name: string;
-    databaseId: string;
-    chartType: import("@/shared/types/domain/chart").ChartType;
-    revision: number;
-  }>;
-  databases: Record<string, DatabaseRecord>;
-}): ProjectResourceMeta[] {
-  const resources: ProjectResourceMeta[] = [];
-  for (const graph of params.graphs) {
-    resources.push(
-      buildGraphResourceMeta(graph.type, graph.path, graph.name, {
-        revision: graph.revision,
-      }),
-    );
-  }
-  for (const chart of params.charts) {
-    resources.push({
-      id: chart.chartPath,
-      kind: "chart",
-      name: chart.name,
-      uri: `yssbi://chart/${chart.chartPath}`,
-      revision: chart.revision,
-      exists: true,
-      loaded: Boolean(useChartDocumentStore.getState().documents[chart.chartPath]),
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
-  }
-  for (const [id, database] of Object.entries(params.databases)) {
-    const name = typeof database.name === "string" ? database.name : id;
-    resources.push({
-      id,
-      kind: "database",
-      name,
-      uri: `yssbi://database/${id}`,
-      exists: true,
-      loaded: true,
-      hasDirtyDocument: false,
-      hasStaleDocument: false,
-      hasConflictDocument: false,
-    });
-  }
-  return resources;
-}
-
-let refreshResourceIndexInFlight: Promise<boolean> | null = null;
-let refreshResourceIndexPending = false;
-
 export async function refreshProjectResourceIndex(): Promise<boolean> {
-  if (refreshResourceIndexInFlight) {
-    refreshResourceIndexPending = true;
-    return refreshResourceIndexInFlight;
-  }
-
-  refreshResourceIndexInFlight = (async () => {
-    let lastResult = false;
-    try {
-      do {
-        refreshResourceIndexPending = false;
-        lastResult = await refreshProjectResourceIndexOnce();
-      } while (refreshResourceIndexPending);
-      return lastResult;
-    } finally {
-      refreshResourceIndexInFlight = null;
-    }
-  })();
-
-  return refreshResourceIndexInFlight;
-}
-
-async function refreshProjectResourceIndexOnce(): Promise<boolean> {
   const identity = captureProjectIdentity();
   try {
-    const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
-    if (!isCurrentProjectIdentity(identity)) return false;
-    if (index.projectInstanceId !== identity.projectInstanceId) return false;
-
-    const databaseRows = index.databases;
-    const databasePaths = Object.fromEntries(databaseRows.map((row) => [row.id, row.resourcePath]));
-    useDatabaseStore.setState((state) => ({
-      databases: Object.fromEntries(
-        Object.entries(state.databases).map(([id, database]) => [
-          id,
-          { ...database, resourcePath: databasePaths[id] },
-        ]),
-      ),
-      revisions: Object.fromEntries(databaseRows.map((row) => [row.id, row.revision])),
-    }));
-
-    const graphOrder = index.graphs.map((graph) => graph.path);
-
-    const chartIndex = index.charts.map((chart) => ({
-      chartPath: chart.chartPath,
-      name: chart.name,
-      databaseId: chart.databaseId,
-      chartType: chart.chartType as import("@/shared/types/domain/chart").ChartType,
-      revision: chart.revision,
-    }));
-    useChartDocumentStore.getState().setIndex(chartIndex);
-
-    const incoming = buildResourceIndex({
-      graphs: index.graphs,
-      charts: chartIndex,
-      databases: useDatabaseStore.getState().databases,
-    });
-
-    const previousByKey = useResourceStore.getState().resources;
-    const { resources, documentPatches } = prepareResourceProjectionSnapshot(
-      incoming,
-      previousByKey,
-    );
-    applySnapshotDocumentPatches(documentPatches);
-
-    useResourceStore.getState().setSnapshot({
-      resources,
-      graphOrder,
-    });
-    hydrateFunctionSignaturesFromProjectIndex(index.graphs);
-    synchronizeProjectPresentation();
-    useNodeCatalogStore
-      .getState()
-      .observeResourcePublication(identity.projectInstanceId, index.publicationRevision);
-    return true;
+    await projectPublicationCoordinator.refreshIndex();
+    return isCurrentProjectIdentity(identity);
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;
     const error = toErrorReference(err, PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE);
@@ -278,6 +144,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
   projectPublicationCoordinator.startProject(
     nextProjectInstanceId,
     prepared.index.publicationRevision,
+    prepared.index,
   );
   commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
   commitProjectLoadStep("graph draft coordinator", resetGraphDraftCoordinator);
@@ -328,9 +195,10 @@ export async function commitPreparedAuthoritativeProjectLoad(
   );
   commitProjectLoadStep("documents", () => useDocumentStateStore.setState({ documents: {} }));
   commitProjectLoadStep("resources", () =>
-    useResourceStore.setState({
-      resources: prepared.storeState.resources,
+    useResourceStore.getState().setSnapshot({
+      resources: Object.values(prepared.storeState.resources),
       graphOrder: prepared.storeState.graphOrder,
+      publicationRevision: prepared.index.publicationRevision,
     }),
   );
   commitProjectLoadStep("function metadata", () =>

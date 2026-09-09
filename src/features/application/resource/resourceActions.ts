@@ -1,5 +1,4 @@
 import { useResourceStore, type ResourceRef } from "@/features/core/resource";
-import { commitAfterCommand } from "./resourceIndexCoordinator";
 import { DatabaseService } from "@/services/database/databaseService";
 import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
@@ -62,10 +61,6 @@ async function submitCurrentResult(
   }
   await projectPublicationCoordinator.submit({ result });
   context.assertCurrent();
-}
-
-export async function commitFileFirstResourceIndex(): Promise<boolean> {
-  return commitAfterCommand();
 }
 
 export async function renameResource(ref: ResourceRef, nextName: string): Promise<void> {
@@ -138,7 +133,6 @@ export async function createGraphResource(kind: GraphResourceKind, name?: string
           context.operationId,
         );
   await submitCurrentResult(context, result);
-  await commitFileFirstResourceIndex();
   context.assertCurrent();
   return mutationGraphPath(result);
 }
@@ -152,7 +146,6 @@ export async function duplicateGraphResource(graphPath: string): Promise<string>
     context.operationId,
   );
   await submitCurrentResult(context, result);
-  await commitFileFirstResourceIndex();
   context.assertCurrent();
   return mutationGraphPath(result);
 }

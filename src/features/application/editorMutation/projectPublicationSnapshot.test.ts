@@ -3,9 +3,18 @@ import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/w
 import { buildGraphResourceMeta } from "@/features/core/resource";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphDraftStore } from "@/features/core/graphDraft";
-import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
-import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
-import { prepareSynchronousPublicationCommit } from "./resourceMutationResult";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+} from "@/tests/helpers/editorProjectionFixtures";
+import {
+  captureProjectIdentity,
+  startProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import {
+  prepareProjectSnapshotCommit,
+  commitPreparedProjectSnapshot,
+} from "./projectPublicationSnapshot";
 import { commitEditorDockviewPublication } from "./editorDockviewPublicationCommit";
 
 const dockviewMocks = vi.hoisted(() => {
@@ -77,7 +86,7 @@ function callerSnapshot() {
   return structuredClone(useGraphProjectionStore.getState().graphEntities[caller]);
 }
 
-describe("resource mutation projection replacement protocol", () => {
+describe("project snapshot projection replacement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dockviewMocks.ready = true;
@@ -93,86 +102,50 @@ describe("resource mutation projection replacement protocol", () => {
     useGraphProjectionStore.getState().replaceProjection(caller, projection);
   });
 
-  it("rejects complete status missing a caller replacement without locally patching the caller", () => {
-    const before = callerSnapshot();
-    const result: ResourceMutationResultDto = {
-      operationId: "00000000-0000-0000-0000-000000000904",
-      projectInstanceId: "00000000-0000-0000-0000-000000000901",
-      publicationRevision: 1,
-      moves: [],
-      deltas: [],
-      projectionReplacements: [],
-      projectionStatus: { status: "complete", expectedGraphPaths: [caller] },
-    };
-
-    expect(() =>
-      prepareSynchronousPublicationCommit(result, {
-        projectInstanceId: result.projectInstanceId,
-        epoch: 1,
-        fingerprint: "missing-loaded-caller-replacement",
-        affectedGraphPaths: new Set([caller]),
-        moves: [],
-      }),
-    ).toThrow("complete replacement paths do not equal the declared expected graph paths");
-    expect(callerSnapshot()).toEqual(before);
-  });
-
-  it("does not replace a dirty Graph draft with a Rust projection publication", () => {
+  it("does not replace a dirty Graph draft, including edits made after snapshot preparation", async () => {
     const replacement = makeEditorProjectionFixture({ graphPath: caller });
-    useGraphDraftStore.setState({
-      sessions: {
-        [caller]: {
-          sessionId: 1,
-          draftGeneration: 0,
-          semanticInputHash: "0".repeat(64),
-          compiledInputHash: null,
-          compileRequest: null,
-          saveDirty: true,
-          compileDirty: true,
-          document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
-          savedDocument: {
-            nodes: {
-              "00000000-0000-0000-0000-000000000001": {
-                id: "00000000-0000-0000-0000-000000000001",
-                node_type: "yssbi.tests.node",
-                position: { x: 0, y: 0 },
-                parameters: {},
-                user_label: null,
-              },
-            },
-            port_bindings: [],
-            connections: {},
-            input_states: [],
-          },
-          projection: replacement.projection,
-          saving: false,
-          compileStatus: "uncompiled",
-          compiledArtifactId: null,
-          compileCacheHit: false,
-          undoStack: [],
-          redoStack: [],
-        },
-      },
-    });
-    const result: ResourceMutationResultDto = {
-      operationId: "00000000-0000-0000-0000-000000000905",
-      projectInstanceId: "00000000-0000-0000-0000-000000000901",
+    useGraphDraftStore.getState().install(caller, makeGraphEditorSession(replacement.projection));
+    const setDirty = (saveDirty: boolean) =>
+      useGraphDraftStore.setState((state) => ({
+        sessions: { ...state.sessions, [caller]: { ...state.sessions[caller], saveDirty } },
+      }));
+    setDirty(true);
+    startProjectLifecycle("project-a");
+    const plan = prepareProjectSnapshotCommit({
+      ...captureProjectIdentity(),
       publicationRevision: 2,
-      moves: [],
-      deltas: [],
-      projectionReplacements: [{ graphPath: caller, projection: replacement.projection }],
-      projectionStatus: { status: "complete", expectedGraphPaths: [caller] },
-    };
-
-    const plan = prepareSynchronousPublicationCommit(result, {
-      projectInstanceId: result.projectInstanceId,
-      epoch: 1,
-      fingerprint: "dirty-draft-projection-suppression",
-      affectedGraphPaths: new Set([caller]),
-      moves: [],
+      index: {
+        projectInstanceId: "project-a",
+        projectName: "Project",
+        exportTime: "",
+        publicationRevision: 2,
+        graphs: [{ path: caller, name: "Caller", type: "event", revision: 2 }],
+        charts: [],
+        databases: [],
+      },
+      graphSessions: new Map([
+        [
+          caller,
+          {
+            document: useGraphDraftStore.getState().sessions[caller].savedDocument,
+            projection: replacement.projection,
+          },
+        ],
+      ]),
+      chartDocuments: new Map(),
+      pathRemaps: new Map(),
+      chartPathRemaps: new Map(),
     });
 
-    expect(plan.projectionReplacements).toEqual([]);
+    expect(plan.graphProjectionPlan.graphPaths).toEqual([]);
+    const before = callerSnapshot();
+    expect(plan.graphProjectionPlan.graphEntities[caller]).toEqual(before);
+    setDirty(false);
+    const preparedClean = prepareProjectSnapshotCommit(plan);
+    expect(preparedClean.graphProjectionPlan.graphPaths).toEqual([caller]);
+    setDirty(true);
+    await commitPreparedProjectSnapshot(preparedClean);
+    expect(callerSnapshot()).toEqual(before);
   });
 });
 

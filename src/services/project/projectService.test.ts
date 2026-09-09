@@ -49,7 +49,6 @@ function projectIndex(): Record<string, unknown> {
       },
     ],
     charts: [],
-    variables: [],
     databases: [],
   };
 }
@@ -221,6 +220,10 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
         },
       ],
     });
+    index.charts = [chartRow(), chartRow()];
+    await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(
+      "Invalid project index response",
+    );
   });
 
   it.each([

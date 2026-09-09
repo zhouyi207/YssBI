@@ -1,11 +1,6 @@
-import type { EditorGraphProjectionDto } from "@/shared/types/domain/editorProjection";
-import type {
-  FunctionSignatureDto,
-  GraphProjectionReplacementDto,
-  ResourceMoveDto,
-  ResourceMutationResultDto,
-} from "@/shared/types/domain/editorMutation";
-import type { FunctionSignaturePin, ChartDocument, ChartIndexEntry } from "@/shared/types";
+import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
+import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
+import type { ChartDocument, ChartIndexEntry, ProjectIndexRow } from "@/shared/types";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import type { PreparedGraphProjectionReplacements } from "@/features/core/dataStore/graphProjectionStore";
 import {
@@ -20,43 +15,46 @@ import {
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import type { FocusedGraphSession } from "@/features/core/graphSession/graphSessionStore";
 import type { EditorViewport } from "@/features/core/viewport/editorViewport";
-import type { DocumentState, ProjectResourceMeta, ResourceKey } from "@/features/core/resource";
+import {
+  useDocumentStateStore,
+  useResourceStore,
+  resourceKey,
+  type DocumentState,
+  type ProjectResourceMeta,
+  type ResourceKey,
+} from "@/features/core/resource";
+import { isGraphDraftDirty, isGraphDraftSaving } from "@/features/core/graphDraft";
 import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { ProjectService } from "@/services/project/projectService";
-import type { ProjectIndexRow } from "@/shared/types/domain/project";
+import { ChartService } from "@/services/chart/chartService";
 import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
-import { prepareGraphProjectionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
+import { prepareGraphSessionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
-import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
+import { invalidateGraphResults } from "@/features/application/results/runtime";
 import {
   collectResourceMutationGraphPaths,
-  commitPreparedPublication,
   fingerprintResourceMutationResult,
-  prepareSynchronousPublicationCommit,
 } from "./resourceMutationResult";
 import { validateResourceMutationResult } from "@/features/domain/resource/resourceMutationValidation";
-import { prepareResourceMove, type PreparedResourceMove } from "./projectPublicationMovePlan";
 import {
-  buildProjectRecoveryPathRemaps,
-  buildProjectRecoveryChartPathRemaps,
-  collectProjectRecoveryGraphPaths,
-  commitPreparedProjectRecovery,
-  prepareProjectRecoveryCommit,
-  validateProjectRecoveryIndex,
-} from "./projectPublicationRecovery";
+  buildProjectSnapshotPathRemaps,
+  buildProjectSnapshotChartPathRemaps,
+  commitPreparedProjectSnapshot,
+  prepareProjectSnapshotCommit,
+  validateProjectSnapshotIndex,
+} from "./projectPublicationSnapshot";
 
-export type ProjectPublicationSuccess =
-  | { status: "applied"; affectedGraphPaths: ReadonlySet<string> }
-  | { status: "duplicate"; affectedGraphPaths: ReadonlySet<string> }
-  | { status: "recovered"; affectedGraphPaths: ReadonlySet<string> };
-
+export type ProjectPublicationSuccess = {
+  status: "applied" | "duplicate" | "recovered";
+  affectedGraphPaths: ReadonlySet<string>;
+};
 export type ProjectPublicationErrorCode =
   | "stale_project_lifecycle"
   | "publication_protocol_error"
   | "publication_recovery_failed";
-
 export class ProjectPublicationError extends Error {
   constructor(
     readonly code: ProjectPublicationErrorCode,
@@ -65,606 +63,434 @@ export class ProjectPublicationError extends Error {
   ) {
     super(message);
     this.name = "ProjectPublicationError";
-    if (options && "cause" in options) {
-      (this as Error & { cause?: unknown }).cause = options.cause;
-    }
+    if (options) Object.assign(this, { cause: options.cause });
   }
 }
-
 export interface ProjectPublicationSubmission {
   result: ResourceMutationResultDto;
   fallbackPaths?: readonly string[];
   validate?: (result: ResourceMutationResultDto) => string | undefined;
 }
-
-export interface PreparedFunctionDeltaInstall {
-  readonly graphPath: string;
-  readonly revision: number;
-  readonly signature: FunctionSignatureDto;
-  readonly functionInputs: readonly FunctionSignaturePin[];
-  readonly functionOutputs: readonly FunctionSignaturePin[];
-}
-
-export interface PreparedPublicationStoreState {
-  readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
-  readonly graphOrder: string[];
-  readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
-  readonly graphMeta?: Readonly<Record<string, GraphMeta>>;
-  readonly databases: Readonly<Record<string, DatabaseRecord>>;
-  readonly databaseRevisions: Readonly<Record<string, number>>;
-  readonly chartIndex: ChartIndexEntry[];
-  readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
-  readonly focusedSession?: FocusedGraphSession | null;
-  readonly viewports?: Readonly<Record<string, EditorViewport>>;
-}
-
-export interface PreparePublicationContext {
-  readonly projectInstanceId: string;
-  readonly epoch: number;
-  readonly fingerprint: string;
-  readonly affectedGraphPaths: ReadonlySet<string>;
-  readonly moves: readonly PreparedResourceMove[];
-}
-
-export interface PreparedProjectPublication {
-  readonly projectInstanceId: string;
-  readonly epoch: number;
-  readonly publicationRevision: number;
-  readonly fingerprint: string;
-  readonly affectedGraphPaths: ReadonlySet<string>;
-  readonly moves: readonly PreparedResourceMove[];
-  readonly removedChartPaths: ReadonlySet<string>;
-  readonly graphProjectionPlan?: PreparedGraphProjectionReplacements;
-  readonly projectionReplacements: readonly GraphProjectionReplacementDto[];
-  readonly storeState: PreparedPublicationStoreState;
-}
-
-export interface ProjectRecoveryPreparation {
+export interface ProjectSnapshotPreparation {
   readonly projectInstanceId: string;
   readonly epoch: number;
   readonly publicationRevision: number;
   readonly index: ProjectIndexRow;
-  readonly projections: ReadonlyMap<string, EditorGraphProjectionDto>;
-  readonly graphPathsLoadedAtStart: ReadonlySet<string>;
+  readonly graphSessions: ReadonlyMap<string, GraphEditorSessionDto>;
+  readonly chartDocuments: ReadonlyMap<string, ChartDocument>;
   readonly pathRemaps: ReadonlyMap<string, string>;
-  readonly chartPathRemaps?: ReadonlyMap<string, string>;
+  readonly chartPathRemaps: ReadonlyMap<string, string>;
 }
-
-export interface PreparedProjectRecoveryStoreState extends PreparedPublicationStoreState {
+export interface PreparedProjectSnapshotStoreState {
+  readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
+  readonly graphOrder: string[];
+  readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
   readonly graphMeta: Readonly<Record<string, GraphMeta>>;
+  readonly databases: Readonly<Record<string, DatabaseRecord>>;
+  readonly databaseRevisions: Readonly<Record<string, number>>;
+  readonly chartIndex: ChartIndexEntry[];
+  readonly chartDocuments: Readonly<Record<string, ChartDocument>>;
   readonly focusedSession: FocusedGraphSession | null;
   readonly viewports: Readonly<Record<string, EditorViewport>>;
 }
-
-export interface PreparedProjectRecovery extends ProjectRecoveryPreparation {
+export interface PreparedProjectSnapshot extends ProjectSnapshotPreparation {
   readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
-  readonly storeState: PreparedProjectRecoveryStoreState;
+  readonly storeState: PreparedProjectSnapshotStoreState;
 }
-
 export interface ProjectPublicationDependencies {
-  loadRecoverySnapshot(projectInstanceId: string): Promise<ProjectIndexRow>;
-  prepareGraphProjection(
-    graphPath: string,
+  loadProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow>;
+  loadChartDocument(projectInstanceId: string, path: string): Promise<ChartDocument>;
+  prepareGraphSession(
+    path: string,
     projectInstanceId: string,
     epoch: number,
-  ): Promise<EditorGraphProjectionDto | false>;
+  ): Promise<GraphEditorSessionDto | false>;
   captureLoadedGraphPaths(): ReadonlySet<string>;
-  preparePublication(
-    result: ResourceMutationResultDto,
-    context: PreparePublicationContext,
-  ): PreparedProjectPublication;
-  prepareRecovery(plan: ProjectRecoveryPreparation): PreparedProjectRecovery;
-  prepareMove(
-    move: ResourceMoveDto,
-    hasAuthoritativeDestinationReplacement: boolean,
-  ): PreparedResourceMove;
-  commitPublication(plan: PreparedProjectPublication): void | Promise<void>;
-  commitRecovery(plan: PreparedProjectRecovery): void | Promise<void>;
+  prepareSnapshot(plan: ProjectSnapshotPreparation): PreparedProjectSnapshot;
+  commitSnapshot(plan: PreparedProjectSnapshot): void | Promise<void>;
   markProjectProjectionStale(): void;
 }
-
 interface PublicationWaiter {
   resolve(value: ProjectPublicationSuccess): void;
-  reject(reason: ProjectPublicationError): void;
+  reject(error: ProjectPublicationError): void;
 }
-
 interface PendingPublication {
-  readonly revision: number;
-  readonly fingerprint: string;
-  readonly input: ProjectPublicationSubmission;
-  readonly affectedGraphPaths: ReadonlySet<string>;
-  readonly waiters: PublicationWaiter[];
-  ownerRecoveryAttempt?: number;
-  requiresRecovery?: boolean;
+  input: ProjectPublicationSubmission;
+  fingerprint: string;
+  affectedGraphPaths: ReadonlySet<string>;
+  waiters: PublicationWaiter[];
+}
+interface IndexWaiter {
+  resolve(): void;
+  reject(error: ProjectPublicationError): void;
 }
 
-interface ProjectPublicationState {
-  appliedRevision: number;
-  appliedFingerprint?: string;
-  phase: "idle" | "applying" | "recovering";
-  pendingByRevision: Map<number, PendingPublication>;
+function protocolError(message: string): ProjectPublicationError {
+  return new ProjectPublicationError("publication_protocol_error", message);
 }
-
-function protocolError(message: string, cause?: unknown): ProjectPublicationError {
-  return new ProjectPublicationError("publication_protocol_error", message, { cause });
-}
-
-function recoveryError(message: string, cause?: unknown): ProjectPublicationError {
-  return new ProjectPublicationError("publication_recovery_failed", message, { cause });
-}
-
 function staleLifecycleError(): ProjectPublicationError {
   return new ProjectPublicationError(
     "stale_project_lifecycle",
     "project lifecycle changed before publication settlement",
   );
 }
+function indexSignature(index: ProjectIndexRow): string {
+  return JSON.stringify([index.graphs, index.charts, index.databases]);
+}
 
+/** The only installer for resource receipts and index invalidations. */
 export class ProjectPublicationCoordinator {
-  private readonly state: ProjectPublicationState = {
-    appliedRevision: 0,
-    phase: "idle",
-    pendingByRevision: new Map(),
-  };
-
-  private recoveryAttempt = 0;
-  private recoveryVersion = 0;
-  private activeRecoverySnapshotRevision: number | null = null;
+  private appliedRevision = 0;
+  private appliedFingerprint: string | undefined;
+  private publishedIndexSignature: string | undefined;
+  private phase: "idle" | "applying" | "recovering" = "idle";
+  private readonly pending = new Map<number, PendingPublication>();
+  private indexWaiters: IndexWaiter[] = [];
   private driverInFlight: Promise<void> | null = null;
 
   constructor(private readonly dependencies: ProjectPublicationDependencies) {}
 
-  validateProjectStart(projectInstanceId: string, appliedRevision: number): void {
-    if (!projectInstanceId || !Number.isSafeInteger(appliedRevision) || appliedRevision < 0) {
+  validateProjectStart(projectInstanceId: string, revision: number): void {
+    if (!projectInstanceId || !Number.isSafeInteger(revision) || revision < 0)
       throw protocolError("project publication baseline is malformed");
-    }
   }
-
-  startProject(projectInstanceId: string, appliedRevision: number): void {
-    this.validateProjectStart(projectInstanceId, appliedRevision);
+  startProject(projectInstanceId: string, revision: number, index?: ProjectIndexRow): void {
+    this.validateProjectStart(projectInstanceId, revision);
     clearChartPreviewCache();
     clearChartLifecycleProjects();
     startProjectLifecycle(projectInstanceId);
-    this.resetPublicationState(appliedRevision);
-    useNodeCatalogStore.getState().observeResourcePublication(projectInstanceId, appliedRevision);
+    this.reset(revision, index);
+    useNodeCatalogStore.getState().observeResourcePublication(projectInstanceId, revision);
   }
-
-  acceptProjectActivation(projectInstanceId: string, activationRevision: number): boolean {
-    if (
-      !projectInstanceId ||
-      !Number.isSafeInteger(activationRevision) ||
-      activationRevision <= 0
-    ) {
+  acceptProjectActivation(projectInstanceId: string, revision: number): boolean {
+    if (!projectInstanceId || !Number.isSafeInteger(revision) || revision <= 0)
       throw protocolError("project activation identity is malformed");
-    }
-    const result = acceptProjectLifecycleActivation(projectInstanceId, activationRevision);
+    const result = acceptProjectLifecycleActivation(projectInstanceId, revision);
     if (result === "stale") return false;
     if (result === "activated") {
       clearChartPreviewCache();
       clearChartLifecycleProjects();
-      this.resetPublicationState(0);
+      this.reset(0);
     }
     return true;
   }
-
   cancelProject(): void {
     clearChartPreviewCache();
     clearChartLifecycleProjects();
     clearProjectLifecycle();
-    this.resetPublicationState(0);
+    this.reset(0);
+  }
+  private reset(revision: number, index?: ProjectIndexRow): void {
+    const error = staleLifecycleError();
+    for (const pending of this.pending.values())
+      for (const waiter of pending.waiters) waiter.reject(error);
+    for (const waiter of this.indexWaiters) waiter.reject(error);
+    this.pending.clear();
+    this.indexWaiters = [];
+    this.appliedRevision = revision;
+    this.appliedFingerprint = undefined;
+    this.publishedIndexSignature = index ? indexSignature(index) : undefined;
+    this.phase = "idle";
+    this.driverInFlight = null;
+    useNodeCatalogStore.getState().clear();
+  }
+  capturePublicationRevision(): number {
+    return this.appliedRevision;
+  }
+  captureCommandLifecycle() {
+    return { ...captureProjectIdentity(), publicationRevision: this.appliedRevision };
+  }
+  markProjectProjectionStale(): void {
+    this.publishedIndexSignature = undefined;
+    this.dependencies.markProjectProjectionStale();
+  }
+  getSnapshotForTests() {
+    return {
+      ...captureProjectLifecycleState(),
+      appliedRevision: this.appliedRevision,
+      phase: this.phase,
+      pendingRevisions: [...this.pending.keys()].sort((a, b) => a - b),
+    };
   }
 
   submit(input: ProjectPublicationSubmission): Promise<ProjectPublicationSuccess> {
-    const validation = this.validateSubmission(input);
-    if (validation) return Promise.reject(validation);
-
+    const identity = captureProjectLifecycleState();
+    if (
+      !identity.projectInstanceId ||
+      input.result.projectInstanceId !== identity.projectInstanceId
+    )
+      return Promise.reject(staleLifecycleError());
+    const invalid = validateResourceMutationResult(input.result) ?? input.validate?.(input.result);
+    if (invalid) return Promise.reject(protocolError(invalid));
     const revision = input.result.publicationRevision;
     const fingerprint = fingerprintResourceMutationResult(input.result);
     const affectedGraphPaths = collectResourceMutationGraphPaths(
       input.result,
       input.fallbackPaths ?? [],
     );
-    const existing = this.state.pendingByRevision.get(revision);
-    if (existing) {
-      if (existing.fingerprint !== fingerprint) {
-        return Promise.reject(
-          protocolError(`publication revision ${revision} conflicts with a different result`),
-        );
-      }
-      return this.addWaiter(existing);
-    }
-
-    if (this.state.phase === "recovering") {
-      const pending = this.createPending(input, fingerprint, affectedGraphPaths);
-      const snapshotRevision = this.activeRecoverySnapshotRevision;
-      if (snapshotRevision !== null && revision <= snapshotRevision) {
-        pending.ownerRecoveryAttempt = this.recoveryAttempt;
-        this.recoveryVersion += 1;
-      }
-      this.state.pendingByRevision.set(revision, pending);
-      return this.addWaiter(pending);
-    }
-
-    if (revision === this.state.appliedRevision && fingerprint === this.state.appliedFingerprint) {
+    const existing = this.pending.get(revision);
+    if (existing && existing.fingerprint !== fingerprint)
+      return Promise.reject(protocolError("conflicting receipts for one publication revision"));
+    if (!existing && revision <= this.appliedRevision) {
+      if (
+        revision === this.appliedRevision &&
+        this.appliedFingerprint &&
+        fingerprint !== this.appliedFingerprint
+      )
+        return Promise.reject(protocolError("conflicting receipt for the installed publication"));
+      // An installed authoritative snapshot covers late command/event copies as well.
       return Promise.resolve({ status: "duplicate", affectedGraphPaths });
     }
-    if (revision <= this.state.appliedRevision) {
-      const pending = this.createPending(input, fingerprint, affectedGraphPaths);
-      this.state.pendingByRevision.set(revision, pending);
-      const promise = this.addWaiter(pending);
-      this.kick();
-      return promise;
-    }
-
-    const pending = this.createPending(input, fingerprint, affectedGraphPaths);
-    this.state.pendingByRevision.set(revision, pending);
-    const promise = this.addWaiter(pending);
+    const pending = existing ?? { input, fingerprint, affectedGraphPaths, waiters: [] };
+    this.pending.set(revision, pending);
+    const promise = new Promise<ProjectPublicationSuccess>((resolve, reject) =>
+      pending.waiters.push({ resolve, reject }),
+    );
     this.kick();
     return promise;
   }
 
-  capturePublicationRevision(): number {
-    return this.state.appliedRevision;
+  refreshIndex(): Promise<void> {
+    if (!captureProjectLifecycleState().projectInstanceId)
+      return Promise.reject(staleLifecycleError());
+    const promise = new Promise<void>((resolve, reject) =>
+      this.indexWaiters.push({ resolve, reject }),
+    );
+    this.kick();
+    return promise;
   }
-
-  captureCommandLifecycle(): {
-    projectInstanceId: string;
-    epoch: number;
-    publicationRevision: number;
-  } {
-    const identity = captureProjectIdentity();
-    const publicationRevision = this.capturePublicationRevision();
-    this.assertLifecycle(identity.projectInstanceId, identity.epoch);
-    return { ...identity, publicationRevision };
+  private assertCurrent(identity: ProjectIdentitySnapshot): void {
+    if (!isCurrentProjectIdentity(identity)) throw staleLifecycleError();
   }
-
-  markProjectProjectionStale(): void {
-    this.dependencies.markProjectProjectionStale();
-  }
-
-  getSnapshotForTests(): {
-    projectInstanceId: string | null;
-    epoch: number;
-    appliedRevision: number;
-    phase: "idle" | "applying" | "recovering";
-    pendingRevisions: number[];
-  } {
-    const lifecycle = captureProjectLifecycleState();
-    return {
-      ...lifecycle,
-      appliedRevision: this.state.appliedRevision,
-      phase: this.state.phase,
-      pendingRevisions: [...this.state.pendingByRevision.keys()].sort((a, b) => a - b),
-    };
-  }
-
-  private validateSubmission(
-    input: ProjectPublicationSubmission,
-  ): ProjectPublicationError | undefined {
-    const lifecycle = captureProjectLifecycleState();
-    if (!lifecycle.projectInstanceId) return staleLifecycleError();
-    if (input.result.projectInstanceId !== lifecycle.projectInstanceId)
-      return staleLifecycleError();
-    const validationError = validateResourceMutationResult(input.result);
-    if (validationError) return protocolError(validationError);
-    const callerError = input.validate?.(input.result);
-    if (callerError) return protocolError(callerError);
-    return undefined;
-  }
-
-  private createPending(
-    input: ProjectPublicationSubmission,
-    fingerprint: string,
-    affectedGraphPaths: ReadonlySet<string>,
-  ): PendingPublication {
-    return {
-      revision: input.result.publicationRevision,
-      fingerprint,
-      input,
-      affectedGraphPaths,
-      waiters: [],
-    };
-  }
-
-  private addWaiter(pending: PendingPublication): Promise<ProjectPublicationSuccess> {
-    return new Promise((resolve, reject) => pending.waiters.push({ resolve, reject }));
-  }
-
-  private resetPublicationState(appliedRevision: number): void {
-    const error = staleLifecycleError();
-    for (const pending of this.state.pendingByRevision.values()) {
-      for (const waiter of pending.waiters) waiter.reject(error);
-    }
-    this.state.pendingByRevision.clear();
-    this.state.appliedRevision = appliedRevision;
-    this.state.appliedFingerprint = undefined;
-    this.state.phase = "idle";
-    this.activeRecoverySnapshotRevision = null;
-    this.driverInFlight = null;
-    useNodeCatalogStore.getState().clear();
-  }
-
-  private ownsLifecycle(projectInstanceId: string, epoch: number): boolean {
-    return isCurrentProjectIdentity({ projectInstanceId, epoch });
-  }
-
-  private assertLifecycle(projectInstanceId: string, epoch: number): void {
-    if (!this.ownsLifecycle(projectInstanceId, epoch)) throw staleLifecycleError();
-  }
-
   private kick(): void {
     if (this.driverInFlight) return;
-    let identity: ProjectIdentitySnapshot;
-    try {
-      identity = captureProjectIdentity();
-    } catch {
-      return;
-    }
-    const driver = this.drive(identity);
+    const identity = captureProjectIdentity();
+    const driver = Promise.resolve().then(() => this.drive(identity));
     this.driverInFlight = driver;
     void driver
       .finally(() => {
         if (this.driverInFlight !== driver) return;
         this.driverInFlight = null;
-        if (isCurrentProjectIdentity(identity)) this.state.phase = "idle";
-        if (this.state.pendingByRevision.size > 0) this.kick();
+        this.phase = "idle";
+        if (this.pending.size || this.indexWaiters.length) this.kick();
       })
       .catch(() => undefined);
   }
-
   private async drive(identity: ProjectIdentitySnapshot): Promise<void> {
-    while (isCurrentProjectIdentity(identity) && this.state.pendingByRevision.size > 0) {
-      const next = this.state.pendingByRevision.get(this.state.appliedRevision + 1);
-      if (next && !next.requiresRecovery) {
-        await this.applyPending(next);
-      } else {
-        await this.runRecovery();
-      }
-    }
-  }
-
-  private async prepareProjection(
-    graphPath: string,
-    projectInstanceId: string,
-    epoch: number,
-  ): Promise<EditorGraphProjectionDto> {
-    const projection = await this.dependencies.prepareGraphProjection(
-      graphPath,
-      projectInstanceId,
-      epoch,
-    );
-    this.assertLifecycle(projectInstanceId, epoch);
-    if (projection === false) throw new Error(`projection preparation failed for '${graphPath}'`);
-    const entities = toProjectionEntities(projection);
-    if (
-      entities.graphPath !== graphPath ||
-      projection.graphPath !== graphPath ||
-      projection.basis?.graphPath !== graphPath
-    ) {
-      throw new Error(`prepared projection identity is invalid for '${graphPath}'`);
-    }
-    return projection;
-  }
-
-  private async applyPending(pending: PendingPublication): Promise<void> {
-    let identity: ProjectIdentitySnapshot;
-    try {
-      identity = captureProjectIdentity();
-    } catch {
-      return;
-    }
-    this.state.phase = "applying";
-    const { projectInstanceId, epoch } = identity;
-    try {
-      const result = pending.input.result;
-      if (result.projectionStatus.status === "incomplete") {
-        pending.requiresRecovery = true;
-        return;
-      }
-      const replacementPaths = new Set(
-        result.projectionReplacements.map((replacement) => replacement.graphPath),
-      );
-      const moves = result.moves.map((move) =>
-        this.dependencies.prepareMove(move, replacementPaths.has(move.to)),
-      );
-      this.assertLifecycle(projectInstanceId, epoch);
-      if (pending.revision !== this.state.appliedRevision + 1) return;
-      const plan = this.dependencies.preparePublication(result, {
-        projectInstanceId,
-        epoch,
-        fingerprint: pending.fingerprint,
-        affectedGraphPaths: pending.affectedGraphPaths,
-        moves,
-      });
-      const committed = this.dependencies.commitPublication(plan);
-      if (committed) await committed;
-      this.assertLifecycle(projectInstanceId, epoch);
-      this.state.appliedFingerprint = pending.fingerprint;
-      this.state.appliedRevision = pending.revision;
-      useNodeCatalogStore
-        .getState()
-        .observeResourcePublication(projectInstanceId, pending.revision);
-      this.state.pendingByRevision.delete(pending.revision);
-      for (const waiter of pending.waiters) {
-        waiter.resolve({ status: "applied", affectedGraphPaths: pending.affectedGraphPaths });
-      }
-    } catch (error) {
-      if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle")
-        return;
-      pending.requiresRecovery = true;
-    }
-  }
-
-  private async runRecovery(): Promise<void> {
-    if (this.state.pendingByRevision.size === 0) return;
-    let identity: ProjectIdentitySnapshot;
-    try {
-      identity = captureProjectIdentity();
-    } catch {
-      return;
-    }
-    const attempt = ++this.recoveryAttempt;
-    const { projectInstanceId, epoch } = identity;
-    const loadedAtStart = this.dependencies.captureLoadedGraphPaths();
-    const coveredAtStart = new Set(this.state.pendingByRevision.values());
-    this.state.phase = "recovering";
-    try {
-      await this.recover(attempt, projectInstanceId, epoch, loadedAtStart, coveredAtStart);
-    } finally {
-      if (this.ownsLifecycle(projectInstanceId, epoch) && this.recoveryAttempt === attempt) {
-        this.activeRecoverySnapshotRevision = null;
-      }
-    }
-  }
-
-  private async recover(
-    attempt: number,
-    projectInstanceId: string,
-    epoch: number,
-    graphPathsLoadedAtStart: ReadonlySet<string>,
-    coveredAtStart: ReadonlySet<PendingPublication>,
-  ): Promise<void> {
-    let snapshotRevision: number | null = null;
-    let rejectCoveredAtStart = false;
-    try {
-      const index = await this.dependencies.loadRecoverySnapshot(projectInstanceId);
-      this.assertLifecycle(projectInstanceId, epoch);
-      const indexError = validateProjectRecoveryIndex(index, projectInstanceId);
-      if (indexError) throw new Error(indexError);
-
-      const validatedSnapshotRevision = index.publicationRevision;
-      snapshotRevision = validatedSnapshotRevision;
-      this.activeRecoverySnapshotRevision = validatedSnapshotRevision;
-      for (const pending of this.state.pendingByRevision.values()) {
-        if (pending.revision <= validatedSnapshotRevision) pending.ownerRecoveryAttempt = attempt;
-      }
-      const initiallyOwned = [...this.state.pendingByRevision.values()].filter(
-        (pending) =>
-          pending.ownerRecoveryAttempt === attempt && pending.revision <= validatedSnapshotRevision,
-      );
-      const nextContiguous = this.state.pendingByRevision.get(this.state.appliedRevision + 1);
+    while (isCurrentProjectIdentity(identity) && (this.pending.size || this.indexWaiters.length)) {
+      const first = this.pending.get(this.appliedRevision + 1);
+      const receipt = first?.input.result;
       if (
-        validatedSnapshotRevision === this.state.appliedRevision &&
-        initiallyOwned.length === 0 &&
-        nextContiguous &&
-        !nextContiguous.requiresRecovery
+        first &&
+        receipt &&
+        receipt.deltas.length === 0 &&
+        receipt.moves.length === 0 &&
+        receipt.projectionStatus.status === "complete" &&
+        receipt.projectionReplacements.length === 0
       ) {
-        return;
+        this.appliedRevision = receipt.publicationRevision;
+        this.appliedFingerprint = first.fingerprint;
+        this.pending.delete(this.appliedRevision);
+        useNodeCatalogStore
+          .getState()
+          .observeResourcePublication(identity.projectInstanceId, this.appliedRevision);
+        for (const waiter of first.waiters)
+          waiter.resolve({ status: "applied", affectedGraphPaths: first.affectedGraphPaths });
+        continue;
       }
-      if (
-        validatedSnapshotRevision < this.state.appliedRevision ||
-        (validatedSnapshotRevision === this.state.appliedRevision && initiallyOwned.length === 0)
-      ) {
-        rejectCoveredAtStart = true;
-        throw new Error(
-          `recovery snapshot revision ${validatedSnapshotRevision} does not advance or cover the attempt`,
-        );
+      const waiting = [...this.indexWaiters];
+      const owned = new Set(this.pending.values());
+      const recovered =
+        (!first && owned.size > 0) ||
+        [...owned].some((p) => p.input.result.projectionStatus.status === "incomplete");
+      this.phase = recovered ? "recovering" : "applying";
+      try {
+        await this.publishIndex(identity, recovered);
+        this.assertCurrent(identity);
+        for (const waiter of waiting) waiter.resolve();
+      } catch (cause) {
+        const error = isCurrentProjectIdentity(identity)
+          ? new ProjectPublicationError(
+              "publication_recovery_failed",
+              "authoritative project publication failed",
+              { cause },
+            )
+          : staleLifecycleError();
+        for (const [revision, pending] of this.pending) {
+          if (!owned.has(pending)) continue;
+          this.pending.delete(revision);
+          for (const waiter of pending.waiters) waiter.reject(error);
+        }
+        for (const waiter of waiting) waiter.reject(error);
+        if (isCurrentProjectIdentity(identity)) this.markProjectProjectionStale();
       }
+      if (isCurrentProjectIdentity(identity))
+        this.indexWaiters = this.indexWaiters.filter((waiter) => !waiting.includes(waiter));
+    }
+  }
 
-      const authoritativeGraphPaths = new Set(index.graphs.map((graph) => graph.path));
-      const authoritativeChartPaths = new Set(index.charts.map((chart) => chart.chartPath));
-      const projections = new Map<string, EditorGraphProjectionDto>();
-      let owned: PendingPublication[] = initiallyOwned;
-      let queuedResults: ResourceMutationResultDto[] = [];
-      let pathRemaps: ReadonlyMap<string, string> = new Map();
-      let chartPathRemaps: ReadonlyMap<string, string> = new Map();
-      for (;;) {
-        const observedVersion = this.recoveryVersion;
-        owned = [...this.state.pendingByRevision.values()].filter(
-          (pending) =>
-            pending.ownerRecoveryAttempt === attempt &&
-            pending.revision <= validatedSnapshotRevision,
-        );
-        queuedResults = owned.map((pending) => pending.input.result);
-        pathRemaps = buildProjectRecoveryPathRemaps(authoritativeGraphPaths, queuedResults);
-        chartPathRemaps = buildProjectRecoveryChartPathRemaps(
-          authoritativeChartPaths,
-          queuedResults,
-        );
-        const recoveryPaths = collectProjectRecoveryGraphPaths(
-          index,
-          graphPathsLoadedAtStart,
-          queuedResults,
-        );
-        const requiredProjectionPaths = new Set(
-          [...graphPathsLoadedAtStart]
-            .map((path) => pathRemaps.get(path) ?? path)
-            .filter((path) => authoritativeGraphPaths.has(path)),
-        );
-        for (const path of recoveryPaths) {
-          if (!requiredProjectionPaths.has(path) || projections.has(path)) continue;
-          projections.set(path, await this.prepareProjection(path, projectInstanceId, epoch));
+  private async publishIndex(identity: ProjectIdentitySnapshot, recovered: boolean): Promise<void> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const index = await this.dependencies.loadProjectIndex(identity.projectInstanceId);
+        this.assertCurrent(identity);
+        const invalid = validateProjectSnapshotIndex(index, identity.projectInstanceId);
+        if (invalid) throw protocolError(invalid);
+        const minimum = Math.max(this.appliedRevision, useResourceStore.getState().indexRevision);
+        if (
+          index.publicationRevision < minimum ||
+          (this.pending.size > 0 &&
+            ![...this.pending.keys()].some((revision) => revision <= index.publicationRevision))
+        )
+          throw protocolError("index does not cover the requested publication");
+        const graphSessions = new Map<string, GraphEditorSessionDto>();
+        const chartDocuments = new Map<string, ChartDocument>();
+        while (true) {
+          const covered = [...this.pending.values()].filter(
+            (p) => p.input.result.publicationRevision <= index.publicationRevision,
+          );
+          const receipts = covered.map((p) => p.input.result);
+          const signature = indexSignature(index);
+          const changed = signature !== this.publishedIndexSignature;
+          if (
+            changed ||
+            receipts.some((r) => r.projectionReplacements.length > 0 || r.moves.length > 0)
+          ) {
+            const graphPaths = new Set(index.graphs.map((g) => g.path));
+            const chartPaths = new Set(index.charts.map((c) => c.chartPath));
+            const pathRemaps = buildProjectSnapshotPathRemaps(graphPaths, receipts);
+            const chartPathRemaps = buildProjectSnapshotChartPathRemaps(chartPaths, receipts);
+            const affected = new Set(covered.flatMap((p) => [...p.affectedGraphPaths]));
+            const loaded = this.dependencies.captureLoadedGraphPaths();
+            for (const graph of index.graphs) {
+              const previousPath =
+                [...pathRemaps].find(([, to]) => to === graph.path)?.[0] ?? graph.path;
+              if (
+                !loaded.has(previousPath) ||
+                isGraphDraftDirty(previousPath) ||
+                isGraphDraftSaving(previousPath) ||
+                graphSessions.has(graph.path)
+              )
+                continue;
+              const previous =
+                useResourceStore.getState().resources[
+                  resourceKey({ id: previousPath, kind: graph.type })
+                ];
+              if (
+                !recovered &&
+                previousPath === graph.path &&
+                previous?.revision === graph.revision &&
+                !affected.has(graph.path) &&
+                !previous.hasStaleDocument
+              )
+                continue;
+              const session = await this.dependencies.prepareGraphSession(
+                graph.path,
+                identity.projectInstanceId,
+                identity.epoch,
+              );
+              this.assertCurrent(identity);
+              if (!session || toProjectionEntities(session.projection).graphPath !== graph.path)
+                throw protocolError("graph projection identity is invalid");
+              graphSessions.set(graph.path, session);
+            }
+            for (const chart of index.charts) {
+              const previousPath =
+                [...chartPathRemaps].find(([, to]) => to === chart.chartPath)?.[0] ??
+                chart.chartPath;
+              const cached = useChartDocumentStore.getState().documents[previousPath];
+              const dirty =
+                useDocumentStateStore.getState().documents[
+                  resourceKey({ id: previousPath, kind: "chart" })
+                ]?.dirty;
+              const created = receipts.some((r) =>
+                r.deltas.some(
+                  (d) =>
+                    d.payload.kind === "resource_lifecycle" &&
+                    d.payload.patch.after?.kind === "chart" &&
+                    d.payload.patch.after.path === chart.chartPath,
+                ),
+              );
+              if (
+                dirty ||
+                chartDocuments.has(chart.chartPath) ||
+                (!created &&
+                  (!cached ||
+                    (cached.revision === chart.revision && previousPath === chart.chartPath)))
+              )
+                continue;
+              const document = await this.dependencies.loadChartDocument(
+                identity.projectInstanceId,
+                chart.chartPath,
+              );
+              this.assertCurrent(identity);
+              if (document.revision !== chart.revision)
+                throw protocolError("chart changed during index preparation");
+              chartDocuments.set(chart.chartPath, document);
+            }
+            // Include receipts delivered while documents were being prepared before committing moves.
+            if (
+              [...this.pending.values()].some(
+                (p) =>
+                  p.input.result.publicationRevision <= index.publicationRevision &&
+                  !covered.includes(p),
+              )
+            )
+              continue;
+            const plan = this.dependencies.prepareSnapshot({
+              ...identity,
+              publicationRevision: index.publicationRevision,
+              index,
+              graphSessions,
+              chartDocuments,
+              pathRemaps,
+              chartPathRemaps,
+            });
+            this.assertCurrent(identity);
+            await this.dependencies.commitSnapshot(plan);
+            this.assertCurrent(identity);
+            for (const graphPath of affected) invalidateGraphResults(graphPath);
+            this.publishedIndexSignature = signature;
+          }
+          const indexOnlyChange = changed && index.publicationRevision === this.appliedRevision;
+          this.appliedRevision = index.publicationRevision;
+          this.appliedFingerprint = covered.find(
+            (p) => p.input.result.publicationRevision === index.publicationRevision,
+          )?.fingerprint;
+          useNodeCatalogStore
+            .getState()
+            .observeResourcePublication(
+              identity.projectInstanceId,
+              index.publicationRevision,
+              indexOnlyChange,
+            );
+          for (const pending of covered) {
+            const revision = pending.input.result.publicationRevision;
+            this.pending.delete(revision);
+            for (const waiter of pending.waiters)
+              waiter.resolve({
+                status: recovered ? "recovered" : "applied",
+                affectedGraphPaths: pending.affectedGraphPaths,
+              });
+          }
+          return;
         }
-        this.assertLifecycle(projectInstanceId, epoch);
-        if (observedVersion === this.recoveryVersion) break;
+      } catch (error) {
+        this.assertCurrent(identity);
+        if (attempt === 1) throw error;
       }
-      const recoveryPreparation: ProjectRecoveryPreparation = {
-        projectInstanceId,
-        epoch,
-        publicationRevision: index.publicationRevision,
-        index,
-        projections,
-        graphPathsLoadedAtStart,
-        pathRemaps,
-        chartPathRemaps,
-      };
-      const plan = this.dependencies.prepareRecovery(recoveryPreparation);
-      const committed = this.dependencies.commitRecovery(plan);
-      if (committed) await committed;
-      this.assertLifecycle(projectInstanceId, epoch);
-      this.state.appliedRevision = index.publicationRevision;
-      this.state.appliedFingerprint = undefined;
-      useNodeCatalogStore
-        .getState()
-        .observeResourcePublication(projectInstanceId, index.publicationRevision);
-      for (const pending of owned) {
-        if (pending.revision > index.publicationRevision) continue;
-        this.state.pendingByRevision.delete(pending.revision);
-        for (const waiter of pending.waiters) {
-          waiter.resolve({ status: "recovered", affectedGraphPaths: pending.affectedGraphPaths });
-        }
-      }
-    } catch (cause) {
-      if (!this.ownsLifecycle(projectInstanceId, epoch)) return;
-      if (cause instanceof ProjectPublicationError && cause.code === "stale_project_lifecycle")
-        return;
-      const error = recoveryError("authoritative project publication recovery failed", cause);
-      for (const [revision, pending] of this.state.pendingByRevision) {
-        const covered =
-          snapshotRevision === null || rejectCoveredAtStart
-            ? coveredAtStart.has(pending)
-            : pending.ownerRecoveryAttempt === attempt && pending.revision <= snapshotRevision;
-        if (!covered) continue;
-        this.state.pendingByRevision.delete(revision);
-        for (const waiter of pending.waiters) waiter.reject(error);
-      }
-      this.state.phase = "idle";
-      this.dependencies.markProjectProjectionStale();
     }
   }
 }
-
-const productionDependencies: ProjectPublicationDependencies = {
-  loadRecoverySnapshot: (projectInstanceId) => ProjectService.getProjectIndex(projectInstanceId),
-  prepareGraphProjection: prepareGraphProjectionForPublication,
+export const projectPublicationCoordinator = new ProjectPublicationCoordinator({
+  loadProjectIndex: (id) => ProjectService.getProjectIndex(id),
+  loadChartDocument: (id, path) => ChartService.loadChart(id, path),
+  prepareGraphSession: prepareGraphSessionForPublication,
   captureLoadedGraphPaths: () =>
     new Set(Object.keys(useGraphProjectionStore.getState().graphEntities)),
-  preparePublication: prepareSynchronousPublicationCommit,
-  prepareRecovery: prepareProjectRecoveryCommit,
-  prepareMove: prepareResourceMove,
-  commitPublication: commitPreparedPublication,
-  commitRecovery: commitPreparedProjectRecovery,
+  prepareSnapshot: prepareProjectSnapshotCommit,
+  commitSnapshot: commitPreparedProjectSnapshot,
   markProjectProjectionStale: () => {
-    useResourceStore.setState((state) => ({
-      resources: Object.fromEntries(
-        Object.entries(state.resources).map(([key, resource]) => [
-          key,
-          resource.kind === "event" || resource.kind === "function"
-            ? { ...resource, hasStaleDocument: true }
-            : resource,
-        ]),
-      ),
-    }));
     useDocumentStateStore.setState((state) => ({
       documents: Object.fromEntries(
         Object.entries(state.documents).map(([key, document]) => [
@@ -673,9 +499,13 @@ const productionDependencies: ProjectPublicationDependencies = {
         ]),
       ),
     }));
+    useResourceStore.setState((state) => ({
+      resources: Object.fromEntries(
+        Object.entries(state.resources).map(([key, resource]) => [
+          key,
+          { ...resource, hasStaleDocument: true },
+        ]),
+      ),
+    }));
   },
-};
-
-export const projectPublicationCoordinator = new ProjectPublicationCoordinator(
-  productionDependencies,
-);
+});

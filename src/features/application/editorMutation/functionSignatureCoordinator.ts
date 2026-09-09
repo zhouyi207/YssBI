@@ -8,7 +8,6 @@ import {
   ProjectPublicationError,
   projectPublicationCoordinator,
 } from "./projectPublicationCoordinator";
-import { hydrateFunctionSignaturesFromProjectIndex } from "@/features/application/graphDocument/functionSignatureSync";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 import type { FunctionSignaturePatch } from "@/shared/types";
 import type {
@@ -19,8 +18,6 @@ import type {
 } from "@/shared/types/domain/editorMutation";
 import { FunctionMutationService } from "@/services/nodeSystem/functionMutationService";
 import { isApplicationIpcErrorCode } from "@/features/application/errorReference";
-import { ProjectService } from "@/services/project/projectService";
-import type { ProjectGraphIndexRow } from "@/shared/types/domain/project";
 import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
@@ -42,7 +39,7 @@ export interface FunctionSignatureCoordinatorDependencies {
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto>;
   hydrateGraph(graphPath: string, locale: string): Promise<unknown>;
-  loadFunctionResources(projectInstanceId: string): Promise<ProjectGraphIndexRow[]>;
+  refreshResourceIndex(): Promise<void>;
 }
 
 export type ExecuteFunctionSignatureMutationOutcome =
@@ -58,8 +55,7 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
   mutateSignature: (projectInstanceId, functionPath, locale, request) =>
     FunctionMutationService.updateSignature(projectInstanceId, functionPath, locale, request),
   hydrateGraph: hydrateGraphProjection,
-  loadFunctionResources: async (projectInstanceId) =>
-    (await ProjectService.getProjectIndex(projectInstanceId)).graphs,
+  refreshResourceIndex: () => projectPublicationCoordinator.refreshIndex(),
 };
 
 function isFunctionRevisionConflict(error: unknown): boolean {
@@ -120,9 +116,8 @@ async function hydrateAuthoritativeState(
   dependencies: FunctionSignatureCoordinatorDependencies,
   identity: ProjectIdentitySnapshot,
 ): Promise<void> {
-  const resources = await dependencies.loadFunctionResources(identity.projectInstanceId);
+  await dependencies.refreshResourceIndex();
   if (!isCurrentProjectIdentity(identity)) return;
-  hydrateFunctionSignaturesFromProjectIndex(resources);
   await Promise.all(
     [...new Set(graphPaths)].map((graphPath) => dependencies.hydrateGraph(graphPath, locale)),
   );

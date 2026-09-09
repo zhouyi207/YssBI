@@ -123,15 +123,14 @@ function result(
 function dependencies(
   mutateSignature: FunctionSignatureCoordinatorDependencies["mutateSignature"],
   hydrateGraph = vi.fn(async () => true),
-  loadFunctionResources: FunctionSignatureCoordinatorDependencies["loadFunctionResources"] = vi.fn(
-    async () => [],
-  ),
+  refreshResourceIndex: FunctionSignatureCoordinatorDependencies["refreshResourceIndex"] = () =>
+    projectPublicationCoordinator.refreshIndex(),
 ): Partial<FunctionSignatureCoordinatorDependencies> {
   return {
     createOperationId: () => operationId,
     mutateSignature,
     hydrateGraph,
-    loadFunctionResources,
+    refreshResourceIndex,
   };
 }
 
@@ -277,6 +276,33 @@ describe("executeFunctionSignatureMutation", () => {
   });
 
   it("atomically applies a complete authoritative result", async () => {
+    const refreshIndex = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
+      projectInstanceId,
+      projectName: "Project",
+      exportTime: "",
+      publicationRevision: 1,
+      graphs: [
+        {
+          path: functionPath,
+          name: "Compute",
+          type: "function",
+          revision: 3,
+          functionRevision: 3,
+          functionSignature: afterSignature,
+          functionEditorProjection: authoritativeFunctionProjection,
+        },
+      ],
+      charts: [],
+      databases: [],
+    });
+    vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
+      makeGraphEditorSession(
+        makeEditorProjectionFixture({
+          graphPath: functionPath,
+          title: "Committed signature projection",
+        }).projection,
+      ),
+    );
     const committed = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
     const eventHandler = {
       handle: (payload: { result: ResourceMutationResultDto }) => {
@@ -316,6 +342,7 @@ describe("executeFunctionSignatureMutation", () => {
     expect(graphTitleDuringInvoke).toBe("Current graph projection");
     expect(signatureRevisionDuringInvoke).toBe(2);
     expect(outcome).toEqual({ status: "applied", result: committed });
+    expect(refreshIndex).toHaveBeenCalledOnce();
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toMatchObject({
       nodes: { "local-node": { display: { title: "Committed signature projection" } } },
     });
@@ -407,17 +434,26 @@ describe("executeFunctionSignatureMutation", () => {
   it("refreshes canonical function projection and hydrates without local writes on a revision conflict", async () => {
     const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const hydrateGraph = vi.fn(async () => true);
-    const loadFunctionResources = vi.fn(async () => [
-      {
-        path: functionPath,
-        name: "Compute",
-        type: "function" as const,
-        revision: 7,
-        functionRevision: 3,
-        functionSignature: afterSignature,
-        functionEditorProjection: authoritativeFunctionProjection,
-      },
-    ]);
+    const refreshResourceIndex = vi.fn(() => projectPublicationCoordinator.refreshIndex());
+    const query = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
+      projectInstanceId,
+      projectName: "Project",
+      exportTime: "",
+      publicationRevision: 1,
+      charts: [],
+      databases: [],
+      graphs: [
+        {
+          path: functionPath,
+          name: "Compute",
+          type: "function" as const,
+          revision: 7,
+          functionRevision: 3,
+          functionSignature: afterSignature,
+          functionEditorProjection: authoritativeFunctionProjection,
+        },
+      ],
+    });
 
     const outcome = await executeFunctionSignatureMutation(
       {
@@ -430,19 +466,20 @@ describe("executeFunctionSignatureMutation", () => {
           throw backendError("function_revision_conflict");
         }),
         hydrateGraph,
-        loadFunctionResources,
+        refreshResourceIndex,
       ),
     );
 
     expect(outcome).toEqual({ status: "conflict" });
-    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
+    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).not.toBe(beforeGraph);
     expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
       functionRevision: 3,
       functionSignature: afterSignature,
       functionInputs: authoritativeFunctionProjection.inputs,
       functionOutputs: authoritativeFunctionProjection.outputs,
     });
-    expect(loadFunctionResources).toHaveBeenCalledOnce();
+    expect(refreshResourceIndex).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledOnce();
     expect(hydrateGraph).toHaveBeenCalledWith(functionPath, "en-US");
   });
@@ -516,7 +553,7 @@ describe("executeFunctionSignatureMutation", () => {
     const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
     const hydrateGraph = vi.fn(async () => true);
-    const loadFunctionResources = vi.fn(async () => []);
+    const refreshResourceIndex = vi.fn(async () => undefined);
 
     await expect(
       executeFunctionSignatureMutation(
@@ -528,14 +565,14 @@ describe("executeFunctionSignatureMutation", () => {
         dependencies(
           vi.fn(async () => malformed),
           hydrateGraph,
-          loadFunctionResources,
+          refreshResourceIndex,
         ),
       ),
     ).rejects.toThrow("resource delta operation correlation is inconsistent");
 
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
     expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
-    expect(loadFunctionResources).not.toHaveBeenCalled();
+    expect(refreshResourceIndex).not.toHaveBeenCalled();
     expect(hydrateGraph).not.toHaveBeenCalled();
   });
 });

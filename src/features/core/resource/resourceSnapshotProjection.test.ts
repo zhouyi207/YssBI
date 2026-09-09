@@ -5,10 +5,7 @@ import {
   buildGraphResourceMeta,
   type ProjectResourceMeta,
 } from "@/features/core/resource";
-import {
-  prepareResourceProjectionSnapshot,
-  applySnapshotDocumentPatches,
-} from "./resourceSnapshotProjection";
+import { prepareResourceProjectionSnapshot } from "./resourceSnapshotProjection";
 import { selectGraphResourcesByKind } from "./resourceSelectors";
 import { resourceKey } from "./resourceTypes";
 
@@ -39,14 +36,15 @@ describe("resource projection snapshot preparation", () => {
     const { resources, documentPatches } = prepareResourceProjectionSnapshot(incoming, {
       [resourceKey(previous)]: previous,
     });
-    applySnapshotDocumentPatches(documentPatches);
 
     expect(resources[0]).toMatchObject({
       loaded: true,
       hasStaleDocument: true,
       hasConflictDocument: false,
     });
-    expect(useDocumentStateStore.getState().documents[resourceKey(previous)]?.stale).toBe(true);
+    expect(documentPatches).toEqual([
+      { key: resourceKey(previous), patch: { stale: true, conflict: false, missing: false } },
+    ]);
   });
 
   it("retains missing loaded resources absent from the snapshot", () => {
@@ -65,7 +63,6 @@ describe("resource projection snapshot preparation", () => {
     const { resources, documentPatches } = prepareResourceProjectionSnapshot([], {
       [resourceKey(previous)]: previous,
     });
-    applySnapshotDocumentPatches(documentPatches);
 
     expect(resources).toHaveLength(1);
     expect(resources[0]).toMatchObject({
@@ -73,7 +70,9 @@ describe("resource projection snapshot preparation", () => {
       exists: false,
       loaded: true,
     });
-    expect(useDocumentStateStore.getState().documents[resourceKey(previous)]?.missing).toBe(true);
+    expect(documentPatches).toEqual([
+      { key: resourceKey(previous), patch: { missing: true, stale: false, conflict: false } },
+    ]);
   });
 });
 

@@ -2,14 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createProjectEventConsumer } from "./projectEventConsumer";
 
 describe("project event consumer", () => {
-  it("refreshes from Rust for a matching resource publication without an operation ledger", async () => {
+  it("forwards a matching resource receipt to the publication owner", async () => {
     const publishResourceMutationCommitted = vi.fn();
     const consumer = createProjectEventConsumer({
-      hydration: {
-        loadCurrentProject: vi.fn(),
-        refreshResourceIndex: vi.fn(),
-        replaceProject: vi.fn(),
-      },
+      refreshResourceIndex: vi.fn(),
+      activateProject: vi.fn(),
       currentProjectInstanceId: () => "project-a",
       publishResourceMutationCommitted,
     });

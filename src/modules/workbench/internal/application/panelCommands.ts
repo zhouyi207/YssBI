@@ -60,7 +60,9 @@ export function commitEditorPanelPublication(
   moves: Iterable<EditorPanelResourceMove>,
   isResourceAvailable: (resourceKind: EditorResourceKind, resourceRef: string) => boolean,
   commitBusinessStores: () => void,
+  isCurrent: () => boolean = () => true,
 ): void | Promise<void> {
+  if (!isCurrent()) return;
   if (!workbenchDockviewRead.isReady) {
     commitBusinessStores();
     return;
@@ -69,6 +71,7 @@ export function commitEditorPanelPublication(
     [...moves],
     isResourceAvailable,
     commitBusinessStores,
+    isCurrent,
   );
 }
 
@@ -76,9 +79,11 @@ async function commitEditorPanelPublicationWithDockview(
   moves: readonly EditorPanelResourceMove[],
   isResourceAvailable: (resourceKind: EditorResourceKind, resourceRef: string) => boolean,
   commitBusinessStores: () => void,
+  isCurrent: () => boolean,
 ): Promise<void> {
   const removedPanelIds = await workbenchDockviewInternal.runPublicationTransaction(
     (transaction) => {
+      if (!isCurrent()) return [];
       for (const move of moves) transaction.remapResource(move.from, move.to);
 
       const removed = transaction.listPanels().flatMap((panel) => {
