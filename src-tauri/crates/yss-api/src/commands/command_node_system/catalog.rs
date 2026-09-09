@@ -9,7 +9,7 @@ use yss_application::catalog_query::{
 use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_project_identity::ProjectInstanceId;
 
-fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
+pub(crate) fn catalog_query_command_error(error: CatalogQueryApplicationError) -> CommandError {
     match error {
         CatalogQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
         CatalogQueryApplicationError::SessionChanged => {

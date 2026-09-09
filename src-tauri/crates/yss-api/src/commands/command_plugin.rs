@@ -6,7 +6,7 @@ use yss_plugin_runtime::{
     InstalledPlugin, PackageInspection, PluginFailure, PluginManager, TaskSnapshot, ViewSession,
 };
 
-fn plugin_error(error: PluginFailure) -> CommandError {
+pub(crate) fn plugin_error(error: PluginFailure) -> CommandError {
     let code = if yss_plugin_protocol::valid_id(&error.code) {
         error.code
     } else {

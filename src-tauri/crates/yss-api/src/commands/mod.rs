@@ -1,3 +1,4 @@
+pub mod command_activity_panel;
 pub mod command_dataframe;
 pub mod command_diagnostics;
 pub mod command_harness;
@@ -15,6 +16,7 @@ pub mod command_serial_tests;
 pub mod command_window;
 pub(crate) mod project_failure;
 
+pub use command_activity_panel::*;
 pub use command_dataframe::*;
 pub use command_diagnostics::*;
 pub use command_harness::*;

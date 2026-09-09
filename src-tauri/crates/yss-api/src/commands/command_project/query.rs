@@ -176,7 +176,7 @@ pub fn get_project_resource_path(
         .map_err(map_project_query_error)
 }
 
-fn map_project_query_error(
+pub(crate) fn map_project_query_error(
     error: yss_application::project_query::ProjectQueryApplicationError,
 ) -> CommandError {
     use yss_application::project_query::ProjectQueryApplicationError;

@@ -426,5 +426,57 @@ mod tests {
         assert!(wire.get("project_instance_id").is_none());
         assert!(wire.get("registry_fingerprint").is_none());
         assert!(wire.get("resource_publication_revision").is_none());
+
+        // The same authorities supply Activity JSON, including opaque resource descriptors.
+        let project_id = application
+            .capture_session()
+            .unwrap()
+            .project_instance_id()
+            .clone();
+        let activity = application
+            .nodes_activity_panel(Some(project_id.clone()), "zh-CN".into())
+            .unwrap();
+        let activity = serde_json::to_value(
+            crate::schema::activity_panel::ActivityPanelDocumentDto::try_from(activity).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(activity["schema"], "yssbi.activity-panel.v1");
+        assert_eq!(activity["projectInstanceId"], project_id.as_str());
+        let rows = activity["rows"].as_array().unwrap();
+        let function = rows
+            .iter()
+            .find(|row| {
+                row["item"]["creation"]["resourcePath"] == "functions/Opaque.yssbi-function"
+            })
+            .unwrap();
+        assert_eq!(function["item"]["creation"], item["creation"]);
+        assert!(rows.iter().any(|row| row["kind"] == "category"));
+        let project = application
+            .project_activity_panel(Some(project_id))
+            .unwrap();
+        let project = serde_json::to_value(
+            crate::schema::activity_panel::ActivityPanelDocumentDto::try_from(project).unwrap(),
+        )
+        .unwrap();
+        let rows = project["rows"].as_array().unwrap();
+        assert_eq!(
+            rows.iter().filter(|row| row["kind"] == "category").count(),
+            4
+        );
+        assert!(rows.iter().any(
+            |row| row["item"]["path"] == "functions/Opaque.yssbi-function"
+                && row["item"]["graphType"] == "function"
+        ));
+        assert!(
+            rows.iter()
+                .any(|row| row["id"] == "project.functions" && row["defaultExpanded"] == false)
+        );
+        assert!(
+            application
+                .project_activity_panel(Some(
+                    yss_project_identity::ProjectInstanceId::from_existing("other-project".into())
+                ))
+                .is_err()
+        );
     }
 }

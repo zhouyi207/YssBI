@@ -1,5 +1,6 @@
 //! Cross-authority use-case orchestration without transport or Tauri dependencies.
 
+pub mod activity_panel;
 pub mod automation;
 pub mod catalog_query;
 pub mod chart;

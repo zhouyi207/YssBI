@@ -59,6 +59,52 @@ Events are notifications, not state stores. Consumers recover authoritative data
 
 Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Diagnostics and Execution channels are separate contracts; diagnostics live-gap recovery is documented in [Runtime Signals](../../../docs/architecture/RUNTIME_SIGNALS.md#4-operational-diagnostics).
 
+## Activity panel projection
+
+`get_activity_panel_document` accepts a fixed panel id, locale, and an explicit project identity
+for Project/Nodes. A null project context requests their empty document before activation;
+Commands/Plugins are global and use null. The handler delegates to Application/Plugin Manager
+on the blocking boundary and maps to `ActivityPanelDocumentDto`. The request also carries a
+nullable cursor, never frontend resource rows or rendering callbacks. The invoking WebView
+supplies the window identity; a caller cannot name another window.
+
+The exact `yssbi.activity-panel.v1` envelope contains panel/project identity, publication revision,
+title, tools, complete depth-ordered rows, and optional empty-state presentation. Text is either
+a localization key or a literal. Category defaults and six item kinds are Rust-owned. The payload
+contains resource references and node creation descriptors, not graph documents, database engines,
+connection strings, or table data. Row count, depth and serialized response size are bounded;
+invalid/oversized input is never partially rendered.
+
+The first reply is `{ kind: "snapshot", cursor, document }`. Subsequent replies use
+`{ kind: "patch", baseCursor, cursor, patch, operations }`. The document-level patch is limited
+to title, tools, emptyState and publicationRevision. Row operations are:
+
+| op     | Fields       | Meaning                                                                  |
+| ------ | ------------ | ------------------------------------------------------------------------ |
+| update | id, patch    | Replace only changed top-level fields of one row; id/kind are immutable. |
+| insert | afterId, row | Insert one row after the named row; null means the beginning.            |
+| remove | id           | Remove exactly one row.                                                  |
+| move   | id, afterId  | Reposition one existing row without replacing its contents.              |
+
+Nested values are replaced as fields, not recursively merged. Null is a value. Row-kind changes
+are represented by remove+insert. Batches apply atomically, so parent/child ordering is validated
+after all operations. Unchanged rows retain their frontend references; unchanged documents return
+empty patches with the original cursor.
+
+`ActivityPanelSyncState` is an injected transport cache, not committed state. It retains immutable,
+window/panel/project/locale-bound baselines under explicit count and serialized-byte budgets.
+Query/diff work runs outside its lock. Lost replies can still be diffed from a retained cursor;
+an unavailable cursor causes a fresh snapshot. Ordinary refreshes never echo a whole tree or
+send the client's tree to Rust. This is request/response synchronization driven by existing
+invalidation signals, not a new polling or push stream.
+
+The frontend service validates identity, cursor continuity, allowed patch fields, row kinds,
+unique ids and final tree depth before publication. Malformed batches do not partially mutate
+the visible projection. A failed delta gets one explicit snapshot recovery; a repeated failure
+is surfaced. Requests within a binding are serialized and coalesced. Project/language/epoch
+replacement and unmount invalidate the binding; UI expansion creates no request.
+See [Workbench](../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) for UI ownership.
+
 ## Error contract
 
 Every command rejection serializes the Rust-owned `CommandError` with exactly three camelCase keys:

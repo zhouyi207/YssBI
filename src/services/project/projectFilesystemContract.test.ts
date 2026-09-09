@@ -69,6 +69,7 @@ const projectDatabaseIdentityFields = {
 } as const;
 
 const activeProjectCommandIdentityFields = {
+  get_activity_panel_document: "projectInstanceId",
   get_localized_node_catalog: "projectInstanceId",
   get_compatible_node_catalog: "projectInstanceId",
   get_project_databases: "projectInstanceId",
@@ -123,8 +124,6 @@ const globalCommandExemptions = [
   "get_window_states",
   "get_window_state",
   "save_window_state",
-  "get_application_settings",
-  "update_application_settings",
   "list_sqlite_tables",
   "list_sql_tables",
   "list_excel_sheets",
@@ -133,11 +132,12 @@ const globalCommandExemptions = [
   "compute_acf_pacf",
   "compute_serial_tests",
   "compute_panel_did_fake_group_ri",
-  "parse_bayes_expression",
-  "validate_bayes_model",
-  "get_julia_runtime_status",
-  "get_julia_worker_status",
-  "install_julia_runtime",
+  "list_plugins",
+  "inspect_plugin_package",
+  "install_plugin_package",
+  "set_plugin_enabled",
+  "uninstall_plugin",
+  "list_plugin_tasks",
   "submit_frontend_diagnostics",
   "subscribe_diagnostics",
   "unsubscribe_diagnostics",
@@ -155,17 +155,11 @@ const capabilityCommandExemptions = [
   "get_result_page",
   "get_pin_result",
 
-  "submit_bayes_inference",
-  "get_bayes_inference_status",
-  "cancel_bayes_inference",
-  "read_bayes_inference_result",
-  "clear_bayes_inference_task",
-  "export_bayes_artifact_csv",
-  "read_bayes_posterior_samples",
-  "read_bayes_trace_plot_data",
-  "read_bayes_density_plot_data",
-  "read_bayes_autocorrelation_data",
-  "read_bayes_posterior_predictive",
+  // Plugin view capabilities are bound to the installed plugin, window and backend session.
+  "attach_plugin_view",
+  "detach_plugin_view",
+  "call_plugin_view",
+  "grant_plugin_export",
 
   "get_harness_runtime_status",
   "configure_harness_provider",
@@ -908,7 +902,7 @@ describe("projectFilesystemContract", () => {
     const offenders = productionSources(resolve("src/services")).flatMap(({ path, source }) => {
       const matches =
         source.match(
-          /projectInstanceId\s*\?\s*:\s*string|projectInstanceId\s*:\s*string\s*\|\s*(?:null|undefined)|projectInstanceId\s*=\s*[^,;)]+/g,
+          /projectInstanceId\s*\?\s*:\s*string|projectInstanceId\s*:\s*string\s*\|\s*(?:null|undefined)|projectInstanceId\s*=(?![=>])\s*[^,;)]+/g,
         ) ?? [];
       return matches.map((match) => `${path}: ${match}`);
     });

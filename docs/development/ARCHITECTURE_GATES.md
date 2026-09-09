@@ -116,6 +116,12 @@ Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConst
 
 科学计算端口和 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 service 实现按 SCI Core 分类，依赖中性契约与模型。Composition root 只获 runtime 构造器的精确调用权限；Execution 不依赖 SCI runtime 或模型实现。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
+Activity panel command 的 capability 只开放 Application 文档查询、Plugin Manager 只读列表与
+Activity DTO，以及按游标返回增量的传输缓存。Composition root 只获缓存的构造权限，
+缓存按 Transport 分类，既不写入项目也不拥有 UI 状态。Transport mapper 只开放 Activity projection 类型及其固定 variants；
+不增加 Commands → Application 或 Transport → Application 的通配依赖。
+文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 维护。
+
 ## 6. Changing the architecture policy
 
 插件协议与清单属于 Pure Leaf；通用进程/签名安装和 IPC SDK 属于 Backend Adapter。`yss-bayes-runtime` 属于插件内部 Application，只有 Julia extension 的确切 adapter source 可访问其编排入口。宿主 composition root 只构造通用 Plugin Manager 和 HostServices；Julia adapter 构造器只允许出现在外部 extension 中。文件发布、Arrow 适配和签名库权限均为对应 source/package 的显式登记，不开放通配业务桥接。

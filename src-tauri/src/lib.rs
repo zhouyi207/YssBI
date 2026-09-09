@@ -151,6 +151,7 @@ pub fn run() {
             std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
         ))
         .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
+        .manage(yss_api::ActivityPanelSyncState::default())
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
             let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize()

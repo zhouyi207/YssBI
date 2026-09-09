@@ -1,4 +1,5 @@
 mod catalog;
+pub(crate) use catalog::catalog_query_command_error;
 mod common;
 mod editor;
 mod execution;

@@ -1,10 +1,12 @@
 //! Tauri transport boundary and the canonical YssBI command registry.
 
+mod activity_panel_sync;
 mod commands;
 mod error;
 mod event;
 mod schema;
 
+pub use activity_panel_sync::ActivityPanelSyncState;
 pub use commands::{HarnessChannelHub, HarnessRuntimeState};
 
 /// Builds the single invoke handler consumed by the root composition crate.
@@ -12,6 +14,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
     use commands::*;
 
     tauri::generate_handler![
+        get_activity_panel_document,
         get_localized_node_catalog,
         get_compatible_node_catalog,
         create_event,
