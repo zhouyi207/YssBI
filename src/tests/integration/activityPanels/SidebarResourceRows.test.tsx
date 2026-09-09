@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   draggableInputs: [] as Array<{ data: unknown; disabled?: boolean }>,
   dragPointerDown: vi.fn(),
   revealDetails: vi.fn(),
+  openDatabase: vi.fn(),
+  openDatabaseWindow: vi.fn(),
 }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -48,7 +50,12 @@ vi.mock("@/features/application/nodeCatalog/useLocalizedNodeCatalog", () => ({
 vi.mock("@/features/application/editor/rightSidebarActions", () => ({
   revealDetails: mocks.revealDetails,
 }));
-vi.mock("@/features/application/window", () => ({ openDatabaseEditorWindow: vi.fn() }));
+vi.mock("@/features/application/editor/openDatabaseInEditor", () => ({
+  openDatabaseInEditor: mocks.openDatabase,
+}));
+vi.mock("@/features/application/window", () => ({
+  openDatabaseEditorWindow: mocks.openDatabaseWindow,
+}));
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
@@ -118,6 +125,7 @@ describe("resource sidebar rows", () => {
     mocks.draggableInputs.length = 0;
     mocks.catalogState = catalogState();
     mocks.revealDetails.mockResolvedValue(undefined);
+    mocks.openDatabase.mockResolvedValue(undefined);
     useDatabaseStore.getState().clear();
     vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     host = document.createElement("div");
@@ -209,16 +217,17 @@ describe("resource sidebar rows", () => {
     expect(dragData.template?.descriptor).toBe(databaseSource);
   });
 
-  it("explicitly reveals Details for database row clicks", async () => {
+  it("opens data in the workbench on click without opening a window on double-click", async () => {
     renderDatabase();
     await act(async () => {
       host.firstElementChild?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
 
-    expect(mocks.revealDetails.mock.calls.map(([focus]) => focus)).toEqual([
-      { kind: "data", id: "database-id" },
-    ]);
+    expect(mocks.openDatabase).toHaveBeenCalledWith("database-id");
+    act(() => host.firstElementChild?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(mocks.openDatabaseWindow).not.toHaveBeenCalled();
+    expect(mocks.revealDetails).not.toHaveBeenCalled();
   });
 
   it("shows the localized load failure tooltip from machine state", () => {

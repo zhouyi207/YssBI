@@ -155,12 +155,6 @@ export function buildProjectSidebarContextMenuSections(
             onClick: () => actions.openDatabase(target.id),
           },
           {
-            id: "view-editor",
-            label: t("sidebar.viewInDatabaseEditor"),
-            icon: <VscChevronRight size={12} />,
-            onClick: () => actions.openDatabase(target.id),
-          },
-          {
             id: "reveal-in-explorer",
             label: t("contextMenu.sidebar.revealInExplorer"),
             icon: <VscFolderOpened size={12} />,

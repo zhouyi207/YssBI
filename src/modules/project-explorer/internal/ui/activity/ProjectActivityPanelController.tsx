@@ -49,7 +49,7 @@ function ProjectActivityPanelController() {
           duplicateChart: actions.duplicateChart,
           deleteChart: actions.deleteChartItem,
           addChart: actions.addChart,
-          openDatabase: actions.openDatabaseEditorWindow,
+          openDatabase: actions.openDatabaseInEditor,
           renameDatabaseItem: actions.renameDatabaseItem,
           deleteDatabaseItem: actions.deleteDatabaseItem,
           importData: actions.triggerImportData,

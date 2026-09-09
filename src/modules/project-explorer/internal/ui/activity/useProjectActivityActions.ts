@@ -14,7 +14,7 @@ import {
 } from "@/features/application/sidebar/sidebarResourceActions";
 import type { GraphResourceType } from "./projectSidebarTypes";
 import { renameResource } from "@/features/application/resource/resourceActions";
-import { openDatabaseEditorWindow } from "@/features/application/window";
+import { openDatabaseInEditor } from "@/features/application/editor/openDatabaseInEditor";
 import { ui } from "@/features/core/ui/ui";
 
 type OpenInputDialog = (
@@ -143,6 +143,6 @@ export function useProjectActivityActions(openInputDialog: OpenInputDialog) {
     renameDatabaseItem,
     deleteDatabaseItem,
     triggerImportData,
-    openDatabaseEditorWindow,
+    openDatabaseInEditor,
   };
 }

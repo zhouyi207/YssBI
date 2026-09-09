@@ -7,8 +7,7 @@ import {
 } from "@/features/application/sidebar";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { findResourceNodeSpawnTemplate } from "@/features/application/editor/canvasDrop";
-import { openDatabaseEditorWindow } from "@/features/application/window";
-import { revealDetails } from "@/features/application/editor/rightSidebarActions";
+import { openDatabaseInEditor } from "@/features/application/editor/openDatabaseInEditor";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -69,11 +68,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
       label={name}
       onClick={async (e) => {
         e.stopPropagation();
-        await revealDetails({ kind: "data", id });
-      }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        void openDatabaseEditorWindow(id);
+        await openDatabaseInEditor(id);
       }}
       onContextMenu={onContextMenu}
       trailing={
@@ -99,7 +94,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
             tooltip={t("sidebar.viewInDatabaseEditor")}
             onClick={(e) => {
               e.stopPropagation();
-              void openDatabaseEditorWindow(id);
+              void openDatabaseInEditor(id);
             }}
           />
         </>
