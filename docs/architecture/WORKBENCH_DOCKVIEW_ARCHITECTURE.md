@@ -36,13 +36,15 @@ WorkbenchWindow
 
 Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
-Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，共用一棵虚拟化树和分类展开状态。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口，数据行保留拖拽、详情、数据库编辑窗口与右键管理操作；数据来自既有数据库投影，不再注册独立 Data Activity panel。
+Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，共用一棵虚拟化树和分类展开状态。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
+
+数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。
 
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
 
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
-`editorRendererRegistry.ts` 是唯一把 event/function/chart 映射到具体 editor 的位置。Workbench module
+`editorRendererRegistry.ts` 是唯一把 event/function/chart/database 映射到具体 editor 的位置。Workbench module
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
 当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
 `src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
@@ -69,19 +71,19 @@ Activity 底部固定显示 Plugins 原生 tab，替代原 Julia 入口。仅通
 
 root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
 
-| 角色             | 内容                        | deterministic home                  |
-| ---------------- | --------------------------- | ----------------------------------- |
-| `editor`         | Graph/Function/Chart editor | 当前 central grid group             |
-| `view:project`   | Project activity panel      | left Activity edge                  |
-| `view:nodes`     | Nodes activity panel        | left Activity edge                  |
-| `view:commands`  | Commands activity panel     | left Activity edge                  |
-| `view:details`   | permanent fixed Details     | right edge index 0                  |
-| `view:assistant` | movable/closable Assistant  | right edge index 1 on default/reset |
-| `view:inspect`   | contextual Inspect          | right edge                          |
-| `result`         | 一个可检查结果              | right edge                          |
-| `view:logs`      | Logs workspace              | bottom edge                         |
-| `view:output`    | Run Output                  | bottom edge                         |
-| `view:problems`  | Graph Problems              | bottom edge                         |
+| 角色             | 内容                                      | deterministic home                  |
+| ---------------- | ----------------------------------------- | ----------------------------------- |
+| `editor`         | Graph/Function/Chart editor、只读数据表格 | 当前 central grid group             |
+| `view:project`   | Project activity panel                    | left Activity edge                  |
+| `view:nodes`     | Nodes activity panel                      | left Activity edge                  |
+| `view:commands`  | Commands activity panel                   | left Activity edge                  |
+| `view:details`   | permanent fixed Details                   | right edge index 0                  |
+| `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
+| `view:inspect`   | contextual Inspect                        | right edge                          |
+| `result`         | 一个可检查结果                            | right edge                          |
+| `view:logs`      | Logs workspace                            | bottom edge                         |
+| `view:output`    | Run Output                                | bottom edge                         |
+| `view:problems`  | Graph Problems                            | bottom edge                         |
 
 默认空布局建立 central grid group，并放置：
 
@@ -129,13 +131,13 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 以下 identity 永远分离：
 
-| Identity          | 含义                                                                      |
-| ----------------- | ------------------------------------------------------------------------- |
-| `resourceRef`     | editor 打开的 opaque backend resource path；同一资源可有多个 editor panel |
-| `resultKey`       | logical Result panel key；同 key 执行 upsert，不同 key 可并存             |
-| `resultId`        | Rust `ResultStore` 中当前 payload 的 opaque identity                      |
-| `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity                         |
-| `groupId`         | Dockview 当前物理 group 的 identity；panel 移动后可改变                   |
+| Identity          | 含义                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `resourceRef`     | editor 打开的 opaque backend resource key：图/图表使用路径，数据使用 DatabaseId；同一资源可有多个 editor panel |
+| `resultKey`       | logical Result panel key；同 key 执行 upsert，不同 key 可并存                                                  |
+| `resultId`        | Rust `ResultStore` 中当前 payload 的 opaque identity                                                           |
+| `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity                                                              |
+| `groupId`         | Dockview 当前物理 group 的 identity；panel 移动后可改变                                                        |
 
 不得从 `panelInstanceId` 或 `groupId` 推导 `resourceRef`、`resultKey` 或 `resultId`，也不得把这些 identity 合并为一个 tab id。
 
