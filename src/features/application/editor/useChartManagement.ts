@@ -177,7 +177,7 @@ export function useOpenChart() {
       void revealWorkbenchView("project");
       useSidebarStore
         .getState()
-        .setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.charts, true);
+        .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.charts, true);
     } catch (error) {
       if (!isEditorOpenRejectionHandled(error)) throw error;
     }

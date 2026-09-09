@@ -27,7 +27,7 @@ function createDeferred<T>(): Deferred<T> {
 const mocks = vi.hoisted(() => ({
   openEditorPanel: vi.fn(),
   revealWorkbenchView: vi.fn(),
-  setProjectTreeCategoryExpanded: vi.fn(),
+  setCategoryExpanded: vi.fn(),
   handledRejection: undefined as unknown,
   documents: {
     "charts/Summary.yssbi-chart": { revision: 1 },
@@ -47,7 +47,7 @@ vi.mock("@/features/core/sidebar", () => ({
   PROJECT_TREE_CATEGORY_IDS: { charts: "charts" },
   useSidebarStore: {
     getState: () => ({
-      setProjectTreeCategoryExpanded: mocks.setProjectTreeCategoryExpanded,
+      setCategoryExpanded: mocks.setCategoryExpanded,
     }),
   },
 }));
@@ -132,13 +132,13 @@ describe("useOpenChart", () => {
       await Promise.resolve();
     });
 
-    expect(mocks.setProjectTreeCategoryExpanded).not.toHaveBeenCalled();
+    expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();
 
     deferred.resolve(openedPanel);
     await act(async () => opening);
 
     expect(mocks.revealWorkbenchView).toHaveBeenCalledWith("project");
-    expect(mocks.setProjectTreeCategoryExpanded).toHaveBeenCalledWith("charts", true);
+    expect(mocks.setCategoryExpanded).toHaveBeenCalledWith("project", "charts", true);
   });
 
   it("contains an editor-open rejection whose feedback was already presented", async () => {
@@ -148,6 +148,6 @@ describe("useOpenChart", () => {
 
     await expect(openChart("charts/Summary.yssbi-chart", "Summary")).resolves.toBeUndefined();
 
-    expect(mocks.setProjectTreeCategoryExpanded).not.toHaveBeenCalled();
+    expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();
   });
 });

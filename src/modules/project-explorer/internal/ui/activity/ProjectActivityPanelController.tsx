@@ -2,7 +2,6 @@ import { useCallback, useMemo, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  ActivityPanelShell,
   SidebarRenameDialog,
   useSidebarContextMenu,
   type RootDockviewPanelComponent,
@@ -119,9 +118,7 @@ function ProjectActivityPanelController() {
 
   return (
     <>
-      <ActivityPanelShell>
-        <SidebarProjectTab actions={projectTreeActions} />
-      </ActivityPanelShell>
+      <SidebarProjectTab actions={projectTreeActions} />
       {contextMenu ? (
         <ActionMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}

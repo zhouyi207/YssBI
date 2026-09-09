@@ -1,15 +1,26 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { PluginsPanel } from "./PluginsPanel";
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
+import type { ActivityPanelDocument } from "@/shared/types/domain/activityPanel";
 import type { InstalledPlugin } from "@/shared/types/plugins/generated";
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("@/modules/workbench/public", () => ({
-  ActivityPanelShell: ({ children }: { children: React.ReactNode }) => children,
+const backend = vi.hoisted(() => ({ document: null as ActivityPanelDocument | null }));
+vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
+  useActivityPanelDocument: () => ({
+    document: backend.document,
+    error: null,
+    refresh: vi.fn(),
+    ...useActivityPanelExpansion("plugins"),
+  }),
 }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 it("renders all installed plugins without search and preserves group collapse and actions", () => {
+  useSidebarStore.setState({ expandedCategories: {} });
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -47,6 +58,32 @@ it("renders all installed plugins without search and preserves group collapse an
     },
   };
   const render = (plugins: InstalledPlugin[]) => {
+    backend.document = activityPanelFixture(
+      "plugins",
+      [
+        {
+          ...categoryFixture("plugins.installed", "plugins.installed", 0, true),
+          count: plugins.length,
+        },
+        ...plugins.map((plugin) => ({
+          kind: "item" as const,
+          id: plugin.manifest.id,
+          depth: 1,
+          item: {
+            kind: "plugin" as const,
+            id: plugin.manifest.id,
+            name: plugin.manifest.name,
+            description: plugin.manifest.description,
+            publisher: plugin.manifest.publisher,
+            enabled: plugin.enabled,
+          },
+        })),
+      ],
+      [
+        { id: "install", label: { key: "plugins.installPackage" }, icon: "install" },
+        { id: "refresh", label: { key: "plugins.recheck" }, icon: "refresh" },
+      ],
+    );
     act(() =>
       root.render(
         <PluginsPanel
@@ -66,7 +103,7 @@ it("renders all installed plugins without search and preserves group collapse an
   const installedGroup = () => host.querySelector("button[aria-expanded]")!.parentElement!;
   try {
     render([]);
-    expect(installedGroup().children).toHaveLength(1);
+    expect(host.querySelectorAll("[data-plugin-item]")).toHaveLength(0);
     expect(host.querySelector('[role="status"]')).toBeNull();
     const installButton = host.querySelector<HTMLButtonElement>(
       'header button[aria-label="plugins.installPackage"]',
@@ -88,7 +125,7 @@ it("renders all installed plugins without search and preserves group collapse an
       ),
     ).toEqual([plugin.manifest.id, otherPlugin.manifest.id]);
     const groupToggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    expect(groupToggle.lastElementChild?.textContent).toBe("2");
+    expect(installedGroup().lastElementChild?.textContent).toBe("2");
     expect(host.querySelector("article details")).toBeNull();
     act(() =>
       [...host.querySelectorAll("button")]
@@ -98,12 +135,12 @@ it("renders all installed plugins without search and preserves group collapse an
     expect(open).toHaveBeenCalledWith(plugin);
     act(() => groupToggle.click());
     expect(host.querySelector("[data-plugin-item]")).toBeNull();
-    expect(groupToggle.lastElementChild?.textContent).toBe("2");
+    expect(installedGroup().lastElementChild?.textContent).toBe("2");
     act(() => groupToggle.click());
     expect(host.querySelectorAll("[data-plugin-item]")).toHaveLength(2);
 
     render([]);
-    expect(installedGroup().children).toHaveLength(1);
+    expect(host.querySelectorAll("[data-plugin-item]")).toHaveLength(0);
     expect(host.querySelector('[role="status"]')).toBeNull();
   } finally {
     act(() => root.unmount());

@@ -1,11 +1,9 @@
 import { VscSymbolMethod, VscSymbolProperty } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
-import type { SidebarDragPayload } from "@/features/core/dnd";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/localizedCatalogTree";
 import { cn } from "@/lib/utils";
 import {
-  SidebarDraggableItem,
   SidebarTreeCategoryRow,
   SIDEBAR_ROW_ICON_SIZE,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
@@ -19,8 +17,6 @@ export interface LocalizedCatalogTreeRowProps {
   active?: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onItemSelect?: (descriptor: NodeCreationDescriptor) => void;
-  dragData?: SidebarDragPayload | null;
-  dragId?: string;
 }
 
 const catalogItemRowClass = cn(
@@ -60,8 +56,6 @@ export function LocalizedCatalogTreeRow({
   active = false,
   onExpandedChange,
   onItemSelect,
-  dragData = null,
-  dragId,
 }: LocalizedCatalogTreeRowProps) {
   if (row.kind === "category") {
     return (
@@ -82,19 +76,6 @@ export function LocalizedCatalogTreeRow({
 
   const content = <CatalogItemContent row={row} />;
   const handleSelect = onItemSelect ? () => onItemSelect(row.item.creation) : undefined;
-
-  if (dragData) {
-    return (
-      <SidebarDraggableItem
-        id={dragId ?? row.rowKey}
-        dragData={dragData}
-        className={catalogItemRowClass}
-        style={{ paddingLeft: 16 + row.depth * 16 }}
-      >
-        {content}
-      </SidebarDraggableItem>
-    );
-  }
 
   return (
     <Button

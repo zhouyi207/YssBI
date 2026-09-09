@@ -36,10 +36,6 @@ export const SidebarChartRow = memo(function SidebarChartRow({
         e.stopPropagation();
         void onOpen(chartPath, name);
       }}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        void onOpen(chartPath, name);
-      }}
       onContextMenu={onContextMenu}
       trailing={
         <SidebarRowActionButton

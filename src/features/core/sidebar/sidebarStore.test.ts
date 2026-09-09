@@ -1,63 +1,47 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PROJECT_TREE_EXPANSION_DEFAULTS, useSidebarStore } from "./sidebarStore";
-import { PROJECT_TREE_CATEGORY_IDS } from "./projectTreeState";
+import { useSidebarStore } from "./sidebarStore";
 
-describe("Project sidebar category expansion", () => {
+describe("Activity category expansion", () => {
   beforeEach(() => {
-    useSidebarStore.setState({
-      projectTreeExpandedCategories: { ...PROJECT_TREE_EXPANSION_DEFAULTS },
-    });
+    useSidebarStore.setState({ expandedCategories: {} });
   });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
-
-  it("updates Project categories independently", () => {
+  it("keeps expansion independent across panels and leaves defaults to the backend", () => {
     const store = useSidebarStore.getState();
-
-    expect(store.projectTreeExpandedCategories).toEqual(PROJECT_TREE_EXPANSION_DEFAULTS);
-    store.setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.functions, true);
-    store.setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.data, false);
-
-    expect(useSidebarStore.getState()).toMatchObject({
-      projectTreeExpandedCategories: {
-        ...PROJECT_TREE_EXPANSION_DEFAULTS,
-        [PROJECT_TREE_CATEGORY_IDS.functions]: true,
-        [PROJECT_TREE_CATEGORY_IDS.data]: false,
-      },
+    store.setCategoryExpanded("project", "shared-id", true);
+    store.setCategoryExpanded("nodes", "shared-id", false);
+    expect(useSidebarStore.getState().expandedCategories).toEqual({
+      project: { "shared-id": true },
+      nodes: { "shared-id": false },
     });
   });
-
-  it("filters unknown persisted Project tree expansion categories", async () => {
-    const persisted = new Map<string, string>();
+  it("loads only boolean UI preferences and persists through the same key", async () => {
+    const persisted = new Map<string, string>([
+      [
+        "yssbi-activity-panel-expansion",
+        JSON.stringify({
+          project: { events: true, bad: "true" },
+          plugins: { installed: false },
+          unknown: { x: true },
+        }),
+      ],
+    ]);
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => persisted.get(key) ?? null,
       setItem: (key: string, value: string) => persisted.set(key, value),
     });
-    persisted.set(
-      "yssbi-project-tree-expanded-categories",
-      JSON.stringify({
-        [PROJECT_TREE_CATEGORY_IDS.functions]: true,
-        [PROJECT_TREE_CATEGORY_IDS.data]: false,
-        "project.unknown": true,
-      }),
-    );
     vi.resetModules();
-
     const fresh = await import("./sidebarStore");
-
-    expect(fresh.useSidebarStore.getState().projectTreeExpandedCategories).toEqual({
-      ...PROJECT_TREE_EXPANSION_DEFAULTS,
-      [PROJECT_TREE_CATEGORY_IDS.functions]: true,
-      [PROJECT_TREE_CATEGORY_IDS.data]: false,
+    expect(fresh.useSidebarStore.getState().expandedCategories).toEqual({
+      project: { events: true },
+      plugins: { installed: false },
     });
-    fresh.useSidebarStore
-      .getState()
-      .setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.data, true);
-    expect(JSON.parse(persisted.get("yssbi-project-tree-expanded-categories") ?? "{}")).toEqual({
-      ...PROJECT_TREE_EXPANSION_DEFAULTS,
-      [PROJECT_TREE_CATEGORY_IDS.functions]: true,
+    fresh.useSidebarStore.getState().setCategoryExpanded("plugins", "installed", true);
+    expect(JSON.parse(persisted.get("yssbi-activity-panel-expansion")!)).toEqual({
+      project: { events: true },
+      plugins: { installed: true },
     });
   });
 });

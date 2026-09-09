@@ -1,13 +1,11 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscDatabase } from "react-icons/vsc";
-import {
-  buildSidebarDragData,
-  refreshMissingSidebarResourcePath,
-} from "@/features/application/sidebar";
+import { buildSidebarDragData } from "@/features/application/sidebar";
 import { useLocalizedNodeCatalog } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { findResourceNodeSpawnTemplate } from "@/features/application/editor/canvasDrop";
 import { openDatabaseInEditor } from "@/features/application/editor/openDatabaseInEditor";
+import { useDatabaseRead } from "@/features/core/database/read";
 import { TYPE_ICON_COLORS } from "@/features/domain/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -20,48 +18,38 @@ export const SidebarDataRow = memo(function SidebarDataRow({
   id,
   resourcePath,
   name,
-  data,
   indentDepth = 0,
   isSelected = false,
   onContextMenu,
 }: {
   id: string;
-  resourcePath?: string;
+  resourcePath: string;
   name: string;
-  data: unknown;
   indentDepth?: number;
   isSelected?: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
-  const isLoading = (data as { loading?: unknown }).loading === true;
-  const loadFailed = (data as { loadFailed?: unknown }).loadFailed === true;
+  const loadFailed = useDatabaseRead((snapshot) => snapshot.databases[id]?.loadFailed === true);
   const { status, catalog, refresh } = useLocalizedNodeCatalog();
-  const templateForPath = (path: string) =>
+  const template =
     status === "ready" && catalog
-      ? findResourceNodeSpawnTemplate(catalog.items, path, "database", "yssbi.dataframe.source.get")
+      ? findResourceNodeSpawnTemplate(
+          catalog.items,
+          resourcePath,
+          "database",
+          "yssbi.dataframe.source.get",
+        )
       : null;
-  const template = resourcePath ? templateForPath(resourcePath) : null;
   const dragData = template ? buildSidebarDragData(id, name, "data", template.descriptor) : null;
   const resourceCatalogRefreshMessage = t("notifications.editor.resourceCatalogRefreshing");
-  const handleDisabledDragAttempt = () => {
-    if (resourcePath) {
-      refresh();
-    } else {
-      void refreshMissingSidebarResourcePath({
-        id,
-        hasCurrentDescriptor: (path) => templateForPath(path) != null,
-        refreshCatalog: refresh,
-      });
-    }
-  };
 
   return (
     <SidebarListItem
       id={id}
       dragData={dragData}
       dragDisabledReason={resourceCatalogRefreshMessage}
-      onDisabledDragAttempt={handleDisabledDragAttempt}
+      onDisabledDragAttempt={refresh}
       isSelected={isSelected}
       indentDepth={indentDepth}
       icon={<VscDatabase size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.data }} />}
@@ -73,15 +61,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
       onContextMenu={onContextMenu}
       trailing={
         <>
-          {isLoading && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 animate-pulse" />
-              </TooltipTrigger>
-              <TooltipContent side="top">{t("sidebar.dataLoading")}</TooltipContent>
-            </Tooltip>
-          )}
-          {!isLoading && loadFailed && (
+          {loadFailed && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />

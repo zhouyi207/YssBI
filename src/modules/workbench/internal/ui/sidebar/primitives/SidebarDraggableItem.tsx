@@ -2,7 +2,7 @@ import { useDraggable, type Data } from "@dnd-kit/core";
 
 /**
  * Draggable sidebar row shell. PointerSensor activationConstraint (distance: 5)
- * keeps click / doubleClick separate from drag.
+ * keeps clicks separate from drag.
  */
 export function SidebarDraggableItem({
   id,
@@ -11,7 +11,6 @@ export function SidebarDraggableItem({
   className,
   style,
   onClick,
-  onDoubleClick,
   onContextMenu,
   dragDisabledReason,
   onDisabledDragAttempt,
@@ -22,7 +21,6 @@ export function SidebarDraggableItem({
   className?: string;
   style?: React.CSSProperties;
   onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   dragDisabledReason?: string;
   onDisabledDragAttempt?: () => void;
@@ -41,14 +39,11 @@ export function SidebarDraggableItem({
       {...(canDrag ? attributes : {})}
       {...(!canDrag && dragDisabledReason ? { onPointerDown: onDisabledDragAttempt } : {})}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
-      aria-disabled={!canDrag && Boolean(dragDisabledReason)}
       title={!canDrag ? dragDisabledReason : undefined}
-      className={`${className ?? ""} ${canDrag ? "cursor-pointer" : ""}`}
+      className={`${className ?? ""} ${canDrag || onClick ? "cursor-pointer" : ""}`}
       style={{
         ...style,
-        opacity: !canDrag && dragDisabledReason ? 0.65 : 1,
         touchAction: canDrag ? "none" : undefined,
       }}
     >

@@ -59,28 +59,4 @@ describe("Sidebar empty-state components", () => {
     act(() => (message as HTMLElement).focus());
     expect(document.activeElement).toBe(message);
   });
-
-  it("forwards section context-menu events", () => {
-    let contextMenuCalls = 0;
-    act(() => {
-      root.render(
-        <TooltipProvider>
-          <SidebarSectionEmptyState
-            level={1}
-            message="No events"
-            onContextMenu={() => {
-              contextMenuCalls += 1;
-            }}
-          />
-        </TooltipProvider>,
-      );
-    });
-
-    const message = host.querySelector('[aria-label="No events"]');
-    act(() => {
-      message?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-    });
-
-    expect(contextMenuCalls).toBe(1);
-  });
 });

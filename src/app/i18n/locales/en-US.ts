@@ -1120,7 +1120,6 @@ export const enUS = {
     noData: "No data yet",
     noEvents: "No Events yet",
     noFunctions: "No Functions yet",
-    dataLoading: "Loading data…",
     dataLoadFailed: "Failed to load data",
     noCommandHistory: "No command history",
     noBuiltinNodes: "No built-in nodes",

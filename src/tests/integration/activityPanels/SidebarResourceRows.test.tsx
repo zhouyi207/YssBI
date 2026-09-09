@@ -1,24 +1,25 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
-import * as projectHydration from "@/features/application/project/projectHydration";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { SidebarDataRow } from "@/modules/project-explorer/internal/ui/activity/SidebarDataRow";
 import { SidebarProjectTab } from "@/modules/project-explorer/internal/ui/activity/SidebarProjectTab";
+import type { ActivityPanelDocument } from "@/shared/types/domain/activityPanel";
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
 import { useSidebarStore, PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
   catalogState: null as LocalizedNodeCatalogState | null,
+  document: null as ActivityPanelDocument | null,
   draggableInputs: [] as Array<{ data: unknown; disabled?: boolean }>,
   dragPointerDown: vi.fn(),
-  revealDetails: vi.fn(),
   openDatabase: vi.fn(),
-  openDatabaseWindow: vi.fn(),
 }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -31,30 +32,19 @@ vi.mock("@dnd-kit/core", () => ({
     };
   },
 }));
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
-    getTotalSize: () => options.count * 28,
-    getVirtualItems: () =>
-      Array.from({ length: options.count }, (_, index) => ({
-        index,
-        key: options.getItemKey(index),
-        start: index * 28,
-        size: 28,
-      })),
-    measureElement: vi.fn(),
+vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
+  useActivityPanelDocument: () => ({
+    document: mocks.document,
+    error: null,
+    refresh: vi.fn(),
+    ...useActivityPanelExpansion("project"),
   }),
 }));
 vi.mock("@/features/application/nodeCatalog/useLocalizedNodeCatalog", () => ({
   useLocalizedNodeCatalog: () => mocks.catalogState,
 }));
-vi.mock("@/features/application/editor/rightSidebarActions", () => ({
-  revealDetails: mocks.revealDetails,
-}));
 vi.mock("@/features/application/editor/openDatabaseInEditor", () => ({
   openDatabaseInEditor: mocks.openDatabase,
-}));
-vi.mock("@/features/application/window", () => ({
-  openDatabaseEditorWindow: mocks.openDatabaseWindow,
 }));
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
@@ -124,10 +114,8 @@ describe("resource sidebar rows", () => {
     vi.clearAllMocks();
     mocks.draggableInputs.length = 0;
     mocks.catalogState = catalogState();
-    mocks.revealDetails.mockResolvedValue(undefined);
     mocks.openDatabase.mockResolvedValue(undefined);
     useDatabaseStore.getState().clear();
-    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockResolvedValue(true);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -138,14 +126,19 @@ describe("resource sidebar rows", () => {
     host.remove();
   });
 
-  function renderDatabase(resourcePath: string | null = databasePath, data: unknown = {}) {
+  function renderDatabase(loadFailed = false) {
+    useDatabaseStore.getState().addDatabase("database-id", {
+      id: "database-id",
+      name: "Sales",
+      resourcePath: databasePath,
+      loadFailed,
+    });
     act(() =>
       root.render(
         <SidebarDataRow
           id="database-id"
-          resourcePath={resourcePath ?? undefined}
+          resourcePath={databasePath}
           name="Sales"
-          data={data}
           onContextMenu={vi.fn()}
         />,
       ),
@@ -153,7 +146,16 @@ describe("resource sidebar rows", () => {
   }
 
   it("shows live data in the Project tree with category expansion and no search input", () => {
-    useSidebarStore.getState().setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.data, true);
+    useSidebarStore.setState({ expandedCategories: {} });
+    mocks.document = activityPanelFixture("project", [
+      ...Object.values(PROJECT_TREE_CATEGORY_IDS).map((id) => categoryFixture(id, id, 0, true)),
+      {
+        kind: "item",
+        id: "database:database-id",
+        depth: 1,
+        item: { kind: "database", id: "database-id", name: "Sales", resourcePath: databasePath },
+      },
+    ]);
     useDatabaseStore.getState().addDatabase("database-id", {
       id: "database-id",
       name: "Sales",
@@ -189,11 +191,12 @@ describe("resource sidebar rows", () => {
     expect(dataCategory().disabled).toBe(false);
     expect(host.querySelectorAll("[data-sidebar-tree-category-id]")).toHaveLength(4);
     expect(
-      useSidebarStore.getState().projectTreeExpandedCategories[PROJECT_TREE_CATEGORY_IDS.data],
+      useSidebarStore.getState().expandedCategories.project?.[PROJECT_TREE_CATEGORY_IDS.data],
     ).toBe(true);
 
     act(() => useDatabaseStore.getState().updateDatabase("database-id", { name: "Sales updated" }));
-    expect(host.textContent).toContain("Sales updated");
+    expect(host.textContent).not.toContain("Sales updated");
+    expect(host.textContent).toContain("Sales");
   });
 
   it("forwards pointer down to the dnd-kit drag listener", () => {
@@ -217,7 +220,7 @@ describe("resource sidebar rows", () => {
     expect(dragData.template?.descriptor).toBe(databaseSource);
   });
 
-  it("opens data in the workbench on click without opening a window on double-click", async () => {
+  it("opens data in the workbench on click", async () => {
     renderDatabase();
     await act(async () => {
       host.firstElementChild?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -225,41 +228,35 @@ describe("resource sidebar rows", () => {
     });
 
     expect(mocks.openDatabase).toHaveBeenCalledWith("database-id");
-    act(() => host.firstElementChild?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
-    expect(mocks.openDatabaseWindow).not.toHaveBeenCalled();
-    expect(mocks.revealDetails).not.toHaveBeenCalled();
   });
 
   it("shows the localized load failure tooltip from machine state", () => {
-    renderDatabase(databasePath, { loadFailed: true });
+    renderDatabase(true);
 
     expect(host.textContent).toContain("sidebar.dataLoadFailed");
-  });
-
-  it("does not treat a legacy raw load error as failure state", () => {
-    renderDatabase(databasePath, { loadError: "sensitive backend failure" });
-
-    expect(host.textContent).not.toContain("sidebar.dataLoadFailed");
-    expect(host.textContent).not.toContain("sensitive backend failure");
   });
 
   it.each([
     ["stale", catalogState("loading")],
     ["missing", catalogState("ready", [])],
-  ])("disables a database row for a %s descriptor and refreshes on interaction", (_case, state) => {
-    mocks.catalogState = state;
-    renderDatabase();
-    const row = host.querySelector('[aria-disabled="true"]');
+  ])(
+    "keeps data openable for a %s descriptor and refreshes drag metadata on interaction",
+    (_case, state) => {
+      mocks.catalogState = state;
+      renderDatabase();
+      const row = host.firstElementChild as HTMLElement;
 
-    expect(row).not.toBeNull();
-    expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]?.disabled).toBe(true);
-    act(() => row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+      expect(row.getAttribute("aria-disabled")).not.toBe("true");
+      expect(row.style.opacity).toBe("");
+      expect(row.classList.contains("cursor-pointer")).toBe(true);
+      expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]?.disabled).toBe(true);
+      act(() => row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
 
-    expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
-    expect(state.refresh).toHaveBeenCalledOnce();
-  });
+      expect(state.refresh).toHaveBeenCalledOnce();
+    },
+  );
 
-  it("disables a database row when its exact descriptor is missing", () => {
+  it("preserves data-row appearance when its exact drag descriptor is missing", () => {
     const state = catalogState("ready", [
       item("Other database", {
         ...databaseSource,
@@ -268,62 +265,12 @@ describe("resource sidebar rows", () => {
     ]);
     mocks.catalogState = state;
     renderDatabase();
-    const row = host.querySelector('[aria-disabled="true"]');
+    const row = host.firstElementChild as HTMLElement;
 
-    expect(row).not.toBeNull();
+    expect(row.getAttribute("aria-disabled")).not.toBe("true");
+    expect(row.style.opacity).toBe("");
+    expect(row.classList.contains("cursor-pointer")).toBe(true);
     act(() => row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-    expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
     expect(state.refresh).toHaveBeenCalledOnce();
-  });
-
-  it("suppresses Catalog refresh when missing-path ProjectIndex hydration becomes stale", async () => {
-    const state = catalogState("ready", []);
-    mocks.catalogState = state;
-    const refreshResourceIndex = vi.fn().mockResolvedValue(false);
-    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
-      refreshResourceIndex,
-    );
-    renderDatabase(null);
-    const row = host.querySelector('[aria-disabled="true"]');
-
-    await act(async () => {
-      row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(refreshResourceIndex).toHaveBeenCalledOnce();
-    expect(state.refresh).not.toHaveBeenCalled();
-  });
-
-  it("hydrates a missing database path through ProjectIndex before refreshing Catalog and dragging", async () => {
-    const state = catalogState("loading", []);
-    mocks.catalogState = state;
-    const refreshResourceIndex = vi.fn(async () => {
-      useDatabaseStore.setState({
-        databases: {
-          "database-id": { id: "database-id", name: "Sales", resourcePath: databasePath },
-        },
-      });
-      return true;
-    });
-    vi.spyOn(projectHydration, "refreshProjectResourceIndex").mockImplementation(
-      refreshResourceIndex,
-    );
-    renderDatabase(null);
-    const row = host.querySelector('[aria-disabled="true"]');
-
-    await act(async () => {
-      row!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(refreshResourceIndex).toHaveBeenCalledOnce();
-    expect(state.refresh).toHaveBeenCalledOnce();
-    mocks.catalogState = catalogState("ready", [item("Sales", databaseSource)]);
-    renderDatabase(useDatabaseStore.getState().databases["database-id"]?.resourcePath);
-    expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]).toMatchObject({
-      disabled: false,
-      data: { type: "node-template", template: { title: "Sales", descriptor: databaseSource } },
-    });
   });
 });

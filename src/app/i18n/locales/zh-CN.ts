@@ -1052,7 +1052,6 @@ export const zhCN = {
     noData: "暂无数据",
     noEvents: "暂无 Event",
     noFunctions: "暂无 Function",
-    dataLoading: "正在加载数据…",
     dataLoadFailed: "数据加载失败",
     noCommandHistory: "无命令历史",
     noBuiltinNodes: "无系统内置节点",

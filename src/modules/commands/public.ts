@@ -1,1 +1,1 @@
-export { commandsActivityPanelContribution } from "./internal/ui/activity/CommandsActivityPanelController";
+export { SidebarCommandsTab as commandsActivityPanelContribution } from "./internal/ui/activity/SidebarCommandsTab";

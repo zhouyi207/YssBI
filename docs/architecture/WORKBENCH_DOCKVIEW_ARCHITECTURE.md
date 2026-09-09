@@ -36,7 +36,7 @@ WorkbenchWindow
 
 Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
-Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，共用一棵虚拟化树和分类展开状态。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
+Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，共用后端生成的分类树和前端展开状态。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
 
 Graph 分类与 Chart、Data 使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签。Graph 不再区分侧栏预览与双击固定，也不再通过替换旧预览标签来控制标签数量。
 
@@ -68,6 +68,70 @@ root Dockview 是以下物理事实的唯一 authority：
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
 Activity 底部固定显示 Plugins 原生 tab，替代原 Julia 入口。仅通过 CSS 将该 tab 排在标签列最下方，样式、选中状态与点击逻辑均复用上方 Activity tabs：点击已展开的当前 tab 收起 left edge；折叠时点击展开对应面板，点击其他 tab 则切换面板。不另设入口按钮或选中状态订阅。
+
+### 1.1 Activity 文档与模板
+
+四个内置 Activity panels 使用同一条数据链路：
+
+```text
+Rust Project / Node Catalog / Plugin Manager
+  → yss-application::activity_panel
+  → yss-api get_activity_panel_document
+  → activityPanelService / parseActivityPanelUpdate
+  → ActivityPanelDocumentView
+```
+
+Rust 生成完整的 `ActivityPanelDocument`：面板标题、工具、分类顺序、默认展开值、
+条目及空状态均由该文档描述。Project 复用带项目身份校验的 ProjectIndex；
+Nodes 复用本地化节点目录并在后端组织、排序和裁剪空分类，保留原始 NodeCreation
+descriptor；Plugins 复用 Plugin Manager 的已安装快照；Commands 提供固定命令定义。
+调用方不把前端资源列表传回后端做格式转换。
+
+文档只有 category、item、message 三种行；item 限于 graph、chart、database、node、
+command 和 plugin 六种。文本使用本地化 key 或字面值；资源路径是 opaque identity。
+Workbench 模板只接收文档、展开状态、格式化错误与有限操作回调，不订阅业务 store。
+已有资源打开、拖拽、详情和右键操作继续由对应 module/application owner 执行。
+数据行直接使用文档中必填的 resourcePath，不再反查前端索引补路径；可用的 loadFailed
+状态直接从数据库投影读取。空分组的右键事件统一由文档模板处理。资源行只提供单击
+打开入口，双击不再绑定额外打开操作。Nodes/Commands 直接贡献现有面板组件。
+画布 NodePalette 保留自己的搜索目录和选择行；Activity 拖拽行由文档条目独立渲染。
+资源行的选中/悬停样式与拖拽描述就绪状态分开：描述未就绪时只禁用拖拽，仍可点击打开，
+不降低整行透明度或将整行标记为 aria-disabled。目录加载完成、取消选中或关闭标签
+不会通过拖拽状态改变普通行的亮度。
+
+插件自带的 sandbox iframe 页面仍遵循 Plugin 契约，不转换成宿主 Activity 条目。
+
+首次查询返回 `{ kind: "snapshot", cursor, document }`。资源或插件变更继续使用现有失效信号；
+后续查询只携带 cursor，Rust 从权威查询生成当前投影，与该游标绑定的不可变基线比较，
+仅返回 `{ kind: "patch", baseCursor, cursor, patch, operations }`。不会把旧树传回后端，
+也不会在普通更新时跨 IPC 重新发送完整树；后端投影生成逻辑仍复用既有查询。
+
+`operations` 使用稳定行 id，支持 update、insert、remove、move。update 的 patch
+只包含发生变化的顶层字段；嵌套字段值整体替换，null 是合法值而不是删除指令。例如：
+
+```json
+{ "op": "update", "id": "summary", "patch": { "label": { "text": "新的分析结果" } } }
+```
+
+insert/move 的 afterId 指定平面行顺序中的前一行，null 表示首行；remove 只删除指定行，
+子行变化由同一批次内的其他操作描述。文档级 patch 仅更新标题、工具、空状态和 publicationRevision。
+整批操作在隔离副本上校验后一次发布；普通更新保留可见文档和未修改行的引用，
+不切换回 loading。无变化返回空操作并保持 cursor，前端保留原快照引用。
+
+同一面板作用域内请求串行、失效信号合并。语言、项目/生命周期变化建立新作用域，
+旧响应不能发布；卸载不再接收响应。Rust 传输缓存按窗口、面板、项目及语言隔离，
+以数量和序列化体积限制不可变基线，旧基线可以支持丢失回复后的增量请求。
+缓存缺失/淘汰时返回 snapshot；前端遇到基线不匹配或非法增量时只尝试一次快照恢复。
+重复失败显示错误并保留上一份完整投影。不存在前端生成文档的回退路径。
+Commands 的可用性来自本地草稿历史，数据库运行状态和选中状态仍从既有 UI/runtime
+投影读取；这些变化不生成另一份资源文档。
+
+标题栏使用 `--workbench-tab-height`。分类统一复用 `SidebarTreeCategoryRow`；
+内容使用普通滚动列表，仅挂载展开分支，取消 Activity 的虚拟列表测量依赖。
+文档上限由 transport/parser 约束，超限明确失败，不静默截断。折叠只改变本地可见行，
+不会产生 IPC。四个面板的展开偏好统一由 `sidebarStore` 按 panel/category 保存到
+`yssbi-activity-panel-expansion`；文档不落盘，Dockview placement 不进入该 store。
+旧 Project 分类偏好 key 不迁移，首次使用采用后端默认值。
 
 ## 2. Root panel 角色与默认 home
 

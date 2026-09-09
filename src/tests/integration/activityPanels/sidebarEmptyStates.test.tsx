@@ -1,90 +1,35 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
+import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
-import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { TooltipProvider } from "@/components/ui/tooltip";
-
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import { IpcError } from "@/services/ipc/ipcError";
 const historyAvailability = vi.hoisted(() => ({
   activeResourceRef: null as string | null,
   canUndo: false,
   canRedo: false,
   pending: false,
 }));
-
 const draggableInputs = vi.hoisted(() => [] as Array<{ data: unknown; disabled?: boolean }>);
-
-const catalogState = vi.hoisted(() => ({
-  current: null as LocalizedNodeCatalogState | null,
-}));
-
-function readyCatalogState(): LocalizedNodeCatalogState {
-  const catalog = {
-    projectInstanceId: "project-1",
-    registryFingerprint: "registry-1",
-    resourcePublicationRevision: 1,
-    locale: "en-US",
-    categories: [
-      { categoryId: "math", parentCategoryId: null, order: 10, title: "Math", searchText: "math" },
-    ],
-    items: [
-      {
-        nodeTypeId: "yssbi.numeric.add",
-        title: "Add",
-        documentation: null,
-        categoryId: "math",
-        iconId: "math",
-        styleId: "default",
-        aliases: [],
-        technicalTerms: [],
-        backendSearchText: ["add"],
-        resourceNames: [],
-        ports: [],
-        parameters: [],
-        creation: { kind: "static" as const, nodeTypeId: "yssbi.numeric.add" },
-      },
-    ],
-  };
-  return {
-    status: "ready",
-    error: null,
-    catalog,
-    searchIndex: getLocalizedSearchIndex(catalog),
-    refresh: vi.fn(),
-  };
-}
-
+const backend = vi.hoisted(() => ({ error: null as unknown }));
 vi.mock("@dnd-kit/core", () => ({
   useDraggable: (input: { data: unknown; disabled?: boolean }) => {
     draggableInputs.push(input);
     return { attributes: {}, listeners: {}, setNodeRef: vi.fn() };
   },
 }));
-
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
-    getTotalSize: () => options.count * 32,
-    getVirtualItems: () =>
-      Array.from({ length: options.count }, (_, index) => ({
-        index,
-        key: options.getItemKey(index),
-        start: index * 32,
-        size: 32,
-      })),
-    measureElement: vi.fn(),
-  }),
-}));
-
 vi.mock("react-i18next", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        "common.loading": "Loading...",
         "common.error": "Error",
+        "common.loading": "Loading...",
         "common.incidentId": "Incident ID",
-        "nodeCatalog.loadError": "Node catalog unavailable",
         "sidebar.noActiveGraph": "No active graph open",
         "sidebar.noActiveGraphDescription": "Open a graph to view commands",
         "common.undo": "Undo",
@@ -92,27 +37,58 @@ vi.mock("react-i18next", async (importOriginal) => ({
       })[key] ?? key,
   }),
 }));
-
 vi.mock("@/features/application/editor", () => ({
   useEditorHistoryAvailability: () => historyAvailability,
 }));
-
-vi.mock("@/features/application/nodeCatalog/useLocalizedNodeCatalog", () => ({
-  useLocalizedNodeCatalog: () => catalogState.current,
+vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
+  useActivityPanelDocument: (panelId: string) => ({
+    document: backend.error ? null : panelId === "nodes" ? nodesDocument : commandsDocument,
+    error: backend.error
+      ? formatInlineUserError(
+          backend.error,
+          ((key: string) =>
+            ({ "common.error": "Error", "common.incidentId": "Incident ID" })[key] ?? key) as never,
+        )
+      : null,
+    refresh: vi.fn(),
+    ...useActivityPanelExpansion(panelId === "nodes" ? "nodes" : "commands"),
+  }),
 }));
-
 import { SidebarCommandsTab } from "@/modules/commands/internal/ui/activity/SidebarCommandsTab";
 import { SidebarNodesTab } from "@/modules/node-catalog/internal/ui/activity/SidebarNodesTab";
-
+const nodeCreation = { kind: "static" as const, nodeTypeId: "yssbi.numeric.add" };
+const nodesDocument = activityPanelFixture("nodes", [
+  categoryFixture("math", "Math"),
+  {
+    kind: "item",
+    id: "node:add",
+    depth: 1,
+    item: { kind: "node", key: "static:yssbi.numeric.add", title: "Add", creation: nodeCreation },
+  },
+]);
+const commandsDocument = activityPanelFixture("commands", [
+  {
+    kind: "item",
+    id: "undo",
+    depth: 0,
+    item: { kind: "command", id: "undo", label: { key: "common.undo" } },
+  },
+  {
+    kind: "item",
+    id: "redo",
+    depth: 0,
+    item: { kind: "command", id: "redo", label: { key: "common.redo" } },
+  },
+]);
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
 describe("Sidebar tab-level empty states", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
     draggableInputs.length = 0;
-    catalogState.current = readyCatalogState();
+    backend.error = null;
+    useSidebarStore.setState({ expandedCategories: {} });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -152,20 +128,18 @@ describe("Sidebar tab-level empty states", () => {
       },
     });
     const dragData = draggableInputs[0]?.data as { template?: { descriptor?: unknown } };
-    expect(dragData.template?.descriptor).toBe(catalogState.current?.catalog?.items[0].creation);
+    expect(dragData.template?.descriptor).toBe(nodeCreation);
   });
 
   it("renders localized generic Catalog text, code, and incident ID", () => {
-    catalogState.current = {
-      status: "error",
-      error: {
-        code: "catalog_backend_failed",
-        incidentId: "incident-sidebar-catalog-42",
-      },
-      catalog: null,
-      searchIndex: null,
-      refresh: vi.fn(),
-    };
+    backend.error = new IpcError({
+      kind: "backend",
+      command: "get_activity_panel_document",
+      code: "catalog_backend_failed",
+      incidentId: "incident-sidebar-catalog-42",
+      details: null,
+      cause: null,
+    });
 
     act(() =>
       root.render(
@@ -175,7 +149,7 @@ describe("Sidebar tab-level empty states", () => {
       ),
     );
 
-    expect(host.textContent).toContain("Node catalog unavailable");
+    expect(host.textContent).toContain("Error");
     expect(host.textContent).toContain("[catalog_backend_failed]");
     expect(host.textContent).toContain("Incident ID: incident-sidebar-catalog-42");
   });

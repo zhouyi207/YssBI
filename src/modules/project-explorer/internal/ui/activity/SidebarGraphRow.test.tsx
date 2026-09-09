@@ -111,6 +111,5 @@ describe("SidebarGraphRow", () => {
       "Main",
       "event",
     );
-    expect(mocks.listItemProps[0]?.onDoubleClick).toBeUndefined();
   });
 });

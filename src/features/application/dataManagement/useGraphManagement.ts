@@ -71,7 +71,7 @@ export function useGraphManagement(openGraph: OpenGraphFn) {
         void revealWorkbenchView("project");
         useSidebarStore
           .getState()
-          .setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.events, true);
+          .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.events, true);
       } catch (error) {
         const message = formatErrorMessage(error);
         logger.graph.error(`Failed to create event: ${message}`, "GraphManagement");
@@ -115,7 +115,7 @@ export function useGraphManagement(openGraph: OpenGraphFn) {
         void revealWorkbenchView("project");
         useSidebarStore
           .getState()
-          .setProjectTreeCategoryExpanded(PROJECT_TREE_CATEGORY_IDS.functions, true);
+          .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.functions, true);
       } catch (error) {
         const message = formatErrorMessage(error);
         logger.graph.error(`Failed to create function: ${message}`, "GraphManagement");

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import type { LocalizedCatalogResponse } from "@/features/core/nodeCatalog/nodeCatalogStore";
-import { useNodeCatalogTreeStore } from "@/features/core/nodeCatalog/nodeCatalogTreeStore";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocalizedCatalogTreeRow } from "@/modules/node-catalog/internal/ui/activity/LocalizedCatalogTreeRow";
@@ -182,7 +181,6 @@ describe("NodePalette", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useNodeCatalogTreeStore.getState().reset();
     catalogState.current = readyState();
     compatibleCatalogState.current = {
       status: "idle",

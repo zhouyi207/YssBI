@@ -66,13 +66,17 @@ describe("SidebarDraggableItem", () => {
     expect(draggable.inputs[0]?.data).toBe(dragData);
   });
 
-  it("keeps descriptor-unavailable rows disabled and non-draggable", () => {
+  it("keeps an openable row visually enabled while its drag descriptor is unavailable", () => {
+    const open = vi.fn();
+    const refresh = vi.fn();
     act(() =>
       root.render(
         <SidebarDraggableItem
           id="function-row"
           dragData={null}
           dragDisabledReason="Descriptor unavailable"
+          onDisabledDragAttempt={refresh}
+          onClick={open}
         >
           Revenue
         </SidebarDraggableItem>,
@@ -80,16 +84,30 @@ describe("SidebarDraggableItem", () => {
     );
     const row = host.firstElementChild as HTMLElement;
 
-    expect(row.getAttribute("aria-disabled")).toBe("true");
+    expect(row.getAttribute("aria-disabled")).not.toBe("true");
     expect(row.hasAttribute("aria-roledescription")).toBe(false);
+    expect(row.style.opacity).toBe("");
+    expect(row.classList.contains("cursor-pointer")).toBe(true);
 
     act(() => row.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
 
     expect(draggable.onPointerDown).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledOnce();
+    act(() => row.click());
+    expect(open).toHaveBeenCalledOnce();
     expect(draggable.inputs[0]).toEqual({
       id: "sidebar-item-function-row",
       data: {},
       disabled: true,
     });
+    act(() =>
+      root.render(
+        <SidebarDraggableItem id="function-row" dragData={dragData} onClick={open}>
+          Revenue
+        </SidebarDraggableItem>,
+      ),
+    );
+    expect(row.style.opacity).toBe("");
+    expect(row.classList.contains("cursor-pointer")).toBe(true);
   });
 });

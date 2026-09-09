@@ -1,6 +1,3 @@
-export {
-  LocalizedCatalogTreeRow,
-  type LocalizedCatalogTreeRowProps,
-} from "./internal/ui/activity/LocalizedCatalogTreeRow";
-export { nodeCatalogActivityPanelContribution } from "./internal/ui/activity/NodeCatalogActivityPanelController";
+export { LocalizedCatalogTreeRow } from "./internal/ui/activity/LocalizedCatalogTreeRow";
+export { SidebarNodesTab as nodeCatalogActivityPanelContribution } from "./internal/ui/activity/SidebarNodesTab";
 export { NodeDocumentationModal } from "./internal/ui/documentation/NodeDocumentationModal";

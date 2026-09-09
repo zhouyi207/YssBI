@@ -1,20 +1,11 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { sidebarItemIndent } from "./primitives/sidebarStyles";
 
-export function SidebarSectionEmptyState({
-  level,
-  message,
-  onContextMenu,
-}: {
-  level: number;
-  message: string;
-  onContextMenu?: (event: React.MouseEvent) => void;
-}) {
+export function SidebarSectionEmptyState({ level, message }: { level: number; message: string }) {
   return (
     <div
       className="flex h-7 w-full min-w-0 items-center pr-2 text-[12px] text-muted-foreground/70"
       style={sidebarItemIndent(level)}
-      onContextMenu={onContextMenu}
     >
       <Tooltip>
         <TooltipTrigger asChild>

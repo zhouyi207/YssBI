@@ -1,170 +1,89 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
-import type { LocalizedCatalogResponse } from "@/features/core/nodeCatalog/nodeCatalogStore";
-import type { LocalizedNodeCatalogState } from "@/features/application/nodeCatalog/useLocalizedNodeCatalog";
-import { useNodeCatalogTreeStore } from "@/features/core/nodeCatalog/nodeCatalogTreeStore";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import type { NodeCreationDescriptorDto } from "@/shared/types/domain/nodeCreationDescriptor";
 
 const draggableInputs = vi.hoisted(() => [] as Array<{ id: string; data: unknown }>);
-const catalogState = vi.hoisted(() => ({
-  current: null as LocalizedNodeCatalogState | null,
-}));
-
 vi.mock("@dnd-kit/core", () => ({
   useDraggable: (input: { id: string; data: unknown }) => {
     draggableInputs.push(input);
     return { attributes: {}, listeners: {}, setNodeRef: vi.fn() };
   },
 }));
-
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
-    getTotalSize: () => options.count * 32,
-    getVirtualItems: () =>
-      Array.from({ length: options.count }, (_, index) => ({
-        index,
-        key: options.getItemKey(index),
-        start: index * 32,
-        size: 32,
-      })),
-    measureElement: vi.fn(),
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
+  useActivityPanelDocument: () => ({
+    document: backendDocument,
+    error: null,
+    refresh: vi.fn(),
+    ...useActivityPanelExpansion("nodes"),
   }),
 }));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) =>
-      ({
-        "common.loading": "Loading...",
-        "nodeCatalog.loadError": "Node catalog unavailable",
-        "sidebar.noNodes": "No nodes available",
-        "activityBar.nodes": "Nodes",
-      })[key] ?? key,
-  }),
-}));
-
-vi.mock("@/features/application/nodeCatalog/useLocalizedNodeCatalog", () => ({
-  useLocalizedNodeCatalog: () => catalogState.current,
-}));
-
 import { SidebarNodesTab } from "./SidebarNodesTab";
-
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const catalog: LocalizedCatalogResponse = {
-  projectInstanceId: "project-1",
-  registryFingerprint: "registry-1",
-  resourcePublicationRevision: 1,
-  locale: "en-US",
-  categories: [
-    {
-      categoryId: "statistics.regression",
-      parentCategoryId: "statistics",
-      order: 11,
-      title: "Regression",
-      searchText: "regression",
-    },
-    {
-      categoryId: "statistics",
-      parentCategoryId: null,
-      order: 10,
-      title: "Statistics",
-      searchText: "statistics",
-    },
-    {
-      categoryId: "output",
-      parentCategoryId: null,
-      order: 20,
-      title: "Output",
-      searchText: "output",
-    },
-  ],
-  items: [
-    {
-      nodeTypeId: "statistics.logit.fit",
+const helperCreation: NodeCreationDescriptorDto = {
+  kind: "resourceBound",
+  nodeTypeId: "function.call",
+  resourcePath: "functions/Helper",
+  resourceRevision: 1,
+  createArgs: { kind: "function" },
+};
+const otherCreation: NodeCreationDescriptorDto = {
+  ...helperCreation,
+  resourcePath: "functions/Other",
+};
+const backendDocument = activityPanelFixture("nodes", [
+  categoryFixture("statistics", "Statistics"),
+  categoryFixture("statistics.regression", "Regression", 1),
+  {
+    kind: "item",
+    id: "node:logit",
+    depth: 2,
+    item: {
+      kind: "node",
+      key: "static:statistics.logit.fit",
       title: "Logit fit",
-      documentation: null,
-      categoryId: "statistics.regression",
-      iconId: "statistics",
-      styleId: "default",
-      aliases: ["logit"],
-      technicalTerms: [],
-      backendSearchText: [],
-      resourceNames: [],
-      ports: [],
-      parameters: [],
       creation: { kind: "static", nodeTypeId: "statistics.logit.fit" },
     },
-    {
-      nodeTypeId: "function.call",
+  },
+  categoryFixture("output", "Output"),
+  {
+    kind: "item",
+    id: "node:helper",
+    depth: 1,
+    item: {
+      kind: "node",
+      key: "resourceBound:function.call:Helper",
       title: "Call Helper",
-      documentation: null,
-      categoryId: "output",
-      iconId: "function",
-      styleId: "default",
-      aliases: [],
-      technicalTerms: [],
-      backendSearchText: [],
-      resourceNames: ["Helper Resource"],
-      ports: [],
-      parameters: [],
-      resourcePath: "functions/Helper",
-      resourceRevision: 1,
-      creation: {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/Helper",
-        resourceRevision: 1,
-        createArgs: { kind: "function" },
-      },
+      creation: helperCreation,
     },
-    {
-      nodeTypeId: "function.call",
+  },
+  {
+    kind: "item",
+    id: "node:other",
+    depth: 1,
+    item: {
+      kind: "node",
+      key: "resourceBound:function.call:Other",
       title: "Call Other",
-      documentation: null,
-      categoryId: "output",
-      iconId: "function",
-      styleId: "default",
-      aliases: [],
-      technicalTerms: [],
-      backendSearchText: [],
-      resourceNames: ["Other Resource"],
-      ports: [],
-      parameters: [],
-      resourcePath: "functions/Other",
-      resourceRevision: 1,
-      creation: {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/Other",
-        resourceRevision: 1,
-        createArgs: { kind: "function" },
-      },
+      creation: otherCreation,
     },
-  ],
-};
-
-function readyState(): LocalizedNodeCatalogState {
-  return {
-    status: "ready",
-    error: null,
-    catalog,
-    searchIndex: getLocalizedSearchIndex(catalog),
-    refresh: vi.fn(),
-  };
-}
-
+  },
+]);
 describe("SidebarNodesTab", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    useNodeCatalogTreeStore.getState().reset();
+    useSidebarStore.setState({ expandedCategories: {} });
     draggableInputs.length = 0;
-    catalogState.current = readyState();
+
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -236,6 +155,6 @@ describe("SidebarNodesTab", () => {
             }
           ).template.descriptor,
       ),
-    ).toEqual([catalog.items[1].creation, catalog.items[2].creation]);
+    ).toEqual([helperCreation, otherCreation]);
   });
 });

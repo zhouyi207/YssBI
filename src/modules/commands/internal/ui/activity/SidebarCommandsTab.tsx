@@ -1,38 +1,33 @@
 import { useTranslation } from "react-i18next";
 import { useEditorHistoryAvailability } from "@/features/application/editor";
-import { SidebarEmptyState, SidebarTabPanel } from "@/modules/workbench/public";
+import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
+import { ActivityPanelDocumentView } from "@/modules/workbench/public";
 
 export function SidebarCommandsTab() {
   const { t } = useTranslation();
+  const query = useActivityPanelDocument("commands");
   const { activeResourceRef, canUndo, canRedo, pending } = useEditorHistoryAvailability();
-
-  if (!activeResourceRef) {
-    return (
-      <SidebarTabPanel>
-        <SidebarEmptyState
-          title={t("sidebar.noActiveGraph")}
-          description={t("sidebar.noActiveGraphDescription")}
-        />
-      </SidebarTabPanel>
-    );
-  }
-
   return (
-    <SidebarTabPanel>
-      <div className="flex flex-col gap-1 p-2 text-xs text-muted-foreground">
-        <div className="flex h-7 items-center justify-between rounded-sm px-2">
-          <span>{t("common.undo")}</span>
-          <span aria-label={canUndo ? "available" : "unavailable"}>
-            {pending ? "…" : canUndo ? "✓" : "—"}
-          </span>
-        </div>
-        <div className="flex h-7 items-center justify-between rounded-sm px-2">
-          <span>{t("common.redo")}</span>
-          <span aria-label={canRedo ? "available" : "unavailable"}>
-            {pending ? "…" : canRedo ? "✓" : "—"}
-          </span>
-        </div>
-      </div>
-    </SidebarTabPanel>
+    <ActivityPanelDocumentView
+      panelId="commands"
+      document={query.document}
+      error={query.error}
+      expanded={query.expanded}
+      onExpandedChange={query.setExpanded}
+      onRetry={query.refresh}
+      empty={!activeResourceRef}
+      renderItem={(item) => {
+        if (item.kind !== "command") return null;
+        const available = item.id === "undo" ? canUndo : canRedo;
+        return (
+          <div className="flex h-7 items-center justify-between px-4 text-xs text-muted-foreground">
+            <span>{"key" in item.label ? t(item.label.key) : item.label.text}</span>
+            <span aria-label={available ? "available" : "unavailable"}>
+              {pending ? "…" : available ? "✓" : "—"}
+            </span>
+          </div>
+        );
+      }}
+    />
   );
 }

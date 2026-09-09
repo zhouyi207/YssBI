@@ -56,7 +56,7 @@ export {
   type WorkbenchLayoutController,
 } from "./internal/application/workbenchLayoutController";
 export { showWorkbenchLayoutError } from "./internal/application/workbenchLayoutErrorFeedback";
-export { ActivityPanelShell } from "./internal/ui/activity/ActivityPanelShell";
+export { ActivityPanelDocumentView } from "./internal/ui/activity/ActivityPanelDocumentView";
 export { SidebarDragOverlay } from "./internal/ui/dnd/SidebarDragOverlay";
 export { AboutModal } from "./internal/ui/menu/AboutModal";
 export {
@@ -70,29 +70,14 @@ export {
 export { StatusBar } from "./internal/ui/status/StatusBar";
 export { SidebarEmptyState } from "./internal/ui/sidebar/SidebarEmptyState";
 export { SidebarRenameDialog } from "./internal/ui/sidebar/SidebarRenameDialog";
-export { SidebarSectionEmptyState } from "./internal/ui/sidebar/SidebarSectionEmptyState";
-export { SidebarTabPanel } from "./internal/ui/sidebar/SidebarTabPanel";
 export type { SidebarInputDialogState } from "./internal/ui/sidebar/sidebarInputDialog";
 export { useSidebarContextMenu } from "./internal/ui/sidebar/useSidebarContextMenu";
 export {
-  SidebarChevron,
-  SidebarDraggableItem,
   SidebarListItem,
   SidebarRowActionButton,
   SidebarTreeCategoryRow,
   SidebarTreeSearchInput,
-  SidebarVirtualTree,
-  sidebarGroupRowClass,
-  sidebarItemIndent,
-  sidebarItemLabelClass,
   sidebarItemRowClass,
-  sidebarRowActionClass,
-  SIDEBAR_CHEVRON_SIZE,
-  SIDEBAR_ROW_HEIGHT_CLASS,
   SIDEBAR_ROW_ICON_SIZE,
   SIDEBAR_ROW_LEADING_SLOT_CLASS,
-  SIDEBAR_ROW_TRAILING_SLOT_CLASS,
-  type SidebarTreeCategoryRowProps,
-  type SidebarTreeSearchInputProps,
-  type SidebarVirtualTreeProps,
 } from "./internal/ui/sidebar/primitives";

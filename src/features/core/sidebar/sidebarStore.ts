@@ -1,73 +1,50 @@
-/** Project sidebar category expansion backed by localStorage. */
 import { create } from "zustand";
-import {
-  PROJECT_TREE_CATEGORY_IDS,
-  PROJECT_TREE_EXPANSION_DEFAULTS,
-  type ProjectTreeCategoryId,
-} from "./projectTreeState";
+import type { ActivityPanelId } from "@/shared/types/domain/activityPanel";
 
-export {
-  PROJECT_TREE_CATEGORY_IDS,
-  PROJECT_TREE_EXPANSION_DEFAULTS,
-  type ProjectTreeCategoryId,
-} from "./projectTreeState";
+const STORAGE_KEY = "yssbi-activity-panel-expansion";
+type Expansion = Partial<Record<ActivityPanelId, Record<string, boolean>>>;
 
-const PROJECT_TREE_EXPANDED_CATEGORIES_KEY = "yssbi-project-tree-expanded-categories";
-
-function loadFromStorage<T>(key: string, fallback: T): T {
+function loadExpansion(): Expansion {
   try {
-    const raw = localStorage.getItem(key);
-    if (raw) {
-      const parsed = JSON.parse(raw) as T;
-      if (parsed != null) return parsed;
-    }
+    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(
+          ([panelId, categories]) =>
+            ["project", "nodes", "commands", "plugins"].includes(panelId) &&
+            categories &&
+            typeof categories === "object" &&
+            !Array.isArray(categories),
+        )
+        .map(([panelId, categories]) => [
+          panelId,
+          Object.fromEntries(
+            Object.entries(categories).filter(([, expanded]) => typeof expanded === "boolean"),
+          ),
+        ]),
+    );
   } catch {
-    // ignore
-  }
-  return fallback;
-}
-
-function saveToStorage(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
+    return {};
   }
 }
 
-function isProjectTreeCategoryId(value: string): value is ProjectTreeCategoryId {
-  return Object.values(PROJECT_TREE_CATEGORY_IDS).includes(value as ProjectTreeCategoryId);
-}
-
-function loadProjectTreeExpandedCategories(): Record<ProjectTreeCategoryId, boolean> {
-  const persisted = loadFromStorage<Record<string, unknown>>(
-    PROJECT_TREE_EXPANDED_CATEGORIES_KEY,
-    {},
-  );
-  const filtered = Object.fromEntries(
-    Object.entries(persisted).filter(
-      ([categoryId, expanded]) =>
-        isProjectTreeCategoryId(categoryId) && typeof expanded === "boolean",
-    ),
-  ) as Partial<Record<ProjectTreeCategoryId, boolean>>;
-  return { ...PROJECT_TREE_EXPANSION_DEFAULTS, ...filtered };
-}
-
-export interface SidebarStore {
-  projectTreeExpandedCategories: Record<ProjectTreeCategoryId, boolean>;
-  setProjectTreeCategoryExpanded(categoryId: ProjectTreeCategoryId, expanded: boolean): void;
-}
-
-export const useSidebarStore = create<SidebarStore>((set) => ({
-  projectTreeExpandedCategories: loadProjectTreeExpandedCategories(),
-
-  setProjectTreeCategoryExpanded: (categoryId, expanded) =>
+export const useSidebarStore = create<{
+  expandedCategories: Expansion;
+  setCategoryExpanded(panelId: ActivityPanelId, categoryId: string, expanded: boolean): void;
+}>((set) => ({
+  expandedCategories: loadExpansion(),
+  setCategoryExpanded: (panelId, categoryId, expanded) =>
     set((state) => {
-      const projectTreeExpandedCategories = {
-        ...state.projectTreeExpandedCategories,
-        [categoryId]: expanded,
+      const expandedCategories = {
+        ...state.expandedCategories,
+        [panelId]: { ...state.expandedCategories[panelId], [categoryId]: expanded },
       };
-      saveToStorage(PROJECT_TREE_EXPANDED_CATEGORIES_KEY, projectTreeExpandedCategories);
-      return { projectTreeExpandedCategories };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(expandedCategories));
+      } catch {
+        /* UI preferences can remain session-local. */
+      }
+      return { expandedCategories };
     }),
 }));

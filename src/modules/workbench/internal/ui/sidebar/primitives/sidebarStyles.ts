@@ -9,10 +9,7 @@ export const SIDEBAR_ROW_LEADING_SLOT_CLASS =
   "flex size-3 shrink-0 items-center justify-center" as const;
 
 /** Standard sidebar row height (28px). */
-export const SIDEBAR_ROW_HEIGHT_CLASS = "h-7" as const;
-
-/** Fixed trailing slot for section headers (add button or spacer). */
-export const SIDEBAR_ROW_TRAILING_SLOT_CLASS = "size-6 shrink-0" as const;
+const SIDEBAR_ROW_HEIGHT_CLASS = "h-7" as const;
 
 /** Left indent for sidebar rows (16px base + 16px per depth level). */
 export function sidebarItemIndent(depth = 0): CSSProperties {

@@ -304,10 +304,7 @@ const VIEW_DOMAIN_CAPABILITIES = [
   viewCoreCapability("src/features/domain/nodeCatalog/localizedCatalogTree.ts", [
     "LocalizedCatalogBrowserRow",
   ]),
-  viewCoreCapability("src/features/domain/sidebar/constants.ts", [
-    "PIN_COLORS",
-    "TYPE_ICON_COLORS",
-  ]),
+  viewCoreCapability("src/features/domain/sidebar/constants.ts", ["TYPE_ICON_COLORS"]),
 ];
 
 export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {

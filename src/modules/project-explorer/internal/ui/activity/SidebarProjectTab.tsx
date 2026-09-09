@@ -1,37 +1,44 @@
-import { useTranslation } from "react-i18next";
 import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
-import { useProjectResourceBrowser } from "@/features/application/sidebar/useProjectResourceBrowser";
+import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
 import { useDetailTarget } from "@/features/application/editor";
-import { SidebarTabPanel, SidebarVirtualTree } from "@/modules/workbench/public";
+import { ActivityPanelDocumentView } from "@/modules/workbench/public";
+import {
+  PROJECT_TREE_CATEGORY_IDS,
+  type ProjectTreeCategoryId,
+} from "@/features/core/sidebar/projectTreeState";
 import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./SidebarProjectTreeRow";
 
-const PROJECT_TREE_ROW_HEIGHT = 28;
-
 export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
-  const { t } = useTranslation();
+  const query = useActivityPanelDocument("project");
   const detailTarget = useDetailTarget();
   const graphDiagnosticCounts = useGraphDiagnosticCounts();
-  const { rows, setCategoryExpanded } = useProjectResourceBrowser();
-
   return (
-    <SidebarTabPanel>
-      <SidebarVirtualTree
-        rows={rows}
-        ariaLabel={t("activityBar.project")}
-        emptyMessage={t("sidebar.projectTree.empty")}
-        getRowKey={(row) => row.rowKey}
-        getRowDepth={(row) => row.level}
-        estimateSize={() => PROJECT_TREE_ROW_HEIGHT}
-        renderRow={(row) => (
-          <SidebarProjectTreeRow
-            row={row}
-            actions={actions}
-            detailTarget={detailTarget}
-            graphDiagnosticCounts={graphDiagnosticCounts}
-            onCategoryExpandedChange={setCategoryExpanded}
-          />
-        )}
-      />
-    </SidebarTabPanel>
+    <ActivityPanelDocumentView
+      panelId="project"
+      document={query.document}
+      error={query.error}
+      expanded={query.expanded}
+      onExpandedChange={query.setExpanded}
+      onRetry={query.refresh}
+      actions={{
+        newEvent: actions.onAddEvent,
+        newFunction: actions.onAddFunction,
+        newChart: actions.onAddChart,
+        importData: actions.onImportData,
+      }}
+      onContextMenu={(event, row) => {
+        if (Object.values(PROJECT_TREE_CATEGORY_IDS).includes(row.id as ProjectTreeCategoryId))
+          actions.onCategoryContextMenu(event, row.id as ProjectTreeCategoryId);
+      }}
+      renderItem={(item, depth) => (
+        <SidebarProjectTreeRow
+          item={item}
+          depth={depth}
+          actions={actions}
+          detailTarget={detailTarget}
+          graphDiagnosticCounts={graphDiagnosticCounts}
+        />
+      )}
+    />
   );
 }

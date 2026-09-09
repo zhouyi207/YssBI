@@ -1,35 +1,29 @@
 // @vitest-environment happy-dom
 import { act } from "react";
+import { useActivityPanelExpansion } from "@/features/application/sidebar/useActivityPanelExpansion";
 import { createRoot, type Root } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { ProjectResourceBrowserRow } from "@/features/application/sidebar/projectResourceBrowser";
+import type { ActivityPanelDocument } from "@/shared/types/domain/activityPanel";
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
-import type { useProjectResourceBrowser } from "@/features/application/sidebar/useProjectResourceBrowser";
+
 import { SidebarProjectTab } from "./SidebarProjectTab";
 
 const browserState = vi.hoisted(() => ({
-  current: null as ReturnType<typeof useProjectResourceBrowser> | null,
+  current: null as ActivityPanelDocument | null,
 }));
 
-vi.mock("@/features/application/sidebar/useProjectResourceBrowser", () => ({
-  useProjectResourceBrowser: () => browserState.current,
-}));
-
-vi.mock("@tanstack/react-virtual", () => ({
-  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
-    getTotalSize: () => options.count * 32,
-    getVirtualItems: () =>
-      Array.from({ length: options.count }, (_, index) => ({
-        index,
-        key: options.getItemKey(index),
-        start: index * 32,
-        size: 32,
-      })),
-    measureElement: vi.fn(),
+vi.mock("@/features/application/sidebar/useActivityPanelDocument", () => ({
+  useActivityPanelDocument: () => ({
+    document: browserState.current,
+    error: null,
+    refresh: vi.fn(),
+    ...useActivityPanelExpansion("project"),
   }),
 }));
 
@@ -51,32 +45,15 @@ const actions = {
   onDatabaseContextMenu: vi.fn(),
 };
 
-function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserRow {
-  const level = 0;
-  return {
-    kind: "category",
-    rowKey: `category:${categoryId}`,
-    categoryId,
-    level,
-    label: `Projected ${categoryId}`,
-    expanded: true,
-  };
-}
-
 function renderBrowser() {
-  const categoryIds = [
-    PROJECT_TREE_CATEGORY_IDS.events,
-    PROJECT_TREE_CATEGORY_IDS.functions,
-    PROJECT_TREE_CATEGORY_IDS.charts,
-    PROJECT_TREE_CATEGORY_IDS.data,
-  ];
-  const rows = categoryIds.map(categoryRow);
-
-  browserState.current = {
-    rows,
-    activeGraph: null,
-    setCategoryExpanded: vi.fn(),
-  } as ReturnType<typeof useProjectResourceBrowser>;
+  const rows = Object.values(PROJECT_TREE_CATEGORY_IDS).map((id: ProjectTreeCategoryId) =>
+    categoryFixture(id, `Projected ${id}`, 0, true),
+  );
+  rows[3] = {
+    ...rows[3],
+    tools: [{ id: "importData", label: { key: "contextMenu.sidebar.importData" }, icon: "add" }],
+  };
+  browserState.current = activityPanelFixture("project", rows);
 }
 
 function categoryLabels(host: HTMLElement): string[] {
@@ -93,6 +70,7 @@ describe("SidebarProjectTab", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useSidebarStore.setState({ expandedCategories: {} });
     await i18n.changeLanguage("en-US");
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -129,10 +107,9 @@ describe("SidebarProjectTab", () => {
       `[data-sidebar-tree-category-id="${PROJECT_TREE_CATEGORY_IDS.data}"]`,
     )!;
     act(() => data.click());
-    expect(browserState.current!.setCategoryExpanded).toHaveBeenCalledWith(
-      PROJECT_TREE_CATEGORY_IDS.data,
-      false,
-    );
+    expect(
+      useSidebarStore.getState().expandedCategories.project?.[PROJECT_TREE_CATEGORY_IDS.data],
+    ).toBe(false);
     act(() => data.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
     expect(actions.onCategoryContextMenu).toHaveBeenCalledWith(
       expect.anything(),

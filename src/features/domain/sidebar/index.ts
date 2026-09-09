@@ -1,1 +1,1 @@
-export { PIN_COLORS, TYPE_ICON_COLORS } from "./constants";
+export { TYPE_ICON_COLORS } from "./constants";

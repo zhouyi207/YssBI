@@ -1,52 +1,41 @@
-import { useTranslation } from "react-i18next";
-import { useNodeCatalogBrowser } from "@/features/application/nodeCatalog/useNodeCatalogBrowser";
-import { nodeCatalogErrorText } from "@/features/application/nodeCatalog/nodeCatalogErrorPresentation";
-import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/localizedCatalogTree";
-import { SidebarTabPanel, SidebarVirtualTree } from "@/modules/workbench/public";
-import { SidebarCatalogTreeRow } from "./SidebarCatalogTreeRow";
-
-const CATEGORY_ROW_HEIGHT = 28;
-const ITEM_ROW_ESTIMATE = 32;
-
-function rowEstimate(row: LocalizedCatalogBrowserRow | undefined): number {
-  return row?.kind === "category" ? CATEGORY_ROW_HEIGHT : ITEM_ROW_ESTIMATE;
-}
+import { VscSymbolMethod, VscSymbolProperty } from "react-icons/vsc";
+import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
+import {
+  ActivityPanelDocumentView,
+  SidebarListItem,
+  SIDEBAR_ROW_ICON_SIZE,
+} from "@/modules/workbench/public";
+import { DRAG_TYPES } from "@/features/core/dnd";
+import type { NodeTemplateDragData } from "@/features/core/dnd";
 
 export function SidebarNodesTab() {
-  const { t } = useTranslation();
-  const { status, error, catalog, rows, expandedCategoryIds, setCategoryExpanded } =
-    useNodeCatalogBrowser();
+  const query = useActivityPanelDocument("nodes");
   return (
-    <SidebarTabPanel>
-      {status === "error" && !catalog ? (
-        <p role="alert" className="px-2 py-3 text-sm text-destructive">
-          {nodeCatalogErrorText(error, t)}
-        </p>
-      ) : !catalog ? (
-        <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
-          {t("common.loading")}
-        </p>
-      ) : (
-        <SidebarVirtualTree
-          rows={rows}
-          ariaLabel={t("activityBar.nodes")}
-          emptyMessage={t("sidebar.noNodes")}
-          getRowKey={(row) => row.rowKey}
-          getRowDepth={(row) => row.depth}
-          estimateSize={rowEstimate}
-          renderRow={(row) => (
-            <SidebarCatalogTreeRow
-              row={row}
-              expanded={row.kind === "category" && expandedCategoryIds.has(row.category.categoryId)}
-              onExpandedChange={(expanded) => {
-                if (row.kind === "category") {
-                  setCategoryExpanded(row.category.categoryId, expanded);
-                }
-              }}
-            />
-          )}
-        />
-      )}
-    </SidebarTabPanel>
+    <ActivityPanelDocumentView
+      panelId="nodes"
+      document={query.document}
+      error={query.error}
+      expanded={query.expanded}
+      onExpandedChange={query.setExpanded}
+      onRetry={query.refresh}
+      renderItem={(item, depth) => {
+        if (item.kind !== "node") return null;
+        const Icon = item.creation.kind === "resourceBound" ? VscSymbolMethod : VscSymbolProperty;
+        return (
+          <SidebarListItem
+            id={`node-${item.key}`}
+            indentDepth={depth}
+            icon={<Icon size={SIDEBAR_ROW_ICON_SIZE} />}
+            label={<span title={item.creation.nodeTypeId}>{item.title}</span>}
+            dragData={
+              {
+                type: DRAG_TYPES.NODE_TEMPLATE,
+                template: { title: item.title, descriptor: item.creation },
+              } satisfies NodeTemplateDragData
+            }
+          />
+        );
+      }}
+    />
   );
 }

@@ -16,7 +16,6 @@ export function SidebarListItem({
   label,
   trailing,
   onClick,
-  onDoubleClick,
   onContextMenu,
   dragDisabledReason,
   onDisabledDragAttempt,
@@ -29,7 +28,6 @@ export function SidebarListItem({
   label: React.ReactNode;
   trailing?: React.ReactNode;
   onClick?: (e: React.MouseEvent) => void;
-  onDoubleClick?: (e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   dragDisabledReason?: string;
   onDisabledDragAttempt?: () => void;
@@ -39,7 +37,6 @@ export function SidebarListItem({
       id={id}
       dragData={dragData}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       dragDisabledReason={dragDisabledReason}
       onDisabledDragAttempt={onDisabledDragAttempt}

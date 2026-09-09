@@ -2,7 +2,11 @@ import { useGraphSessionUi } from "@/features/core/graphSession/ui";
 import { workbenchDockviewRead } from "@/modules/workbench/public";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
-import type { ActiveProjectGraph } from "./projectResourceBrowser";
+export interface ActiveProjectGraph {
+  path: string;
+  kind: "event" | "function";
+  name: string;
+}
 
 export function useActiveProjectGraph(): ActiveProjectGraph | null {
   const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);

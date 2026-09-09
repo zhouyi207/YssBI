@@ -1,16 +1,8 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  VscChevronDown,
-  VscChevronRight,
-  VscExtensions,
-  VscPackage,
-  VscRefresh,
-  VscSettingsGear,
-} from "react-icons/vsc";
-import { ActivityPanelShell } from "@/modules/workbench/public";
+import { VscExtensions, VscSettingsGear } from "react-icons/vsc";
+import { ActivityPanelDocumentView } from "@/modules/workbench/public";
+import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,123 +33,85 @@ export function PluginsPanel({
   onUninstall(plugin: InstalledPlugin): void;
 }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(true);
+  const query = useActivityPanelDocument("plugins", plugins);
   return (
-    <ActivityPanelShell>
-      <section
-        className="flex min-h-0 min-w-0 flex-1 flex-col text-foreground"
-        aria-label={t("activityBar.plugins")}
-      >
-        <header className="flex h-9 shrink-0 items-center justify-between px-3 text-xs">
-          <span>{t("activityBar.plugins")}</span>
-          <div className="flex gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("plugins.installPackage")}
-              title={t("plugins.installPackage")}
-              disabled={busy}
-              onClick={onInstall}
-            >
-              <VscPackage aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("plugins.recheck")}
-              title={t("plugins.recheck")}
-              disabled={busy}
-              onClick={onRefresh}
-            >
-              <VscRefresh aria-hidden />
-            </Button>
-          </div>
-        </header>
-        {error && (
+    <ActivityPanelDocumentView
+      panelId="plugins"
+      document={loading ? null : query.document}
+      error={query.error}
+      expanded={query.expanded}
+      onExpandedChange={query.setExpanded}
+      busy={busy}
+      notice={
+        error ? (
           <p role="alert" className="px-3 py-2 text-xs text-destructive">
             {error}
           </p>
-        )}
-        <ScrollArea className="min-h-0 flex-1" orientation="vertical">
-          <button
-            type="button"
-            className="flex h-7 w-full items-center gap-1 px-2 text-left text-xs hover:bg-muted/50"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((value) => !value)}
+        ) : undefined
+      }
+      onRetry={query.refresh}
+      actions={{
+        install: onInstall,
+        refresh: onRefresh,
+      }}
+      renderItem={(item) => {
+        if (item.kind !== "plugin") return null;
+        const plugin = plugins.find((entry) => entry.manifest.id === item.id);
+        if (!plugin) return null;
+        return (
+          <article
+            className="flex min-w-0 items-center gap-3 px-3 py-2 hover:bg-muted/50"
+            data-plugin-item={item.id}
           >
-            {expanded ? <VscChevronDown aria-hidden /> : <VscChevronRight aria-hidden />}
-            <span className="flex-1">{t("plugins.installed")}</span>
-            <span className="rounded-full bg-muted px-1.5 text-[10px]">{plugins.length}</span>
-          </button>
-          {expanded &&
-            (loading ? (
-              <p role="status" className="p-4 text-xs text-muted-foreground">
-                {t("common.loading")}
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-sm border border-border bg-background"
+            >
+              <VscExtensions className="size-6 text-muted-foreground" />
+            </span>
+            <div className="min-w-0 flex-1 space-y-1 text-xs">
+              <button
+                className="block w-full truncate text-left font-medium"
+                title={item.name}
+                onClick={() => onOpen(plugin)}
+              >
+                {item.name}
+              </button>
+              <p className="truncate text-muted-foreground" title={item.description}>
+                {item.description}
               </p>
-            ) : (
-              plugins.map((plugin) => (
-                <article
-                  key={plugin.manifest.id}
-                  className="flex min-w-0 items-center gap-3 px-3 py-2 hover:bg-muted/50"
-                  data-plugin-item={plugin.manifest.id}
-                >
-                  <span
-                    aria-hidden
-                    className="flex size-9 shrink-0 items-center justify-center rounded-sm border border-border bg-background"
-                  >
-                    <VscExtensions className="size-6 text-muted-foreground" />
-                  </span>
-                  <div className="min-w-0 flex-1 space-y-1 text-xs">
-                    <button
-                      className="block w-full truncate text-left font-medium"
-                      title={plugin.manifest.name}
-                      onClick={() => onOpen(plugin)}
+              <div className="flex h-5 items-center justify-between gap-2">
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {item.publisher}
+                  {!item.enabled ? " (" + t("plugins.disabled") + ")" : ""}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("plugins.manage", { name: item.name })}
                     >
-                      {plugin.manifest.name}
-                    </button>
-                    <p
-                      className="truncate text-muted-foreground"
-                      title={plugin.manifest.description}
-                    >
-                      {plugin.manifest.description}
-                    </p>
-                    <div className="flex h-5 items-center justify-between gap-2">
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        {plugin.manifest.publisher}
-                        {!plugin.enabled ? " (" + t("plugins.disabled") + ")" : ""}
-                      </span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t("plugins.manage", { name: plugin.manifest.name })}
-                          >
-                            <VscSettingsGear aria-hidden />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={() => onOpen(plugin)}
-                            disabled={!plugin.enabled}
-                          >
-                            {t("plugins.open")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => onToggle(plugin)} disabled={busy}>
-                            {t(plugin.enabled ? "plugins.disable" : "plugins.enable")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => onUninstall(plugin)} disabled={busy}>
-                            {t("plugins.uninstall")}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </article>
-              ))
-            ))}
-        </ScrollArea>
-      </section>
-    </ActivityPanelShell>
+                      <VscSettingsGear aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => onOpen(plugin)} disabled={!plugin.enabled}>
+                      {t("plugins.open")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onToggle(plugin)} disabled={busy}>
+                      {t(plugin.enabled ? "plugins.disable" : "plugins.enable")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onUninstall(plugin)} disabled={busy}>
+                      {t("plugins.uninstall")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+          </article>
+        );
+      }}
+    />
   );
 }
