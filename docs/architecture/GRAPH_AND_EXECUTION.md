@@ -60,8 +60,16 @@ Undo/redo 条目只保留文档意图，容量由 `graphDraftStore.ts` 的 `GRAP
 
 本地化节点目录缓存跟随已提交资源的 publication revision 失效。Application 在正常发布、
 恢复和项目初始化完成时通知目录 Store；项目生命周期重置会撤销旧目录请求。
+只有索引内容变化而 Rust 水位未变时额外失效目录，覆盖外部发现未驻留文件；相同索引不重复发布。
 新消费者继承已知版本下限，迟到或低于请求水位的响应不能替换目录。
 该目录刷新只更新资源创建描述，不覆盖 Graph Draft，也不通过点击/拖拽改变 committed state。
+
+Event/Function 创建、复制、删除复用 Project 的标准资源 patch 发布：回执拥有递增 publication revision
+与 lifecycle delta，不以内部 authority generation 代替资源发布版本。纯资源生命周期变化不要求完整图投影；
+重命名等影响已有图的操作仍声明受影响路径。前端命令回执、资源事件与 watcher 走同一发布队列和
+ProjectIndex 快照安装入口，不由各 CRUD hook 自行选择是否补查。刷新已加载的干净 Graph 时安装完整
+GraphEditorSession，使 document 保存基线与 projection 同步；dirty/saving 草稿保留。
+函数签名修改由 Rust 同一文件事务持久化后发布，watcher 不会用旧磁盘签名覆盖已提交修改。
 
 没有 Graph Projection background channel、独立 ProblemsStore 或面板自有 subscription。关闭 Problems 不影响 Canvas、Details 或 Run Gate。Dirty Draft 的重新解析只替换解析结果，不覆盖未保存 document。
 

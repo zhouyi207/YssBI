@@ -61,16 +61,20 @@ Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save 
 
 ## Activity panel projection
 
-`get_activity_panel_document` accepts a fixed panel id, locale, and an explicit project identity
-for Project/Nodes. A null project context requests their empty document before activation;
+`get_activity_panel_document` accepts Nodes, Commands or Plugins, locale, and an explicit project identity
+for Nodes. A null project context requests its empty document before activation;
 Commands/Plugins are global and use null. The handler delegates to Application/Plugin Manager
 on the blocking boundary and maps to `ActivityPanelDocumentDto`. The request also carries a
 nullable cursor, never frontend resource rows or rendering callbacks. The invoking WebView
 supplies the window identity; a caller cannot name another window.
 
+Project is not an Activity IPC panel. Its frontend document is a synchronous projection of the
+published ProjectIndex/ResourceStore snapshot; resource changes do not trigger another index query
+through the Activity endpoint.
+
 The exact `yssbi.activity-panel.v1` envelope contains panel/project identity, publication revision,
 title, tools, complete depth-ordered rows, and optional empty-state presentation. Text is either
-a localization key or a literal. Category defaults and six item kinds are Rust-owned. The payload
+a localization key or a literal. Category defaults and node, command and plugin item kinds are Rust-owned. The payload
 contains resource references and node creation descriptors, not graph documents, database engines,
 connection strings, or table data. Row count, depth and serialized response size are bounded;
 invalid/oversized input is never partially rendered.
@@ -104,6 +108,13 @@ the visible projection. A failed delta gets one explicit snapshot recovery; a re
 is surfaced. Requests within a binding are serialized and coalesced. Project/language/epoch
 replacement and unmount invalidate the binding; UI expansion creates no request.
 See [Workbench](../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) for UI ownership.
+
+Resource command replies and matching `ResourceMutationCommitted` events enter the same frontend
+publication coordinator. A committed mutation carries a positive monotonic publication revision and
+canonical deltas. Replies, events and watcher invalidations share one serialized authoritative-index installer,
+not separate delta and snapshot Store writers. The installer uses receipts for correlation and resource moves,
+prepares loaded clean documents, and deduplicates late receipts already covered by its snapshot.
+Unchanged indexes do not republish sidebar state. Watcher refreshes do not reactivate the project or rebuild the workbench.
 
 ## Error contract
 
