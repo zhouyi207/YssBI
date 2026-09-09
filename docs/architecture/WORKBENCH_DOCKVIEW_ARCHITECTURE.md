@@ -394,6 +394,9 @@ Plugins 通过 Activity Bar 最下方原生 tab 打开。`src/modules/plugins/` 
 Status Bar 通过 Workbench application hook 订阅 root Dockview 的 group 顺序、active panel、visibility
 与 collapsed state，不保存独立的选中或布局状态。订阅投影只在图标顺序、选中或可操作状态改变时
 触发 React 更新；编辑器的 active 判定同样只订阅自身布尔结果，不因无关的 layout revision 重绘画布。
+节点、连接、选中数量与 X/Y/缩放仅在当前激活的 editor 为 Event 或 Function 时显示，
+切换到 Chart、Data、其他 panel 或没有激活 editor 时整组隐藏，不显示默认零值占位。
+显示条件复用状态项注册的 `visible`，不保存另一份激活 tab 状态。
 图统计从当前 Graph projection 的节点数量和 connection 集合派生，仅 connection 集合替换时重新计数；
 视口文字更新按动画帧合并，只写入变化后的显示文本，切换 editor 时取消旧帧并刷新文字。
 

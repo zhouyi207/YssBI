@@ -16,6 +16,7 @@ export function createBuiltInStatusBarItems(
       id: "node-count",
       alignment: "right",
       priority: 10,
+      visible: (ctx) => ctx.activeResourceRef !== null,
       tooltip: (ctx) => ctx.t("bottomBar.nodeCount"),
       render: (ctx) => (
         <>
@@ -28,6 +29,7 @@ export function createBuiltInStatusBarItems(
       id: "connection-count",
       alignment: "right",
       priority: 20,
+      visible: (ctx) => ctx.activeResourceRef !== null,
       tooltip: (ctx) => ctx.t("bottomBar.connectionCount"),
       render: (ctx) => (
         <>
@@ -43,6 +45,7 @@ export function createBuiltInStatusBarItems(
       id: "selected-nodes",
       alignment: "right",
       priority: 30,
+      visible: (ctx) => ctx.activeResourceRef !== null,
       tooltip: (ctx) => ctx.t("bottomBar.selectedNodes"),
       render: (ctx) => (
         <>
@@ -62,6 +65,7 @@ export function createBuiltInStatusBarItems(
       id: "viewport-status",
       alignment: "right",
       priority: 50,
+      visible: (ctx) => ctx.activeResourceRef !== null,
       ariaLabel: () => actions.viewportTooltip,
       tooltip: () => actions.viewportTooltip,
       onClick: () => actions.resetCanvasViewport(),

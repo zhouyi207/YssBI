@@ -151,22 +151,45 @@ describe("status bar subscriptions", () => {
     await act(async () => {
       activeEditor = {
         ...activeEditor!,
-        metadata: { role: "editor", resourceRef: "Background", resourceKind: "event" },
+        panelInstanceId: "function-editor",
+        metadata: { role: "editor", resourceRef: "Background", resourceKind: "function" },
       };
+      useEditorPaneStateStore.getState().setSelectedNodeIds("function-editor", ["a", "b"]);
       publishLayout();
     });
     expect(text("node-count")).toBe("bottomBar.nodes:1");
     expect(text("connection-count")).toBe("bottomBar.links:1");
+    expect(text("selected-nodes")).toBe("bottomBar.selected:2");
+    for (const resourceKind of ["chart", "database"] as const) {
+      await act(async () => {
+        activeEditor = {
+          ...activeEditor!,
+          metadata: { role: "editor", resourceRef: "Other", resourceKind },
+        };
+        publishLayout();
+      });
+      expect(document.querySelectorAll("[data-item]")).toHaveLength(0);
+    }
     await act(async () => {
-      activeEditor = undefined;
+      activeEditor = {
+        ...activeEditor!,
+        metadata: { role: "editor", resourceRef: "Empty", resourceKind: "event" },
+      };
+      useEditorPaneStateStore.getState().setSelectedNodeIds("function-editor", []);
       publishLayout();
     });
     expect(text("node-count")).toBe("bottomBar.nodes:0");
     expect(text("connection-count")).toBe("bottomBar.links:0");
     expect(text("selected-nodes")).toBe("bottomBar.selected:0");
+    expect(text("viewport-status")).toBe("X 0 Y 0 100%");
+    await act(async () => {
+      activeEditor = undefined;
+      publishLayout();
+    });
+    expect(document.querySelectorAll("[data-item]")).toHaveLength(0);
   });
 
-  it("coalesces viewport text to the latest frame and cancels work when the editor loses focus", async () => {
+  it("coalesces viewport text, follows graph tabs and stops updates without an active graph", async () => {
     await act(async () => root.render(<StatusItems />));
     await act(async () => flushFrame());
     const viewport = document.querySelector<HTMLSpanElement>('[data-item="viewport-status"] span')!;
@@ -188,13 +211,33 @@ describe("status bar subscriptions", () => {
     await act(async () => flushFrame());
     expect(writes).toHaveBeenCalledTimes(1);
     setViewportLive(scope, { x: 200 });
+    const previousFrame = frameId;
+    const functionScope = editorViewportScope("split", "Function");
+    setViewportLive(functionScope, { x: 20, y: -30, scale: 0.75 });
+    await act(async () => {
+      activeEditor = {
+        ...activeEditor!,
+        panelInstanceId: "function-editor",
+        groupId: "split",
+        metadata: { role: "editor", resourceRef: "Function", resourceKind: "function" },
+      };
+      publishLayout();
+    });
+    expect(frames.has(previousFrame)).toBe(false);
+    await act(async () => flushFrame());
+    expect(frames.size).toBe(0);
+    expect(text("viewport-status")).toBe("X 20 Y -30 75%");
+    setViewportLive(scope, { x: 300 });
+    expect(frames.size).toBe(0);
+    setViewportLive(functionScope, { x: 40 });
+    expect(frames.size).toBe(1);
     await act(async () => {
       activeEditor = undefined;
       publishLayout();
     });
     expect(frames.size).toBe(0);
-    expect(viewport.textContent).toBe("X 0 Y 0 100%");
-    setViewportLive(scope, { x: 300 });
+    expect(document.querySelector('[data-item="viewport-status"]')).toBeNull();
+    setViewportLive(functionScope, { x: 80 });
     expect(frames.size).toBe(0);
   });
 });
