@@ -30,6 +30,9 @@ add or commit them unless explicitly requested.
 * Keep work scoped to the requested outcome and preserve unrelated user changes.
 * Prefer changing the existing owner of a responsibility. Add a module only for
   a distinct responsibility or a real boundary.
+* When reusing an existing implementation can simplify code without adding an
+  abstraction layer, proactively notify the user and briefly explain what can
+  be reused and how it simplifies the code.
 * Preserve observable behavior during refactors unless the request changes it.
 * This is a 0.x project: remove obsolete internal paths directly unless
   compatibility is an explicit requirement.
