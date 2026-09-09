@@ -17,14 +17,12 @@ pub(crate) fn validate_context_revisions(
             }
         })?;
         let actual = match resource {
-            ResourceKey::Graph(path) => {
-                GraphResourcePath::new(path.as_str()).ok().and_then(|path| {
-                    data.graphs
-                        .contains_key(&path)
-                        .then(|| graph_resource_revisions.get(&path).copied())
-                        .flatten()
-                })
-            }
+            ResourceKey::Graph(path) => Some(
+                graph_resource_revisions
+                    .get(path)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL),
+            ),
             ResourceKey::Function(path) => GraphResourcePath::new(path.0.as_ref())
                 .ok()
                 .and_then(|path| data.graphs.get(&path))
@@ -208,8 +206,7 @@ pub(super) fn normalize_function_patch_revisions(
                 )?;
             }
         }
-        ProjectDataPatch::UnloadGraph { .. }
-        | ProjectDataPatch::UpsertChart { .. }
+        ProjectDataPatch::UpsertChart { .. }
         | ProjectDataPatch::RemoveChart { .. }
         | ProjectDataPatch::MoveChart { .. } => {}
     }
@@ -366,6 +363,8 @@ pub(super) fn canonical_resource_lifecycle_events(
             let revision = graph_resource_revisions
                 .get(path)
                 .copied()
+                .map(|retained| checked_resource_revision(path.as_str(), retained))
+                .transpose()?
                 .unwrap_or(ResourceRevision::INITIAL);
             return Ok(vec![lifecycle_delta(
                 path,
@@ -388,16 +387,6 @@ pub(super) fn canonical_resource_lifecycle_events(
                 *revision,
                 None,
                 Some(lifecycle_state(path, *revision)),
-            )]);
-        }
-        ProjectDataPatch::UnloadGraph { path } => {
-            let revision = expected_revision(&graph_key(path))?;
-            return Ok(vec![lifecycle_delta(
-                path,
-                revision,
-                revision,
-                None,
-                Some(lifecycle_state(path, revision)),
             )]);
         }
         ProjectDataPatch::RemoveGraph { path, revision } => {
@@ -438,7 +427,15 @@ pub(super) fn canonical_resource_lifecycle_events(
     let mut deltas = vec![yss_project_history::ResourceDeltaEvent {
         resource: graph_key(to),
         from_revision: source_revision,
-        to_revision: checked_resource_revision(from.as_str(), source_revision)?,
+        to_revision: checked_resource_revision(
+            from.as_str(),
+            source_revision.max(
+                graph_resource_revisions
+                    .get(to)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL),
+            ),
+        )?,
         caused_by: Some(context.operation_id),
         payload: graph_move_patch(),
     }];
@@ -463,12 +460,9 @@ pub(super) fn canonical_resource_lifecycle_events(
 pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectData) -> Vec<String> {
     let mut paths = std::collections::BTreeSet::new();
     match patch {
-        ProjectDataPatch::InsertGraph { path, .. }
-        | ProjectDataPatch::DeclareGraph { path, .. }
-        | ProjectDataPatch::RemoveGraph { path, .. }
-        | ProjectDataPatch::UnloadGraph { path } => {
-            paths.insert(path.as_str().to_string());
-        }
+        ProjectDataPatch::InsertGraph { .. }
+        | ProjectDataPatch::DeclareGraph { .. }
+        | ProjectDataPatch::RemoveGraph { .. } => {}
         ProjectDataPatch::MoveGraph {
             from,
             to,
@@ -489,41 +483,6 @@ pub(super) fn patch_projection_paths(patch: &ProjectDataPatch, data: &ProjectDat
         | ProjectDataPatch::MoveChart { .. } => {}
     }
     paths.into_iter().collect()
-}
-
-pub(super) fn validate_graph_resource(
-    _path: &GraphResourcePath,
-    _resource: &GraphResourceDocument,
-) -> Result<(), ProjectFilesystemError> {
-    Ok(())
-}
-
-pub(super) fn preflight_resource_patch_graphs(
-    patch: &ProjectDataPatch,
-) -> Result<(), ProjectFilesystemError> {
-    match patch {
-        ProjectDataPatch::InsertGraph { path, resource } => {
-            validate_graph_resource(path, resource)?;
-        }
-        ProjectDataPatch::MoveGraph {
-            to,
-            moved,
-            referenced_graphs,
-            ..
-        } => {
-            validate_graph_resource(to, moved)?;
-            for (path, resource) in referenced_graphs {
-                validate_graph_resource(path, resource)?;
-            }
-        }
-        ProjectDataPatch::DeclareGraph { .. }
-        | ProjectDataPatch::RemoveGraph { .. }
-        | ProjectDataPatch::UnloadGraph { .. }
-        | ProjectDataPatch::UpsertChart { .. }
-        | ProjectDataPatch::RemoveChart { .. }
-        | ProjectDataPatch::MoveChart { .. } => {}
-    }
-    Ok(())
 }
 
 pub(super) fn affected_projection_paths(

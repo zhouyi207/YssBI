@@ -47,9 +47,8 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<Event>| match result {
                 Ok(event) => {
-                    if let Some(change) = project_change_from_event(callback_root.as_path(), &event)
-                    {
-                        enqueue(&callback_sender, ObservedProjectChange { epoch, change });
+                    if project_change_from_event(callback_root.as_path(), &event).is_some() {
+                        enqueue(&callback_sender);
                     }
                 }
                 Err(source) => {
@@ -61,13 +60,7 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
                         error = %error,
                         "Project file watcher reported an error"
                     );
-                    enqueue(
-                        &callback_sender,
-                        ObservedProjectChange {
-                            epoch,
-                            change: ProjectChange::rescan_required(),
-                        },
-                    );
+                    enqueue(&callback_sender);
                 }
             })
             .map_err(NotifyProjectFileWatcherError::Create)
@@ -78,7 +71,7 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
             .map_err(report_start_error)?;
 
         let (completion_sender, completion_receiver) = mpsc::sync_channel(1);
-        let worker = spawn_worker(receiver, sink, completion_sender)
+        let worker = spawn_worker(receiver, epoch, sink, completion_sender)
             .map_err(|error| report_start_error(NotifyProjectFileWatcherError::Worker(error)))?;
         Ok(Box::new(NotifyProjectFileWatcherSession {
             sender: Some(sender),
@@ -89,17 +82,23 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
     }
 }
 
-fn enqueue(sender: &SyncSender<ObservedProjectChange>, change: ObservedProjectChange) {
-    let _ = sender.try_send(change);
+fn enqueue(sender: &SyncSender<()>) {
+    // A full slot already represents a pending rescan of every relevant path.
+    let _ = sender.try_send(());
 }
 
 fn project_change_from_event(root: &Path, event: &Event) -> Option<ProjectChange> {
+    if event.need_rescan() {
+        return Some(ProjectChange::rescan_required());
+    }
     let kind = project_file_change_kind(&event.kind)?;
     event.paths.iter().find_map(|path| {
         let relative = path.strip_prefix(root).ok()?.to_path_buf();
         let relative = ProjectRelativePath::try_new(relative).ok()?;
         let change = ProjectChange::file(relative, kind);
-        change.affects_project_index().then_some(change)
+        change
+            .affects_project_index()
+            .then_some(ProjectChange::rescan_required())
     })
 }
 
@@ -118,7 +117,8 @@ fn project_file_change_kind(kind: &EventKind) -> Option<ProjectFileChangeKind> {
 }
 
 fn spawn_worker(
-    receiver: Receiver<ObservedProjectChange>,
+    receiver: Receiver<()>,
+    epoch: ProjectWatcherEpoch,
     sink: Arc<dyn ProjectChangeSink>,
     completion: SyncSender<WorkerTerminal>,
 ) -> Result<JoinHandle<()>, std::io::Error> {
@@ -126,11 +126,15 @@ fn spawn_worker(
         .name("yssbi-project-watcher".into())
         .spawn(move || {
             let terminal = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                while let Ok(mut change) = receiver.recv() {
-                    while let Ok(next) = receiver.recv_timeout(PROJECT_FILE_WATCHER_QUIET_PERIOD) {
-                        change = next;
-                    }
-                    sink.publish(change);
+                while receiver.recv().is_ok() {
+                    while receiver
+                        .recv_timeout(PROJECT_FILE_WATCHER_QUIET_PERIOD)
+                        .is_ok()
+                    {}
+                    sink.publish(ObservedProjectChange {
+                        epoch,
+                        change: ProjectChange::rescan_required(),
+                    });
                 }
             }));
             let terminal = match terminal {
@@ -148,7 +152,7 @@ enum WorkerTerminal {
 }
 
 struct NotifyProjectFileWatcherSession {
-    sender: Option<SyncSender<ObservedProjectChange>>,
+    sender: Option<SyncSender<()>>,
     watcher: Option<RecommendedWatcher>,
     completion: Option<Receiver<WorkerTerminal>>,
     worker: Option<JoinHandle<()>>,
@@ -277,14 +281,9 @@ mod tests {
         let relevant = path_event(root.as_path(), "events/foo.yssbi-event");
 
         assert!(project_change_from_event(root.as_path(), &unrelated).is_none());
-        let ProjectChange::File(change) = project_change_from_event(root.as_path(), &relevant)
-            .expect("relevant event is retained")
-        else {
-            panic!("filesystem events must produce a file change");
-        };
         assert_eq!(
-            change.relative_path().as_path(),
-            Path::new("events/foo.yssbi-event")
+            project_change_from_event(root.as_path(), &relevant),
+            Some(ProjectChange::RescanRequired)
         );
     }
 
@@ -317,12 +316,10 @@ mod tests {
 
         assert!(project_change_from_event(root.as_path(), &access).is_none());
         assert!(project_change_from_event(root.as_path(), &write_closed).is_some());
-        let ProjectChange::File(change) = project_change_from_event(root.as_path(), &rename)
-            .expect("rename events invalidate the project index")
-        else {
-            panic!("rename events must produce a file change");
-        };
-        assert_eq!(change.kind(), ProjectFileChangeKind::Renamed);
+        assert_eq!(
+            project_change_from_event(root.as_path(), &rename),
+            Some(ProjectChange::RescanRequired)
+        );
     }
 
     #[test]
@@ -338,5 +335,65 @@ mod tests {
         };
 
         assert!(project_change_from_event(root.as_path(), &event).is_some());
+        let rescan = Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
+        assert_eq!(
+            project_change_from_event(root.as_path(), &rescan),
+            Some(ProjectChange::RescanRequired)
+        );
+    }
+
+    #[test]
+    fn pending_rescan_survives_a_full_queue_while_the_sink_is_busy() {
+        struct CaptureEpoch(SyncSender<ProjectWatcherEpoch>);
+        impl ProjectFileWatcherFactory for CaptureEpoch {
+            fn start(
+                &self,
+                _: &Path,
+                epoch: ProjectWatcherEpoch,
+                _: Arc<dyn ProjectChangeSink>,
+            ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
+                self.0.send(epoch).unwrap();
+                Err(FileWatcherStartError::StartFailed)
+            }
+        }
+        struct BlockingSink {
+            published: SyncSender<ObservedProjectChange>,
+            resume: std::sync::Mutex<Receiver<()>>,
+        }
+        impl ProjectChangeSink for BlockingSink {
+            fn publish(&self, change: ObservedProjectChange) {
+                let _ = self.published.send(change);
+                let _ = self.resume.lock().unwrap().recv();
+            }
+        }
+        let (published, observed) = mpsc::sync_channel(1);
+        let (resume, waiting) = mpsc::sync_channel(1);
+        let sink = Arc::new(BlockingSink {
+            published,
+            resume: std::sync::Mutex::new(waiting),
+        });
+        let (epochs, epoch) = mpsc::sync_channel(1);
+        let owner = yss_project_watcher::ProjectWatcherState::new(Arc::new(CaptureEpoch(epochs)));
+        assert!(owner.watch_project("test-project", sink.clone()).is_err());
+        let epoch = epoch.recv().unwrap();
+        let (sender, receiver) = mpsc::sync_channel(PROJECT_CHANGE_QUEUE_CAPACITY);
+        let (complete, completion) = mpsc::sync_channel(1);
+        let worker = spawn_worker(receiver, epoch, sink, complete).unwrap();
+        enqueue(&sender);
+        let first = observed.recv_timeout(Duration::from_secs(3)).unwrap();
+        assert_eq!(first.change, ProjectChange::RescanRequired);
+        for _ in 0..100 {
+            enqueue(&sender);
+        }
+        resume.send(()).unwrap();
+        let second = observed.recv_timeout(Duration::from_secs(3)).unwrap();
+        assert_eq!(second, first);
+        drop(sender);
+        resume.send(()).unwrap();
+        assert!(matches!(
+            completion.recv_timeout(Duration::from_secs(3)).unwrap(),
+            WorkerTerminal::Drained
+        ));
+        join_worker(worker);
     }
 }

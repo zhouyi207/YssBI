@@ -26,12 +26,18 @@ impl CommittedResourceMutation {
             publication_revision,
             moves.into_iter().collect::<Vec<_>>().into_boxed_slice(),
             deltas,
-            crate::project_writers::ProjectProjectionStatus::Incomplete {
-                invalidated_graph_paths: expected_graph_paths
-                    .into_iter()
-                    .filter_map(|path| yss_graph_document::GraphResourcePath::new(path).ok())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
+            if expected_graph_paths.is_empty() {
+                crate::project_writers::ProjectProjectionStatus::Complete {
+                    expected_graph_paths: Default::default(),
+                }
+            } else {
+                crate::project_writers::ProjectProjectionStatus::Incomplete {
+                    invalidated_graph_paths: expected_graph_paths
+                        .into_iter()
+                        .filter_map(|path| yss_graph_document::GraphResourcePath::new(path).ok())
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                }
             },
         )
     }
@@ -56,7 +62,6 @@ impl ProjectState {
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
-        preflight_resource_patch_graphs(&patch)?;
         let authority = self.capture_project_authority_for_session(&context.session)?;
 
         let receipt = {
@@ -125,6 +130,8 @@ impl ProjectState {
                     let revision = graph_resource_revisions
                         .get(&path)
                         .copied()
+                        .map(|retained| checked_resource_revision(path.as_str(), retained))
+                        .transpose()?
                         .unwrap_or(ResourceRevision::INITIAL);
                     Self::install_validated_resident_graph(&mut data, path.clone(), resource);
                     graph_resource_revisions.insert(path, revision);
@@ -132,29 +139,10 @@ impl ProjectState {
                 ProjectDataPatch::DeclareGraph { path, revision } => {
                     graph_resource_revisions.insert(path, revision);
                 }
-                ProjectDataPatch::RemoveGraph { path, .. } => {
-                    let existing = data.graphs.get(&path);
-                    let retained_function_revision = if existing.is_some_and(|resource| {
-                        resource.kind == yss_graph_document::GraphResourceKind::Function
-                    }) {
-                        let retained = graph_resource_revisions.get(&path).copied();
-                        let incoming = existing
-                            .and_then(|resource| resource.function.as_ref())
-                            .map(|function| function.revision)
-                            .unwrap_or(ResourceRevision::INITIAL);
-                        Some(authoritative_function_revision(&path, incoming, retained)?)
-                    } else {
-                        None
-                    };
+                ProjectDataPatch::RemoveGraph { path, revision } => {
+                    let next = checked_resource_revision(path.as_str(), revision)?;
                     data.graphs.remove(&path);
-                    if let Some(revision) = retained_function_revision {
-                        graph_resource_revisions.insert(path.clone(), revision);
-                    } else {
-                        graph_resource_revisions.remove(&path);
-                    }
-                }
-                ProjectDataPatch::UnloadGraph { path } => {
-                    data.graphs.remove(&path);
+                    graph_resource_revisions.insert(path, next);
                 }
                 ProjectDataPatch::MoveGraph {
                     from,
@@ -164,30 +152,23 @@ impl ProjectState {
                     loaded_referenced_graphs,
                     ..
                 } => {
-                    let existing = data.graphs.get(&from);
-                    let retained_function_revision =
-                        if moved.kind == yss_graph_document::GraphResourceKind::Function {
-                            let retained = graph_resource_revisions.get(&from).copied();
-                            let incoming = existing
-                                .and_then(|resource| resource.function.as_ref())
-                                .map(|function| function.revision)
-                                .unwrap_or(ResourceRevision::INITIAL);
-                            Some(authoritative_function_revision(&from, incoming, retained)?)
-                        } else {
-                            None
-                        };
                     let source_revision = graph_resource_revisions
                         .get(&from)
                         .copied()
                         .unwrap_or(ResourceRevision::INITIAL);
-                    let removed = data.graphs.remove(&from);
-                    let was_loaded = removed.is_some();
-                    if let Some(revision) = retained_function_revision {
-                        graph_resource_revisions.insert(from.clone(), revision);
-                    } else {
-                        graph_resource_revisions.remove(&from);
-                    }
-                    let moved_revision = checked_resource_revision(from.as_str(), source_revision)?;
+                    let target_revision = graph_resource_revisions
+                        .get(&to)
+                        .copied()
+                        .unwrap_or(ResourceRevision::INITIAL);
+                    let moved_revision = checked_resource_revision(
+                        from.as_str(),
+                        source_revision.max(target_revision),
+                    )?;
+                    let was_loaded = data.graphs.remove(&from).is_some();
+                    graph_resource_revisions.insert(
+                        from.clone(),
+                        checked_resource_revision(from.as_str(), source_revision)?,
+                    );
                     graph_resource_revisions.insert(to.clone(), moved_revision);
                     if was_loaded {
                         Self::install_validated_resident_graph(&mut data, to, moved);

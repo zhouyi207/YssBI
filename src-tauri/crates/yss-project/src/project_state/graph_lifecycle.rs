@@ -7,17 +7,14 @@ use yss_graph_document::{
     NodeId, PortAddress, PortInstanceId, PortRef,
 };
 use yss_project_filesystem::{
-    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
-    StagedFilesystemMutation,
+    ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
-use yss_project_model::GraphResourceDocument;
+use yss_project_model::{GraphResourceDocument, ProjectDataPatch};
 use yss_resource_lifecycle::{LifecycleResourcePath, ResourceLifecycleIntent};
 use yss_resource_naming::{ResourceName, allocate_unique_resource_name};
 
-use crate::project_writers::{
-    ProjectProjectionStatus, ProjectResourceMove, ProjectResourceMutationFacts,
-};
+use crate::project_writers::{ProjectResourceMutationFacts, context};
 
 impl ProjectState {
     pub fn read_graph_resource_snapshot(
@@ -51,28 +48,34 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         name: &str,
-        resource: GraphResourceDocument,
+        mut resource: GraphResourceDocument,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
-        let session = self.capture_project_session()?;
-        if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph creation project instance is stale".into(),
-            });
-        }
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let current = self.get_data()?;
-        let (path, unique_name) = Self::allocate_graph_path_from_snapshot(
-            session.root.as_path().to_str(),
-            &current,
-            name,
-            resource.kind,
-        )?;
-        let mut resource = resource;
-        resource.name = unique_name.clone();
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        // Application has already allocated the shell's identity. Never silently rename it here.
+        let name = ResourceName::parse(name)?;
+        let path = renamed_graph_path(&name, resource.kind)?;
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::new(),
+            [yss_project_history::ResourceKey::Graph(path.clone())].into(),
+        );
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        let revision = snapshot
+            .graph_resource_revisions
+            .get(&path)
+            .copied()
+            .map(|retained| super::checked_resource_revision(path.as_str(), retained))
+            .transpose()?
+            .unwrap_or(ResourceRevision::INITIAL);
+        resource.name = name.as_str().to_owned();
         if let Some(function) = resource.function.as_mut() {
-            function.revision = ResourceRevision::INITIAL;
+            function.revision = revision;
         }
         let contents =
             crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
@@ -80,49 +83,35 @@ impl ProjectState {
                     message: error.to_string(),
                 }
             })?;
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_project_session(&session)?;
-        let context = crate::ProjectTransactionContext {
-            session: session.clone(),
-            operation_id,
-            affected_resources: Vec::new(),
-            expected_revisions: Default::default(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.filesystem_context(),
-            filesystem_lease,
+            mutation_context.filesystem_context(),
+            lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: path.as_str().into(),
                 contents,
             }],
-            |_, staged| {
-                serde_json::from_slice::<crate::project_io::GraphResourceFile>(staged)
+            |_, bytes| {
+                serde_json::from_slice::<crate::GraphResourceFile>(bytes)
                     .map(|_| ())
                     .map_err(|error| error.to_string())
             },
         )?;
-        self.validate_project_session(&session)?;
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
-        let result = self.publish_graph_resource(
-            &session,
-            expected_project_instance_id,
-            path.clone(),
-            resource,
-            operation_id,
-            true,
-        );
-        match result {
+        match self.apply_project_resource_document_patch(
+            &mutation_context,
+            ProjectDataPatch::InsertGraph { path, resource },
+            None,
+        ) {
             Ok(result) => {
                 committed.finalize();
                 reservation.complete();
                 Ok(result)
             }
-            Err(error) => match committed.rollback() {
-                Ok(()) => Err(error),
-                Err(rollback) => Err(rollback),
-            },
+            Err(error) => {
+                committed.rollback()?;
+                Err(error)
+            }
         }
     }
 
@@ -133,56 +122,53 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
-        let session = self.capture_project_session()?;
-        if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph duplication project instance is stale".into(),
-            });
-        }
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let current = self.get_data()?;
-        let source = if let Some(resource) = current.graphs.get(source_path) {
-            resource.clone()
-        } else {
-            let persisted = crate::project_io::load_project_graph_document_from_file(
-                session.root.as_path().to_string_lossy().as_ref(),
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let mut mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            [(
+                yss_project_history::ResourceKey::Graph(source_path.clone()),
+                expected_revision,
+            )]
+            .into(),
+            Default::default(),
+        );
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        let source = match snapshot.data.graphs.get(source_path) {
+            Some(resource) => resource.clone(),
+            None => crate::project_io::load_project_graph_from_file(
+                snapshot.session.root.as_path().to_string_lossy().as_ref(),
                 source_path,
             )
             .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
-            })?;
-            GraphResourceDocument {
-                name: persisted.name,
-                kind: persisted.kind,
-                document: persisted.document,
-                function: persisted.function,
-            }
+            })?,
         };
-        let source_revision = self
-            .graph_resource_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(source_path)
-            .copied()
-            .unwrap_or(ResourceRevision::INITIAL);
-        if source_revision != expected_revision {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!("graph '{}' revision changed", source_path),
-            });
-        }
-        let requested_name = format!("{} Copy", source.name);
-        let (target, unique_name) = Self::allocate_graph_path_from_snapshot(
-            session.root.as_path().to_str(),
-            &current,
-            &requested_name,
+        let (target, name) = Self::allocate_graph_path_from_snapshot(
+            snapshot.session.root.as_path().to_str(),
+            &snapshot.data,
+            &format!("{} Copy", source.name),
             source.kind,
         )?;
-        let mut duplicate = source.clone();
-        duplicate.name = unique_name;
+        mutation_context
+            .expected_absent_resources
+            .insert(yss_project_history::ResourceKey::Graph(target.clone()));
+        let revision = snapshot
+            .graph_resource_revisions
+            .get(&target)
+            .copied()
+            .map(|retained| super::checked_resource_revision(target.as_str(), retained))
+            .transpose()?
+            .unwrap_or(ResourceRevision::INITIAL);
+        let mut duplicate = source;
+        duplicate.name = name;
         duplicate.document = duplicate_document(&duplicate.document, source_path, &target);
         if let Some(function) = duplicate.function.as_mut() {
-            function.revision = ResourceRevision::INITIAL;
+            function.revision = revision;
         }
         let contents =
             crate::project_io::serialize_graph_resource_document(&duplicate).map_err(|error| {
@@ -190,44 +176,33 @@ impl ProjectState {
                     message: error.to_string(),
                 }
             })?;
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_project_session(&session)?;
-        let context = crate::ProjectTransactionContext {
-            session: session.clone(),
-            operation_id,
-            affected_resources: Vec::new(),
-            expected_revisions: Default::default(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
         let prepared = ProjectFilesystemTransaction::prepare(
-            context.filesystem_context(),
-            filesystem_lease,
+            mutation_context.filesystem_context(),
+            lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: target.as_str().into(),
                 contents,
             }],
         )?;
-        self.validate_project_session(&session)?;
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
-        let result = self.publish_graph_resource(
-            &session,
-            expected_project_instance_id,
-            target,
-            duplicate,
-            operation_id,
-            false,
-        );
-        match result {
+        match self.apply_project_resource_document_patch(
+            &mutation_context,
+            ProjectDataPatch::DeclareGraph {
+                path: target,
+                revision,
+            },
+            None,
+        ) {
             Ok(result) => {
                 committed.finalize();
                 reservation.complete();
                 Ok(result)
             }
-            Err(error) => match committed.rollback() {
-                Ok(()) => Err(error),
-                Err(rollback) => Err(rollback),
-            },
+            Err(error) => {
+                committed.rollback()?;
+                Err(error)
+            }
         }
     }
 
@@ -238,212 +213,49 @@ impl ProjectState {
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
-        let session = self.capture_project_session()?;
-        if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph removal project instance is stale".into(),
-            });
-        }
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
-        let current_revision = self
-            .graph_resource_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(graph_path)
-            .copied()
-            .ok_or_else(|| ProjectFilesystemError::StaleResourceLifecycle {
-                message: format!("graph '{}' is not known", graph_path),
-            })?;
-        if current_revision != expected_revision {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!("graph '{}' revision changed", graph_path),
-            });
-        }
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_project_session(&session)?;
-        let context = crate::ProjectTransactionContext {
-            session: session.clone(),
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
             operation_id,
-            affected_resources: Vec::new(),
-            expected_revisions: Default::default(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
+            [(
+                yss_project_history::ResourceKey::Graph(graph_path.clone()),
+                expected_revision,
+            )]
+            .into(),
+            Default::default(),
+        );
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let prepared = ProjectFilesystemTransaction::prepare(
-            context.filesystem_context(),
-            filesystem_lease,
+            mutation_context.filesystem_context(),
+            lease,
             vec![StagedFilesystemMutation::RemoveFile {
                 relative_path: graph_path.as_str().into(),
             }],
         )?;
-        self.validate_project_session(&session)?;
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
-        let result = self.publish_graph_removal(
-            &session,
-            expected_project_instance_id,
-            graph_path,
-            expected_revision,
-            operation_id,
-        );
-        match result {
+        match self.apply_project_resource_document_patch(
+            &mutation_context,
+            ProjectDataPatch::RemoveGraph {
+                path: graph_path.clone(),
+                revision: expected_revision,
+            },
+            None,
+        ) {
             Ok(result) => {
                 committed.finalize();
                 reservation.complete();
                 Ok(result)
             }
-            Err(error) => match committed.rollback() {
-                Ok(()) => Err(error),
-                Err(rollback) => Err(rollback),
-            },
-        }
-    }
-
-    pub fn save_graph_resource(
-        &self,
-        expected_project_instance_id: &ProjectInstanceId,
-        graph_path: &GraphResourcePath,
-        expected_revision: ResourceRevision,
-        operation_id: yss_project_identity::OperationId,
-    ) -> Result<crate::project_writers::ProjectSaveResult, ProjectFilesystemError> {
-        let session = self.capture_project_session()?;
-        if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph save project instance is stale".into(),
-            });
-        }
-        let data = self.get_data()?;
-        let resource = data.graphs.get(graph_path).ok_or_else(|| {
-            ProjectFilesystemError::StaleResourceLifecycle {
-                message: format!("graph '{}' is not resident", graph_path),
+            Err(error) => {
+                committed.rollback()?;
+                Err(error)
             }
-        })?;
-        if self
-            .graph_resource_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(graph_path)
-            .copied()
-            != Some(expected_revision)
-        {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!("graph '{}' revision changed", graph_path),
-            });
         }
-        let contents =
-            crate::project_io::serialize_graph_resource_document(resource).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                }
-            })?;
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_project_session(&session)?;
-        let prepared = ProjectFilesystemTransaction::prepare(
-            ProjectFilesystemTransactionContext {
-                root: session.root,
-                operation_id,
-                recovery_marker: Some(self.project_recovery_marker()),
-            },
-            filesystem_lease,
-            vec![StagedFilesystemMutation::Write {
-                relative_path: graph_path.as_str().into(),
-                contents,
-            }],
-        )?;
-        let committed = prepared.commit()?;
-        committed.finalize();
-        let publication = self
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        Ok(crate::project_writers::ProjectSaveResult {
-            project_instance_id: expected_project_instance_id.clone(),
-            operation_id,
-            publication_revision: publication.resource_revision,
-            affected_resources: Vec::new().into(),
-            index_invalidated: false,
-        })
-    }
-
-    fn publish_graph_resource(
-        &self,
-        session: &crate::ProjectSession,
-        expected_project_instance_id: &ProjectInstanceId,
-        path: GraphResourcePath,
-        resource: GraphResourceDocument,
-        operation_id: yss_project_identity::OperationId,
-        resident: bool,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
-        let mut publication = self
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if publication.project_instance_id != expected_project_instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph resource authority changed before publication".into(),
-            });
-        }
-        let advance = publication.prepare_authority_generation()?;
-        let mut data = self
-            .project_data
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if resident {
-            Self::install_validated_resident_graph(&mut data, path.clone(), resource.clone());
-        }
-        let mut revisions = self
-            .graph_resource_revisions
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        revisions.insert(path.clone(), ResourceRevision::INITIAL);
-        publication.commit_prepared(advance);
-        drop(revisions);
-        drop(data);
-        drop(publication);
-        let _ = session;
-        Ok(resource_lifecycle_result(
-            expected_project_instance_id,
-            operation_id,
-            path,
-            resource,
-            true,
-            self,
-        ))
-    }
-
-    fn publish_graph_removal(
-        &self,
-        _session: &crate::ProjectSession,
-        expected_project_instance_id: &ProjectInstanceId,
-        path: &GraphResourcePath,
-        expected_revision: ResourceRevision,
-        operation_id: yss_project_identity::OperationId,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
-        let mut publication = self
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if publication.project_instance_id != expected_project_instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph removal authority changed before publication".into(),
-            });
-        }
-        let advance = publication.prepare_authority_generation()?;
-        let mut data = self
-            .project_data
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        data.graphs.remove(path);
-        publication.commit_prepared(advance);
-        drop(data);
-        drop(publication);
-        Ok(resource_removal_result(
-            expected_project_instance_id,
-            operation_id,
-            path,
-            expected_revision,
-            self,
-        ))
     }
 
     pub fn load_graph_document(
@@ -476,7 +288,7 @@ impl ProjectState {
             ResourceLifecycleIntent::Load,
         )?;
         let operation = ResourceLifecycleOperation::from_guard(session.clone(), &lifecycle_guard);
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
+        let _filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_resource_lifecycle_operation(&operation)?;
         let loaded = crate::project_io::load_project_graph_document_from_file(
             session.root.as_path().to_string_lossy().as_ref(),
@@ -485,7 +297,6 @@ impl ProjectState {
         .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
-        drop(filesystem_lease);
         self.run_graph_load_after_read_test_hook();
         self.validate_resource_lifecycle_operation(&operation)?;
 
@@ -518,7 +329,9 @@ impl ProjectState {
         let publication_advance = publication.prepare_authority_generation()?;
         lifecycle.commit_guard(&mut lifecycle_guard, ResourceLifecycleIntent::Load)?;
         Self::install_validated_resident_graph(&mut data, graph_path.clone(), resource);
-        graph_resource_revisions.insert(graph_path.clone(), ResourceRevision::INITIAL);
+        graph_resource_revisions
+            .entry(graph_path.clone())
+            .or_insert(ResourceRevision::INITIAL);
         publication.commit_prepared(publication_advance);
         drop(graph_resource_revisions);
         drop(data);
@@ -727,27 +540,17 @@ impl ProjectState {
         operation_id: yss_project_identity::OperationId,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        let session = self.capture_project_session()?;
-        if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "graph rename project instance is stale".into(),
-            });
-        }
-        let mut lifecycle_guard = self.resource_lifecycle.register(
-            &session.instance_id,
-            graph_path,
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let session = snapshot.session.clone();
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let mut ownership = self.acquire_resource_rename_ownership(
+            expected_project_instance_id,
+            LifecycleResourcePath::Graph(graph_path.clone()),
             lifecycle_token,
-            ResourceLifecycleIntent::Rename,
         )?;
-        let lifecycle_operation =
-            ResourceLifecycleOperation::from_guard(session.clone(), &lifecycle_guard);
-        self.validate_resource_lifecycle_operation(&lifecycle_operation)?;
-
-        let current_data = self
-            .project_data
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone();
+        self.validate_resource_lifecycle_operation(&ownership.operation)?;
+        let current_data = &snapshot.data;
         let mut source = if let Some(resource) = current_data.graphs.get(graph_path) {
             resource.clone()
         } else {
@@ -765,10 +568,8 @@ impl ProjectState {
                 function: persisted.function,
             }
         };
-        let current_revision = self
+        let current_revision = snapshot
             .graph_resource_revisions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(graph_path)
             .copied()
             .unwrap_or(ResourceRevision::INITIAL);
@@ -797,12 +598,18 @@ impl ProjectState {
             });
         }
 
-        let next_revision = current_revision.checked_next().map_err(|error| {
-            ProjectFilesystemError::ResourceRevisionOverflow {
+        let retained_target = snapshot
+            .graph_resource_revisions
+            .get(&target)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        let next_revision = current_revision
+            .max(retained_target)
+            .checked_next()
+            .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
                 resource: graph_path.as_str().to_owned(),
                 retained: error.retained,
-            }
-        })?;
+            })?;
         source.name = requested.as_str().to_owned();
         if let Some(function) = source.function.as_mut() {
             function.revision = next_revision;
@@ -826,6 +633,11 @@ impl ProjectState {
             ) {
                 continue;
             }
+            super::normalize_function_resource_revision(
+                path,
+                &mut changed,
+                snapshot.graph_resource_revisions.get(path).copied(),
+            )?;
             let contents = crate::project_io::serialize_graph_resource_document(&changed).map_err(
                 |error| ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
@@ -835,23 +647,37 @@ impl ProjectState {
         }
 
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
-        self.validate_resource_lifecycle_operation(&lifecycle_operation)?;
-        let context = crate::ProjectTransactionContext {
-            session: session.clone(),
+        self.validate_resource_lifecycle_operation(&ownership.operation)?;
+        let expected_revisions = std::iter::once((
+            yss_project_history::ResourceKey::Graph(graph_path.clone()),
+            expected_revision,
+        ))
+        .chain(referenced.iter().map(|(path, _, _)| {
+            (
+                yss_project_history::ResourceKey::Graph(path.clone()),
+                snapshot
+                    .graph_resource_revisions
+                    .get(path)
+                    .copied()
+                    .unwrap_or(ResourceRevision::INITIAL),
+            )
+        }))
+        .collect();
+        let context = context(
+            self,
+            session.clone(),
             operation_id,
-            affected_resources: Vec::new(),
-            expected_revisions: Default::default(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
+            expected_revisions,
+            [yss_project_history::ResourceKey::Graph(target.clone())].into(),
+        );
+        self.validate_writer_context(&context, snapshot.authority_generation)?;
         let mut mutations = vec![
-            StagedFilesystemMutation::MoveFile {
-                from: std::path::PathBuf::from(graph_path.as_str()),
-                to: std::path::PathBuf::from(target.as_str()),
-            },
             StagedFilesystemMutation::Write {
                 relative_path: target.as_str().into(),
                 contents: target_contents,
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: graph_path.as_str().into(),
             },
         ];
         mutations.extend(referenced.iter().map(|(path, _, contents)| {
@@ -865,107 +691,36 @@ impl ProjectState {
             filesystem_lease,
             mutations,
         )?;
-        self.validate_resource_lifecycle_operation(&lifecycle_operation)?;
+        self.validate_resource_lifecycle_operation(&ownership.operation)?;
+        self.validate_writer_context(&context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
 
-        let publication = (|| {
-            let mut publication = self
-                .mutation_publication
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let mut data = self
-                .project_data
-                .write()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if publication.project_instance_id != expected_project_instance_id.as_str() {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                    message: "graph changed before rename publication".into(),
-                });
-            }
-            let mut graph_resource_revisions = self
-                .graph_resource_revisions
-                .write()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if graph_resource_revisions
-                .get(graph_path)
-                .copied()
-                .unwrap_or(ResourceRevision::INITIAL)
-                != expected_revision
-            {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
-                    message: "graph changed before rename publication".into(),
-                });
-            }
-            let mut lifecycle = self.resource_lifecycle.boundary();
-            lifecycle.validate(&lifecycle_operation.owner)?;
-            let advance = publication.prepare_authority_generation()?;
-            lifecycle.commit_guard(&mut lifecycle_guard, ResourceLifecycleIntent::Rename)?;
-            let source_loaded = data.graphs.remove(graph_path).is_some();
-            if source_loaded {
-                data.graphs.insert(target.clone(), source.clone());
-            }
-            for (path, changed, _) in &referenced {
-                data.graphs.insert(path.clone(), changed.clone());
-                let retained = graph_resource_revisions
-                    .get(path)
-                    .copied()
-                    .unwrap_or(ResourceRevision::INITIAL);
-                let revision = retained.checked_next().map_err(|error| {
-                    ProjectFilesystemError::ResourceRevisionOverflow {
-                        resource: path.as_str().to_owned(),
-                        retained: error.retained,
-                    }
-                })?;
-                graph_resource_revisions.insert(path.clone(), revision);
-            }
-            graph_resource_revisions.remove(graph_path);
-            graph_resource_revisions.insert(target.clone(), next_revision);
-            publication.commit_prepared(advance);
-            Ok(())
-        })();
-        match publication {
-            Ok(()) => {
-                committed.finalize();
-                let mut invalidated = vec![target.as_str().to_owned()];
-                invalidated.extend(
-                    referenced
-                        .iter()
-                        .map(|(path, _, _)| path.as_str().to_owned()),
-                );
-                Ok(ProjectResourceMutationFacts::new(
-                    operation_id,
-                    ProjectInstanceId::from_existing(expected_project_instance_id.to_string()),
-                    self.mutation_publication
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .resource_revision,
-                    [ProjectResourceMove {
-                        from: graph_path.as_str().to_owned().into(),
-                        to: target.as_str().to_owned().into(),
-                        kind: match source.kind {
-                            yss_graph_document::GraphResourceKind::Event => {
-                                yss_project_history::ResourceLifecycleKind::Event
-                            }
-                            yss_graph_document::GraphResourceKind::Function => {
-                                yss_project_history::ResourceLifecycleKind::Function
-                            }
-                        },
-                        name: source.name.into_boxed_str(),
-                    }],
-                    Vec::<yss_project_history::ResourceDeltaEvent>::new(),
-                    ProjectProjectionStatus::Incomplete {
-                        invalidated_graph_paths: invalidated
-                            .into_iter()
-                            .filter_map(|path| GraphResourcePath::new(path).ok())
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                    },
-                ))
-            }
-            Err(error) => match committed.rollback() {
-                Ok(()) => Err(error),
-                Err(rollback) => Err(rollback),
+        match self.apply_project_resource_document_patch(
+            &context,
+            ProjectDataPatch::MoveGraph {
+                from: graph_path.clone(),
+                to: target,
+                moved: source,
+                referenced_graphs: referenced
+                    .iter()
+                    .map(|(path, graph, _)| (path.clone(), graph.clone()))
+                    .collect(),
+                loaded_referenced_graphs: referenced
+                    .iter()
+                    .map(|(path, _, _)| path.clone())
+                    .collect(),
             },
+            Some(&mut ownership),
+        ) {
+            Ok(result) => {
+                committed.finalize();
+                reservation.complete();
+                Ok(result)
+            }
+            Err(error) => {
+                committed.rollback()?;
+                Err(error)
+            }
         }
     }
 }
@@ -1181,59 +936,6 @@ fn duplicate_locator(
     }
 }
 
-fn resource_lifecycle_result(
-    project_instance_id: &ProjectInstanceId,
-    operation_id: yss_project_identity::OperationId,
-    path: GraphResourcePath,
-    resource: GraphResourceDocument,
-    resident: bool,
-    state: &ProjectState,
-) -> ProjectResourceMutationFacts {
-    let _ = resource;
-    ProjectResourceMutationFacts::new(
-        operation_id,
-        project_instance_id.clone(),
-        state
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .resource_revision,
-        Vec::<ProjectResourceMove>::new(),
-        Vec::<yss_project_history::ResourceDeltaEvent>::new(),
-        ProjectProjectionStatus::Incomplete {
-            invalidated_graph_paths: if resident {
-                vec![path.clone()].into()
-            } else {
-                Default::default()
-            },
-        },
-    )
-}
-
-fn resource_removal_result(
-    project_instance_id: &ProjectInstanceId,
-    operation_id: yss_project_identity::OperationId,
-    path: &GraphResourcePath,
-    expected_revision: ResourceRevision,
-    state: &ProjectState,
-) -> ProjectResourceMutationFacts {
-    let _ = expected_revision;
-    ProjectResourceMutationFacts::new(
-        operation_id,
-        project_instance_id.clone(),
-        state
-            .mutation_publication
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .resource_revision,
-        Vec::<ProjectResourceMove>::new(),
-        Vec::<yss_project_history::ResourceDeltaEvent>::new(),
-        ProjectProjectionStatus::Incomplete {
-            invalidated_graph_paths: vec![path.clone()].into_boxed_slice(),
-        },
-    )
-}
-
 fn remap_document_references(document: &mut GraphDocument, from: &str, to: &str) -> bool {
     let mut changed = false;
     for node in document.nodes.values_mut() {
@@ -1253,4 +955,160 @@ fn document_references(document: &GraphDocument, target: &str) -> bool {
             .values()
             .any(|value| value.as_str() == Some(target))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures;
+    use crate::project_writers::ProjectProjectionStatus;
+    use yss_graph_document::GraphResourceKind;
+    use yss_project_history::ResourceDocumentPatch;
+    use yss_project_model::ProjectData;
+
+    #[test]
+    fn graph_writers_reject_changed_revision_and_occupied_or_missing_paths() {
+        let fixture =
+            fixtures::TempProject::activate("graph-writer-preconditions", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let path = GraphResourcePath::new("events/Event.yssbi-event").unwrap();
+        let create = || {
+            state.create_graph_resource(
+                &session.instance_id,
+                "Event",
+                GraphResourceDocument::new("Event", GraphResourceKind::Event),
+                yss_project_identity::OperationId::new(),
+            )
+        };
+        create().unwrap();
+        let file = session.root.as_path().join(path.as_str());
+        let bytes = std::fs::read(&file).unwrap();
+        // An unloaded graph still owns its disk path and committed revision.
+        state.unload_graph_resource(&path).unwrap();
+        assert!(matches!(
+            create(),
+            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+        ));
+        let wrong_revision = ResourceRevision::INITIAL.checked_next().unwrap();
+        assert!(matches!(
+            state.remove_graph_resource(
+                &session.instance_id,
+                &path,
+                wrong_revision,
+                yss_project_identity::OperationId::new()
+            ),
+            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+        ));
+        assert!(matches!(
+            state.duplicate_graph_resource(
+                &session.instance_id,
+                &path,
+                wrong_revision,
+                yss_project_identity::OperationId::new()
+            ),
+            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+        ));
+        assert_eq!(std::fs::read(&file).unwrap(), bytes);
+
+        let snapshot = state.capture_writer_snapshot(&session.instance_id).unwrap();
+        let context = context(
+            state,
+            session.clone(),
+            yss_project_identity::OperationId::new(),
+            [(
+                yss_project_history::ResourceKey::Graph(path.clone()),
+                ResourceRevision::INITIAL,
+            )]
+            .into(),
+            Default::default(),
+        );
+        let _lease = state.filesystem().acquire(session.root.clone()).unwrap();
+        state
+            .validate_writer_context(&context, snapshot.authority_generation)
+            .unwrap();
+        std::fs::remove_file(&file).unwrap();
+        assert!(matches!(
+            state.validate_writer_context(&context, snapshot.authority_generation),
+            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+        ));
+    }
+
+    #[test]
+    fn graph_crud_publishes_ordered_deltas_before_any_chart_exists() {
+        let fixture =
+            fixtures::TempProject::activate("graph-crud-publications", ProjectData::new());
+        let state = fixture.state();
+        let project = ProjectInstanceId::from_existing(state.project_instance_id());
+        let event = GraphResourcePath::new("events/Event.yssbi-event").unwrap();
+        let function = GraphResourcePath::new("functions/Function.yssbi-function").unwrap();
+        for (revision, name, kind) in [
+            (1, "Event", GraphResourceKind::Event),
+            (2, "Function", GraphResourceKind::Function),
+        ] {
+            let result = state
+                .create_graph_resource(
+                    &project,
+                    name,
+                    GraphResourceDocument::new(name, kind),
+                    yss_project_identity::OperationId::new(),
+                )
+                .unwrap()
+                .into_parts();
+            assert_eq!(result.publication_revision, revision);
+            assert_eq!(result.deltas.len(), 1);
+            assert!(matches!(&result.deltas[0].payload,
+                ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_none() && patch.after.is_some()));
+            assert!(matches!(
+                result.projection_status,
+                ProjectProjectionStatus::Complete { .. }
+            ));
+        }
+        let duplicated = state
+            .duplicate_graph_resource(
+                &project,
+                &event,
+                ResourceRevision::INITIAL,
+                yss_project_identity::OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        assert_eq!(duplicated.publication_revision, 3);
+        let ResourceDocumentPatch::ResourceLifecycle(patch) = &duplicated.deltas[0].payload else {
+            panic!("missing creation delta")
+        };
+        let copy = GraphResourcePath::new(patch.after.as_ref().unwrap().path.as_ref()).unwrap();
+        let removed = state
+            .remove_graph_resource(
+                &project,
+                &copy,
+                ResourceRevision::INITIAL,
+                yss_project_identity::OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        assert_eq!(removed.publication_revision, 4);
+        assert!(matches!(&removed.deltas[0].payload,
+            ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_some() && patch.after.is_none()));
+        let renamed = state
+            .rename_graph_resource(
+                &project,
+                &function,
+                ResourceRevision::INITIAL,
+                "Renamed",
+                1,
+                yss_project_identity::OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        assert_eq!(renamed.publication_revision, 5);
+        assert_eq!(renamed.moves.len(), 1);
+        assert!(matches!(
+            renamed.deltas[0].payload,
+            ResourceDocumentPatch::ResourceMove(_)
+        ));
+        let index = state.read_project_index(&project).unwrap();
+        assert_eq!(index.publication_revision, 5);
+        assert!(index.charts.is_empty());
+    }
 }

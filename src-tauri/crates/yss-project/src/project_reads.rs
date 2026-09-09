@@ -187,29 +187,23 @@ fn overlay_authoritative_project_index(
     index
         .databases
         .sort_by(|left, right| left.id.cmp(&right.id));
-    index.charts = data
-        .charts
-        .iter()
-        .map(|(path, chart)| crate::ProjectChartIndexEntry {
-            chart_path: path.clone(),
-            name: path.display_name().as_str().to_string(),
-            database_id: chart.database_id.clone(),
-            chart_type: chart.chart_type.clone(),
-            revision: chart.revision,
-        })
-        .collect();
-    index.charts.sort_by_key(|entry| entry.name.to_lowercase());
+    // Disk owns membership; resident revision overrides must never resurrect a deleted file.
+    for chart in &mut index.charts {
+        if let Some(resident) = data.charts.get(&chart.chart_path) {
+            chart.revision = resident.revision;
+        }
+    }
     for entry in &mut index.graphs {
         let Ok(path) = yss_graph_document::GraphResourcePath::new(&entry.path) else {
-            continue;
-        };
-        let Some(resource) = data.graphs.get(&path) else {
             continue;
         };
         entry.revision = graph_resource_revisions
             .get(&path)
             .copied()
             .unwrap_or(ResourceRevision::INITIAL);
+        let Some(resource) = data.graphs.get(&path) else {
+            continue;
+        };
         if let Some(function) = resource.function.as_ref() {
             entry.function_revision = Some(function.revision);
             entry.function_signature = Some(function.signature.clone());

@@ -38,10 +38,9 @@ pub use graph_operation::{
 };
 use resource_patch::CommittedResourceMutation;
 use resource_publication::{
-    affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, chart_publication_deltas,
-    normalize_function_patch_revisions, patch_projection_paths, preflight_resource_patch_graphs,
-    validate_chart_path_insertion,
+    affected_projection_paths, canonical_resource_lifecycle_events, chart_publication_deltas,
+    normalize_function_patch_revisions, normalize_function_resource_revision,
+    patch_projection_paths, validate_chart_path_insertion,
 };
 pub(super) use resource_publication::{checked_resource_revision, validate_context_revisions};
 

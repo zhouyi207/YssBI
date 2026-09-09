@@ -273,7 +273,9 @@ pub fn load_project_graph_from_file(
     })
 }
 
-fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, ProjectError> {
+pub(crate) fn read_project_manifest_from_root(
+    root: &Path,
+) -> Result<ProjectManifest, ProjectError> {
     read_json(root.join(PROJECT_METADATA_FILE).as_path())
 }
 
@@ -300,7 +302,7 @@ pub(crate) fn parse_graph_resource_document(
     Ok(document)
 }
 
-fn read_graph_document(
+pub(crate) fn read_graph_document(
     path: &Path,
     expected_kind: GraphResourceKind,
 ) -> Result<GraphResourceFile, ProjectError> {

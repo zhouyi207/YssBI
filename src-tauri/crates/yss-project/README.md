@@ -40,3 +40,19 @@ Graph 撤销/重做由前端 Graph Draft 管理，数据库编辑历史由 Datab
 以下字段不能互相替代：`ResourceRevision` 标识已提交资源版本；frontend lifecycle token 拒绝旧 editor 请求；Draft document 是未保存意图；compiled source hash 标识语义内容与 catalog 对应的 artifact。单独的 revision 也不能替代 Project instance/session identity。若以后合并 revision 的存储位置，必须同时迁移以上使用方，保持提交前重验与事务/执行资源校验语义。
 
 Graph Draft、Compile、Save 和 Execute 的当前流程见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。
+
+## Resource publication and external files
+
+Event/Function 创建、复制、删除、重命名复用标准 ProjectDataPatch 的提交与 lifecycle/move delta；资源操作推进
+publication revision，而不仅是 authority generation。纯生命周期增删不伪造缺失的图投影，
+重命名回执保留真实 move delta、递增发布版本及受影响图的恢复声明。
+
+Graph 与 Chart writers 共用 WriterSnapshot 和 transaction context。取得文件系统 lease 后与暂存完成后，
+均检查捕获的 authority generation、受影响资源版本以及源/目标路径存在性；重命名复用相同的 ownership lease
+和 patch 发布入口。函数签名的 before-state、函数版本与所属 Graph 版本也在事务内校验，文件落盘成功后才发布，
+发布失败则回滚文件。Graph revision 不随驻留状态重置：卸载/重新加载保留版本，删除与移动后的旧路径保留 tombstone。
+
+Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后同步驻留 graph/chart，
+预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。
+未打开的 graph 保持按需加载；本地未保存 Graph Draft 不属于 Rust 驻留快照。
+ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威版本，不得复活已删除的 chart。

@@ -38,9 +38,9 @@ pub fn is_project_index_input_path(path: &Path) -> bool {
 
     let normalized = path.to_string_lossy().replace('\\', "/");
     normalized == PROJECT_METADATA_FILE
-        || [EVENTS_DIR, FUNCTIONS_DIR, CHARTS_DIR, DATABASE_DIR]
+        || PROJECT_CONTENT_DIRECTORIES
             .into_iter()
-            .any(|directory| is_descendant(&normalized, directory))
+            .any(|directory| normalized == directory || is_descendant(&normalized, directory))
 }
 
 fn is_descendant(path: &str, directory: &str) -> bool {
@@ -70,7 +70,10 @@ mod tests {
     fn project_index_inputs_cover_documents_and_content_directories() {
         for path in [
             PROJECT_METADATA_FILE,
-            GLOBAL_VARIABLES_FILE,
+            EVENTS_DIR,
+            FUNCTIONS_DIR,
+            CHARTS_DIR,
+            DATABASE_DIR,
             "events/Main.yssbi-event",
             r"events\Main.yssbi-event",
             "functions/Mean.yssbi-function",
@@ -83,8 +86,6 @@ mod tests {
         for path in [
             "",
             "README.md",
-            "events",
-            "database",
             "../metadata.yssbi",
             "events/../metadata.yssbi",
             "/metadata.yssbi",

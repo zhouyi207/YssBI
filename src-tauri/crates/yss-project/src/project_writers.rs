@@ -212,11 +212,12 @@ fn chart_resource_delta(
     })
 }
 
-struct WriterSnapshot {
-    session: ProjectSession,
-    data: ProjectData,
-    graph_resource_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-    authority_generation: u64,
+pub(crate) struct WriterSnapshot {
+    pub(crate) session: ProjectSession,
+    pub(crate) data: ProjectData,
+    pub(crate) graph_resource_revisions:
+        std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+    pub(crate) authority_generation: u64,
 }
 
 struct CommittedProjectSave {
@@ -250,7 +251,7 @@ fn chart_key(path: &ChartResourcePath) -> ResourceKey {
     ResourceKey::Chart(ChartResourceKey(path.as_str().into()))
 }
 
-fn context(
+pub(crate) fn context(
     state: &ProjectState,
     session: ProjectSession,
     operation_id: OperationId,
@@ -296,7 +297,7 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
 }
 
 impl ProjectState {
-    fn capture_writer_snapshot(
+    pub(crate) fn capture_writer_snapshot(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
     ) -> Result<WriterSnapshot, ProjectFilesystemError> {
@@ -324,7 +325,7 @@ impl ProjectState {
         Ok(snapshot)
     }
 
-    fn validate_writer_context(
+    pub(crate) fn validate_writer_context(
         &self,
         context: &ProjectTransactionContext,
         authority_generation: u64,
@@ -346,7 +347,40 @@ impl ProjectState {
             &data,
             &graph_resource_revisions,
             &chart_revisions,
-        )
+        )?;
+        drop(chart_revisions);
+        drop(graph_resource_revisions);
+        drop(data);
+        drop(publication);
+        for (resource, must_exist) in context
+            .affected_resources
+            .iter()
+            .map(|resource| (resource, true))
+            .chain(
+                context
+                    .expected_absent_resources
+                    .iter()
+                    .map(|resource| (resource, false)),
+            )
+        {
+            let path = match resource {
+                ResourceKey::Graph(path) => Path::new(path.as_str()),
+                ResourceKey::Chart(path) => Path::new(path.0.as_ref()),
+                _ => continue,
+            };
+            let present = match std::fs::symlink_metadata(context.session.root.as_path().join(path))
+            {
+                Ok(_) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => return Err(prepare_error(error)),
+            };
+            if present != must_exist {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!("resource presence changed for {resource:?}"),
+                });
+            }
+        }
+        Ok(())
     }
 
     fn publish_project_save(

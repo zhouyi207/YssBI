@@ -24,9 +24,6 @@ pub enum ProjectDataPatch {
         path: GraphResourcePath,
         revision: ResourceRevision,
     },
-    UnloadGraph {
-        path: GraphResourcePath,
-    },
     MoveGraph {
         from: GraphResourcePath,
         to: GraphResourcePath,
