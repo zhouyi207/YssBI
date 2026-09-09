@@ -130,6 +130,7 @@ describe("useDatabaseManagement revision authority", () => {
   });
 
   it("does not perform an independent delete outside canonical publication application", async () => {
+    const progress = vi.spyOn(uiStore, "startProgress");
     vi.spyOn(DatabaseService, "deleteDatabase").mockImplementation(async (_project, operation) =>
       aggregate(null, operation),
     );
@@ -144,5 +145,24 @@ describe("useDatabaseManagement revision authority", () => {
     );
     expect(useDatabaseStore.getState().databases.sales).toBeUndefined();
     expect(useDatabaseStore.getState().revisions.sales).toBeUndefined();
+    expect(progress).not.toHaveBeenCalled();
+  });
+
+  it("preserves a different detail selection made while a database deletion is pending", async () => {
+    let complete!: () => void;
+    vi.spyOn(DatabaseService, "deleteDatabase").mockImplementation(
+      (_project, operation) =>
+        new Promise((resolve) => {
+          complete = () => resolve(aggregate(null, operation));
+        }),
+    );
+    act(() => useEditorStore.getState().setDetailFocus({ kind: "data", id: "sales" }));
+    const deleting = actions.deleteDataFrame("sales");
+    act(() => useEditorStore.getState().setDetailFocus({ kind: "data", id: "other" }));
+    await act(async () => {
+      complete();
+      await deleting;
+    });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "data", id: "other" });
   });
 });

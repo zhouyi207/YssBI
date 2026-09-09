@@ -1252,7 +1252,6 @@ export const enUS = {
   },
   dataOperation: {
     importing: "Importing data…",
-    deleting: "Deleting data…",
     reading: "Reading…",
     importingCsv: "Parsing CSV and writing to project database",
     importingExcel: 'Importing sheet "{{sheet}}"',

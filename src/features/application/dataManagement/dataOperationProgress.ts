@@ -7,7 +7,7 @@ async function flushProgressFrame() {
   });
 }
 
-/** 导入/删除等耗时数据操作：显示全局进度蒙层，避免窗口「假死」。 */
+/** 导入及来源读取等耗时操作：显示全局进度蒙层。资源删除走普通提交反馈。 */
 export async function runWithDataOperationProgress<T>(
   stage: string,
   detail: string | undefined,

@@ -1184,7 +1184,6 @@ export const zhCN = {
   },
   dataOperation: {
     importing: "正在导入数据…",
-    deleting: "正在删除数据…",
     reading: "正在读取…",
     importingCsv: "解析 CSV 并写入项目数据库",
     importingExcel: "导入 Sheet「{{sheet}}」",

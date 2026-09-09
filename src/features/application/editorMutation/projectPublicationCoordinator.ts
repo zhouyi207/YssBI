@@ -28,6 +28,7 @@ import { clearChartPreviewCache } from "@/services/chart/chartPreviewCache";
 import { prepareGraphProjectionForPublication } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { clearChartLifecycleProjects } from "@/features/application/editor/chartLifecycleCoordinator";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
 import { useDocumentStateStore, useResourceStore } from "@/features/core/resource";
 import {
   collectResourceMutationGraphPaths,
@@ -225,6 +226,7 @@ export class ProjectPublicationCoordinator {
     clearChartLifecycleProjects();
     startProjectLifecycle(projectInstanceId);
     this.resetPublicationState(appliedRevision);
+    useNodeCatalogStore.getState().observeResourcePublication(projectInstanceId, appliedRevision);
   }
 
   acceptProjectActivation(projectInstanceId: string, activationRevision: number): boolean {
@@ -379,6 +381,7 @@ export class ProjectPublicationCoordinator {
     this.state.phase = "idle";
     this.activeRecoverySnapshotRevision = null;
     this.driverInFlight = null;
+    useNodeCatalogStore.getState().clear();
   }
 
   private ownsLifecycle(projectInstanceId: string, epoch: number): boolean {
@@ -478,6 +481,9 @@ export class ProjectPublicationCoordinator {
       this.assertLifecycle(projectInstanceId, epoch);
       this.state.appliedFingerprint = pending.fingerprint;
       this.state.appliedRevision = pending.revision;
+      useNodeCatalogStore
+        .getState()
+        .observeResourcePublication(projectInstanceId, pending.revision);
       this.state.pendingByRevision.delete(pending.revision);
       for (const waiter of pending.waiters) {
         waiter.resolve({ status: "applied", affectedGraphPaths: pending.affectedGraphPaths });
@@ -608,6 +614,9 @@ export class ProjectPublicationCoordinator {
       this.assertLifecycle(projectInstanceId, epoch);
       this.state.appliedRevision = index.publicationRevision;
       this.state.appliedFingerprint = undefined;
+      useNodeCatalogStore
+        .getState()
+        .observeResourcePublication(projectInstanceId, index.publicationRevision);
       for (const pending of owned) {
         if (pending.revision > index.publicationRevision) continue;
         this.state.pendingByRevision.delete(pending.revision);

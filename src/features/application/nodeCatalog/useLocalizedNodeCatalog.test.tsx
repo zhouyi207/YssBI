@@ -148,8 +148,8 @@ describe("useLocalizedNodeCatalog", () => {
       .mockResolvedValueOnce(catalog("project-2", "zh-CN"));
 
     await act(async () => root.render(createElement(Harness)));
-    projectPublicationCoordinator.startProject("project-2", 7);
     await act(async () => {
+      projectPublicationCoordinator.startProject("project-2", 7);
       useProjectIOStore.setState({ projectInstanceId: "project-2" });
       root.render(createElement(Harness));
     });
@@ -167,7 +167,7 @@ describe("useLocalizedNodeCatalog", () => {
     expect(output?.dataset.project).toBe("project-2");
   });
 
-  it("refetches to the exact resource publication watermark and keeps the old catalog while loading", async () => {
+  it("refetches after canonical resource publication and keeps the old catalog while loading", async () => {
     const refresh = deferred<LocalizedCatalogDto>();
     vi.mocked(CatalogService.getLocalizedCatalog)
       .mockResolvedValueOnce(catalog("project-1", "zh-CN"))
@@ -176,8 +176,18 @@ describe("useLocalizedNodeCatalog", () => {
     await act(async () => root.render(createElement(Harness)));
     await vi.waitFor(() => expect(host.querySelector("output")?.dataset.status).toBe("ready"));
 
-    act(() => {
-      useNodeCatalogStore.getState().observeResourcePublication("project-1", 8);
+    await act(async () => {
+      await projectPublicationCoordinator.submit({
+        result: {
+          projectInstanceId: "project-1",
+          operationId: "00000000-0000-0000-0000-000000000801",
+          publicationRevision: 8,
+          deltas: [],
+          moves: [],
+          projectionReplacements: [],
+          projectionStatus: { status: "complete", expectedGraphPaths: [] },
+        },
+      });
     });
     await vi.waitFor(() => expect(CatalogService.getLocalizedCatalog).toHaveBeenCalledTimes(2));
     expect(host.querySelector("output")?.dataset).toMatchObject({

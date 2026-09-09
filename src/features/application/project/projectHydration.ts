@@ -7,6 +7,7 @@ import { logger } from "@/features/application/observability/appLogger";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useNodeCatalogStore } from "@/features/core/nodeCatalog/nodeCatalogStore";
 
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import {
@@ -204,6 +205,9 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     });
     hydrateFunctionSignaturesFromProjectIndex(index.graphs);
     synchronizeProjectPresentation();
+    useNodeCatalogStore
+      .getState()
+      .observeResourcePublication(identity.projectInstanceId, index.publicationRevision);
     return true;
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;

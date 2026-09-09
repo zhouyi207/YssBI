@@ -299,44 +299,33 @@ export function triggerImportData() {
 
 // database
 export function useDatabaseManagement() {
-  const detailFocus = useEditorStore((s) => s.detailFocus);
-  const clearDetailFocus = useEditorStore((s) => s.clearDetailFocus);
-
   const updateDataFrame = useCallback((id: string, data: Partial<DatabaseRecord>) => {
     useDatabaseStore.getState().updateDatabase(id, data);
   }, []);
 
-  const deleteDataFrame = useCallback(
-    async (id: string) => {
-      const previous = useDatabaseStore.getState().databases[id];
-      if (!previous) return;
+  const deleteDataFrame = useCallback(async (id: string) => {
+    if (!useDatabaseStore.getState().databases[id]) return;
 
-      try {
-        await runWithDataOperationProgress(
-          i18n.t("dataOperation.deleting"),
-          String(previous.name ?? id),
-          () =>
-            executeDatabaseMutation(id, (authority) =>
-              DatabaseService.deleteDatabase(
-                authority.projectInstanceId,
-                authority.operationId,
-                authority.expectedRevision,
-                id,
-              ),
-            ),
-        );
-        if (detailFocus?.kind === "data" && detailFocus.id === id) {
-          clearDetailFocus();
-        }
-      } catch (e) {
-        logDataOperationFailure(e, "delete_database", "Database deletion");
-        showDataOperationError(e, "delete_database", (code) =>
-          i18n.t("dataOperation.deleteFailed", { error: code }),
-        );
+    try {
+      await executeDatabaseMutation(id, (authority) =>
+        DatabaseService.deleteDatabase(
+          authority.projectInstanceId,
+          authority.operationId,
+          authority.expectedRevision,
+          id,
+        ),
+      );
+      const editor = useEditorStore.getState();
+      if (editor.detailFocus?.kind === "data" && editor.detailFocus.id === id) {
+        editor.clearDetailFocus();
       }
-    },
-    [detailFocus, clearDetailFocus],
-  );
+    } catch (e) {
+      logDataOperationFailure(e, "delete_database", "Database deletion");
+      showDataOperationError(e, "delete_database", (code) =>
+        i18n.t("dataOperation.deleteFailed", { error: code }),
+      );
+    }
+  }, []);
 
   const renameDataFrame = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();

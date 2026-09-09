@@ -239,4 +239,32 @@ describe("useNodeCatalogStore", () => {
       minimumResourcePublicationRevision: 8,
     });
   });
+
+  it("carries publication watermarks into later consumers and invalidates lagging locales", () => {
+    const store = useNodeCatalogStore.getState();
+    store.observeResourcePublication("project-1", 7);
+    const first = store.beginRequest("project-1", "zh-CN")!;
+    expect(first.minimumResourcePublicationRevision).toBe(7);
+    expect(store.storeResponse(first, catalog())).toBe(true);
+
+    const english = store.beginRequest("project-1", "en-US")!;
+    store.storeResponse(english, catalog({ locale: "en-US", resourcePublicationRevision: 8 }));
+    // A query may see the committed revision before its publication reaches the client.
+    store.observeResourcePublication("project-1", 8);
+    expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
+      status: "idle",
+      minimumResourcePublicationRevision: 8,
+    });
+    expect(useNodeCatalogStore.getState().requests['["project-1","en-US"]']).toMatchObject({
+      status: "ready",
+      minimumResourcePublicationRevision: 8,
+    });
+    expect(store.observeResourcePublication("project-1", 8)).toBe(false);
+
+    const later = store.beginRequest("project-1", "fr-FR")!;
+    expect(later.minimumResourcePublicationRevision).toBe(8);
+    expect(
+      store.storeResponse(later, catalog({ locale: "fr-FR", resourcePublicationRevision: 7 })),
+    ).toBe(false);
+  });
 });

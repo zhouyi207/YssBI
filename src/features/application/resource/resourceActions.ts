@@ -168,7 +168,6 @@ export async function deleteResource(ref: ResourceRef): Promise<void> {
       context.operationId,
     );
     await submitCurrentResult(context, result);
-    await commitFileFirstResourceIndex();
     return;
   }
 

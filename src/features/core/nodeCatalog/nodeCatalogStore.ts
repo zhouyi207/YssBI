@@ -105,7 +105,10 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
         projectInstanceId,
         locale,
         requestGeneration: nextRequestGeneration++,
-        minimumResourcePublicationRevision: current.minimumResourcePublicationRevision,
+        minimumResourcePublicationRevision: Math.max(
+          current.minimumResourcePublicationRevision,
+          state.projectWatermarks[projectInstanceId] ?? 0,
+        ),
       };
       return {
         requests: {
@@ -115,7 +118,7 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
             responseKey: current.responseKey,
             error: null,
             requestGeneration: identity.requestGeneration,
-            minimumResourcePublicationRevision: current.minimumResourcePublicationRevision,
+            minimumResourcePublicationRevision: identity.minimumResourcePublicationRevision,
           },
         },
       };
@@ -216,22 +219,36 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     let advanced = false;
     set((state) => {
       const currentRevision = state.projectWatermarks[projectInstanceId] ?? 0;
-      if (!Number.isSafeInteger(revision) || revision <= currentRevision) return state;
-      advanced = true;
+      if (!Number.isSafeInteger(revision) || revision < 0) return state;
+      const minimumRevision = Math.max(revision, currentRevision);
+      advanced = minimumRevision > currentRevision;
       const requests = { ...state.requests };
       for (const [key, request] of Object.entries(requests)) {
         const [requestProject] = JSON.parse(key) as [string, string];
-        if (requestProject !== projectInstanceId) continue;
-        requests[key] = {
-          ...request,
-          status: "idle",
-          error: null,
-          requestGeneration: null,
-          minimumResourcePublicationRevision: revision,
-        };
+        if (
+          requestProject !== projectInstanceId ||
+          request.minimumResourcePublicationRevision >= minimumRevision
+        )
+          continue;
+        const cached = request.responseKey ? state.responses[request.responseKey] : null;
+        const fresh =
+          request.status === "ready" &&
+          cached &&
+          cached.resourcePublicationRevision >= minimumRevision;
+        requests[key] = fresh
+          ? { ...request, minimumResourcePublicationRevision: minimumRevision }
+          : {
+              ...request,
+              status: "idle",
+              error: null,
+              requestGeneration: null,
+              minimumResourcePublicationRevision: minimumRevision,
+            };
+        advanced = true;
       }
+      if (!advanced) return state;
       return {
-        projectWatermarks: { ...state.projectWatermarks, [projectInstanceId]: revision },
+        projectWatermarks: { ...state.projectWatermarks, [projectInstanceId]: minimumRevision },
         requests,
       };
     });

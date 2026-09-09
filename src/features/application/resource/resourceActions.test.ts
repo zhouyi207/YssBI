@@ -256,6 +256,7 @@ describe("renameResource project ownership", () => {
       expect.any(String),
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
+    expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
   });
 
   it("renames a chart from captured revision and token without load or save fallback", async () => {

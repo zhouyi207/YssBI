@@ -58,6 +58,11 @@ Draft/history/projection 在写入前完成 projection preparation，避免先�
 
 Undo/redo 条目只保留文档意图，容量由 `graphDraftStore.ts` 的 `GRAPH_HISTORY_LIMIT` 限制。恢复前重新 Resolve 目标文档，并采用这次解析的投影；历史中不保留旧的解析投影。Graph locale 查询独立于加载/刷新生命周期，草稿 FIFO 不反向依赖加载流程。
 
+本地化节点目录缓存跟随已提交资源的 publication revision 失效。Application 在正常发布、
+恢复和项目初始化完成时通知目录 Store；项目生命周期重置会撤销旧目录请求。
+新消费者继承已知版本下限，迟到或低于请求水位的响应不能替换目录。
+该目录刷新只更新资源创建描述，不覆盖 Graph Draft，也不通过点击/拖拽改变 committed state。
+
 没有 Graph Projection background channel、独立 ProblemsStore 或面板自有 subscription。关闭 Problems 不影响 Canvas、Details 或 Run Gate。Dirty Draft 的重新解析只替换解析结果，不覆盖未保存 document。
 
 ## 4. Semantic resolution
