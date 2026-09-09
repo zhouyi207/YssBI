@@ -1,4 +1,4 @@
-import { lookupGraphResource, useResourceStore } from "@/features/core/resource";
+import { lookupGraphResource, resourceKey, useResourceStore } from "@/features/core/resource";
 import type { ResourceRef } from "@/features/core/resource/resourceTypes";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 
@@ -18,5 +18,5 @@ export function resolveResourceDisplayName(ref: ResourceRef | null, fallbackId =
     return indexEntry?.name ?? fallbackId ?? ref.id;
   }
 
-  return fallbackId ?? ref.id;
+  return useResourceStore.getState().resources[resourceKey(ref)]?.name ?? fallbackId ?? ref.id;
 }

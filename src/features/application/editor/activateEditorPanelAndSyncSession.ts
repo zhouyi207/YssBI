@@ -63,7 +63,7 @@ async function synchronizePanelSession(
     return true;
   }
 
-  if (metadata.resourceKind === "chart") {
+  if (metadata.resourceKind === "chart" || metadata.resourceKind === "database") {
     setPassiveDetailContext(
       detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
     );

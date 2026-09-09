@@ -21,6 +21,7 @@ function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
   for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
     const { resourceRef, resourceKind } = panel.metadata;
+    if (resourceKind === "database") continue;
     const key = resourceKey({ id: resourceRef, kind: resourceKind });
     if (seen.has(key) || !isResourceDocumentDirty({ id: resourceRef, kind: resourceKind })) {
       continue;

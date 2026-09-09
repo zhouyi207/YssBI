@@ -117,6 +117,14 @@ describe("editor command focus", () => {
 
     mocks.activePanel = toolPanel();
     expect(target && isEditorCommandTargetCurrent(target)).toBe(false);
+    mocks.activePanel = editorPanel({
+      metadata: {
+        role: "editor",
+        resourceRef: "sales",
+        resourceKind: "database",
+      },
+    });
+    expect(captureActiveEditorCommandTarget()).toBeNull();
   });
 
   it.each([

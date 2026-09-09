@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   VscClose,
   VscCloseAll,
+  VscDatabase,
   VscError,
   VscExtensions,
   VscGraphLine,
@@ -78,6 +79,7 @@ function iconForMetadata(metadata: WorkbenchPanelMetadata): {
   if (metadata.role === "editor") {
     if (metadata.resourceKind === "event") return { Icon: VscSymbolEvent, key: "event" };
     if (metadata.resourceKind === "function") return { Icon: VscSymbolMethod, key: "function" };
+    if (metadata.resourceKind === "database") return { Icon: VscDatabase, key: "database" };
     return { Icon: VscGraphLine, key: "chart" };
   }
   if (metadata.role === "result") return { Icon: VscPreview, key: "result" };

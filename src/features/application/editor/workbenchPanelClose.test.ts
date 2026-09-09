@@ -425,6 +425,7 @@ describe("workbench panel close coordinator", () => {
       editorPanel("editor-a", graphPath, "event", "group-a"),
       editorPanel("editor-b", graphPath, "event", "group-b"),
       editorPanel("chart-a", chartPath, "chart", "group-b"),
+      editorPanel("database-a", "sales", "database", "group-b"),
       viewPanel("logs-a", "logs", "group-b"),
       resultPanel("result-a", "group-b"),
     ]);
@@ -436,6 +437,7 @@ describe("workbench panel close coordinator", () => {
         "editor-a",
         "editor-b",
         "chart-a",
+        "database-a",
         "logs-a",
         "result-a",
         "editor-a",
@@ -449,6 +451,7 @@ describe("workbench panel close coordinator", () => {
       { panelInstanceId: "editor-a", groupId: "group-a" },
       { panelInstanceId: "editor-b", groupId: "group-b" },
       { panelInstanceId: "chart-a", groupId: "group-b" },
+      { panelInstanceId: "database-a", groupId: "group-b" },
       { panelInstanceId: "logs-a", groupId: "group-b" },
       { panelInstanceId: "result-a", groupId: "group-b" },
     ]);
@@ -456,6 +459,7 @@ describe("workbench panel close coordinator", () => {
       "editor-a",
       "editor-b",
       "chart-a",
+      "database-a",
     ]);
     expect(mocks.releaseEditorViewport).toHaveBeenCalledTimes(2);
     expect(mocks.releaseEditorViewport).toHaveBeenCalledWith({
@@ -468,6 +472,7 @@ describe("workbench panel close coordinator", () => {
     });
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(graphPath);
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(chartPath);
+    expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith("sales");
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledTimes(2);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: graphPath,

@@ -18,5 +18,6 @@ function shouldClearFocus(focus: DetailFocus, resourceRef: string): boolean {
   if (focus.kind === "chart") {
     return focus.chartPath === resourceRef;
   }
+  if (focus.kind === "data") return focus.id === resourceRef;
   return false;
 }

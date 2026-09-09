@@ -21,7 +21,8 @@ export async function synchronizeVisibleGraphPanels(): Promise<void> {
 
   for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.visible !== true || panel.metadata.role !== "editor") continue;
-    if (panel.metadata.resourceKind === "chart") continue;
+    if (panel.metadata.resourceKind !== "event" && panel.metadata.resourceKind !== "function")
+      continue;
 
     const groups = scopesByGraph.get(panel.metadata.resourceRef) ?? new Set<string>();
     groups.add(panel.groupId);

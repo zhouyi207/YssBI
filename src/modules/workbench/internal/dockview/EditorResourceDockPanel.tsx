@@ -72,6 +72,11 @@ export function EditorResourceDockPanel({
       editor = <Editor key={editorKey} {...editorScope} resourceKind="chart" />;
       break;
     }
+    case "database": {
+      const Editor = rendererRegistry.database;
+      editor = <Editor key={editorKey} {...editorScope} resourceKind="database" />;
+      break;
+    }
   }
 
   return (

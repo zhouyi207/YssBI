@@ -139,7 +139,7 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
 
   for (const panel of snapshot.panels) {
     const metadata = panel.metadata;
-    if (metadata.role !== "editor") continue;
+    if (metadata.role !== "editor" || metadata.resourceKind === "database") continue;
     const key = editorKey(metadata);
     if (remainingKeys.has(key) || documents.has(key)) continue;
     const ref = { id: metadata.resourceRef, kind: metadata.resourceKind };
@@ -253,6 +253,14 @@ function finalizeClosedPanels(
     const metadata = panel.metadata;
     if (metadata.role !== "editor") continue;
     releaseEditorPaneState(panel.panelInstanceId);
+
+    if (metadata.resourceKind === "database") {
+      if (
+        !remainingEditors.some((candidate) => editorKey(candidate.metadata) === editorKey(metadata))
+      )
+        clearDetailFocusForClosedPanel(metadata.resourceRef);
+      continue;
+    }
 
     if (metadata.resourceKind !== "chart") {
       const hasSameScope = remainingEditors.some(

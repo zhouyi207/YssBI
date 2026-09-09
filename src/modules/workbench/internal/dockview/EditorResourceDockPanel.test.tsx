@@ -13,6 +13,7 @@ const rendererCalls = {
   event: vi.fn(),
   function: vi.fn(),
   chart: vi.fn(),
+  database: vi.fn(),
 };
 
 const rendererRegistry = {
@@ -27,6 +28,10 @@ const rendererRegistry = {
   chart: (scope: EditorPanelScope<"chart">) => {
     rendererCalls.chart(scope);
     return <div data-editor-kind="chart" />;
+  },
+  database: (scope: EditorPanelScope<"database">) => {
+    rendererCalls.database(scope);
+    return <div data-editor-kind="database" />;
   },
 } satisfies EditorRendererRegistry;
 
@@ -62,7 +67,7 @@ function createPanelApi() {
 
 function panelProps(
   api: ReturnType<typeof createPanelApi>["api"],
-  resourceKind: "event" | "function" | "chart",
+  resourceKind: "event" | "function" | "chart" | "database",
 ): IDockviewPanelProps<WorkbenchPanelParams> {
   return {
     api,
@@ -140,5 +145,22 @@ describe("EditorResourceDockPanel", () => {
       );
     });
     expect(host.querySelector('[data-editor-kind="chart"]')).not.toBeNull();
+    act(() =>
+      root.render(
+        <EditorResourceDockPanel
+          {...panelProps(panel.api, "database")}
+          rendererRegistry={rendererRegistry}
+        />,
+      ),
+    );
+    expect(host.querySelector('[data-editor-kind="database"]')).not.toBeNull();
+    expect(rendererCalls.database).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        resourceKind: "database",
+        resourceRef: "database/Main",
+        groupId: "group-b",
+        isVisible: true,
+      }),
+    );
   });
 });

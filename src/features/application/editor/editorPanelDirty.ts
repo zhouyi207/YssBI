@@ -27,6 +27,7 @@ export function collectDirtyEditorPanels(): DirtyEditorPanelSnapshot[] {
   for (const panel of workbenchDockviewRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
     const { resourceKind, resourceRef } = panel.metadata;
+    if (resourceKind === "database") continue;
     if (seen.has(resourceRef) || !isGraphResourceDirty(resourceRef, resourceKind)) continue;
     seen.add(resourceRef);
     dirty.push({

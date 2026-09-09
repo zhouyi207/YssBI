@@ -14,6 +14,7 @@ export function detailFocusForEditorResource(
   if (resourceKind === "chart") {
     return { kind: "chart", chartPath: resourceRef };
   }
+  if (resourceKind === "database") return { kind: "data", id: resourceRef };
   return { kind: resourceKind, path: resourceRef };
 }
 

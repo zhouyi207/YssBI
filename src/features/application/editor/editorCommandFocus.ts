@@ -38,7 +38,8 @@ const SHORTCUT_CONSUMER_SELECTOR = [
 
 export function captureActiveEditorCommandTarget(): EditorCommandTarget | null {
   const panel = workbenchDockviewRead.getActiveEditorPanel();
-  if (!panel || panel.metadata.role !== "editor") return null;
+  if (!panel || panel.metadata.role !== "editor" || panel.metadata.resourceKind === "database")
+    return null;
 
   let projectIdentity: ProjectIdentitySnapshot;
   try {
