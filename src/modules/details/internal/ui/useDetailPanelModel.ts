@@ -20,11 +20,7 @@ export function useDetailPanelModel(): {
   const chartPath = target?.kind === "chart" ? target.chartPath : null;
 
   const chartDocument = useChartRead((snapshot) =>
-    chartPath
-      ? snapshot.documents[chartPath]
-        ? (structuredClone(snapshot.documents[chartPath]) as ChartDocument)
-        : null
-      : null,
+    chartPath ? (snapshot.documents[chartPath] ?? null) : null,
   );
   const chartName = useChartRead((snapshot) =>
     chartPath
