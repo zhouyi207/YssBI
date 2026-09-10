@@ -1,8 +1,44 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use yss_application::activity_panel as app;
 
 use super::catalog::NodeCreationDescriptorDto;
 use crate::error::CommandError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActivityPanelId {
+    Project,
+    Nodes,
+    Commands,
+    Plugins,
+}
+impl ActivityPanelId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::Nodes => "nodes",
+            Self::Commands => "commands",
+            Self::Plugins => "plugins",
+        }
+    }
+    pub fn is_project_scoped(self) -> bool {
+        matches!(self, Self::Project | Self::Nodes)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ActivityPanelRequest {
+    pub panel_id: ActivityPanelId,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ActivityGraphKindDto {
+    Event,
+    Function,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
@@ -42,6 +78,20 @@ impl From<app::ActivityTool> for ActivityToolDto {
     rename_all_fields = "camelCase"
 )]
 pub enum ActivityItemDto {
+    Graph {
+        path: String,
+        name: String,
+        graph_type: ActivityGraphKindDto,
+    },
+    Chart {
+        path: String,
+        name: String,
+    },
+    Database {
+        id: String,
+        name: String,
+        resource_path: String,
+    },
     Node {
         key: String,
         title: String,
@@ -62,6 +112,30 @@ pub enum ActivityItemDto {
 impl From<app::ActivityItem> for ActivityItemDto {
     fn from(item: app::ActivityItem) -> Self {
         match item {
+            app::ActivityItem::Graph {
+                path,
+                name,
+                graph_type,
+            } => Self::Graph {
+                path,
+                name,
+                graph_type: match graph_type {
+                    yss_graph_document::GraphResourceKind::Event => ActivityGraphKindDto::Event,
+                    yss_graph_document::GraphResourceKind::Function => {
+                        ActivityGraphKindDto::Function
+                    }
+                },
+            },
+            app::ActivityItem::Chart { path, name } => Self::Chart { path, name },
+            app::ActivityItem::Database {
+                id,
+                name,
+                resource_path,
+            } => Self::Database {
+                id,
+                name,
+                resource_path,
+            },
             app::ActivityItem::Node {
                 key,
                 title,

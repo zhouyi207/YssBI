@@ -1,3 +1,4 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import {
   loadCurrentProject,
   refreshProjectResourceIndex,
@@ -74,16 +75,18 @@ describe("projectIOStore error references", () => {
 
   it("does not clean project panels during initial null-to-project hydration", async () => {
     useProjectIOStore.setState({ projectInstanceId: null });
-    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
-      projectInstanceId,
-      publicationRevision: 0,
-      projectName: "Initial project",
-      graphs: [],
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId,
+        publicationRevision: 0,
+        projectName: "Initial project",
+        graphs: [],
 
-      charts: [],
-      databases: [],
-      exportTime: "",
-    });
+        charts: [],
+        databases: [],
+        exportTime: "",
+      }),
+    );
 
     await expect(loadCurrentProject()).resolves.not.toBeNull();
 
@@ -146,7 +149,7 @@ describe("projectIOStore error references", () => {
     );
   });
 
-  it("maps resource-index parser prose to its stable contract code", async () => {
+  it("reports a resource publication failure without retaining parser prose", async () => {
     vi.mocked(ProjectService.getProjectIndex).mockRejectedValue(
       new Error("private resource index parser prose"),
     );
@@ -154,7 +157,7 @@ describe("projectIOStore error references", () => {
     await expect(refreshProjectResourceIndex()).resolves.toBe(false);
 
     expect(useProjectIOStore.getState().error).toEqual({
-      code: "project_resource_index_contract_error",
+      code: "publication_recovery_failed",
       incidentId: null,
     });
     expect(JSON.stringify(useProjectIOStore.getState().error)).not.toContain(

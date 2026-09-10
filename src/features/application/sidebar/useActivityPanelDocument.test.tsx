@@ -5,85 +5,135 @@ import { expect, it, vi } from "vitest";
 import { useActivityPanelDocument } from "./useActivityPanelDocument";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useResourceStore } from "@/features/core/resource/resourceStore";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { ProjectService } from "@/services/project/projectService";
+import * as activityService from "@/services/workbench/activityPanelService";
 import {
-  startProjectLifecycle,
-  clearProjectLifecycle,
-} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { activityPanelFixture } from "@/tests/helpers/activityPanelFixture";
-import type { ActivityPanelSnapshot } from "@/shared/types/domain/activityPanel";
+  projectIndexSnapshotFixture,
+  activityPanelFixture,
+} from "@/tests/helpers/activityPanelFixture";
+import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
 
-const backend = vi.hoisted(() => vi.fn());
-vi.mock("@/services/workbench/activityPanelService", () => ({ getActivityPanelDocument: backend }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: { language: "en-US" } }) }));
+vi.mock("@/features/application/graphProjection/projectionLocale", () => ({
+  currentProjectionLocale: () => "en-US",
+}));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ i18n: { language: "en-US" }, t: (key: string) => key }),
+}));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-it("retains the visible tree, coalesces changes and discards replaced or unmounted bindings", async () => {
-  const pending: Array<(snapshot: ActivityPanelSnapshot) => void> = [];
-  backend.mockImplementation(
-    () => new Promise<ActivityPanelSnapshot>((resolve) => pending.push(resolve)),
-  );
+it("shares project sync, retains the visible document and ignores resource-field writes and old-project replies", async () => {
+  const pending: Array<(snapshot: ProjectIndexSnapshot) => void> = [];
+  const query = vi
+    .spyOn(ProjectService, "getProjectIndex")
+    .mockImplementation(
+      () => new Promise<ProjectIndexSnapshot>((resolve) => pending.push(resolve)),
+    );
+  const standalone = vi.spyOn(activityService, "getActivityPanelDocument");
+  const response = (projectInstanceId: string, publicationRevision = 0) =>
+    projectIndexSnapshotFixture({
+      projectInstanceId,
+      publicationRevision,
+      projectName: "Project",
+      exportTime: "",
+      graphs: [],
+      charts: [],
+      databases: [],
+    });
+  useResourceStore.getState().clear();
+  useSidebarStore.setState({ panels: {}, expandedCategories: {} });
   let current: ReturnType<typeof useActivityPanelDocument> | undefined;
   function Probe() {
     current = useActivityPanelDocument("nodes");
     return null;
   }
   const root = createRoot(document.createElement("div"));
-  const first = { cursor: "first", document: activityPanelFixture("nodes", []) };
-  const second = {
-    cursor: "second",
-    document: { ...first.document, projectInstanceId: "project-2" },
-  };
-  let unmounted = false;
   try {
-    startProjectLifecycle("project-1");
+    projectPublicationCoordinator.startProject("project-1", 0);
     useProjectIOStore.setState({ projectInstanceId: "project-1" });
-    act(() => root.render(<Probe />));
-    act(() => {
-      startProjectLifecycle("project-2");
+    await act(async () => root.render(<Probe />));
+    expect(query).toHaveBeenCalledOnce();
+    await act(async () => {
+      projectPublicationCoordinator.startProject("project-2", 0);
       useProjectIOStore.setState({ projectInstanceId: "project-2" });
     });
+    expect(query).toHaveBeenCalledTimes(2);
+    const second = response("project-2");
     await act(async () => pending[1](second));
-    await act(async () => pending[0](first));
-    expect(current!.document).toBe(second.document);
-    act(() => current!.setExpanded("project.events", false));
-    expect(backend).toHaveBeenCalledTimes(2);
+    await act(async () => pending[0](response("project-1")));
+    expect(current!.document).toBe(second.activityPanels.nodes.document);
+    act(() => current!.setExpanded("category", false));
+    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
+    expect(query).toHaveBeenCalledTimes(2);
 
-    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
-    expect(current!.document).toBe(second.document);
-    expect(backend).toHaveBeenLastCalledWith(
-      "nodes",
-      { projectInstanceId: "project-2" },
-      "en-US",
-      second,
-    );
-    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
-    act(() => useResourceStore.getState().setSnapshot({ resources: [] }));
-    expect(backend).toHaveBeenCalledTimes(3);
-    const intermediate = {
-      cursor: "intermediate",
-      document: { ...second.document, publicationRevision: 2 },
-    };
+    await act(async () => current!.refresh());
+    expect(current!.document).toBe(second.activityPanels.nodes.document);
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[2][2]?.nodes).toBe(second.activityPanels.nodes);
+    await act(async () => {
+      current!.refresh();
+      current!.refresh();
+    });
+    expect(query).toHaveBeenCalledTimes(3);
+    const intermediate = response("project-2", 1);
     await act(async () => pending[2](intermediate));
-    expect(current!.document).toBe(second.document);
-    expect(backend).toHaveBeenCalledTimes(4);
-    expect(backend).toHaveBeenLastCalledWith(
-      "nodes",
-      { projectInstanceId: "project-2" },
-      "en-US",
-      intermediate,
-    );
-    const latest = { cursor: "latest", document: { ...second.document, publicationRevision: 3 } };
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(current!.document).toBe(intermediate.activityPanels.nodes.document);
+    const latest = response("project-2", 2);
     await act(async () => pending[3](latest));
-    expect(current!.document).toBe(latest.document);
-    act(() => current!.refresh());
-    act(() => root.unmount());
-    unmounted = true;
-    await act(async () => pending[4](second));
-    expect(current!.document).toBe(latest.document);
-    expect(backend).toHaveBeenCalledTimes(5);
+    expect(current!.document).toBe(latest.activityPanels.nodes.document);
+    expect(current!.loading).toBe(false);
+    expect(standalone).not.toHaveBeenCalled();
+    query
+      .mockRejectedValueOnce({ code: "panel_sync_failed", incidentId: "panel-42" })
+      .mockRejectedValueOnce({ code: "panel_sync_failed", incidentId: "panel-42" });
+    await act(async () => current!.refresh());
+    expect(current!.document).toBe(latest.activityPanels.nodes.document);
+    expect(current!.error).toContain("panel_sync_failed");
+    expect(current!.error).toContain("panel-42");
   } finally {
-    if (!unmounted) act(() => root.unmount());
-    clearProjectLifecycle();
+    act(() => root.unmount());
+    projectPublicationCoordinator.cancelProject();
     useProjectIOStore.setState({ projectInstanceId: null });
+    vi.restoreAllMocks();
+  }
+});
+
+it("reuses global panel documents across mounts and preserves them when refresh fails", async () => {
+  useSidebarStore.setState({ panels: {} });
+  const snapshot = { cursor: "commands-1", document: activityPanelFixture("commands", []) };
+  const backend = vi
+    .spyOn(activityService, "getActivityPanelDocument")
+    .mockResolvedValueOnce(snapshot);
+  const indexQuery = vi.spyOn(ProjectService, "getProjectIndex");
+  let current: ReturnType<typeof useActivityPanelDocument> | undefined;
+  function Probe() {
+    current = useActivityPanelDocument("commands");
+    return null;
+  }
+  let root = createRoot(document.createElement("div"));
+  try {
+    await act(async () => root.render(<Probe />));
+    expect(current!.document).toBe(snapshot.document);
+    act(() => root.unmount());
+    root = createRoot(document.createElement("div"));
+    await act(async () => root.render(<Probe />));
+    expect(backend).toHaveBeenCalledOnce();
+    backend.mockRejectedValueOnce({
+      code: "activity_query_failed",
+      incidentId: "incident-42",
+      details: { private: "not for UI" },
+    });
+    await act(async () => current!.refresh());
+    expect(current!.document).toBe(snapshot.document);
+    expect(current!.error).toContain("activity_query_failed");
+    expect(current!.error).toContain("incident-42");
+    expect(current!.error).not.toContain("not for UI");
+    expect(current!.loading).toBe(false);
+    expect(indexQuery).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    vi.restoreAllMocks();
   }
 });

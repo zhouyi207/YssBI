@@ -16,6 +16,31 @@ impl ProjectState {
         })
     }
 
+    /// Revalidate a captured index without rescanning files or cloning project data.
+    pub fn validate_project_index_version(
+        &self,
+        project: &ProjectInstanceId,
+        publication_revision: u64,
+        authority_generation: u64,
+    ) -> Result<(), ProjectFilesystemError> {
+        let session = expected_session(self, project)?;
+        self.validate_project_session(&session)?;
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != project.as_str() {
+            return Err(stale_project_lifecycle(
+                "project changed before index validation",
+            ));
+        }
+        if publication.resource_revision != publication_revision
+            || publication.authority_generation() != authority_generation
+        {
+            return Err(stale_catalog(
+                "project index authority changed before publication",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn load_chart_document(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -144,20 +169,11 @@ fn validate_project_index_authority(
     capture: &ProjectIndexAuthorityCapture,
 ) -> Result<(), ProjectFilesystemError> {
     state.validate_project_session(session)?;
-    let publication = state.mutation_publication.lock().unwrap();
-    if publication.project_instance_id != capture.project_instance_id {
-        return Err(stale_project_lifecycle(
-            "project changed before project index publication",
-        ));
-    }
-    if publication.resource_revision != capture.publication_revision
-        || publication.authority_generation() != capture.authority_generation
-    {
-        return Err(stale_catalog(
-            "project index authority changed before publication",
-        ));
-    }
-    Ok(())
+    state.validate_project_index_version(
+        &session.instance_id,
+        capture.publication_revision,
+        capture.authority_generation,
+    )
 }
 
 fn overlay_authoritative_project_index(

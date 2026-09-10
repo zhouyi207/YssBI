@@ -412,6 +412,13 @@ pub(crate) fn capture_localized_project_facts(
         .project()
         .read_project_index(session.project_instance_id())
         .map_err(map_project_catalog_error)?;
+    localized_project_facts_from_index(session, index)
+}
+
+pub(crate) fn localized_project_facts_from_index(
+    session: &ApplicationSession,
+    index: ProjectIndex,
+) -> Result<LocalizedCatalogProjectFacts, ProjectCatalogReadError> {
     if index.project_instance_id != session.project_instance_id().as_str() {
         return Err(ProjectCatalogReadError::ProjectLifecycleChanged);
     }
@@ -485,6 +492,15 @@ pub(crate) fn localized_node_catalog_in_session(
 ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
     ensure_requested_project(captured, request.project_instance_id())?;
     let project = capture_localized_project_facts(captured)?;
+    localized_node_catalog_from_facts(application, captured, project, request.locale())
+}
+
+pub(crate) fn localized_node_catalog_from_facts(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    project: LocalizedCatalogProjectFacts,
+    locale: &str,
+) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
     let database = catalog_snapshot(captured.database())?;
     revalidate_declaration_observations(
         captured.database(),
@@ -493,7 +509,7 @@ pub(crate) fn localized_node_catalog_in_session(
     let _graph_catalog = build_resource_catalog(project.resources().graph(), &database)?;
     let localized = captured
         .graph()
-        .localized_catalog_with_resources(project.resources().entries(), request.locale());
+        .localized_catalog_with_resources(project.resources().entries(), locale);
 
     revalidate_project_catalog_facts(captured, &project)?;
     revalidate_declaration_observations(
@@ -581,19 +597,14 @@ pub(crate) fn revalidate_project_catalog_facts(
     session: &ApplicationSession,
     facts: &LocalizedCatalogProjectFacts,
 ) -> Result<(), ProjectCatalogReadError> {
-    let current = session
+    session
         .project()
-        .read_project_index(session.project_instance_id())
-        .map_err(map_project_catalog_error)?;
-    if current.project_instance_id != facts.authority_basis.project_instance_id.as_str()
-        || current.publication_revision != facts.authority_basis.resource_publication_revision
-        || current.authority_generation() != facts.authority_basis.authority_generation
-    {
-        return Err(ProjectCatalogReadError::CatalogResourceStale {
-            resource: GraphResourceId::new("project/catalog"),
-        });
-    }
-    Ok(())
+        .validate_project_index_version(
+            &facts.authority_basis.project_instance_id,
+            facts.authority_basis.resource_publication_revision,
+            facts.authority_basis.authority_generation,
+        )
+        .map_err(map_project_catalog_error)
 }
 
 fn map_project_catalog_error(error: ProjectFilesystemError) -> ProjectCatalogReadError {

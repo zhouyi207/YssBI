@@ -1,5 +1,4 @@
 import { showWorkbenchLayoutError } from "@/modules/workbench/public";
-import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import type { EditorResourceTarget } from "@/modules/workbench/public";
 import { workbenchDockviewControl } from "@/modules/workbench/public";
 import { type WorkbenchEditorPanelInfo, type WorkbenchPanelInfo } from "@/modules/workbench/public";
@@ -7,12 +6,10 @@ import { WorkbenchLayoutError } from "@/modules/workbench/public";
 
 import { resolveEditorOpenTargetGroupId } from "./editorOpenTarget";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
-import { revealDetails } from "./rightSidebarActions";
 
 export interface OpenEditorPanelOptions {
   targetGroupId?: string;
   insertIndex?: number;
-  focusDetail?: DetailFocus;
 }
 
 const handledOpenRejections = new WeakSet<Error>();
@@ -39,8 +36,6 @@ export async function openEditorPanel(
   target: EditorResourceTarget,
   options?: OpenEditorPanelOptions,
 ): Promise<WorkbenchEditorPanelInfo> {
-  let panel: WorkbenchEditorPanelInfo;
-
   try {
     const targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
     const opened = await workbenchDockviewControl.openEditor({
@@ -58,11 +53,8 @@ export async function openEditorPanel(
     if (!isEditorPanelInfo(opened)) {
       throw new WorkbenchLayoutError("invalid_panel_metadata");
     }
-    panel = opened;
+    return opened;
   } catch (error) {
     throw presentOpenRejection(error);
   }
-
-  if (options?.focusDetail) await revealDetails(options.focusDetail);
-  return panel;
 }

@@ -6,6 +6,8 @@ import { useDatabaseStore } from "@/features/core/dataStore";
 import { useEditorStore } from "@/features/core/editor";
 import { useResourceStore } from "@/features/core/resource";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
+import { ProjectService } from "@/services/project/projectService";
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { DatabaseService } from "@/services/database/databaseService";
 import { normalizeIpcError } from "@/services/ipc";
 import { uiStore } from "@/features/core/ui/UIStore";
@@ -17,6 +19,30 @@ const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function aggregate(afterName: string | null, operationId: string) {
+  vi.mocked(ProjectService.getProjectIndex).mockResolvedValue(
+    projectIndexSnapshotFixture({
+      projectInstanceId,
+      projectName: "Test",
+      exportTime: "",
+      publicationRevision: 1,
+      graphs: [],
+      charts: [],
+      databases:
+        afterName === null
+          ? []
+          : [
+              {
+                id: "sales",
+                resourcePath: "opaque database resource path",
+                revision: 5,
+                engine: { dataset: {} },
+                schemaVersion: 1,
+                required: false,
+                name: afterName,
+              },
+            ],
+    }),
+  );
   const before = {
     id: "sales",
     engine: { dataset: {} },
@@ -57,6 +83,7 @@ describe("useDatabaseManagement revision authority", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(ProjectService, "getProjectIndex");
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useEditorStore.getState().clearDetailFocus();

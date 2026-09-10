@@ -1,3 +1,5 @@
+import { ProjectService } from "@/services/project/projectService";
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { expect, it, vi } from "vitest";
 import { getActivityPanelDocument } from "./activityPanelService";
 import {
@@ -8,7 +10,10 @@ import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityP
 import type { ActivityPanelRow } from "@/shared/types/domain/activityPanel";
 
 const invoke = vi.hoisted(() => vi.fn());
-vi.mock("@/services/ipc", () => ({ invokeCommand: invoke }));
+vi.mock("@/services/ipc", async (original) => ({
+  ...(await original<typeof import("@/services/ipc")>()),
+  invokeCommand: invoke,
+}));
 
 it("applies ID patches atomically, preserves unchanged references and recovers a lost baseline once", async () => {
   const summary: ActivityPanelRow = {
@@ -122,4 +127,109 @@ it("applies ID patches atomically, preserves unchanged references and recovers a
       rows: [{ ...document.rows[0], html: "<script />" }],
     }),
   ).toBeNull();
+});
+
+it("parses a coherent index with panel operations and recovers the entire batch if one cursor is invalid", async () => {
+  const index = {
+    projectInstanceId: "project-1",
+    publicationRevision: 1,
+    projectName: "Project",
+    exportTime: "",
+    graphs: [],
+    charts: [],
+    databases: [],
+  };
+  const initial = projectIndexSnapshotFixture(index);
+  const first = {
+    ...initial,
+    activityPanels: {
+      ...initial.activityPanels,
+      project: {
+        cursor: "p1",
+        document: {
+          ...initial.activityPanels.project.document,
+          rows: [
+            categoryFixture("project.events", "Events", 0, true),
+            {
+              id: "summary",
+              depth: 1,
+              kind: "message" as const,
+              label: { text: "Old" },
+              description: null,
+            },
+          ],
+        },
+      },
+    },
+  };
+  const patches = {
+    index: { ...index, publicationRevision: 2 },
+    activityPanels: {
+      project: {
+        kind: "patch",
+        baseCursor: "p1",
+        cursor: "p2",
+        patch: { publicationRevision: 2 },
+        operations: [{ op: "update", id: "summary", patch: { label: { text: "Updated" } } }],
+      },
+      nodes: {
+        kind: "patch",
+        baseCursor: initial.activityPanels.nodes.cursor,
+        cursor: "n2",
+        patch: { publicationRevision: 2 },
+        operations: [],
+      },
+    },
+  };
+  invoke.mockReset();
+  invoke.mockResolvedValueOnce(patches);
+  const updated = await ProjectService.getProjectIndex("project-1", "en-US", first.activityPanels);
+  expect(updated.index.publicationRevision).toBe(2);
+  expect(updated.activityPanels.project.document.rows[1]).toMatchObject({
+    label: { text: "Updated" },
+  });
+  expect(updated.activityPanels.project.document.rows[0]).toBe(
+    first.activityPanels.project.document.rows[0],
+  );
+  expect(first.activityPanels.project.document.rows[1]).toMatchObject({ label: { text: "Old" } });
+  expect(invoke).toHaveBeenCalledOnce();
+  expect(invoke).toHaveBeenCalledWith("get_project_index", {
+    projectInstanceId: "project-1",
+    locale: "en-US",
+    activityPanels: [
+      { panelId: "project", cursor: "p1" },
+      { panelId: "nodes", cursor: initial.activityPanels.nodes.cursor },
+    ],
+  });
+  const recovered = projectIndexSnapshotFixture({ ...index, publicationRevision: 3 });
+  invoke
+    .mockResolvedValueOnce({
+      ...patches,
+      activityPanels: {
+        ...patches.activityPanels,
+        nodes: { ...patches.activityPanels.nodes, baseCursor: "missing" },
+      },
+    })
+    .mockResolvedValueOnce({
+      index: recovered.index,
+      activityPanels: Object.fromEntries(
+        Object.entries(recovered.activityPanels).map(([id, snapshot]) => [
+          id,
+          { kind: "snapshot", ...snapshot },
+        ]),
+      ),
+    });
+  expect(
+    (await ProjectService.getProjectIndex("project-1", "en-US", first.activityPanels)).index
+      .publicationRevision,
+  ).toBe(3);
+  expect(invoke).toHaveBeenLastCalledWith("get_project_index", {
+    projectInstanceId: "project-1",
+    locale: "en-US",
+    activityPanels: [
+      { panelId: "project", cursor: null },
+      { panelId: "nodes", cursor: null },
+    ],
+  });
+  expect(first.activityPanels.project.document.rows[1]).toMatchObject({ label: { text: "Old" } });
 });

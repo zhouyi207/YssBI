@@ -37,11 +37,11 @@ export function PluginsPanel({
   return (
     <ActivityPanelDocumentView
       panelId="plugins"
-      document={loading ? null : query.document}
+      document={query.document}
       error={query.error}
       expanded={query.expanded}
       onExpandedChange={query.setExpanded}
-      busy={busy}
+      busy={busy || loading}
       notice={
         error ? (
           <p role="alert" className="px-3 py-2 text-xs text-destructive">

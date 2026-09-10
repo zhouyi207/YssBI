@@ -224,6 +224,32 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         resource.creation,
         yss_graph_catalog::NodeCreation::ResourceBound { .. }
     ));
+    let snapshot = session
+        .application
+        .query_project_index(project_instance_id.clone(), "zh-CN", true)
+        .unwrap();
+    assert_eq!(snapshot.activity_panels.len(), 2);
+    for panel in &snapshot.activity_panels {
+        assert_eq!(
+            panel.project_instance_id.as_deref(),
+            Some(project_instance_id.as_str())
+        );
+        assert_eq!(
+            panel.publication_revision,
+            snapshot.index.publication_revision
+        );
+    }
+    assert!(snapshot.activity_panels[0].rows.iter().any(|row| matches!(
+        &row.content,
+        crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Graph { path, name, .. })
+        if path == function_path.as_str() && name == "Sales Report"
+    )));
+    assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
+        &row.content,
+        crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
+            creation: yss_graph_catalog::NodeCreation::ResourceBound { resource_path, .. }, ..
+        }) if resource_path.as_str() == function_path.as_str()
+    )));
 }
 
 #[test]

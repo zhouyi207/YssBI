@@ -1,3 +1,4 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
@@ -276,25 +277,27 @@ describe("executeFunctionSignatureMutation", () => {
   });
 
   it("atomically applies a complete authoritative result", async () => {
-    const refreshIndex = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-      projectInstanceId,
-      projectName: "Project",
-      exportTime: "",
-      publicationRevision: 1,
-      graphs: [
-        {
-          path: functionPath,
-          name: "Compute",
-          type: "function",
-          revision: 3,
-          functionRevision: 3,
-          functionSignature: afterSignature,
-          functionEditorProjection: authoritativeFunctionProjection,
-        },
-      ],
-      charts: [],
-      databases: [],
-    });
+    const refreshIndex = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId,
+        projectName: "Project",
+        exportTime: "",
+        publicationRevision: 1,
+        graphs: [
+          {
+            path: functionPath,
+            name: "Compute",
+            type: "function",
+            revision: 3,
+            functionRevision: 3,
+            functionSignature: afterSignature,
+            functionEditorProjection: authoritativeFunctionProjection,
+          },
+        ],
+        charts: [],
+        databases: [],
+      }),
+    );
     vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
       makeGraphEditorSession(
         makeEditorProjectionFixture({
@@ -370,27 +373,29 @@ describe("executeFunctionSignatureMutation", () => {
     };
     const hydrateGraph = vi.fn(async () => true);
     const beforeMeta = structuredClone(useGraphMetaStore.getState().graphs[functionPath]);
-    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-      projectInstanceId,
-      projectName: "Recovery fixture",
+    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId,
+        projectName: "Recovery fixture",
 
-      exportTime: "2026-08-07T00:00:00.000Z",
-      publicationRevision: 1,
-      graphs: [
-        {
-          path: functionPath,
-          name: "Compute",
-          type: "function",
-          revision: 7,
-          functionRevision: 3,
-          functionSignature: afterSignature,
-          functionEditorProjection: authoritativeFunctionProjection,
-        },
-      ],
-      databases: [],
+        exportTime: "2026-08-07T00:00:00.000Z",
+        publicationRevision: 1,
+        graphs: [
+          {
+            path: functionPath,
+            name: "Compute",
+            type: "function",
+            revision: 7,
+            functionRevision: 3,
+            functionSignature: afterSignature,
+            functionEditorProjection: authoritativeFunctionProjection,
+          },
+        ],
+        databases: [],
 
-      charts: [],
-    });
+        charts: [],
+      }),
+    );
 
     const outcome = await executeFunctionSignatureMutation(
       {
@@ -435,25 +440,27 @@ describe("executeFunctionSignatureMutation", () => {
     const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const hydrateGraph = vi.fn(async () => true);
     const refreshResourceIndex = vi.fn(() => projectPublicationCoordinator.refreshIndex());
-    const query = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-      projectInstanceId,
-      projectName: "Project",
-      exportTime: "",
-      publicationRevision: 1,
-      charts: [],
-      databases: [],
-      graphs: [
-        {
-          path: functionPath,
-          name: "Compute",
-          type: "function" as const,
-          revision: 7,
-          functionRevision: 3,
-          functionSignature: afterSignature,
-          functionEditorProjection: authoritativeFunctionProjection,
-        },
-      ],
-    });
+    const query = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId,
+        projectName: "Project",
+        exportTime: "",
+        publicationRevision: 1,
+        charts: [],
+        databases: [],
+        graphs: [
+          {
+            path: functionPath,
+            name: "Compute",
+            type: "function" as const,
+            revision: 7,
+            functionRevision: 3,
+            functionSignature: afterSignature,
+            functionEditorProjection: authoritativeFunctionProjection,
+          },
+        ],
+      }),
+    );
 
     const outcome = await executeFunctionSignatureMutation(
       {

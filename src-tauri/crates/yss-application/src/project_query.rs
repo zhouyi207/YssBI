@@ -23,6 +23,8 @@ pub enum ProjectQueryApplicationError {
     Project(#[from] ProjectFilesystemError),
     #[error(transparent)]
     ProjectRead(#[from] ProjectError),
+    #[error(transparent)]
+    Catalog(#[from] crate::catalog_query::CatalogQueryApplicationError),
     #[error("database catalog could not be read")]
     Database(#[from] yss_database_runtime::error::DatabaseError),
     #[error("project resource reference is invalid")]
@@ -31,6 +33,12 @@ pub enum ProjectQueryApplicationError {
     ResourceNotFound,
     #[error("captured application session changed during project query")]
     SessionChanged(#[source] SessionRevalidationError),
+}
+
+#[derive(Debug)]
+pub struct ProjectIndexSnapshot {
+    pub index: ProjectIndex,
+    pub activity_panels: Vec<crate::activity_panel::ActivityPanelDocument>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,14 +132,36 @@ impl ApplicationState {
     pub fn query_project_index(
         &self,
         project_instance_id: ProjectInstanceId,
-    ) -> Result<ProjectIndex, ProjectQueryApplicationError> {
+        locale: &str,
+        include_nodes: bool,
+    ) -> Result<ProjectIndexSnapshot, ProjectQueryApplicationError> {
         let captured = self.capture_project_session(&project_instance_id)?;
-        let result = captured
+        let index = captured
             .project()
             .read_project_index(&project_instance_id)?;
+        let mut activity_panels = vec![crate::activity_panel::project_activity_panel(Some(&index))];
+        if include_nodes {
+            let facts =
+                crate::catalog_query::localized_project_facts_from_index(&captured, index.clone())
+                    .map_err(crate::catalog_query::CatalogQueryApplicationError::from)?;
+            let catalog = crate::catalog_query::localized_node_catalog_from_facts(
+                self, &captured, facts, locale,
+            )?;
+            activity_panels.push(crate::activity_panel::nodes_activity_panel_from_catalog(
+                catalog,
+            ));
+        }
+        captured.project().validate_project_index_version(
+            &project_instance_id,
+            index.publication_revision,
+            index.authority_generation(),
+        )?;
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(result)
+        Ok(ProjectIndexSnapshot {
+            index,
+            activity_panels,
+        })
     }
 
     pub fn reveal_project_resource(

@@ -1,18 +1,25 @@
-use serde::Deserialize;
 use tauri::{Manager, State, WebviewWindow};
 use yss_application::{activity_panel, execution::ApplicationState};
 use yss_plugin_runtime::PluginManager;
 use yss_project_identity::ProjectInstanceId;
 
 use crate::activity_panel_sync::{ActivityPanelSyncState, ActivityPanelUpdateDto};
-use crate::{error::CommandError, schema::activity_panel::ActivityPanelDocumentDto};
+use crate::{
+    error::CommandError,
+    schema::activity_panel::{ActivityPanelDocumentDto, ActivityPanelId},
+};
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ActivityPanelId {
-    Nodes,
-    Commands,
-    Plugins,
+pub(crate) fn validate_activity_query(
+    locale: &str,
+    cursor: Option<&str>,
+) -> Result<(), CommandError> {
+    if locale.len() > 64 {
+        return Err(CommandError::expected("invalid_locale"));
+    }
+    if cursor.is_some_and(|cursor| cursor.is_empty() || cursor.len() > 64) {
+        return Err(CommandError::expected("activity_panel_cursor_invalid"));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -25,14 +32,9 @@ pub async fn get_activity_panel_document(
     locale: String,
     cursor: Option<String>,
 ) -> Result<ActivityPanelUpdateDto, CommandError> {
-    if locale.len() > 64 {
-        return Err(CommandError::expected("invalid_locale"));
-    }
-    if cursor
-        .as_ref()
-        .is_some_and(|cursor| cursor.is_empty() || cursor.len() > 64)
-    {
-        return Err(CommandError::expected("activity_panel_cursor_invalid"));
+    validate_activity_query(&locale, cursor.as_deref())?;
+    if !panel_id.is_project_scoped() && project_instance_id.is_some() {
+        return Err(CommandError::expected("activity_panel_scope_invalid"));
     }
     let application = application.inner().clone();
     let manager = manager.inner().clone();
@@ -40,6 +42,16 @@ pub async fn get_activity_panel_document(
     let window_label = window.label().to_owned();
     tauri::async_runtime::spawn_blocking(move || {
         let document = match panel_id {
+            ActivityPanelId::Project => match project_instance_id {
+                Some(project) => application
+                    .query_project_index(project, &locale, false)
+                    .map_err(super::command_project::query::map_project_query_error)?
+                    .activity_panels
+                    .into_iter()
+                    .next()
+                    .expect("project document is always present"),
+                None => activity_panel::project_activity_panel(None),
+            },
             ActivityPanelId::Nodes => application
                 .nodes_activity_panel(project_instance_id, locale.clone())
                 .map_err(super::command_node_system::catalog_query_command_error)?,

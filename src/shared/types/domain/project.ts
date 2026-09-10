@@ -1,3 +1,4 @@
+import type { ActivityPanelSnapshot, ProjectActivityPanelId } from "./activityPanel";
 import type { DatabaseEngineDTO } from "./database";
 import type { FunctionEditorProjectionDto } from "./editorProjection";
 import type { FunctionSignatureDto, ResourceKeyDto } from "./editorMutation";
@@ -113,4 +114,9 @@ export interface ProjectSaveResultDto {
   publicationRevision: number;
   affectedResources: ResourceKeyDto[];
   indexInvalidated: boolean;
+}
+
+export interface ProjectIndexSnapshot {
+  readonly index: ProjectIndexRow;
+  readonly activityPanels: Readonly<Record<ProjectActivityPanelId, ActivityPanelSnapshot>>;
 }

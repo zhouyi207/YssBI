@@ -29,10 +29,6 @@ vi.mock("./resolveResourceDisplayName", () => ({
   resolveResourceDisplayName: (_ref: unknown, fallback: string) => fallback,
 }));
 
-vi.mock("./rightSidebarActions", () => ({
-  revealDetails: vi.fn(async () => undefined),
-}));
-
 import { openEditorPanel } from "./openEditorPanel";
 
 function editorPanel(

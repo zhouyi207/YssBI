@@ -1,3 +1,5 @@
+import type { ProjectIndexRow, ProjectIndexSnapshot } from "@/shared/types/domain/project";
+import { PROJECT_ACTIVITY_PANEL_IDS } from "@/shared/types/domain/activityPanel";
 import type {
   ActivityPanelDocument,
   ActivityPanelId,
@@ -41,5 +43,24 @@ export function categoryFixture(
     defaultExpanded,
     tools: [],
     count: null,
+  };
+}
+
+export function projectIndexSnapshotFixture(index: ProjectIndexRow): ProjectIndexSnapshot {
+  return {
+    index,
+    activityPanels: Object.fromEntries(
+      PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => [
+        panelId,
+        {
+          cursor: `${panelId}-${index.publicationRevision}`,
+          document: {
+            ...activityPanelFixture(panelId, []),
+            projectInstanceId: index.projectInstanceId,
+            publicationRevision: index.publicationRevision,
+          },
+        },
+      ]),
+    ) as ProjectIndexSnapshot["activityPanels"],
   };
 }

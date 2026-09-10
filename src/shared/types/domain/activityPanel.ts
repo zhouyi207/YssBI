@@ -1,7 +1,8 @@
 import type { NodeCreationDescriptorDto } from "./nodeCreationDescriptor";
 
 export type ActivityPanelId = "project" | "nodes" | "commands" | "plugins";
-export type BackendActivityPanelId = Exclude<ActivityPanelId, "project">;
+export const PROJECT_ACTIVITY_PANEL_IDS = ["project", "nodes"] as const;
+export type ProjectActivityPanelId = (typeof PROJECT_ACTIVITY_PANEL_IDS)[number];
 export type ActivityText = { readonly key: string } | { readonly text: string };
 export type ActivityActionId =
   | "newEvent"

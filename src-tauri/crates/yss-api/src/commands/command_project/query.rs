@@ -1,9 +1,14 @@
+use crate::activity_panel_sync::{ActivityPanelSyncState, ActivityPanelUpdateDto};
 use crate::error::CommandError;
+use crate::schema::activity_panel::{
+    ActivityPanelDocumentDto, ActivityPanelId, ActivityPanelRequest,
+};
 use crate::schema::application_event::ProjectActivationResultDto;
 use crate::schema::graph_draft::GraphEditorSessionDto;
 use crate::schema::{DatabaseDeclDTO, ProjectDatabasesDTO};
 use serde::Serialize;
-use tauri::State;
+use std::collections::{BTreeMap, BTreeSet};
+use tauri::{Manager, State, WebviewWindow};
 use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use yss_project::ProjectIndex;
@@ -91,16 +96,71 @@ pub fn get_project_path(
     Ok(path.map(|path| normalize_existing_path(&path).unwrap_or(path)))
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectIndexSnapshotDto {
+    index: ProjectIndex,
+    activity_panels: BTreeMap<&'static str, ActivityPanelUpdateDto>,
+}
+
 #[tauri::command]
-pub fn get_project_index(
-    application: State<ApplicationState>,
+pub async fn get_project_index(
+    window: WebviewWindow,
+    application: State<'_, ApplicationState>,
     project_instance_id: String,
-) -> Result<ProjectIndex, CommandError> {
-    let project_instance_id =
-        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
-    application
-        .query_project_index(project_instance_id)
-        .map_err(map_project_query_error)
+    locale: String,
+    activity_panels: Vec<ActivityPanelRequest>,
+) -> Result<ProjectIndexSnapshotDto, CommandError> {
+    if activity_panels.len() > 2 {
+        return Err(CommandError::expected("activity_panel_scope_invalid"));
+    }
+    let mut ids = BTreeSet::new();
+    for request in &activity_panels {
+        super::super::command_activity_panel::validate_activity_query(
+            &locale,
+            request.cursor.as_deref(),
+        )?;
+        if !request.panel_id.is_project_scoped() || !ids.insert(request.panel_id) {
+            return Err(CommandError::expected("activity_panel_scope_invalid"));
+        }
+    }
+    super::super::command_activity_panel::validate_activity_query(&locale, None)?;
+    let application = application.inner().clone();
+    let sync = window.state::<ActivityPanelSyncState>().inner().clone();
+    let window_label = window.label().to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let snapshot = application
+            .query_project_index(
+                yss_project_identity::ProjectInstanceId::from_existing(project_instance_id),
+                &locale,
+                ids.contains(&ActivityPanelId::Nodes),
+            )
+            .map_err(map_project_query_error)?;
+        let mut updates = BTreeMap::new();
+        for document in snapshot.activity_panels {
+            let Some(request) = activity_panels
+                .iter()
+                .find(|request| request.panel_id.as_str() == document.panel_id)
+            else {
+                continue;
+            };
+            updates.insert(
+                document.panel_id,
+                sync.publish(
+                    &window_label,
+                    &locale,
+                    request.cursor.as_deref(),
+                    ActivityPanelDocumentDto::try_from(document)?,
+                )?,
+            );
+        }
+        Ok(ProjectIndexSnapshotDto {
+            index: snapshot.index,
+            activity_panels: updates,
+        })
+    })
+    .await
+    .map_err(CommandError::internal)?
 }
 
 #[tauri::command]
@@ -176,7 +236,7 @@ pub fn get_project_resource_path(
         .map_err(map_project_query_error)
 }
 
-fn map_project_query_error(
+pub(crate) fn map_project_query_error(
     error: yss_application::project_query::ProjectQueryApplicationError,
 ) -> CommandError {
     use yss_application::project_query::ProjectQueryApplicationError;
@@ -196,6 +256,9 @@ fn map_project_query_error(
         }
         ProjectQueryApplicationError::Project(error) => {
             crate::commands::project_failure::application_project_command_error(error)
+        }
+        ProjectQueryApplicationError::Catalog(error) => {
+            super::super::command_node_system::catalog_query_command_error(error)
         }
         ProjectQueryApplicationError::ProjectRead(error) => {
             CommandError::diagnosed("project_query_failed", error)

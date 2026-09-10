@@ -1,94 +1,105 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useResourceStore } from "@/features/core/resource/resourceStore";
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { useSidebarStore, type ActivityPanelBinding } from "@/features/core/sidebar/sidebarStore";
 import { getActivityPanelDocument } from "@/services/workbench/activityPanelService";
+import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import type {
-  BackendActivityPanelId,
-  ActivityPanelSnapshot,
-} from "@/shared/types/domain/activityPanel";
+import type { ActivityPanelId } from "@/shared/types/domain/activityPanel";
 import { useActivityPanelExpansion } from "./useActivityPanelExpansion";
-import { formatInlineUserError } from "../userErrorSummary";
+import { toErrorReference } from "../errorReference";
 
-/** Existing projections only invalidate this query; Rust supplies snapshots and row operations. */
-export function useActivityPanelDocument(panelId: BackendActivityPanelId, invalidation?: unknown) {
-  const { i18n, t } = useTranslation();
-  const expansion = useActivityPanelExpansion(panelId);
-  const scoped = panelId === "nodes";
-  const projectInstanceId = useProjectIOStore((state) => (scoped ? state.projectInstanceId : null));
-  const indexGeneration = useResourceStore((state) => (scoped ? state.indexGeneration : 0));
-  const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
-  const epoch = scoped ? captureProjectLifecycleState().epoch : 0;
-  const binding = useMemo<{ refresh: (() => void) | null }>(
-    () => ({ refresh: null }),
-    [panelId, projectInstanceId, locale, epoch],
-  );
-  const [result, setResult] = useState<{
-    binding: typeof binding;
-    snapshot: ActivityPanelSnapshot | null;
-    error: unknown;
-  } | null>(null);
-
-  useEffect(() => {
-    const identity = captureProjectLifecycleState();
-    let closed = false;
-    let pending = false;
-    let requested = false;
-    let snapshot: ActivityPanelSnapshot | null = null;
-    const ownsBinding = () => !closed && (!scoped || isProjectLifecycleStateCurrent(identity));
-    const refresh = async () => {
-      requested = true;
-      if (pending) return;
-      pending = true;
-      try {
-        // Serialize within a binding and coalesce invalidations, retaining the last delivered cursor.
-        while (requested && ownsBinding()) {
-          requested = false;
-          try {
-            const next = await getActivityPanelDocument(
-              panelId,
-              projectInstanceId ? { projectInstanceId } : null,
-              locale,
-              snapshot,
-            );
-            if (!ownsBinding()) return;
-            snapshot = next;
-            if (!requested)
-              setResult((current) =>
-                current?.binding === binding && current.snapshot === next && !current.error
-                  ? current
-                  : { binding, snapshot: next, error: null },
-              );
-          } catch (error: unknown) {
-            if (ownsBinding() && !requested) setResult({ binding, snapshot, error });
-          }
+// Requests are shared by mounted consumers of the same cached binding.
+const requests = new Map<ActivityPanelBinding, { again: boolean; promise: Promise<void> }>();
+function requestStandalone(binding: ActivityPanelBinding): Promise<void> {
+  const pending = requests.get(binding);
+  if (pending) {
+    pending.again = true;
+    return pending.promise;
+  }
+  const owns = () => useSidebarStore.getState().panels[binding.panelId]?.binding === binding;
+  const entry = { again: true, promise: Promise.resolve() };
+  requests.set(binding, entry);
+  useSidebarStore.getState().startPanelRequest(binding);
+  entry.promise = (async () => {
+    let previous = useSidebarStore.getState().panels[binding.panelId]?.snapshot ?? null;
+    try {
+      while (entry.again && owns()) {
+        entry.again = false;
+        try {
+          previous = await getActivityPanelDocument(
+            binding.panelId,
+            binding.projectInstanceId ? { projectInstanceId: binding.projectInstanceId } : null,
+            binding.locale,
+            previous,
+          );
+          if (owns() && !entry.again)
+            useSidebarStore.getState().publishPanels([{ binding, snapshot: previous }]);
+        } catch (error) {
+          if (owns() && !entry.again)
+            useSidebarStore
+              .getState()
+              .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
         }
-      } finally {
-        pending = false;
       }
-    };
-    binding.refresh = () => {
-      void refresh();
-    };
-    return () => {
-      closed = true;
-      binding.refresh = null;
-    };
-  }, [binding, panelId, projectInstanceId, locale, scoped]);
+    } finally {
+      requests.delete(binding);
+    }
+  })();
+  return entry.promise;
+}
+function refreshPanel(binding: ActivityPanelBinding): void {
+  if ((binding.panelId === "project" || binding.panelId === "nodes") && binding.projectInstanceId) {
+    if (!isProjectLifecycleStateCurrent(binding)) return;
+    useSidebarStore.getState().startPanelRequest(binding);
+    void projectPublicationCoordinator.refreshIndex().catch((error) => {
+      if (!useSidebarStore.getState().panels[binding.panelId]?.error)
+        useSidebarStore
+          .getState()
+          .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
+    });
+  } else {
+    void requestStandalone(binding);
+  }
+}
 
+/** All content is a cached Rust document; expansion is local UI state. */
+export function useActivityPanelDocument(panelId: ActivityPanelId, invalidation?: unknown) {
+  const { i18n, t } = useTranslation();
+  const scoped = panelId === "project" || panelId === "nodes";
+  const installedProject = useProjectIOStore((state) => (scoped ? state.projectInstanceId : null));
+  const lifecycle = captureProjectLifecycleState();
+  const projectInstanceId =
+    scoped && installedProject === lifecycle.projectInstanceId ? installedProject : null;
+  const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
+  const epoch = scoped ? lifecycle.epoch : 0;
+  const entry = useSidebarStore((state) => state.panels[panelId] ?? null);
+  const matchesScope =
+    entry?.binding.projectInstanceId === projectInstanceId &&
+    entry.binding.locale === locale &&
+    entry.binding.epoch === epoch;
+  const current = matchesScope ? entry : null;
   useEffect(() => {
-    binding.refresh?.();
-  }, [binding, indexGeneration, invalidation]);
-  const current = result?.binding === binding ? result : null;
+    const binding = useSidebarStore
+      .getState()
+      .bindPanel({ panelId, projectInstanceId, locale, epoch });
+    const entry = useSidebarStore.getState().panels[panelId]!;
+    if ((!entry.snapshot && !entry.loading) || invalidation !== undefined) refreshPanel(binding);
+  }, [panelId, projectInstanceId, locale, epoch, invalidation]);
   return {
     document: current?.snapshot?.document ?? null,
-    error: current?.error ? formatInlineUserError(current.error, t) : null,
-    refresh: () => binding.refresh?.(),
-    ...expansion,
+    error: current?.error
+      ? `${t("common.error")} [${current.error.code}]${current.error.incidentId ? ` · ${t("common.incidentId")}: ${current.error.incidentId}` : ""}`
+      : null,
+    loading: current?.loading ?? false,
+    refresh: () =>
+      refreshPanel(
+        useSidebarStore.getState().bindPanel({ panelId, projectInstanceId, locale, epoch }),
+      ),
+    ...useActivityPanelExpansion(panelId),
   };
 }

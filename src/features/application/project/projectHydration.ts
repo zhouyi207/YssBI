@@ -1,3 +1,7 @@
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
+import { PROJECT_ACTIVITY_PANEL_IDS } from "@/shared/types/domain/activityPanel";
+import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { useProjectIOStore, resetGraphLoadOwnership } from "./projectIOStore";
 import { LoadStatus } from "@/shared/types/ui/common";
 import { ProjectService, type ProjectActivationResult } from "@/services/project/projectService";
@@ -50,6 +54,8 @@ export interface ProjectLoadReceipt {
 export type { AuthoritativeProjectLoadPlanDependencies } from "@/features/application/project/authoritativeProjectLoadPlan";
 export type PreparedAuthoritativeProjectLoad = BasePreparedAuthoritativeProjectLoad & {
   readonly identity: ProjectIdentitySnapshot;
+  readonly locale: string;
+  readonly activityPanels: ProjectIndexSnapshot["activityPanels"];
 };
 
 export const PROJECT_LOAD_CONTRACT_ERROR_CODE = "project_load_contract_error";
@@ -92,7 +98,11 @@ export async function prepareAuthoritativeProjectLoad(
   assertCurrentProjectIdentity(identity);
   const { databases } = await ProjectService.getDatabases(identity.projectInstanceId);
   assertCurrentProjectIdentity(identity);
-  const index = await ProjectService.getProjectIndex(identity.projectInstanceId);
+  const locale = currentProjectionLocale();
+  const { index, activityPanels } = await ProjectService.getProjectIndex(
+    identity.projectInstanceId,
+    locale,
+  );
   assertCurrentProjectIdentity(identity);
   if (index.projectInstanceId !== identity.projectInstanceId) {
     throw new Error("Project index identity does not match the requested project");
@@ -111,7 +121,7 @@ export async function prepareAuthoritativeProjectLoad(
       ...dependencyOverrides,
     },
   );
-  return { ...prepared, identity };
+  return { ...prepared, identity, locale, activityPanels };
 }
 
 function commitProjectLoadStep(label: string, assignment: () => void): void {
@@ -201,6 +211,16 @@ export async function commitPreparedAuthoritativeProjectLoad(
       publicationRevision: prepared.index.publicationRevision,
     }),
   );
+  commitProjectLoadStep("activity panels", () => {
+    const identity = captureProjectIdentity();
+    const updates = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => ({
+      binding: useSidebarStore
+        .getState()
+        .bindPanel({ panelId, ...identity, locale: prepared.locale }),
+      snapshot: prepared.activityPanels[panelId],
+    }));
+    useSidebarStore.getState().publishPanels(updates);
+  });
   commitProjectLoadStep("function metadata", () =>
     useGraphMetaStore.setState({
       graphs: prepared.storeState.graphMeta,

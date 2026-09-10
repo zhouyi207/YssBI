@@ -1,3 +1,4 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   ProjectPublicationCoordinator,
@@ -73,7 +74,7 @@ function deferred<T>() {
 let coordinator: ProjectPublicationCoordinator;
 function setup(overrides: Partial<ProjectPublicationDependencies> = {}) {
   const dependencies = {
-    loadProjectIndex: vi.fn(async () => index(0)),
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(index(0))),
     loadChartDocument: vi.fn(),
     prepareGraphSession: vi.fn(async (path: string) =>
       makeGraphEditorSession(makeEditorProjectionFixture({ graphPath: path }).projection),
@@ -102,7 +103,9 @@ afterEach(() => coordinator?.cancelProject());
 
 it("coalesces command, event and index refreshes, including a snapshot ahead of a late receipt", async () => {
   const pendingIndex = deferred<ProjectIndexRow>();
-  const dependencies = setup({ loadProjectIndex: vi.fn(() => pendingIndex.promise) });
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(() => pendingIndex.promise.then(projectIndexSnapshotFixture)),
+  });
   const identity = captureProjectLifecycleState();
   const first = receipt(1);
   const second = receipt(2, "events/Later.yssbi-event");
@@ -146,7 +149,7 @@ it("installs an event-first chart receipt without a UI-staged document", async (
     encodings: {},
   };
   const dependencies = setup({
-    loadProjectIndex: vi.fn(async () => snapshot),
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
     loadChartDocument: vi.fn(async () => document),
   });
   const result = receipt(1, chartPath, "chart");
@@ -162,7 +165,9 @@ it("installs an event-first chart receipt without a UI-staged document", async (
 it("does not republish unchanged index content or invalidate catalogs on repeated watcher notifications", async () => {
   const snapshot = index(0);
   const dependencies = setup({
-    loadProjectIndex: vi.fn(async () => ({ ...snapshot, exportTime: String(Date.now()) })),
+    loadProjectIndex: vi.fn(async () =>
+      projectIndexSnapshotFixture({ ...snapshot, exportTime: String(Date.now()) }),
+    ),
   });
   await coordinator.refreshIndex();
   const before = useResourceStore.getState();
@@ -188,7 +193,7 @@ it("includes move receipts delivered while another graph session is being prepar
       : makeGraphEditorSession(makeEditorProjectionFixture({ graphPath: path }).projection),
   );
   const dependencies = setup({
-    loadProjectIndex: vi.fn(async () => snapshot),
+    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
     prepareGraphSession,
   });
   for (const path of [eventPath, source])
@@ -214,7 +219,9 @@ it("includes move receipts delivered while another graph session is being prepar
 
 it("discards a delayed snapshot after project replacement", async () => {
   const pending = deferred<ProjectIndexRow>();
-  const dependencies = setup({ loadProjectIndex: vi.fn(() => pending.promise) });
+  const dependencies = setup({
+    loadProjectIndex: vi.fn(() => pending.promise.then(projectIndexSnapshotFixture)),
+  });
   const refresh = coordinator.refreshIndex();
   const rejected = expect(refresh).rejects.toMatchObject({ code: "stale_project_lifecycle" });
   await Promise.resolve();

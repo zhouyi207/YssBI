@@ -1,13 +1,10 @@
 import { invokeCommand } from "@/services/ipc";
-import { parseActivityPanelUpdate } from "@/shared/types/dto/activityPanel";
-import type {
-  BackendActivityPanelId,
-  ActivityPanelSnapshot,
-} from "@/shared/types/domain/activityPanel";
+import { parseActivityPanelResponse } from "@/shared/types/dto/activityPanel";
+import type { ActivityPanelId, ActivityPanelSnapshot } from "@/shared/types/domain/activityPanel";
 import { IpcError } from "@/services/ipc/ipcError";
 
 export async function getActivityPanelDocument(
-  panelId: BackendActivityPanelId,
+  panelId: ActivityPanelId,
   project: { projectInstanceId: string } | null,
   locale: string,
   previous: ActivityPanelSnapshot | null = null,
@@ -19,17 +16,27 @@ export async function getActivityPanelDocument(
       locale,
       cursor,
     });
-  const matchesScope = (snapshot: ActivityPanelSnapshot) =>
-    snapshot.document.panelId === panelId &&
-    snapshot.document.projectInstanceId === (project?.projectInstanceId ?? null) &&
-    (!previous || snapshot.document.publicationRevision >= previous.document.publicationRevision);
   const value = await invoke(previous?.cursor ?? null);
-  const snapshot = parseActivityPanelUpdate(value, previous);
-  if (snapshot && matchesScope(snapshot)) return snapshot;
+  const snapshot = parseActivityPanelResponse(
+    value,
+    panelId,
+    project?.projectInstanceId ?? null,
+    previous,
+  );
+  if (snapshot) return snapshot;
   // One explicit snapshot recovery for a lost baseline or invalid delta; never publish a partial tree.
   if (previous) {
-    const recovered = parseActivityPanelUpdate(await invoke(null), null);
-    if (recovered && matchesScope(recovered)) return recovered;
+    const recovered = parseActivityPanelResponse(
+      await invoke(null),
+      panelId,
+      project?.projectInstanceId ?? null,
+      null,
+    );
+    if (
+      recovered &&
+      (!previous || recovered.document.publicationRevision >= previous.document.publicationRevision)
+    )
+      return recovered;
   }
   throw new IpcError({
     kind: "malformed",

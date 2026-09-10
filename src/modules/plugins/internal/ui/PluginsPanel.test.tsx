@@ -57,7 +57,7 @@ it("renders all installed plugins without search and preserves group collapse an
       contributes: { commands: [], taskTypes: [], views: [] },
     },
   };
-  const render = (plugins: InstalledPlugin[]) => {
+  const render = (plugins: InstalledPlugin[], loading = false) => {
     backend.document = activityPanelFixture(
       "plugins",
       [
@@ -88,7 +88,7 @@ it("renders all installed plugins without search and preserves group collapse an
       root.render(
         <PluginsPanel
           plugins={plugins}
-          loading={false}
+          loading={loading}
           busy={false}
           error={null}
           onRefresh={vi.fn()}
@@ -117,6 +117,9 @@ it("renders all installed plugins without search and preserves group collapse an
       enabled: false,
       manifest: { ...plugin.manifest, id: "example.other", name: "Other extension" },
     };
+    render([plugin, otherPlugin], true);
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelectorAll("[data-plugin-item]")).toHaveLength(2);
     render([plugin, otherPlugin]);
     expect(host.querySelector("input")).toBeNull();
     expect(

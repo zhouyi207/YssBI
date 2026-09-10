@@ -36,9 +36,11 @@ WorkbenchWindow
 
 Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
-Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，资源来自统一发布的 ResourceStore 快照，分类和展开状态由前端模板拥有。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
+Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，内容与分类来自 Rust 生成的 ActivityPanelDocument，展开状态由前端保存。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
 
 Graph 分类与 Chart、Data 使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签。Graph 不再区分侧栏预览与双击固定，也不再通过替换旧预览标签来控制标签数量。
+
+Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文。打开资源不额外激活 Details 或 Project sidebar，避免 `Ctrl+W` 的目标从编辑器转移到固定面板；Project 分类展开不改变活动面板。
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。
 
@@ -71,25 +73,27 @@ Activity 底部固定显示 Plugins 原生 tab，替代原 Julia 入口。仅通
 
 ### 1.1 Activity 文档与模板
 
-四个内置 Activity panels 共用 `ActivityPanelDocumentView`，数据来源按职责区分：
+四个内置 Activity panels 的文档均由 Rust 生成，共用 `ActivityPanelDocumentView`：
 
 ```text
-Rust ProjectIndex → ResourceStore → Project ActivityPanelDocument
-                                      └→ ActivityPanelDocumentView
+Rust ProjectIndex ─┬→ 资源索引
+                   ├→ Project ActivityPanelDocument
+                   └→ Catalog → Nodes ActivityPanelDocument
+                         ↓
+get_project_index → { index, activityPanels: 游标增量 }
+                         ↓
+ProjectPublicationCoordinator → ResourceStore + sidebarStore
 
-Rust Node Catalog / Plugin Manager / Commands
-  → yss-application::activity_panel
-  → yss-api get_activity_panel_document
-  → activityPanelService / parseActivityPanelUpdate
-  → ActivityPanelDocumentView
+Rust Plugin Manager / Commands → get_activity_panel_document
+                              → sidebarStore
+                                      ↓
+                     useActivityPanelDocument → 模板
 ```
 
-Project 由 `useProjectActivityPanelDocument` 同步投影 ResourceStore，只展示 `exists: true` 的资源；
-不再请求 Rust Activity 文档，也不把普通资源更新转换成整栏 loading。
-分类、工具、默认展开和空提示是固定模板配置；数据库的 opaque resourcePath 随索引进入同一资源快照。
-Nodes 复用本地化节点目录并在后端组织、排序和裁剪空分类，保留原始 NodeCreation
-descriptor；Plugins 复用 Plugin Manager 的已安装快照；Commands 提供固定命令定义。
-Nodes/Commands/Plugins 的文档仍由 Rust 生成，调用方不把前端资源列表传回后端做格式转换。
+Project 文档是传入 ProjectIndex 的纯投影，不独立扫描文件。Project/Nodes 使用同一份
+已捕获索引生成，Catalog 复用该索引并通过版本校验重验，而不是再次读盘。
+Global Plugins/Commands 与无活动项目时的空文档使用独立 Activity 查询，但共享相同的协议、缓存与渲染入口。
+后端决定分类、工具、默认展开、空提示和固定条目类型；不存在前端 Project 文档生成分支。
 
 文档只有 category、item、message 三种行；item 限于 graph、chart、database、node、
 command 和 plugin 六种。文本使用本地化 key 或字面值；资源路径是 opaque identity。
@@ -105,7 +109,7 @@ Workbench 模板只接收文档、展开状态、格式化错误与有限操作�
 
 Event、Function、Chart、Data 的 mutation 回执与 watcher 索引失效共用项目发布协调器的串行队列。
 回执提供相关性校验、受影响路径与 move 信息，不再先写一套 delta Store、随后又用索引覆盖。
-正常更新和恢复均由 `projectPublicationSnapshot` 安装权威 ProjectIndex；Chart 文档和已加载的干净 Graph
+正常更新和恢复均由 `projectPublicationSnapshot` 安装同次响应中的权威 ProjectIndex 与 Activity 增量；Chart 文档和已加载的干净 Graph
 会话在提交前准备，UI 不预写入临时 Chart。快照可以覆盖较晚才到达的命令/事件回执，同一版本只结算一次。
 实际 Dockview 提交处再次检查项目身份和本地草稿，未保存内容不被磁盘快照覆盖。
 CRUD 调用方不保留独立的 post-commit refresh；数据删除不显示额外全屏进度蒙层。
@@ -114,9 +118,9 @@ CRUD 调用方不保留独立的 post-commit refresh；数据删除不显示额�
 保留用户在等待期间切换的新选择。
 
 共享本地化节点目录由项目发布协调器在成功提交、恢复和初始化后提供 Rust publication revision；
-索引内容变化才安装快照并推进 ResourceStore 的 `indexGeneration`，`indexRevision` 保存安装时的 Rust publication revision。
-重复 watcher 查询忽略 exportTime 等非资源字段，不重复安装。Nodes Activity 订阅索引代际，
-不把 loaded/dirty 等资源字段变化当成重查信号。共享节点目录以 Rust 水位判断新旧；只有索引内容变化而
+索引内容变化才替换资源快照，`indexRevision` 保存安装时的 Rust publication revision。
+重复 watcher 查询忽略 exportTime 等非资源字段，不重复安装。Project/Nodes 文档随同次响应更新，
+不订阅 ResourceStore 对象或索引代际以触发另一轮 Activity 查询。共享节点目录以 Rust 水位判断新旧；只有索引内容变化而
 水位未推进时才显式失效，不为普通发布额外维护一套代际表。项目生命周期重置清除旧请求，后挂载或切换语言的消费者
 继承当前水位。落后的目录自动重查，已经足够新的目录复用；不依赖首次点击数据行来触发更新。
 插件自带的 sandbox iframe 页面仍遵循 Plugin 契约，不转换成宿主 Activity 条目。
@@ -124,7 +128,7 @@ CRUD 调用方不保留独立的 post-commit refresh；数据删除不显示额�
 后端 Activity 首次查询返回 `{ kind: "snapshot", cursor, document }`。索引发布或插件变更驱动失效；
 后续查询只携带 cursor，Rust 从权威查询生成当前投影，与该游标绑定的不可变基线比较，
 仅返回 `{ kind: "patch", baseCursor, cursor, patch, operations }`。不会把旧树传回后端，
-也不会在普通更新时跨 IPC 重新发送完整树；后端投影生成逻辑仍复用既有查询。
+也不会在普通更新时跨 IPC 重新发送完整树；后端在已捕获的权威事实之上生成投影并计算差分。
 
 `operations` 使用稳定行 id，支持 update、insert、remove、move。update 的 patch
 只包含发生变化的顶层字段；嵌套字段值整体替换，null 是合法值而不是删除指令。例如：
@@ -139,17 +143,19 @@ insert/move 的 afterId 指定平面行顺序中的前一行，null 表示首行
 不切换回 loading。无变化返回空操作并保持 cursor，前端保留原快照引用。
 
 同一面板作用域内请求串行、失效信号合并。语言、项目/生命周期变化建立新作用域，
-旧响应不能发布；卸载不再接收响应。Rust 传输缓存按窗口、面板、项目及语言隔离，
+旧响应不能发布；组件卸载只停止订阅，运行期文档可供同作用域再次挂载复用。Rust 传输缓存按窗口、面板、项目及语言隔离，
 以数量和序列化体积限制不可变基线，旧基线可以支持丢失回复后的增量请求。
 缓存缺失/淘汰时返回 snapshot；前端遇到基线不匹配或非法增量时只尝试一次快照恢复。
-重复失败显示错误并保留上一份完整投影。后端 Activity 不回退到前端重建；Project 的本地投影不是回退路径。
+合并响应中任何面板的基线或协议无效，整批重取一次快照；重复失败显示错误并保留上一份完整投影。
+后端 Activity 不回退到前端重建。
 Commands 的可用性来自本地草稿历史，数据库运行状态和选中状态仍从既有 UI/runtime
 投影读取；这些变化不生成另一份资源文档。
 
 标题栏使用 `--workbench-tab-height`。分类统一复用 `SidebarTreeCategoryRow`；
 内容使用普通滚动列表，仅挂载展开分支，取消 Activity 的虚拟列表测量依赖。
 后端文档上限由 transport/parser 约束，超限明确失败，不静默截断。折叠只改变本地可见行，
-不会产生 IPC。四个面板的展开偏好统一由 `sidebarStore` 按 panel/category 保存到
+不会产生 IPC。四个面板的运行期文档、游标和错误由现有 `sidebarStore` 缓存，并按面板/项目/语言/生命周期隔离；
+同作用域共享请求，过期作用域不能覆盖新文档。展开偏好按 panel/category 保存到
 `yssbi-activity-panel-expansion`；文档不落盘，Dockview placement 不进入该 store。
 旧 Project 分类偏好 key 不迁移，首次使用采用各文档定义的默认值。
 

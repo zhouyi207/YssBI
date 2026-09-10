@@ -1,3 +1,4 @@
+import { activityPanelFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSidebarStore } from "./sidebarStore";
 
@@ -38,6 +39,14 @@ describe("Activity category expansion", () => {
       project: { events: true },
       plugins: { installed: false },
     });
+    const binding = fresh.useSidebarStore
+      .getState()
+      .bindPanel({ panelId: "plugins", projectInstanceId: null, locale: "en-US", epoch: 0 });
+    fresh.useSidebarStore
+      .getState()
+      .publishPanels([
+        { binding, snapshot: { cursor: "c1", document: activityPanelFixture("plugins", []) } },
+      ]);
     fresh.useSidebarStore.getState().setCategoryExpanded("plugins", "installed", true);
     expect(JSON.parse(persisted.get("yssbi-activity-panel-expansion")!)).toEqual({
       project: { events: true },

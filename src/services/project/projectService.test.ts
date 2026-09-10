@@ -1,8 +1,22 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
+import type { ProjectIndexRow } from "@/shared/types/domain/project";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ipc = vi.hoisted(() => ({
   response: undefined as unknown,
-  invoke: vi.fn(async () => ipc.response),
+  invoke: vi.fn(async (command: string) => {
+    if (command !== "get_project_index") return ipc.response;
+    const snapshot = projectIndexSnapshotFixture(ipc.response as ProjectIndexRow);
+    return {
+      index: ipc.response,
+      activityPanels: Object.fromEntries(
+        Object.entries(snapshot.activityPanels).map(([id, value]) => [
+          id,
+          { kind: "snapshot", ...value },
+        ]),
+      ),
+    };
+  }),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -14,7 +28,7 @@ import { ProjectService } from "./projectService";
 
 function projectIndex(): Record<string, unknown> {
   return {
-    projectInstanceId: "00000000-0000-0000-0000-000000000601",
+    projectInstanceId: "project-a",
     publicationRevision: 4,
     projectName: "Projection contract",
     exportTime: "2026-08-07T00:00:00Z",
@@ -98,7 +112,7 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
   });
 
   it("preserves the exact Rust-resolved output name and structured pin types", async () => {
-    const index = await ProjectService.getProjectIndex("00000000-0000-0000-0000-000000000601");
+    const { index } = await ProjectService.getProjectIndex("project-a");
 
     const functionRow = index.graphs[0];
     expect(functionRow.type).toBe("function");
@@ -135,10 +149,12 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
-      graphs: [
-        { path: "events/每日 Sales Report.yssbi-event", type: "event" },
-        { path: "functions/Sales Report 销售预测.yssbi-function", type: "function" },
-      ],
+      index: {
+        graphs: [
+          { path: "events/每日 Sales Report.yssbi-event", type: "event" },
+          { path: "functions/Sales Report 销售预测.yssbi-function", type: "function" },
+        ],
+      },
     });
   });
 
@@ -147,7 +163,9 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     functionRow(index).path = "events/opaque-function-identity";
     ipc.response = index;
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
-      graphs: [{ path: "events/opaque-function-identity", type: "function" }],
+      index: {
+        graphs: [{ path: "events/opaque-function-identity", type: "function" }],
+      },
     });
     functionRow(index).path = "";
     await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(
@@ -210,15 +228,17 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex("project-a")).resolves.toMatchObject({
-      charts: [
-        {
-          chartPath: "charts/Opaque Path With Spaces.yssbi-chart",
-          name: "Rust supplied label",
-          databaseId: "database-1",
-          chartType: "scatter",
-          revision: 7,
-        },
-      ],
+      index: {
+        charts: [
+          {
+            chartPath: "charts/Opaque Path With Spaces.yssbi-chart",
+            name: "Rust supplied label",
+            databaseId: "database-1",
+            chartType: "scatter",
+            revision: 7,
+          },
+        ],
+      },
     });
     index.charts = [chartRow(), chartRow()];
     await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(

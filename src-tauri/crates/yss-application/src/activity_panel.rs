@@ -23,6 +23,20 @@ pub struct ActivityTool {
 
 #[derive(Debug)]
 pub enum ActivityItem {
+    Graph {
+        path: String,
+        name: String,
+        graph_type: yss_graph_document::GraphResourceKind,
+    },
+    Chart {
+        path: String,
+        name: String,
+    },
+    Database {
+        id: String,
+        name: String,
+        resource_path: String,
+    },
     Node {
         key: String,
         title: String,
@@ -88,27 +102,153 @@ impl ActivityPanelDocument {
     }
 }
 
+/// Presentation only: the caller owns the coherent resource read.
+pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> ActivityPanelDocument {
+    let mut document = ActivityPanelDocument::new("project", "activityBar.project");
+    if let Some(index) = index {
+        document.project_instance_id = Some(index.project_instance_id.clone());
+        document.publication_revision = index.publication_revision;
+    }
+    for (kind, id, label, expanded, action, action_label, empty) in [
+        (
+            "event",
+            "project.events",
+            "sidebar.projectTree.categories.events",
+            true,
+            "newEvent",
+            "canvas.newEventGraph",
+            "sidebar.noEvents",
+        ),
+        (
+            "function",
+            "project.functions",
+            "sidebar.projectTree.categories.functions",
+            false,
+            "newFunction",
+            "canvas.newFunctionGraph",
+            "sidebar.noFunctions",
+        ),
+        (
+            "chart",
+            "project.charts",
+            "sidebar.projectTree.categories.charts",
+            true,
+            "newChart",
+            "contextMenu.sidebar.newChart",
+            "chartsSidebar.noCharts",
+        ),
+        (
+            "database",
+            "project.data",
+            "sidebar.sections.data",
+            true,
+            "importData",
+            "contextMenu.sidebar.importData",
+            "sidebar.noData",
+        ),
+    ] {
+        document.rows.push(ActivityRow {
+            id: id.into(),
+            depth: 0,
+            content: ActivityRowContent::Category {
+                label: ActivityText::Key(label),
+                default_expanded: expanded,
+                count: None,
+                tools: vec![ActivityTool {
+                    id: action,
+                    label: ActivityText::Key(action_label),
+                    icon: "add",
+                }],
+            },
+        });
+        let start = document.rows.len();
+        if let Some(index) = index {
+            match kind {
+                "event" | "function" => {
+                    let graph_kind = if kind == "event" {
+                        yss_graph_document::GraphResourceKind::Event
+                    } else {
+                        yss_graph_document::GraphResourceKind::Function
+                    };
+                    document.rows.extend(
+                        index
+                            .graphs
+                            .iter()
+                            .filter(|graph| graph.graph_type == graph_kind)
+                            .map(|graph| ActivityRow {
+                                id: format!("{kind}:{}", graph.path),
+                                depth: 1,
+                                content: ActivityRowContent::Item(ActivityItem::Graph {
+                                    path: graph.path.clone(),
+                                    name: graph.name.clone(),
+                                    graph_type: graph.graph_type,
+                                }),
+                            }),
+                    );
+                }
+                "chart" => document
+                    .rows
+                    .extend(index.charts.iter().map(|chart| ActivityRow {
+                        id: format!("chart:{}", chart.chart_path.as_str()),
+                        depth: 1,
+                        content: ActivityRowContent::Item(ActivityItem::Chart {
+                            path: chart.chart_path.as_str().into(),
+                            name: chart.name.clone(),
+                        }),
+                    })),
+                _ => document
+                    .rows
+                    .extend(index.databases.iter().map(|database| ActivityRow {
+                        id: format!("database:{}", database.id),
+                        depth: 1,
+                        content: ActivityRowContent::Item(ActivityItem::Database {
+                            id: database.id.clone(),
+                            name: database.name.clone().unwrap_or_else(|| database.id.clone()),
+                            resource_path: database.resource_path.as_str().into(),
+                        }),
+                    })),
+            }
+        }
+        if document.rows.len() == start {
+            document
+                .rows
+                .push(message(&format!("{id}.empty"), 1, empty));
+        }
+    }
+    document
+}
+
+pub(crate) fn nodes_activity_panel_from_catalog(
+    result: crate::catalog_query::CatalogQueryResult,
+) -> ActivityPanelDocument {
+    let (project, _, revision, catalog) = result.into_transport_parts().into_fields();
+    let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");
+    document.project_instance_id = Some(project.as_str().into());
+    document.publication_revision = revision;
+    document.rows = catalog_rows(catalog);
+    if document.rows.is_empty() {
+        document
+            .rows
+            .push(message("nodes.empty", 0, "sidebar.noNodes"));
+    }
+    document
+}
+
 impl ApplicationState {
     pub fn nodes_activity_panel(
         &self,
         project: Option<ProjectInstanceId>,
         locale: String,
     ) -> Result<ActivityPanelDocument, CatalogQueryApplicationError> {
-        let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");
         if let Some(project) = project {
-            let (project, _, revision, catalog) = self
-                .localized_node_catalog(LocalizedCatalogRequest::new(project, locale))?
-                .into_transport_parts()
-                .into_fields();
-            document.project_instance_id = Some(project.as_str().to_owned());
-            document.publication_revision = revision;
-            document.rows = catalog_rows(catalog);
+            return self
+                .localized_node_catalog(LocalizedCatalogRequest::new(project, locale))
+                .map(nodes_activity_panel_from_catalog);
         }
-        if document.rows.is_empty() {
-            document
-                .rows
-                .push(message("nodes.empty", 0, "sidebar.noNodes"));
-        }
+        let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");
+        document
+            .rows
+            .push(message("nodes.empty", 0, "sidebar.noNodes"));
         Ok(document)
     }
 }

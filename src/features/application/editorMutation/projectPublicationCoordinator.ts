@@ -1,3 +1,15 @@
+import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
+import {
+  PROJECT_ACTIVITY_PANEL_IDS,
+  type ProjectActivityPanelId,
+  type ActivityPanelSnapshot,
+} from "@/shared/types/domain/activityPanel";
+import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
+import {
+  useSidebarStore,
+  type ActivityPanelPublication,
+} from "@/features/core/sidebar/sidebarStore";
+import { toErrorReference } from "@/features/application/errorReference";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ChartDocument, ChartIndexEntry, ProjectIndexRow } from "@/shared/types";
@@ -76,6 +88,7 @@ export interface ProjectSnapshotPreparation {
   readonly epoch: number;
   readonly publicationRevision: number;
   readonly index: ProjectIndexRow;
+  readonly activityPanels: readonly ActivityPanelPublication[];
   readonly graphSessions: ReadonlyMap<string, GraphEditorSessionDto>;
   readonly chartDocuments: ReadonlyMap<string, ChartDocument>;
   readonly pathRemaps: ReadonlyMap<string, string>;
@@ -98,7 +111,11 @@ export interface PreparedProjectSnapshot extends ProjectSnapshotPreparation {
   readonly storeState: PreparedProjectSnapshotStoreState;
 }
 export interface ProjectPublicationDependencies {
-  loadProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow>;
+  loadProjectIndex(
+    projectInstanceId: string,
+    locale: string,
+    previous: Partial<Record<ProjectActivityPanelId, ActivityPanelSnapshot>>,
+  ): Promise<ProjectIndexSnapshot>;
   loadChartDocument(projectInstanceId: string, path: string): Promise<ChartDocument>;
   prepareGraphSession(
     path: string,
@@ -193,6 +210,7 @@ export class ProjectPublicationCoordinator {
     this.phase = "idle";
     this.driverInFlight = null;
     useNodeCatalogStore.getState().clear();
+    useSidebarStore.getState().clearProjectPanels();
   }
   capturePublicationRevision(): number {
     return this.appliedRevision;
@@ -322,7 +340,9 @@ export class ProjectPublicationCoordinator {
           for (const waiter of pending.waiters) waiter.reject(error);
         }
         for (const waiter of waiting) waiter.reject(error);
-        if (isCurrentProjectIdentity(identity)) this.markProjectProjectionStale();
+        if (isCurrentProjectIdentity(identity)) {
+          this.markProjectProjectionStale();
+        }
       }
       if (isCurrentProjectIdentity(identity))
         this.indexWaiters = this.indexWaiters.filter((waiter) => !waiting.includes(waiter));
@@ -331,8 +351,28 @@ export class ProjectPublicationCoordinator {
 
   private async publishIndex(identity: ProjectIdentitySnapshot, recovered: boolean): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt++) {
+      const locale = currentProjectionLocale();
+      const bindings = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) =>
+        useSidebarStore.getState().bindPanel({ panelId, ...identity, locale }),
+      );
       try {
-        const index = await this.dependencies.loadProjectIndex(identity.projectInstanceId);
+        const previous = Object.fromEntries(
+          bindings.flatMap((binding) => {
+            const snapshot = useSidebarStore.getState().panels[binding.panelId]?.snapshot;
+            return snapshot ? [[binding.panelId, snapshot]] : [];
+          }),
+        );
+        for (const binding of bindings) useSidebarStore.getState().startPanelRequest(binding);
+        const response = await this.dependencies.loadProjectIndex(
+          identity.projectInstanceId,
+          locale,
+          previous,
+        );
+        const index = response.index;
+        const activityPanels = bindings.map((binding) => ({
+          binding,
+          snapshot: response.activityPanels[binding.panelId as ProjectActivityPanelId],
+        }));
         this.assertCurrent(identity);
         const invalid = validateProjectSnapshotIndex(index, identity.projectInstanceId);
         if (invalid) throw protocolError(invalid);
@@ -441,6 +481,7 @@ export class ProjectPublicationCoordinator {
               ...identity,
               publicationRevision: index.publicationRevision,
               index,
+              activityPanels,
               graphSessions,
               chartDocuments,
               pathRemaps,
@@ -451,6 +492,8 @@ export class ProjectPublicationCoordinator {
             this.assertCurrent(identity);
             for (const graphPath of affected) invalidateGraphResults(graphPath);
             this.publishedIndexSignature = signature;
+          } else {
+            useSidebarStore.getState().publishPanels(activityPanels);
           }
           const indexOnlyChange = changed && index.publicationRevision === this.appliedRevision;
           this.appliedRevision = index.publicationRevision;
@@ -477,13 +520,22 @@ export class ProjectPublicationCoordinator {
         }
       } catch (error) {
         this.assertCurrent(identity);
-        if (attempt === 1) throw error;
+        if (
+          attempt === 1 ||
+          (error as { code?: string })?.code === "activity_panel_contract_invalid"
+        ) {
+          for (const binding of bindings)
+            useSidebarStore
+              .getState()
+              .failPanelRequest(binding, toErrorReference(error, "activity_panel_sync_failed"));
+          throw error;
+        }
       }
     }
   }
 }
 export const projectPublicationCoordinator = new ProjectPublicationCoordinator({
-  loadProjectIndex: (id) => ProjectService.getProjectIndex(id),
+  loadProjectIndex: (id, locale, previous) => ProjectService.getProjectIndex(id, locale, previous),
   loadChartDocument: (id, path) => ChartService.loadChart(id, path),
   prepareGraphSession: prepareGraphSessionForPublication,
   captureLoadedGraphPaths: () =>

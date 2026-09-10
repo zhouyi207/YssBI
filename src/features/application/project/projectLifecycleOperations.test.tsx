@@ -1,3 +1,4 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 // @vitest-environment happy-dom
 
 import { act } from "react";
@@ -136,16 +137,18 @@ function mockProjectBHydration(): void {
   vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
     databases: {},
   });
-  vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-    projectInstanceId: "project-b",
-    publicationRevision: 0,
-    projectName: "Project B",
-    graphs: [],
+  vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+    projectIndexSnapshotFixture({
+      projectInstanceId: "project-b",
+      publicationRevision: 0,
+      projectName: "Project B",
+      graphs: [],
 
-    charts: [],
-    databases: [],
-    exportTime: "",
-  });
+      charts: [],
+      databases: [],
+      exportTime: "",
+    }),
+  );
 }
 
 function projectReceipt(
@@ -232,16 +235,18 @@ describe("project lifecycle initiating operations", () => {
     vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
       databases: {},
     });
-    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-      projectInstanceId: "project-b",
-      publicationRevision: 0,
-      projectName: "Project B",
-      graphs: [],
+    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId: "project-b",
+        publicationRevision: 0,
+        projectName: "Project B",
+        graphs: [],
 
-      charts: [],
-      databases: [],
-      exportTime: "",
-    });
+        charts: [],
+        databases: [],
+        exportTime: "",
+      }),
+    );
 
     useEditorStore.setState({
       detailFocus: {
@@ -368,16 +373,18 @@ describe("project lifecycle initiating operations", () => {
     vi.spyOn(ProjectService, "getDatabases").mockResolvedValue({
       databases: {},
     });
-    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue({
-      projectInstanceId: "project-b",
-      publicationRevision: 0,
-      projectName: "Project B",
-      graphs: [],
+    vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId: "project-b",
+        publicationRevision: 0,
+        projectName: "Project B",
+        graphs: [],
 
-      charts: [],
-      databases: [],
-      exportTime: "",
-    });
+        charts: [],
+        databases: [],
+        exportTime: "",
+      }),
+    );
 
     let completion!: Promise<void>;
     await act(async () => {
@@ -635,23 +642,25 @@ describe("project lifecycle initiating operations", () => {
     });
 
     mockProjectBHydration();
-    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
-      projectInstanceId: "project-b",
-      publicationRevision: 0,
-      projectName: "Project B",
-      graphs: [
-        {
-          path: "events/ProjectB.yssbi-event",
-          name: "Project B graph",
-          type: "event",
-          revision: 1,
-        },
-      ],
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue(
+      projectIndexSnapshotFixture({
+        projectInstanceId: "project-b",
+        publicationRevision: 0,
+        projectName: "Project B",
+        graphs: [
+          {
+            path: "events/ProjectB.yssbi-event",
+            name: "Project B graph",
+            type: "event",
+            revision: 1,
+          },
+        ],
 
-      charts: [],
-      databases: [],
-      exportTime: "",
-    });
+        charts: [],
+        databases: [],
+        exportTime: "",
+      }),
+    );
     await act(async () => {
       await loadActivatedProject({
         path: "C:/project-b/metadata.yssbi",

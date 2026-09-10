@@ -1,3 +1,4 @@
+import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ProjectDatabaseIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
 import { parseProjectIndexRow } from "@/services/project/projectService";
@@ -460,6 +461,7 @@ export function commitPreparedProjectSnapshot(
         publicationRevision: plan.publicationRevision,
       });
       useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
+      useSidebarStore.getState().publishPanels(plan.activityPanels);
       useGraphProjectionStore.setState({ graphEntities: plan.graphProjectionPlan.graphEntities });
       for (const path of plan.graphProjectionPlan.graphPaths) {
         const session = plan.graphSessions.get(path);

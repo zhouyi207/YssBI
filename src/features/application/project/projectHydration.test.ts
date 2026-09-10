@@ -1,3 +1,4 @@
+import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { afterEach, expect, it, vi } from "vitest";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import { ProjectService } from "@/services/project/projectService";
@@ -25,12 +26,14 @@ it("never publishes an index older than a committed resource revision", async ()
   };
   const query = vi
     .spyOn(ProjectService, "getProjectIndex")
-    .mockResolvedValueOnce({
-      ...index,
-      publicationRevision: 1,
-      graphs: [{ path: graph.id, name: graph.name, type: "event", revision: 0 }],
-    })
-    .mockResolvedValueOnce(index);
+    .mockResolvedValueOnce(
+      projectIndexSnapshotFixture({
+        ...index,
+        publicationRevision: 1,
+        graphs: [{ path: graph.id, name: graph.name, type: "event", revision: 0 }],
+      }),
+    )
+    .mockResolvedValueOnce(projectIndexSnapshotFixture(index));
   const published: boolean[] = [];
   const unsubscribe = useResourceStore.subscribe((state) =>
     published.push(Boolean(state.resources[graph.uri])),

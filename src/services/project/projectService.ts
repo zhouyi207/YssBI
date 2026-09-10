@@ -1,3 +1,11 @@
+import {
+  PROJECT_ACTIVITY_PANEL_IDS,
+  type ActivityPanelSnapshot,
+  type ProjectActivityPanelId,
+} from "@/shared/types/domain/activityPanel";
+import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
+import { parseActivityPanelResponse } from "@/shared/types/dto/activityPanel";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 import { Channel } from "@tauri-apps/api/core";
 import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
@@ -278,9 +286,64 @@ export class ProjectService {
     return await invokeCommand("get_project_path", { projectInstanceId });
   }
 
-  static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
-    const value = await invokeCommand<unknown>("get_project_index", { projectInstanceId });
-    return parseProjectIndexRow(value);
+  static async getProjectIndex(
+    projectInstanceId: string,
+    locale: string = DEFAULT_LANGUAGE,
+    previous: Partial<Record<ProjectActivityPanelId, ActivityPanelSnapshot>> = {},
+  ): Promise<ProjectIndexSnapshot> {
+    let baselines = previous;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const value = await invokeCommand<unknown>("get_project_index", {
+        projectInstanceId,
+        locale,
+        activityPanels: PROJECT_ACTIVITY_PANEL_IDS.map((panelId) => ({
+          panelId,
+          cursor: baselines[panelId]?.cursor ?? null,
+        })),
+      });
+      if (!isRecord(value) || !hasExactKeys(value, ["index", "activityPanels"]))
+        throw new Error("Invalid project index response");
+      const index = parseProjectIndexRow(value.index);
+      if (index.projectInstanceId !== projectInstanceId)
+        throw new Error("Invalid project index response");
+      const updates = value.activityPanels;
+      if (isRecord(updates) && hasExactKeys(updates, PROJECT_ACTIVITY_PANEL_IDS)) {
+        const parsed = PROJECT_ACTIVITY_PANEL_IDS.map((panelId) =>
+          parseActivityPanelResponse(
+            updates[panelId],
+            panelId,
+            projectInstanceId,
+            baselines[panelId] ?? null,
+          ),
+        );
+        if (
+          parsed.every(
+            (snapshot) =>
+              snapshot && snapshot.document.publicationRevision === index.publicationRevision,
+          )
+        ) {
+          return {
+            index,
+            activityPanels: Object.fromEntries(
+              PROJECT_ACTIVITY_PANEL_IDS.map((panelId, i) => [panelId, parsed[i]!]),
+            ) as ProjectIndexSnapshot["activityPanels"],
+          };
+        }
+      }
+      if (attempt === 0 && Object.keys(baselines).length > 0) {
+        baselines = {};
+        continue;
+      }
+      throw new IpcError({
+        kind: "malformed",
+        command: "get_project_index",
+        code: "activity_panel_contract_invalid",
+        details: null,
+        incidentId: null,
+        cause: null,
+      });
+    }
+    throw new Error("Invalid project index response");
   }
 
   /**

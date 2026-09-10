@@ -5,7 +5,6 @@ import { resourceKey } from "./resourceTypes";
 interface ResourceStore {
   resources: Record<ResourceKey, ProjectResourceMeta>;
   graphOrder: string[];
-  indexGeneration: number;
   indexRevision: number;
   setSnapshot(snapshot: {
     resources: ProjectResourceMeta[];
@@ -22,12 +21,10 @@ interface ResourceStore {
 export const useResourceStore = create<ResourceStore>((set) => ({
   resources: {},
   graphOrder: [],
-  indexGeneration: 0,
   indexRevision: 0,
 
   setSnapshot: ({ resources, graphOrder, publicationRevision }) =>
     set((state) => ({
-      indexGeneration: state.indexGeneration + 1,
       indexRevision: publicationRevision ?? state.indexRevision,
       resources: Object.fromEntries(
         resources.map((resource) => [resourceKey(resource), resource]),
@@ -85,10 +82,9 @@ export const useResourceStore = create<ResourceStore>((set) => ({
     }),
 
   clear: () =>
-    set((state) => ({
+    set({
       resources: {},
       graphOrder: [],
       indexRevision: 0,
-      indexGeneration: state.indexGeneration + 1,
-    })),
+    }),
 }));

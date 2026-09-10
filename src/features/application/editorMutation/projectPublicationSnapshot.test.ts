@@ -114,6 +114,7 @@ describe("project snapshot projection replacement", () => {
     const plan = prepareProjectSnapshotCommit({
       ...captureProjectIdentity(),
       publicationRevision: 2,
+      activityPanels: [],
       index: {
         projectInstanceId: "project-a",
         projectName: "Project",

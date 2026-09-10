@@ -26,6 +26,7 @@ function createDeferred<T>(): Deferred<T> {
 
 const mocks = vi.hoisted(() => ({
   openEditorPanel: vi.fn(),
+  activateEditorPanelAndSyncSession: vi.fn(async () => true),
   revealWorkbenchView: vi.fn(),
   setCategoryExpanded: vi.fn(),
   handledRejection: undefined as unknown,
@@ -37,6 +38,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./openEditorPanel", () => ({
   openEditorPanel: mocks.openEditorPanel,
   isEditorOpenRejectionHandled: (error: unknown) => error === mocks.handledRejection,
+}));
+
+vi.mock("./activateEditorPanelAndSyncSession", () => ({
+  activateEditorPanelAndSyncSession: mocks.activateEditorPanelAndSyncSession,
 }));
 
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutActions", () => ({
@@ -118,7 +123,7 @@ describe("useOpenChart", () => {
     host.remove();
   });
 
-  it("awaits the editor open before revealing the chart in the project tree", async () => {
+  it("activates the opened chart without transferring focus to a sidebar", async () => {
     const deferred = createDeferred<WorkbenchPanelInfo>();
     mocks.openEditorPanel.mockReturnValueOnce(deferred.promise);
 
@@ -129,11 +134,17 @@ describe("useOpenChart", () => {
     });
 
     expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();
+    expect(mocks.activateEditorPanelAndSyncSession).not.toHaveBeenCalled();
 
     deferred.resolve(openedPanel);
     await act(async () => opening);
 
-    expect(mocks.revealWorkbenchView).toHaveBeenCalledWith("project");
+    expect(mocks.openEditorPanel).toHaveBeenCalledWith({
+      resourceRef: "charts/Summary.yssbi-chart",
+      resourceKind: "chart",
+    });
+    expect(mocks.activateEditorPanelAndSyncSession).toHaveBeenCalledWith(openedPanel);
+    expect(mocks.revealWorkbenchView).not.toHaveBeenCalled();
     expect(mocks.setCategoryExpanded).toHaveBeenCalledWith("project", "charts", true);
   });
 
@@ -144,6 +155,7 @@ describe("useOpenChart", () => {
 
     await expect(openChart("charts/Summary.yssbi-chart", "Summary")).resolves.toBeUndefined();
 
+    expect(mocks.activateEditorPanelAndSyncSession).not.toHaveBeenCalled();
     expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();
   });
 });

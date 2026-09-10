@@ -2,7 +2,7 @@ import type {
   ActivityPanelDocument,
   ActivityPanelRow,
   ActivityPanelSnapshot,
-  BackendActivityPanelId,
+  ActivityPanelId,
 } from "../domain/activityPanel";
 import { isNodeCreationDescriptorDto } from "../domain/nodeCreationDescriptor";
 
@@ -25,7 +25,7 @@ function text(value: unknown): boolean {
 function integer(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
-const actions = ["install", "refresh"];
+const actions = ["newEvent", "newFunction", "newChart", "importData", "install", "refresh"];
 function tools(value: unknown): boolean {
   return (
     Array.isArray(value) &&
@@ -45,6 +45,24 @@ function item(value: unknown): boolean {
   if (!record(value)) return false;
   const strings = (keys: string[]) => keys.every((key) => typeof value[key] === "string");
   switch (value.kind) {
+    case "graph":
+      return (
+        exact(value, ["kind", "path", "name", "graphType"]) &&
+        strings(["path", "name"]) &&
+        Boolean(value.path) &&
+        ["event", "function"].includes(value.graphType as string)
+      );
+    case "chart":
+      return (
+        exact(value, ["kind", "path", "name"]) && strings(["path", "name"]) && Boolean(value.path)
+      );
+    case "database":
+      return (
+        exact(value, ["kind", "id", "name", "resourcePath"]) &&
+        strings(["id", "name", "resourcePath"]) &&
+        Boolean(value.id) &&
+        Boolean(value.resourcePath)
+      );
     case "node":
       return (
         exact(value, ["kind", "key", "title", "creation"]) &&
@@ -93,7 +111,7 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
     return null;
   if (
     value.schema !== "yssbi.activity-panel.v1" ||
-    !["nodes", "commands", "plugins"].includes(value.panelId as string)
+    !["project", "nodes", "commands", "plugins"].includes(value.panelId as string)
   )
     return null;
   if (value.projectInstanceId !== null && typeof value.projectInstanceId !== "string") return null;
@@ -133,10 +151,11 @@ export function parseActivityPanelDocument(value: unknown): ActivityPanelDocumen
         if (
           !record(row.item) ||
           !{
+            project: ["graph", "chart", "database"],
             nodes: ["node"],
             commands: ["command"],
             plugins: ["plugin"],
-          }[value.panelId as BackendActivityPanelId].includes(row.item.kind as string)
+          }[value.panelId as ActivityPanelId].includes(row.item.kind as string)
         )
           return null;
         break;
@@ -268,4 +287,19 @@ export function parseActivityPanelUpdate(
   if (!document || document.publicationRevision < previous.document.publicationRevision)
     return null;
   return { cursor: value.cursor, document };
+}
+
+export function parseActivityPanelResponse(
+  value: unknown,
+  panelId: ActivityPanelId,
+  projectInstanceId: string | null,
+  previous: ActivityPanelSnapshot | null,
+): ActivityPanelSnapshot | null {
+  const snapshot = parseActivityPanelUpdate(value, previous);
+  return snapshot &&
+    snapshot.document.panelId === panelId &&
+    snapshot.document.projectInstanceId === projectInstanceId &&
+    (!previous || snapshot.document.publicationRevision >= previous.document.publicationRevision)
+    ? snapshot
+    : null;
 }

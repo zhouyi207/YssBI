@@ -6,9 +6,9 @@ import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { captureProjectCommandContext } from "@/features/application/projectCommandContext";
 
-import { revealWorkbenchView } from "@/modules/workbench/public";
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from "@/features/core/sidebar";
 import { isEditorOpenRejectionHandled, openEditorPanel } from "./openEditorPanel";
+import { activateEditorPanelAndSyncSession } from "./activateEditorPanelAndSyncSession";
 import { showBlockingIpcError } from "./blockingErrorDialog";
 
 function createdChartState(
@@ -109,13 +109,8 @@ export function useOpenChart() {
     }
 
     try {
-      await openEditorPanel(
-        { resourceRef: chartPath, resourceKind: "chart" },
-        {
-          focusDetail: { kind: "chart", chartPath },
-        },
-      );
-      void revealWorkbenchView("project");
+      const panel = await openEditorPanel({ resourceRef: chartPath, resourceKind: "chart" });
+      await activateEditorPanelAndSyncSession(panel);
       useSidebarStore
         .getState()
         .setCategoryExpanded("project", PROJECT_TREE_CATEGORY_IDS.charts, true);

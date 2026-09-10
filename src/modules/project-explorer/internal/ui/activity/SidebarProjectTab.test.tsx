@@ -1,4 +1,11 @@
 // @vitest-environment happy-dom
+import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
+import { parseActivityPanelUpdate } from "@/shared/types/dto/activityPanel";
+import {
+  startProjectLifecycle,
+  captureProjectIdentity,
+  clearProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
@@ -45,10 +52,26 @@ describe("SidebarProjectTab", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    useSidebarStore.setState({ expandedCategories: {} });
+    startProjectLifecycle("project-1");
+    useSidebarStore.setState({ expandedCategories: {}, panels: {} });
     useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: "project-1" });
     await i18n.changeLanguage("en-US");
+    const binding = useSidebarStore
+      .getState()
+      .bindPanel({ panelId: "project", ...captureProjectIdentity(), locale: "en-US" });
+    const rows = Object.values(PROJECT_TREE_CATEGORY_IDS).map((id) =>
+      categoryFixture(id, id, 0, true),
+    );
+    rows[3] = {
+      ...rows[3],
+      tools: [{ id: "importData", label: { text: "Import Data" }, icon: "add" }],
+    };
+    useSidebarStore
+      .getState()
+      .publishPanels([
+        { binding, snapshot: { cursor: "c1", document: activityPanelFixture("project", rows) } },
+      ]);
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -59,6 +82,7 @@ describe("SidebarProjectTab", () => {
     host.remove();
     useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: null });
+    clearProjectLifecycle();
     vi.restoreAllMocks();
   });
 
@@ -98,6 +122,32 @@ describe("SidebarProjectTab", () => {
     act(() =>
       useResourceStore.getState().setSnapshot({ resources: [event], publicationRevision: 1 }),
     );
+    expect(host.textContent).not.toContain("First Event");
+    const panel = useSidebarStore.getState().panels.project!;
+    const inserted = parseActivityPanelUpdate(
+      {
+        kind: "patch",
+        baseCursor: "c1",
+        cursor: "c2",
+        patch: {},
+        operations: [
+          {
+            op: "insert",
+            afterId: "project.events",
+            row: {
+              id: event.uri,
+              kind: "item",
+              depth: 1,
+              item: { kind: "graph", path: event.id, name: "First Event", graphType: "event" },
+            },
+          },
+        ],
+      },
+      panel.snapshot,
+    )!;
+    act(() =>
+      useSidebarStore.getState().publishPanels([{ binding: panel.binding, snapshot: inserted }]),
+    );
     expect(host.textContent).toContain("First Event");
     expect(host.querySelector('[role="status"]')).toBeNull();
     act(() =>
@@ -105,6 +155,20 @@ describe("SidebarProjectTab", () => {
         resources: [{ ...event, loaded: true, exists: false }],
         publicationRevision: 2,
       }),
+    );
+    expect(host.textContent).toContain("First Event");
+    const removed = parseActivityPanelUpdate(
+      {
+        kind: "patch",
+        baseCursor: "c2",
+        cursor: "c3",
+        patch: {},
+        operations: [{ op: "remove", id: event.uri }],
+      },
+      inserted,
+    )!;
+    act(() =>
+      useSidebarStore.getState().publishPanels([{ binding: panel.binding, snapshot: removed }]),
     );
     expect(host.textContent).not.toContain("First Event");
     expect(host.querySelector('[role="status"]')).toBeNull();
