@@ -15,7 +15,7 @@ use yss_database_contract::{
 fn declaration(id: &str, name: &str) -> DatabaseDecl {
     DatabaseDecl {
         id: DatabaseId::from_existing(id.into()),
-        engine: DatabaseEngine::InMemory { name: id.into() },
+        engine: DatabaseEngine::Dataset {},
         schema_version: 1,
         required: false,
         name: name.into(),

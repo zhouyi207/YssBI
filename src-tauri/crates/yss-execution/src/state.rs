@@ -658,6 +658,7 @@ impl PreparedKernelInvocation<'_> {
 #[derive(Clone, Copy)]
 enum BuiltinKernel {
     Statistical(crate::statistics::StatisticalKernel),
+    Relational(crate::relational::RelationalKernel),
     Constant,
     Add,
     Subtract,
@@ -680,6 +681,11 @@ struct KernelRegistry {
     kernels: BTreeMap<crate::plan::KernelId, BuiltinKernel>,
 }
 
+/// Compile admission uses the same registry that dispatches execution.
+pub fn supports_kernel(id: &str) -> bool {
+    KernelRegistry::default().kernels.contains_key(&crate::plan::KernelId::from_existing(id.into()))
+}
+
 impl Default for KernelRegistry {
     fn default() -> Self {
         use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
@@ -688,6 +694,30 @@ impl Default for KernelRegistry {
             kernels: [
                 ("yssbi.statistics.ols.fit", Statistical(OlsFit)),
                 ("yssbi.statistics.ols.summary", Statistical(OlsSummary)),
+                (
+                    "yssbi.dataframe.source.get",
+                    Relational(crate::relational::RelationalKernel::Source),
+                ),
+                (
+                    "yssbi.dataframe.project",
+                    Relational(crate::relational::RelationalKernel::Project),
+                ),
+                (
+                    "yssbi.dataframe.filter.rows",
+                    Relational(crate::relational::RelationalKernel::Filter),
+                ),
+                (
+                    "yssbi.dataframe.series.select",
+                    Relational(crate::relational::RelationalKernel::Series),
+                ),
+                (
+                    "yssbi.dataframe.limit",
+                    Relational(crate::relational::RelationalKernel::Limit),
+                ),
+                (
+                    "yssbi.dataframe.rename",
+                    Relational(crate::relational::RelationalKernel::Rename),
+                ),
                 ("yssbi.constant.get", Constant),
                 ("yssbi.numeric.add", Add),
                 ("yssbi.numeric.subtract", Subtract),
@@ -752,6 +782,7 @@ fn execute_kernel(
         BuiltinKernel::Statistical(kind) => {
             return crate::statistics::execute(kind, invocation, backend);
         }
+        BuiltinKernel::Relational(kind) => crate::relational::execute(kind, invocation),
         BuiltinKernel::Constant => invocation
             .parameter("value")
             .map(|value| parameter_value(value, resources))

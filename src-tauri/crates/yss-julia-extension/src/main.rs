@@ -1,4 +1,5 @@
 mod commands;
+mod inputs;
 
 use serde_json::{Value, json};
 use std::{
@@ -174,7 +175,7 @@ impl Extension {
                 let dataset_path = descriptor["path"]
                     .as_str()
                     .ok_or_else(|| fail("plugin_snapshot_invalid"))?;
-                let values = commands::read_inputs(dataset_path)?;
+                let values = inputs::read_inputs(dataset_path)?;
                 let _ = peer.call(
                     "data.release",
                     json!({"context":context,"input":{"leaseId":descriptor["leaseId"]}}),
@@ -373,7 +374,10 @@ fn run() -> Result<(), PluginFailure> {
             data_dir.clone(),
             worker.clone(),
         )),
-        Arc::new(yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()),
+        Arc::new(
+            yss_bayes_artifact_datafusion::DataFusionBayesArtifactReader::new()
+                .map_err(|_| fail("plugin_storage_failed"))?,
+        ),
     );
     let version = fs::read("plugin.json")
         .ok()

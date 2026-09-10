@@ -1,0 +1,20 @@
+[package]
+name = "yss-bayes-artifact-datafusion"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+arrow.workspace = true
+datafusion.workspace = true
+futures-util.workspace = true
+tokio.workspace = true
+url.workspace = true
+yss-tabular-io = { path = "../yss-tabular-io" }
+yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
+yss-bayes-result = { path = "../yss-bayes-result" }
+yss-sci-runtime = { path = "../yss-sci-runtime" }
+
+[dev-dependencies]
+uuid.workspace = true

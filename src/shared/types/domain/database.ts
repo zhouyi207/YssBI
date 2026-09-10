@@ -14,18 +14,7 @@ export interface LoadDatabaseResult {
   columns: ColumnInfo[];
 }
 
-export type DatabaseEngineSqlDTO =
-  | { sqlite: { autoCreate?: boolean } }
-  | { postgres: { ssl?: boolean } }
-  | { mysql: { charset?: string } };
-
 export type DatabaseImportSqlEngineDTO = "sqlite" | "postgres" | "mysql";
-
-export type SqlEngineConfig = {
-  engine: DatabaseEngineSqlDTO;
-  connectionString: string;
-  table: string;
-};
 
 export type CsvEngineConfig = {
   path: string;
@@ -36,16 +25,7 @@ export type CsvEngineConfig = {
 
 export type ParquetEngineConfig = { path: string; columns?: string[] };
 export type ExcelEngineConfig = { path: string; sheet: string };
-export type DuckDbEngineConfig = { path: string; table: string };
-export type InMemoryEngineConfig = { name: string };
-
-export type DatabaseEngineDTO =
-  | { sql: SqlEngineConfig }
-  | { csv: CsvEngineConfig }
-  | { parquet: ParquetEngineConfig }
-  | { excel: ExcelEngineConfig }
-  | { duckDb: DuckDbEngineConfig }
-  | { inMemory: InMemoryEngineConfig };
+export type DatabaseEngineDTO = { dataset: Record<string, never> };
 
 export type DatabaseImportSourceDTO =
   | { sql: { engine: DatabaseImportSqlEngineDTO; connectionString: string; table: string } }
@@ -78,13 +58,3 @@ export interface DatabaseDocumentDto {
 
 /** Frontend database projection with a display name resolved by Application. */
 export type DatabaseRecord = DatabaseDeclDTO & { name: string };
-
-export function databaseSourcePath(engine: DatabaseEngineDTO | undefined): string | undefined {
-  if (!engine) return undefined;
-  if ("csv" in engine) return engine.csv.path;
-  if ("parquet" in engine) return engine.parquet.path;
-  if ("excel" in engine) return engine.excel.path;
-  if ("duckDb" in engine) return engine.duckDb.path;
-  if ("sql" in engine) return engine.sql.connectionString;
-  return undefined;
-}

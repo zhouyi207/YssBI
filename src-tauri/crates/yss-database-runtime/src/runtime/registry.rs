@@ -35,6 +35,20 @@ enum DatabaseCommittedRecordState {
     Claimed,
 }
 
+#[derive(Clone)]
+pub(crate) struct DatasetStorageRecovery {
+    pub store: Arc<yss_dataset_store::DatasetStore>,
+    pub publication: yss_dataset_store::DatasetPublication,
+}
+impl std::fmt::Debug for DatasetStorageRecovery {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DatasetStorageRecovery")
+            .field("publication", &self.publication)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DatabaseRuntimeChangeRecord {
     recovery_id: u64,
@@ -44,6 +58,7 @@ pub(crate) struct DatabaseRuntimeChangeRecord {
     expected_observation: DatabaseDeclarationObservation,
     next_observation: DatabaseDeclarationObservation,
     state: DatabaseCommittedRecordState,
+    pub(crate) storage: Option<DatasetStorageRecovery>,
 }
 
 impl DatabaseRuntimeChangeRecord {
@@ -167,6 +182,7 @@ impl Drop for DatabaseCommittedRegistration {
 pub(crate) struct DatabasePreparedRegistration {
     runtime: Arc<DatabaseSessionRuntime>,
     active: bool,
+    storage: Option<DatasetStorageRecovery>,
 }
 
 impl std::fmt::Debug for DatabasePreparedRegistration {
@@ -179,6 +195,9 @@ impl std::fmt::Debug for DatabasePreparedRegistration {
 }
 
 impl DatabasePreparedRegistration {
+    pub(crate) fn track_storage(&mut self, storage: DatasetStorageRecovery) {
+        self.storage = Some(storage);
+    }
     fn disarm(&mut self) {
         self.active = false;
     }
@@ -264,6 +283,13 @@ impl DatabaseSessionRuntime {
     ) -> Result<(DatabaseOperationLease, DatabaseRuntimeSnapshot), DatabaseError> {
         let mut state = lock_or_recover(&self.state);
         admit(&mut state, operation)?;
+        if state
+            .changes
+            .values()
+            .any(|change| change.storage.is_some())
+        {
+            return Err(DatabaseError::conflict(operation, None));
+        }
         state.outstanding.increment_operation_lease();
         let snapshot = DatabaseRuntimeSnapshot {
             observations: state.observations.clone(),
@@ -299,11 +325,19 @@ impl DatabaseSessionRuntime {
     ) -> Result<DatabasePreparedRegistration, DatabaseError> {
         let mut state = lock_or_recover(&self.state);
         admit(&mut state, operation)?;
+        if state
+            .changes
+            .values()
+            .any(|change| change.storage.is_some())
+        {
+            return Err(DatabaseError::conflict(operation, None));
+        }
         state.outstanding.increment_pending_prepare();
         drop(state);
         Ok(DatabasePreparedRegistration {
             runtime: Arc::clone(self),
             active: true,
+            storage: None,
         })
     }
 
@@ -397,6 +431,7 @@ impl DatabaseSessionRuntime {
             expected_observation,
             next_observation,
             state: DatabaseCommittedRecordState::Committed,
+            storage: registration.storage.take(),
         };
         state.changes.insert(recovery_id, record.clone());
         drop(state);

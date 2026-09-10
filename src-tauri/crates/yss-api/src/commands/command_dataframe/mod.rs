@@ -555,7 +555,7 @@ pub fn save_database_changes(
 }
 
 /// Export the current dataset view (including unsaved in-memory edits) to an external file.
-/// Use `save_database_changes` to persist edits into `project.duckdb`.
+/// Use `save_database_changes` to checkpoint the committed dataset and clear edit history.
 #[tauri::command]
 pub async fn export_database(
     application: State<'_, yss_application::execution::ApplicationState>,

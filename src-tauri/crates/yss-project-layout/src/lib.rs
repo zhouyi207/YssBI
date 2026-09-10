@@ -17,7 +17,7 @@ pub const CHARTS_DIR: &str = "charts";
 pub const CHART_EXTENSION: &str = "yssbi-chart";
 
 pub const DATABASE_DIR: &str = "database";
-pub const PROJECT_DUCKDB_FILE: &str = "project.duckdb";
+pub const PROJECT_DATASET_CATALOG_FILE: &str = "catalog.sqlite";
 
 pub const PROJECT_CONTENT_DIRECTORIES: [&str; 4] =
     [EVENTS_DIR, FUNCTIONS_DIR, CHARTS_DIR, DATABASE_DIR];
@@ -63,7 +63,7 @@ mod tests {
         assert_eq!(CHARTS_DIR, "charts");
         assert_eq!(CHART_EXTENSION, "yssbi-chart");
         assert_eq!(DATABASE_DIR, "database");
-        assert_eq!(PROJECT_DUCKDB_FILE, "project.duckdb");
+        assert_eq!(PROJECT_DATASET_CATALOG_FILE, "catalog.sqlite");
     }
 
     #[test]
@@ -78,7 +78,7 @@ mod tests {
             r"events\Main.yssbi-event",
             "functions/Mean.yssbi-function",
             "charts/Sales.yssbi-chart",
-            "database/project.duckdb",
+            "database/catalog.sqlite",
         ] {
             assert!(is_project_index_input_path(Path::new(path)), "{path}");
         }

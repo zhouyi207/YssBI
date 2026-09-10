@@ -1,29 +1,30 @@
-use super::error::DatabaseExportError;
-use crate::DatabaseState;
+use std::path::Path;
+use std::sync::{Arc, atomic::AtomicBool};
+use std::time::{Duration, Instant};
+
+use arrow::array::Int64Array;
+use arrow::record_batch::RecordBatch;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat};
-use yss_database_edit::{EditOperation, EditState};
-
-use polars::prelude::*;
-use std::path::{Path, PathBuf};
+use yss_database_edit::EditState;
 use yss_database_schema::DatabaseSchemaFact;
-use yss_dataset_profile::{ColumnDistribution, ColumnStats, DatasetOverview};
-use yss_duckdb::{
-    DatasetProfileColumnRef, DuckDbColumnMeta, PageQueryResult, add_row_with_operation,
-    apply_edit_on_duckdb,
-    compute_all_column_distributions as compute_all_column_distributions_duckdb,
-    compute_all_column_stats as compute_all_column_stats_duckdb,
-    compute_dataset_overview as compute_dataset_overview_duckdb, delete_column_with_snapshot,
-    delete_rows_with_operations, edit_cell_with_operation, export_duckdb_table,
-    query_columns_to_dataframe, query_page_with_rowids, refresh_duckdb_meta,
-    reverse_edit_on_duckdb, write_display_name,
+use yss_dataset_store::{
+    DatasetCellEdit, DatasetColumnCast, DatasetPublication, DatasetSnapshot, DatasetStoreError,
+    PreparedDataset,
 };
-use yss_tabular_polars::{dtype_from_string, dtype_to_string};
+use yss_relational_contract::{RelationBinding, RelationControl, RelationError, RelationHandle};
 
-fn duckdb_profile_columns(columns: &[DuckDbColumnMeta]) -> Vec<DatasetProfileColumnRef<'_>> {
-    columns
-        .iter()
-        .map(|column| DatasetProfileColumnRef::new(&column.name, &column.dtype))
-        .collect()
+use crate::error::DatabaseExportError;
+use crate::session_api::DatabaseMutationOperation;
+use crate::{DatabaseState, DatasetEdit};
+
+pub const MAX_GET_DATAFRAME_ROWS: usize = 10_000;
+
+pub(crate) fn query_control(bytes: usize) -> RelationControl {
+    RelationControl {
+        cancellation: Arc::new(AtomicBool::new(false)),
+        deadline: Instant::now() + Duration::from_secs(30),
+        max_input_bytes: bytes,
+    }
 }
 
 #[derive(Clone)]
@@ -33,413 +34,124 @@ pub struct DatabaseInstance {
 }
 
 impl DatabaseInstance {
-    pub fn data_schema(&mut self) -> PolarsResult<DatabaseSchemaFact> {
-        let fact = match &self.state {
-            DatabaseState::DuckDb { columns, .. } => {
-                DatabaseSchemaFact::from_duckdb(&self.decl.id, columns)
-            }
-            DatabaseState::Failed { error } => {
-                return Err(PolarsError::ComputeError(error.clone().into()));
-            }
+    pub fn snapshot(&self) -> Result<&Arc<DatasetSnapshot>, DatasetStoreError> {
+        match &self.state {
+            DatabaseState::Dataset { snapshot, .. } if !snapshot.metadata().deleted => Ok(snapshot),
+            DatabaseState::Dataset { .. } => Err(DatasetStoreError::NotFound),
+            DatabaseState::Failed { .. } => Err(DatasetStoreError::NotFound),
         }
-        .map_err(|error| PolarsError::ComputeError(error.to_string().into()))?;
-
-        Ok(fact)
     }
-
-    /// 分页读取行数据。DuckDB 走 `LIMIT/OFFSET`，不触发整表物化。
-    pub fn query_page(&mut self, offset: usize, limit: usize) -> PolarsResult<DataFrame> {
-        self.query_page_with_rowids(offset, limit)
-            .map(|page| page.dataframe)
+    pub(crate) fn engine(
+        &self,
+    ) -> Result<&Arc<yss_datafusion::DataFusionRuntime>, DatasetStoreError> {
+        match &self.state {
+            DatabaseState::Dataset { engine, .. } => Ok(engine),
+            DatabaseState::Failed { .. } => Err(DatasetStoreError::NotFound),
+        }
     }
-
-    /// 分页读取，附带 DuckDB `rowid`（供 DataView 编辑）。
-    pub fn query_page_with_rowids(
-        &mut self,
+    pub fn data_schema(&self) -> Result<DatabaseSchemaFact, DatasetStoreError> {
+        yss_tabular_arrow::database_schema_fact(&self.decl.id, &self.snapshot()?.metadata().schema)
+            .map_err(|_| DatasetStoreError::InvalidSchema)
+    }
+    pub fn row_count(&self) -> Result<usize, DatasetStoreError> {
+        Ok(self.snapshot()?.metadata().row_count)
+    }
+    pub(crate) fn query(&self) -> Result<yss_datafusion::DatasetQuery, DatasetStoreError> {
+        self.snapshot()?.query(self.engine()?, "database-read")
+    }
+    pub fn relation(
+        &self,
+        session: &str,
+        revision: u64,
+    ) -> Result<RelationHandle, DatasetStoreError> {
+        let snapshot = self.snapshot()?;
+        let binding = RelationBinding {
+            project_session: session.into(),
+            dataset: self.decl.id.clone(),
+            snapshot: snapshot.metadata().snapshot_id.clone(),
+            revision,
+        };
+        Ok(self
+            .engine()?
+            .dataset_query(binding, snapshot.relation_input(), snapshot.clone())?
+            .relation()?)
+    }
+    pub fn read_arrow_columns(
+        &self,
+        names: &[&str],
         offset: usize,
         limit: usize,
-    ) -> PolarsResult<PageQueryResult> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path, table, ..
-            } => query_page_with_rowids(Path::new(duckdb_path), table, offset, limit)
-                .map_err(|e| PolarsError::ComputeError(e.into())),
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
+        control: &RelationControl,
+    ) -> Result<Vec<RecordBatch>, DatasetStoreError> {
+        let relation = self
+            .query()?
+            .relation()?
+            .project(&names.iter().map(|name| (*name).into()).collect::<Vec<_>>())?;
+        let count = limit.min(self.row_count()?.saturating_sub(offset));
+        let relation = relation.limit(offset, count)?;
+        let mut batches = Vec::new();
+        let mut bytes = 0usize;
+        self.engine()?
+            .visit_relation(&relation, control, &mut |batch| {
+                bytes = bytes
+                    .checked_add(batch.get_array_memory_size())
+                    .ok_or(RelationError::MemoryLimitExceeded)?;
+                if bytes > control.max_input_bytes {
+                    return Err(RelationError::MemoryLimitExceeded);
+                }
+                batches.push(batch);
+                Ok(())
+            })?;
+        Ok(batches)
     }
-
-    /// 按列名列表加载窄 DataFrame。DuckDB 走 `SELECT col1, col2, ...`，不整表物化。
-    pub fn load_columns(&mut self, columns: &[&str]) -> PolarsResult<DataFrame> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path, table, ..
-            } => query_columns_to_dataframe(Path::new(duckdb_path), table, columns)
-                .map_err(|e| PolarsError::ComputeError(e.into())),
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
-    }
-
-    /// 加载单列 Series，优先走列裁剪路径。
-    pub fn load_column_series(&mut self, column: &str) -> PolarsResult<Series> {
-        let df = self.load_columns(&[column])?;
-        Ok(df.column(column)?.clone().take_materialized_series())
-    }
-
-    /// 列出列名（不触发整表加载）。
-    pub fn list_column_names(&mut self) -> PolarsResult<Vec<String>> {
-        Ok(self
-            .data_schema()?
-            .columns()
-            .iter()
-            .map(|c| c.name().as_str().to_string())
-            .collect())
-    }
-
     pub fn export_to_path(
         &self,
         path: &Path,
         format: DatabaseExportFormat,
     ) -> Result<(), DatabaseExportError> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path, table, ..
-            } => {
-                export_duckdb_table(Path::new(duckdb_path), table, path, format).map_err(Into::into)
-            }
-            DatabaseState::Failed { .. } => Err(DatabaseExportError::unavailable()),
-        }
-    }
-
-    pub fn rename_display_name(&mut self, name: &str) -> Result<EditState, String> {
-        if let DatabaseState::DuckDb {
-            duckdb_path, table, ..
-        } = &self.state
-        {
-            write_display_name(Path::new(duckdb_path), table, name)?;
-        }
-        self.decl.name = name.to_owned().into_boxed_str();
-        Ok(self.edit_state())
-    }
-
-    /// 列统计：DuckDB 走 SQL 聚合。
-    pub fn compute_column_stats(&mut self) -> PolarsResult<Vec<ColumnStats>> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                columns,
-                ..
-            } => {
-                let columns = duckdb_profile_columns(columns);
-                compute_all_column_stats_duckdb(Path::new(duckdb_path), table, &columns)
-                    .map_err(|e| PolarsError::ComputeError(e.into()))
-            }
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
-    }
-
-    /// 列分布：DuckDB 走 SQL 聚合。
-    pub fn compute_column_distributions(&mut self) -> PolarsResult<Vec<ColumnDistribution>> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                columns,
-                ..
-            } => {
-                let columns = duckdb_profile_columns(columns);
-                compute_all_column_distributions_duckdb(Path::new(duckdb_path), table, &columns)
-                    .map_err(|e| PolarsError::ComputeError(e.into()))
-            }
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
-    }
-
-    /// 数据集概览：DuckDB 用缓存元数据 + SQL null 统计。
-    pub fn compute_dataset_overview(&mut self) -> PolarsResult<DatasetOverview> {
-        match &self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                columns,
-                row_count,
-                ..
-            } => {
-                let columns = duckdb_profile_columns(columns);
-                compute_dataset_overview_duckdb(Path::new(duckdb_path), table, &columns, *row_count)
-                    .map_err(|e| PolarsError::ComputeError(e.into()))
-            }
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
-        }
-    }
-
-    pub fn edit_cell(
-        &mut self,
-        row: usize,
-        col_name: &str,
-        new_value: serde_json::Value,
-        row_id: Option<i64>,
-    ) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                ..
-            } => {
-                let path = PathBuf::from(duckdb_path.clone());
-                let table_name = table.clone();
-                let operation =
-                    edit_cell_with_operation(&path, &table_name, row, row_id, col_name, new_value)?;
-                history.push(operation);
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn add_row(&mut self, index: Option<usize>) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                row_count,
-                ..
-            } => {
-                let path = PathBuf::from(duckdb_path.clone());
-                let table_name = table.clone();
-                let idx = index.unwrap_or(*row_count);
-                let operation = add_row_with_operation(&path, &table_name, idx)?;
-                history.push(operation);
-                *row_count += 1;
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn delete_rows(
-        &mut self,
-        indices: &[usize],
-        row_ids: Option<&[i64]>,
-    ) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                row_count,
-                ..
-            } => {
-                let path = PathBuf::from(duckdb_path.clone());
-                let table_name = table.clone();
-                let operations = delete_rows_with_operations(&path, &table_name, indices, row_ids)?;
-                let deleted_count = operations.len();
-                for operation in operations {
-                    history.push(operation);
-                }
-                *row_count = row_count.saturating_sub(deleted_count);
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn add_column(&mut self, name: &str, dtype: &str) -> Result<EditState, String> {
-        let dtype = dtype_to_string(&dtype_from_string(dtype)?)?;
-
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                columns,
-                ..
-            } => {
-                let mut op = EditOperation::AddColumn {
-                    name: name.to_string(),
-                    dtype: dtype.to_string(),
-                };
-                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-                columns.push(DuckDbColumnMeta {
-                    name: name.to_string(),
-                    dtype: dtype.to_string(),
+        let relation = self.query()?.relation()?;
+        let engine = self.engine()?;
+        let control = query_control(128 * 1024 * 1024);
+        let file = std::fs::File::create(path)?;
+        match format {
+            DatabaseExportFormat::Csv => {
+                let mut writer = arrow::csv::Writer::new(file);
+                writer.write(&RecordBatch::new_empty(relation.schema()))?;
+                let mut failure = None;
+                let result = engine.visit_relation(&relation, &control, &mut |batch| {
+                    writer.write(&batch).map_err(|error| {
+                        failure = Some(error);
+                        RelationError::QueryFailed
+                    })
                 });
-                history.push(op);
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn delete_column(&mut self, name: &str) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                columns,
-                ..
-            } => {
-                let snapshot = delete_column_with_snapshot(Path::new(duckdb_path), table, name)?;
-                let op = EditOperation::DeleteColumn {
-                    name: name.to_string(),
-                    dtype: snapshot.dtype,
-                    row_ids: snapshot.row_ids,
-                    row_fingerprints: snapshot.row_fingerprints,
-                    data: snapshot.data,
-                };
-                columns.retain(|c| c.name != name);
-                history.push(op);
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn rename_column(&mut self, old_name: &str, new_name: &str) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                columns,
-                ..
-            } => {
-                let mut op = EditOperation::RenameColumn {
-                    old_name: old_name.to_string(),
-                    new_name: new_name.to_string(),
-                };
-                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-                if let Some(col) = columns.iter_mut().find(|c| c.name == old_name) {
-                    col.name = new_name.to_string();
+                if let Some(error) = failure {
+                    return Err(error.into());
                 }
-                history.push(op);
-                Ok(history.state())
+                result?;
+                writer.into_inner().sync_all()?;
             }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn cast_column(
-        &mut self,
-        col_name: &str,
-        new_dtype: &str,
-        force: bool,
-    ) -> Result<EditState, String> {
-        let new_dtype = dtype_to_string(&dtype_from_string(new_dtype)?)?;
-        if force && matches!(&self.state, DatabaseState::DuckDb { .. }) {
-            return Err("DuckDB force casting is not supported".into());
-        }
-
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                columns,
-                ..
-            } => {
-                let old_dtype = columns
-                    .iter()
-                    .find(|c| c.name == col_name)
-                    .map(|c| c.dtype.clone())
-                    .ok_or_else(|| format!("Column '{col_name}' not found"))?;
-                let mut op = EditOperation::CastColumn {
-                    col: col_name.to_string(),
-                    old_data: vec![],
-                    old_dtype: old_dtype.clone(),
-                    new_dtype: new_dtype.clone(),
-                };
-                apply_edit_on_duckdb(Path::new(duckdb_path), table, &mut op)?;
-                if let Some(col) = columns.iter_mut().find(|c| c.name == col_name) {
-                    col.dtype = new_dtype.clone();
+            DatabaseExportFormat::Parquet => {
+                let mut writer = yss_tabular_io::ParquetBatchWriter::new(file, relation.schema())?;
+                let mut failure = None;
+                let result = engine.visit_relation(&relation, &control, &mut |batch| {
+                    writer.write(&batch).map_err(|error| {
+                        failure = Some(error);
+                        RelationError::QueryFailed
+                    })
+                });
+                if let Some(error) = failure {
+                    return Err(error.into());
                 }
-                history.push(op);
-                Ok(history.state())
+                result?;
+                writer.finish()?;
             }
-            DatabaseState::Failed { error } => Err(error.clone()),
         }
+        Ok(())
     }
-
-    pub fn undo_edit(&mut self) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                row_count,
-                columns,
-                ..
-            } => {
-                let mut op = history.pop_undo().ok_or("Nothing to undo")?;
-                let path = PathBuf::from(duckdb_path.clone());
-                let table_name = table.clone();
-                if let Err(error) = reverse_edit_on_duckdb(&path, &table_name, &mut op) {
-                    history.push_undo(op);
-                    return Err(error);
-                }
-                history.push_redo(op);
-                let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
-                *row_count = count;
-                *columns = cols;
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn redo_edit(&mut self) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                row_count,
-                columns,
-                ..
-            } => {
-                let mut op = history.pop_redo().ok_or("Nothing to redo")?;
-                let path = PathBuf::from(duckdb_path.clone());
-                let table_name = table.clone();
-                if let Err(error) = apply_edit_on_duckdb(&path, &table_name, &mut op) {
-                    history.push_redo(op);
-                    return Err(error);
-                }
-                history.push_undo(op);
-                let (count, cols) = refresh_duckdb_meta(&path, &table_name)?;
-                *row_count = count;
-                *columns = cols;
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
-    pub fn save_changes(&mut self) -> Result<EditState, String> {
-        match &mut self.state {
-            DatabaseState::DuckDb {
-                duckdb_path,
-                table,
-                history,
-                row_count,
-                columns,
-            } => {
-                let (count, cols) = refresh_duckdb_meta(Path::new(duckdb_path), table)?;
-                *row_count = count;
-                *columns = cols;
-                history.clear();
-                Ok(history.state())
-            }
-            DatabaseState::Failed { error } => Err(error.clone()),
-        }
-    }
-
     pub fn edit_state(&self) -> EditState {
         match &self.state {
-            DatabaseState::DuckDb { history, .. } => history.state(),
-            _ => EditState {
+            DatabaseState::Dataset { history, .. } => history.state(),
+            DatabaseState::Failed { .. } => EditState {
                 can_undo: false,
                 can_redo: false,
                 is_modified: false,
@@ -447,5 +159,200 @@ impl DatabaseInstance {
                 redo_count: 0,
             },
         }
+    }
+    pub(crate) fn prepare_mutation(
+        &self,
+        operation: &DatabaseMutationOperation,
+        operation_id: &str,
+    ) -> Result<PreparedInstanceMutation, DatasetStoreError> {
+        let DatabaseState::Dataset {
+            snapshot,
+            engine,
+            history,
+        } = &self.state
+        else {
+            return Err(DatasetStoreError::NotFound);
+        };
+        let store = snapshot.store();
+        let control = query_control(128 * 1024 * 1024);
+        let mut next_history = history.clone();
+        let mut push_history = false;
+        let prepared = match operation {
+            DatabaseMutationOperation::DeleteDatabase => {
+                store.prepare_delete(snapshot, operation_id)?
+            }
+            DatabaseMutationOperation::Undo => {
+                let edit = next_history
+                    .pop_undo()
+                    .ok_or(DatasetStoreError::InvalidValue)?;
+                let mut prepared = store.prepare_restore(snapshot, &edit.before, operation_id)?;
+                prepared.preserve_display_name(snapshot)?;
+                next_history.push_redo(edit);
+                prepared
+            }
+            DatabaseMutationOperation::Redo => {
+                let edit = next_history
+                    .pop_redo()
+                    .ok_or(DatasetStoreError::InvalidValue)?;
+                let mut prepared = store.prepare_restore(snapshot, &edit.after, operation_id)?;
+                prepared.preserve_display_name(snapshot)?;
+                next_history.push_undo(edit);
+                prepared
+            }
+            DatabaseMutationOperation::RenameDatabase { name } => {
+                store.prepare_rename(snapshot, operation_id, name)?
+            }
+            DatabaseMutationOperation::Save => {
+                next_history.clear();
+                store.prepare_rename(snapshot, operation_id, &snapshot.metadata().name)?
+            }
+            operation => {
+                push_history = true;
+                match operation {
+                    DatabaseMutationOperation::EditCell {
+                        row,
+                        column,
+                        value,
+                        row_id,
+                    } => {
+                        let row_id = match row_id {
+                            Some(id) => *id,
+                            None => self.row_id_at(*row, &control)?,
+                        };
+                        let value = serde_json::to_value(value)
+                            .map_err(|_| DatasetStoreError::InvalidValue)?;
+                        store.prepare_cell_edit(
+                            snapshot,
+                            engine,
+                            operation_id,
+                            DatasetCellEdit {
+                                row_id,
+                                column,
+                                value,
+                            },
+                            &control,
+                        )?
+                    }
+                    DatabaseMutationOperation::AddRow { index } => store.prepare_add_row(
+                        snapshot,
+                        engine,
+                        operation_id,
+                        if *index == usize::MAX {
+                            snapshot.metadata().row_count
+                        } else {
+                            *index
+                        },
+                        &control,
+                    )?,
+                    DatabaseMutationOperation::DeleteRows { indices, row_ids } => {
+                        let ids = match row_ids {
+                            Some(ids) if ids.len() == indices.len() => ids.to_vec(),
+                            Some(_) => return Err(DatasetStoreError::InvalidValue),
+                            None => indices
+                                .iter()
+                                .map(|index| self.row_id_at(*index, &control))
+                                .collect::<Result<Vec<_>, _>>()?,
+                        };
+                        store.prepare_delete_rows(snapshot, engine, operation_id, &ids, &control)?
+                    }
+                    DatabaseMutationOperation::AddColumn { name, data_type } => {
+                        store.prepare_add_column(snapshot, operation_id, name, data_type.clone())?
+                    }
+                    DatabaseMutationOperation::DeleteColumn { name } => {
+                        store.prepare_delete_column(snapshot, operation_id, name)?
+                    }
+                    DatabaseMutationOperation::RenameColumn { old_name, new_name } => {
+                        store.prepare_rename_column(snapshot, operation_id, old_name, new_name)?
+                    }
+                    DatabaseMutationOperation::CastColumn {
+                        name,
+                        data_type,
+                        force,
+                    } => store.prepare_cast_column(
+                        snapshot,
+                        engine,
+                        operation_id,
+                        DatasetColumnCast {
+                            column: name,
+                            data_type: data_type.clone(),
+                            force: *force,
+                        },
+                        &control,
+                    )?,
+                    _ => return Err(DatasetStoreError::InvalidValue),
+                }
+            }
+        };
+        Ok(PreparedInstanceMutation {
+            before: self.clone(),
+            prepared,
+            history: next_history,
+            push_history,
+        })
+    }
+    fn row_id_at(&self, index: usize, control: &RelationControl) -> Result<i64, DatasetStoreError> {
+        let page = self.query()?.page(index, 1, control)?;
+        let batch = page.batches.first().ok_or(DatasetStoreError::RowNotFound)?;
+        let rows = yss_tabular_arrow::dataset_row_columns(&batch.schema())
+            .map_err(|_| DatasetStoreError::InvalidSchema)?
+            .ok_or(DatasetStoreError::InvalidSchema)?;
+        let array = batch
+            .column_by_name(&rows.row_id)
+            .and_then(|array| array.as_any().downcast_ref::<Int64Array>())
+            .ok_or(DatasetStoreError::InvalidSchema)?;
+        Ok(array.value(0))
+    }
+}
+
+pub(crate) struct PreparedInstanceMutation {
+    before: DatabaseInstance,
+    prepared: PreparedDataset,
+    history: yss_database_edit::EditHistory<DatasetEdit>,
+    push_history: bool,
+}
+impl PreparedInstanceMutation {
+    pub fn schema_changed(&self) -> Result<bool, DatasetStoreError> {
+        Ok(self.prepared.metadata().schema != self.before.snapshot()?.metadata().schema)
+    }
+    pub fn recovery(
+        &self,
+    ) -> Result<(Arc<yss_dataset_store::DatasetStore>, DatasetPublication), DatasetStoreError> {
+        Ok((
+            self.before.snapshot()?.store().clone(),
+            self.prepared.publication(),
+        ))
+    }
+    pub fn edit_state(&self) -> EditState {
+        let mut state = self.history.state();
+        if self.push_history {
+            state.undo_count += 1;
+            state.redo_count = 0;
+            state.can_undo = true;
+            state.can_redo = false;
+            state.is_modified = true;
+        }
+        state
+    }
+    pub fn commit(mut self) -> Result<(DatabaseInstance, DatasetPublication), DatasetStoreError> {
+        let snapshot = self.before.snapshot()?.clone();
+        let engine = self.before.engine()?.clone();
+        let committed = snapshot.store().commit(self.prepared)?;
+        if self.push_history {
+            self.history.push(DatasetEdit {
+                before: snapshot,
+                after: committed.snapshot.clone(),
+            });
+        }
+        let mut decl = self.before.decl;
+        decl.name = committed.snapshot.metadata().name.clone();
+        let instance = DatabaseInstance {
+            decl,
+            state: DatabaseState::Dataset {
+                snapshot: committed.snapshot,
+                engine,
+                history: self.history,
+            },
+        };
+        Ok((instance, committed.publication))
     }
 }

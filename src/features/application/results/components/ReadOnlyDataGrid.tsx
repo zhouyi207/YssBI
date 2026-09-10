@@ -49,6 +49,7 @@ function dtypeToKind(dtype?: string): ColumnDataKind {
     normalized.includes("int") ||
     normalized.includes("float") ||
     normalized.includes("double") ||
+    normalized.includes("decimal") ||
     normalized.includes("number")
   ) {
     return "number";

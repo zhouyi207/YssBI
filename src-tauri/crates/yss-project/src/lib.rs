@@ -3,6 +3,7 @@
 pub mod execution_authority;
 pub mod graph_resource_index;
 mod manifest;
+pub use manifest::CURRENT_PROJECT_SCHEMA_VERSION;
 pub(crate) mod project_change_reconciliation;
 pub mod project_error;
 mod resource_lifecycle_operation;

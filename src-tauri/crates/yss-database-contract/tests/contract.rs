@@ -12,7 +12,7 @@ use yss_database_contract::{
 fn declaration(id: &str, name: &str) -> DatabaseDecl {
     DatabaseDecl {
         id: DatabaseId::from_existing(id.into()),
-        engine: DatabaseEngine::InMemory { name: id.into() },
+        engine: DatabaseEngine::Dataset {},
         schema_version: 1,
         required: false,
         name: name.into(),
@@ -59,7 +59,7 @@ fn declaration_preserves_wire_bytes_and_requires_the_display_name() {
     let bytes = serde_json::to_vec(&declaration).unwrap();
     assert_eq!(
         bytes,
-        br#"{"id":"sales","engine":{"inMemory":{"name":"sales"}},"schemaVersion":1,"required":false,"name":"Sales"}"#
+        br#"{"id":"sales","engine":{"dataset":{}},"schemaVersion":1,"required":false,"name":"Sales"}"#
     );
     assert_eq!(
         serde_json::from_slice::<DatabaseDecl>(&bytes).unwrap(),
@@ -73,27 +73,10 @@ fn declaration_preserves_wire_bytes_and_requires_the_display_name() {
 }
 
 #[test]
-fn engines_preserve_in_memory_and_duckdb_wire_shapes() {
-    assert_eq!(
-        serde_json::to_value(DatabaseEngine::InMemory {
-            name: "sales".into(),
-        })
-        .unwrap(),
-        json!({"inMemory": {"name": "sales"}})
-    );
-
-    let duckdb = DatabaseEngine::DuckDb {
-        path: "database/project.duckdb".into(),
-        table: "sales".into(),
-    };
-    assert_eq!(
-        duckdb.duckdb_table(),
-        Some(("database/project.duckdb", "sales"))
-    );
-    assert_eq!(
-        serde_json::to_value(duckdb).unwrap(),
-        json!({"duckDb": {"path": "database/project.duckdb", "table": "sales"}})
-    );
+fn persisted_storage_accepts_only_the_dataset_identity() {
+    assert_eq!(serde_json::to_value(DatabaseEngine::Dataset {}).unwrap(), json!({"dataset": {}}));
+    assert!(serde_json::from_value::<DatabaseEngine>(json!({"duckDb": {"path": "database/project.duckdb", "table": "sales"}})).is_err());
+    assert!(serde_json::from_value::<DatabaseEngine>(json!({"csv": {"path": "source.csv"}})).is_err());
 }
 
 #[test]

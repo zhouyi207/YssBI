@@ -63,10 +63,30 @@ impl ApplicationState {
         &self,
         path: &str,
     ) -> Result<ProjectActivation, ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        let path = normalize_existing_path(path).map_err(|_| ProjectLifecycleError::InvalidPath)?;
+        // A rejected file has not started a session replacement. Preserve existing admission,
+        // drafts and results until Project has validated the target's activation data.
+        let prepared = captured
+            .project()
+            .prepare_project_activation(Some(Path::new(&path)))
+            .map_err(ProjectLifecycleError::LoadFailed)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
         let replacement = begin_replacement(self)?;
-        let result = load_project(replacement.project(), path)?;
+        let result = replacement
+            .project()
+            .activate_prepared_project(prepared)
+            .map(|session| ProjectActivation {
+                path,
+                project_instance_id: session.instance_id,
+                activation_revision: replacement.project().activation_revision(),
+            })
+            .map_err(ProjectLifecycleError::LoadFailed);
+        // Project rechecks files under its final lease. If that check fails after draining,
+        // rebuild admission from the still-current authority instead of abandoning the worker.
         finish_replacement(self, replacement)?;
-        Ok(result)
+        result.map_err(Into::into)
     }
 
     pub fn clear_project_for_application(&self) -> Result<(), ApplicationProjectLifecycleError> {

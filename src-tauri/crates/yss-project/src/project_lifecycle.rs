@@ -7,7 +7,7 @@ use yss_project_discovery::normalize_project_name;
 use yss_project_filesystem::{
     NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectRootBinding, ProjectRootLifecycleGuard, StagedFilesystemMutation, ensure_directory,
-    read_project_source_tree, remove_directory_if_created, validate_deletion_root,
+    read_project_file_inventory, remove_directory_if_created, validate_deletion_root,
     validate_destination_policy,
 };
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
@@ -137,11 +137,11 @@ impl ProjectState {
             operation_id,
             self,
         );
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+        let prepared = ProjectFilesystemTransaction::prepare_with_file_validator(
             context.filesystem_context(),
             lease,
             mutations,
-            validate_project_copy_file,
+            validate_project_copy_staged_file,
         )?;
         self.validate_project_session(&session)?;
         destination_binding.revalidate()?;
@@ -202,6 +202,8 @@ impl ProjectState {
         destination_binding.revalidate()?;
         let committed = prepared.commit()?;
         destination_binding.revalidate()?;
+        yss_dataset_store::DatasetStore::create(destination_root.as_path())
+            .map_err(prepare_error)?;
         committed.finalize();
         root_guard.disarm();
         Ok(CreatedProject {
@@ -378,36 +380,72 @@ fn copy_mutations(
     source: &Path,
     authority: &ProjectData,
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
-    let source_tree = read_project_source_tree(source)?;
+    let catalog = yss_dataset_store::DatasetStore::open(source)
+        .and_then(|store| store.catalog_snapshot())
+        .map_err(prepare_error)?;
+    let source_tree = read_project_file_inventory(source)?;
     let mut directories = source_tree.directories;
     directories.extend(PROJECT_CONTENT_DIRECTORIES.map(PathBuf::from));
-    let mut files = source_tree.files;
+    let source_root = NormalizedProjectRoot::from_project_path(source)?;
+    let mut files = source_tree
+        .files
+        .into_iter()
+        .map(|relative_path| {
+            let mutation = StagedFilesystemMutation::CopyFile {
+                relative_path: relative_path.clone(),
+                source_root: source_root.clone(),
+                source_relative_path: relative_path.clone(),
+            };
+            (relative_path, mutation)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let catalog_path = crate::relative_dataset_catalog_path();
+    files.remove(Path::new(&format!("{catalog_path}-wal")));
+    files.remove(Path::new(&format!("{catalog_path}-shm")));
+    files.insert(
+        PathBuf::from(&catalog_path),
+        write_mutation(catalog_path, catalog),
+    );
     files.remove(Path::new(PROJECT_METADATA_FILE));
     files.retain(|path, _| !path.starts_with(CHARTS_DIR));
     files.insert(
         PathBuf::from(PROJECT_METADATA_FILE),
-        crate::serialize_project_manifest(authority).map_err(prepare_error)?,
+        write_mutation(
+            PROJECT_METADATA_FILE,
+            crate::serialize_project_manifest(authority).map_err(prepare_error)?,
+        ),
     );
     for graph_path in authority.graphs.keys() {
         let (path, contents) =
             crate::serialize_graph_document(authority, graph_path).map_err(prepare_error)?;
-        files.insert(path, contents);
+        files.insert(path.clone(), write_mutation(path, contents));
     }
     for (chart_path, chart) in &authority.charts {
         let (path, contents) = crate::serialize_chart(chart_path, chart).map_err(prepare_error)?;
-        files.insert(path, contents);
+        files.insert(path.clone(), write_mutation(path, contents));
     }
     let mut mutations = directories
         .into_iter()
         .map(|relative_path| StagedFilesystemMutation::CreateDirectory { relative_path })
         .collect::<Vec<_>>();
-    mutations.extend(files.into_iter().map(|(relative_path, contents)| {
-        StagedFilesystemMutation::Write {
-            relative_path,
-            contents,
-        }
-    }));
+    mutations.extend(files.into_values());
     Ok(mutations)
+}
+
+fn validate_project_copy_staged_file(relative: &Path, staged: &Path) -> Result<(), String> {
+    if relative == Path::new(PROJECT_METADATA_FILE)
+        || matches!(
+            relative
+                .extension()
+                .and_then(|extension| extension.to_str()),
+            Some("yssbi-event" | "yssbi-function" | CHART_EXTENSION)
+        )
+    {
+        let contents = std::fs::read(staged).map_err(|error| error.to_string())?;
+        validate_project_copy_file(relative, &contents)
+    } else {
+        Ok(())
+    }
 }
 
 fn validate_project_copy_file(path: &Path, contents: &[u8]) -> Result<(), String> {

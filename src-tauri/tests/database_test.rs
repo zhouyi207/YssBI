@@ -1,700 +1,573 @@
-use std::path::PathBuf;
-
-use polars::prelude::*;
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseId};
-use yss_database_edit::EditHistory;
-use yss_database_runtime::test_support::DuckDbFixture;
-use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use yss_duckdb::{
-    MAX_DELETE_COLUMN_SNAPSHOT_ROWS, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
-    query_page_to_dataframe, read_table_meta, write_display_name,
+//! Production database workflows over the committed catalog and Arrow file boundary.
+use arrow::array::{
+    Decimal128Array, Int8Array, Int32Array, Int64Array, StringArray, TimestampNanosecondArray,
+    UInt8Array, UInt64Array,
 };
-use yss_project::{ProjectState, discover_databases_from_root, project_duckdb_abs};
-use yss_project_identity::OperationId;
+use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use arrow::record_batch::{RecordBatch, RecordBatchReader};
+use std::path::PathBuf;
+use std::sync::Arc;
+use yss_application::database::{DatabaseMutation, DatabaseRowsResult};
+use yss_application::execution::{
+    ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState,
+};
+use yss_database_contract::DatabaseImportSource;
 
-fn test_output_path(name: String) -> PathBuf {
-    let directory = PathBuf::from("target");
-    std::fs::create_dir_all(&directory).expect("create database test output directory");
-    directory.join(name)
+use yss_project::ProjectState;
+use yss_project_identity::{OperationId, ResourceRevision};
+
+struct Native {
+    schema: arrow::datatypes::SchemaRef,
+    batches: Vec<RecordBatch>,
 }
 
-fn duckdb_instance(duckdb_path: &PathBuf, table: &str) -> DatabaseInstance {
-    let meta = read_table_meta(duckdb_path, table).unwrap();
-    DatabaseInstance {
-        decl: DatabaseDecl {
-            id: DatabaseId::from_existing(table.into()),
-            engine: DatabaseEngine::DuckDb {
-                path: duckdb_path.to_string_lossy().into_owned(),
-                table: table.into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: table.into(),
-        },
-        state: DatabaseState::DuckDb {
-            duckdb_path: duckdb_path.to_string_lossy().into_owned(),
-            table: table.into(),
-            row_count: meta.row_count,
-            columns: meta.columns,
-            history: EditHistory::new(),
-        },
+struct Project {
+    app: ApplicationState,
+    state: Arc<ProjectState>,
+    directory: PathBuf,
+    metadata: PathBuf,
+}
+impl Project {
+    fn new() -> Self {
+        let directory =
+            std::env::temp_dir().join(format!("yss-database ['test']-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let project = Arc::new(ProjectState::new());
+        let metadata = project
+            .create_project_transaction("Data", &directory.join("project"), OperationId::new())
+            .unwrap()
+            .metadata_path;
+        project.activate_project_from_path(&metadata).unwrap();
+        Self {
+            app: application(project.clone()),
+            state: project,
+            directory,
+            metadata,
+        }
+    }
+    fn import(&self, source: DatabaseImportSource) -> String {
+        self.app
+            .load_database_for_application(
+                self.app
+                    .capture_session()
+                    .unwrap()
+                    .project_instance_id()
+                    .clone(),
+                OperationId::new(),
+                source,
+            )
+            .unwrap()
+            .data
+            .id
+    }
+    fn batch(&self, batch: RecordBatch) -> String {
+        let path = self
+            .directory
+            .join(format!("input-{}.parquet", uuid::Uuid::new_v4()));
+        yss_tabular_io::write_parquet_batches(&path, batch.schema(), [Ok(batch.clone())]).unwrap();
+        self.import(DatabaseImportSource::Parquet {
+            path: path.to_string_lossy().into(),
+            columns: None,
+        })
+    }
+    fn revision(&self, id: &str) -> ResourceRevision {
+        let capture = self.app.capture_session().unwrap();
+        self.state
+            .read_project_index(capture.project_instance_id())
+            .unwrap()
+            .databases
+            .into_iter()
+            .find(|entry| entry.id == id)
+            .unwrap()
+            .revision
+    }
+    fn edit(
+        &self,
+        id: &str,
+        operation: DatabaseMutation,
+    ) -> Result<yss_database_edit::EditState, yss_application::database::DatabaseUseCaseError> {
+        self.app
+            .mutate_database_for_application(
+                self.app
+                    .capture_session()
+                    .unwrap()
+                    .project_instance_id()
+                    .clone(),
+                id.into(),
+                self.revision(id),
+                OperationId::new(),
+                operation,
+            )
+            .map(|result| result.data)
+    }
+    fn rows(&self, id: &str, offset: usize, limit: usize) -> DatabaseRowsResult {
+        self.app
+            .query_database_rows_for_application(
+                self.app
+                    .capture_session()
+                    .unwrap()
+                    .project_instance_id()
+                    .clone(),
+                id.into(),
+                offset,
+                limit,
+            )
+            .unwrap()
+    }
+    fn native(&self, id: &str, columns: &[&str], offset: usize, limit: usize) -> Native {
+        let store = yss_dataset_store::DatasetStore::open(self.metadata.parent().unwrap()).unwrap();
+        let decl = self.state.get_data().unwrap().databases[id].clone();
+        let instance = yss_database_runtime::bind_dataset_instance(&decl, &store);
+        let control = yss_relational_contract::RelationControl {
+            cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(20),
+            max_input_bytes: 16 * 1024 * 1024,
+        };
+        let batches = instance
+            .read_arrow_columns(columns, offset, limit, &control)
+            .unwrap();
+        Native {
+            schema: batches[0].schema(),
+            batches,
+        }
     }
 }
-
-#[test]
-fn save_preserves_data_and_starts_a_new_edit_history() {
-    let mut fixture = DuckDbFixture::new("test", df!("value" => [1_i64]).unwrap());
-    let database = &mut fixture.instance;
-
-    database
-        .edit_cell(0, "value", serde_json::json!(2), None)
-        .unwrap();
-    database.undo_edit().unwrap();
-    assert_eq!(
-        database
-            .query_page(0, 1)
-            .unwrap()
-            .column("value")
-            .unwrap()
-            .i64()
-            .unwrap()
-            .get(0),
-        Some(1)
-    );
-    database.redo_edit().unwrap();
-
-    let saved = database.save_changes().unwrap();
-    assert!(!saved.can_undo);
-    assert!(!saved.can_redo);
-    assert!(!saved.is_modified);
-    assert_eq!(saved.undo_count, 0);
-    assert_eq!(saved.redo_count, 0);
-    assert_eq!(
-        database
-            .query_page(0, 1)
-            .unwrap()
-            .column("value")
-            .unwrap()
-            .i64()
-            .unwrap()
-            .get(0),
-        Some(2)
-    );
-
-    database
-        .edit_cell(0, "value", serde_json::json!(3), None)
-        .unwrap();
-    database.undo_edit().unwrap();
-    assert_eq!(
-        database
-            .query_page(0, 1)
-            .unwrap()
-            .column("value")
-            .unwrap()
-            .i64()
-            .unwrap()
-            .get(0),
-        Some(2)
-    );
-    assert!(!database.edit_state().can_undo);
+impl Drop for Project {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
+}
+fn application(project: Arc<ProjectState>) -> ApplicationState {
+    let backend = Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
+    let candidate = yss_application::execution::session_factory::build_current_project_candidate(
+        ApplicationSessionEpoch::INITIAL,
+        project,
+        [],
+        backend.clone(),
+    )
+    .unwrap();
+    let app = ApplicationState::from_composition(Arc::new(ApplicationSessionSlot::new()), backend);
+    app.install_candidate(candidate).unwrap();
+    app
+}
+fn value(rows: &DatabaseRowsResult, column: usize, row: usize) -> serde_json::Value {
+    serde_json::to_value(&rows.rows.columns()[column].values()[row]).unwrap()
 }
 
 #[test]
-fn add_column_rejects_unknown_dtype_without_history() {
-    let mut fixture = DuckDbFixture::new("test", df!("value" => [1_i64]).unwrap());
-    let database = &mut fixture.instance;
-
-    let error = database.add_column("invalid", "Mystery").unwrap_err();
-
-    assert!(error.contains("Mystery"));
-    assert_eq!(database.list_column_names().unwrap(), vec!["value"]);
-    assert!(!database.edit_state().can_undo);
-}
-
-#[test]
-fn edit_cell_rejects_out_of_range_integers_without_history() {
-    let mut fixture = DuckDbFixture::new(
-        "test",
-        df!(
-            "signed" => [7_i8],
-            "unsigned" => [9_u8],
-        )
-        .unwrap(),
+fn invalid_edit_targets_and_integer_overflow_leave_data_and_history_unchanged() {
+    let project = Project::new();
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("signed", DataType::Int8, false),
+            Field::new("unsigned", DataType::UInt8, false),
+        ])),
+        vec![
+            Arc::new(Int8Array::from(vec![7])),
+            Arc::new(UInt8Array::from(vec![9])),
+        ],
+    )
+    .unwrap();
+    let id = project.batch(batch);
+    let revision = project.revision(&id);
+    assert!(
+        project
+            .edit(
+                &id,
+                DatabaseMutation::AddColumn {
+                    name: "bad".into(),
+                    dtype: "Mystery".into()
+                }
+            )
+            .is_err()
     );
-    let database = &mut fixture.instance;
-
     for (column, value) in [
         ("signed", serde_json::json!(128)),
         ("unsigned", serde_json::json!(-1)),
     ] {
-        assert!(database.edit_cell(0, column, value, None).is_err());
-        assert!(!database.edit_state().can_undo);
+        assert!(
+            project
+                .edit(
+                    &id,
+                    DatabaseMutation::EditCell {
+                        row: 0,
+                        column: column.into(),
+                        value,
+                        row_id: Some(0)
+                    }
+                )
+                .is_err()
+        );
     }
-
-    let page = database.query_page(0, 1).unwrap();
-    assert_eq!(page.column("signed").unwrap().i8().unwrap().get(0), Some(7));
+    let native = project.native(&id, &["signed", "unsigned"], 0, 1);
+    assert_eq!(native.schema.field(0).data_type(), &DataType::Int8);
     assert_eq!(
-        page.column("unsigned").unwrap().u8().unwrap().get(0),
-        Some(9)
-    );
-}
-
-#[test]
-fn dataframe_import_preserves_column_dtype_and_data_through_delete_undo() {
-    let mut fixture = DuckDbFixture::new(
-        "test",
-        df!(
-            "keep" => [10_i64, 20, 30],
-            "removed" => [Some(1_i32), None, Some(-2)],
-        )
-        .unwrap(),
-    );
-    let database = &mut fixture.instance;
-
-    database.delete_column("removed").unwrap();
-    database.undo_edit().unwrap();
-
-    let page = database.query_page(0, 3).unwrap();
-    let restored = page.column("removed").unwrap();
-    assert_eq!(restored.dtype(), &DataType::Int32);
-    assert_eq!(
-        restored.i32().unwrap().into_iter().collect::<Vec<_>>(),
-        vec![Some(1), None, Some(-2)]
-    );
-}
-
-#[test]
-fn duckdb_edit_quotes_identifiers_separately_from_string_literals() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_quotes_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let table = "table\"with'quotes";
-    let column = "value\"with'quotes";
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(
-        r#"CREATE TABLE "table""with'quotes" ("value""with'quotes" VARCHAR);
-           INSERT INTO "table""with'quotes" VALUES ('before');"#,
-    )
-    .unwrap();
-    drop(conn);
-
-    let mut database = duckdb_instance(&duckdb_path, table);
-
-    database
-        .edit_cell(0, column, serde_json::json!("O'Reilly\\path"), None)
-        .unwrap();
-
-    let page = database.query_page(0, 1).unwrap();
-    assert_eq!(
-        page.column(column).unwrap().str().unwrap().get(0),
-        Some("O'Reilly\\path")
-    );
-
-    let _ = std::fs::remove_file(duckdb_path);
-}
-
-#[test]
-fn duckdb_force_cast_is_rejected_without_mutation() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_force_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(
-        "CREATE TABLE force_cast (value VARCHAR); INSERT INTO force_cast VALUES ('1');",
-    )
-    .unwrap();
-    drop(conn);
-
-    let mut database = duckdb_instance(&duckdb_path, "force_cast");
-
-    let error = database.cast_column("value", "Int64", true).unwrap_err();
-
-    assert!(error.to_lowercase().contains("force"));
-    assert!(!database.edit_state().can_undo);
-    let page = database.query_page(0, 1).unwrap();
-    assert_eq!(page.column("value").unwrap().dtype(), &DataType::String);
-    assert_eq!(
-        page.column("value").unwrap().str().unwrap().get(0),
-        Some("1")
-    );
-
-    let _ = std::fs::remove_file(duckdb_path);
-}
-
-#[test]
-fn duckdb_delete_column_undo_restores_dtype_and_data() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_delete_column_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let table = "delete_column";
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(
-        "CREATE TABLE delete_column (keep BIGINT, removed INTEGER);\n\
-         INSERT INTO delete_column VALUES (1, 7), (2, NULL), (3, -2);",
-    )
-    .unwrap();
-    drop(conn);
-
-    let mut database = duckdb_instance(&duckdb_path, table);
-
-    database.delete_column("removed").unwrap();
-    database.undo_edit().unwrap();
-
-    let page = database.query_page(0, 3).unwrap();
-    let restored = page.column("removed").unwrap();
-    assert_eq!(restored.dtype(), &DataType::Int32);
-    assert_eq!(
-        restored.i32().unwrap().into_iter().collect::<Vec<_>>(),
-        vec![Some(7), None, Some(-2)]
-    );
-
-    let _ = std::fs::remove_file(duckdb_path);
-}
-
-#[test]
-fn duckdb_delete_column_over_snapshot_limit_is_rejected_without_history() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_delete_limit_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let table = "delete_limit";
-    let row_count = MAX_DELETE_COLUMN_SNAPSHOT_ROWS + 1;
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(&format!(
-        "CREATE TABLE {table} AS \
-         SELECT i::BIGINT AS keep, i::INTEGER AS removed \
-         FROM range({row_count}) AS rows(i);"
-    ))
-    .unwrap();
-    drop(conn);
-
-    let mut database = duckdb_instance(&duckdb_path, table);
-
-    let error = database.delete_column("removed").unwrap_err();
-
-    assert!(error.to_lowercase().contains("limit"));
-    assert!(!database.edit_state().can_undo);
-    assert!(
-        database
-            .list_column_names()
+        native.batches[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int8Array>()
             .unwrap()
-            .contains(&"removed".to_string())
+            .value(0),
+        7
     );
-
-    let _ = std::fs::remove_file(duckdb_path);
+    assert_eq!(
+        native.batches[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<UInt8Array>()
+            .unwrap()
+            .value(0),
+        9
+    );
+    assert_eq!(project.revision(&id), revision);
+    assert!(
+        !project
+            .app
+            .query_database_edit_state_for_application(
+                project
+                    .app
+                    .capture_session()
+                    .unwrap()
+                    .project_instance_id()
+                    .clone(),
+                id
+            )
+            .unwrap()
+            .can_undo
+    );
 }
 
 #[test]
-fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_export_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let table = "export\"table";
-    let row_count = 50_001;
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(&format!(
-        "CREATE TABLE \"export\"\"table\" AS \
-         SELECT i::BIGINT AS id FROM range({row_count}) AS rows(i);"
-    ))
+fn deleting_a_large_column_and_undo_preserve_exact_type_nulls_and_stable_identity() {
+    let project = Project::new();
+    let count = 50_001_i32;
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("keep", DataType::Int64, false),
+            Field::new("removed", DataType::Int32, true),
+        ])),
+        vec![
+            Arc::new(Int64Array::from_iter_values(0..i64::from(count))),
+            Arc::new(Int32Array::from_iter(
+                (0..count).map(|value| (value % 5 != 0).then_some(-value)),
+            )),
+        ],
+    )
     .unwrap();
-    drop(conn);
-
-    let database = duckdb_instance(&duckdb_path, table);
-    let csv_path = test_output_path(format!(
-        "test_database_export_'_{}.csv",
-        uuid::Uuid::new_v4()
-    ));
-    let parquet_path = csv_path.with_extension("parquet");
-    std::fs::write(&csv_path, b"reserved").unwrap();
-    std::fs::write(&parquet_path, b"reserved").unwrap();
-
-    database
-        .export_to_path(&csv_path, DatabaseExportFormat::Csv)
-        .unwrap();
-    database
-        .export_to_path(&parquet_path, DatabaseExportFormat::Parquet)
-        .unwrap();
-
-    assert_eq!(
-        std::fs::read_to_string(&csv_path).unwrap().lines().count(),
-        row_count + 1
-    );
-    let conn = duckdb::Connection::open_in_memory().unwrap();
-    let parquet_rows: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM read_parquet(?)",
-            [parquet_path.to_string_lossy().as_ref()],
-            |row| row.get(0),
+    let id = project.batch(batch);
+    let original = project.native(&id, &["removed"], 49_998, 3);
+    project
+        .edit(
+            &id,
+            DatabaseMutation::DeleteColumn {
+                name: "removed".into(),
+            },
         )
         .unwrap();
-    assert_eq!(parquet_rows as usize, row_count);
-    assert!(matches!(database.state, DatabaseState::DuckDb { .. }));
-
-    let _ = std::fs::remove_file(csv_path);
-    let _ = std::fs::remove_file(parquet_path);
-    let _ = std::fs::remove_file(duckdb_path);
-}
-
-#[test]
-fn duckdb_delete_column_failed_undo_is_atomic_and_keeps_history() {
-    let duckdb_path = test_output_path(format!(
-        "test_database_delete_atomic_{}.duckdb",
-        uuid::Uuid::new_v4()
-    ));
-    let table = "delete_atomic";
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(
-        "CREATE TABLE delete_atomic (keep BIGINT, removed INTEGER);\n\
-         INSERT INTO delete_atomic VALUES (1, 7), (2, 8), (3, 9);",
-    )
-    .unwrap();
-    drop(conn);
-
-    let mut database = duckdb_instance(&duckdb_path, table);
-    database.delete_column("removed").unwrap();
-
-    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
-    conn.execute_batch(
-        "DELETE FROM delete_atomic WHERE rowid = 1;\n\
-         INSERT INTO delete_atomic (keep) VALUES (4);",
-    )
-    .unwrap();
-    drop(conn);
-
-    let error = database.undo_edit().unwrap_err();
-
-    assert!(error.contains("rowid 1"));
-    assert!(database.edit_state().can_undo);
-    assert!(!database.edit_state().can_redo);
-    let meta = read_table_meta(&duckdb_path, table).unwrap();
-    assert!(meta.columns.iter().all(|column| column.name != "removed"));
-
-    let _ = std::fs::remove_file(duckdb_path);
-}
-
-fn setup_iris_duckdb_project() -> (PathBuf, String) {
-    let project_root = test_output_path(format!("test_project_duckdb_{}", uuid::Uuid::new_v4()));
-    let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::new()
-        .create_project_transaction("Database test", &project_root, OperationId::new())
-        .expect("create project fixture");
-
-    let db_id = "db-test-iris";
-    let duckdb_path = project_duckdb_abs(&project_root);
-
-    ingest_csv_to_duckdb(
-        PathBuf::from("tests/data/iris.csv").as_path(),
-        &duckdb_path,
-        db_id,
-        ',',
-        true,
-        Some(100),
-    )
-    .expect("ingest csv");
-    write_display_name(&duckdb_path, db_id, "iris").expect("write display name");
-
-    (project_root, db_id.to_string())
-}
-
-/// Phase 2：分页与 schema 不触发整表 Loaded。
-#[test]
-fn test_duckdb_query_page_and_schema_without_full_load() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let columns = db_instance.list_column_names().expect("schema");
-    assert!(columns.len() >= 5);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let page = db_instance.query_page(10, 5).expect("page");
-    assert_eq!(page.height(), 5);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let direct = query_page_to_dataframe(&project_duckdb_abs(&project_root), &db_id, 20, 3)
-        .expect("direct page");
-    assert_eq!(direct.height(), 3);
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// Phase 4.5：打开项目时从 project.duckdb 枚举表并绑定。
-#[test]
-fn test_project_reload_discovers_duckdb_from_directory() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let state = ProjectState::new();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    assert_eq!(databases.len(), 1);
-    assert_eq!(databases.get(&db_id).map(|d| d.name.as_ref()), Some("iris"));
-    state.activate_project_from_path(&project_root).unwrap();
-
-    let data = state.get_data().expect("project data after reload");
-    let declaration = data
-        .databases
-        .get(&db_id)
-        .expect("database in project data");
+    let stale = project.revision(&id);
+    project.edit(&id, DatabaseMutation::Undo).unwrap();
+    let restored = project.native(&id, &["removed"], 49_998, 3);
+    assert_eq!(restored.schema, original.schema);
+    assert_eq!(restored.batches[0], original.batches[0]);
     assert_eq!(
-        declaration.engine.duckdb_table(),
-        Some(("database/project.duckdb", db_id.as_str())),
+        project.rows(&id, 49_998, 3).row_ids,
+        vec![49_998, 49_999, 50_000]
     );
-    let mut database = bind_duckdb_instance(declaration, Some(project_root.as_path()));
-    assert!(matches!(database.state, DatabaseState::DuckDb { .. }));
-
-    let page = database.query_page(0, 20).expect("page after reload");
-    assert_eq!(page.height(), 20);
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// 同一 project.duckdb 可承载多张表。
-#[test]
-fn test_single_project_duckdb_multiple_tables() {
-    let project_root = test_output_path(format!("test_project_multi_{}", uuid::Uuid::new_v4()));
-    let _ = std::fs::remove_dir_all(&project_root);
-    ProjectState::new()
-        .create_project_transaction("Multi database test", &project_root, OperationId::new())
-        .expect("create project fixture");
-    let duckdb_path = project_duckdb_abs(&project_root);
-    let csv = PathBuf::from("tests/data/iris.csv");
-
-    ingest_csv_to_duckdb(&csv, &duckdb_path, "db-a", ',', true, Some(100)).expect("ingest a");
-    ingest_csv_to_duckdb(&csv, &duckdb_path, "db-b", ',', true, Some(100)).expect("ingest b");
-    write_display_name(&duckdb_path, "db-a", "iris-a").expect("name a");
-    write_display_name(&duckdb_path, "db-b", "iris-b").expect("name b");
-
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    assert_eq!(databases.len(), 2);
-    assert_eq!(
-        databases.get("db-a").map(|d| d.name.as_ref()),
-        Some("iris-a")
-    );
-    assert_eq!(
-        databases.get("db-b").map(|d| d.name.as_ref()),
-        Some("iris-b")
-    );
-    assert_eq!(
-        databases.get("db-a").unwrap().engine.duckdb_table(),
-        Some(("database/project.duckdb", "db-a"))
-    );
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// Phase 1：Parquet ingest → DuckDB 表。
-#[test]
-fn test_parquet_ingest_to_duckdb() {
-    use polars::prelude::*;
-
-    let parquet_path = test_output_path(format!("test_iris_{}.parquet", uuid::Uuid::new_v4()));
-    let csv_path = PathBuf::from("tests/data/iris.csv");
-    let mut df = LazyCsvReader::new(PlRefPath::new(csv_path.to_string_lossy().as_ref()))
-        .with_has_header(true)
-        .finish()
-        .expect("scan csv")
-        .collect()
-        .expect("collect csv");
-    let file = std::fs::File::create(&parquet_path).expect("create parquet");
-    ParquetWriter::new(file)
-        .finish(&mut df)
-        .expect("write parquet");
-
-    let duckdb_path = test_output_path(format!("test_parquet_{}.duckdb", uuid::Uuid::new_v4()));
-    let _ = std::fs::remove_file(&duckdb_path);
-
-    let meta = ingest_parquet_to_duckdb(&parquet_path, &duckdb_path, "db-parquet-test", None)
-        .expect("ingest parquet");
-
-    assert_eq!(meta.row_count, 150);
-    assert!(meta.columns.len() >= 5);
-
-    let _ = std::fs::remove_file(&parquet_path);
-    let _ = std::fs::remove_file(&duckdb_path);
-}
-
-/// Phase 3：按列加载不触发整表 Loaded。
-#[test]
-fn test_duckdb_load_columns_without_full_load() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let series = db_instance
-        .load_column_series("sepal_length")
-        .expect("load column");
-    assert_eq!(series.len(), 150);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let narrow = db_instance
-        .load_columns(&["sepal_length", "sepal_width"])
-        .expect("load columns");
-    assert_eq!(narrow.height(), 150);
-    assert_eq!(narrow.width(), 2);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// Phase 4：DuckDB 列统计/分布/概览不触发整表 Loaded。
-#[test]
-fn test_duckdb_analytics_without_full_load() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let stats = db_instance.compute_column_stats().expect("stats");
-    assert!(stats.len() >= 5);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let dists = db_instance
-        .compute_column_distributions()
-        .expect("distributions");
-    assert_eq!(dists.len(), stats.len());
-
-    let overview = db_instance.compute_dataset_overview().expect("overview");
-    assert_eq!(overview.size_shape.n_rows, 150);
-    assert!(overview.size_shape.n_columns >= 5);
-    assert_eq!(overview.size_shape.estimated_dataframe_memory_bytes, None);
-    assert_eq!(overview.size_shape.duplicated_rows, None);
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// Phase 5：DatabaseInstance 保存编辑后，重开可恢复。
-#[test]
-fn test_edit_save_persists_to_duckdb() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    db_instance
-        .edit_cell(0, "sepal_length", serde_json::json!(999.0), None)
-        .expect("edit");
-    let saved = db_instance.save_changes().expect("save");
-    assert!(!saved.can_undo);
-    assert!(!saved.can_redo);
-    assert!(!saved.is_modified);
-    drop(db_instance);
-
-    let databases = discover_databases_from_root(project_root.as_path()).expect("rediscover");
-    let decl = databases.get(&db_id).expect("rediscovered declaration");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let page = db_instance.query_page(0, 1).expect("page");
-    let val = page
-        .column("sepal_length")
-        .expect("column")
-        .f64()
-        .expect("f64")
-        .get(0)
-        .unwrap();
-    assert!((val - 999.0).abs() < 1e-6);
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// Phase 6：SQL 编辑不触发 Loaded 整表物化。
-#[test]
-fn test_duckdb_sql_edit_without_full_load() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let page = db_instance.query_page_with_rowids(0, 1).expect("page");
-    let row_id = page.row_ids[0];
-
-    db_instance
-        .edit_cell(0, "sepal_length", serde_json::json!(123.0), Some(row_id))
-        .expect("sql edit");
-
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let page2 = db_instance
-        .query_page_with_rowids(0, 1)
-        .expect("page after edit");
-    let val = page2
-        .dataframe
-        .column("sepal_length")
-        .expect("column")
-        .f64()
-        .expect("f64")
-        .get(0)
-        .unwrap();
-    assert!((val - 123.0).abs() < 1e-6);
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
-/// ingest / schema 不含物理行键列。
-#[test]
-fn test_duckdb_ingest_meta_has_no_physical_rowid_column() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let meta = read_table_meta(&project_duckdb_abs(&project_root), &db_id).expect("meta");
-
     assert!(
-        meta.columns.iter().all(|c| c.name != "_yssbi_rowid"),
-        "schema must not contain physical rowid column: {:?}",
-        meta.columns.iter().map(|c| &c.name).collect::<Vec<_>>()
+        project
+            .app
+            .mutate_database_for_application(
+                project
+                    .app
+                    .capture_session()
+                    .unwrap()
+                    .project_instance_id()
+                    .clone(),
+                id.clone(),
+                stale,
+                OperationId::new(),
+                DatabaseMutation::Undo
+            )
+            .is_err()
     );
-
-    let _ = std::fs::remove_dir_all(&project_root);
+    assert_eq!(
+        project.native(&id, &["removed"], 49_998, 3).batches,
+        restored.batches
+    );
 }
 
-/// 删行 → undo 恢复 → redo 再删（DatabaseInstance 路径）。
 #[test]
-fn test_duckdb_delete_undo_redo() {
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-
-    let before = db_instance.query_page(0, 150).expect("page");
-    assert_eq!(before.height(), 150);
-
-    let page = db_instance.query_page_with_rowids(0, 1).expect("page");
-    let row_id = page.row_ids[0];
-    let original_val = page
-        .dataframe
-        .column("sepal_length")
-        .expect("col")
-        .f64()
-        .expect("f64")
-        .get(0)
+fn literal_names_and_force_cast_have_reversible_values() {
+    let project = Project::new();
+    let column = "value.a\"'[]";
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new(column, DataType::Utf8, true)])),
+        vec![Arc::new(StringArray::from(vec!["1", "bad", ""]))],
+    )
+    .unwrap();
+    let id = project.batch(batch);
+    project
+        .edit(
+            &id,
+            DatabaseMutation::EditCell {
+                row: 0,
+                column: column.into(),
+                value: serde_json::json!("O'Reilly\\path"),
+                row_id: Some(0),
+            },
+        )
         .unwrap();
+    assert_eq!(
+        value(&project.rows(&id, 0, 3), 0, 0),
+        serde_json::json!("O'Reilly\\path")
+    );
+    project.edit(&id, DatabaseMutation::Undo).unwrap();
+    assert!(
+        project
+            .edit(
+                &id,
+                DatabaseMutation::CastColumn {
+                    column: column.into(),
+                    dtype: "Int64".into(),
+                    force: false
+                }
+            )
+            .is_err()
+    );
+    project
+        .edit(
+            &id,
+            DatabaseMutation::CastColumn {
+                column: column.into(),
+                dtype: "Int64".into(),
+                force: true,
+            },
+        )
+        .unwrap();
+    let page = project.rows(&id, 0, 3);
+    assert_eq!(value(&page, 0, 0), serde_json::json!(1));
+    assert_eq!(value(&page, 0, 1), serde_json::Value::Null);
+    project.edit(&id, DatabaseMutation::Undo).unwrap();
+    assert_eq!(
+        value(&project.rows(&id, 0, 3), 0, 1),
+        serde_json::json!("bad")
+    );
+}
 
-    db_instance
-        .delete_rows(&[0], Some(&[row_id]))
-        .expect("delete");
+#[test]
+fn row_history_save_and_multiple_dataset_reopen_keep_names_and_contents() {
+    let project = Project::new();
+    let csv = project.directory.join("input.csv");
+    std::fs::write(&csv, b"value,label\n1,alpha\n2,beta\n3,gamma\n").unwrap();
+    let source = DatabaseImportSource::Csv {
+        path: csv.to_string_lossy().into(),
+        delimiter: ',',
+        has_header: true,
+        infer_schema_length: Some(10),
+    };
+    let id = project.import(source.clone());
+    let second = project.import(source);
+    project
+        .edit(&id, DatabaseMutation::AddRow { index: None })
+        .unwrap();
+    assert_eq!(project.rows(&id, 0, 10).row_ids, vec![0, 1, 2, 3]);
+    project
+        .edit(
+            &id,
+            DatabaseMutation::DeleteRows {
+                indices: vec![2, 0],
+                row_ids: Some(vec![2, 0]),
+            },
+        )
+        .unwrap();
+    assert_eq!(project.rows(&id, 0, 10).row_ids, vec![1, 3]);
+    project.edit(&id, DatabaseMutation::Undo).unwrap();
+    project.edit(&id, DatabaseMutation::Redo).unwrap();
+    let instance = project
+        .app
+        .capture_session()
+        .unwrap()
+        .project_instance_id()
+        .clone();
+    project
+        .app
+        .rename_database_for_application(
+            instance.clone(),
+            id.clone(),
+            project.revision(&id),
+            "Renamed".into(),
+            OperationId::new(),
+        )
+        .unwrap();
+    let saved = project
+        .app
+        .save_database_for_application(
+            instance,
+            id.clone(),
+            project.revision(&id),
+            OperationId::new(),
+        )
+        .unwrap()
+        .data;
+    assert!(!saved.can_undo && !saved.can_redo && !saved.is_modified);
+    let reopened = Arc::new(ProjectState::new());
+    reopened
+        .activate_project_from_path(&project.metadata)
+        .unwrap();
+    let app = application(reopened.clone());
+    let capture = app.capture_session().unwrap();
+    let index = reopened
+        .read_project_index(capture.project_instance_id())
+        .unwrap();
+    assert_eq!(index.databases.len(), 2);
+    assert_eq!(
+        index
+            .databases
+            .iter()
+            .find(|entry| entry.id == id)
+            .unwrap()
+            .name
+            .as_deref(),
+        Some("Renamed")
+    );
+    let rows = app
+        .query_database_rows_for_application(capture.project_instance_id().clone(), id, 0, 10)
+        .unwrap();
+    assert_eq!(rows.row_ids, vec![1, 3]);
+    assert_eq!(value(&rows, 0, 0), serde_json::json!(2));
+    assert_eq!(project.rows(&second, 0, 10).row_ids, vec![0, 1, 2]);
+}
 
-    let after_delete = db_instance.query_page(0, 150).expect("page");
-    assert_eq!(after_delete.height(), 149);
-
-    db_instance.undo_edit().expect("undo");
-    let after_undo = db_instance.query_page(0, 150).expect("page");
-    assert_eq!(after_undo.height(), 150);
-    let restored_exists = after_undo
-        .column("sepal_length")
-        .expect("col")
-        .f64()
-        .expect("f64")
-        .into_iter()
-        .flatten()
-        .any(|v| (v - original_val).abs() < 1e-6);
-    assert!(restored_exists, "undo should restore deleted row data");
-
-    db_instance.redo_edit().expect("redo");
-    let after_redo = db_instance.query_page(0, 150).expect("page");
-    assert_eq!(after_redo.height(), 149);
-
-    let _ = std::fs::remove_dir_all(&project_root);
+#[test]
+fn large_export_preserves_wide_integers_decimals_and_timestamps_without_internal_columns() {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let project = Project::new();
+    let count = 50_001;
+    let coefficient = 12345678901234567890123456789_i128;
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("wide", DataType::UInt64, false),
+        Field::new("amount", DataType::Decimal128(38, 12), false),
+        Field::new(
+            "instant",
+            DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into())),
+            false,
+        ),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(UInt64Array::from(vec![u64::MAX; count])),
+            Arc::new(
+                Decimal128Array::from(vec![coefficient; count])
+                    .with_precision_and_scale(38, 12)
+                    .unwrap(),
+            ),
+            Arc::new(TimestampNanosecondArray::from(vec![-1; count]).with_timezone("UTC")),
+        ],
+    )
+    .unwrap();
+    let id = project.batch(batch);
+    let capture = project.app.capture_session().unwrap();
+    let csv = project.directory.join("export '[data]'.csv");
+    let parquet = csv.with_extension("parquet");
+    for (path, format) in [(&csv, "csv"), (&parquet, "parquet")] {
+        std::fs::write(path, b"old destination").unwrap();
+        project
+            .app
+            .export_database_for_application(
+                capture.project_instance_id().clone(),
+                id.clone(),
+                path.to_string_lossy().into(),
+                format.into(),
+            )
+            .unwrap();
+    }
+    let csv = std::fs::read_to_string(csv).unwrap();
+    assert_eq!(csv.lines().count(), count + 1);
+    assert!(
+        csv.lines()
+            .nth(1)
+            .unwrap()
+            .starts_with("18446744073709551615,12345678901234567.890123456789,")
+    );
+    let mut reader = yss_tabular_io::read_parquet_batches(&parquet, 8192, None).unwrap();
+    assert_eq!(reader.schema().fields().len(), 3);
+    assert_eq!(
+        reader.schema().field(2).data_type(),
+        &DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
+    );
+    let first = reader.next().unwrap().unwrap();
+    assert_eq!(
+        first
+            .column(0)
+            .as_any()
+            .downcast_ref::<UInt64Array>()
+            .unwrap()
+            .value(0),
+        u64::MAX
+    );
+    assert_eq!(
+        first
+            .column(1)
+            .as_any()
+            .downcast_ref::<Decimal128Array>()
+            .unwrap()
+            .value(0),
+        coefficient
+    );
+    assert_eq!(
+        first
+            .column(2)
+            .as_any()
+            .downcast_ref::<TimestampNanosecondArray>()
+            .unwrap()
+            .value(0),
+        -1
+    );
+    assert_eq!(
+        first.num_rows() + reader.map(|batch| batch.unwrap().num_rows()).sum::<usize>(),
+        count
+    );
+    let payload = project
+        .metadata
+        .parent()
+        .unwrap()
+        .join("database/opaque.bin");
+    let mut file = std::fs::File::create(&payload).unwrap();
+    file.set_len(64 * 1024 * 1024).unwrap();
+    file.write_all(b"start").unwrap();
+    file.seek(SeekFrom::End(-4)).unwrap();
+    file.write_all(b"last").unwrap();
+    drop(file);
+    let destination = project.directory.join("copy");
+    let copy = project
+        .state
+        .save_project_as_transaction(
+            capture.project_instance_id(),
+            &destination,
+            OperationId::new(),
+        )
+        .unwrap();
+    let mut copied = std::fs::File::open(destination.join("database/opaque.bin")).unwrap();
+    assert_eq!(copied.metadata().unwrap().len(), 64 * 1024 * 1024);
+    let mut sample = [0u8; 5];
+    copied.read_exact(&mut sample).unwrap();
+    assert_eq!(&sample, b"start");
+    copied.seek(SeekFrom::End(-4)).unwrap();
+    copied.read_exact(&mut sample[..4]).unwrap();
+    assert_eq!(&sample[..4], b"last");
+    let reopened = Arc::new(ProjectState::new());
+    reopened
+        .activate_project_from_path(&copy.metadata_path)
+        .unwrap();
+    let app = application(reopened);
+    let page = app
+        .query_database_rows_for_application(
+            app.capture_session().unwrap().project_instance_id().clone(),
+            id,
+            50_000,
+            1,
+        )
+        .unwrap();
+    assert_eq!(value(&page, 0, 0), serde_json::json!(u64::MAX.to_string()));
 }

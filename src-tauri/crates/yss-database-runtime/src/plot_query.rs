@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
-use polars::prelude::{DataType as PolarsDataType, PolarsResult, Series};
+use arrow::array::Float64Array;
+use arrow::datatypes::{DataType as ArrowDataType, TimeUnit};
 use thiserror::Error;
 
-use crate::error::{DatabaseDriverError, DatabaseError, DatabaseErrorCode, DatabaseOperation};
+use crate::error::{DatabaseError, DatabaseErrorCode, DatabaseOperation};
 use crate::runtime::DatabaseRuntimeSession;
-use crate::session_api::{
-    self, DatabaseColumnSelection, DatabaseDataSnapshotRequest, DatabaseQueryBasis,
-};
+use crate::session_api::{self, DatabaseQueryBasis};
 use yss_data_contract::DataType;
 use yss_database_contract::DatabaseId;
-use yss_database_schema::DatabaseColumnFact;
 use yss_tabular_contract::TabularColumnName;
-use yss_tabular_polars::column_to_series;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {
@@ -105,109 +102,116 @@ pub fn read_numeric_column_pair(
     let basis = session
         .capture_query_basis(database)
         .map_err(|error| map_database_error(error, database, None, ErrorContext::Capture))?;
-    let snapshot = session_api::data_snapshot(
-        session,
-        DatabaseDataSnapshotRequest {
-            database: database.clone(),
-            columns: DatabaseColumnSelection::Selected([x_column.clone(), y_column.clone()].into()),
-            offset: 0,
-            limit: usize::MAX,
-        },
-    )
-    .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
-
-    if snapshot.rows().row_count() == 0 {
+    let _admission = session
+        .admit_operation(DatabaseOperation::Query)
+        .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
+    let instance = session
+        .physical_instance(database)
+        .map_err(|error| map_database_error(error, database, None, ErrorContext::Read))?;
+    let facts = instance.data_schema().map_err(|error| {
+        materialization_error(
+            database,
+            None,
+            DatabaseError::dataset(DatabaseOperation::Query, Some(database.clone()), error),
+        )
+    })?;
+    let kind = |name: &TabularColumnName| {
+        facts
+            .columns()
+            .iter()
+            .find(|column| column.name() == name)
+            .map(|field| numeric_kind(field.data_type()))
+            .ok_or_else(|| {
+                materialization_error(
+                    database,
+                    Some(name),
+                    DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone())),
+                )
+            })
+    };
+    let x_kind = kind(x_column)?;
+    let y_kind = kind(y_column)?;
+    let batches = instance
+        .read_arrow_columns(
+            &[x_column.as_str(), y_column.as_str()],
+            0,
+            usize::MAX,
+            &crate::database_instance::query_control(128 * 1024 * 1024),
+        )
+        .map_err(|error| {
+            materialization_error(
+                database,
+                None,
+                DatabaseError::dataset(DatabaseOperation::Query, Some(database.clone()), error),
+            )
+        })?;
+    let mut x = Vec::new();
+    let mut y = Vec::new();
+    for batch in batches {
+        for (index, output) in [(0, &mut x), (1, &mut y)] {
+            let column = batch.column(index);
+            let physical = match column.data_type() {
+                ArrowDataType::Timestamp(_, timezone) => arrow::compute::cast(
+                    column.as_ref(),
+                    &ArrowDataType::Timestamp(TimeUnit::Microsecond, timezone.clone()),
+                )
+                .and_then(|array| arrow::compute::cast(array.as_ref(), &ArrowDataType::Int64)),
+                data_type if data_type.is_temporal() => {
+                    arrow::compute::cast(column.as_ref(), &ArrowDataType::Int64)
+                }
+                _ => Ok(column.clone()),
+            }
+            .and_then(|array| arrow::compute::cast(array.as_ref(), &ArrowDataType::Float64))
+            .map_err(|error| {
+                materialization_error(
+                    database,
+                    None,
+                    DatabaseError::dataset(
+                        DatabaseOperation::Query,
+                        Some(database.clone()),
+                        error.into(),
+                    ),
+                )
+            })?;
+            let values = physical
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or_else(|| {
+                    materialization_error(
+                        database,
+                        None,
+                        DatabaseError::schema(DatabaseOperation::Query, Some(database.clone())),
+                    )
+                })?;
+            let scale = if matches!(column.data_type(), ArrowDataType::Date64) {
+                86_400_000.0
+            } else {
+                1.0
+            };
+            output.extend(values.iter().map(|value| value.map(|value| value / scale)));
+        }
+    }
+    if x.is_empty() {
         return Err(materialization_error(
             database,
             None,
             DatabaseError::invalid_request(DatabaseOperation::Query, Some(database.clone())),
         ));
     }
-
-    let x_fact = snapshot
-        .columns()
-        .iter()
-        .find(|column| column.name() == x_column)
-        .ok_or_else(|| {
-            materialization_error(
-                database,
-                Some(x_column),
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone())),
-            )
-        })?;
-    let y_fact = snapshot
-        .columns()
-        .iter()
-        .find(|column| column.name() == y_column)
-        .ok_or_else(|| {
-            materialization_error(
-                database,
-                Some(y_column),
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone())),
-            )
-        })?;
-    let x_source = snapshot
-        .rows()
-        .columns()
-        .iter()
-        .find(|column| column.name() == x_column)
-        .ok_or_else(|| {
-            materialization_error(
-                database,
-                Some(x_column),
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone())),
-            )
-        })?;
-    let y_source = snapshot
-        .rows()
-        .columns()
-        .iter()
-        .find(|column| column.name() == y_column)
-        .ok_or_else(|| {
-            materialization_error(
-                database,
-                Some(y_column),
-                DatabaseError::not_found(DatabaseOperation::Query, Some(database.clone())),
-            )
-        })?;
-
-    let x_series = column_to_series(x_source).map_err(|error| {
-        materialization_error(
-            database,
-            Some(x_column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-    let y_series = column_to_series(y_source).map_err(|error| {
-        materialization_error(
-            database,
-            Some(y_column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-
-    pair_from_fact_series(
-        basis,
-        database,
-        NumericColumnMaterialization {
-            fact: x_fact,
-            series: &x_series,
-            column: x_column,
+    session_api::revalidate_query_basis(session, &basis)
+        .map_err(|error| map_database_error(error, database, None, ErrorContext::Revalidate))?;
+    Ok(NumericColumnPair {
+        basis: PlotQueryBasis {
+            query: basis,
+            database: database.clone(),
         },
-        NumericColumnMaterialization {
-            fact: y_fact,
-            series: &y_series,
-            column: y_column,
-        },
-    )
+        x: x.into(),
+        y: y.into(),
+        x_label: Some(x_column.as_str().into()),
+        y_label: Some(y_column.as_str().into()),
+        x_kind,
+        y_kind,
+    })
 }
 
 pub fn revalidate_numeric_column_pair(
@@ -270,76 +274,6 @@ fn materialization_error(
     }
 }
 
-struct NumericColumnMaterialization<'a> {
-    fact: &'a DatabaseColumnFact,
-    series: &'a Series,
-    column: &'a TabularColumnName,
-}
-
-fn pair_from_fact_series(
-    basis: DatabaseQueryBasis,
-    database: &DatabaseId,
-    x: NumericColumnMaterialization<'_>,
-    y: NumericColumnMaterialization<'_>,
-) -> Result<NumericColumnPair, DatabasePlotQueryError> {
-    let x_kind = numeric_kind(x.fact.data_type());
-    let y_kind = numeric_kind(y.fact.data_type());
-    let x_values = series_to_numeric_values(x.series, x_kind).map_err(|error| {
-        materialization_error(
-            database,
-            Some(x.column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-    let y_values = series_to_numeric_values(y.series, y_kind).map_err(|error| {
-        materialization_error(
-            database,
-            Some(y.column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-    Ok(NumericColumnPair {
-        basis: PlotQueryBasis {
-            query: basis,
-            database: database.clone(),
-        },
-        x: x_values,
-        y: y_values,
-        x_label: label_for_series(x.series),
-        y_label: label_for_series(y.series),
-        x_kind,
-        y_kind,
-    })
-}
-
-fn series_to_numeric_values(
-    series: &Series,
-    kind: NumericColumnKind,
-) -> PolarsResult<Arc<[Option<f64>]>> {
-    let casted = match kind {
-        NumericColumnKind::Date => series
-            .cast(&PolarsDataType::Int32)?
-            .cast(&PolarsDataType::Float64)?,
-        NumericColumnKind::Datetime => series
-            .cast(&PolarsDataType::Int64)?
-            .cast(&PolarsDataType::Float64)?,
-        NumericColumnKind::Number if matches!(series.dtype(), PolarsDataType::Time) => series
-            .cast(&PolarsDataType::Int64)?
-            .cast(&PolarsDataType::Float64)?,
-        NumericColumnKind::Number => series.cast(&PolarsDataType::Float64)?,
-    };
-    let values = casted.f64()?.into_iter().collect::<Vec<_>>();
-    Ok(Arc::from(values.into_boxed_slice()))
-}
-
 fn numeric_kind(data_type: &DataType) -> NumericColumnKind {
     match data_type {
         DataType::Date => NumericColumnKind::Date,
@@ -360,41 +294,38 @@ fn numeric_kind(data_type: &DataType) -> NumericColumnKind {
     }
 }
 
-fn label_for_series(series: &Series) -> Option<Box<str>> {
-    (!series.name().is_empty()).then(|| series.name().as_str().into())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::runtime::DatabaseRuntimeRegistry;
-    use crate::test_support::DuckDbFixture;
-    use polars::prelude::{AnyValue, Column, DataFrame, PlSmallStr, TimeUnit};
+    use crate::test_support::{DatasetFixture, SALES_ID};
+    use arrow::array::{Date32Array, TimestampMicrosecondArray};
+    use arrow::datatypes::{Field, Schema};
+    use arrow::record_batch::RecordBatch;
     use std::num::NonZeroU64;
     use yss_database_contract::{
         DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseSessionIdentity,
         DatabaseSessionOpenRequest,
     };
-    fn session_with_temporal_data(identity: &str) -> (DuckDbFixture, DatabaseRuntimeSession) {
-        let date = Series::from_any_values(
-            PlSmallStr::from("observed_date"),
-            &[AnyValue::Date(1), AnyValue::Date(2)],
-            false,
-        )
-        .expect("test date series is valid");
-        let datetime = Series::from_any_values(
-            PlSmallStr::from("observed_at"),
-            &[
-                AnyValue::DatetimeOwned(1, TimeUnit::Milliseconds, None),
-                AnyValue::DatetimeOwned(2, TimeUnit::Milliseconds, None),
+    fn session_with_temporal_data(identity: &str) -> (DatasetFixture, DatabaseRuntimeSession) {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("observed_date", ArrowDataType::Date32, true),
+            Field::new(
+                "observed_at",
+                ArrowDataType::Timestamp(TimeUnit::Microsecond, None),
+                true,
+            ),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(Date32Array::from(vec![1, 2])),
+                Arc::new(TimestampMicrosecondArray::from(vec![1000, 2000])),
             ],
-            false,
         )
-        .expect("test datetime series is valid");
-        let dataframe = DataFrame::new(2, vec![Column::from(date), Column::from(datetime)])
-            .expect("test dataframe is valid");
-        let fixture = DuckDbFixture::new("sales", dataframe);
+        .unwrap();
+        let fixture = DatasetFixture::new(SALES_ID, batch);
         let declaration = fixture.instance.decl.clone();
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             declaration.id.clone(),
@@ -422,13 +353,13 @@ mod tests {
     #[test]
     fn runtime_materializer_preserves_plot_day_and_microsecond_encodings() {
         let (_fixture, session) = session_with_temporal_data("plot-session");
-        let database = DatabaseId::from_existing("sales".into());
+        let database = DatabaseId::from_existing(SALES_ID.into());
         let date_column =
             TabularColumnName::try_from("observed_date").expect("test column name is valid");
         let datetime_column =
             TabularColumnName::try_from("observed_at").expect("test column name is valid");
         let pair = read_numeric_column_pair(&session, &database, &date_column, &datetime_column)
-            .expect("DuckDB temporal columns materialize");
+            .expect("Arrow temporal columns materialize");
         assert_eq!(pair.x_label(), Some("observed_date"));
         assert_eq!(pair.y_label(), Some("observed_at"));
         assert_eq!(pair.x_kind(), NumericColumnKind::Date);

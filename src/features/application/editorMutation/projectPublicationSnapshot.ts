@@ -2,7 +2,6 @@ import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMuta
 import type { ProjectDatabaseIndexRow, ProjectIndexRow } from "@/shared/types/domain/project";
 import { parseProjectIndexRow } from "@/services/project/projectService";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import { displayNameFromEngine } from "@/features/application/dataManagement/databaseRecords";
 import type {
   PreparedProjectSnapshot,
   ProjectSnapshotPreparation,
@@ -277,7 +276,7 @@ function databaseFromIndex(
     ...runtime,
     id: row.id,
     resourcePath: row.resourcePath,
-    name: row.name ?? displayNameFromEngine(row.engine) ?? row.id,
+    name: row.name ?? row.id,
     engine: structuredClone(row.engine),
     schemaVersion: row.schemaVersion,
     required: row.required,

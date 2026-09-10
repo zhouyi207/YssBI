@@ -232,6 +232,8 @@ pub enum ExecutionApplicationError {
 
 #[derive(Debug, Error)]
 pub enum ResourceBindingError {
+    #[error("project dataset snapshot is unavailable")]
+    Dataset(#[source] yss_database_runtime::error::DatabaseError),
     #[error("present resource has no version")]
     MissingVersion { resource: ProjectResourceId },
     #[error("project value contains an invalid Execution identity")]
@@ -333,11 +335,8 @@ where
         .execution()
         .prepare_compiled_package(package, captured.runtime_generation())
         .map_err(ExecutionApplicationError::PackagePreparation)?;
-    let bindings = map_project_resource_facts(
-        captured.project_session_id().as_str(),
-        prepared_project.resources().grants(),
-    )
-    .map_err(ExecutionApplicationError::ResourceBindings)?;
+    let bindings = map_project_resource_facts(&captured, prepared_project.resources().grants())
+        .map_err(ExecutionApplicationError::ResourceBindings)?;
     drop(project_data);
 
     check_control(&request)?;
@@ -418,7 +417,7 @@ where
 
     let prepared_effects = match captured.project().prepare_execution_effects(
         prepared_project.authority(),
-        CandidateProjectEffects::empty(),
+        CandidateProjectEffects::new(prepared_project.resources().grants().iter().cloned()),
     ) {
         Ok(effects) => effects,
         Err(error) => {
@@ -722,7 +721,7 @@ fn plan_basis(
 }
 
 fn map_project_resource_facts(
-    project_session_id: &str,
+    captured: &ApplicationSession,
     grants: &[ProjectResourceGrant],
 ) -> Result<yss_execution::resource_preparation::RunResourceBindings, ResourceBindingError> {
     let mut requirements = Vec::new();
@@ -757,7 +756,23 @@ fn map_project_resource_facts(
             .ok_or_else(|| ResourceBindingError::MissingVersion {
                 resource: grant.resource().clone(),
             })?;
-        let value = yss_execution::value::RuntimeValue::Resource(resource.as_str().into());
+        let value = if grant.kind() == ProjectResourceKind::DataFrame {
+            let id = resource
+                .as_str()
+                .strip_prefix("databases/")
+                .filter(|id| !id.is_empty())
+                .ok_or(ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
+            let relation = captured
+                .database()
+                .capture_relation(
+                    &yss_database_contract::DatabaseId::from_existing(id.into()),
+                    version.get(),
+                )
+                .map_err(ResourceBindingError::Dataset)?;
+            yss_execution::value::RuntimeValue::Relation(relation)
+        } else {
+            yss_execution::value::RuntimeValue::Resource(resource.as_str().into())
+        };
         bindings.push(
             yss_execution::resource_preparation::RunResourceBinding::new(
                 requirement,
@@ -768,7 +783,7 @@ fn map_project_resource_facts(
     }
     Ok(
         yss_execution::resource_preparation::RunResourceBindings::new(
-            PlanProjectSessionId::from_existing(project_session_id.into()),
+            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
             requirements,
             bindings,
         ),

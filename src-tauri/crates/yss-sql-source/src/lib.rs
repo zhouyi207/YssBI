@@ -1,19 +1,21 @@
 //! Read-only SQLite, PostgreSQL, and MySQL table sources.
 //!
 //! This crate owns external SQL connection configuration, table discovery, identifier quoting,
-//! strict SQLx value decoding, and Polars materialization. It never owns project state or import
-//! publication; callers decide how the returned [`polars::prelude::DataFrame`] is persisted.
+//! strict SQLx decoding, and bounded Arrow batches. Project state and import publication
+//! remain with their existing owners.
 
-mod dataframe;
+#[macro_use]
+mod batch;
 mod mysql;
 mod postgres;
+mod reader;
 mod runtime;
 mod sqlite;
 
-use polars::prelude::DataFrame;
 use yss_database_contract::DatabaseEngineSql;
 
-pub use dataframe::SqlSourceError;
+pub use batch::SqlSourceError;
+pub use reader::SqlBatchReader;
 
 /// List user tables exposed by an external SQL source.
 pub fn list_tables(
@@ -27,19 +29,14 @@ pub fn list_tables(
     }
 }
 
-/// Materialize one external SQL table into a typed Polars DataFrame.
-pub fn read_table_to_dataframe(
+/// Stream a strictly typed SQL table with backpressure and cancellation/deadline checks.
+pub fn read_table_batches(
     engine: &DatabaseEngineSql,
     connection: &str,
     table: &str,
-) -> Result<DataFrame, SqlSourceError> {
-    match engine {
-        DatabaseEngineSql::Sqlite { auto_create } => {
-            sqlite::read_table(connection, *auto_create, table)
-        }
-        DatabaseEngineSql::Postgres { ssl } => postgres::read_table(connection, *ssl, table),
-        DatabaseEngineSql::Mysql { charset } => mysql::read_table(connection, charset, table),
-    }
+    control: yss_relational_contract::RelationControl,
+) -> Result<SqlBatchReader, SqlSourceError> {
+    reader::read_table(engine, connection, table, control)
 }
 
 #[cfg(test)]

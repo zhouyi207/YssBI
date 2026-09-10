@@ -24,21 +24,23 @@ members = [
   "crates/yss-statistical-harness",
   "crates/yss-statistical-harness-sqlite",
   "crates/yss-bayes-artifact-contract",
-  "crates/yss-bayes-artifact-polars",
+  "crates/yss-bayes-artifact-datafusion",
   "crates/yss-bayes-model",
   "crates/yss-bayes-result",
   "crates/yss-bayes-worker",
   "crates/yss-bayes-worker-julia",
   "crates/yss-canonical-hash",
   "crates/yss-data-contract",
+  "crates/yss-datafusion",
+  "crates/yss-relational-contract",
   "crates/yss-database-contract",
   "crates/yss-database-edit",
   "crates/yss-database-runtime",
   "crates/yss-database-schema",
   "crates/yss-dataset-profile",
+  "crates/yss-dataset-store",
   "crates/yss-diagnostics",
   "crates/yss-display-naming",
-  "crates/yss-duckdb",
   "crates/yss-execution",
   "crates/yss-file-replace",
   "crates/yss-function-editor-projection",
@@ -82,8 +84,8 @@ members = [
   "crates/yss-sci-runtime",
   "crates/yss-sql-source",
   "crates/yss-tabular-contract",
+  "crates/yss-tabular-arrow",
   "crates/yss-tabular-io",
-  "crates/yss-tabular-polars",
   "crates/yss-tracing",
   "crates/yss-window-state",
   "crates/yss-chart-document",
@@ -93,34 +95,19 @@ members = [
 rust-version = "1.94"
 
 [workspace.dependencies]
+arrow-array = "=59.3.0"
+futures-core = "0.3"
+futures-util = "0.3"
+url = "2.5"
+arrow = { version = "=59.3.0", default-features = false, features = ["ipc", "csv", "chrono-tz"] }
+arrow-schema = { version = "=59.3.0", features = ["serde"] }
+parquet = { version = "=59.3.0", default-features = false, features = ["arrow", "snap", "zstd"] }
+datafusion = { version = "=55.0.0", default-features = false, features = ["parquet", "sql", "datetime_expressions", "string_expressions", "unicode_expressions"] }
 chrono = "0.4.41"
-duckdb = { version = "1.10504.0", default-features = false, features = [
-  "bundled",
-  "appender-arrow",
-] }
 mathlex = "=0.4.2"
 ndarray = "0.17.2"
 notify = "8.2.0"
 num-traits = "0.2.19"
-polars = { version = "0.53.0", default-features = false, features = [
-  "lazy",
-  "csv",
-  "ipc",
-  "parquet",
-  "strings",
-  "dtype-categorical",
-  "dtype-date",
-  "dtype-datetime",
-  "dtype-duration",
-  "dtype-time",
-  "dtype-decimal",
-  "dtype-i8",
-  "dtype-i16",
-  "dtype-u8",
-  "dtype-u16",
-] }
-polars-arrow = { version = "0.53.0", default-features = false }
-polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 rand = "0.10"
 rig-agent = { version = "=0.42.0", default-features = false }
 serde = { version = "1", features = ["derive"] }
@@ -192,8 +179,10 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-duckdb.workspace = true
-polars.workspace = true
+yss-dataset-store = { path = "./crates/yss-dataset-store" }
+yss-relational-contract = { path = "./crates/yss-relational-contract" }
+arrow.workspace = true
+yss-tabular-io = { path = "./crates/yss-tabular-io" }
 proc-macro2 = "1"
 serde.workspace = true
 serde_json.workspace = true
@@ -202,4 +191,3 @@ uuid.workspace = true
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
 yss-database-runtime = { path = "./crates/yss-database-runtime", features = ["test-support"] }
-yss-duckdb = { path = "./crates/yss-duckdb" }

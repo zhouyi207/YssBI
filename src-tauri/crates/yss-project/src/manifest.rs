@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const CURRENT_PROJECT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_PROJECT_SCHEMA_VERSION: u32 = 5;
 
 pub fn deserialize_current_project_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where

@@ -242,6 +242,29 @@ impl DatabaseRuntimeRegistry {
 }
 
 impl DatabaseRuntimeSession {
+    pub(crate) fn physical_instance(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<crate::DatabaseInstance, DatabaseError> {
+        self.physical.required_instance(database)
+    }
+
+    pub fn capture_relation(
+        &self,
+        database: &DatabaseId,
+        revision: u64,
+    ) -> Result<yss_relational_contract::RelationHandle, DatabaseError> {
+        let basis = self.capture_query_basis(database)?;
+        let relation = self
+            .physical
+            .required_instance(database)?
+            .relation(self.identity().as_str(), revision)
+            .map_err(|error| {
+                DatabaseError::dataset(DatabaseOperation::Query, Some(database.clone()), error)
+            })?;
+        crate::session_api::revalidate_query_basis(self, &basis)?;
+        Ok(relation)
+    }
     pub fn identity(&self) -> &DatabaseSessionIdentity {
         &self.basis.identity
     }
@@ -386,20 +409,14 @@ impl DatabaseRuntimeSession {
         self.physical.export_to_path(database, path, format)
     }
 
-    pub fn remove_physical_database(
-        &self,
-        database: &DatabaseId,
-        project_root: &std::path::Path,
-    ) -> Result<(), DatabaseError> {
-        self.physical.remove_database(database, project_root)
-    }
-
     pub fn prepare_physical_mutation(
         &self,
         database: &DatabaseId,
         operation: &crate::session_api::DatabaseMutationOperation,
+        operation_id: &str,
     ) -> Result<PreparedDatabasePhysicalMutation, DatabaseError> {
-        self.physical.prepare_mutation(database, operation)
+        self.physical
+            .prepare_mutation(database, operation, operation_id)
     }
 
     pub fn install_physical_mutation(&self, mutation: &PreparedDatabasePhysicalMutation) {

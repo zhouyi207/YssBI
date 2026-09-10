@@ -100,25 +100,10 @@ pub fn absolute_path_for_database(
     })?;
 
     let path = match &decl.engine {
-        DatabaseEngine::DuckDb { path, .. } => root.join(path),
-        DatabaseEngine::Csv { path, .. }
-        | DatabaseEngine::Parquet { path, .. }
-        | DatabaseEngine::Excel { path, .. } => {
-            let file = Path::new(path);
-            if file.is_absolute() {
-                file.to_path_buf()
-            } else {
-                root.join(file)
-            }
-        }
-        DatabaseEngine::Sql {
-            connection_string, ..
-        } => PathBuf::from(connection_string),
-        DatabaseEngine::InMemory { .. } => {
-            return Err(ProjectError::InvalidProjectFormat(
-                "In-memory datasets have no file on disk".into(),
-            ));
-        }
+        DatabaseEngine::Dataset {} => root
+            .join(yss_project_layout::DATABASE_DIR)
+            .join("datasets")
+            .join(decl.id.as_str()),
     };
 
     Ok(path)

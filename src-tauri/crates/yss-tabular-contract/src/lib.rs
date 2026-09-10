@@ -36,6 +36,23 @@ pub enum TabularScalar {
     String(Box<str>),
 }
 
+impl TabularScalar {
+    /// The JSON number representation cannot carry wider integers into JavaScript exactly.
+    /// Storage/literals keep the original scalar; paged display uses decimal text when needed.
+    pub fn display_value(&self) -> Self {
+        const MAX_SAFE_INTEGER: u64 = (1_u64 << 53) - 1;
+        match self {
+            Self::Integer(value) if value.unsigned_abs() > MAX_SAFE_INTEGER => {
+                Self::String(value.to_string().into())
+            }
+            Self::Unsigned(value) if *value > MAX_SAFE_INTEGER => {
+                Self::String(value.to_string().into())
+            }
+            value => value.clone(),
+        }
+    }
+}
+
 impl Serialize for TabularScalar {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

@@ -69,26 +69,10 @@ export const DatabaseEditorWindow: React.FC = () => {
 
   const dfOptions: DataframeOption[] = useMemo(
     () =>
-      Object.entries(dataframes).map(([id, df]) => {
-        const d = df as {
-          name?: string;
-          engine?: {
-            csv?: { path?: string };
-            parquet?: { path?: string };
-            duckDb?: { table?: string };
-          };
-        };
-        let label = d.name;
-        if (!label && d.engine?.csv?.path) {
-          const p = d.engine.csv.path;
-          label = p.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || p;
-        }
-        if (!label && d.engine?.parquet?.path) {
-          const p = d.engine.parquet.path;
-          label = p.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || p;
-        }
-        return { label: String(label ?? id), value: id };
-      }),
+      Object.entries(dataframes).map(([id, df]) => ({
+        label: df.name,
+        value: id,
+      })),
     [dataframes],
   );
 

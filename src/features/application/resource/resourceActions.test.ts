@@ -24,7 +24,7 @@ vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", (
 function databaseResult(afterName: string | null, operationId: string) {
   const before = {
     id: "sales",
-    engine: { duckDb: { path: "database/project.duckdb", table: "sales" } },
+    engine: { dataset: {} },
     schemaVersion: 1,
     required: false,
     name: "Sales",

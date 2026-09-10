@@ -18,8 +18,9 @@ pub use coordinator::{
 };
 pub use error::ProjectFilesystemError;
 pub use lifecycle::{
-    ProjectSourceTree, ensure_directory, read_project_source_tree, remove_directory_if_created,
-    validate_deletion_root, validate_destination_policy,
+    ProjectFileInventory, ProjectSourceTree, ensure_directory, read_project_file_inventory,
+    read_project_source_tree, remove_directory_if_created, validate_deletion_root,
+    validate_destination_policy,
 };
 pub use recovery::ProjectRecoveryMarker;
 pub use root::{NormalizedProjectRoot, ProjectRootBinding, project_root_from_path};

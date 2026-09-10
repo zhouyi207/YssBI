@@ -15,6 +15,8 @@ pub enum RuntimeValue {
     List(Box<[RuntimeValue]>),
     Record(BTreeMap<Box<str>, RuntimeValue>),
     Resource(Box<str>),
+    Relation(yss_relational_contract::RelationHandle),
+    Series(yss_relational_contract::SeriesHandle),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]

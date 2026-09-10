@@ -13,24 +13,49 @@ pub struct DatabaseExportError {
 
 #[derive(Debug, thiserror::Error)]
 enum DatabaseExportSource {
-    #[error("database is unavailable for export")]
-    Unavailable,
-    #[error("DuckDB export failed")]
-    DuckDb(#[source] yss_duckdb::DuckDbExportError),
+    #[error("dataset export failed")]
+    Dataset(#[source] yss_dataset_store::DatasetStoreError),
+    #[error("relation export failed")]
+    Relation(#[source] yss_relational_contract::RelationError),
+    #[error("Arrow export failed")]
+    Arrow(#[source] arrow::error::ArrowError),
+    #[error("file export failed")]
+    Io(#[source] std::io::Error),
+    #[error("batch export failed")]
+    Encoding(#[source] yss_tabular_io::TabularIoError),
 }
-
-impl DatabaseExportError {
-    pub(crate) fn unavailable() -> Self {
+impl From<yss_dataset_store::DatasetStoreError> for DatabaseExportError {
+    fn from(source: yss_dataset_store::DatasetStoreError) -> Self {
         Self {
-            source: DatabaseExportSource::Unavailable,
+            source: DatabaseExportSource::Dataset(source),
         }
     }
 }
-
-impl From<yss_duckdb::DuckDbExportError> for DatabaseExportError {
-    fn from(source: yss_duckdb::DuckDbExportError) -> Self {
+impl From<yss_relational_contract::RelationError> for DatabaseExportError {
+    fn from(source: yss_relational_contract::RelationError) -> Self {
         Self {
-            source: DatabaseExportSource::DuckDb(source),
+            source: DatabaseExportSource::Relation(source),
+        }
+    }
+}
+impl From<arrow::error::ArrowError> for DatabaseExportError {
+    fn from(source: arrow::error::ArrowError) -> Self {
+        Self {
+            source: DatabaseExportSource::Arrow(source),
+        }
+    }
+}
+impl From<std::io::Error> for DatabaseExportError {
+    fn from(source: std::io::Error) -> Self {
+        Self {
+            source: DatabaseExportSource::Io(source),
+        }
+    }
+}
+impl From<yss_tabular_io::TabularIoError> for DatabaseExportError {
+    fn from(source: yss_tabular_io::TabularIoError) -> Self {
+        Self {
+            source: DatabaseExportSource::Encoding(source),
         }
     }
 }
@@ -128,10 +153,6 @@ impl DatabaseError {
         Self::without_driver(DatabaseErrorCode::Schema, operation, resource)
     }
 
-    pub(crate) fn unsupported(operation: DatabaseOperation, resource: Option<DatabaseId>) -> Self {
-        Self::without_driver(DatabaseErrorCode::Unsupported, operation, resource)
-    }
-
     pub(crate) fn driver(
         operation: DatabaseOperation,
         resource: Option<DatabaseId>,
@@ -145,12 +166,32 @@ impl DatabaseError {
         }
     }
 
-    pub fn polars_driver(
+    pub fn dataset(
         operation: DatabaseOperation,
         resource: Option<DatabaseId>,
-        source: polars::error::PolarsError,
+        source: yss_dataset_store::DatasetStoreError,
     ) -> Self {
-        Self::driver(operation, resource, DatabaseDriverError::Polars(source))
+        use yss_dataset_store::DatasetStoreError as Store;
+        use yss_relational_contract::RelationError;
+        let code = match &source {
+            Store::NotFound | Store::RowNotFound => DatabaseErrorCode::NotFound,
+            Store::Conflict => DatabaseErrorCode::Conflict,
+            Store::InvalidValue | Store::DeltaLimit => DatabaseErrorCode::Constraint,
+            Store::InvalidSchema | Store::CorruptCatalog | Store::UnsupportedFormat => {
+                DatabaseErrorCode::Schema
+            }
+            Store::InvalidIdentity => DatabaseErrorCode::InvalidRequest,
+            Store::Query(RelationError::Cancelled) => DatabaseErrorCode::Cancelled,
+            Store::Query(RelationError::DeadlineExceeded) => DatabaseErrorCode::Deadline,
+            Store::Query(RelationError::MemoryLimitExceeded) => DatabaseErrorCode::Constraint,
+            _ => DatabaseErrorCode::Driver,
+        };
+        Self {
+            code,
+            operation,
+            resource,
+            driver: Some(DatabaseDriverError::Dataset(source)),
+        }
     }
 
     fn without_driver(
@@ -169,25 +210,25 @@ impl DatabaseError {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum DatabaseDriverError {
-    #[error("database operation failed")]
-    Operation(Box<str>),
     #[error("database export failed")]
     Export(#[source] DatabaseExportError),
-    #[error("Polars driver failure")]
-    Polars(#[source] polars::error::PolarsError),
+    #[error("dataset driver failure")]
+    Dataset(#[source] yss_dataset_store::DatasetStoreError),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DatabaseDriverError, DatabaseError, DatabaseOperation};
+    use super::{DatabaseError, DatabaseOperation};
 
     #[test]
     fn database_error_redacts_driver_details_from_public_views() {
         let secret = "driver detail: SELECT token FROM secrets";
-        let error = DatabaseError::driver(
+        let error = DatabaseError::dataset(
             DatabaseOperation::Query,
             None,
-            DatabaseDriverError::Operation(secret.into()),
+            yss_dataset_store::DatasetStoreError::Batch(arrow::error::ArrowError::ComputeError(
+                secret.into(),
+            )),
         );
 
         assert!(!error.to_string().contains(secret));

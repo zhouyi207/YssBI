@@ -67,12 +67,18 @@ export interface ResultDataSeriesMetadata {
   format: string | null;
 }
 
+export interface ResultTableMetadata {
+  columns: { name: string; type: string }[];
+}
+
+export type ResultMetadata = ResultDataSeriesMetadata | ResultTableMetadata;
+
 export interface ResultDescriptor {
   resultId: ResultId;
   provenance: ResultProvenance;
   presentation: ResultPresentation;
   valueKind: ResultValueKind;
-  metadata: ResultDataSeriesMetadata | null;
+  metadata: ResultMetadata | null;
   totalCount: number | null;
   title: string;
 }
@@ -87,10 +93,10 @@ export interface ResultPage {
   offset: number;
   requestedLimit: number;
   actualCount: number;
-  totalCount: number;
+  totalCount: number | null;
   hasMore: boolean;
   nextOffset: number | null;
   valueKind: Exclude<ResultValueKind, "unknown">;
-  metadata: ResultDataSeriesMetadata | null;
+  metadata: ResultMetadata | null;
   values: unknown[];
 }

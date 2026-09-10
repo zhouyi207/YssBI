@@ -28,24 +28,6 @@ function normalizeColumns(raw: unknown): DatabaseColumn[] | undefined {
   return columns.length > 0 ? columns : undefined;
 }
 
-function pathStem(path: string): string | undefined {
-  const parts = path.replace(/\\/g, "/").split("/");
-  const file = parts[parts.length - 1] || "";
-  const stem = file.replace(/\.[^.]+$/, "");
-  return stem || file || undefined;
-}
-
-export function displayNameFromEngine(engine: DatabaseEngine | undefined): string | undefined {
-  if (!engine) return undefined;
-  if ("csv" in engine) return pathStem(engine.csv.path);
-  if ("parquet" in engine) return pathStem(engine.parquet.path);
-  if ("excel" in engine) return engine.excel.sheet || pathStem(engine.excel.path);
-  if ("duckDb" in engine) return engine.duckDb.table || pathStem(engine.duckDb.path);
-  if ("sql" in engine) return engine.sql.table;
-  if ("inMemory" in engine) return engine.inMemory.name;
-  return undefined;
-}
-
 export function normalizeDatabaseRecord(
   id: string,
   raw: unknown,
@@ -56,7 +38,7 @@ export function normalizeDatabaseRecord(
   const name =
     typeof input.name === "string" && input.name.trim()
       ? input.name.trim()
-      : (displayNameFromEngine(engine) ?? existing?.name ?? id);
+      : (existing?.name ?? id);
   const columns = normalizeColumns(input.columns) ?? existing?.columns;
   const rowCount = typeof input.rowCount === "number" ? input.rowCount : existing?.rowCount;
   const columnCount =

@@ -26,4 +26,4 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-polars.workspace = true
+arrow.workspace = true

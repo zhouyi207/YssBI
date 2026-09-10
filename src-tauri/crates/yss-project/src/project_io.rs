@@ -8,8 +8,8 @@ use super::{
     load_charts_from_root, read_chart_index_entries, scan_graph_resource_index,
 };
 use crate::manifest::{CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest};
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yss_duckdb::{list_data_tables, read_display_name};
+use yss_database_contract::{DatabaseDecl, DatabaseEngine};
+use yss_dataset_store::DatasetStore;
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_filesystem::project_root_from_path;
@@ -18,7 +18,7 @@ use yss_project_identity::ProjectResourcePath;
 use yss_project_layout::PROJECT_CONTENT_DIRECTORIES;
 use yss_project_layout::{
     DATABASE_DIR, EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR,
-    PROJECT_DUCKDB_FILE, PROJECT_METADATA_FILE,
+    PROJECT_DATASET_CATALOG_FILE, PROJECT_METADATA_FILE,
 };
 use yss_project_model::{GraphResourceDocument, ProjectData};
 
@@ -169,6 +169,11 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     std::fs::create_dir_all(root)?;
     for directory in PROJECT_CONTENT_DIRECTORIES {
         std::fs::create_dir_all(root.join(directory))?;
+    }
+
+    if !root.join(relative_dataset_catalog_path()).exists() {
+        DatasetStore::create(root)
+            .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
     }
 
     scan_graph_resource_index(root)?;
@@ -562,41 +567,34 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> 
     Ok(())
 }
 
-pub fn relative_project_duckdb_path() -> String {
-    format!("{}/{}", DATABASE_DIR, PROJECT_DUCKDB_FILE)
+pub fn relative_dataset_catalog_path() -> String {
+    format!("{}/{}", DATABASE_DIR, PROJECT_DATASET_CATALOG_FILE)
 }
 
-pub fn project_duckdb_abs(root: &Path) -> PathBuf {
-    root.join(relative_project_duckdb_path())
-}
-
-/// 打开项目时枚举 `database/project.duckdb` 内的用户表，重建运行时 `DatabaseDecl` 索引。
+/// Rebuild declarations solely from the committed catalog after manifest validation.
 pub fn discover_databases_from_root(
     root: &Path,
 ) -> Result<HashMap<String, DatabaseDecl>, ProjectError> {
-    let mut map = HashMap::new();
-    let duckdb_path = project_duckdb_abs(root);
-    let tables = list_data_tables(&duckdb_path).map_err(|e| {
-        ProjectError::InvalidProjectFormat(format!("Failed to list DuckDB tables: {e}"))
-    })?;
-
-    let relative_path = relative_project_duckdb_path();
-    for table in tables {
-        let display_name = read_display_name(&duckdb_path, &table).unwrap_or_else(|| table.clone());
-        let decl = DatabaseDecl {
-            id: DatabaseId::from_existing(table.clone().into()),
-            engine: DatabaseEngine::DuckDb {
-                path: relative_path.clone(),
-                table: table.clone(),
-            },
-            schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
-            required: false,
-            name: display_name.into(),
-        };
-        map.insert(table, decl);
-    }
-
-    Ok(map)
+    let store = DatasetStore::open(root)
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?;
+    store
+        .catalog_metadata()
+        .map_err(|error| ProjectError::InvalidProjectFormat(error.to_string()))?
+        .into_iter()
+        .map(|metadata| {
+            let id = metadata.id.as_str().to_owned();
+            Ok((
+                id,
+                DatabaseDecl {
+                    id: metadata.id,
+                    engine: DatabaseEngine::Dataset {},
+                    schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
+                    required: false,
+                    name: metadata.name,
+                },
+            ))
+        })
+        .collect()
 }
 
 #[cfg(test)]

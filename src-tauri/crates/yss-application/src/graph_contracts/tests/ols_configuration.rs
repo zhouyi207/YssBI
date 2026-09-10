@@ -143,7 +143,13 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
     };
     let execute = |document: &GraphDocument| {
         let compiled = runtime
-            .compile_draft(document, graph.clone(), &catalog, &basis)
+            .compile_draft(
+                document,
+                graph.clone(),
+                &catalog,
+                &basis,
+                &yss_execution::state::supports_kernel,
+            )
             .unwrap();
         let projection = crate::editor_projection::build_editor_projection(
             crate::editor_projection::EditorProjectionInput {
@@ -346,7 +352,13 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         .insert("configuration".parse().unwrap(), serde_json::json!({}));
     assert!(
         runtime
-            .compile_draft(&document, graph, &catalog, &basis)
+            .compile_draft(
+                &document,
+                graph,
+                &catalog,
+                &basis,
+                &yss_execution::state::supports_kernel
+            )
             .unwrap()
             .artifact_id()
             .is_none()

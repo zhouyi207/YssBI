@@ -1,63 +1,79 @@
-//! Owned temporary DuckDB tables for runtime and consumer contract tests.
-
+//! Temporary committed dataset fixtures for runtime and consumer contract tests.
+use crate::DatabaseInstance;
+use arrow::record_batch::RecordBatch;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use polars::prelude::DataFrame;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yss_database_edit::EditHistory;
+use yss_dataset_store::DatasetStore;
 
-use crate::{DatabaseInstance, DatabaseState};
+pub const SALES_ID: &str = "00000000-0000-4000-8000-000000000001";
 
-static NEXT_DATABASE: AtomicU64 = AtomicU64::new(0);
-
-pub struct DuckDbFixture {
+pub struct DatasetFixture {
     path: PathBuf,
     pub instance: DatabaseInstance,
 }
-
-impl DuckDbFixture {
-    pub fn new(id: &str, mut dataframe: DataFrame) -> Self {
-        let sequence = NEXT_DATABASE.fetch_add(1, Ordering::Relaxed);
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "yssbi-database-{}-{timestamp}-{sequence}.duckdb",
-            std::process::id(),
-        ));
-        let meta = yss_duckdb::ingest_dataframe_to_duckdb(&mut dataframe, &path, id)
-            .expect("create test DuckDB table");
-        let duckdb_path = path.to_string_lossy().into_owned();
+impl DatasetFixture {
+    pub fn new(id: &str, batch: RecordBatch) -> Self {
+        let path =
+            std::env::temp_dir().join(format!("yss-runtime-dataset-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&path).unwrap();
+        let store = DatasetStore::create(&path).unwrap();
+        let id = DatabaseId::from_existing(id.into());
+        let prepared = store
+            .prepare_import(
+                id.clone(),
+                "Sales",
+                "fixture-import",
+                batch.schema(),
+                [Ok(batch)],
+            )
+            .unwrap();
+        let committed = store.commit(prepared).unwrap();
+        store
+            .acknowledge_publication(&committed.publication)
+            .unwrap();
+        let decl = DatabaseDecl {
+            id,
+            engine: DatabaseEngine::Dataset {},
+            schema_version: 5,
+            required: false,
+            name: "Sales".into(),
+        };
         Self {
             path,
-            instance: DatabaseInstance {
-                decl: DatabaseDecl {
-                    id: DatabaseId::from_existing(id.into()),
-                    engine: DatabaseEngine::DuckDb {
-                        path: duckdb_path.clone(),
-                        table: id.into(),
-                    },
-                    schema_version: 1,
-                    required: false,
-                    name: id.into(),
-                },
-                state: DatabaseState::DuckDb {
-                    duckdb_path,
-                    table: id.into(),
-                    row_count: meta.row_count,
-                    columns: meta.columns,
-                    history: EditHistory::new(),
-                },
-            },
+            instance: crate::bind_dataset_instance(&decl, &store),
         }
     }
+    pub fn single_i64(id: &str, column: &str, values: Vec<i64>) -> Self {
+        let schema = std::sync::Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new(column, arrow::datatypes::DataType::Int64, true),
+        ]));
+        Self::new(
+            id,
+            RecordBatch::try_new(
+                schema,
+                vec![std::sync::Arc::new(arrow::array::Int64Array::from(values))],
+            )
+            .unwrap(),
+        )
+    }
+    pub fn single_f64(id: &str, column: &str, values: Vec<f64>) -> Self {
+        let schema = std::sync::Arc::new(arrow::datatypes::Schema::new(vec![
+            arrow::datatypes::Field::new(column, arrow::datatypes::DataType::Float64, true),
+        ]));
+        Self::new(
+            id,
+            RecordBatch::try_new(
+                schema,
+                vec![std::sync::Arc::new(arrow::array::Float64Array::from(
+                    values,
+                ))],
+            )
+            .unwrap(),
+        )
+    }
 }
-
-impl Drop for DuckDbFixture {
+impl Drop for DatasetFixture {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir_all(&self.path);
     }
 }

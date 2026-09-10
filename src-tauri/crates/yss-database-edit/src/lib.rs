@@ -1,47 +1,6 @@
-//! Database edit operations, undo/redo history, and edit-state projection.
+//! Generic undo/redo history and its edit-state projection.
 
 use serde::Serialize;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum EditOperation {
-    EditCell {
-        row: usize,
-        row_id: Option<i64>,
-        col: String,
-        old_value: serde_json::Value,
-        new_value: serde_json::Value,
-    },
-    AddRow {
-        index: usize,
-        row_id: Option<i64>,
-    },
-    DeleteRow {
-        index: usize,
-        row_id: Option<i64>,
-        data: Vec<serde_json::Value>,
-    },
-    AddColumn {
-        name: String,
-        dtype: String,
-    },
-    DeleteColumn {
-        name: String,
-        dtype: String,
-        row_ids: Vec<i64>,
-        row_fingerprints: Vec<u64>,
-        data: Vec<serde_json::Value>,
-    },
-    RenameColumn {
-        old_name: String,
-        new_name: String,
-    },
-    CastColumn {
-        col: String,
-        old_data: Vec<serde_json::Value>,
-        old_dtype: String,
-        new_dtype: String,
-    },
-}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,35 +12,44 @@ pub struct EditState {
     pub redo_count: usize,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct EditHistory {
-    undo_stack: Vec<EditOperation>,
-    redo_stack: Vec<EditOperation>,
+#[derive(Debug, Clone)]
+pub struct EditHistory<T> {
+    undo_stack: Vec<T>,
+    redo_stack: Vec<T>,
 }
 
-impl EditHistory {
+impl<T> Default for EditHistory<T> {
+    fn default() -> Self {
+        Self {
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        }
+    }
+}
+
+impl<T> EditHistory<T> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn push(&mut self, op: EditOperation) {
+    pub fn push(&mut self, op: T) {
         self.undo_stack.push(op);
         self.redo_stack.clear();
     }
 
-    pub fn pop_undo(&mut self) -> Option<EditOperation> {
+    pub fn pop_undo(&mut self) -> Option<T> {
         self.undo_stack.pop()
     }
 
-    pub fn push_redo(&mut self, op: EditOperation) {
+    pub fn push_redo(&mut self, op: T) {
         self.redo_stack.push(op);
     }
 
-    pub fn pop_redo(&mut self) -> Option<EditOperation> {
+    pub fn pop_redo(&mut self) -> Option<T> {
         self.redo_stack.pop()
     }
 
-    pub fn push_undo(&mut self, op: EditOperation) {
+    pub fn push_undo(&mut self, op: T) {
         self.undo_stack.push(op);
     }
 
@@ -106,17 +74,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn add_row(index: usize) -> EditOperation {
-        EditOperation::AddRow {
-            index,
-            row_id: None,
-        }
-    }
-
     #[test]
     fn new_edit_after_undo_clears_redo_history() {
         let mut history = EditHistory::new();
-        history.push(add_row(0));
+        history.push(0usize);
         let operation = history.pop_undo().expect("undo operation");
         history.push_redo(operation);
         assert_eq!(
@@ -130,7 +91,7 @@ mod tests {
             }
         );
 
-        history.push(add_row(1));
+        history.push(1usize);
 
         assert_eq!(
             history.state(),

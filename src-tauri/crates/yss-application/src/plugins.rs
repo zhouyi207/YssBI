@@ -96,7 +96,7 @@ impl HostServices for PluginHostServices {
                     .query_project_databases()
                     .map_err(|_| fail("plugin_dataset_unavailable"))?;
                 Ok(
-                    json!({"datasets":data.databases().iter().map(|dataset|json!({"id":dataset.declaration.id.as_str(),"name":dataset.declaration.name,"columns":dataset.schema.columns().iter().map(|column|json!({"name":column.name().as_str(),"type":format!("{:?}",column.data_type()),"nullable":column.nullable()})).collect::<Vec<_>>()})).collect::<Vec<_>>()}),
+                    json!({"datasets":data.databases().iter().map(|dataset|json!({"id":dataset.declaration.id.as_str(),"name":dataset.declaration.name,"columns":dataset.schema.columns().iter().map(|column|json!({"name":column.name().as_str(),"type":column.display_type(),"nullable":column.nullable()})).collect::<Vec<_>>()})).collect::<Vec<_>>()}),
                 )
             }
             "data.snapshot" => {
@@ -130,7 +130,7 @@ impl HostServices for PluginHostServices {
                     .iter()
                     .map(|column| column.as_str().to_owned())
                     .collect();
-                let snapshot = yss_database_runtime::session_api::data_snapshot(
+                let snapshot = yss_database_runtime::session_api::arrow_snapshot(
                     captured.database(),
                     DatabaseDataSnapshotRequest {
                         database: DatabaseId::from_existing(dataset.into()),
@@ -140,7 +140,7 @@ impl HostServices for PluginHostServices {
                     },
                 )
                 .map_err(|_| fail("plugin_dataset_unavailable"))?;
-                if snapshot.rows().row_count() > max_rows {
+                if snapshot.row_count > max_rows {
                     return Err(fail("plugin_resource_exhausted"));
                 }
                 let directory = exchange_dir.join("snapshots");
@@ -152,8 +152,12 @@ impl HostServices for PluginHostServices {
                 }
                 let id = uuid::Uuid::new_v4().to_string();
                 let path = directory.join(format!("{id}.arrow"));
-                yss_tabular_io::write_ipc_snapshot(&path, snapshot.rows())
-                    .map_err(|_| fail("plugin_snapshot_failed"))?;
+                yss_tabular_io::write_ipc_batches(
+                    &path,
+                    &snapshot.schema,
+                    snapshot.batches.iter().cloned().map(Ok),
+                )
+                .map_err(|_| fail("plugin_snapshot_failed"))?;
                 let bytes = fs::metadata(&path)
                     .map_err(|_| fail("plugin_snapshot_failed"))?
                     .len();
@@ -199,7 +203,7 @@ impl HostServices for PluginHostServices {
                     },
                 );
                 Ok(
-                    json!({"leaseId":id,"path":path,"sourceRevision":snapshot.runtime_revision().get().to_string(),"sha256":snapshot_hash,"rows":snapshot.rows().row_count().to_string(),"bytes":bytes.to_string(),"format":"arrowIpc"}),
+                    json!({"leaseId":id,"path":path,"sourceRevision":snapshot.runtime_revision().get().to_string(),"sha256":snapshot_hash,"rows":snapshot.row_count.to_string(),"bytes":bytes.to_string(),"format":"arrowIpc"}),
                 )
             }
             "data.release" => {

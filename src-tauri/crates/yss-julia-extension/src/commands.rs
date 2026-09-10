@@ -1,9 +1,6 @@
-use polars::prelude::*;
 use serde_json::Value;
-use std::sync::Arc;
 use yss_bayes_runtime::{BayesApplicationError, BayesInferenceService};
 use yss_plugin_protocol::PluginFailure;
-use yss_sci_contract::{StatisticalInput, StatisticalScalar};
 
 pub fn bayes_error(error: BayesApplicationError) -> PluginFailure {
     let code = match error {
@@ -138,38 +135,4 @@ pub fn execute(
         .map_err(|_| PluginFailure::new("plugin_response_invalid")),
         _ => Err(PluginFailure::new("plugin_method_unknown")),
     }
-}
-
-pub fn read_inputs(path: &str) -> Result<Arc<[StatisticalInput]>, PluginFailure> {
-    let invalid = || PluginFailure::new("plugin_snapshot_invalid");
-    let file = std::fs::File::open(path).map_err(|_| invalid())?;
-    let dataframe = IpcReader::new(file).finish().map_err(|_| invalid())?;
-    dataframe
-        .columns()
-        .iter()
-        .map(|column| {
-            let values = column
-                .as_materialized_series()
-                .iter()
-                .map(|value| match value {
-                    AnyValue::Null => Ok(None),
-                    AnyValue::Boolean(value) => {
-                        Ok(Some(StatisticalScalar::Category(value.to_string().into())))
-                    }
-                    AnyValue::String(value) => Ok(Some(StatisticalScalar::Category(value.into()))),
-                    AnyValue::StringOwned(value) => {
-                        Ok(Some(StatisticalScalar::Category(value.to_string().into())))
-                    }
-                    value => value
-                        .extract::<f64>()
-                        .filter(|value| value.is_finite())
-                        .map(|value| Some(StatisticalScalar::Numeric(value)))
-                        .ok_or_else(invalid),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            StatisticalInput::try_new(column.name().as_str().into(), values.into(), None)
-                .map_err(|_| invalid())
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(Arc::from)
 }

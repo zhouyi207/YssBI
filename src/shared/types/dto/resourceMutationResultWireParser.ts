@@ -193,28 +193,13 @@ function isLifecyclePatchShape(value: unknown): boolean {
   );
 }
 
-function isSqlEngineShape(value: unknown): boolean {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if (isRecord(value.sqlite)) return hasExactKeys(value.sqlite, ["autoCreate"]);
-  if (isRecord(value.postgres)) return hasExactKeys(value.postgres, ["ssl"]);
-  return isRecord(value.mysql) && hasExactKeys(value.mysql, ["charset"]);
-}
-
 function isDatabaseEngineShape(value: unknown): boolean {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if (isRecord(value.csv)) {
-    return hasExactKeys(value.csv, ["path", "delimiter", "hasHeader", "inferSchemaLength"]);
-  }
-  if (isRecord(value.sql)) {
-    return (
-      hasExactKeys(value.sql, ["engine", "connectionString", "table"]) &&
-      isSqlEngineShape(value.sql.engine)
-    );
-  }
-  if (isRecord(value.parquet)) return hasExactKeys(value.parquet, ["path", "columns"]);
-  if (isRecord(value.excel)) return hasExactKeys(value.excel, ["path", "sheet"]);
-  if (isRecord(value.duckDb)) return hasExactKeys(value.duckDb, ["path", "table"]);
-  return isRecord(value.inMemory) && hasExactKeys(value.inMemory, ["name"]);
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["dataset"]) &&
+    isRecord(value.dataset) &&
+    Object.keys(value.dataset).length === 0
+  );
 }
 
 function isDatabaseDocumentShape(value: unknown): boolean {

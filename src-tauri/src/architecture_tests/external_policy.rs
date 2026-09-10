@@ -29,6 +29,186 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-artifact-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "datafusion",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-artifact-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-artifact-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-artifact-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "url",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-application",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-database-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-sql-source",
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "url",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-dataset-store",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-relational-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-array",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-relational-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-relational-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-core",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-relational-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "datafusion",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-datafusion",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-io",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-io",
+        mode: RustDependencyMode::Runtime,
+        package_name: "parquet",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-plugin-protocol",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -139,7 +319,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-julia-extension",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -359,9 +539,9 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-bayes-artifact-polars",
+        owning_package: "yss-bayes-artifact-datafusion",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -385,7 +565,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-bayes-worker-julia",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -449,15 +629,9 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-database-edit",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-database-runtime",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -475,19 +649,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-database-schema",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-database-schema",
-        mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-dataset-profile",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -530,42 +692,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-diagnostics",
         mode: RustDependencyMode::Runtime,
         package_name: "uuid",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "duckdb",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-arrow",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-duckdb",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1027,7 +1153,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1093,7 +1219,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sql-source",
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1128,42 +1254,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-tabular-io",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-io",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-polars",
-        mode: RustDependencyMode::Runtime,
-        package_name: "chrono",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-polars",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-polars",
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-polars",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-polars",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
         target_condition: None,
@@ -1267,6 +1357,71 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "url",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "datafusion",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "url",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-array",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PureLeaf,
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-core",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "datafusion",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::DatabaseCore,
+        mode: RustDependencyMode::Runtime,
+        package_name: "parquet",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
         mode: RustDependencyMode::Runtime,
@@ -1435,16 +1590,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::DatabaseCore,
         mode: RustDependencyMode::Runtime,
-        package_name: "duckdb",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
-        mode: RustDependencyMode::Runtime,
-        package_name: "duckdb",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::DatabaseCore,
-        mode: RustDependencyMode::Runtime,
         package_name: "sqlx",
     },
     ExternalDependencyUseAllowance {
@@ -1460,47 +1605,12 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::SciCore,
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::DatabaseCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars",
+        package_name: "arrow",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
-        package_name: "polars",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::SciCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-arrow",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::DatabaseCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-arrow",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-arrow",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::SciCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::DatabaseCore,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
-        mode: RustDependencyMode::Runtime,
-        package_name: "polars-dtype",
+        package_name: "arrow",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,

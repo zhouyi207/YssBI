@@ -9,7 +9,7 @@ publish = false
 test-support = []
 
 [dependencies]
-polars.workspace = true
+arrow.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
@@ -17,6 +17,10 @@ yss-database-contract = { path = "../yss-database-contract" }
 yss-database-edit = { path = "../yss-database-edit" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
-yss-duckdb = { path = "../yss-duckdb" }
+yss-datafusion = { path = "../yss-datafusion" }
+yss-dataset-store = { path = "../yss-dataset-store" }
+yss-relational-contract = { path = "../yss-relational-contract" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
-yss-tabular-polars = { path = "../yss-tabular-polars" }
+yss-tabular-arrow = { path = "../yss-tabular-arrow" }
+yss-tabular-io = { path = "../yss-tabular-io" }
+uuid.workspace = true

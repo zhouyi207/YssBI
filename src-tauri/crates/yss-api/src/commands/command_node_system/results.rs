@@ -1,6 +1,6 @@
 use super::common::parse_opaque_u64;
 use crate::commands::execution_dto::{
-    ResultDescriptorDto, ResultPageDto, ResultValueDto, ResultValueKindDto,
+    ResultDescriptorDto, ResultPageDto, ResultValueDto, runtime_value_to_json,
 };
 use crate::error::CommandError;
 use serde::Serialize;
@@ -22,6 +22,18 @@ struct ResultPagingErrorDetails {
 fn result_query_command_error(error: ResultQueryApplicationError) -> CommandError {
     match error {
         ResultQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
+        ResultQueryApplicationError::SessionChanged => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        ResultQueryApplicationError::InvalidPageRequest => {
+            CommandError::expected("invalid_result_page_request")
+        }
+        ResultQueryApplicationError::PageTooLarge => {
+            CommandError::expected("result_page_too_large")
+        }
+        ResultQueryApplicationError::Relation(error) => {
+            CommandError::diagnosed("result_source_read_failed", format!("{error:?}"))
+        }
     }
 }
 
@@ -68,16 +80,23 @@ pub fn get_result_value(
     };
     if matches!(
         result.value().value(),
-        StoredResult::Runtime(RuntimeValue::List(_))
+        StoredResult::Runtime(
+            RuntimeValue::List(_) | RuntimeValue::Relation(_) | RuntimeValue::Series(_)
+        )
     ) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
-    let values = execution_result_values(result.value(), 0, 1)?;
-    let value = values
-        .into_vec()
-        .into_iter()
-        .next()
-        .unwrap_or(serde_json::Value::Null);
+    let value = match result.value().value() {
+        StoredResult::Runtime(value) => runtime_value_to_json(value)
+            .map_err(|_| CommandError::expected("result_value_not_json"))?,
+        StoredResult::Scalar(value) => runtime_value_to_json(&RuntimeValue::Decimal(*value))
+            .map_err(|_| CommandError::expected("result_value_not_json"))?,
+        StoredResult::Text(value) => serde_json::Value::String(value.to_string()),
+        StoredResult::Empty => serde_json::Value::Null,
+        StoredResult::Categorized { .. } => {
+            return Err(CommandError::expected("result_value_not_json"));
+        }
+    };
     let encoded_size = serde_json::to_vec(&value)
         .map_err(|_| CommandError::expected("result_value_not_json"))?
         .len();
@@ -88,29 +107,26 @@ pub fn get_result_value(
 }
 
 #[tauri::command]
-pub fn get_result_page(
+pub async fn get_result_page(
     state: State<'_, ApplicationState>,
     result_id: String,
     offset: usize,
     limit: usize,
 ) -> Result<Option<ResultPageDto>, CommandError> {
     let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
-    let Some(result) = state
-        .query_result(result_id)
-        .map_err(result_query_command_error)?
-    else {
-        return Ok(None);
-    };
-    let total_count = execution_result_len(result.value());
-    let values = execution_result_values(result.value(), offset, limit)?;
-    Ok(Some(ResultPageDto::from_execution(
-        result_id,
-        offset.min(total_count),
-        limit,
-        execution_result_kind(result.value()),
-        total_count,
-        values,
-    )))
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        state
+            .query_result_page(result_id, offset, limit)
+            .map_err(result_query_command_error)?
+            .map(|page| {
+                ResultPageDto::from_application(result_id, page)
+                    .map_err(|_| CommandError::expected("result_value_not_json"))
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|error| CommandError::diagnosed("result_source_read_failed", format!("{error:?}")))?
 }
 
 #[tauri::command]
@@ -139,79 +155,5 @@ fn result_requires_paging(result_id: ResultId, value_kind: &'static str) -> Comm
     CommandError::expected("result_requires_paging").with_details(ResultPagingErrorDetails {
         result_id: result_id.get().to_string(),
         value_kind,
-    })
-}
-
-fn execution_result_kind(result: &StoredResult) -> ResultValueKindDto {
-    match result.value() {
-        StoredResult::Categorized { value, .. } => execution_result_kind(value),
-        StoredResult::Runtime(RuntimeValue::List(_)) => ResultValueKindDto::Sequence,
-        _ => ResultValueKindDto::Scalar,
-    }
-}
-
-fn execution_result_len(result: &StoredResult) -> usize {
-    match result.value() {
-        StoredResult::Categorized { value, .. } => execution_result_len(value),
-        StoredResult::Runtime(RuntimeValue::List(values)) => values.len(),
-        StoredResult::Empty => 0,
-        _ => 1,
-    }
-}
-
-fn execution_result_values(
-    result: &StoredResult,
-    offset: usize,
-    limit: usize,
-) -> Result<Box<[serde_json::Value]>, CommandError> {
-    let values: Vec<RuntimeValue> = match result.value() {
-        StoredResult::Categorized { value, .. } => {
-            return execution_result_values(value, offset, limit);
-        }
-        StoredResult::Runtime(RuntimeValue::List(values)) => {
-            values.iter().skip(offset).take(limit).cloned().collect()
-        }
-        StoredResult::Runtime(value) if offset == 0 && limit > 0 => vec![value.clone()],
-        StoredResult::Runtime(value) => (offset == 0 && limit > 0)
-            .then_some(value.clone())
-            .into_iter()
-            .collect(),
-        StoredResult::Scalar(value) if offset == 0 && limit > 0 => {
-            vec![RuntimeValue::Decimal(*value)]
-        }
-        StoredResult::Text(value) if offset == 0 && limit > 0 => {
-            vec![RuntimeValue::String(value.clone())]
-        }
-        StoredResult::Empty | StoredResult::Scalar(_) | StoredResult::Text(_) => Vec::new(),
-    };
-    values
-        .into_iter()
-        .map(|value| runtime_value_to_json(&value))
-        .collect::<Result<Vec<_>, _>>()
-        .map(Vec::into_boxed_slice)
-}
-
-fn runtime_value_to_json(value: &RuntimeValue) -> Result<serde_json::Value, CommandError> {
-    Ok(match value {
-        RuntimeValue::Null => serde_json::Value::Null,
-        RuntimeValue::Bool(value) => (*value).into(),
-        RuntimeValue::Integer(value) => (*value).into(),
-        RuntimeValue::Unsigned(value) => (*value).into(),
-        RuntimeValue::Decimal(value) => serde_json::Number::from_f64(*value)
-            .map(serde_json::Value::Number)
-            .ok_or_else(|| CommandError::expected("result_value_not_json"))?,
-        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
-        RuntimeValue::List(values) => values
-            .iter()
-            .map(runtime_value_to_json)
-            .collect::<Result<Vec<_>, _>>()?
-            .into(),
-        RuntimeValue::Record(values) => values
-            .iter()
-            .map(|(key, value)| Ok((key.to_string(), runtime_value_to_json(value)?)))
-            .collect::<Result<std::collections::BTreeMap<_, _>, CommandError>>()?
-            .into_iter()
-            .collect::<serde_json::Map<_, _>>()
-            .into(),
     })
 }

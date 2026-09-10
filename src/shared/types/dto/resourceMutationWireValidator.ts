@@ -170,72 +170,12 @@ function isFunctionPatch(value: unknown): boolean {
   return isRecord(value) && isFunctionSignature(value.before) && isFunctionSignature(value.after);
 }
 
-function isSqlEngine(value: unknown): boolean {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if (isRecord(value.sqlite)) {
-    return (
-      hasExactKeys(value.sqlite, ["autoCreate"]) && typeof value.sqlite.autoCreate === "boolean"
-    );
-  }
-  if (isRecord(value.postgres)) {
-    return hasExactKeys(value.postgres, ["ssl"]) && typeof value.postgres.ssl === "boolean";
-  }
-  return (
-    isRecord(value.mysql) &&
-    hasExactKeys(value.mysql, ["charset"]) &&
-    typeof value.mysql.charset === "string"
-  );
-}
-
 function isDatabaseEngine(value: unknown): boolean {
-  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
-  if (isRecord(value.csv)) {
-    return (
-      hasExactKeys(value.csv, ["path", "delimiter", "hasHeader", "inferSchemaLength"]) &&
-      typeof value.csv.path === "string" &&
-      typeof value.csv.delimiter === "string" &&
-      [...value.csv.delimiter].length === 1 &&
-      typeof value.csv.hasHeader === "boolean" &&
-      (value.csv.inferSchemaLength === null ||
-        (Number.isSafeInteger(value.csv.inferSchemaLength) &&
-          (value.csv.inferSchemaLength as number) >= 0))
-    );
-  }
-  if (isRecord(value.sql)) {
-    return (
-      hasExactKeys(value.sql, ["engine", "connectionString", "table"]) &&
-      isSqlEngine(value.sql.engine) &&
-      typeof value.sql.connectionString === "string" &&
-      typeof value.sql.table === "string"
-    );
-  }
-  if (isRecord(value.parquet)) {
-    return (
-      hasExactKeys(value.parquet, ["path", "columns"]) &&
-      typeof value.parquet.path === "string" &&
-      (value.parquet.columns === null ||
-        (Array.isArray(value.parquet.columns) &&
-          value.parquet.columns.every((column) => typeof column === "string")))
-    );
-  }
-  if (isRecord(value.excel)) {
-    return (
-      hasExactKeys(value.excel, ["path", "sheet"]) &&
-      typeof value.excel.path === "string" &&
-      typeof value.excel.sheet === "string"
-    );
-  }
-  if (isRecord(value.duckDb)) {
-    return (
-      hasExactKeys(value.duckDb, ["path", "table"]) &&
-      typeof value.duckDb.path === "string" &&
-      typeof value.duckDb.table === "string"
-    );
-  }
   return (
-    isRecord(value.inMemory) &&
-    hasExactKeys(value.inMemory, ["name"]) &&
-    typeof value.inMemory.name === "string"
+    isRecord(value) &&
+    hasExactKeys(value, ["dataset"]) &&
+    isRecord(value.dataset) &&
+    Object.keys(value.dataset).length === 0
   );
 }
 

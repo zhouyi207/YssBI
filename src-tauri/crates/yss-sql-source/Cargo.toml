@@ -6,8 +6,10 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-polars.workspace = true
+arrow.workspace = true
+futures-util.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
+yss-relational-contract = { path = "../yss-relational-contract" }

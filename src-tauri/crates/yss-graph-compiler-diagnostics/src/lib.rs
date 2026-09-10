@@ -44,6 +44,7 @@ pub enum GraphDiagnosticKind {
     InputUnknownPort,
     InterfaceSchemaDependencyUnresolved,
     NodeUnknown,
+    NodeKernelUnavailable,
     ParameterInvalid,
     ParameterRequired,
     ParameterUnknown,
@@ -82,6 +83,7 @@ impl GraphDiagnosticKind {
                 "compiler.interface.schema_dependency_unresolved"
             }
             Self::NodeUnknown => "compiler.node.unknown",
+            Self::NodeKernelUnavailable => "compiler.node.kernel_unavailable",
             Self::ParameterInvalid => "compiler.parameter.invalid",
             Self::ParameterRequired => "compiler.parameter.required",
             Self::ParameterUnknown => "compiler.parameter.unknown",
@@ -493,6 +495,14 @@ define_compiler_diagnostics! {
         blocking: true,
         en: "Node type {node_type} is unknown.",
         zh: "节点类型 {node_type} 未知。",
+    },
+    NodeKernelUnavailable { node_type } => {
+        code: "compiler.node.kernel_unavailable",
+        message_key: "diagnostics.compiler.node.kernel_unavailable",
+        severity: Error,
+        blocking: true,
+        en: "Node type {node_type} has no execution kernel in this build.",
+        zh: "当前版本尚未实现节点类型 {node_type} 的执行内核。",
     },
     ParameterInvalid { parameter_key } => {
         code: "compiler.parameter.invalid",
@@ -1022,6 +1032,7 @@ mod tests {
             GraphDiagnosticKind::InputUnbound,
             GraphDiagnosticKind::InterfaceSchemaDependencyUnresolved,
             GraphDiagnosticKind::NodeUnknown,
+            GraphDiagnosticKind::NodeKernelUnavailable,
             GraphDiagnosticKind::ParameterInvalid,
             GraphDiagnosticKind::ParameterRequired,
             GraphDiagnosticKind::ParameterUnknown,

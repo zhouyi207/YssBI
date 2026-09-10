@@ -218,7 +218,7 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
     let files = [
         TABULAR_CONTRACT_SOURCE,
         CONSTANT_VALUE_SOURCE,
-        "src-tauri/crates/yss-tabular-polars/src/lib.rs",
+        "src-tauri/crates/yss-tabular-arrow/src/lib.rs",
         "src-tauri/crates/yss-tabular-io/src/lib.rs",
     ];
     let mut violations = Vec::new();
@@ -261,8 +261,8 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         if relative == CONSTANT_VALUE_SOURCE && !source.contains("ConstantValueError") {
             violations.push(format!("{relative}: missing typed normalization error"));
         }
-        if relative == "src-tauri/crates/yss-tabular-polars/src/lib.rs"
-            && !source.contains("TabularMaterializationError")
+        if relative == "src-tauri/crates/yss-tabular-arrow/src/lib.rs"
+            && !source.contains("TabularArrowError")
         {
             violations.push(format!("{relative}: missing typed materialization error"));
         }
@@ -1753,6 +1753,8 @@ impl ScientificAdapterVisitor<'_> {
         if !self.adapter_source
             && self.source_file != "src-tauri/src/lib.rs"
             && self.source_file != "src-tauri/crates/yss-sci-runtime/src/lib.rs"
+            && self.source_file
+                != "src-tauri/crates/yss-application/examples/dataset_engine_bench.rs"
             && segments
                 .iter()
                 .any(|segment| segment == "SciRuntimeBackend")
@@ -1897,12 +1899,25 @@ impl LegacyScientificBackend for SciRuntimeBackend {}
             .any(|finding| finding.kind == "execution-imports-sci")
     );
 
-    let production_constructor = scientific_adapter_source_violations(
+    for source in [
         "src-tauri/src/lib.rs",
-        "fn compose() { let _ = SciRuntimeBackend::new(); }",
-    )
-    .expect("production constructor fixture must parse");
-    assert!(production_constructor.is_empty());
+        "src-tauri/crates/yss-application/examples/dataset_engine_bench.rs",
+    ] {
+        let constructor = scientific_adapter_source_violations(
+            source,
+            "fn compose() { let _ = SciRuntimeBackend::new(); }",
+        )
+        .expect("constructor fixture must parse");
+        assert!(constructor.is_empty());
+    }
+    assert!(
+        !scientific_adapter_source_violations(
+            "src-tauri/crates/yss-application/src/database.rs",
+            "fn bypass() { let _ = SciRuntimeBackend::new(); }",
+        )
+        .unwrap()
+        .is_empty()
+    );
 }
 
 #[test]

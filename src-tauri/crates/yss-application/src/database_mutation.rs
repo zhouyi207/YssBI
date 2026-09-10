@@ -24,6 +24,7 @@ pub(crate) struct DatabaseMutationRequest {
     expected_observation: DatabaseDeclarationObservation,
     next_observation: DatabaseDeclarationObservation,
     operation: RuntimeDatabaseMutationOperation,
+    operation_id: yss_project_identity::OperationId,
 }
 
 impl DatabaseMutationRequest {
@@ -33,6 +34,7 @@ impl DatabaseMutationRequest {
         expected_observation: DatabaseDeclarationObservation,
         next_observation: DatabaseDeclarationObservation,
         operation: RuntimeDatabaseMutationOperation,
+        operation_id: yss_project_identity::OperationId,
     ) -> Self {
         Self {
             database,
@@ -40,6 +42,7 @@ impl DatabaseMutationRequest {
             expected_observation,
             next_observation,
             operation,
+            operation_id,
         }
     }
 
@@ -269,23 +272,30 @@ fn coordinate_database_handoff(
     database: &DatabaseRuntimeSession,
     request: DatabaseMutationRequest,
     project: &dyn ProjectDatabaseMutationPort,
-    final_session_gate: impl FnOnce() -> Result<(), SessionRevalidationError>,
+    final_session_gate: impl Fn() -> Result<(), SessionRevalidationError>,
 ) -> Result<DatabaseMutationApplicationReceipt, HandoffError> {
     let prepared_project = project
         .prepare(&request)
         .map_err(HandoffError::ProjectPrepare)?;
-    let physical = database
-        .prepare_physical_mutation(&request.database, &request.operation)
+    let mut physical = database
+        .prepare_physical_mutation(
+            &request.database,
+            &request.operation,
+            &request.operation_id.to_string(),
+        )
         .map_err(HandoffError::DatabasePrepare)?;
     let edit_state = physical.edit_state();
-    let prepared_database = match prepare_database_runtime_change(database, request.into_runtime())
-    {
-        Ok(prepared) => prepared,
-        Err(error) => {
-            let _ = physical.rollback();
-            return Err(HandoffError::DatabasePrepare(error));
-        }
-    };
+    let mut prepared_database =
+        match prepare_database_runtime_change(database, request.into_runtime()) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                let _ = physical.rollback();
+                return Err(HandoffError::DatabasePrepare(error));
+            }
+        };
+    prepared_database
+        .track_physical(&physical)
+        .map_err(HandoffError::DatabasePrepare)?;
     let committed_database = match commit_database_runtime_change(database, prepared_database) {
         Ok(committed) => committed,
         Err(error) => {
@@ -293,8 +303,20 @@ fn coordinate_database_handoff(
             return Err(HandoffError::DatabaseCommit(error));
         }
     };
-    database.install_physical_mutation(&physical);
     let database_outcome = committed_database.outcome();
+    if let Err(source) = final_session_gate() {
+        return Err(HandoffError::StaleSession {
+            source,
+            recovery: compensate_committed_change(committed_database, physical),
+        });
+    }
+
+    if let Err(error) = physical.commit() {
+        if physical.rollback().is_ok() {
+            let _ = committed_database.compensate();
+        }
+        return Err(HandoffError::DatabaseCommit(error));
+    }
     if let Err(source) = final_session_gate() {
         return Err(HandoffError::StaleSession {
             source,
@@ -312,6 +334,9 @@ fn coordinate_database_handoff(
         }
     };
     committed_database.confirm();
+    // Project has published the durable commit. Failed acknowledgement/GC stays recoverable
+    // in the catalog and must not turn that completed operation into a client retry.
+    let _ = physical.confirm();
     Ok(DatabaseMutationApplicationReceipt {
         edit_state,
         mutation: project_receipt.mutation().clone(),
@@ -396,12 +421,13 @@ mod tests {
     }
 
     fn database_session() -> (
-        yss_database_runtime::test_support::DuckDbFixture,
+        yss_database_runtime::test_support::DatasetFixture,
         DatabaseRuntimeSession,
     ) {
-        let fixture = yss_database_runtime::test_support::DuckDbFixture::new(
-            "sales",
-            polars::df!("value" => &[1_i64]).unwrap(),
+        let fixture = yss_database_runtime::test_support::DatasetFixture::single_i64(
+            yss_database_runtime::test_support::SALES_ID,
+            "value",
+            vec![1],
         );
         let declaration = fixture.instance.decl.clone();
         let observations =
@@ -437,7 +463,7 @@ mod tests {
             .1
             .clone();
         DatabaseMutationRequest::new(
-            DatabaseId::from_existing("sales".into()),
+            DatabaseId::from_existing(yss_database_runtime::test_support::SALES_ID.into()),
             0,
             observation.clone(),
             observation,
@@ -447,33 +473,87 @@ mod tests {
                 value: yss_tabular_contract::TabularScalar::Null,
                 row_id: None,
             },
+            yss_project_identity::OperationId::new(),
         )
     }
 
     #[test]
-    fn project_handoff_failure_consumes_exact_database_owner_into_typed_compensation() {
-        let (_fixture, database) = database_session();
+    fn project_handoff_failure_retains_committed_data_for_catalog_recovery() {
+        let (fixture, database) = database_session();
+        let id = fixture.instance.decl.id.clone();
+        let store = fixture.instance.snapshot().unwrap().store().clone();
         let result = coordinate_database_handoff(
             &database,
             request(&database),
             &RejectingProject,
             || Ok(()),
         );
-
         match result {
             Err(HandoffError::ProjectFinalize {
                 source: ProjectDatabaseFinalizeError::Rejected,
-                recovery: DatabaseMutationRecovery::Restored { database },
-            }) => assert_eq!(database.as_str(), "sales"),
-            Err(other) => panic!("unexpected handoff result: {other:?}"),
-            Ok(_) => panic!("Project rejection must not publish a receipt"),
+                recovery: DatabaseMutationRecovery::RecoveryRequired { owner },
+            }) => assert_eq!(owner.database, id),
+            other => panic!("unexpected handoff result: {other:?}"),
         }
+        assert_eq!(database.runtime_revision(&id).unwrap().get(), 1);
         assert_eq!(
-            database
-                .runtime_revision(&DatabaseId::from_existing("sales".into()))
-                .expect("database revision remains registered")
-                .get(),
-            0
+            database.capture_query_basis(&id).unwrap_err().code(),
+            yss_database_runtime::error::DatabaseErrorCode::Conflict
+        );
+        assert_eq!(store.pending_publications().unwrap().len(), 1);
+        database.close_admission();
+        assert_eq!(database.resolve_storage_recoveries().unwrap(), 1);
+        assert!(database.recovery_requirements().is_empty());
+        let snapshot = store.snapshot(&id).unwrap();
+        let control = yss_relational_contract::RelationControl {
+            cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(10),
+            max_input_bytes: 1024 * 1024,
+        };
+        let relation = snapshot
+            .query(
+                &yss_database_runtime::dataset_query_engine().unwrap(),
+                "recovery",
+            )
+            .unwrap()
+            .relation()
+            .unwrap();
+        assert_eq!(
+            relation.page(0, 1, &control).unwrap().data.columns()[0].values(),
+            &[yss_tabular_contract::TabularScalar::Null]
+        );
+    }
+
+    #[test]
+    fn recovery_compensates_runtime_registration_when_catalog_never_committed() {
+        let (fixture, database) = database_session();
+        let id = fixture.instance.decl.id.clone();
+        let request = request(&database);
+        let physical = database
+            .prepare_physical_mutation(&id, &request.operation, &request.operation_id.to_string())
+            .unwrap();
+        let mut prepared =
+            prepare_database_runtime_change(&database, request.into_runtime()).unwrap();
+        prepared.track_physical(&physical).unwrap();
+        let committed = commit_database_runtime_change(&database, prepared).unwrap();
+        assert_eq!(
+            database.capture_query_basis(&id).unwrap_err().code(),
+            yss_database_runtime::error::DatabaseErrorCode::Conflict
+        );
+        drop(committed);
+        drop(physical);
+        database.close_admission();
+        assert_eq!(database.resolve_storage_recoveries().unwrap(), 1);
+        assert_eq!(database.runtime_revision(&id).unwrap().get(), 0);
+        assert!(
+            fixture
+                .instance
+                .snapshot()
+                .unwrap()
+                .store()
+                .pending_publications()
+                .unwrap()
+                .is_empty()
         );
     }
 }

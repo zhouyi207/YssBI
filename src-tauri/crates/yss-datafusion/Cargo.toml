@@ -1,0 +1,22 @@
+[package]
+name = "yss-datafusion"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+arrow.workspace = true
+datafusion.workspace = true
+futures-util.workspace = true
+serde_json.workspace = true
+url.workspace = true
+tokio = { workspace = true, features = ["time"] }
+yss-relational-contract = { path = "../yss-relational-contract" }
+yss-dataset-profile = { path = "../yss-dataset-profile" }
+yss-tabular-arrow = { path = "../yss-tabular-arrow" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }
+
+[dev-dependencies]
+yss-database-contract = { path = "../yss-database-contract" }
+yss-tabular-io = { path = "../yss-tabular-io" }

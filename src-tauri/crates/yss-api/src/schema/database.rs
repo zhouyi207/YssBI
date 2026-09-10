@@ -23,7 +23,7 @@ pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<Col
         .iter()
         .map(|column| ColumnInfoDTO {
             name: column.name().as_str().to_string(),
-            dtype: column.data_type().to_string(),
+            dtype: column.display_type().to_owned(),
         })
         .collect()
 }
@@ -131,40 +131,7 @@ pub enum DatabaseImportSourceDTO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineDTO {
-    /// SQLite（本地文件），table 为选中的表名
-    Sql {
-        engine: DatabaseEngineSqlDTO,
-        #[serde(rename = "connectionString")]
-        connection_string: String,
-        table: String,
-    },
-
-    /// CSV file
-    Csv {
-        path: String,
-        #[serde(default = "default_csv_delimiter")]
-        delimiter: char,
-        #[serde(default = "default_true", rename = "hasHeader")]
-        has_header: bool,
-        #[serde(default, rename = "inferSchemaLength")]
-        infer_schema_length: Option<usize>,
-    },
-
-    /// Parquet file
-    Parquet {
-        path: String,
-        columns: Option<Vec<String>>,
-    },
-
-    /// Excel 文件（xlsx/xls），sheet 为选中的 Sheet 名
-    Excel { path: String, sheet: String },
-
-    /// 项目内 DuckDB 列存
-    DuckDb { path: String, table: String },
-
-    /// In-memory DataFrame (not serializable, runtime only)
-    /// Will be ignored or converted during serialization
-    InMemory { name: String },
+    Dataset {},
 }
 
 impl From<DatabaseImportSourceDTO> for yss_database_contract::DatabaseImportSource {
@@ -214,82 +181,7 @@ impl From<DatabaseImportSourceDTO> for yss_database_contract::DatabaseImportSour
 impl From<&yss_database_contract::DatabaseEngine> for DatabaseEngineDTO {
     fn from(value: &yss_database_contract::DatabaseEngine) -> Self {
         match value {
-            yss_database_contract::DatabaseEngine::Sql {
-                engine,
-                connection_string,
-                table,
-            } => DatabaseEngineDTO::Sql {
-                engine: engine.into(),
-                connection_string: connection_string.clone(),
-                table: table.clone(),
-            },
-            yss_database_contract::DatabaseEngine::Csv {
-                path,
-                delimiter,
-                has_header,
-                infer_schema_length,
-            } => DatabaseEngineDTO::Csv {
-                path: path.clone(),
-                delimiter: *delimiter,
-                has_header: *has_header,
-                infer_schema_length: *infer_schema_length,
-            },
-            yss_database_contract::DatabaseEngine::Parquet { path, columns } => {
-                DatabaseEngineDTO::Parquet {
-                    path: path.clone(),
-                    columns: columns.clone(),
-                }
-            }
-            yss_database_contract::DatabaseEngine::Excel { path, sheet } => {
-                DatabaseEngineDTO::Excel {
-                    path: path.clone(),
-                    sheet: sheet.clone(),
-                }
-            }
-            yss_database_contract::DatabaseEngine::DuckDb { path, table } => {
-                DatabaseEngineDTO::DuckDb {
-                    path: path.clone(),
-                    table: table.clone(),
-                }
-            }
-            yss_database_contract::DatabaseEngine::InMemory { name } => {
-                DatabaseEngineDTO::InMemory { name: name.clone() }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub enum DatabaseEngineSqlDTO {
-    Sqlite {
-        #[serde(default, rename = "autoCreate")]
-        auto_create: bool,
-    },
-    Postgres {
-        ssl: bool,
-    },
-    Mysql {
-        charset: String,
-    },
-}
-
-impl From<&yss_database_contract::DatabaseEngineSql> for DatabaseEngineSqlDTO {
-    fn from(value: &yss_database_contract::DatabaseEngineSql) -> Self {
-        match value {
-            yss_database_contract::DatabaseEngineSql::Sqlite { auto_create } => {
-                DatabaseEngineSqlDTO::Sqlite {
-                    auto_create: *auto_create,
-                }
-            }
-            yss_database_contract::DatabaseEngineSql::Postgres { ssl } => {
-                DatabaseEngineSqlDTO::Postgres { ssl: *ssl }
-            }
-            yss_database_contract::DatabaseEngineSql::Mysql { charset } => {
-                DatabaseEngineSqlDTO::Mysql {
-                    charset: charset.clone(),
-                }
-            }
+            yss_database_contract::DatabaseEngine::Dataset {} => Self::Dataset {},
         }
     }
 }
@@ -298,19 +190,14 @@ impl From<&yss_database_contract::DatabaseEngineSql> for DatabaseEngineSqlDTO {
 mod tests {
     use super::*;
     use serde_json::json;
-    use yss_data_contract::DataType;
     use yss_database_contract::DatabaseId;
-    use yss_database_schema::DatabaseSchemaFact;
-    use yss_duckdb::DuckDbColumnMeta;
+    use arrow::datatypes::{DataType, Field, Schema};
 
     #[test]
     fn database_declaration_wire_exposes_only_machine_load_state() {
         let wire = serde_json::to_value(DatabaseDeclDTO {
             id: "sales".into(),
-            engine: DatabaseEngineDTO::DuckDb {
-                path: "database/project.duckdb".into(),
-                table: "sales".into(),
-            },
+            engine: DatabaseEngineDTO::Dataset {},
             schema_version: 1,
             required: false,
             name: Some("Sales".into()),
@@ -325,12 +212,7 @@ mod tests {
             wire,
             json!({
                 "id": "sales",
-                "engine": {
-                    "duckDb": {
-                        "path": "database/project.duckdb",
-                        "table": "sales",
-                    },
-                },
+                "engine": { "dataset": {} },
                 "schemaVersion": 1,
                 "required": false,
                 "name": "Sales",
@@ -342,18 +224,8 @@ mod tests {
     #[test]
     fn database_schema_facts_map_to_column_info_dto_wire() {
         let database = DatabaseId::from_existing("database-id".into());
-        let source_columns = [
-            DuckDbColumnMeta {
-                name: "value".into(),
-                dtype: "Int64".into(),
-            },
-            DuckDbColumnMeta {
-                name: "label".into(),
-                dtype: "String".into(),
-            },
-        ];
-        let fact = DatabaseSchemaFact::from_duckdb(&database, &source_columns)
-            .expect("test database schema should be valid");
+        let schema = Schema::new(vec![Field::new("value", DataType::UInt64, true), Field::new("label", DataType::Utf8, true)]);
+        let fact = yss_tabular_arrow::database_schema_fact(&database, &schema).unwrap();
 
         let wire = serde_json::to_value(column_info_from_schema(fact.columns()))
             .expect("column info DTOs should serialize");
@@ -361,8 +233,8 @@ mod tests {
         assert_eq!(
             wire,
             json!([
-                { "name": "value", "type": DataType::Int64.to_string() },
-                { "name": "label", "type": DataType::String.to_string() },
+                { "name": "value", "type": "UInt64" },
+                { "name": "label", "type": "String" },
             ])
         );
     }

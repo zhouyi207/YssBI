@@ -1,23 +1,22 @@
-//! Cross-engine physical database state held by a runtime session.
-
+//! Fixed dataset handles and session-scoped undo/redo history.
+use std::sync::Arc;
 use yss_database_edit::EditHistory;
-use yss_duckdb::DuckDbColumnMeta;
+use yss_datafusion::DataFusionRuntime;
+use yss_dataset_store::DatasetSnapshot;
 
-/// 数据库实例的生命周期状态。
-///
-/// - `DuckDb`：项目内 DuckDB 列存，元数据已缓存；编辑走 SQL + `history`，不整表 Loaded。
-/// - `Failed`：上一次 IO 失败，错误信息保存在内。
+#[derive(Clone)]
+pub struct DatasetEdit {
+    pub(crate) before: Arc<DatasetSnapshot>,
+    pub(crate) after: Arc<DatasetSnapshot>,
+}
+
 #[derive(Clone)]
 pub enum DatabaseState {
-    DuckDb {
-        /// 运行时绝对路径（decl 中仍保存相对项目根的路径）
-        duckdb_path: String,
-        table: String,
-        row_count: usize,
-        columns: Vec<DuckDbColumnMeta>,
-        history: EditHistory,
+    Dataset {
+        snapshot: Arc<DatasetSnapshot>,
+        engine: Arc<DataFusionRuntime>,
+        history: EditHistory<DatasetEdit>,
     },
-
     Failed {
         error: String,
     },

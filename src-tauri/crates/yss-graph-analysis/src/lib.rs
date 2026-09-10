@@ -145,6 +145,26 @@ impl GraphSemanticSnapshot {
         &self.diagnostics
     }
 
+    /// Runtime capabilities constrain Compile without introducing a second diagnostic store.
+    pub fn with_execution_kernel_support(mut self, supports: &dyn Fn(&str) -> bool) -> Self {
+        let mut diagnostics = self.diagnostics.into_vec();
+        for node in &self.nodes {
+            if node
+                .specialization
+                .as_ref()
+                .is_some_and(|kernel| !supports(&kernel.implementation))
+            {
+                diagnostics.push(graph_problem(
+                    GraphDiagnosticKind::NodeKernelUnavailable,
+                    GraphDiagnosticLocation::Node(node.node_id),
+                    [("node_type", node.node_type.as_str().into())],
+                ));
+            }
+        }
+        self.diagnostics = diagnostics.into_boxed_slice();
+        self
+    }
+
     pub const fn outcome(&self) -> &GraphResolutionOutcome {
         &self.outcome
     }

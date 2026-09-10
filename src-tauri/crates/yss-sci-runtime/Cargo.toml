@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 chrono.workspace = true
-polars.workspace = true
+arrow.workspace = true
 yss-linalg = { path = "../yss-linalg" }
 ndarray.workspace = true
 rand.workspace = true

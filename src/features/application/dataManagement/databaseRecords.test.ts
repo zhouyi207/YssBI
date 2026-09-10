@@ -3,12 +3,12 @@ import type { DatabaseRecord } from "@/shared/types/domain/database";
 import { normalizeDatabaseRecord, normalizeDatabases } from "./databaseRecords";
 
 describe("normalizeDatabaseRecord", () => {
-  it("derives display name from csv engine path when name is missing", () => {
+  it("uses the dataset identity when no Rust display name is available", () => {
     const record = normalizeDatabaseRecord("df-1", {
       id: "df-1",
-      engine: { csv: { path: "C:/data/sales_report.csv" } },
+      engine: { dataset: {} },
     });
-    expect(record.name).toBe("sales_report");
+    expect(record.name).toBe("df-1");
     expect(record.loadFailed).toBe(false);
   });
 
@@ -34,10 +34,10 @@ describe("normalizeDatabaseRecord", () => {
     };
     const record = normalizeDatabaseRecord(
       "df-1",
-      { id: "df-1", engine: { csv: { path: "/tmp/other.csv" } } },
+      { id: "df-1", engine: { dataset: {} } },
       existing,
     );
-    expect(record.name).toBe("other");
+    expect(record.name).toBe("Kept Name");
     expect(record.columns).toEqual(existing.columns);
     expect(record.rowCount).toBe(42);
     expect(record.loadFailed).toBe(true);
@@ -65,14 +65,14 @@ describe("normalizeDatabases", () => {
     };
     const result = normalizeDatabases(
       {
-        "df-1": { engine: { parquet: { path: "/archive/metrics.parquet" } } },
+        "df-1": { engine: { dataset: {} } },
         "df-2": { name: "New Table", rowCount: 3 },
       },
       existing,
     );
-    expect(result["df-1"].name).toBe("metrics");
+    expect(result["df-1"].name).toBe("Previous Name");
     expect(result["df-1"].rowCount).toBe(10);
-    expect(result["df-1"].engine).toEqual({ parquet: { path: "/archive/metrics.parquet" } });
+    expect(result["df-1"].engine).toEqual({ dataset: {} });
     expect(result["df-2"].name).toBe("New Table");
     expect(result["df-2"].rowCount).toBe(3);
   });

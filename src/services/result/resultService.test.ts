@@ -76,6 +76,17 @@ describe("result DTO parsers", () => {
     expect(parseResultPage(page)).toEqual(page);
 
     expect(() => parseResultPage({ ...page, limit: 2 })).toThrow();
+    const table = {
+      ...page,
+      totalCount: null,
+      valueKind: "sequence",
+      metadata: { columns: [{ name: "id", type: "UInt64" }] },
+      values: [["18446744073709551615"], [null]],
+    };
+    expect(parseResultPage(table)).toEqual(table);
+    expect(() => parseResultPage({ ...table, nextOffset: 0 })).toThrow();
+    expect(() => parseResultPage({ ...table, actualCount: 1 })).toThrow();
+    expect(() => parseResultPage({ ...table, values: [[1, 2], [null]] })).toThrow();
   });
 });
 

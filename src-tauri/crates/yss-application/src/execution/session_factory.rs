@@ -10,7 +10,7 @@ use yss_database_contract::{
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
 };
 use yss_database_runtime::runtime::DatabaseRuntimeSession;
-use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
+use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_dataset_instance};
 use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_execution::plan::PlanProjectSessionId;
 use yss_execution::resource_preparation::ResourceProviderFactory;
@@ -238,6 +238,9 @@ pub fn build_current_project_candidate(
         .into_iter()
         .map(|instance| (instance.decl.id.clone(), instance))
         .collect::<BTreeMap<_, _>>();
+    let dataset_store = root
+        .as_ref()
+        .map(|root| yss_dataset_store::DatasetStore::open(root.as_path()));
     let database_instances = data
         .databases
         .values()
@@ -246,14 +249,12 @@ pub fn build_current_project_candidate(
                 .get(&declaration.id)
                 .filter(|instance| instance.decl == *declaration)
                 .cloned()
-                .unwrap_or_else(|| match &declaration.engine {
-                    yss_database_contract::DatabaseEngine::DuckDb { .. } => {
-                        bind_duckdb_instance(declaration, root.as_ref().map(|root| root.as_path()))
-                    }
+                .unwrap_or_else(|| match &dataset_store {
+                    Some(Ok(store)) => bind_dataset_instance(declaration, store),
                     _ => DatabaseInstance {
                         decl: declaration.clone(),
                         state: DatabaseState::Failed {
-                            error: "Only DuckDb datasets are supported; re-import the data".into(),
+                            error: "Dataset catalog is unavailable".into(),
                         },
                     },
                 })

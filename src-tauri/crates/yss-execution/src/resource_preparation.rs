@@ -287,6 +287,13 @@ impl ResourceProviderFactory {
                     actual: binding.version().clone(),
                 });
             }
+            if let RuntimeValue::Relation(relation) = binding.value()
+                && (relation.binding().project_session.as_ref() != basis.project_session().as_str()
+                    || relation.binding().revision.to_string() != expected_version.as_str()
+                    || requirement.kind() != ResourceKind::DataFrame)
+            {
+                return Err(ResourcePreparationError::RequirementMismatch { resource });
+            }
             grants.push(SealedResourceGrant {
                 resource,
                 version: binding.version().clone(),

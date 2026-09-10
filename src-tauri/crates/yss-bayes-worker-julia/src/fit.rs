@@ -5,7 +5,9 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use polars::prelude::{Column, DataFrame, IpcWriter, SerWriter};
+use arrow::array::{ArrayRef, Float64Array, StringArray};
+use arrow::datatypes::{Field, Schema};
+use arrow::record_batch::RecordBatch;
 use serde::{Deserialize, Serialize};
 
 use super::JuliaTaskCompletion;
@@ -238,20 +240,27 @@ fn write_input_table(
     input_path: &Path,
     inputs: &[StatisticalInput],
 ) -> Result<(), JuliaWorkerError> {
-    let height = inputs.first().map_or(0, |input| input.values().len());
     let columns = inputs
         .iter()
         .map(input_column)
         .collect::<Result<Vec<_>, _>>()?;
-    let mut dataframe = DataFrame::new(height, columns).map_err(|_| task_generation_error())?;
-    let mut file = File::create(input_path).map_err(|_| task_generation_error())?;
-    IpcWriter::new(&mut file)
-        .finish(&mut dataframe)
-        .map_err(|_| task_generation_error())?;
-    Ok(())
+    let schema = Arc::new(Schema::new(
+        inputs
+            .iter()
+            .zip(&columns)
+            .map(|(input, column)| Field::new(input.name(), column.data_type().clone(), true))
+            .collect::<Vec<_>>(),
+    ));
+    let batch =
+        RecordBatch::try_new(schema.clone(), columns).map_err(|_| task_generation_error())?;
+    let batches = (0..batch.num_rows())
+        .step_by(8192)
+        .map(|offset| Ok(batch.slice(offset, 8192.min(batch.num_rows() - offset))));
+    yss_tabular_io::write_ipc_batches(input_path, &schema, batches)
+        .map_err(|_| task_generation_error())
 }
 
-fn input_column(input: &StatisticalInput) -> Result<Column, JuliaWorkerError> {
+fn input_column(input: &StatisticalInput) -> Result<ArrayRef, JuliaWorkerError> {
     let numeric = input
         .values()
         .iter()
@@ -270,7 +279,7 @@ fn input_column(input: &StatisticalInput) -> Result<Column, JuliaWorkerError> {
                 Some(StatisticalScalar::Category(_)) => Err(task_generation_error()),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(Column::new(input.name().into(), values));
+        return Ok(Arc::new(Float64Array::from(values)));
     }
     if categorical {
         let values = input
@@ -282,9 +291,79 @@ fn input_column(input: &StatisticalInput) -> Result<Column, JuliaWorkerError> {
                 Some(StatisticalScalar::Numeric(_)) => Err(task_generation_error()),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(Column::new(input.name().into(), values));
+        return Ok(Arc::new(StringArray::from(values)));
     }
     Err(task_generation_error())
+}
+
+#[cfg(test)]
+#[test]
+fn julia_exchange_preserves_numeric_category_and_null_values_across_batches() {
+    use arrow::array::Array;
+    let path = std::env::temp_dir().join(format!(
+        "yss-julia-exchange-{}-{}.arrow",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    struct RemoveFile(PathBuf);
+    impl Drop for RemoveFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+    let file = RemoveFile(path);
+    let numeric = (0..9001)
+        .map(|row| (row != 8192).then_some(StatisticalScalar::Numeric(row as f64)))
+        .collect();
+    let categories = (0..9001)
+        .map(|row| (row != 8192).then(|| StatisticalScalar::Category("group,\nquoted".into())))
+        .collect();
+    let inputs = [
+        StatisticalInput::try_new("response".into(), numeric, None).unwrap(),
+        StatisticalInput::try_new("group".into(), categories, Some(CategoricalRole::General))
+            .unwrap(),
+    ];
+    write_input_table(&file.0, &inputs).unwrap();
+    let reader = yss_tabular_io::read_ipc_batches(&file.0, None).unwrap();
+    assert_eq!(
+        reader.schema().field(0).data_type(),
+        &arrow::datatypes::DataType::Float64
+    );
+    assert_eq!(
+        reader.schema().field(1).data_type(),
+        &arrow::datatypes::DataType::Utf8
+    );
+    let batches = reader.collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(
+        batches
+            .iter()
+            .map(RecordBatch::num_rows)
+            .collect::<Vec<_>>(),
+        [8192, 809]
+    );
+    assert!(batches[1].column(0).is_null(0));
+    assert!(batches[1].column(1).is_null(0));
+    assert_eq!(
+        batches[1]
+            .column(0)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap()
+            .value(808),
+        9000.
+    );
+    assert_eq!(
+        batches[0]
+            .column(1)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .value(0),
+        "group,\nquoted"
+    );
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> Result<(), JuliaWorkerError> {

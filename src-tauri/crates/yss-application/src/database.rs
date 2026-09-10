@@ -6,6 +6,8 @@ use thiserror::Error;
 mod error;
 mod export;
 mod import;
+#[cfg(test)]
+mod tests;
 use export::export_database_in_captured_session;
 use import::load_database_in_captured_session;
 
@@ -35,20 +37,15 @@ use yss_database_contract::{
     DatabaseImportSource,
 };
 use yss_database_edit::EditState;
+use yss_database_runtime::MAX_GET_DATAFRAME_ROWS;
 use yss_database_runtime::error::{DatabaseError, DatabaseErrorCode};
 use yss_database_runtime::session_api;
-use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
+use yss_database_schema::DatabaseColumnFact;
 use yss_display_naming::allocate_unique_display_name;
-use yss_duckdb::{
-    DuckDbTableMeta, MAX_GET_DATAFRAME_ROWS, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
-    ingest_excel_to_duckdb, ingest_parquet_to_duckdb, write_display_name,
-};
-use yss_project::{
-    ProjectDatabaseError, ProjectSession, ProjectState, relative_project_duckdb_path,
-};
+use yss_project::{ProjectDatabaseError, ProjectState};
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
-use yss_sql_source::{list_tables as list_sql_source_tables, read_table_to_dataframe};
+use yss_sql_source::list_tables as list_sql_source_tables;
 use yss_tabular_contract::TabularSnapshot;
 use yss_tabular_io::list_excel_sheets as list_workbook_sheets;
 
@@ -115,6 +112,7 @@ struct ProjectDatabaseAuthority<'a> {
     operation_id: OperationId,
     expected_project_revision: ResourceRevision,
     after: DatabaseDecl,
+    delete: bool,
 }
 
 impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
@@ -161,13 +159,22 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
         {
             return Err(ProjectDatabaseFinalizeError::Rejected);
         }
-        self.project
-            .commit_database_declaration_update(
+        let publication = if self.delete {
+            self.project.commit_database_declaration_delete(
+                &self.project_instance_id,
+                self.after.id.as_str(),
+                self.expected_project_revision,
+                self.operation_id,
+            )
+        } else {
+            self.project.commit_database_declaration_update(
                 &self.project_instance_id,
                 token,
                 self.after.clone(),
                 self.operation_id,
             )
+        };
+        publication
             .map(ProjectDatabaseMutationReceipt::from_project)
             .map_err(|error| match error {
                 ProjectDatabaseError::Project(ProjectFilesystemError::StaleProjectLifecycle {
@@ -613,9 +620,9 @@ fn delete_database_in_captured_session(
                 None,
             ))
         })?;
-    let session = captured
+    let declaration = captured
         .project()
-        .capture_project_session()
+        .get_data()
         .map_err(|error| {
             DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
                 error,
@@ -623,59 +630,30 @@ fn delete_database_in_captured_session(
                 &project_instance_id,
                 Some(&id),
             ))
-        })?;
-    captured
-        .project()
-        .validate_project_session(&session)
-        .map_err(|error| {
-            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
-                error,
-                DatabaseApplicationOperation::Delete,
-                &project_instance_id,
-                Some(&id),
-            ))
-        })?;
-    let database = database_id(&id);
-    if captured.database().runtime_revision(&database).is_none() {
-        return Err(DatabaseUseCaseError::Database(
-            DatabaseOperationError::NotFound {
+        })?
+        .databases
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| {
+            DatabaseUseCaseError::Database(DatabaseOperationError::NotFound {
                 database_id: id.clone(),
-            },
-        ));
-    }
-    captured
-        .database()
-        .remove_physical_database(&database, session.root.as_path())
-        .map_err(|error| {
-            DatabaseUseCaseError::Database(map_database_runtime_error(
-                error,
-                DatabaseApplicationOperation::Delete,
-                &id,
-            ))
+            })
         })?;
-    let mutation = captured
-        .project()
-        .commit_database_declaration_delete(
-            &project_instance_id,
-            &id,
-            expected_revision,
-            operation_id,
-        )
-        .map_err(|error| {
-            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
-                error,
-                DatabaseApplicationOperation::Delete,
-                &project_instance_id,
-                Some(&id),
-                Some(expected_revision),
-                None,
-            ))
-        })?;
+    let receipt = apply_database_mutation_in_session(
+        state,
+        captured,
+        project_instance_id,
+        id,
+        expected_revision,
+        operation_id,
+        session_api::DatabaseMutationOperation::DeleteDatabase,
+        declaration,
+        DatabaseApplicationOperation::Delete,
+    )?;
     reservation.complete();
-    let _ = state;
     Ok(DatabaseMutationResult {
         data: (),
-        mutation: crate::events::committed_resource_mutation_from_project(mutation),
+        mutation: receipt.mutation().clone(),
     })
 }
 
@@ -772,12 +750,17 @@ fn apply_database_mutation_in_session(
         yss_database_contract::DatabaseDeclarationRevision::from_existing(next_revision),
         yss_database_contract::DatabaseDeclarationFingerprint::from_decl(&after),
     );
+    let delete = matches!(
+        operation,
+        session_api::DatabaseMutationOperation::DeleteDatabase
+    );
     let runtime_request = RuntimeDatabaseMutationRequest::new(
         database,
         runtime_revision,
         expected_observation,
         next_observation,
         operation,
+        operation_id,
     );
     let authority = ProjectDatabaseAuthority {
         project: captured.project(),
@@ -785,6 +768,7 @@ fn apply_database_mutation_in_session(
         operation_id,
         expected_project_revision,
         after,
+        delete,
     };
     crate::database_mutation::mutate_database_in_captured_session(
         state,
@@ -875,7 +859,8 @@ fn runtime_database_mutation(
         }
         DatabaseMutation::AddColumn { name, dtype } => Ok(DatabaseMutationOperation::AddColumn {
             name: name.into_boxed_str(),
-            data_type: dtype.parse().map_err(|_| invalid("dtype"))?,
+            data_type: yss_tabular_arrow::editable_data_type(&dtype)
+                .map_err(|_| invalid("dtype"))?,
         }),
         DatabaseMutation::DeleteColumn { name } => Ok(DatabaseMutationOperation::DeleteColumn {
             name: name.into_boxed_str(),
@@ -886,7 +871,8 @@ fn runtime_database_mutation(
             force,
         } => Ok(DatabaseMutationOperation::CastColumn {
             name: column.into_boxed_str(),
-            data_type: dtype.parse().map_err(|_| invalid("dtype"))?,
+            data_type: yss_tabular_arrow::editable_data_type(&dtype)
+                .map_err(|_| invalid("dtype"))?,
             force,
         }),
         DatabaseMutation::RenameColumn { old_name, new_name } => {
@@ -898,24 +884,6 @@ fn runtime_database_mutation(
         DatabaseMutation::Undo => Ok(DatabaseMutationOperation::Undo),
         DatabaseMutation::Redo => Ok(DatabaseMutationOperation::Redo),
     }
-}
-
-fn prepare_duckdb_ingest_paths(
-    session: &ProjectSession,
-) -> Result<(String, String, PathBuf, String), ProjectDatabaseError> {
-    yss_project_filesystem::ensure_directory(
-        &session
-            .root
-            .as_path()
-            .join(yss_project_layout::DATABASE_DIR),
-    )
-    .map_err(ProjectDatabaseError::operation)?;
-
-    let id = format!("db-{}", Uuid::new_v4());
-    let table = id.clone();
-    let relative_path = relative_project_duckdb_path();
-    let duckdb_abs = session.root.as_path().join(&relative_path);
-    Ok((id, table, duckdb_abs, relative_path))
 }
 
 pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseOperationError> {
@@ -958,22 +926,7 @@ pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseOperationErr
     })
 }
 
-fn unique_database_name(state: &ProjectState, base_name: &str) -> String {
-    state
-        .get_data()
-        .map(|data| {
-            allocate_unique_display_name(
-                base_name,
-                data.databases
-                    .values()
-                    .map(|database| database.name.as_ref()),
-            )
-        })
-        .unwrap_or_else(|_| base_name.to_owned())
-}
-
-/// Persist in-memory edits into the project's DuckDB table (`project.duckdb`).
-/// DuckDB-backed datasets transition back to `DatabaseState::DuckDb` after a successful save.
+/// Editable DataView operations admitted by the database runtime.
 pub enum DatabaseMutation {
     EditCell {
         row: usize,

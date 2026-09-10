@@ -251,7 +251,7 @@ export function dataTypeFromDisplayString(s: string): DataType | null {
     return { kind: "Struct", inner: structMatch[1] };
   }
 
-  // 保真层带参数的原始类型字符串收敛（对齐 Rust polars_type_string_to_data_type）
+  // 显示类型只用于 UI 分类；精确存储类型由 Rust Arrow Schema 保留。
   if (/^(Datetime|DateTime)\(/.test(trimmed)) return { kind: "Datetime" };
   if (/^Time/.test(trimmed)) return { kind: "Time" };
   if (/^Decimal\(/.test(trimmed)) return { kind: "Float64" };

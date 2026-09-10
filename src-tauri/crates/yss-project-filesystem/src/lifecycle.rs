@@ -10,6 +10,11 @@ pub struct ProjectSourceTree {
     pub files: BTreeMap<PathBuf, Vec<u8>>,
 }
 
+pub struct ProjectFileInventory {
+    pub directories: BTreeSet<PathBuf>,
+    pub files: BTreeSet<PathBuf>,
+}
+
 pub fn ensure_directory(root: &Path) -> Result<bool, ProjectFilesystemError> {
     let created = !root.exists();
     if created {
@@ -71,9 +76,28 @@ pub fn validate_deletion_root(root: &NormalizedProjectRoot) -> Result<(), Projec
 pub fn read_project_source_tree(
     source_root: &Path,
 ) -> Result<ProjectSourceTree, ProjectFilesystemError> {
-    let mut tree = ProjectSourceTree {
+    let inventory = read_project_file_inventory(source_root)?;
+    let files = inventory
+        .files
+        .into_iter()
+        .map(|relative| {
+            let contents =
+                read_secure_project_file(source_root, &relative).map_err(prepare_error)?;
+            Ok((relative, contents))
+        })
+        .collect::<Result<_, ProjectFilesystemError>>()?;
+    Ok(ProjectSourceTree {
+        directories: inventory.directories,
+        files,
+    })
+}
+
+pub fn read_project_file_inventory(
+    source_root: &Path,
+) -> Result<ProjectFileInventory, ProjectFilesystemError> {
+    let mut tree = ProjectFileInventory {
         directories: BTreeSet::new(),
-        files: BTreeMap::new(),
+        files: BTreeSet::new(),
     };
     collect_source_files(source_root, source_root, &mut tree)?;
     Ok(tree)
@@ -82,7 +106,7 @@ pub fn read_project_source_tree(
 fn collect_source_files(
     source_root: &Path,
     directory: &Path,
-    tree: &mut ProjectSourceTree,
+    tree: &mut ProjectFileInventory,
 ) -> Result<(), ProjectFilesystemError> {
     for entry in std::fs::read_dir(directory).map_err(prepare_error)? {
         let entry = entry.map_err(prepare_error)?;
@@ -105,9 +129,7 @@ fn collect_source_files(
             tree.directories.insert(relative);
             collect_source_files(source_root, &entry.path(), tree)?;
         } else if metadata.is_file() {
-            let contents =
-                read_secure_project_file(source_root, &relative).map_err(prepare_error)?;
-            tree.files.insert(relative, contents);
+            tree.files.insert(relative);
         } else {
             return Err(prepare_error(format!(
                 "project copy source '{}' is not a regular file or directory",

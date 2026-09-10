@@ -9,6 +9,8 @@ const paging = vi.hoisted(() => ({
   pageIndex: 0,
   totalPages: 3,
   totalCount: 401,
+  actualCount: 200,
+  hasMore: true,
   pageSize: 200,
   loading: false,
   values: [1, 2],

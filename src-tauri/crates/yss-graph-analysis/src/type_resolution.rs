@@ -551,6 +551,47 @@ fn apply_node_rule(
 ) {
     match rule {
         NodeTypingSpec::Fixed => {}
+        NodeTypingSpec::ColumnOutput {
+            input,
+            column,
+            output,
+        } => {
+            let selected = node
+                .parameters
+                .get(column)
+                .and_then(serde_json::Value::as_str);
+            let scalar = selected.and_then(|selected| {
+                declared_port(ports, input)?
+                    .schema_state
+                    .exact()?
+                    .fields
+                    .iter()
+                    .find(|field| field.name.0.as_ref() == selected)
+                    .map(|field| field.scalar_type)
+            });
+            let nominal = match scalar {
+                Some(yss_graph_protocol::RelationalScalarType::Boolean) => Some("core.bool"),
+                Some(yss_graph_protocol::RelationalScalarType::Int64) => Some("core.int64"),
+                Some(yss_graph_protocol::RelationalScalarType::Float64) => Some("core.float64"),
+                Some(yss_graph_protocol::RelationalScalarType::String) => Some("core.string"),
+                Some(yss_graph_protocol::RelationalScalarType::Date) => Some("core.date"),
+                Some(yss_graph_protocol::RelationalScalarType::DateTime) => Some("core.datetime"),
+                _ => None,
+            };
+            let state = nominal
+                .map(|nominal| {
+                    TypeState::Exact(ResolvedType::Applied {
+                        constructor: "core.data_series".parse().expect("static series type"),
+                        arguments: Box::new([ResolvedType::Nominal(
+                            nominal.parse().expect("static scalar type"),
+                        )]),
+                    })
+                })
+                .unwrap_or(TypeState::Unknown(TypeUnknownReason::UnresolvedUpstream));
+            if let Some(output) = declared_port(ports, output) {
+                states.insert(output.address.clone(), state);
+            }
+        }
         NodeTypingSpec::Identity { input, output } => {
             let state = declared_port(ports, input)
                 .and_then(|port| states.get(&port.address))

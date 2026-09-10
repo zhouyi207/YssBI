@@ -151,10 +151,10 @@ impl ConfigurationSchema {
         let normalized = self.normalize_json(raw)?;
         if raw
             .as_object()
-            .map(|value| value.keys().collect::<Vec<_>>())
+            .map(|value| value.keys().collect::<std::collections::BTreeSet<_>>())
             != normalized
                 .as_object()
-                .map(|value| value.keys().collect::<Vec<_>>())
+                .map(|value| value.keys().collect::<std::collections::BTreeSet<_>>())
         {
             return Err("configuration must contain exactly its active fields".into());
         }

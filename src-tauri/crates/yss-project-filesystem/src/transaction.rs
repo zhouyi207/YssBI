@@ -2,7 +2,7 @@ use crate::{
     NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemLeaseSet, ProjectRecoveryMarker,
 };
 use std::collections::{BTreeSet, HashMap};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
@@ -19,6 +19,12 @@ pub struct ProjectFilesystemTransactionContext {
 
 #[derive(Clone, Debug)]
 pub enum StagedFilesystemMutation {
+    /// Copy a new file under a leased source root without retaining its contents in memory.
+    CopyFile {
+        relative_path: PathBuf,
+        source_root: NormalizedProjectRoot,
+        source_relative_path: PathBuf,
+    },
     Write {
         relative_path: PathBuf,
         contents: Vec<u8>,
@@ -42,6 +48,7 @@ impl StagedFilesystemMutation {
     fn relative_paths(&self) -> Vec<&Path> {
         match self {
             Self::Write { relative_path, .. }
+            | Self::CopyFile { relative_path, .. }
             | Self::RemoveFile { relative_path }
             | Self::CreateDirectory { relative_path }
             | Self::RemoveDirectoryIfEmpty { relative_path } => vec![relative_path],
@@ -139,6 +146,18 @@ impl ProjectFilesystemTransaction {
         mutations: Vec<StagedFilesystemMutation>,
         mut validator: impl FnMut(&Path, &[u8]) -> Result<(), String>,
     ) -> Result<PreparedProjectFilesystemTransaction, ProjectFilesystemError> {
+        Self::prepare_with_file_validator(context, lease, mutations, |relative, staged| {
+            let contents = std::fs::read(staged).map_err(|error| error.to_string())?;
+            validator(relative, &contents)
+        })
+    }
+
+    pub fn prepare_with_file_validator(
+        context: ProjectFilesystemTransactionContext,
+        lease: ProjectFilesystemLeaseSet,
+        mutations: Vec<StagedFilesystemMutation>,
+        mut validator: impl FnMut(&Path, &Path) -> Result<(), String>,
+    ) -> Result<PreparedProjectFilesystemTransaction, ProjectFilesystemError> {
         if !lease.contains(&context.root) {
             return Err(ProjectFilesystemError::TransactionPrepareFailed {
                 message: "transaction lease does not own the project root".into(),
@@ -148,6 +167,20 @@ impl ProjectFilesystemTransaction {
         let root = context.root.as_path().to_path_buf();
         validate_real_directory(&root).map_err(prepare_error)?;
         for mutation in &mutations {
+            if let StagedFilesystemMutation::CopyFile {
+                relative_path,
+                source_root,
+                source_relative_path,
+            } = mutation
+            {
+                if !lease.contains(source_root) || root.join(relative_path).exists() {
+                    return Err(prepare_error(
+                        "copy requires a leased source and an absent destination",
+                    ));
+                }
+                validate_copy_source(source_root.as_path(), source_relative_path)
+                    .map_err(prepare_error)?;
+            }
             for relative_path in mutation.relative_paths() {
                 validate_secure_path(&root, relative_path, true).map_err(prepare_error)?;
             }
@@ -167,12 +200,10 @@ impl ProjectFilesystemTransaction {
         let prepare_result = (|| {
             create_secure_directories(&root, &prepared_root).map_err(prepare_error)?;
             for mutation in &transaction.mutations {
-                let StagedFilesystemMutation::Write {
-                    relative_path,
-                    contents,
-                } = mutation
-                else {
-                    continue;
+                let relative_path = match mutation {
+                    StagedFilesystemMutation::Write { relative_path, .. }
+                    | StagedFilesystemMutation::CopyFile { relative_path, .. } => relative_path,
+                    _ => continue,
                 };
                 #[cfg(any(test, feature = "test-support"))]
                 if transaction
@@ -190,15 +221,38 @@ impl ProjectFilesystemTransaction {
                     .create_new(true)
                     .open(&staged_path)
                     .map_err(prepare_error)?;
-                staged.write_all(contents).map_err(prepare_error)?;
+                match mutation {
+                    StagedFilesystemMutation::Write { contents, .. } => {
+                        staged.write_all(contents).map_err(prepare_error)?
+                    }
+                    StagedFilesystemMutation::CopyFile {
+                        source_root,
+                        source_relative_path,
+                        ..
+                    } => {
+                        let source =
+                            validate_copy_source(source_root.as_path(), source_relative_path)
+                                .map_err(prepare_error)?;
+                        let mut source_file = std::fs::File::open(source).map_err(prepare_error)?;
+                        let before = source_file.metadata().map_err(prepare_error)?;
+                        let copied =
+                            std::io::copy(&mut source_file, &mut staged).map_err(prepare_error)?;
+                        let after = source_file.metadata().map_err(prepare_error)?;
+                        validate_copy_source(source_root.as_path(), source_relative_path)
+                            .map_err(prepare_error)?;
+                        if copied != before.len()
+                            || before.len() != after.len()
+                            || before.modified().ok() != after.modified().ok()
+                        {
+                            return Err(prepare_error("copy source changed during preparation"));
+                        }
+                    }
+                    _ => unreachable!("only file writes enter staging"),
+                }
                 staged.sync_all().map_err(prepare_error)?;
                 drop(staged);
                 validate_regular_file(&staged_path).map_err(prepare_error)?;
-                let mut staged_contents = Vec::new();
-                std::fs::File::open(&staged_path)
-                    .and_then(|mut file| file.read_to_end(&mut staged_contents))
-                    .map_err(prepare_error)?;
-                validator(relative_path, &staged_contents).map_err(prepare_error)?;
+                validator(relative_path, &staged_path).map_err(prepare_error)?;
             }
 
             let journal = transaction
@@ -462,7 +516,8 @@ fn validate_mutation_paths(
         }
 
         match mutation {
-            StagedFilesystemMutation::Write { relative_path, .. } => {
+            StagedFilesystemMutation::Write { relative_path, .. }
+            | StagedFilesystemMutation::CopyFile { relative_path, .. } => {
                 register_portable_path(&mut owners, relative_path, PortablePathClaim::Write)?
             }
             StagedFilesystemMutation::RemoveFile { relative_path } => {
@@ -566,6 +621,10 @@ fn validate_regular_file(path: &Path) -> std::io::Result<()> {
 }
 
 pub fn read_secure_project_file(root: &Path, relative: &Path) -> std::io::Result<Vec<u8>> {
+    std::fs::read(validate_copy_source(root, relative)?)
+}
+
+fn validate_copy_source(root: &Path, relative: &Path) -> std::io::Result<PathBuf> {
     if relative.as_os_str().is_empty()
         || relative.is_absolute()
         || !relative
@@ -580,7 +639,7 @@ pub fn read_secure_project_file(root: &Path, relative: &Path) -> std::io::Result
     validate_secure_path(root, relative, true)?;
     let source = root.join(relative);
     validate_regular_file(&source)?;
-    std::fs::read(source)
+    Ok(source)
 }
 
 fn validate_secure_path(
@@ -855,7 +914,7 @@ fn apply_mutation(
         .expect("filesystem mutation has at least one path");
     let live = root.join(relative);
     match mutation {
-        StagedFilesystemMutation::Write { .. } => {
+        StagedFilesystemMutation::Write { .. } | StagedFilesystemMutation::CopyFile { .. } => {
             create_missing_parents(root, &live, created_parent_directories)?;
             validate_secure_path(root, relative, true)?;
             validate_secure_path(prepared_root, relative, true)?;

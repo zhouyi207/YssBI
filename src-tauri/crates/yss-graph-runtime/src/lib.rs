@@ -269,9 +269,15 @@ impl GraphRuntimeState {
         graph: GraphResourcePath,
         resource_catalog: &ResourceCatalogSnapshot,
         basis: &CompilationBasis,
+        supports_kernel: &dyn Fn(&str) -> bool,
     ) -> Result<GraphDraftCompilation, GraphDraftCompilationError> {
         let analysis =
             self.resolve_graph_draft(&graph, document, basis, resource_catalog, &[], "en-US");
+        let semantics = analysis
+            .semantic_snapshot()
+            .clone()
+            .with_execution_kernel_support(supports_kernel);
+        let analysis = analysis.with_semantic_snapshot(semantics);
         if let yss_graph_analysis::GraphResolutionOutcome::InternalFailure { code, .. } =
             analysis.semantic_snapshot().outcome()
         {
@@ -868,6 +874,7 @@ mod tests {
                 graph.clone(),
                 &empty_resource_catalog(),
                 &basis(&runtime),
+                &|_| true,
             )
             .unwrap();
         assert!(
@@ -1185,7 +1192,13 @@ mod tests {
         );
         assert!(
             runtime
-                .compile_draft(&document, graph.clone(), &changed_resources, &basis)
+                .compile_draft(
+                    &document,
+                    graph.clone(),
+                    &changed_resources,
+                    &basis,
+                    &|_| true
+                )
                 .unwrap()
                 .artifact_id()
                 .is_none()
@@ -1328,14 +1341,48 @@ mod tests {
         let compile_basis = basis(&runtime);
 
         let first = runtime
-            .compile_draft(&document, graph.clone(), &resources, &compile_basis)
+            .compile_draft(
+                &document,
+                graph.clone(),
+                &resources,
+                &compile_basis,
+                &|_| true,
+            )
             .expect("initial draft compiles");
         assert!(!first.cache_hit());
+
+        let unsupported = runtime
+            .compile_draft(
+                &document,
+                graph.clone(),
+                &resources,
+                &compile_basis,
+                &|_| false,
+            )
+            .expect("unavailable execution capability is a compile diagnostic");
+        assert!(unsupported.artifact_id().is_none());
+        assert!(
+            unsupported
+                .analysis()
+                .semantic_snapshot()
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| {
+                    diagnostic.blocking
+                        && diagnostic.code.as_str() == "compiler.node.kernel_unavailable"
+                })
+        );
 
         document.nodes.get_mut(&node_id).unwrap().position = NodePosition { x: 20.0, y: 40.0 };
         document.nodes.get_mut(&node_id).unwrap().user_label = Some("Renamed".into());
         let layout_only = runtime
-            .compile_draft(&document, graph.clone(), &resources, &compile_basis)
+            .compile_draft(
+                &document,
+                graph.clone(),
+                &resources,
+                &compile_basis,
+                &|_| true,
+            )
             .expect("layout-only draft compiles");
         assert!(layout_only.cache_hit());
         assert_eq!(layout_only.artifact_id(), first.artifact_id());
@@ -1347,7 +1394,7 @@ mod tests {
             yss_data_contract::DataValue::Int64(8),
         );
         let semantic_change = runtime
-            .compile_draft(&document, graph, &resources, &compile_basis)
+            .compile_draft(&document, graph, &resources, &compile_basis, &|_| true)
             .expect("updated draft compiles");
         assert!(!semantic_change.cache_hit());
         assert_ne!(semantic_change.artifact_id(), first.artifact_id());
@@ -1385,6 +1432,7 @@ mod tests {
                 function.clone(),
                 &resources("Before"),
                 &compile_basis,
+                &|_| true,
             )
             .unwrap();
         let renamed = runtime
@@ -1393,6 +1441,7 @@ mod tests {
                 function.clone(),
                 &resources("After"),
                 &compile_basis,
+                &|_| true,
             )
             .unwrap();
         assert!(renamed.cache_hit());

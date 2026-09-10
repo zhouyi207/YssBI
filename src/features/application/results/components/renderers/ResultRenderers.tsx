@@ -9,7 +9,7 @@ import { ReadOnlyDataGrid } from "../ReadOnlyDataGrid";
 import { ResultReadError } from "../ResultReadError";
 
 export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
-  const totalCount = payload.totalCount ?? 0;
+  const totalCount = payload.totalCount;
   const paging = usePagedResultRows(payload.resultId, totalCount);
   return (
     <ResultViewShell
@@ -18,7 +18,9 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
         <ResultPageToolbar
           pageIndex={paging.pageIndex}
           totalPages={paging.totalPages}
-          totalCount={paging.totalCount || totalCount}
+          totalCount={paging.totalCount}
+          actualCount={paging.actualCount}
+          hasMore={paging.hasMore}
           pageSize={paging.pageSize}
           loading={paging.loading}
           onPrevious={paging.goToPreviousPage}
@@ -30,7 +32,7 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
         <ResultReadError error={paging.error} />
       ) : (
         <ReadOnlyDataGrid
-          columns={[]}
+          columns={paging.columns.map((column) => ({ ...column }))}
           rows={paging.rows.map((row) => [...row])}
           pageStartIndex={paging.offset}
           loading={paging.loading}
@@ -43,7 +45,9 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
 }
 
 export function DataSeriesResultView({ payload }: { payload: ResultDescriptor }) {
-  const totalCount = payload.totalCount ?? payload.metadata?.length ?? 0;
+  const totalCount =
+    payload.totalCount ??
+    (payload.metadata && "length" in payload.metadata ? payload.metadata.length : null);
   const paging = usePagedResultRows(payload.resultId, totalCount);
   return (
     <ResultViewShell
@@ -53,6 +57,8 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
           pageIndex={paging.pageIndex}
           totalPages={paging.totalPages}
           totalCount={paging.totalCount}
+          actualCount={paging.actualCount}
+          hasMore={paging.hasMore}
           pageSize={paging.pageSize}
           loading={paging.loading}
           onPrevious={paging.goToPreviousPage}

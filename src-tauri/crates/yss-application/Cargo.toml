@@ -31,7 +31,10 @@ yss-database-runtime = { path = "../yss-database-runtime" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-display-naming = { path = "../yss-display-naming" }
-yss-duckdb = { path = "../yss-duckdb" }
+yss-dataset-store = { path = "../yss-dataset-store" }
+yss-datafusion = { path = "../yss-datafusion" }
+arrow.workspace = true
+yss-tabular-arrow = { path = "../yss-tabular-arrow" }
 yss-execution = { path = "../yss-execution" }
 yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
@@ -63,12 +66,12 @@ yss-sci-contract = { path = "../yss-sci-contract" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sql-source = { path = "../yss-sql-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-relational-contract = { path = "../yss-relational-contract" }
 yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }
-polars.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true

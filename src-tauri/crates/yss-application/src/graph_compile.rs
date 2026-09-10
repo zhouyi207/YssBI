@@ -103,7 +103,13 @@ pub fn compile_graph_draft(
     let graph_basis = graph_compilation_basis(&basis);
     let compilation = captured
         .graph()
-        .compile_draft(&document, graph_path.clone(), &graph_catalog, &graph_basis)
+        .compile_draft(
+            &document,
+            graph_path.clone(),
+            &graph_catalog,
+            &graph_basis,
+            &yss_execution::state::supports_kernel,
+        )
         .map_err(CompileGraphDraftError::Compilation)?;
     let analysis = captured.graph().localize_analysis(
         &document,

@@ -19,7 +19,7 @@ const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 function aggregate(afterName: string | null, operationId: string) {
   const before = {
     id: "sales",
-    engine: { duckDb: { path: "database/project.duckdb", table: "sales" } },
+    engine: { dataset: {} },
     schemaVersion: 1,
     required: false,
     name: "Sales",
@@ -67,7 +67,7 @@ describe("useDatabaseManagement revision authority", () => {
           id: "sales",
           name: "Sales",
           resourcePath: "opaque database resource path",
-          engine: { duckDb: { path: "database/project.duckdb", table: "sales" } },
+          engine: { dataset: {} },
           schemaVersion: 1,
           required: false,
         },

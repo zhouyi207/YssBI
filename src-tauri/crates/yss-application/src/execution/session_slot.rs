@@ -987,6 +987,11 @@ impl ApplicationSessionSlot {
         }
         let deadline = Instant::now() + std::time::Duration::from_secs(30);
         guard.old.database().close_admission();
+        guard
+            .old
+            .database()
+            .resolve_storage_recoveries()
+            .map_err(|_| SessionRecoveryError::DatabaseClaim)?;
         match guard
             .old
             .database()

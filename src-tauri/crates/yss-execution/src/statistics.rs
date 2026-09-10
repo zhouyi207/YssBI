@@ -35,19 +35,42 @@ pub(crate) fn execute(
                 _ => return Err(KernelExecutionError::InvalidNumericInput),
             };
             let covariance = covariance(&configuration)?;
-            let response = numeric_series(
-                invocation
-                    .inputs
-                    .first()
-                    .ok_or(KernelExecutionError::Failed)?,
-            )?;
+            let response = invocation
+                .inputs
+                .first()
+                .ok_or(KernelExecutionError::Failed)?;
             let predictors = invocation
                 .input_slots
                 .iter()
                 .zip(invocation.inputs)
                 .filter(|(slot, _)| slot.contract().group.is_some())
-                .map(|(_, value)| numeric_series(value))
-                .collect::<Result<Vec<_>, _>>()?;
+                .map(|(_, value)| value)
+                .collect::<Vec<_>>();
+            let (response, predictors) = if let RuntimeValue::Series(response) = response {
+                let mut series = vec![response.clone()];
+                for predictor in predictors {
+                    let RuntimeValue::Series(predictor) = predictor else {
+                        return Err(KernelExecutionError::InvalidNumericInput);
+                    };
+                    series.push(predictor.clone());
+                }
+                let mut columns =
+                    crate::relational::numeric_columns(&series, invocation)?.into_iter();
+                (
+                    columns
+                        .next()
+                        .ok_or(KernelExecutionError::InvalidNumericInput)?,
+                    columns.collect(),
+                )
+            } else {
+                (
+                    numeric_series(response)?,
+                    predictors
+                        .into_iter()
+                        .map(numeric_series)
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+            };
             let result = backend
                 .ols(
                     OlsRequest {

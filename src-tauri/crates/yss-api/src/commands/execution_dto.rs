@@ -1,5 +1,6 @@
 use crate::schema::graph_mutation::PortAddressDto;
 use serde::{Deserialize, Serialize};
+use yss_application::execution::result_query::{ResultPageKind, ResultPageProjection};
 use yss_application::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunDemand,
 };
@@ -456,6 +457,9 @@ impl ResultDescriptorDto {
             StoredResult::Runtime(RuntimeValue::List(values)) => {
                 (ResultValueKindDto::Sequence, Some(values.len()))
             }
+            StoredResult::Runtime(RuntimeValue::Relation(_) | RuntimeValue::Series(_)) => {
+                (ResultValueKindDto::Sequence, None)
+            }
             StoredResult::Empty => (ResultValueKindDto::Unknown, Some(0)),
             _ => (ResultValueKindDto::Scalar, Some(1)),
         };
@@ -562,39 +566,104 @@ pub struct ResultPageDto {
     offset: usize,
     requested_limit: usize,
     actual_count: usize,
-    total_count: usize,
+    total_count: Option<usize>,
     has_more: bool,
     next_offset: Option<usize>,
     value_kind: ResultValueKindDto,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<ResultTableMetadataDto>,
     values: Box<[serde_json::Value]>,
 }
 
+#[derive(Debug, Serialize)]
+struct ResultTableMetadataDto {
+    columns: Box<[ResultColumnDto]>,
+}
+
+#[derive(Debug, Serialize)]
+struct ResultColumnDto {
+    name: Box<str>,
+    #[serde(rename = "type")]
+    data_type: Box<str>,
+}
+
 impl ResultPageDto {
-    pub(crate) fn from_execution(
+    pub(crate) fn from_application(
         result_id: ResultId,
-        offset: usize,
-        requested_limit: usize,
-        value_kind: ResultValueKindDto,
-        total_count: usize,
-        values: Box<[serde_json::Value]>,
-    ) -> Self {
+        page: ResultPageProjection,
+    ) -> Result<Self, RunEventDtoError> {
+        let values = page
+            .values
+            .iter()
+            .map(runtime_value_to_json)
+            .collect::<Result<Box<[_]>, _>>()?;
         let actual_count = values.len();
-        let next = offset.saturating_add(actual_count);
-        let has_more = next < total_count;
-        Self {
+        let next = page
+            .offset
+            .checked_add(actual_count)
+            .ok_or(RunEventDtoError::InvalidOutput)?;
+        let metadata = (!page.columns.is_empty()).then(|| ResultTableMetadataDto {
+            columns: page
+                .columns
+                .into_vec()
+                .into_iter()
+                .map(|column| ResultColumnDto {
+                    name: column.name,
+                    data_type: column.data_type,
+                })
+                .collect(),
+        });
+        Ok(Self {
             result_id: result_id.get().to_string(),
-            offset,
-            requested_limit,
+            offset: page.offset,
+            requested_limit: page.requested_limit,
             actual_count,
-            total_count,
-            has_more,
-            next_offset: has_more.then_some(next),
-            value_kind,
-            metadata: None,
+            total_count: page.total_count,
+            has_more: page.has_more,
+            next_offset: page.has_more.then_some(next),
+            value_kind: match page.kind {
+                ResultPageKind::Scalar => ResultValueKindDto::Scalar,
+                ResultPageKind::Sequence => ResultValueKindDto::Sequence,
+            },
+            metadata,
             values,
-        }
+        })
     }
+}
+
+pub(crate) fn runtime_value_to_json(
+    value: &RuntimeValue,
+) -> Result<serde_json::Value, RunEventDtoError> {
+    Ok(match value {
+        RuntimeValue::Null => serde_json::Value::Null,
+        RuntimeValue::Bool(value) => (*value).into(),
+        RuntimeValue::Integer(value) => serde_json::to_value(
+            yss_tabular_contract::TabularScalar::Integer(*value).display_value(),
+        )
+        .map_err(|_| RunEventDtoError::InvalidOutput)?,
+        RuntimeValue::Unsigned(value) => serde_json::to_value(
+            yss_tabular_contract::TabularScalar::Unsigned(*value).display_value(),
+        )
+        .map_err(|_| RunEventDtoError::InvalidOutput)?,
+        RuntimeValue::Decimal(value) => serde_json::Number::from_f64(*value)
+            .map(serde_json::Value::Number)
+            .ok_or(RunEventDtoError::InvalidOutput)?,
+        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
+            return Err(RunEventDtoError::InvalidOutput);
+        }
+        RuntimeValue::List(values) => values
+            .iter()
+            .map(runtime_value_to_json)
+            .collect::<Result<Vec<_>, _>>()?
+            .into(),
+        RuntimeValue::Record(values) => values
+            .iter()
+            .map(|(key, value)| Ok((key.to_string(), runtime_value_to_json(value)?)))
+            .collect::<Result<std::collections::BTreeMap<_, _>, RunEventDtoError>>()?
+            .into_iter()
+            .collect::<serde_json::Map<_, _>>()
+            .into(),
+    })
 }
 
 #[cfg(test)]
@@ -603,6 +672,34 @@ mod tests {
     use yss_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
     use yss_execution::run_output::test_support;
     use yss_execution::run_registry::RunId;
+
+    #[test]
+    fn relation_page_wire_keeps_unknown_count_and_exact_wide_integer_text() {
+        let page = ResultPageDto::from_application(
+            ResultId::from_existing(7),
+            ResultPageProjection {
+                offset: 0,
+                requested_limit: 1,
+                total_count: None,
+                has_more: true,
+                kind: ResultPageKind::Sequence,
+                columns: Box::new([yss_relational_contract::RelationColumn {
+                    name: "id".into(),
+                    data_type: "UInt64".into(),
+                }]),
+                values: Box::new([RuntimeValue::List(Box::new([RuntimeValue::Unsigned(
+                    u64::MAX,
+                )]))]),
+            },
+        )
+        .unwrap();
+        let encoded = serde_json::to_value(page).unwrap();
+        assert!(encoded["totalCount"].is_null());
+        assert_eq!(encoded["nextOffset"], 1);
+        assert_eq!(encoded["hasMore"], true);
+        assert_eq!(encoded["values"][0][0], u64::MAX.to_string());
+        assert_eq!(encoded["metadata"]["columns"][0]["type"], "UInt64");
+    }
 
     #[test]
     fn run_failure_wire_preserves_the_cause_phase_and_node() {

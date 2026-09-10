@@ -3,6 +3,7 @@ import { isResultPlotKind } from "./result";
 import type {
   GraphOutputRefDto,
   ResultDataSeriesMetadata,
+  ResultMetadata,
   ResultDescriptor,
   ResultPage,
   ResultPresentation,
@@ -117,8 +118,27 @@ function parseResultProvenance(value: unknown): ResultProvenance {
   };
 }
 
-function parseMetadata(value: unknown): ResultDataSeriesMetadata | null {
+function parseMetadata(value: unknown): ResultMetadata | null {
   if (value === null) return null;
+  if (isRecord(value) && hasExactKeys(value, ["columns"]) && Array.isArray(value.columns)) {
+    const names = new Set<string>();
+    return {
+      columns: value.columns.map((column) => {
+        if (
+          !isRecord(column) ||
+          !hasExactKeys(column, ["name", "type"]) ||
+          typeof column.name !== "string" ||
+          column.name.length === 0 ||
+          typeof column.type !== "string" ||
+          column.type.length === 0 ||
+          names.has(column.name)
+        )
+          return fail("result columns");
+        names.add(column.name);
+        return { name: column.name, type: column.type };
+      }),
+    };
+  }
   if (
     !isRecord(value) ||
     !hasExactKeys(value, ["elementType", "length", "nullCount", "name", "format"]) ||
@@ -200,12 +220,34 @@ export function parseResultPage(value: unknown): ResultPage {
     !isNonNegativeInteger(value.offset) ||
     !isNonNegativeInteger(value.requestedLimit) ||
     !isNonNegativeInteger(value.actualCount) ||
-    !isNonNegativeInteger(value.totalCount) ||
+    !(value.totalCount === null || isNonNegativeInteger(value.totalCount)) ||
     typeof value.hasMore !== "boolean" ||
     !(value.nextOffset === null || isNonNegativeInteger(value.nextOffset)) ||
     !Array.isArray(value.values)
   )
     return fail("result page");
+  const next = value.offset + value.actualCount;
+  if (
+    value.requestedLimit === 0 ||
+    value.actualCount !== value.values.length ||
+    value.actualCount > value.requestedLimit ||
+    !Number.isSafeInteger(next) ||
+    (value.totalCount !== null &&
+      (value.offset > value.totalCount ||
+        next > value.totalCount ||
+        value.hasMore !== next < value.totalCount)) ||
+    (value.hasMore
+      ? value.actualCount === 0 || value.nextOffset !== next
+      : value.nextOffset !== null)
+  )
+    return fail("result page bounds");
+  const metadata = parseMetadata(value.metadata);
+  if (
+    metadata &&
+    "columns" in metadata &&
+    value.values.some((row) => !Array.isArray(row) || row.length !== metadata.columns.length)
+  )
+    return fail("result table row");
   return {
     resultId: value.resultId,
     offset: value.offset,
@@ -215,7 +257,7 @@ export function parseResultPage(value: unknown): ResultPage {
     hasMore: value.hasMore,
     nextOffset: value.nextOffset,
     valueKind: parseValueKind(value.valueKind, false) as ResultPage["valueKind"],
-    metadata: parseMetadata(value.metadata),
+    metadata,
     values: value.values,
   };
 }

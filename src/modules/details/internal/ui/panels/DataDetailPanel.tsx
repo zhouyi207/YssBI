@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import { databaseSourcePath } from "@/shared/types/domain/database";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { DetailColumnList } from "../shared/DetailColumnList";
@@ -14,7 +13,6 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
   const { t } = useTranslation();
   const columnCount = dataframe.columnCount ?? dataframe.columns?.length ?? 0;
   const rowCount = dataframe.rowCount ?? 0;
-  const sourcePath = databaseSourcePath(dataframe.engine);
 
   return (
     <DetailPanelShell>
@@ -28,15 +26,6 @@ export function DataDetailPanel({ dataframe }: DataDetailPanelProps) {
         <DetailReadonlyField label={t("detail.fields.rows")}>
           {t("detail.counts.rows", { count: rowCount })}
         </DetailReadonlyField>
-        {sourcePath && (
-          <DetailReadonlyField
-            label={t("detail.fields.source")}
-            tone="mono"
-            valueClassName="break-all"
-          >
-            {sourcePath}
-          </DetailReadonlyField>
-        )}
       </DetailForm>
       {dataframe.columns && dataframe.columns.length > 0 && (
         <DetailCollapsibleSection title={t("detail.fields.columns")}>

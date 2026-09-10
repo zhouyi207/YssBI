@@ -1,4 +1,6 @@
-use polars::prelude::*;
+use arrow::array::{ArrayRef, Float64Array};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -39,14 +41,24 @@ impl HostServices for Host {
                             "y" => vec![3.1, 5.0, 7.2, 8.9, 11.1, 13.0],
                             _ => panic!("unexpected column"),
                         };
-                        Column::new(name.into(), values)
+                        Arc::new(Float64Array::from(values)) as ArrayRef
                     })
                     .collect();
-                let mut data = DataFrame::new(6, columns).unwrap();
+                let schema = Arc::new(Schema::new(
+                    names
+                        .iter()
+                        .map(|name| Field::new(name.as_str().unwrap(), DataType::Float64, false))
+                        .collect::<Vec<_>>(),
+                ));
+                let data = RecordBatch::try_new(schema.clone(), columns).unwrap();
                 let path = exchange.join("fixture.arrow");
-                IpcWriter::new(fs::File::create(&path).unwrap())
-                    .finish(&mut data)
-                    .unwrap();
+                let mut writer = arrow::ipc::writer::FileWriter::try_new(
+                    fs::File::create(&path).unwrap(),
+                    &schema,
+                )
+                .unwrap();
+                writer.write(&data).unwrap();
+                writer.finish().unwrap();
                 Ok(json!({"leaseId":"fixture","path":path,"sourceRevision":"1"}))
             }
             "data.release" => Ok(Value::Null),

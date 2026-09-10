@@ -8,6 +8,7 @@ pub mod identity;
 pub mod package_preparation;
 pub mod plan;
 pub mod ports;
+mod relational;
 pub mod resource_preparation;
 pub mod result;
 pub mod result_store;

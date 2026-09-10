@@ -683,6 +683,12 @@ fn inspect_runtime_value(
         RuntimeValue::Resource(resource_id) => Ok(ResultValueInspection::Resource {
             resource_id: resource_id.to_string(),
         }),
+        RuntimeValue::Relation(relation) => Ok(ResultValueInspection::Resource {
+            resource_id: relation.binding().snapshot.to_string(),
+        }),
+        RuntimeValue::Series(series) => Ok(ResultValueInspection::Resource {
+            resource_id: series.relation().binding().snapshot.to_string(),
+        }),
         RuntimeValue::List(values) => {
             let total_count = values.len();
             if depth >= 4 {

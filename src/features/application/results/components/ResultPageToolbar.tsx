@@ -2,8 +2,10 @@ import { Button } from "@/components/ui/button";
 
 interface ResultPageToolbarProps {
   pageIndex: number;
-  totalPages: number;
-  totalCount: number;
+  totalPages: number | null;
+  totalCount: number | null;
+  actualCount: number;
+  hasMore: boolean;
   pageSize: number;
   loading?: boolean;
   onPrevious: () => void;
@@ -14,17 +16,25 @@ export function ResultPageToolbar({
   pageIndex,
   totalPages,
   totalCount,
+  actualCount,
+  hasMore,
   pageSize,
   loading,
   onPrevious,
   onNext,
 }: ResultPageToolbarProps) {
-  const start = totalCount === 0 ? 0 : pageIndex * pageSize + 1;
-  const end = Math.min(totalCount, (pageIndex + 1) * pageSize);
+  const start = actualCount === 0 ? 0 : pageIndex * pageSize + 1;
+  const end = pageIndex * pageSize + actualCount;
 
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span>{totalCount === 0 ? "0 rows" : `${start}–${end} of ${totalCount}`}</span>
+      <span>
+        {actualCount === 0
+          ? "0 rows"
+          : totalCount === null
+            ? `${start}–${end}`
+            : `${start}–${end} of ${totalCount}`}
+      </span>
       <Button
         type="button"
         variant="outline"
@@ -35,13 +45,13 @@ export function ResultPageToolbar({
         Prev
       </Button>
       <span>
-        {pageIndex + 1} / {totalPages}
+        {totalPages === null ? `Page ${pageIndex + 1}` : `${pageIndex + 1} / ${totalPages}`}
       </span>
       <Button
         type="button"
         variant="outline"
         size="sm"
-        disabled={loading || pageIndex >= totalPages - 1}
+        disabled={loading || !hasMore}
         onClick={onNext}
       >
         Next

@@ -1,8 +1,8 @@
 use super::declaration::DatabaseDecl;
-use super::engine::{DatabaseEngine, DatabaseEngineSql};
+use super::engine::DatabaseEngine;
 use sha2::{Digest, Sha256};
 
-const FINGERPRINT_VERSION: &[u8] = b"yssbi.database-declaration.fingerprint.v1";
+const FINGERPRINT_VERSION: &[u8] = b"yssbi.database-declaration.fingerprint.v2";
 
 pub(super) fn fingerprint_declaration(declaration: &DatabaseDecl) -> [u8; 32] {
     let mut encoding = Vec::new();
@@ -30,68 +30,7 @@ pub(super) fn fingerprint_declaration(declaration: &DatabaseDecl) -> [u8; 32] {
 
 fn encode_engine(output: &mut Vec<u8>, engine: &DatabaseEngine) {
     match engine {
-        DatabaseEngine::Csv {
-            path,
-            delimiter,
-            has_header,
-            infer_schema_length,
-        } => {
-            output.push(0x01);
-            write_field(output, 0x01, |field| write_string(field, path));
-            write_field(output, 0x02, |field| write_u32(field, *delimiter as u32));
-            write_field(output, 0x03, |field| field.push(u8::from(*has_header)));
-            write_field(output, 0x04, |field| {
-                write_option_u64(field, *infer_schema_length)
-            });
-        }
-        DatabaseEngine::Sql {
-            engine,
-            connection_string,
-            table,
-        } => {
-            output.push(0x02);
-            write_field(output, 0x01, |field| encode_sql_engine(field, engine));
-            write_field(output, 0x02, |field| write_string(field, connection_string));
-            write_field(output, 0x03, |field| write_string(field, table));
-        }
-        DatabaseEngine::Parquet { path, columns } => {
-            output.push(0x03);
-            write_field(output, 0x01, |field| write_string(field, path));
-            write_field(output, 0x02, |field| {
-                write_option_strings(field, columns.as_deref())
-            });
-        }
-        DatabaseEngine::Excel { path, sheet } => {
-            output.push(0x04);
-            write_field(output, 0x01, |field| write_string(field, path));
-            write_field(output, 0x02, |field| write_string(field, sheet));
-        }
-        DatabaseEngine::DuckDb { path, table } => {
-            output.push(0x05);
-            write_field(output, 0x01, |field| write_string(field, path));
-            write_field(output, 0x02, |field| write_string(field, table));
-        }
-        DatabaseEngine::InMemory { name } => {
-            output.push(0x06);
-            write_field(output, 0x01, |field| write_string(field, name));
-        }
-    }
-}
-
-fn encode_sql_engine(output: &mut Vec<u8>, engine: &DatabaseEngineSql) {
-    match engine {
-        DatabaseEngineSql::Sqlite { auto_create } => {
-            output.push(0x01);
-            write_field(output, 0x01, |field| field.push(u8::from(*auto_create)));
-        }
-        DatabaseEngineSql::Postgres { ssl } => {
-            output.push(0x02);
-            write_field(output, 0x01, |field| field.push(u8::from(*ssl)));
-        }
-        DatabaseEngineSql::Mysql { charset } => {
-            output.push(0x03);
-            write_field(output, 0x01, |field| write_string(field, charset));
-        }
+        DatabaseEngine::Dataset {} => output.push(0x07),
     }
 }
 
@@ -103,36 +42,9 @@ fn write_field(output: &mut Vec<u8>, tag: u8, encode: impl FnOnce(&mut Vec<u8>))
     output.extend_from_slice(&value);
 }
 
-fn write_string(output: &mut Vec<u8>, value: &str) {
-    write_bytes(output, value.as_bytes());
-}
-
 fn write_bytes(output: &mut Vec<u8>, value: &[u8]) {
     write_u64(output, value.len() as u64);
     output.extend_from_slice(value);
-}
-
-fn write_option_u64(output: &mut Vec<u8>, value: Option<usize>) {
-    match value {
-        Some(value) => {
-            output.push(1);
-            write_u64(output, value as u64);
-        }
-        None => output.push(0),
-    }
-}
-
-fn write_option_strings(output: &mut Vec<u8>, values: Option<&[String]>) {
-    match values {
-        Some(values) => {
-            output.push(1);
-            write_u64(output, values.len() as u64);
-            for value in values {
-                write_string(output, value);
-            }
-        }
-        None => output.push(0),
-    }
 }
 
 fn write_u32(output: &mut Vec<u8>, value: u32) {
@@ -149,12 +61,10 @@ mod tests {
     use crate::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
     #[test]
-    fn declaration_fingerprint_preserves_the_version_one_digest() {
+    fn declaration_fingerprint_has_a_stable_dataset_storage_digest() {
         let declaration = DatabaseDecl {
             id: DatabaseId::from_existing("sales".into()),
-            engine: DatabaseEngine::InMemory {
-                name: "sales".into(),
-            },
+            engine: DatabaseEngine::Dataset {},
             schema_version: 1,
             required: false,
             name: "Sales".into(),
@@ -163,9 +73,9 @@ mod tests {
         assert_eq!(
             fingerprint_declaration(&declaration),
             [
-                0x4d, 0x1c, 0x0e, 0xd8, 0x25, 0xa7, 0xbc, 0x7f, 0xfe, 0x6e, 0xb8, 0x57, 0x90, 0xa8,
-                0xa3, 0xeb, 0x30, 0x86, 0x50, 0x1f, 0xc2, 0xc2, 0x33, 0x04, 0x67, 0x8e, 0x4f, 0x79,
-                0x67, 0x91, 0x05, 0x3f,
+                0x18, 0xa1, 0x29, 0x39, 0x8f, 0x4b, 0x6b, 0x1a, 0x0e, 0x4b, 0xd7, 0x4d, 0xf5, 0x42,
+                0x11, 0x08, 0x53, 0x76, 0x6e, 0x17, 0x9e, 0x72, 0x6d, 0xe2, 0xf4, 0x6c, 0x19, 0x6b,
+                0x4e, 0x6d, 0xe7, 0x94
             ]
         );
     }

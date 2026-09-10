@@ -755,17 +755,17 @@ fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
 }
 
 #[test]
-fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
+fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners() {
     let facts = production_facts();
     const CONTRACT_PREFIX: &str = "src-tauri/crates/yss-bayes-artifact-contract/src/";
-    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs";
+    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-bayes-artifact-datafusion/src/lib.rs";
 
     for relative in [
         "src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml",
         "src-tauri/crates/yss-bayes-artifact-contract/README.md",
         "src-tauri/crates/yss-bayes-artifact-contract/src/lib.rs",
-        "src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml",
-        "src-tauri/crates/yss-bayes-artifact-polars/README.md",
+        "src-tauri/crates/yss-bayes-artifact-datafusion/Cargo.toml",
+        "src-tauri/crates/yss-bayes-artifact-datafusion/README.md",
         ADAPTER_SOURCE,
     ] {
         assert!(
@@ -791,25 +791,25 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
     let adapter_manifest = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml"),
+            .join("src-tauri/crates/yss-bayes-artifact-datafusion/Cargo.toml"),
     )
-    .expect("Bayes artifact Polars manifest must be readable");
+    .expect("Bayes artifact DataFusion manifest must be readable");
     for dependency in [
-        "polars.workspace = true",
+        "arrow.workspace = true",
+        "datafusion.workspace = true",
         "yss-bayes-artifact-contract",
         "yss-bayes-result",
         "yss-sci-runtime",
-        "yss-tabular-io",
     ] {
         assert!(
             adapter_manifest.contains(dependency),
-            "Bayes artifact Polars adapter must declare {dependency}"
+            "Bayes artifact DataFusion adapter must declare {dependency}"
         );
     }
     for backwards_dependency in ["tauri", "yss-application", "yssbi"] {
         assert!(
             !adapter_manifest.contains(backwards_dependency),
-            "Bayes artifact Polars adapter must not depend on {backwards_dependency}"
+            "Bayes artifact DataFusion adapter must not depend on {backwards_dependency}"
         );
     }
     assert!(
@@ -829,7 +829,7 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
     let adapter = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs"),
+            .join("src-tauri/crates/yss-bayes-artifact-datafusion/src/lib.rs"),
     )
     .expect("Bayes artifact adapter must be readable");
     for consumer in [&application, &adapter] {
@@ -862,7 +862,9 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
             .join("src-tauri/crates/yss-julia-extension/src/main.rs"),
     )
     .expect("plugin composition must be readable");
-    assert!(extension.contains("yss_bayes_artifact_polars::PolarsBayesArtifactReader::new()"));
+    assert!(
+        extension.contains("yss_bayes_artifact_datafusion::DataFusionBayesArtifactReader::new()")
+    );
 
     let contract_sources = facts
         .classification
@@ -879,7 +881,7 @@ fn bayes_artifact_contract_and_polars_adapter_have_distinct_acyclic_owners() {
     assert_eq!(
         facts.classification.get(ADAPTER_SOURCE),
         Some(&RustLayer::BackendAdapter),
-        "the concrete Polars reader must remain a Backend Adapter"
+        "the concrete DataFusion reader must remain a Backend Adapter"
     );
 }
 
@@ -2081,1107 +2083,32 @@ fn database_contract_has_one_pure_crate_owner_without_compatibility_module() {
 }
 
 #[test]
-fn dataset_profile_has_one_database_owner_without_root_facades() {
-    let root = repository_root();
-    let owner_files = [
-        "src-tauri/crates/yss-dataset-profile/Cargo.toml",
-        "src-tauri/crates/yss-dataset-profile/src/lib.rs",
-        "src-tauri/crates/yss-dataset-profile/src/column_stats.rs",
-        "src-tauri/crates/yss-dataset-profile/src/column_distribution.rs",
-        "src-tauri/crates/yss-dataset-profile/src/dataset_overview.rs",
-        "src-tauri/crates/yss-dataset-profile/src/tests.rs",
-    ];
-    for relative in owner_files {
-        assert!(
-            root.join(relative).is_file(),
-            "dataset profile owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/src/database/column_stats.rs",
-        "src-tauri/src/database/column_distribution.rs",
-        "src-tauri/src/database/dataset_overview.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "the root crate must not retain dataset profile owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    assert!(
-        workspace_manifest.contains("\"crates/yss-dataset-profile\""),
-        "the workspace must include yss-dataset-profile"
-    );
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
-    assert!(
-        application_manifest
-            .contains("yss-dataset-profile = { path = \"../yss-dataset-profile\" }"),
-        "Application must declare its direct dataset-profile dependency"
-    );
-    let profile_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-dataset-profile/Cargo.toml"))
-            .expect("the dataset profile manifest must be readable");
-    for dependency in ["polars.workspace = true", "serde.workspace = true"] {
-        assert!(
-            profile_manifest.contains(dependency),
-            "the dataset profile crate must declare {dependency}"
-        );
-    }
-
-    let profile_source = [
-        "src-tauri/crates/yss-dataset-profile/src/lib.rs",
-        "src-tauri/crates/yss-dataset-profile/src/column_stats.rs",
-        "src-tauri/crates/yss-dataset-profile/src/column_distribution.rs",
-        "src-tauri/crates/yss-dataset-profile/src/dataset_overview.rs",
-    ]
-    .into_iter()
-    .map(|relative| {
-        std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
-    })
-    .collect::<Vec<_>>()
-    .join("\n");
-    for owned_api in [
-        "pub struct NumericColumnStats",
-        "pub enum ColumnStats",
-        "pub struct NumericDistribution",
-        "pub enum ColumnDistribution",
-        "pub struct DatasetOverview",
-        "pub const DEFAULT_HISTOGRAM_BIN_COUNT",
-        "pub const DEFAULT_TOP_CATEGORY_COUNT",
-        "pub fn profile_column_kind_from_name",
-        "pub fn format_histogram_bin_label",
-        "pub fn compute_all_column_stats",
-        "pub fn compute_all_column_distributions",
-        "pub fn compute_dataset_overview",
-    ] {
-        assert!(
-            profile_source.contains(owned_api),
-            "the dataset profile crate must own {owned_api}"
-        );
-    }
-    for backwards_dependency in ["yssbi_lib", "duckdb", "tauri::"] {
-        assert!(
-            !profile_source.contains(backwards_dependency),
-            "the dataset profile crate must not depend backwards on {backwards_dependency}"
-        );
-    }
-    for invariant in [
-        "column.cast(&DataType::String)",
-        ".filter(|value| value.is_finite())",
-        "left.0.cmp(&right.0)",
-        "n_rows.saturating_mul(n_columns)",
-    ] {
-        assert!(
-            profile_source.contains(invariant),
-            "the dataset profile crate must preserve invariant {invariant}"
-        );
-    }
-
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not restore a database facade"
-    );
-    let database_instance = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
-    )
-    .expect("the database runtime instance must be readable");
-    assert!(
-        database_instance.contains("use yss_dataset_profile::{")
-            && database_instance.contains("compute_all_column_stats")
-            && database_instance.contains("compute_all_column_distributions")
-            && database_instance.contains("compute_dataset_overview"),
-        "the database instance must consume in-memory profiling directly"
-    );
-    let duckdb_profile =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/profile.rs"))
-            .expect("the DuckDB physical profile must be readable");
-    for invariant in [
-        "use yss_dataset_profile::{",
-        "COUNT(DISTINCT CAST({col} AS VARCHAR))",
-        "isfinite(CAST({col} AS DOUBLE))",
-        "ORDER BY cnt DESC, val ASC",
-        "ORDER BY cnt DESC, label ASC",
-        "physical_profiles_are_finite_stable_and_empty_table_safe",
-    ] {
-        assert!(
-            duckdb_profile.contains(invariant),
-            "the DuckDB physical profile must preserve invariant {invariant}"
-        );
-    }
-
-    let regression_tests =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-dataset-profile/src/tests.rs"))
-            .expect("the dataset profile regression tests must be readable");
-    for regression in [
-        "string_profiles_are_stable_and_exclude_empty_values_from_the_mode",
-        "non_string_columns_use_the_same_string_projection_as_physical_profiles",
-        "numeric_histograms_ignore_non_finite_values_and_close_the_final_bin",
-        "decimal_columns_follow_the_numeric_profile_path",
-        "overview_uses_one_dtype_classifier_and_checked_cell_arithmetic",
-    ] {
-        assert!(
-            regression_tests.contains(regression),
-            "the dataset profile crate must retain regression {regression}"
-        );
-    }
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains(
-            "\"yss-database-edit\"\n            | \"yss-database-runtime\"\n            | \"yss-database-schema\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
-        ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "the dataset profile crate must be classified in Database Core"
-    );
-}
-
-#[test]
-fn duckdb_engine_crate_owns_storage_editing_profiles_and_export_without_root_facades() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-duckdb/Cargo.toml",
-        "src-tauri/crates/yss-duckdb/src/column_snapshot.rs",
-        "src-tauri/crates/yss-duckdb/src/edit.rs",
-        "src-tauri/crates/yss-duckdb/src/export.rs",
-        "src-tauri/crates/yss-duckdb/src/lib.rs",
-        "src-tauri/crates/yss-duckdb/src/profile.rs",
-        "src-tauri/crates/yss-duckdb/src/sql.rs",
-        "src-tauri/crates/yss-duckdb/src/table.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "DuckDB engine owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/src/database/duckdb_analytics.rs",
-        "src-tauri/src/database/duckdb_column_snapshot.rs",
-        "src-tauri/src/database/duckdb_editing.rs",
-        "src-tauri/src/database/duckdb_reader.rs",
-        "src-tauri/src/database/duckdb_sql.rs",
-        "src-tauri/src/database/export.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "the root crate must not retain DuckDB engine owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-duckdb\"",
-        "yss-duckdb = { path = \"./crates/yss-duckdb\" }",
-        "duckdb.workspace = true",
-    ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
-    }
-    let engine_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/Cargo.toml"))
-            .expect("the DuckDB engine manifest must be readable");
-    for dependency in [
-        "duckdb.workspace = true",
-        "polars.workspace = true",
-        "polars-arrow.workspace = true",
-        "polars-dtype.workspace = true",
-        "serde_json.workspace = true",
-        "thiserror.workspace = true",
-        "yss-database-contract = { path = \"../yss-database-contract\" }",
-        "yss-database-edit = { path = \"../yss-database-edit\" }",
-        "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
-        "yss-tabular-io = { path = \"../yss-tabular-io\" }",
-    ] {
-        assert!(
-            engine_manifest.contains(dependency),
-            "the DuckDB engine crate must declare {dependency}"
-        );
-    }
-
-    let engine = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/lib.rs"))
-        .expect("the DuckDB engine root must be readable");
-    for owned_api in [
-        "DatasetProfileColumnRef",
-        "DuckDbColumnMeta",
-        "DuckDbExportError",
-        "DuckDbExportPhase",
-        "DuckDbTableMeta",
-        "INGEST_CHUNK_ROWS",
-        "MAX_DELETE_COLUMN_SNAPSHOT_ROWS",
-        "MAX_GET_DATAFRAME_ROWS",
-        "PageQueryResult",
-        "add_row_with_operation",
-        "apply_edit_on_duckdb",
-        "compute_all_column_distributions",
-        "compute_all_column_stats",
-        "compute_dataset_overview",
-        "delete_column_with_snapshot",
-        "delete_rows_with_operations",
-        "duckdb_table_sql",
-        "edit_cell_with_operation",
-        "editable_dtype_to_duckdb_sql",
-        "export_duckdb_table",
-        "ingest_dataframe_to_duckdb",
-        "query_page_with_rowids",
-        "read_table_meta",
-        "reverse_edit_on_duckdb",
-        "quote_duckdb_identifier",
-        "quote_duckdb_string_literal",
-    ] {
-        assert!(
-            engine.contains(owned_api),
-            "the DuckDB engine crate must export {owned_api}"
-        );
-    }
-
-    let edit = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/edit.rs"))
-        .expect("the DuckDB edit owner must be readable");
-    for invariant in [
-        "pub fn edit_cell_with_operation",
-        "pub fn add_row_with_operation",
-        "pub fn delete_rows_with_operations",
-        "fn apply_edit_on_connection",
-        "Failed to start row-delete transaction",
-        "match resolve_all_null_row_id(conn, table)?",
-        "delete_rows_keeps_unsorted_indices_paired_with_their_row_ids",
-        "multi_row_delete_rolls_back_when_a_later_delete_fails",
-        "failed_edit_restores_the_operation_and_leaves_the_table_unchanged",
-        "edit_cell_preserves_the_full_unsigned_json_integer",
-    ] {
-        assert!(
-            edit.contains(invariant),
-            "the DuckDB edit owner must preserve invariant {invariant}"
-        );
-    }
-    for forbidden in [
-        "yss_duckdb::",
-        "crate::database",
-        ".unwrap_or(resolve_row_id_by_index",
-        "yssbi_lib",
-    ] {
-        assert!(
-            !edit.contains(forbidden),
-            "the DuckDB edit owner must not depend on {forbidden}"
-        );
-    }
-
-    let column_snapshot =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/column_snapshot.rs"))
-            .expect("the DuckDB delete-column snapshot owner must be readable");
-    for invariant in [
-        "pub struct DuckDbColumnSnapshot",
-        "pub fn delete_column_with_snapshot",
-        "pub fn restore_deleted_column",
-        "MAX_DELETE_COLUMN_SNAPSHOT_BYTES",
-        "current_row_fingerprints",
-    ] {
-        assert!(
-            column_snapshot.contains(invariant),
-            "the DuckDB column snapshot owner must preserve invariant {invariant}"
-        );
-    }
-    assert!(
-        !column_snapshot.contains("yss_duckdb::")
-            && !column_snapshot.contains("crate::database")
-            && !column_snapshot.contains("yssbi_lib"),
-        "the DuckDB column snapshot owner must not depend on root compatibility paths"
-    );
-    let export = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/export.rs"))
-        .expect("the DuckDB export owner must be readable");
-    for invariant in [
-        "COPY (SELECT * FROM {table}) TO {destination} ({options});",
-        "DatabaseExportFormat::Csv",
-        "DatabaseExportFormat::Parquet",
-        "DuckDbExportPhase::Open",
-        "DuckDbExportPhase::Copy",
-        "table_exports_csv_and_parquet_without_materializing_in_polars",
-    ] {
-        assert!(
-            export.contains(invariant),
-            "the DuckDB export owner must preserve invariant {invariant}"
-        );
-    }
-    let sql = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/sql.rs"))
-        .expect("the DuckDB SQL owner must be readable");
-    for invariant in [
-        "identifier.replace",
-        "value.replace",
-        "identifiers_and_literals_escape_their_own_delimiters",
-        "editable_types_are_allowlisted",
-    ] {
-        assert!(
-            sql.contains(invariant),
-            "the DuckDB SQL owner must preserve invariant {invariant}"
-        );
-    }
-
-    let table = std::fs::read_to_string(root.join("src-tauri/crates/yss-duckdb/src/table.rs"))
-        .expect("the DuckDB table storage owner must be readable");
-    for invariant in [
-        "pub fn ingest_csv_to_duckdb",
-        "pub fn ingest_dataframe_to_duckdb",
-        "pub fn query_page_with_rowids",
-        "pub fn read_table_meta",
-        "pub fn write_display_name",
-        "drop_data_table_accepts_database_without_metadata_table",
-        "drop_data_table_removes_display_metadata_and_enum_types",
-        "iris_page_rowids_are_stable",
-        "ingest_categorical_enum_roundtrip",
-        "ingest_dataframe_via_arrow_roundtrip",
-    ] {
-        assert!(
-            table.contains(invariant),
-            "the DuckDB table storage owner must preserve invariant {invariant}"
-        );
-    }
-    for forbidden in [
-        "crate::database",
-        "super::duckdb_editing",
-        "target/test_duckdb",
-        "uuid::",
-        "yssbi_lib",
-    ] {
-        assert!(
-            !table.contains(forbidden),
-            "the DuckDB table storage owner must not depend on {forbidden}"
-        );
-    }
-
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not retain DuckDB compatibility facades"
-    );
-    for relative in [
-        "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
-        "src-tauri/crates/yss-database-runtime/src/database_state.rs",
-        "src-tauri/crates/yss-database-runtime/src/project_storage.rs",
-        "src-tauri/crates/yss-database-schema/src/lib.rs",
-        "src-tauri/crates/yss-application/src/database.rs",
-        "src-tauri/crates/yss-project/src/project_io.rs",
-    ] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_duckdb"),
-            "{relative} must consume the DuckDB engine crate directly"
-        );
-        assert!(
-            !consumer.contains("super::duckdb_sql"),
-            "{relative} must not use the removed root DuckDB SQL owner"
-        );
-    }
-    let database_instance = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
-    )
-    .expect("the database runtime instance must be readable");
-    assert!(
-        database_instance.contains("DatasetProfileColumnRef::new")
-            && database_instance.contains("fn duckdb_profile_columns")
-            && database_instance.contains("export_duckdb_table")
-            && database_instance.contains("edit_cell_with_operation")
-            && database_instance.contains("add_row_with_operation")
-            && database_instance.contains("delete_rows_with_operations")
-            && !database_instance.contains("duckdb::Connection"),
-        "the database runtime crate must compose typed DuckDB APIs without owning engine connections"
-    );
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    for database_core_package in [
-        "\"yss-dataset-profile\"",
-        "\"yss-duckdb\"",
-        "\"yss-tabular-io\"",
-    ] {
-        assert!(
-            policy.contains(database_core_package),
-            "the Database Core classifier must include {database_core_package}"
-        );
-    }
-    assert!(
-        policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "the DuckDB engine crate must be classified in Database Core"
-    );
-}
-
-#[test]
-fn sql_source_has_one_database_owner_without_root_readers_or_silent_value_fallbacks() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-sql-source/Cargo.toml",
-        "src-tauri/crates/yss-sql-source/src/dataframe.rs",
-        "src-tauri/crates/yss-sql-source/src/lib.rs",
-        "src-tauri/crates/yss-sql-source/src/mysql.rs",
-        "src-tauri/crates/yss-sql-source/src/postgres.rs",
-        "src-tauri/crates/yss-sql-source/src/runtime.rs",
-        "src-tauri/crates/yss-sql-source/src/sqlite.rs",
-        "src-tauri/crates/yss-sql-source/src/tests.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "the SQL source owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/src/database/sql_reader.rs",
-        "src-tauri/src/database/sqlite_reader.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "the root database package must not retain SQL source owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    assert!(
-        workspace_manifest.contains("\"crates/yss-sql-source\""),
-        "the workspace must include yss-sql-source"
-    );
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
-    assert!(
-        application_manifest.contains("yss-sql-source = { path = \"../yss-sql-source\" }"),
-        "Application must declare its direct SQL source dependency"
-    );
-    let root_runtime_dependencies = workspace_manifest
-        .split_once("[dependencies]")
-        .expect("the root manifest must have runtime dependencies")
-        .1
-        .split_once("[dev-dependencies]")
-        .expect("the root manifest must have development dependencies")
-        .0;
-    assert!(
-        !root_runtime_dependencies.contains("sqlx.workspace = true")
-            && !root_runtime_dependencies.contains("tokio.workspace = true"),
-        "SQLx and Tokio must leave the root package's production dependency surface"
-    );
-    let source_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-sql-source/Cargo.toml"))
-            .expect("the SQL source manifest must be readable");
-    for dependency in [
-        "polars.workspace = true",
-        "sqlx.workspace = true",
-        "thiserror.workspace = true",
-        "tokio.workspace = true",
-        "yss-database-contract = { path = \"../yss-database-contract\" }",
-    ] {
-        assert!(
-            source_manifest.contains(dependency),
-            "the SQL source crate must declare {dependency}"
-        );
-    }
-
-    let owner = [
-        "src-tauri/crates/yss-sql-source/src/dataframe.rs",
-        "src-tauri/crates/yss-sql-source/src/lib.rs",
-        "src-tauri/crates/yss-sql-source/src/mysql.rs",
-        "src-tauri/crates/yss-sql-source/src/postgres.rs",
-        "src-tauri/crates/yss-sql-source/src/runtime.rs",
-        "src-tauri/crates/yss-sql-source/src/sqlite.rs",
-    ]
-    .into_iter()
-    .map(|relative| {
-        std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"))
-    })
-    .collect::<Vec<_>>()
-    .join("\n");
-    for invariant in [
-        "pub enum SqlSourceError",
-        "pub fn list_tables",
-        "pub fn read_table_to_dataframe",
-        "UnsupportedColumnType",
-        "AnyValue::BinaryOwned",
-        "Series::full_null",
-        ".ssl_mode(if ssl",
-        ".charset(charset)",
-        ".create_if_missing(auto_create)",
-        ".read_only(!auto_create)",
-        "Handle::try_current().is_ok()",
-    ] {
-        assert!(
-            owner.contains(invariant),
-            "the SQL source owner must preserve invariant {invariant}"
-        );
-    }
-    for forbidden in [
-        "crate::database",
-        "yssbi_lib",
-        "filter_map",
-        "unwrap_or_else(|_| Series::new_null",
-    ] {
-        assert!(
-            !owner.contains(forbidden),
-            "the SQL source owner must not retain fallback or root dependency {forbidden}"
-        );
-    }
-
-    let regressions =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-sql-source/src/tests.rs"))
-            .expect("the SQL source regressions must be readable");
-    for regression in [
-        "sqlite_source_preserves_typed_values_binary_and_quoted_names",
-        "empty_sqlite_table_retains_column_names_and_declared_dtypes",
-        "sqlite_auto_create_is_explicit_and_missing_read_only_sources_stay_missing",
-        "sync_api_is_safe_when_called_from_an_existing_tokio_runtime",
-        "engine_metadata_maps_to_exact_supported_polars_kinds",
-    ] {
-        assert!(
-            regressions.contains(regression),
-            "the SQL source crate must retain regression {regression}"
-        );
-    }
-
-    let application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/database.rs"))
-            .expect("the database application must be readable")
-            + &std::fs::read_to_string(
-                root.join("src-tauri/crates/yss-application/src/database/import.rs"),
-            )
-            .expect("the database import use case must be readable");
-    assert!(
-        application.contains("use yss_sql_source::{")
-            && application.contains("list_sql_source_tables")
-            && application.contains("read_table_to_dataframe")
-            && !application.contains("sql_reader"),
-        "Application must consume the typed SQL source owner without a root facade"
-    );
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not retain SQL reader facades"
-    );
-    let database_error =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/src/error.rs"))
-            .expect("the database runtime error owner must be readable");
-    let driver_error = database_error
-        .split_once("pub(crate) enum DatabaseDriverError {")
-        .expect("the database runtime driver error enum must exist")
-        .1
-        .split_once("\n}")
-        .expect("the root database driver error enum must be closed")
-        .0;
-    for removed_driver_variant in ["Sqlx(", "DuckDb(", "Filesystem("] {
-        assert!(
-            !driver_error.contains(removed_driver_variant),
-            "the database runtime error must not retain dead driver variant {removed_driver_variant}"
-        );
-    }
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains("| \"yss-sql-source\"")
-            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "the SQL source crate must be classified in Database Core"
-    );
-}
-
-#[test]
-fn database_schema_has_one_owner_without_root_snapshot_or_type_string_drift() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-database-schema/Cargo.toml",
-        "src-tauri/crates/yss-database-schema/src/lib.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "the database schema owner must exist at {relative}"
-        );
-    }
-    assert!(
-        !root
-            .join("src-tauri/src/database/schema_snapshot.rs")
-            .exists(),
-        "the root package must not retain a database schema snapshot owner"
-    );
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-database-schema\"",
-        "yss-database-schema = { path = \"./crates/yss-database-schema\" }",
-    ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
-    }
-
-    let schema_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-schema/Cargo.toml"))
-            .expect("the database schema manifest must be readable");
-    for dependency in [
-        "polars.workspace = true",
-        "thiserror.workspace = true",
-        "yss-data-contract = { path = \"../yss-data-contract\" }",
-        "yss-database-contract = { path = \"../yss-database-contract\" }",
-        "yss-duckdb = { path = \"../yss-duckdb\" }",
-        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
-    ] {
-        assert!(
-            schema_manifest.contains(dependency),
-            "the database schema crate must declare {dependency}"
-        );
-    }
-
-    let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-schema/src/lib.rs"))
-            .expect("the database schema owner must be readable");
-    for invariant in [
-        "pub struct DatabaseRuntimeRevision",
-        "pub struct DatabaseSchemaRevision",
-        "pub struct DatabaseColumnFact",
-        "pub struct DatabaseSchemaFact",
-        "pub enum DatabaseSchemaFactError",
-        "pub fn from_dataframe",
-        "pub fn from_duckdb",
-        "\"DateTime\" | \"Datetime\" => DataType::Datetime",
-        "duckdb_timestamp_metadata_maps_to_datetime_without_any_fallback",
-        "dataframe_schema_preserves_temporal_types_nullability_and_revisions",
-        "invalid_physical_column_names_fail_closed",
-    ] {
-        assert!(
-            owner.contains(invariant),
-            "the database schema owner must preserve invariant {invariant}"
-        );
-    }
-    for forbidden in ["crate::database", "yssbi_lib", "tauri::"] {
-        assert!(
-            !owner.contains(forbidden),
-            "the database schema owner must not depend backwards on {forbidden}"
-        );
-    }
-
-    for relative in [
-        "src-tauri/crates/yss-application/src/database.rs",
-        "src-tauri/crates/yss-application/src/database_mutation.rs",
-        "src-tauri/crates/yss-application/src/project_query.rs",
-        "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
-        "src-tauri/crates/yss-database-runtime/src/plot_query.rs",
-        "src-tauri/crates/yss-database-runtime/src/runtime/mod.rs",
-        "src-tauri/crates/yss-database-runtime/src/runtime/physical.rs",
-        "src-tauri/crates/yss-database-runtime/src/session_api.rs",
-        "src-tauri/crates/yss-api/src/schema/database.rs",
-    ] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_database_schema") && !consumer.contains("schema_snapshot"),
-            "{relative} must consume the canonical database schema crate directly"
-        );
-    }
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not retain a schema compatibility facade"
-    );
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains("canonical_origin_targets: &[\"yss_database_schema::DatabaseColumnFact\"]")
-            && policy.contains("| \"yss-database-schema\"")
-            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "database schema ownership must be canonical and classified in Database Core"
-    );
-}
-
-#[test]
-fn database_edit_and_tabular_adapters_are_acyclic_and_typed() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-tabular-contract/Cargo.toml",
-        "src-tauri/crates/yss-tabular-contract/src/lib.rs",
-        "src-tauri/crates/yss-tabular-contract/tests/wire_contract.rs",
-        "src-tauri/crates/yss-database-edit/Cargo.toml",
-        "src-tauri/crates/yss-database-edit/src/lib.rs",
-        "src-tauri/crates/yss-tabular-polars/Cargo.toml",
-        "src-tauri/crates/yss-tabular-polars/src/data_type.rs",
-        "src-tauri/crates/yss-tabular-polars/src/lib.rs",
-        "src-tauri/crates/yss-tabular-polars/src/tests.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "tabular contract owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/src/tabular",
-        "src-tauri/src/backend_adapters/tabular",
-        "src-tauri/src/backend_adapters/tabular_tests.rs",
-        "src-tauri/src/database/edit_operation.rs",
-        "src-tauri/src/database/row_mapping.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "the root crate must not retain tabular adapter owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-database-edit\"",
-        "\"crates/yss-tabular-polars\"",
-    ] {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace must include {declaration}"
-        );
-    }
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
-    assert!(
-        application_manifest.contains("yss-database-edit = { path = \"../yss-database-edit\" }"),
-        "Application must declare its direct database-edit dependency"
-    );
-    let runtime_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/Cargo.toml"))
-            .expect("the database runtime manifest must be readable");
-    assert!(
-        runtime_manifest.contains("yss-tabular-polars = { path = \"../yss-tabular-polars\" }"),
-        "the database runtime must declare its direct tabular-Polars dependency"
-    );
-
-    let adapter_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/Cargo.toml"))
-            .expect("the tabular Polars manifest must be readable");
-    for dependency in [
-        "chrono.workspace = true",
-        "polars.workspace = true",
-        "polars-dtype.workspace = true",
-        "serde_json.workspace = true",
-        "thiserror.workspace = true",
-        "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
-    ] {
-        assert!(
-            adapter_manifest.contains(dependency),
-            "the tabular Polars adapter must declare {dependency}"
-        );
-    }
-
-    let adapter =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/src/lib.rs"))
-            .expect("the tabular Polars adapter must be readable");
-    for owned_api in [
-        "pub enum TabularMaterializationError",
-        "pub fn to_dataframe",
-        "pub fn column_to_series",
-        "pub fn tabular_scalar_to_any_value",
-        "pub fn anyvalue_to_json",
-        "pub fn json_to_anyvalue",
-    ] {
-        assert!(
-            adapter.contains(owned_api),
-            "the tabular Polars crate must own {owned_api}"
-        );
-    }
-    for backwards_dependency in ["crate::", "yssbi_lib", "tauri::"] {
-        assert!(
-            !adapter.contains(backwards_dependency),
-            "the tabular Polars adapter must not depend backwards on {backwards_dependency}"
-        );
-    }
-    assert!(
-        !adapter.contains("UnsupportedColumnType"),
-        "the tabular Polars adapter must not restore the unreachable error variant"
-    );
-    let edit_contract =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-edit/src/lib.rs"))
-            .expect("the database edit contract must be readable");
-    for owned_type in [
-        "pub enum EditOperation",
-        "pub struct EditHistory",
-        "pub struct EditState",
-    ] {
-        assert!(
-            edit_contract.contains(owned_type),
-            "the database edit crate must own {owned_type}"
-        );
-    }
-    for forbidden in [
-        "Deserialize",
-        "polars::",
-        "duckdb::",
-        "yss_tabular_polars",
-        "yss_duckdb",
-        "yssbi_lib",
-    ] {
-        assert!(
-            !edit_contract.contains(forbidden),
-            "the database edit model must not depend on {forbidden}"
-        );
-    }
-    let data_types =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-polars/src/data_type.rs"))
-            .expect("the Polars dtype mapping must be readable");
-    assert!(
-        data_types.contains("pub fn dtype_from_string")
-            && data_types.contains("pub fn dtype_to_string")
-            && !data_types.contains("yssbi_lib"),
-        "the Polars adapter must own dtype mapping without a root dependency"
-    );
-    let database_instance = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
-    )
-    .expect("the database runtime instance must be readable");
-    assert!(
-        database_instance.contains("use yss_database_edit::{EditOperation, EditState};")
-            && database_instance
-                .contains("use yss_tabular_polars::{dtype_from_string, dtype_to_string};")
-            && database_instance.contains("apply_edit_on_duckdb"),
-        "the database instance must consume the shared edit contract and SQL edit adapter"
-    );
-    assert!(
-        !root.join("src-tauri/src/database/row_mapping.rs").exists(),
-        "the unused duplicate dataframe row projection must stay removed"
-    );
-    for relative in ["src-tauri/crates/yss-database-runtime/src/plot_query.rs"] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_tabular_polars::column_to_series")
-                || consumer.contains("use yss_tabular_polars::column_to_series;"),
-            "{relative} must consume the canonical column materializer"
-        );
-        assert!(
-            !consumer.contains("fn tabular_scalar_to_any_value")
-                && !consumer.contains("fn tabular_column_to_series"),
-            "{relative} must not retain duplicate tabular-to-Polars conversion logic"
-        );
-    }
-    let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/plugins.rs"))
-            .expect("the plugin data application must be readable");
-    assert!(
-        bayes_application.contains("DatabaseDataSnapshot")
-            && bayes_application.contains("yss_tabular_io::write_ipc_snapshot")
-            && bayes_application.contains("DatabaseColumnSelection::Selected")
-            && !bayes_application.contains("yss_tabular_polars::column_to_series"),
-        "plugin data access must consume selected typed snapshots through the Arrow adapter"
-    );
-    assert!(
-        !bayes_application.contains("fn tabular_scalar_to_any_value")
-            && !bayes_application.contains("fn tabular_column_to_series"),
-        "the Bayes application must not restore duplicate tabular-to-Polars conversion logic"
-    );
-    let facts = production_facts();
-    assert_eq!(
-        facts
-            .classification
-            .get("src-tauri/crates/yss-tabular-polars/src/lib.rs"),
-        Some(&RustLayer::BackendAdapter),
-        "the tabular Polars crate must be classified as a Backend Adapter",
-    );
-    let violations = tabular_contract_source_violations(&root);
+fn tabular_value_boundary_retains_checked_construction_and_typed_errors() {
+    let violations = tabular_contract_source_violations(&repository_root());
     assert!(
         violations.is_empty(),
-        "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+        "{TABULAR_CONTRACT_RULE}: {violations:?}"
     );
 }
 
 #[test]
-fn tabular_io_has_one_database_owner_without_root_facade() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-tabular-io/Cargo.toml",
-        "src-tauri/crates/yss-tabular-io/src/excel.rs",
-        "src-tauri/crates/yss-tabular-io/src/lib.rs",
+fn database_schema_and_arrow_adapter_have_separate_owners() {
+    let facts = production_facts();
+    for (source, layer) in [
+        (
+            "src-tauri/crates/yss-database-schema/src/lib.rs",
+            RustLayer::PureLeaf,
+        ),
+        (
+            "src-tauri/crates/yss-tabular-arrow/src/lib.rs",
+            RustLayer::DatabaseCore,
+        ),
+        (
+            "src-tauri/crates/yss-tabular-arrow/src/schema.rs",
+            RustLayer::DatabaseCore,
+        ),
     ] {
-        assert!(
-            root.join(relative).is_file(),
-            "tabular I/O owner must exist at {relative}"
-        );
-    }
-    for removed_owner in [
-        "src-tauri/src/database/excel_reader.rs",
-        "src-tauri/src/database/tabular_io.rs",
-    ] {
-        assert!(
-            !root.join(removed_owner).exists(),
-            "the root database crate must not retain tabular I/O owner {removed_owner}"
-        );
-    }
-
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
-    for declaration in [
-        "\"crates/yss-tabular-io\"",
-        "yss-tabular-io = { path = \"./crates/yss-tabular-io\" }",
-    ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
-    }
-    let io_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/Cargo.toml"))
-            .expect("the tabular I/O manifest must be readable");
-    for dependency in [
-        "calamine = \"0.36\"",
-        "polars.workspace = true",
-        "thiserror.workspace = true",
-    ] {
-        assert!(
-            io_manifest.contains(dependency),
-            "the tabular I/O crate must declare {dependency}"
-        );
-    }
-
-    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/src/lib.rs"))
-        .expect("the tabular I/O owner must be readable");
-    for owned_api in [
-        "ExcelIoError",
-        "ExcelIoPhase",
-        "export_excel_sheet_to_csv",
-        "list_excel_sheets",
-        "pub struct TabularIoError",
-        "pub fn read_ipc_dataframe",
-        "pub fn write_ipc_dataframe",
-        "pub fn write_csv_dataframe",
-        "pub fn write_parquet_dataframe",
-    ] {
-        assert!(
-            owner.contains(owned_api),
-            "the tabular I/O crate must own {owned_api}"
-        );
-    }
-    for forbidden in ["crate::database", "yssbi_lib", "tauri::", "uuid::"] {
-        assert!(
-            !owner.contains(forbidden),
-            "the tabular I/O crate must not depend backwards on {forbidden}"
-        );
-    }
-    assert!(
-        owner.contains("fn output_parent")
-            && owner.contains("current_directory_output_has_no_parent_to_create")
-            && !owner.contains(", String>"),
-        "the tabular I/O owner must preserve typed errors and current-directory outputs"
-    );
-
-    let excel_owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-tabular-io/src/excel.rs"))
-            .expect("the Excel I/O owner must be readable");
-    for invariant in [
-        "pub struct ExcelIoError",
-        "pub enum ExcelIoPhase",
-        "pub fn export_excel_sheet_to_csv",
-        "pub fn list_excel_sheets",
-        "missing_workbook_reports_open_phase",
-        "text_cells_are_quoted_and_escape_quotes",
-    ] {
-        assert!(
-            excel_owner.contains(invariant),
-            "the Excel I/O owner must preserve invariant {invariant}"
-        );
-    }
-    assert!(
-        !excel_owner.contains(", String>"),
-        "the Excel I/O owner must expose typed errors"
-    );
-
-    for relative in [
-        "src-tauri/crates/yss-application/src/database.rs",
-        "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
-        "src-tauri/crates/yss-duckdb/src/table.rs",
-    ] {
-        let consumer = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            consumer.contains("yss_tabular_io") && !consumer.contains("database::tabular_io"),
-            "{relative} must consume yss-tabular-io directly"
-        );
-    }
-    let bayes_application =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/src/plugins.rs"))
-            .expect("the plugin data application must be readable");
-    assert!(
-        bayes_application.contains("yss_database_runtime::session_api")
-            && bayes_application.contains("DatabaseDataSnapshot")
-            && bayes_application.contains("yss_tabular_io::write_ipc_snapshot"),
-        "the plugin data application must serialize Core-owned snapshots through tabular I/O"
-    );
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not retain a tabular I/O facade"
-    );
-
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains(
-            "\"yss-database-edit\"\n            | \"yss-database-runtime\"\n            | \"yss-database-schema\"\n            | \"yss-dataset-profile\"\n            | \"yss-duckdb\"\n            | \"yss-sql-source\"\n            | \"yss-tabular-io\""
-        ) && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "the tabular I/O crate must be classified in Database Core"
-    );
-}
-
-#[test]
-fn database_export_uses_contract_and_engine_owners_without_root_facade() {
-    let root = repository_root();
-    assert!(
-        !root.join("src-tauri/src/database/export.rs").exists(),
-        "the root database crate must not retain a mixed export owner"
-    );
-
-    assert!(
-        !root.join("src-tauri/src/database").exists(),
-        "the root package must not retain an export compatibility facade"
-    );
-
-    let database_instance = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
-    )
-    .expect("the database runtime instance must be readable");
-    for direct_owner in [
-        "yss_database_contract::{DatabaseDecl, DatabaseExportFormat}",
-        "export_duckdb_table",
-        "Result<(), DatabaseExportError>",
-    ] {
-        assert!(
-            database_instance.contains(direct_owner),
-            "the database runtime must consume export owner {direct_owner} directly"
-        );
-    }
-    assert!(
-        !database_instance.contains("format: DatabaseExportFormat) -> Result<(), String>"),
-        "the database instance export seam must not erase typed errors"
-    );
-
-    let database_error =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/src/error.rs"))
-            .expect("the database runtime error owner must be readable");
-    for typed_variant in [
-        "pub struct DatabaseExportError",
-        "enum DatabaseExportSource",
-        "impl From<yss_duckdb::DuckDbExportError> for DatabaseExportError",
-        "Export(#[source] DatabaseExportError)",
-    ] {
-        assert!(
-            database_error.contains(typed_variant),
-            "the database runtime must preserve typed export error {typed_variant}"
-        );
-    }
-
-    let application = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-application/src/database/export.rs"),
-    )
-    .expect("the database application must be readable");
-    assert!(
-        application.contains(".parse::<DatabaseExportFormat>()")
-            && !application.contains("DatabaseExportFormat::parse"),
-        "the application must parse the canonical export contract without a root helper"
-    );
-    for relative in [
-        "src-tauri/crates/yss-database-runtime/src/runtime/mod.rs",
-        "src-tauri/crates/yss-database-runtime/src/runtime/physical.rs",
-    ] {
-        let runtime = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
-        assert!(
-            runtime.contains("DatabaseExportFormat")
-                && !runtime.contains("crate::database::DatabaseExportFormat"),
-            "{relative} must consume the canonical export contract directly"
-        );
+        assert_eq!(facts.classification.get(source), Some(&layer), "{source}");
     }
 }
 
@@ -3236,7 +2163,7 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/Cargo.toml"))
             .expect("the database runtime manifest must be readable");
     for dependency in [
-        "polars.workspace = true",
+        "arrow.workspace = true",
         "serde_json.workspace = true",
         "thiserror.workspace = true",
         "yss-data-contract = { path = \"../yss-data-contract\" }",
@@ -3244,9 +2171,9 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "yss-database-edit = { path = \"../yss-database-edit\" }",
         "yss-database-schema = { path = \"../yss-database-schema\" }",
         "yss-dataset-profile = { path = \"../yss-dataset-profile\" }",
-        "yss-duckdb = { path = \"../yss-duckdb\" }",
+        "yss-dataset-store = { path = \"../yss-dataset-store\" }",
         "yss-tabular-contract = { path = \"../yss-tabular-contract\" }",
-        "yss-tabular-polars = { path = \"../yss-tabular-polars\" }",
+        "yss-tabular-arrow = { path = \"../yss-tabular-arrow\" }",
     ] {
         assert!(
             runtime_manifest.contains(dependency),
@@ -3350,30 +2277,28 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
     let integration = std::fs::read_to_string(root.join("src-tauri/tests/database_test.rs"))
         .expect("the database integration test must be readable");
     assert!(
-        integration.contains("use yss_database_runtime::{")
+        integration.contains("use yss_application::database::{")
             && !integration.contains("yssbi_lib::database"),
-        "database integration tests must target the canonical runtime crate"
+        "database integration tests must exercise the runtime through application workflows"
     );
 
-    let policy = std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/policy.rs"))
-        .expect("the Rust architecture policy must be readable");
-    assert!(
-        policy.contains("src-tauri/crates/yss-database-runtime/src/database_instance.rs")
-            && policy
-                .contains("fully_qualified_owner: \"yss_database_runtime::database_instance\"")
-            && policy.contains("| \"yss-database-runtime\"")
-            && policy.contains("layers.insert(RustLayer::DatabaseCore)"),
-        "database runtime ownership must be canonical and classified in Database Core"
+    assert_eq!(
+        production_facts()
+            .classification
+            .get("src-tauri/crates/yss-database-runtime/src/database_instance.rs"),
+        Some(&RustLayer::DatabaseCore),
+        "database runtime ownership must be classified in Database Core"
     );
-    let external_policy =
-        std::fs::read_to_string(root.join("src-tauri/src/architecture_tests/external_policy.rs"))
-            .expect("the external dependency policy must be readable");
-    for package in ["polars", "serde_json", "thiserror"] {
-        let allowance = format!(
-            "owning_package: \"yss-database-runtime\",\n        mode: RustDependencyMode::Runtime,\n        package_name: \"{package}\""
-        );
+    for package in ["arrow", "serde_json", "thiserror"] {
         assert!(
-            external_policy.contains(&allowance),
+            RUST_EXTERNAL_DEPENDENCY_POLICY
+                .declarations
+                .iter()
+                .any(|allowance| {
+                    allowance.owning_package == "yss-database-runtime"
+                        && allowance.mode == RustDependencyMode::Runtime
+                        && allowance.package_name == package
+                }),
             "the external dependency policy must admit yss-database-runtime -> {package}"
         );
     }
@@ -4648,7 +3573,7 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         "pub const CHARTS_DIR",
         "pub const CHART_EXTENSION",
         "pub const DATABASE_DIR",
-        "pub const PROJECT_DUCKDB_FILE",
+        "pub const PROJECT_DATASET_CATALOG_FILE",
         "pub const PROJECT_CONTENT_DIRECTORIES",
         "pub fn is_project_index_input_path",
     ] {
@@ -6924,7 +5849,7 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
         std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/Cargo.toml"))
             .expect("Julia Bayes adapter manifest must be readable");
     for dependency in [
-        "polars.workspace = true",
+        "arrow.workspace = true",
         "serde.workspace = true",
         "serde_json.workspace = true",
         "thiserror.workspace = true",
@@ -7888,7 +6813,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     for consumer in [
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
-        "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
+        "src-tauri/crates/yss-bayes-artifact-datafusion/src/plots.rs",
         "src-tauri/src/lib.rs",
         "src-tauri/crates/yss-api/src/commands/command_panel_did.rs",
     ] {

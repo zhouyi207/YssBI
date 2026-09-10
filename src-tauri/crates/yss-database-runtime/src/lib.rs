@@ -1,7 +1,7 @@
 //! Session-scoped database state, authority, physical routing, and typed query APIs.
 //!
-//! This crate owns the cross-engine runtime that composes canonical database contracts with
-//! Polars and DuckDB adapters. Project publication, Application workflows, transport DTOs, and
+//! This crate owns the runtime that composes canonical database contracts with
+//! the committed dataset store and DataFusion. Project publication, Application workflows, transport DTOs, and
 //! Tauri delivery remain outside this boundary.
 
 mod database_instance;
@@ -19,9 +19,9 @@ use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
 };
 
-pub use database_instance::DatabaseInstance;
-pub use database_state::DatabaseState;
-pub use project_storage::{bind_duckdb_instance, remove_duckdb_table_if_needed};
+pub use database_instance::{DatabaseInstance, MAX_GET_DATAFRAME_ROWS};
+pub use database_state::{DatabaseState, DatasetEdit};
+pub use project_storage::{bind_dataset_instance, dataset_query_engine};
 
 fn declaration_observation_for<'a>(
     observations: &'a DatabaseDeclarationObservationSet,

@@ -1,0 +1,14 @@
+[package]
+name = "yss-relational-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
+futures-core.workspace = true
+thiserror.workspace = true
+yss-database-contract = { path = "../yss-database-contract" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }

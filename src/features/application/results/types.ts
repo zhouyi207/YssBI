@@ -14,7 +14,7 @@ export type ResultRendererKind = "sequence" | "dataseries" | "scalar" | "json" |
 export interface ResultPageState {
   offset: number;
   limit: number;
-  totalCount: number;
+  totalCount: number | null;
   rows: unknown[][];
   values: unknown[];
   loading: boolean;

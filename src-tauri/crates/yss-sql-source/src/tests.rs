@@ -1,11 +1,31 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use polars::prelude::DataType;
+use arrow::array::{Array, BinaryArray, BooleanArray, Float64Array, Int64Array, StringArray};
+use arrow::datatypes::DataType;
+use arrow::record_batch::{RecordBatch, RecordBatchReader};
 use yss_database_contract::DatabaseEngineSql;
 
-use crate::dataframe::ColumnKind;
-use crate::{list_tables, read_table_to_dataframe, runtime, sqlite};
+use crate::batch::ColumnKind;
+use crate::{list_tables, read_table_batches, runtime, sqlite};
+
+fn control() -> yss_relational_contract::RelationControl {
+    yss_relational_contract::RelationControl {
+        cancellation: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        deadline: std::time::Instant::now() + std::time::Duration::from_secs(15),
+        max_input_bytes: 16 * 1024 * 1024,
+    }
+}
+fn read_table(
+    engine: &DatabaseEngineSql,
+    path: &str,
+    table: &str,
+) -> Result<RecordBatch, crate::SqlSourceError> {
+    let reader = read_table_batches(engine, path, table, control())?;
+    let schema = reader.schema();
+    let batches = reader.collect::<Result<Vec<_>, _>>()?;
+    arrow::compute::concat_batches(&schema, &batches).map_err(Into::into)
+}
 
 static NEXT_DATABASE: AtomicU64 = AtomicU64::new(0);
 
@@ -61,32 +81,72 @@ fn sqlite_source_preserves_typed_values_binary_and_quoted_names() {
     let tables = list_tables(&sqlite_engine(false), &path).expect("list SQLite tables");
     assert_eq!(tables, vec!["odd\"table"]);
 
-    let frame = read_table_to_dataframe(&sqlite_engine(false), &path, "odd\"table")
-        .expect("read quoted SQLite table");
-    assert_eq!(frame.height(), 2);
-    assert_eq!(frame.width(), 5);
+    let frame =
+        read_table(&sqlite_engine(false), &path, "odd\"table").expect("read quoted SQLite table");
+    assert_eq!(frame.num_rows(), 2);
+    assert_eq!(frame.num_columns(), 5);
     assert_eq!(
-        frame.column("signed").unwrap().i64().unwrap().get(0),
+        frame
+            .column_by_name("signed")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
         Some(-7)
     );
     assert_eq!(
-        frame.column("ratio").unwrap().f64().unwrap().get(0),
+        frame
+            .column_by_name("ratio")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
         Some(1.5)
     );
     assert_eq!(
-        frame.column("label").unwrap().str().unwrap().get(0),
+        frame
+            .column_by_name("label")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
         Some("alpha")
     );
     assert_eq!(
-        frame.column("enabled").unwrap().bool().unwrap().get(0),
+        frame
+            .column_by_name("enabled")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<BooleanArray>()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
         Some(true)
     );
     assert_eq!(
-        frame.column("payload").unwrap().binary().unwrap().get(0),
+        frame
+            .column_by_name("payload")
+            .unwrap()
+            .as_any()
+            .downcast_ref::<BinaryArray>()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap(),
         Some(&[0, 255][..])
     );
-    assert_eq!(frame.column("signed").unwrap().null_count(), 1);
-    assert_eq!(frame.column("payload").unwrap().null_count(), 1);
+    assert_eq!(frame.column_by_name("signed").unwrap().null_count(), 1);
+    assert_eq!(frame.column_by_name("payload").unwrap().null_count(), 1);
 }
 
 #[test]
@@ -95,14 +155,31 @@ fn empty_sqlite_table_retains_column_names_and_declared_dtypes() {
     database.create("CREATE TABLE records (id INTEGER, label TEXT, payload BLOB);");
     let path = database.path().to_string_lossy();
 
-    let frame = read_table_to_dataframe(&sqlite_engine(false), &path, "records")
-        .expect("read empty SQLite table");
+    let frame =
+        read_table(&sqlite_engine(false), &path, "records").expect("read empty SQLite table");
 
-    assert_eq!(frame.height(), 0);
-    assert_eq!(frame.get_column_names(), &["id", "label", "payload"]);
-    assert_eq!(frame.column("id").unwrap().dtype(), &DataType::Int64);
-    assert_eq!(frame.column("label").unwrap().dtype(), &DataType::String);
-    assert_eq!(frame.column("payload").unwrap().dtype(), &DataType::Binary);
+    assert_eq!(frame.num_rows(), 0);
+    assert_eq!(
+        frame
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str())
+            .collect::<Vec<_>>(),
+        vec!["id", "label", "payload"]
+    );
+    assert_eq!(
+        frame.column_by_name("id").unwrap().data_type(),
+        &DataType::Int64
+    );
+    assert_eq!(
+        frame.column_by_name("label").unwrap().data_type(),
+        &DataType::Utf8
+    );
+    assert_eq!(
+        frame.column_by_name("payload").unwrap().data_type(),
+        &DataType::Binary
+    );
 }
 
 #[test]
@@ -154,7 +231,7 @@ fn engine_identifier_quoting_escapes_only_its_own_delimiter() {
 }
 
 #[test]
-fn engine_metadata_maps_to_exact_supported_polars_kinds() {
+fn engine_metadata_maps_to_exact_supported_arrow_kinds() {
     let postgres = crate::postgres::column_specs(vec![
         ("internal_char".into(), "CHAR".into()),
         ("small".into(), "INT2".into()),
@@ -202,4 +279,41 @@ fn engine_metadata_maps_to_exact_supported_polars_kinds() {
         error,
         crate::SqlSourceError::UnsupportedColumnType { .. }
     ));
+}
+
+#[test]
+fn streaming_sql_emits_bounded_batches_and_rejects_a_late_incompatible_value() {
+    let database = TestDatabase::new("late-decode");
+    database.create("CREATE TABLE records (value INTEGER); WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<100000) INSERT INTO records SELECT n FROM seq; INSERT INTO records VALUES('bad integer');");
+    let mut reader = read_table_batches(
+        &sqlite_engine(false),
+        &database.path().to_string_lossy(),
+        "records",
+        control(),
+    )
+    .unwrap();
+    assert_eq!(reader.next().unwrap().unwrap().num_rows(), 50_000);
+    assert_eq!(reader.next().unwrap().unwrap().num_rows(), 50_000);
+    assert!(reader.next().unwrap().is_err());
+    assert!(reader.next().is_none());
+}
+
+#[test]
+fn dropping_or_cancelling_a_backpressured_sql_reader_releases_its_worker() {
+    let database = TestDatabase::new("cancel");
+    database.create("CREATE TABLE records (value INTEGER); WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n<300000) INSERT INTO records SELECT n FROM seq;");
+    let control = control();
+    let mut reader = read_table_batches(
+        &sqlite_engine(false),
+        &database.path().to_string_lossy(),
+        "records",
+        control.clone(),
+    )
+    .unwrap();
+    assert_eq!(reader.next().unwrap().unwrap().num_rows(), 50_000);
+    control.cancellation.store(true, Ordering::Release);
+    let start = std::time::Instant::now();
+    assert!(reader.next().unwrap().is_err());
+    drop(reader);
+    assert!(start.elapsed() < std::time::Duration::from_secs(3));
 }

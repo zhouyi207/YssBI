@@ -89,7 +89,15 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             determinism: Determinism::Deterministic,
             cache: CachePolicy::PerRun,
         },
-        typing: NodeTypingSpec::Fixed,
+        typing: if spec.interface == InterfaceKind::SeriesSelect {
+            NodeTypingSpec::ColumnOutput {
+                input: sid("dataframe", PortKey::new)?,
+                column: sid("column", ParameterKey::new)?,
+                output: sid("series", PortKey::new)?,
+            }
+        } else {
+            NodeTypingSpec::Fixed
+        },
         scope: NodeScope::Any,
         managed_role: None,
     })
@@ -450,14 +458,20 @@ fn data_output(
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(
+    let mut spec = port(
         key,
         title,
         PortDirection::Output,
         value_type,
         PortCardinality::Declared,
         schema,
-    )
+    )?;
+    // Values are immutable handles; multiple consumers do not share a consumed Arrow stream.
+    spec.connections = ConnectionsPerPort::Multiple {
+        max: None,
+        ordered: false,
+    };
+    Ok(spec)
 }
 
 fn streaming_output(

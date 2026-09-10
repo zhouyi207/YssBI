@@ -1,129 +1,211 @@
-//! 时间序列模块测试
-
+//! Arrow input preparation and unchanged numerical time-series regressions.
+use arrow::array::{Array, Date32Array, Float64Array, Int64Array};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use ndarray::Array2;
-use polars::prelude::*;
+use std::sync::Arc;
 use yss_sci::ts::unit_root::{AdfRegression, adf_test};
 use yss_sci::ts::var::var_varsoc;
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
-use yss_sci_runtime::data::time_series as ts;
+use yss_sci_runtime::data::{PreparationError, time_series as ts};
 
 #[test]
 fn test_ts_diff() {
-    let values = Series::new("x".into(), &[10.0, 20.0, 30.0, 40.0]);
-    let result = ts::diff::ts_diff(&values, 1).unwrap();
-    let expected: Vec<Option<f64>> = vec![None, Some(10.0), Some(10.0), Some(10.0)];
-    let got: Vec<Option<f64>> = result.f64().unwrap().into_iter().map(|v| v).collect();
-    assert_eq!(got, expected);
+    let values = Float64Array::from(vec![10., 20., 30., 40.]);
+    assert_eq!(
+        ts::diff::ts_diff(&values, 1)
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![None, Some(10.), Some(10.), Some(10.)]
+    );
 }
-
 #[test]
 fn test_ts_pct_change() {
-    let values = Series::new("x".into(), &[100.0, 110.0, 121.0]);
+    let values = Float64Array::from(vec![100., 110., 121.]);
     let result = ts::pct_change::ts_pct_change(&values, 1).unwrap();
-    let got: Vec<Option<f64>> = result.f64().unwrap().into_iter().map(|v| v).collect();
-    assert_eq!(got[0], None);
-    assert!((got[1].unwrap() - 0.1).abs() < 1e-10);
-    assert!((got[2].unwrap() - 0.1).abs() < 1e-10);
+    assert!(result.is_null(0));
+    assert!((result.value(1) - 0.1).abs() < 1e-10);
+    assert!((result.value(2) - 0.1).abs() < 1e-10);
 }
-
 #[test]
 fn test_rolling_mean() {
-    let values = Series::new("x".into(), &[1.0, 2.0, 3.0, 4.0, 5.0]);
-    let result = ts::rolling::rolling_mean(&values, 3).unwrap();
-    let got: Vec<Option<f64>> = result.f64().unwrap().into_iter().map(|v| v).collect();
-    assert_eq!(got[0], None);
-    assert_eq!(got[1], None);
-    assert_eq!(got[2], Some(2.0)); // (1+2+3)/3
-    assert_eq!(got[3], Some(3.0)); // (2+3+4)/3
-    assert_eq!(got[4], Some(4.0)); // (3+4+5)/3
+    let values = Float64Array::from(vec![1., 2., 3., 4., 5.]);
+    assert_eq!(
+        ts::rolling::rolling_mean(&values, 3)
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![None, None, Some(2.), Some(3.), Some(4.)]
+    );
 }
-
 #[test]
 fn test_check_no_duplicate_times_rejects_duplicates() {
-    let times = Series::new("t".into(), &[1_i64, 2, 2, 4]);
-    let err =
-        yss_sci_runtime::data::time_series::align::check_no_duplicate_times(&times).unwrap_err();
-    assert!(err.to_string().contains("重复"));
+    let times = Int64Array::from(vec![1, 2, 2, 4]);
+    assert!(matches!(
+        ts::align::check_no_duplicate_times(&times),
+        Err(PreparationError::DuplicateTime)
+    ));
 }
-
 #[test]
 fn test_check_no_duplicate_times_accepts_unique() {
-    let times = Series::new("t".into(), &[1_i64, 2, 3, 4]);
-    assert!(yss_sci_runtime::data::time_series::align::check_no_duplicate_times(&times).is_ok());
+    assert!(ts::align::check_no_duplicate_times(&Int64Array::from(vec![1, 2, 3, 4])).is_ok());
 }
-
 #[test]
 fn test_infer_interval_int64() {
-    let times = Series::new("t".into(), &[1_i64, 3, 5, 9]);
-    let interval = yss_sci_runtime::data::time_series::align::infer_interval(&times).unwrap();
-    assert_eq!(interval, 2); // min gap between 1,3,5,9
+    assert_eq!(
+        ts::align::infer_interval(&Int64Array::from(vec![1, 3, 5, 9])).unwrap(),
+        2
+    );
 }
-
 #[test]
 fn test_infer_interval_single_value() {
-    let times = Series::new("t".into(), &[42_i64]);
-    let interval = yss_sci_runtime::data::time_series::align::infer_interval(&times).unwrap();
-    assert_eq!(interval, 1);
+    assert_eq!(
+        ts::align::infer_interval(&Int64Array::from(vec![42])).unwrap(),
+        1
+    );
 }
-
 #[test]
-fn test_align_dataframe() {
-    let times = Series::new("t".into(), &[1_i64, 2, 4, 5]);
-    let x = Series::new("x".into(), &[10.0, 20.0, 30.0, 40.0]);
-    let y = Series::new("y".into(), &[100.0, 200.0, 300.0, 400.0]);
-    let df = DataFrame::new(
-        4,
+fn test_align_batch() {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("t", DataType::Int64, false),
+        Field::new("x", DataType::Float64, false),
+        Field::new("y", DataType::Float64, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema,
         vec![
-            polars::prelude::Column::from(times),
-            polars::prelude::Column::from(x),
-            polars::prelude::Column::from(y),
+            Arc::new(Int64Array::from(vec![1, 2, 4, 5])),
+            Arc::new(Float64Array::from(vec![10., 20., 30., 40.])),
+            Arc::new(Float64Array::from(vec![100., 200., 300., 400.])),
         ],
     )
     .unwrap();
-
-    let aligned = yss_sci_runtime::data::time_series::align::align_dataframe(&df, "t", 1).unwrap();
-
-    assert_eq!(aligned.height(), 5); // t=1,2,3,4,5
-    assert_eq!(aligned.width(), 3); // t, x, y
-
-    let t_col = aligned
-        .column("t")
-        .unwrap()
-        .clone()
-        .take_materialized_series();
-    let t_vals: Vec<i64> = t_col.i64().unwrap().into_iter().filter_map(|v| v).collect();
-    assert_eq!(t_vals, vec![1, 2, 3, 4, 5]);
-
-    let x_col = aligned
-        .column("x")
-        .unwrap()
-        .clone()
-        .take_materialized_series();
-    let x_vals: Vec<Option<f64>> = x_col.f64().unwrap().into_iter().map(|v| v).collect();
-    assert_eq!(x_vals[0], Some(10.0));
-    assert_eq!(x_vals[1], Some(20.0));
-    assert_eq!(x_vals[2], None); // t=3 缺失
-    assert_eq!(x_vals[3], Some(30.0));
-    assert_eq!(x_vals[4], Some(40.0));
+    let aligned = ts::align::align_batch(&batch, "t", 1).unwrap();
+    assert_eq!((aligned.num_rows(), aligned.num_columns()), (5, 3));
+    assert_eq!(
+        aligned
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .values()
+            .as_ref(),
+        &[1, 2, 3, 4, 5]
+    );
+    assert_eq!(
+        aligned
+            .column(1)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        vec![Some(10.), Some(20.), None, Some(30.), Some(40.)]
+    );
+}
+#[test]
+fn test_ts_lag_numeric() {
+    let times = Int64Array::from(vec![1, 2, 4, 5]);
+    let values = Float64Array::from(vec![10., 20., 30., 40.]);
+    let (times, _, lag) = ts::lag::ts_lag(&times, &values, 1, 1).unwrap();
+    assert_eq!(
+        times
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .values()
+            .as_ref(),
+        &[1, 2, 3, 4, 5]
+    );
+    assert_eq!(
+        lag.iter().collect::<Vec<_>>(),
+        vec![None, Some(10.), Some(20.), None, Some(30.)]
+    );
 }
 
 #[test]
-fn test_ts_lag_numeric() {
-    let times = Series::new("t".into(), &[1_i64, 2, 4, 5]);
-    let values = Series::new("x".into(), &[10.0, 20.0, 30.0, 40.0]);
-    let (t_out, _aligned, lag_out) = ts::lag::ts_lag(&times, &values, 1, 1).unwrap();
+fn arrow_dates_nulls_and_alignment_limits_are_checked_before_allocation() {
+    let dates = Date32Array::from(vec![0, 1, 3]);
+    let values = Float64Array::from(vec![Some(10.), None, Some(30.)]);
+    let (time, current, lag) = ts::lag::ts_lag(&dates, &values, 1, 1).unwrap();
+    assert_eq!(time.data_type(), &DataType::Date32);
+    assert_eq!(
+        current.iter().collect::<Vec<_>>(),
+        vec![Some(10.), None, None, Some(30.)]
+    );
+    assert_eq!(
+        lag.iter().collect::<Vec<_>>(),
+        vec![None, Some(10.), None, None]
+    );
+    assert!(
+        ts::diff::ts_diff_with_time(&dates, &values, 1, 1)
+            .unwrap()
+            .iter()
+            .all(|value| value.is_none())
+    );
+    assert!(matches!(
+        ts::align::align_series(&dates, &values, 0),
+        Err(PreparationError::Interval)
+    ));
+    assert!(matches!(
+        ts::rolling::rolling_mean(&values, 0),
+        Err(PreparationError::Interval)
+    ));
+    let huge = Int64Array::from(vec![i64::MIN, i64::MAX]);
+    assert!(matches!(
+        ts::align::align_series(&huge, &Float64Array::from(vec![1., 2.]), 1),
+        Err(PreparationError::MemoryLimit)
+    ));
+    let missing = Int64Array::from(vec![Some(1), None]);
+    assert!(matches!(
+        ts::align::align_series(&missing, &Float64Array::from(vec![1., 2.]), 1),
+        Err(PreparationError::NullTime)
+    ));
+}
 
-    // 对齐后: t=1,2,3,4,5; values=10,20,NA,30,40
-    // lag1: NA,1,2,3,4 -> NA,10,20,NA,30
-    let t_vals: Vec<i64> = t_out.i64().unwrap().into_iter().filter_map(|v| v).collect();
-    let lag_vals: Vec<Option<f64>> = lag_out.f64().unwrap().into_iter().map(|v| v).collect();
-
-    assert_eq!(t_vals, vec![1, 2, 3, 4, 5]);
-    assert_eq!(lag_vals[0], None);
-    assert_eq!(lag_vals[1], Some(10.0));
-    assert_eq!(lag_vals[2], Some(20.0));
-    assert_eq!(lag_vals[3], None);
-    assert_eq!(lag_vals[4], Some(30.0));
+#[test]
+fn panel_arrow_adapter_preserves_identity_metadata_and_existing_gap_difference() {
+    use yss_sci_runtime::data::panel;
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("entity", DataType::Int64, false)
+            .with_metadata([(String::from("column_id"), String::from("entity-id"))].into()),
+        Field::new("date", DataType::Date32, false),
+        Field::new("x", DataType::Float64, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(Int64Array::from(vec![10, 10, 20, 20, 20])),
+            Arc::new(Date32Array::from(vec![0, 2, 0, 1, 2])),
+            Arc::new(Float64Array::from(vec![10., 30., 100., 150., 160.])),
+        ],
+    )
+    .unwrap();
+    let aligned = panel::align_batch(&batch, "entity", "date", Some(1)).unwrap();
+    assert_eq!(aligned.num_rows(), 6);
+    assert_eq!(aligned.schema().field(0), batch.schema().field(0));
+    assert_eq!(aligned.column(1).data_type(), &DataType::Date32);
+    assert!(aligned.column(2).is_null(1));
+    let diff = panel::diff_batch(&aligned, "entity", "date").unwrap();
+    assert_eq!(
+        diff.column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap()
+            .values()
+            .as_ref(),
+        &[10, 20, 20]
+    );
+    assert_eq!(
+        diff.column(2)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap()
+            .values()
+            .as_ref(),
+        &[20., 50., 10.]
+    );
 }
 
 #[test]

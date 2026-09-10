@@ -796,9 +796,10 @@ mod tests {
 
     #[test]
     fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
-        let mut fixture = yss_database_runtime::test_support::DuckDbFixture::new(
-            "sales",
-            polars::df!("amount" => &[1.0_f64]).unwrap(),
+        let mut fixture = yss_database_runtime::test_support::DatasetFixture::single_f64(
+            yss_database_runtime::test_support::SALES_ID,
+            "amount",
+            vec![1.0],
         );
         fixture.instance.decl.required = true;
         fixture.instance.decl.name = "Sales".into();
@@ -850,7 +851,10 @@ mod tests {
         assert!(catalog.function_signature(&function_path).is_some());
         assert!(
             catalog
-                .database_schema(&GraphResourceId::new("databases/sales"))
+                .database_schema(&GraphResourceId::new(format!(
+                    "databases/{}",
+                    yss_database_runtime::test_support::SALES_ID
+                )))
                 .is_some()
         );
     }

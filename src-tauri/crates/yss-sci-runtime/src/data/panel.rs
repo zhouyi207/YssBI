@@ -5,7 +5,12 @@
 
 use std::collections::HashMap;
 
-use polars::prelude::*;
+use super::time_series::align::{time_array, time_numbers};
+use crate::data::{MAX_PREPARED_BYTES, PreparationError, check_size};
+use arrow::array::{Array, Float64Array, StringArray, UInt64Array};
+use arrow::datatypes::{DataType, Schema};
+use arrow::record_batch::RecordBatch;
+use std::sync::Arc;
 
 /// 对齐后的面板数据：(entity_id, time_id, value_columns)
 /// 已按 (entity, time) 排序，缺失时间点为 NaN
@@ -173,385 +178,221 @@ pub fn panel_diff(
     Ok((diff_entity, diff_time_id, diff_cols))
 }
 
-/// 对齐面板 DataFrame：按 (entity, time) 补齐到规则时间网格，缺失为 null
-///
-/// 与 TS align 类似，但按 entity 分组，每组内补齐时间轴。
-/// * `df` - 输入 DataFrame
-/// * `entity_col` - 实体列名（Categorical、Int64 或 String）
-/// * `time_col` - 时间列名（Int64 或 Date）
-/// * `interval` - 时间步长，None 时自动推断
-pub fn align_dataframe(
-    df: &DataFrame,
-    entity_col: &str,
-    time_col: &str,
-    interval: Option<i64>,
-) -> Result<DataFrame, String> {
-    let entity_series = df
-        .column(entity_col)
-        .map_err(|e| format!("XT Align: 列 '{}' 不存在: {}", entity_col, e))?
-        .clone();
-    let time_series = df
-        .column(time_col)
-        .map_err(|e| format!("XT Align: 列 '{}' 不存在: {}", time_col, e))?
-        .clone()
-        .take_materialized_series();
-
-    let n = df.height();
-    if n == 0 {
-        return Err("XT Align: DataFrame 为空".to_string());
-    }
-
-    // 映射 entity 到 usize
-    let (entity_id, entity_names): (Vec<usize>, Vec<String>) = {
-        let s = entity_series
-            .cast(&DataType::String)
-            .map_err(|e| e.to_string())?;
-        let ca = s.str().map_err(|e| e.to_string())?;
-        let mut m: HashMap<String, usize> = HashMap::new();
-        let mut idx_to_name: Vec<String> = Vec::new();
-        let mut out = Vec::with_capacity(n);
-        for opt in ca.into_iter() {
-            let key = opt.ok_or("XT Align: entity 列含 null")?.to_string();
-            let idx = *m.entry(key.clone()).or_insert_with(|| {
-                let i = idx_to_name.len();
-                idx_to_name.push(key);
-                i
-            });
-            out.push(idx);
-        }
-        (out, idx_to_name)
-    };
-
-    // 映射 time 到 usize（sorted unique index）
-    let time_id: Vec<usize> = {
-        let dtype = time_series.dtype();
-        match dtype {
-            DataType::Int64 => {
-                let ca = time_series.i64().map_err(|e| e.to_string())?;
-                let values: Vec<i64> = ca
-                    .into_iter()
-                    .map(|o| o.ok_or("XT Align: time 列含 null"))
-                    .collect::<Result<_, _>>()
-                    .map_err(|e| e.to_string())?;
-                let mut unique: Vec<i64> = values
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                unique.sort_unstable();
-                let m: HashMap<i64, usize> =
-                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-                values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
-            }
-            DataType::Date => {
-                let ca = time_series.date().map_err(|e| e.to_string())?;
-                let physical = ca.physical();
-                let values: Vec<i32> = physical
-                    .into_iter()
-                    .map(|o| o.ok_or("XT Align: time 列含 null"))
-                    .collect::<Result<_, _>>()
-                    .map_err(|e| e.to_string())?;
-                let mut unique: Vec<i32> = values
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                unique.sort_unstable();
-                let m: HashMap<i32, usize> =
-                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-                values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
-            }
-            _ => {
-                return Err(format!(
-                    "XT Align: time 列需为 Int64 或 Date，当前为 {:?}",
-                    dtype
-                ));
-            }
-        }
-    };
-
-    let interval = interval.unwrap_or(1).max(1) as usize;
-
-    // 收集所有数值列（排除 entity 和 time）
-    let value_cols: Vec<String> = df
-        .get_column_names()
-        .iter()
-        .filter(|&c| *c != entity_col && *c != time_col)
-        .map(|s| s.to_string())
-        .collect();
-
-    let mut columns: Vec<Vec<f64>> = Vec::with_capacity(value_cols.len());
-    for col_name in &value_cols {
-        let col = df.column(col_name).map_err(|e| e.to_string())?;
-        let f64_col = col.cast(&DataType::Float64).map_err(|e| e.to_string())?;
-        let vec: Vec<f64> = f64_col
-            .f64()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|o| o.unwrap_or(f64::NAN))
-            .collect();
-        columns.push(vec);
-    }
-
-    let aligned = align_panel(&entity_id, &time_id, &columns, Some(interval))?;
-
-    // 构建输出：entity 用原名，time 用原始值
-    let time_dtype = time_series.dtype().clone();
-    let unique_times: Vec<i64> = match time_dtype {
-        DataType::Int64 => {
-            let ca = time_series.i64().map_err(|e| e.to_string())?;
-            let mut unique: Vec<i64> = ca
-                .into_no_null_iter()
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            unique.sort_unstable();
-            unique
-        }
-        DataType::Date => {
-            let ca = time_series.date().map_err(|e| e.to_string())?;
-            let physical = ca.physical();
-            let mut unique: Vec<i32> = physical
-                .into_no_null_iter()
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            unique.sort_unstable();
-            unique.iter().map(|&v| v as i64).collect()
-        }
-        _ => return Err("XT Align: time 类型异常".to_string()),
-    };
-    let time_orig: Vec<i64> = aligned
-        .time_id
-        .iter()
-        .map(|&i| unique_times.get(i).copied().unwrap_or(0))
-        .collect();
-
-    let entity_out: Vec<String> = aligned
-        .entity_id
-        .iter()
-        .map(|&i| entity_names.get(i).cloned().unwrap_or_default())
-        .collect();
-
-    let mut out_cols: Vec<Column> = vec![
-        Column::from(Series::from_iter(entity_out).with_name(entity_col.into())),
-        Column::from(match time_dtype {
-            DataType::Int64 => {
-                Series::from_iter(time_orig.iter().map(|&v| Some(v))).with_name(time_col.into())
-            }
-            DataType::Date => Int32Chunked::from_vec(
-                time_col.into(),
-                time_orig.iter().map(|&v| v as i32).collect::<Vec<_>>(),
-            )
-            .into_series()
-            .cast(&DataType::Date)
-            .map_err(|e| e.to_string())?,
-            _ => return Err("XT Align: time 类型异常".to_string()),
-        }),
-    ];
-
-    for (c, col_name) in value_cols.iter().enumerate() {
-        let vals = &aligned.columns[c];
-        let s = Series::from_iter(
-            vals.iter()
-                .map(|&v| if v.is_nan() { None } else { Some(v) }),
-        )
-        .with_name(col_name.as_str().into());
-        out_cols.push(Column::from(s));
-    }
-
-    DataFrame::new(aligned.entity_id.len(), out_cols).map_err(|e| format!("XT Align: {}", e))
+struct PanelInput {
+    panel: AlignedPanel,
+    entity_rows: Vec<u64>,
+    unique_times: Vec<i64>,
+    value_indices: Vec<usize>,
+    entity_index: usize,
+    time_index: usize,
 }
 
-/// 在 align 后的 DataFrame 上按 entity 做一阶差分，输出新 DataFrame
-///
-/// 与 Stata D. 算子一致。仅保留有有效差分的行。
-pub fn diff_dataframe(
-    aligned_df: &DataFrame,
-    entity_col: &str,
-    time_col: &str,
-) -> Result<DataFrame, String> {
-    let entity_series = aligned_df
-        .column(entity_col)
-        .map_err(|e| format!("XT Diff: {}", e))?
-        .clone();
-    let time_series = aligned_df
-        .column(time_col)
-        .map_err(|e| format!("XT Diff: {}", e))?
-        .clone();
-    let n = aligned_df.height();
-
-    let entity_id: Vec<usize> = {
-        let s = entity_series
-            .cast(&DataType::String)
-            .map_err(|e| e.to_string())?;
-        let ca = s.str().map_err(|e| e.to_string())?;
-        let mut m: HashMap<String, usize> = HashMap::new();
-        let mut idx = 0usize;
-        let mut out = Vec::with_capacity(n);
-        for opt in ca.into_iter() {
-            let key = opt.ok_or("XT Diff: entity 含 null")?.to_string();
-            let i = *m.entry(key).or_insert_with(|| {
-                let i = idx;
-                idx += 1;
-                i
-            });
-            out.push(i);
-        }
-        out
-    };
-
-    let time_id: Vec<usize> = {
-        let dtype = time_series.dtype();
-        match dtype {
-            DataType::Int64 => {
-                let ca = time_series.i64().map_err(|e| e.to_string())?;
-                let values: Vec<i64> = ca.into_iter().map(|o| o.unwrap_or(0)).collect();
-                let mut unique: Vec<i64> = values
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                unique.sort_unstable();
-                let m: HashMap<i64, usize> =
-                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-                values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
-            }
-            DataType::Date => {
-                let ca = time_series.date().map_err(|e| e.to_string())?;
-                let physical = ca.physical();
-                let values: Vec<i32> = physical.into_iter().map(|o| o.unwrap_or(0)).collect();
-                let mut unique: Vec<i32> = values
-                    .iter()
-                    .copied()
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                unique.sort_unstable();
-                let m: HashMap<i32, usize> =
-                    unique.iter().enumerate().map(|(i, &k)| (k, i)).collect();
-                values.iter().map(|k| *m.get(k).unwrap_or(&0)).collect()
-            }
-            _ => return Err(format!("XT Diff: time 需为 Int64 或 Date")),
-        }
-    };
-
-    let value_cols: Vec<String> = aligned_df
-        .get_column_names()
-        .iter()
-        .filter(|&c| *c != entity_col && *c != time_col)
-        .map(|s| s.to_string())
-        .collect();
-
-    let mut columns: Vec<Vec<f64>> = Vec::with_capacity(value_cols.len());
-    for col_name in &value_cols {
-        let col = aligned_df.column(col_name).map_err(|e| e.to_string())?;
-        let f64_col = col.cast(&DataType::Float64).map_err(|e| e.to_string())?;
-        let vec: Vec<f64> = f64_col
-            .f64()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|o| o.unwrap_or(f64::NAN))
-            .collect();
-        columns.push(vec);
+fn prepare_panel(
+    batch: &RecordBatch,
+    entity: &str,
+    time: &str,
+) -> Result<PanelInput, PreparationError> {
+    let n = batch.num_rows();
+    if n == 0 {
+        return Err(PreparationError::Empty);
     }
-
-    let aligned = AlignedPanel {
-        entity_id: entity_id.clone(),
-        time_id,
-        columns,
-    };
-
-    let (diff_entity, diff_time_id, diff_cols) = panel_diff(&aligned)?;
-
-    let n_fd = diff_entity.len();
-    let entity_names: Vec<String> = {
-        let s = entity_series
-            .cast(&DataType::String)
-            .map_err(|e| e.to_string())?;
-        let ca = s.str().map_err(|e| e.to_string())?;
-        let mut seen: HashMap<String, ()> = HashMap::new();
-        let mut idx_to_name: Vec<String> = Vec::new();
-        for opt in ca.into_iter() {
-            let s = opt.ok_or("")?.to_string();
-            if !seen.contains_key(&s) {
-                seen.insert(s.clone(), ());
-                idx_to_name.push(s);
-            }
-        }
-        idx_to_name
-    };
-
-    let entity_out: Vec<String> = diff_entity
+    let width = batch
+        .num_columns()
+        .checked_mul(16)
+        .and_then(|width| width.checked_add(96))
+        .ok_or(PreparationError::MemoryLimit)?;
+    check_size(n, width)?;
+    if batch.get_array_memory_size() > MAX_PREPARED_BYTES {
+        return Err(PreparationError::MemoryLimit);
+    }
+    let entity_index = batch
+        .schema()
+        .index_of(entity)
+        .map_err(|_| PreparationError::Column)?;
+    let time_index = batch
+        .schema()
+        .index_of(time)
+        .map_err(|_| PreparationError::Column)?;
+    if entity_index == time_index {
+        return Err(PreparationError::Column);
+    }
+    let names = arrow::compute::cast(batch.column(entity_index).as_ref(), &DataType::Utf8)?;
+    let names = names
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or(PreparationError::ValueType)?;
+    if names.null_count() != 0 {
+        return Err(PreparationError::ValueType);
+    }
+    let mut ids = HashMap::new();
+    let mut entity_rows = Vec::new();
+    let entity_id = names
         .iter()
-        .map(|&i| entity_names.get(i).cloned().unwrap_or_default())
+        .enumerate()
+        .map(|(row, value)| {
+            *ids.entry(value).or_insert_with(|| {
+                let id = entity_rows.len();
+                entity_rows.push(row as u64);
+                id
+            })
+        })
         .collect();
-
-    let time_dtype = time_series.dtype().clone();
-    let time_col_series = aligned_df
-        .column(time_col)
-        .map_err(|e| e.to_string())?
-        .clone();
-    let unique_times: Vec<i64> = match time_dtype {
-        DataType::Int64 => {
-            let ca = time_col_series.i64().map_err(|e| e.to_string())?;
-            let mut unique: Vec<i64> = ca
-                .into_iter()
-                .filter_map(|o| o)
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            unique.sort_unstable();
-            unique
-        }
-        DataType::Date => {
-            let ca = time_col_series.date().map_err(|e| e.to_string())?;
-            let physical = ca.physical();
-            let mut unique: Vec<i32> = physical
-                .into_iter()
-                .filter_map(|o| o)
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-            unique.sort_unstable();
-            unique.iter().map(|&v| v as i64).collect()
-        }
-        _ => return Err("XT Diff: 暂仅支持 Int64 或 Date 时间".to_string()),
-    };
-
-    let time_out_series = match time_dtype {
-        DataType::Int64 => {
-            let time_out: Vec<i64> = diff_time_id
+    let times = time_numbers(batch.column(time_index).as_ref())?;
+    let mut unique_times = times.clone();
+    unique_times.sort_unstable();
+    unique_times.dedup();
+    let time_id = times
+        .iter()
+        .map(|time| {
+            unique_times
+                .binary_search(time)
+                .map_err(|_| PreparationError::TimeType)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let value_indices = (0..batch.num_columns())
+        .filter(|index| *index != entity_index && *index != time_index)
+        .collect::<Vec<_>>();
+    let columns = value_indices
+        .iter()
+        .map(|index| {
+            if !batch.column(*index).data_type().is_numeric() {
+                return Err(PreparationError::ValueType);
+            }
+            let values = arrow::compute::cast(batch.column(*index).as_ref(), &DataType::Float64)?;
+            let values = values
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or(PreparationError::ValueType)?;
+            Ok(values
                 .iter()
-                .map(|&idx| unique_times.get(idx).copied().unwrap_or(0))
-                .collect();
-            Series::from_iter(time_out.iter().map(|&v| Some(v))).with_name(time_col.into())
-        }
-        DataType::Date => {
-            let time_out: Vec<i32> = diff_time_id
-                .iter()
-                .map(|&idx| unique_times.get(idx).copied().unwrap_or(0) as i32)
-                .collect();
-            Int32Chunked::from_vec(time_col.into(), time_out)
-                .into_series()
-                .cast(&DataType::Date)
-                .map_err(|e| e.to_string())?
-        }
-        _ => return Err("XT Diff: 暂仅支持 Int64 或 Date 时间".to_string()),
-    };
+                .map(|value| value.unwrap_or(f64::NAN))
+                .collect())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PanelInput {
+        panel: AlignedPanel {
+            entity_id,
+            time_id,
+            columns,
+        },
+        entity_rows,
+        unique_times,
+        value_indices,
+        entity_index,
+        time_index,
+    })
+}
 
-    let mut out_cols: Vec<Column> = vec![
-        Column::from(Series::from_iter(entity_out).with_name(entity_col.into())),
-        Column::from(time_out_series),
+fn panel_batch(
+    batch: &RecordBatch,
+    input: &PanelInput,
+    panel: &AlignedPanel,
+) -> Result<RecordBatch, PreparationError> {
+    let entities =
+        UInt64Array::from_iter_values(panel.entity_id.iter().map(|id| input.entity_rows[*id]));
+    let entity = arrow::compute::take(batch.column(input.entity_index).as_ref(), &entities, None)?;
+    let times = panel
+        .time_id
+        .iter()
+        .map(|time| {
+            input
+                .unique_times
+                .get(*time)
+                .copied()
+                .ok_or(PreparationError::TimeType)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let time = time_array(times, batch.column(input.time_index).data_type())?;
+    let mut arrays = vec![entity, time];
+    let mut fields = vec![
+        batch.schema().field(input.entity_index).clone(),
+        batch.schema().field(input.time_index).clone(),
     ];
-    for (c, col_name) in value_cols.iter().enumerate() {
-        let vals = &diff_cols[c];
-        let s = Series::from_iter(vals.iter().cloned()).with_name(col_name.as_str().into());
-        out_cols.push(Column::from(s));
+    for (index, column) in input.value_indices.iter().zip(&panel.columns) {
+        arrays.push(Arc::new(Float64Array::from_iter(
+            column
+                .iter()
+                .map(|value| (!value.is_nan()).then_some(*value)),
+        )));
+        fields.push(
+            batch
+                .schema()
+                .field(*index)
+                .clone()
+                .with_data_type(DataType::Float64)
+                .with_nullable(true),
+        );
     }
+    Ok(RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(
+            fields,
+            batch.schema().metadata().clone(),
+        )),
+        arrays,
+    )?)
+}
 
-    DataFrame::new(n_fd, out_cols).map_err(|e| format!("XT Diff: {}", e))
+/// Align within each entity on the existing shared ordinal time grid.
+pub fn align_batch(
+    batch: &RecordBatch,
+    entity: &str,
+    time: &str,
+    interval: Option<i64>,
+) -> Result<RecordBatch, PreparationError> {
+    let interval =
+        usize::try_from(interval.unwrap_or(1)).map_err(|_| PreparationError::Interval)?;
+    if interval == 0 {
+        return Err(PreparationError::Interval);
+    }
+    let input = prepare_panel(batch, entity, time)?;
+    let mut bounds: HashMap<usize, (usize, usize)> = HashMap::new();
+    for (&entity, &time) in input.panel.entity_id.iter().zip(&input.panel.time_id) {
+        bounds
+            .entry(entity)
+            .and_modify(|(lo, hi)| {
+                *lo = (*lo).min(time);
+                *hi = (*hi).max(time);
+            })
+            .or_insert((time, time));
+    }
+    let rows = bounds.values().try_fold(0usize, |rows, (lo, hi)| {
+        rows.checked_add((hi - lo) / interval + 1)
+            .ok_or(PreparationError::MemoryLimit)
+    })?;
+    check_size(
+        rows,
+        batch
+            .num_columns()
+            .checked_mul(24)
+            .and_then(|width| width.checked_add(32))
+            .ok_or(PreparationError::MemoryLimit)?,
+    )?;
+    let aligned = align_panel(
+        &input.panel.entity_id,
+        &input.panel.time_id,
+        &input.panel.columns,
+        Some(interval),
+    )
+    .map_err(|_| PreparationError::Panel)?;
+    panel_batch(batch, &input, &aligned)
+}
+
+/// The existing panel difference routine owns the treatment of gaps and valid observations.
+pub fn diff_batch(
+    batch: &RecordBatch,
+    entity: &str,
+    time: &str,
+) -> Result<RecordBatch, PreparationError> {
+    let input = prepare_panel(batch, entity, time)?;
+    let (entity_id, time_id, columns) =
+        panel_diff(&input.panel).map_err(|_| PreparationError::Panel)?;
+    panel_batch(
+        batch,
+        &input,
+        &AlignedPanel {
+            entity_id,
+            time_id,
+            columns,
+        },
+    )
 }

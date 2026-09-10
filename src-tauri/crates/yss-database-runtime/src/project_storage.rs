@@ -1,49 +1,35 @@
-use std::path::Path;
-
 use crate::{DatabaseInstance, DatabaseState};
-use yss_database_contract::{DatabaseDecl, DatabaseEngine};
+use std::sync::{Arc, OnceLock};
+use yss_database_contract::DatabaseDecl;
 use yss_database_edit::EditHistory;
-use yss_duckdb::{drop_data_table, read_table_meta};
+use yss_datafusion::DataFusionRuntime;
+use yss_dataset_store::{DatasetStore, DatasetStoreError};
+use yss_relational_contract::RelationError;
 
-pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) -> DatabaseInstance {
-    let DatabaseEngine::DuckDb { path, table, .. } = &decl.engine else {
-        unreachable!("bind_duckdb_instance expects DuckDb engine");
-    };
+pub fn dataset_query_engine() -> Result<Arc<DataFusionRuntime>, DatasetStoreError> {
+    static ENGINE: OnceLock<Result<Arc<DataFusionRuntime>, RelationError>> = OnceLock::new();
+    ENGINE
+        .get_or_init(|| DataFusionRuntime::new(512 * 1024 * 1024, 8192))
+        .clone()
+        .map_err(Into::into)
+}
 
-    let state = match project_root {
-        Some(root) => {
-            let abs = root.join(path);
-            match read_table_meta(&abs, table) {
-                Ok(meta) => DatabaseState::DuckDb {
-                    duckdb_path: abs.to_string_lossy().to_string(),
-                    table: table.clone(),
-                    row_count: meta.row_count,
-                    columns: meta.columns,
-                    history: EditHistory::new(),
-                },
-                Err(error) => DatabaseState::Failed { error },
-            }
-        }
-        None => DatabaseState::Failed {
-            error: "Project path not set; cannot bind DuckDB database".into(),
+pub fn bind_dataset_instance(decl: &DatabaseDecl, store: &Arc<DatasetStore>) -> DatabaseInstance {
+    let state = match store
+        .snapshot(&decl.id)
+        .and_then(|snapshot| Ok((snapshot, dataset_query_engine()?)))
+    {
+        Ok((snapshot, engine)) => DatabaseState::Dataset {
+            snapshot,
+            engine,
+            history: EditHistory::new(),
+        },
+        Err(error) => DatabaseState::Failed {
+            error: error.to_string(),
         },
     };
-
     DatabaseInstance {
         decl: decl.clone(),
         state,
     }
-}
-
-pub fn remove_duckdb_table_if_needed(
-    engine: &DatabaseEngine,
-    project_root: Option<&Path>,
-) -> Result<(), String> {
-    let Some((relative_path, table)) = engine.duckdb_table() else {
-        return Ok(());
-    };
-    let Some(root) = project_root else {
-        return Ok(());
-    };
-    drop_data_table(&root.join(relative_path), table)
 }

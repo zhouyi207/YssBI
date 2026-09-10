@@ -9,7 +9,7 @@ use crate::runtime::{
     DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
     DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
-use yss_data_contract::DataType;
+use arrow::datatypes::DataType;
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
@@ -40,6 +40,18 @@ pub struct DatabaseDataSnapshot {
     runtime_revision: DatabaseRuntimeRevision,
     columns: Box<[DatabaseColumnFact]>,
     rows: TabularSnapshot,
+}
+
+pub struct DatabaseArrowSnapshot {
+    pub schema: arrow::datatypes::SchemaRef,
+    pub batches: Vec<arrow::record_batch::RecordBatch>,
+    pub row_count: usize,
+    runtime_revision: DatabaseRuntimeRevision,
+}
+impl DatabaseArrowSnapshot {
+    pub fn runtime_revision(&self) -> DatabaseRuntimeRevision {
+        self.runtime_revision
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -143,6 +155,7 @@ pub struct DatabaseDeclarationTransition {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DatabaseMutationOperation {
+    DeleteDatabase,
     EditCell {
         row: usize,
         column: Box<str>,
@@ -236,6 +249,24 @@ pub struct CommittedDatabaseRuntimeChange {
     expected_observation: DatabaseDeclarationObservation,
     next_observation: DatabaseDeclarationObservation,
     registration: DatabaseCommittedRegistration,
+}
+
+impl PreparedDatabaseRuntimeChange {
+    pub fn track_physical(
+        &mut self,
+        physical: &crate::runtime::PreparedDatabasePhysicalMutation,
+    ) -> Result<(), DatabaseError> {
+        let storage = physical.storage_recovery()?;
+        if storage.publication.dataset != self.database {
+            return Err(DatabaseError::invalid_request(
+                DatabaseOperation::PrepareMutation,
+                Some(self.database.clone()),
+            ));
+        }
+        self.registration.track_storage(storage);
+        self.schema_changed |= physical.schema_changed()?;
+        Ok(())
+    }
 }
 
 impl CommittedDatabaseRuntimeChange {
@@ -422,6 +453,7 @@ fn schema_effect(operation: &DatabaseMutationOperation) -> DatabaseMutationSchem
         | DatabaseMutationOperation::CastColumn { .. }
         | DatabaseMutationOperation::RenameColumn { .. } => DatabaseMutationSchemaEffect::Schema,
         DatabaseMutationOperation::EditCell { .. }
+        | DatabaseMutationOperation::DeleteDatabase
         | DatabaseMutationOperation::AddRow { .. }
         | DatabaseMutationOperation::DeleteRows { .. }
         | DatabaseMutationOperation::RenameDatabase { .. }
@@ -543,6 +575,81 @@ pub fn revalidate_catalog_snapshot(
     Ok(())
 }
 
+pub fn arrow_snapshot(
+    session: &DatabaseRuntimeSession,
+    request: DatabaseDataSnapshotRequest,
+) -> Result<DatabaseArrowSnapshot, DatabaseError> {
+    let (_lease, _) = session.capture_operation(DatabaseOperation::DataSnapshot)?;
+    let basis = session.capture_query_basis(&request.database)?;
+    let instance = session.physical_instance(&request.database)?;
+    let relation = instance
+        .query()
+        .and_then(|query| query.relation().map_err(Into::into))
+        .map_err(|error| {
+            DatabaseError::dataset(
+                DatabaseOperation::DataSnapshot,
+                Some(request.database.clone()),
+                error,
+            )
+        })?;
+    let selected = match request.columns {
+        DatabaseColumnSelection::All => relation
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.name().as_str().into())
+            .collect::<Vec<Box<str>>>(),
+        DatabaseColumnSelection::Selected(columns) => columns
+            .iter()
+            .map(|column| column.as_str().into())
+            .collect(),
+    };
+    if selected.is_empty() || selected.iter().collect::<BTreeSet<_>>().len() != selected.len() {
+        return Err(DatabaseError::invalid_request(
+            DatabaseOperation::DataSnapshot,
+            Some(request.database),
+        ));
+    }
+    let schema = relation
+        .project(&selected)
+        .map_err(|error| {
+            DatabaseError::dataset(
+                DatabaseOperation::DataSnapshot,
+                Some(request.database.clone()),
+                error.into(),
+            )
+        })?
+        .schema();
+    let names = selected.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+    let batches = instance
+        .read_arrow_columns(
+            &names,
+            request.offset,
+            request.limit,
+            &crate::database_instance::query_control(128 * 1024 * 1024),
+        )
+        .map_err(|error| {
+            DatabaseError::dataset(
+                DatabaseOperation::DataSnapshot,
+                Some(request.database.clone()),
+                error,
+            )
+        })?;
+    revalidate_query_basis(session, &basis)?;
+    let row_count = batches
+        .iter()
+        .try_fold(0usize, |count, batch| count.checked_add(batch.num_rows()))
+        .ok_or_else(|| {
+            DatabaseError::invalid_request(DatabaseOperation::DataSnapshot, Some(request.database))
+        })?;
+    Ok(DatabaseArrowSnapshot {
+        schema,
+        batches,
+        row_count,
+        runtime_revision: basis.runtime_revision,
+    })
+}
+
 pub fn data_snapshot(
     session: &DatabaseRuntimeSession,
     request: DatabaseDataSnapshotRequest,
@@ -558,6 +665,13 @@ pub fn data_snapshot(
                 Some(request.database.clone()),
             )
         })?;
+    let basis = DatabaseQueryBasis {
+        session: session.identity().clone(),
+        generation: session.generation(),
+        database: request.database.clone(),
+        runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision.runtime),
+        schema_revision: DatabaseSchemaRevision::from_existing(runtime_revision.schema),
+    };
     let requested = match &request.columns {
         DatabaseColumnSelection::All => None,
         DatabaseColumnSelection::Selected(columns) => Some(columns.as_ref()),
@@ -568,6 +682,7 @@ pub fn data_snapshot(
         request.offset,
         request.limit,
     )?;
+    revalidate_query_basis(session, &basis)?;
     Ok(DatabaseDataSnapshot {
         database: request.database,
         runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision.runtime),
@@ -786,6 +901,51 @@ pub fn revalidate_query_basis(
 }
 
 impl DatabaseRuntimeSession {
+    /// Resolve abandoned storage handoffs only after admission closes. SQLite operation
+    /// records prove whether the prepared data committed, including an uncertain I/O outcome.
+    pub fn resolve_storage_recoveries(&self) -> Result<usize, DatabaseError> {
+        let mut resolved = 0;
+        for record in self.runtime_recovery_requirements().into_iter().rev() {
+            let Some(storage) = &record.storage else {
+                continue;
+            };
+            let committed = storage
+                .store
+                .publication_committed(&storage.publication)
+                .map_err(|error| {
+                    DatabaseError::dataset(
+                        DatabaseOperation::Recovery,
+                        Some(record.database().clone()),
+                        error,
+                    )
+                })?;
+            let authority = if committed {
+                record.next_observation()
+            } else {
+                record.expected_observation()
+            };
+            let mut claim = self
+                .claim_runtime_recovery(record.recovery_id(), authority)
+                .map_err(|_| {
+                    DatabaseError::conflict(
+                        DatabaseOperation::Recovery,
+                        Some(record.database().clone()),
+                    )
+                })?;
+            if committed {
+                claim.confirm();
+            } else {
+                claim.compensate().map_err(|_| {
+                    DatabaseError::conflict(
+                        DatabaseOperation::Recovery,
+                        Some(record.database().clone()),
+                    )
+                })?;
+            }
+            resolved += 1;
+        }
+        Ok(resolved)
+    }
     pub fn capture_query_basis(
         &self,
         database: &DatabaseId,
@@ -899,7 +1059,7 @@ fn map_recovery_claim_error(
 mod tests {
     use super::*;
     use crate::runtime::DatabaseRuntimeRegistry;
-    use crate::test_support::DuckDbFixture;
+    use crate::test_support::{DatasetFixture, SALES_ID};
     use std::time::Instant;
     use yss_database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
@@ -909,7 +1069,7 @@ mod tests {
     fn declaration(id: &str) -> DatabaseDecl {
         DatabaseDecl {
             id: DatabaseId::from_existing(id.into()),
-            engine: DatabaseEngine::InMemory { name: id.into() },
+            engine: DatabaseEngine::Dataset {},
             schema_version: 1,
             required: false,
             name: id.into(),
@@ -921,7 +1081,7 @@ mod tests {
     }
 
     fn session_with(identity: &str) -> DatabaseRuntimeSession {
-        let declaration = declaration("sales");
+        let declaration = declaration(SALES_ID);
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             declaration.id.clone(),
             DatabaseDeclarationObservation::new(
@@ -941,8 +1101,8 @@ mod tests {
             .unwrap()
     }
 
-    fn session_with_table(identity: &str) -> (DuckDbFixture, DatabaseRuntimeSession) {
-        let fixture = DuckDbFixture::new("sales", polars::df!("value" => &[1_i64]).unwrap());
+    fn session_with_table(identity: &str) -> (DatasetFixture, DatabaseRuntimeSession) {
+        let fixture = DatasetFixture::single_i64(SALES_ID, "value", vec![1]);
         let declaration = fixture.instance.decl.clone();
         let observations = DatabaseDeclarationObservationSet::try_from_iter([(
             declaration.id.clone(),
@@ -981,7 +1141,7 @@ mod tests {
         );
 
         let request = DatabaseMutationRequest {
-            database: DatabaseId::from_existing("sales".into()),
+            database: DatabaseId::from_existing(SALES_ID.into()),
             expected_runtime_revision: DatabaseRuntimeRevision::INITIAL,
             declaration_transition: DatabaseDeclarationTransition {
                 expected: first_session
@@ -1017,7 +1177,7 @@ mod tests {
 
         let fresh = catalog_snapshot(&first_session).unwrap();
         let schema_request = DatabaseMutationRequest {
-            database: DatabaseId::from_existing("sales".into()),
+            database: DatabaseId::from_existing(SALES_ID.into()),
             expected_runtime_revision: DatabaseRuntimeRevision::from_existing(1),
             declaration_transition: DatabaseDeclarationTransition {
                 expected: first_session
@@ -1037,7 +1197,7 @@ mod tests {
             },
             operation: DatabaseMutationOperation::AddColumn {
                 name: "new_column".into(),
-                data_type: DataType::String,
+                data_type: DataType::Utf8,
             },
         };
         let prepared = prepare_database_runtime_change(&first_session, schema_request).unwrap();
@@ -1056,7 +1216,7 @@ mod tests {
         let empty = data_snapshot(
             &session,
             DatabaseDataSnapshotRequest {
-                database: DatabaseId::from_existing("sales".into()),
+                database: DatabaseId::from_existing(SALES_ID.into()),
                 columns: DatabaseColumnSelection::Selected(Box::new([])),
                 offset: 0,
                 limit: 1,
@@ -1076,7 +1236,7 @@ mod tests {
         let prepared = prepare_database_runtime_change(
             &session,
             DatabaseMutationRequest {
-                database: DatabaseId::from_existing("sales".into()),
+                database: DatabaseId::from_existing(SALES_ID.into()),
                 expected_runtime_revision: DatabaseRuntimeRevision::INITIAL,
                 declaration_transition: DatabaseDeclarationTransition {
                     expected: observation.clone(),
@@ -1159,7 +1319,7 @@ mod tests {
             prepare_database_runtime_change(
                 &session,
                 DatabaseMutationRequest {
-                    database: DatabaseId::from_existing("sales".into()),
+                    database: DatabaseId::from_existing(SALES_ID.into()),
                     expected_runtime_revision: DatabaseRuntimeRevision::INITIAL,
                     declaration_transition: DatabaseDeclarationTransition {
                         expected: expected.clone(),
@@ -1187,7 +1347,7 @@ mod tests {
             prepare_database_runtime_change(
                 &session,
                 DatabaseMutationRequest {
-                    database: DatabaseId::from_existing("sales".into()),
+                    database: DatabaseId::from_existing(SALES_ID.into()),
                     expected_runtime_revision: DatabaseRuntimeRevision::from_existing(1),
                     declaration_transition: DatabaseDeclarationTransition {
                         expected: newest_expected,

@@ -116,6 +116,11 @@ pub enum NodeTypingSpec {
         parameter: ParameterKey,
         output: PortKey,
     },
+    ColumnOutput {
+        input: PortKey,
+        column: ParameterKey,
+        output: PortKey,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

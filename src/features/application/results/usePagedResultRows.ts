@@ -23,14 +23,17 @@ export interface PagedResultRowsHookDependencies {
 export interface PagedResultRowsState {
   readonly offset: number;
   readonly limit: number;
-  readonly totalCount: number;
+  readonly totalCount: number | null;
+  readonly actualCount: number;
+  readonly hasMore: boolean;
+  readonly columns: readonly { readonly name: string; readonly type: string }[];
   readonly rows: readonly (readonly unknown[])[];
   readonly values: readonly unknown[];
   readonly loading: boolean;
   readonly error: DeepReadonly<ErrorReference> | null;
   readonly pageIndex: number;
   readonly pageSize: number;
-  readonly totalPages: number;
+  readonly totalPages: number | null;
   readonly goToPage: (pageIndex: number) => void;
   readonly goToPreviousPage: () => void;
   readonly goToNextPage: () => void;
@@ -44,7 +47,7 @@ function rowsFromPage(page: DeepReadonly<ResultPage> | null): readonly (readonly
 
 export function usePagedResultRows(
   resultId: string | null,
-  totalCount: number,
+  totalCount: number | null,
   pageSize = DEFAULT_PAGE_SIZE,
   dependencies: PagedResultRowsHookDependencies = {
     coordinator: resultQueryCoordinator,
@@ -66,9 +69,14 @@ export function usePagedResultRows(
     () => (resultId === null ? null : dependencies.read.getPage(request)),
     () => (resultId === null ? null : dependencies.read.getPage(request)),
   );
-  const effectiveTotalCount = page?.totalCount ?? Math.max(0, totalCount);
-  const totalPages = Math.max(1, Math.ceil(effectiveTotalCount / safePageSize));
-  const boundedPageIndex = Math.min(pageIndex, totalPages - 1);
+  const effectiveTotalCount =
+    page?.totalCount ?? (totalCount === null ? null : Math.max(0, totalCount));
+  const totalPages =
+    effectiveTotalCount === null
+      ? null
+      : Math.max(1, Math.ceil(effectiveTotalCount / safePageSize));
+  const boundedPageIndex = totalPages === null ? pageIndex : Math.min(pageIndex, totalPages - 1);
+  const hasMore = page?.hasMore ?? (totalPages !== null && boundedPageIndex < totalPages - 1);
   const error =
     resultId === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
 
@@ -106,19 +114,20 @@ export function usePagedResultRows(
   );
 
   useEffect(() => {
-    if (resultId === null || effectiveTotalCount <= 0) {
+    if (resultId === null || totalCount === 0) {
       setLoading(false);
       return;
     }
     void loadPage(boundedPageIndex);
-  }, [boundedPageIndex, effectiveTotalCount, loadPage, resultId]);
+  }, [boundedPageIndex, totalCount, loadPage, resultId]);
 
   const goToPage = useCallback(
     (nextPageIndex: number): void => {
-      const clamped = Math.max(0, Math.min(nextPageIndex, totalPages - 1));
+      const upper = totalPages === null ? boundedPageIndex + Number(hasMore) : totalPages - 1;
+      const clamped = Math.max(0, Math.min(nextPageIndex, upper));
       setPageIndex(clamped);
     },
-    [totalPages],
+    [totalPages, boundedPageIndex, hasMore],
   );
 
   const reload = useCallback(
@@ -130,6 +139,9 @@ export function usePagedResultRows(
     offset: page?.offset ?? requestedOffset,
     limit: page?.requestedLimit ?? safePageSize,
     totalCount: effectiveTotalCount,
+    actualCount: page?.actualCount ?? 0,
+    hasMore,
+    columns: page?.metadata && "columns" in page.metadata ? page.metadata.columns : [],
     rows: rowsFromPage(page),
     values: page?.values ?? EMPTY_VALUES,
     loading,

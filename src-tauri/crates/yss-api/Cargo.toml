@@ -48,9 +48,11 @@ yss-window-state = { path = "../yss-window-state" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+yss-relational-contract = { path = "../yss-relational-contract" }
 tracing-subscriber.workspace = true
 yss-application = { path = "../yss-application", features = ["test-support"] }
-yss-duckdb = { path = "../yss-duckdb" }
+arrow.workspace = true
+yss-tabular-arrow = { path = "../yss-tabular-arrow" }
 yss-execution = { path = "../yss-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }

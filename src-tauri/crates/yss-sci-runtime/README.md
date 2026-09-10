@@ -20,7 +20,7 @@ matrix decomposition.
 | `hypothesis`         | Validated t/Wald-test entry points over shared contract results |
 | `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points           |
 | `panel`              | Panel inference workflows                                       |
-| `data`               | Polars-based panel/time alignment and tabular transformations   |
+| `data`               | Arrow panel/time alignment and tabular transformations         |
 | `density`            | Density computation entry point                                 |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Each
@@ -38,6 +38,13 @@ values and residuals. `regression::report::ols_report` returns the typed contrac
 summary consumed by Execution. Conversion into runtime values happens at that
 output boundary; the scientific port does not return an opaque JSON report.
 Existing report field names and statistical calculations are preserved.
+
+Tabular preparation accepts Arrow arrays and `RecordBatch` values. Time alignment preserves
+Int64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and
+the bounded output size before allocating a complete grid. Lag, difference, percentage change,
+and rolling means retain their numeric/null policies. Panel batch adapters reuse the existing
+`align_panel` and `panel_diff` routines; they preserve entity/date types at the Arrow boundary.
+These routines prepare already admitted inputs and do not own relational plans or project data.
 
 The crate does not own project/database state, graph scheduling, result storage,
 Tauri commands, frontend state, Julia processes or Bayesian worker lifecycle.

@@ -1,166 +1,82 @@
-# yss-database-runtime
+# Database runtime
 
-`src-tauri/crates/yss-database-contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
-`DatabaseEngineSql` contracts. `src-tauri/crates/yss-database-edit/` owns the shared edit operation、
-history 与 state projection；`yss-tabular-polars` owns materialization、value 与 dtype conversion；`yss-duckdb` owns
-transactional SQL edit/reverse 与 bounded column snapshot；`yss-sql-source` owns external
-SQLite/PostgreSQL/MySQL discovery 与 strict typed materialization；`yss-database-schema` owns runtime
-schema facts、revision projection 以及 DuckDB/Polars physical schema normalization。本 crate owns
-`DatabaseInstance` state routing、session/runtime authority 与 query/edit orchestration；root
-Application 只组合这些 typed APIs。该名称表达唯一职责；项目不创建会混合多个领域的 catch-all
-`yss-backend` crate。
-Project publication authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
-`application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
+This crate owns session-scoped dataset handles, read admission, runtime revisions, edit history,
+and the storage/publication handoff. `yss-dataset-store` owns committed SQLite catalog state and
+immutable Parquet generations; `yss-datafusion` owns native relational execution. Project owns
+its declaration/index publication, and Application coordinates the existing owners.
 
-`yss-sci` 只承载数值与统计/计量算法，不包含 database edit history、DuckDB state 或 export workflow。
+## Storage and activation
 
-## 1. Storage 与 typed import
+Project format 5 stores `database/catalog.sqlite` and
+`database/datasets/<dataset-id>/<generation-id>/part-000000.parquet`. Activation validates the
+manifest before opening the catalog and rebuilds declarations only from committed entries.
+Format 4 is rejected without rewriting its files. A declaration uses `Dataset {}` storage;
+CSV, Parquet, Excel, and external SQL remain separate `DatabaseImportSource` variants.
 
-项目 tabular 数据统一物化到 `database/project.duckdb`。每个用户数据集对应一个 DuckDB table：
+A runtime instance contains `Dataset { snapshot, engine, history }` or `Failed`. Snapshots keep
+exact Arrow types, column identities, category metadata, stable RowId and independent
+DisplayOrder. All host queries share a DataFusion RuntimeEnv. There is no mutable resident
+DataFrame or host Polars conversion path in this runtime.
 
-- `database/project.duckdb` 保存持久化 table contents、physical schema 与 display metadata；
-- `ProjectData.databases` 保存活动 session 的 authoritative declaration index；
-- `DatabaseRuntimeSession` 保存 session-scoped `DatabaseInstance`、metadata snapshot 与 edit history；
-- project activation 从 DuckDB 用户表重建 declaration/runtime bindings。
+## Queries and display
 
-IPC import interface 是 source-only typed enum `DatabaseImportSourceDTO`：
+Column reads apply projection and bounds before materialization. DataView pages include stable
+row IDs; relation reads hide internal identity/order fields. Display DTOs convert unsafe
+JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
+an independent exact display label; neither reconstructs the stored Arrow schema.
 
-- `Csv { path, delimiter, hasHeader, inferSchemaLength }`
-- `Parquet { path, columns }`
-- `Excel { path, sheet }`
-- `Sql { engine: Sqlite | Postgres | Mysql, connectionString, table }`
+Profile queries aggregate the fixed effective snapshot in DataFusion. Numeric summaries ignore
+non-finite values while reporting nulls separately; category ties sort deterministically and
+empty tables return empty summaries. Plot preparation reads Arrow directly and keeps the existing
+day/microsecond coordinate convention. Plugin snapshots use exact Arrow IPC batches.
 
-Frontend 不能通过 import interface 注入 project-internal `DuckDb` 或 runtime-only `InMemory` engine。Transport 将 `DatabaseImportSourceDTO` 一次转换为领域 `DatabaseImportSource`，Application 只接收外部来源并执行 ingest、authority commit 与 event publication。持久化声明继续由 `DatabaseEngine` 表达内部存储身份。
+A relation captures the actual dataset snapshot and the Project grant revision. Graph source,
+projection, filter, and series kernels retain that handle. Native optimizer rewrites can drop
+field metadata, so the adapter retains the source Arrow schema, validates native names/types,
+and restores metadata at the batch boundary. GraphSemanticSnapshot remains the sole semantic
+Graph authority.
 
-## 2. DuckDB/Polars seam
+## Editing and publication
 
-主要数据交换路径：
+The existing generic EditHistory owns before/after snapshot references. Cell edits, inserts,
+deletes, column operations and undo/redo prepare new immutable views. Row IDs are never reused;
+order keys determine display position. Edit targets parse directly into Arrow types, independently
+of Graph's coarse vocabulary. Casts preserve the original generation for exact undo.
 
-- **写入**：Polars `DataFrame` → Arrow RecordBatch → DuckDB Appender；ingest 每批 50,000 rows。
-- **读取**：DuckDB `query_arrow` → Arrow → Polars `DataFrame`。
-- **分页**：DuckDB `LIMIT/OFFSET` + built-in `rowid`，不整表物化。
-- **按列运行资源**：`load_columns` / `load_column_series`，只读取需求列。
-- **统计概览**：DuckDB SQL aggregate，避免 DataFrame full load。
+The handoff prepares Project authority and storage work, registers the runtime transition,
+revalidates the captured session, commits the catalog using the expected head, installs the
+snapshot/history, and publishes Project facts. A tracked storage handoff blocks reads while
+its snapshot and runtime revision are being reconciled. A schema-changing undo also advances
+the schema revision.
 
-`DatabaseInstance` 的主要 state：
+Before catalog commit, dropping preparation removes only its uncommitted files. After commit,
+Project publication failure retains the committed data and durable handoff. Runtime recovery
+consults the exact SQLite operation record to distinguish committed data from an abandoned
+preparation; it does not undo a durable edit. Project activation publishes the rebuilt index
+and acknowledges recovered handoffs.
 
-```text
-DuckDb { path, table, row_count, columns, history }
-Failed { error }
-```
+Save checkpoints the current snapshot and clears history without rewriting the table. A sparse
+delta that exceeds its budget is compacted into a new generation as part of the same edit.
+Dataset deletion uses the same handoff and publishes a tombstone. Existing relation/result
+snapshots retain their original contents. Garbage collection protects active heads, queries,
+history and pending handoffs, then uses a durable retry queue for physical file removal.
+SQLite connections are released between catalog operations so idle runtime handles do not
+prevent a drained project from being moved or deleted on Windows.
 
-`DatabaseInstance` 使用 DuckDB 表和失败状态。DataView 编辑始终通过 SQL 事务执行，查询按页或按列物化 Polars 数据供计算使用；常驻运行时不维护可编辑的整表 DataFrame。
+## Import and export
 
-本 crate 负责 DuckDB/Polars storage metadata routing 与 canonical database schema facts 的会话组合。当前 `ColumnInfoDTO` wire contract 保持不变，其 conversion 位于 `schema/database.rs`；Application DTO enrichment 只消费该 conversion，Project 不通过 Application 获取 schema。
+SQLx readers decode supported source types directly into bounded Arrow builders. A bounded
+channel supplies backpressure, cancellation/deadline checks cover the worker, and an explicit
+end marker prevents a worker failure from looking like a successful partial import. Unsupported
+SQL types fail explicitly. CSV/Parquet use the shared Arrow readers; Excel decoding retains its
+existing calamine owner.
 
-## 3. DataView 编辑与 undo
+Exports stream a fixed relation into CSV or Parquet. Application retains its sibling temporary
+file, currentness check, atomic destination replacement, and failure cleanup workflow. Project
+Save As captures a standalone SQLite image and streams large files through the existing filesystem
+transaction staging area. Source roots require leases; copied files must have absent destinations,
+and source metadata is checked during staging. Project documents retain their typed validation.
 
-DuckDB-backed DataView edit 使用 SQL 增量 mutation：
-
-- row identity 使用 DuckDB `rowid` pseudo-column；
-- cell、row、column、rename、cast 直接执行 SQL；
-- undo/redo 使用同一 `EditOperation` 反向/正向执行；
-- `save_database_changes` 对 DuckDB state 刷新 metadata 并清空 history，不重建整表。
-
-### 3.1 Reversible delete-column 上限
-
-Delete-column 在真正 drop 前捕获 `DuckDbColumnSnapshot`。这是该 operation 的 undo admission limit，不是 `EditHistory` stack length：
-
-| Limit                              |       Value |
-| ---------------------------------- | ----------: |
-| `MAX_DELETE_COLUMN_SNAPSHOT_ROWS`  | 50,000 rows |
-| `MAX_DELETE_COLUMN_SNAPSHOT_BYTES` |      16 MiB |
-
-Snapshot 保存：
-
-- 原 DuckDB storage dtype 对应的 exact editable dtype；
-- row IDs；
-- 其余列形成的 row fingerprints；
-- 被删列 values。
-
-如果 dtype 不能精确恢复、snapshot 超过 row/byte limit，或 snapshot 不完整，drop column 在 mutation 前失败。Undo restore 前再次校验 row count、row IDs 与 fingerprints；只有 table identity 仍与 snapshot 一致才在 transaction 中恢复原 dtype 与 values。
-
-Cast operation 也在 `EditOperation::CastColumn` 中保存 `old_dtype`。In-memory reverse path 使用 `old_dtype + old_data` 重建原列；DuckDB reverse path 将 column cast 回保存的 dtype。
-
-共享 `EditOperation`、`EditHistory`、`EditState` 只在 `yss-database-edit` 定义；它不依赖具体 dataframe/SQL engine。`EditOperation` 仅为 runtime history model，实际跨 IPC 的 `EditState` 保持 strict camelCase。`yss-duckdb::edit` 在 transaction 中构造、apply/reverse 同一 operation。多行删除先保持调用方 `(index, rowid)` 配对再排序，任一 SQL 失败都会回滚整批；add-row reverse 的已找到 rowid 不再提前求值 index fallback。
-
-## 4. Identifier 与 checked conversion
-
-DuckDB SQL 将 identifiers 与 literals 分开处理：
-
-- table/column identifier 使用 `quote_duckdb_identifier`，双写内嵌 `"`；
-- path/value string 使用 `quote_duckdb_string_literal`，双写内嵌 `'`；
-- editable dtype 通过固定 allowlist 映射 SQL type，不拼接任意 type text。
-
-JSON → Polars conversion 严格保留 target dtype：
-
-- narrow signed/unsigned integer 使用 `TryFrom`；
-- Float32 先检查 representable range；
-- 不兼容 value 返回 error，不静默截断或变更 column dtype。
-
-Row count 与 snapshot size 等跨整数类型/容量计算使用 checked conversion 或 checked addition；overflow 会拒绝 operation。
-
-## 5. Categorical / ENUM
-
-DataView 将列 cast 为 Categorical 后保存时，DuckDB 使用 `_yssbi_enum_{table}_{column}` ENUM type。读写存在物理不对称：
-
-| Path  | DuckDB/Arrow behavior                                              | Module adaptation                                                             |
-| ----- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| Read  | ENUM 通过 Arrow Dictionary 返回                                    | `restore_categorical_columns` 根据 DuckDB schema 恢复 Polars Enum/Categorical |
-| Write | DuckDB Appender 接受 category literal，不接受 Dictionary 直写 ENUM | Categorical/Enum 先转换为 String/Utf8 再 append                               |
-
-因此 ENUM ingest 的 String bridge 是当前 production contract，不是多余 round-trip。
-
-## 6. Export
-
-`DatabaseInstance::export_to_path` 按 state 选择 adapter：
-
-- DuckDB table：执行 `COPY (SELECT * FROM <table>) TO <path>`，CSV 使用 header，Parquet 使用 native format；大表不会先完整进入 Polars。
-
-Application export workflow 不直接覆盖 destination：
-
-1. 在 destination 同目录以 `create_new` 保留 unique sibling temp file；
-2. database snapshot 导出到 temp；
-3. 获取最终 project publication authority；
-4. 原子替换 destination；Windows 使用 `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)`；
-5. 失败时清理 temp，并保留 primary/cleanup error 结构。
-
-## 7. Dataset overview 的 unavailable 值
-
-`SizeShape` 中以下字段是 nullable：
-
-- `estimatedDataframeMemoryBytes`
-- `duplicatedRows`
-
-数据库查询不做整表 memory estimate 或 full-row duplicate detection，因此返回 `null` 表示 **unavailable**。独立的 Polars 数据分析能力仍由 `yss-dataset-profile` 等计算模块提供。
-
-DuckDB overview 仍准确提供：
-
-- row/column counts；
-- numeric/categorical/string/datetime/bool column counts；
-- total nulls、null ratio、columns with nulls、rows with nulls。
-
-## 8. Module map
-
-| File                                     | Responsibility                                                                                           |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `src/database_instance.rs`               | State-dependent query/edit/export interface                                                              |
-| `src/runtime/`                           | Session identity、declaration observations/revisions、admission/drain/recovery 与 physical state routing |
-| `src/session_api.rs`                     | Immutable catalog/data/query snapshots 与 prepared/committed mutation handoff                            |
-| `src/plot_query.rs`                      | Revision-checked numeric plot column query                                                               |
-| `src/project_storage.rs`                 | Project-relative DuckDB runtime binding 与 physical table/metadata removal                               |
-| `../../src/schema/database.rs`           | `DatabaseColumnFact` 到 `ColumnInfoDTO` 的 wire conversion                                               |
-| `../yss-database-edit/`                  | EditOperation、EditHistory 与 EditState                                                                  |
-| `../yss-database-schema/`                | Runtime schema facts、revisions 与 DuckDB/Polars metadata normalization                                  |
-| `../yss-tabular-polars/src/data_type.rs` | Canonical dtype 与 Polars dtype 的转换                                                                   |
-| `../yss-duckdb/src/edit.rs`              | Transactional DuckDB operation construction、SQL apply/reverse 与 edit limits                            |
-| `../yss-duckdb/src/column_snapshot.rs`   | Bounded reversible delete-column snapshot                                                                |
-| `../yss-duckdb/src/table.rs`             | DuckDB ingest、Arrow bridge、catalog metadata 与 paged query                                             |
-| `../yss-duckdb/src/profile.rs`           | DuckDB physical stats/distribution/overview SQL                                                          |
-| `../yss-duckdb/src/sql.rs`               | Identifier/literal quoting 与 editable dtype allowlist                                                   |
-| `../yss-duckdb/src/export.rs`            | Typed DuckDB CSV/Parquet `COPY` export                                                                   |
-| `../yss-dataset-profile/`                | Profile DTO 与 Polars DataFrame profile calculation                                                      |
-| `../yss-sql-source/`                     | External SQLite/PostgreSQL/MySQL table discovery、strict decoding 与 Polars materialization              |
-| `../yss-tabular-io/`                     | 导入和计算使用的 DataFrame/Excel filesystem I/O                                                          |
-
-验证命令以 [`docs/development/LOCAL_WORKFLOW.md`](../../../docs/development/LOCAL_WORKFLOW.md) 为准，从 repository root 通过 `pnpm` scripts 运行。
+The DuckDB and Polars adapter crates have been removed. Julia plugins also use DataFusion and
+Arrow within their process boundary. The original host migration scope and validation are recorded in the
+[migration acceptance](../../../docs/reviews/2026-09-10-data-engine-migration.md).

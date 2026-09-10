@@ -1,255 +1,211 @@
-//! 时间序列对齐
-//!
-//! 将不规则时间序列补齐到规则时间轴，缺失位置为 null。
-//! 使用 Series min/max + range 生成完整时间轴，再通过 Polars join 对齐，避免逐行转换。
+//! Bounded alignment on a complete numeric or date grid using Arrow take indices.
+use super::types::TimeValue;
+use crate::data::{MAX_PREPARED_BYTES, PreparationError, check_size};
+use arrow::array::{
+    Array, ArrayRef, Date32Array, Float64Array, Int64Array, UInt64Array, make_array,
+};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
-use polars::prelude::*;
+pub(crate) fn time_numbers(values: &dyn Array) -> Result<Vec<i64>, PreparationError> {
+    check_size(values.len(), 64)?;
+    if values.null_count() != 0 {
+        return Err(PreparationError::NullTime);
+    }
+    match values.data_type() {
+        DataType::Int64 => Ok(values
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or(PreparationError::TimeType)?
+            .values()
+            .to_vec()),
+        DataType::Date32 => Ok(values
+            .as_any()
+            .downcast_ref::<Date32Array>()
+            .ok_or(PreparationError::TimeType)?
+            .values()
+            .iter()
+            .map(|value| i64::from(*value))
+            .collect()),
+        _ => Err(PreparationError::TimeType),
+    }
+}
 
-use crate::data::time_series::types::TimeValue;
-
-/// Polars Date  epoch: 1970-01-01
-const EPOCH_DAYS_CE: i32 = 719163;
-
-/// 从 Polars Series 提取 TimeValue 序列
-///
-/// 支持 Int64（数字时间）和 Date 类型
-pub fn series_to_time_values(series: &Series) -> PolarsResult<Vec<TimeValue>> {
-    let dtype = series.dtype();
-    match dtype {
-        DataType::Int64 => {
-            let ca = series.i64()?;
-            Ok(ca
+pub(crate) fn time_array(
+    values: Vec<i64>,
+    data_type: &DataType,
+) -> Result<ArrayRef, PreparationError> {
+    match data_type {
+        DataType::Int64 => Ok(Arc::new(Int64Array::from(values))),
+        DataType::Date32 => Ok(Arc::new(Date32Array::from(
+            values
                 .into_iter()
-                .filter_map(|v| v.map(TimeValue::Num))
-                .collect())
-        }
-        DataType::Date => {
-            let ca = series.date()?;
-            let physical = ca.physical();
-            let epoch =
-                chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE).unwrap_or_default();
-            Ok(physical
-                .into_iter()
-                .filter_map(|v: Option<i32>| {
-                    v.map(|d| TimeValue::Date(epoch + chrono::Duration::days(d as i64)))
-                })
-                .collect())
-        }
-        _ => Err(PolarsError::SchemaMismatch(
-            format!("align: time column must be Int64 or Date, got {:?}", dtype).into(),
-        )),
+                .map(|value| i32::try_from(value).map_err(|_| PreparationError::Overflow))
+                .collect::<Result<Vec<_>, _>>()?,
+        ))),
+        _ => Err(PreparationError::TimeType),
     }
 }
 
-/// 将 TimeValue 序列写回 Polars Series
-pub fn time_values_to_series(name: &str, times: &[TimeValue]) -> PolarsResult<Series> {
-    if times.is_empty() {
-        return Ok(Series::new(name.into(), [] as [i64; 0]));
-    }
-    match &times[0] {
-        TimeValue::Num(_) => {
-            let vals: Vec<i64> = times
-                .iter()
-                .filter_map(|t| {
-                    if let TimeValue::Num(v) = t {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            Ok(Series::new(name.into(), vals))
-        }
-        TimeValue::Date(_) => {
-            let epoch =
-                chrono::NaiveDate::from_num_days_from_ce_opt(EPOCH_DAYS_CE).unwrap_or_default();
-            let vals: Vec<i32> = times
-                .iter()
-                .filter_map(|t| {
-                    if let TimeValue::Date(d) = t {
-                        Some((*d - epoch).num_days() as i32)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            Ok(Int32Chunked::from_vec(name.into(), vals)
-                .into_series()
-                .cast(&DataType::Date)?)
-        }
-    }
+pub fn array_to_time_values(values: &dyn Array) -> Result<Vec<TimeValue>, PreparationError> {
+    let numbers = time_numbers(values)?;
+    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).ok_or(PreparationError::Overflow)?;
+    numbers
+        .into_iter()
+        .map(|value| match values.data_type() {
+            DataType::Int64 => Ok(TimeValue::Num(value)),
+            DataType::Date32 => epoch
+                .checked_add_signed(chrono::Duration::days(value))
+                .map(TimeValue::Date)
+                .ok_or(PreparationError::Overflow),
+            _ => Err(PreparationError::TimeType),
+        })
+        .collect()
 }
 
-/// 对齐时间序列：补齐时间轴，缺失处为 null
-///
-/// 复用 align_dataframe 的 Series min/max + join 逻辑，避免 iter/min/max 和 HashMap。
-///
-/// * `time_series` - 时间列（Int64 或 Date）
-/// * `value_series` - 数值列（Float64）
-/// * `interval` - 时间步长（数字时间为步数，日期为天数）
-pub fn align_series(
-    time_series: &Series,
-    value_series: &Series,
-    interval: i64,
-) -> PolarsResult<(Series, Series)> {
-    let time_name = time_series.name().as_str();
-    let df = DataFrame::new(
-        time_series.len(),
-        vec![
-            Column::from(time_series.clone()),
-            Column::from(value_series.clone()),
-        ],
-    )?;
-    let aligned = align_dataframe(&df, time_name, interval)?;
-    let out_times = aligned
-        .column(time_name)?
-        .clone()
-        .take_materialized_series();
-    let out_values = aligned
-        .column(value_series.name().as_str())?
-        .clone()
-        .take_materialized_series();
-    Ok((out_times, out_values))
+pub fn time_values_to_array(times: &[TimeValue]) -> Result<ArrayRef, PreparationError> {
+    check_size(times.len(), 16)?;
+    let date = matches!(times.first(), Some(TimeValue::Date(_)));
+    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).ok_or(PreparationError::Overflow)?;
+    let values = times
+        .iter()
+        .map(|time| match time {
+            TimeValue::Num(value) if !date => Ok(*value),
+            TimeValue::Date(value) if date => Ok(value.signed_duration_since(epoch).num_days()),
+            _ => Err(PreparationError::TimeType),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    time_array(
+        values,
+        if date {
+            &DataType::Date32
+        } else {
+            &DataType::Int64
+        },
+    )
 }
 
-/// 生成完整时间轴 Series（min..=max，步长 interval）
-fn full_time_range_series(
-    time_series: &Series,
-    time_series_name: &str,
-    interval: i64,
-) -> PolarsResult<Series> {
-    let dtype = time_series.dtype();
-    match dtype {
-        DataType::Int64 => {
-            let ca = time_series.i64()?;
-            let min_val = ca.min().ok_or_else(|| {
-                PolarsError::ComputeError("align_dataframe: empty time series".into())
-            })?;
-            let max_val = ca.max().ok_or_else(|| {
-                PolarsError::ComputeError("align_dataframe: empty time series".into())
-            })?;
-            let full: Vec<i64> = (0..)
-                .map(|i| min_val + i * interval)
-                .take_while(|&x| x <= max_val)
-                .collect();
-            Ok(Series::new(time_series_name.into(), full))
-        }
-        DataType::Date => {
-            let ca = time_series.date()?;
-            let physical = ca.physical();
-            let min_val = physical.min().ok_or_else(|| {
-                PolarsError::ComputeError("align_dataframe: empty time series".into())
-            })?;
-            let max_val = physical.max().ok_or_else(|| {
-                PolarsError::ComputeError("align_dataframe: empty time series".into())
-            })?;
-            let full: Vec<i32> = (0..)
-                .map(|i| min_val + (i as i32) * (interval as i32))
-                .take_while(|&x| x <= max_val)
-                .collect();
-            let s = Int32Chunked::from_vec(time_series_name.into(), full)
-                .into_series()
-                .cast(&DataType::Date)?;
-            Ok(s.with_name(time_series_name.into()))
-        }
-        _ => Err(PolarsError::SchemaMismatch(
-            format!(
-                "align_dataframe: time column must be Int64 or Date, got {:?}",
-                dtype
-            )
-            .into(),
-        )),
-    }
-}
-
-/// 检查时间列是否存在重复值，若有则返回错误
-pub fn check_no_duplicate_times(series: &Series) -> PolarsResult<()> {
-    let n = series.len();
-    let n_unique = series.n_unique().map_err(|e| {
-        PolarsError::ComputeError(format!("check_no_duplicate_times: {}", e).into())
-    })?;
-    if n != n_unique {
-        return Err(PolarsError::ComputeError(
-            format!(
-                "TS Align: 时间列存在重复值 ({} 行中有 {} 个唯一值)，拒绝处理",
-                n, n_unique
-            )
-            .into(),
-        ));
+pub fn check_no_duplicate_times(times: &dyn Array) -> Result<(), PreparationError> {
+    let values = time_numbers(times)?;
+    if values.iter().collect::<BTreeSet<_>>().len() != values.len() {
+        return Err(PreparationError::DuplicateTime);
     }
     Ok(())
 }
 
-/// 从时间列推断最小间隔（排序去重后相邻时间差的最小值）
-///
-/// 若数据为空或仅一个点，返回 1。
-pub fn infer_interval(series: &Series) -> PolarsResult<i64> {
-    let dtype = series.dtype();
-    match dtype {
-        DataType::Int64 => {
-            let ca = series.i64()?;
-            let mut sorted: Vec<i64> = ca.into_no_null_iter().collect();
-            sorted.sort_unstable();
-            sorted.dedup();
-            if sorted.len() < 2 {
-                return Ok(1);
-            }
-            let min_gap = sorted.windows(2).map(|w| w[1] - w[0]).min().unwrap_or(1);
-            Ok(min_gap.max(1))
-        }
-        DataType::Date => {
-            let ca = series.date()?;
-            let physical = ca.physical();
-            let mut sorted: Vec<i32> = physical.into_no_null_iter().collect();
-            sorted.sort_unstable();
-            sorted.dedup();
-            if sorted.len() < 2 {
-                return Ok(1);
-            }
-            let min_gap = sorted
-                .windows(2)
-                .map(|w| (w[1] - w[0]) as i64)
-                .min()
-                .unwrap_or(1);
-            Ok(min_gap.max(1))
-        }
-        _ => Err(PolarsError::SchemaMismatch(
-            format!(
-                "infer_interval: time column must be Int64 or Date, got {:?}",
-                dtype
-            )
-            .into(),
-        )),
-    }
+pub fn infer_interval(times: &dyn Array) -> Result<i64, PreparationError> {
+    let mut values = time_numbers(times)?;
+    values.sort_unstable();
+    values.dedup();
+    values
+        .windows(2)
+        .map(|pair| {
+            pair[1]
+                .checked_sub(pair[0])
+                .ok_or(PreparationError::Overflow)
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|gaps| gaps.into_iter().min().unwrap_or(1))
 }
 
-/// 对齐 DataFrame：以指定时间列为轴补齐，所有列在缺失时间点为 null
-///
-/// 使用 Series min/max 获取范围，生成完整时间轴，再通过 Polars left join 对齐，避免逐行转换。
-///
-/// * `df` - 输入 DataFrame
-/// * `time_series_name` - 时间列名（Int64 或 Date）
-/// * `interval` - 时间步长（数字时间为步数，日期为天数）
-pub fn align_dataframe(
-    df: &DataFrame,
-    time_series_name: &str,
+pub fn align_series(
+    times: &dyn Array,
+    values: &Float64Array,
     interval: i64,
-) -> PolarsResult<DataFrame> {
-    let time_col = df.column(time_series_name).map_err(|_| {
-        PolarsError::ColumnNotFound(
-            format!("align_dataframe: column '{}' not found", time_series_name).into(),
+) -> Result<(ArrayRef, Float64Array), PreparationError> {
+    if times.len() != values.len() {
+        return Err(PreparationError::Length);
+    }
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("time", times.data_type().clone(), true),
+            Field::new("value", DataType::Float64, true),
+        ])),
+        vec![make_array(times.to_data()), Arc::new(values.clone())],
+    )?;
+    let aligned = align_batch(&batch, "time", interval)?;
+    let values = aligned
+        .column(1)
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or(PreparationError::ValueType)?
+        .clone();
+    Ok((aligned.column(0).clone(), values))
+}
+
+pub fn align_batch(
+    batch: &RecordBatch,
+    time_column: &str,
+    interval: i64,
+) -> Result<RecordBatch, PreparationError> {
+    if interval <= 0 {
+        return Err(PreparationError::Interval);
+    }
+    let time_index = batch
+        .schema()
+        .index_of(time_column)
+        .map_err(|_| PreparationError::Column)?;
+    let times = time_numbers(batch.column(time_index).as_ref())?;
+    let indexed = times
+        .iter()
+        .enumerate()
+        .map(|(index, time)| (*time, index as u64))
+        .collect::<BTreeMap<_, _>>();
+    if times.len() != indexed.len() {
+        return Err(PreparationError::DuplicateTime);
+    }
+    let lo = *indexed.first_key_value().ok_or(PreparationError::Empty)?.0;
+    let hi = *indexed.last_key_value().ok_or(PreparationError::Empty)?.0;
+    let rows = usize::try_from((i128::from(hi) - i128::from(lo)) / i128::from(interval) + 1)
+        .map_err(|_| PreparationError::MemoryLimit)?;
+    let output_bytes = rows
+        .checked_mul(
+            batch
+                .num_columns()
+                .checked_mul(8)
+                .and_then(|value| value.checked_add(32))
+                .ok_or(PreparationError::MemoryLimit)?,
         )
-    })?;
-    let time_series = time_col.clone().take_materialized_series();
-
-    let full_times = full_time_range_series(&time_series, time_series_name, interval)?;
-    let full_df = DataFrame::new(full_times.len(), vec![Column::from(full_times)])?;
-
-    full_df.join(
-        df,
-        [time_series_name],
-        [time_series_name],
-        JoinArgs::new(JoinType::Left),
-        None,
-    )
+        .and_then(|bytes| bytes.checked_add(batch.get_array_memory_size()))
+        .ok_or(PreparationError::MemoryLimit)?;
+    if output_bytes > MAX_PREPARED_BYTES {
+        return Err(PreparationError::MemoryLimit);
+    }
+    let grid = (0..rows)
+        .map(|index| {
+            i64::try_from(i128::from(lo) + index as i128 * i128::from(interval))
+                .map_err(|_| PreparationError::Overflow)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let indices = UInt64Array::from_iter(grid.iter().map(|time| indexed.get(time).copied()));
+    let time = time_array(grid, batch.column(time_index).data_type())?;
+    let arrays = batch
+        .columns()
+        .iter()
+        .enumerate()
+        .map(|(index, values)| {
+            if index == time_index {
+                Ok(time.clone())
+            } else {
+                arrow::compute::take(values.as_ref(), &indices, None)
+                    .map_err(PreparationError::from)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let fields = batch
+        .schema()
+        .fields()
+        .iter()
+        .enumerate()
+        .map(|(index, field)| field.as_ref().clone().with_nullable(index != time_index))
+        .collect::<Vec<_>>();
+    Ok(RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(
+            fields,
+            batch.schema().metadata().clone(),
+        )),
+        arrays,
+    )?)
 }

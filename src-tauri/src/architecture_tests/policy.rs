@@ -214,12 +214,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &["yss_file_replace::atomic_replace"],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/crates/yss-tabular-io/src/lib.rs",
-        fully_qualified_owner: "yss_tabular_io",
-        canonical_origin_targets: &["yss_tabular_polars::to_dataframe"],
-    },
-    InternalDependencyCapability {
         source_layer: RustLayer::Application,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/database/export.rs",
         fully_qualified_owner: "yss_application::database::export",
@@ -232,30 +226,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &["yss_file_replace::atomic_replace"],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/schema/database.rs",
-        fully_qualified_owner: "yss_api::schema::database",
-        canonical_origin_targets: &["yss_database_schema::DatabaseColumnFact"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/crates/yss-database-runtime/src/database_instance.rs",
-        fully_qualified_owner: "yss_database_runtime::database_instance",
-        canonical_origin_targets: &[
-            "yss_tabular_polars::data_type::dtype_from_string",
-            "yss_tabular_polars::data_type::dtype_to_string",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::DatabaseCore,
-        repository_relative_source_file: "src-tauri/crates/yss-database-runtime/src/plot_query.rs",
-        fully_qualified_owner: "yss_database_runtime::plot_query",
-        canonical_origin_targets: &["yss_tabular_polars::column_to_series"],
-    },
-    InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-bayes-artifact-polars/src/lib.rs",
-        fully_qualified_owner: "yss_bayes_artifact_polars",
+        repository_relative_source_file: "src-tauri/crates/yss-bayes-artifact-datafusion/src/plots.rs",
+        fully_qualified_owner: "yss_bayes_artifact_datafusion::plots",
         canonical_origin_targets: &[
             "yss_bayes_artifact_contract::BayesArtifactReadError",
             "yss_bayes_artifact_contract::BayesArtifactReader",
@@ -348,11 +321,40 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Project,
+        repository_relative_source_file: "src-tauri/crates/yss-project/src/project_activation.rs",
+        fully_qualified_owner: "yss_project::project_activation",
+        canonical_origin_targets: &[
+            "yss_dataset_store::DatasetStore",
+            "yss_dataset_store::DatasetStoreError",
+            "yss_dataset_store::DatasetStore::open",
+            "yss_dataset_store::DatasetStore::pending_publications",
+            "yss_dataset_store::DatasetStore::acknowledge_publication",
+            "yss_dataset_store::DatasetStore::collect_garbage",
+            "yss_dataset_store::DatasetPublication",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Project,
+        repository_relative_source_file: "src-tauri/crates/yss-project/src/project_lifecycle.rs",
+        fully_qualified_owner: "yss_project::project_lifecycle",
+        canonical_origin_targets: &[
+            "yss_dataset_store::DatasetStore",
+            "yss_dataset_store::DatasetStoreError",
+            "yss_dataset_store::DatasetStore::open",
+            "yss_dataset_store::DatasetStore::create",
+            "yss_dataset_store::DatasetStore::catalog_snapshot",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Project,
         repository_relative_source_file: "src-tauri/crates/yss-project/src/project_io.rs",
         fully_qualified_owner: "yss_project::project_io",
         canonical_origin_targets: &[
-            "yss_duckdb::table::list_data_tables",
-            "yss_duckdb::table::read_display_name",
+            "yss_dataset_store::DatasetStore",
+            "yss_dataset_store::DatasetStore::open",
+            "yss_dataset_store::DatasetStore::catalog_metadata",
+            "yss_dataset_store::DatasetMetadata",
+            "yss_dataset_store::DatasetStoreError",
         ],
     },
     InternalDependencyCapability {
@@ -687,6 +689,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::result_query::ResultPinQuery",
             "yss_application::execution::result_query::ResultQueryApplicationError",
             "yss_application::execution::result_query::ResultQueryApplicationError::SessionCapture",
+            "yss_application::execution::result_query::ResultQueryApplicationError::SessionChanged",
+            "yss_application::execution::result_query::ResultQueryApplicationError::InvalidPageRequest",
+            "yss_application::execution::result_query::ResultQueryApplicationError::PageTooLarge",
+            "yss_application::execution::result_query::ResultQueryApplicationError::Relation",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::session_slot::SessionCaptureError",
             "yss_application::execution::session_slot::SessionCaptureError::Inactive",
@@ -696,6 +702,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::commands::execution_dto::ResultPageDto",
             "yss_api::commands::execution_dto::ResultValueDto",
             "yss_api::commands::execution_dto::ResultValueKindDto",
+            "yss_api::commands::execution_dto::runtime_value_to_json",
             "yss_api::error::CommandError",
             "yss_execution::result::ResultId",
             "yss_execution::result::StoredResult",
@@ -711,6 +718,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::run_graph::RunApplicationEvent",
             "yss_application::execution::run_graph::RunApplicationEventKind",
             "yss_application::execution::run_graph::RunDemand",
+            "yss_application::execution::result_query::ResultPageProjection",
+            "yss_application::execution::result_query::ResultPageKind",
+            "yss_application::execution::result_query::ResultPageKind::Scalar",
+            "yss_application::execution::result_query::ResultPageKind::Sequence",
             "yss_execution::error::RunFailure",
             "yss_execution::error::RunFailureCode",
             "yss_execution::error::RunPhase",
@@ -1509,6 +1520,7 @@ fn non_build_memberships(
             | "yss-canonical-hash"
             | "yss-data-contract"
             | "yss-database-contract"
+            | "yss-database-schema"
             | "yss-display-naming"
             | "yss-graph-document"
             | "yss-graph-protocol"
@@ -1524,6 +1536,7 @@ fn non_build_memberships(
             | "yss-project-registry-contract"
             | "yss-resource-naming"
             | "yss-sci-contract"
+            | "yss-relational-contract"
             | "yss-tabular-contract"
             | "yss-chart-document"
     ) {
@@ -1561,11 +1574,12 @@ fn non_build_memberships(
         package,
         "yss-database-edit"
             | "yss-database-runtime"
-            | "yss-database-schema"
             | "yss-dataset-profile"
-            | "yss-duckdb"
+            | "yss-dataset-store"
             | "yss-sql-source"
             | "yss-tabular-io"
+            | "yss-tabular-arrow"
+            | "yss-datafusion"
     ) {
         layers.insert(RustLayer::DatabaseCore);
     } else if matches!(package, "yss-sci" | "yss-sci-runtime") {
@@ -1583,7 +1597,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
-        "yss-bayes-artifact-polars"
+        "yss-bayes-artifact-datafusion"
             | "yss-agent-rig"
             | "yss-bayes-worker-julia"
             | "yss-julia-runtime"
@@ -1593,7 +1607,6 @@ fn non_build_memberships(
             | "yss-plugin-sdk"
             | "yss-project-registry-sqlite"
             | "yss-statistical-harness-sqlite"
-            | "yss-tabular-polars"
     ) {
         layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {

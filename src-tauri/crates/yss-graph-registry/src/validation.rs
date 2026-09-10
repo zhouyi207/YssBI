@@ -531,6 +531,19 @@ fn validate_typing(
 
     match typing {
         NodeTypingSpec::Fixed => Ok(()),
+        NodeTypingSpec::ColumnOutput {
+            input: input_key,
+            column,
+            output: output_key,
+        } => {
+            input(&PortSelector::Declared(input_key.clone()))?;
+            if !parameters.contains_key(column) {
+                return Err(format!(
+                    "column typing rule references unknown parameter '{column}'"
+                ));
+            }
+            output(output_key)
+        }
         NodeTypingSpec::Identity {
             input: input_key,
             output: output_key,

@@ -26,10 +26,17 @@ pnpm plugin:julia:package
 
 - `yss-julia-extension`：插件 IPC adapter 和进程入口。
 - `yss-bayes-runtime`：插件内部 Bayes 编排，依赖原有模型、worker 和 artifact crates，不是 YssBI 的业务 bridge。
+- `yss-bayes-artifact-datafusion`：用 DataFusion 查询 Julia Arrow 产物，负责样本筛选、分页、CSV 批流导出和图表数据投影。
 - `web/`：独立 React、图表、模型编辑器和桥接适配；不依赖宿主 React 实例。
 - 宿主：通用安装 registry、进程监督、任务账本、项目上下文、数据快照授权和结果提交。
 
 项目数据通过有界 Arrow 文件快照传入插件，不穿过网页。任务使用 operation ID 去重，关闭页面不终止计算；取消意图不会被迟到状态覆盖。进程异常后的未知结果不会自动重试。结果以 JSON、CSV 摘要及原始 artifacts 提交到项目 `extension-results/`，包含来源和内容哈希，禁用/卸载不删除已有结果。
+
+插件与宿主统一使用 Arrow 数据边界，workspace 不再依赖 Polars。输入保留跨批次的行对齐、类别标签和缺失值；
+Julia worker 分批写出 Float64/Utf8 交换文件，协议与 Julia 模型不变。
+共享 IPC 写入器显式使用 8 字节对齐，兼容 Julia Arrow 对首条消息位置的读取要求。
+后验查询共用受控的 DataFusion 内存池，保持文件行顺序；分页前检查整个产物的必要列，分页之外的坏行也会失败。
+CSV 导出消费批流，图表输入另有内存预算；密度估计和自相关沿用原数值实现。
 
 ## 验证与能力边界
 

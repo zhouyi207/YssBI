@@ -297,9 +297,7 @@ fn replacement_after_catalog_compute_returns_stale_and_publishes_nothing() {
 fn localized_catalog_rejects_a_project_database_schema_mismatch() {
     let database = DatabaseDecl {
         id: DatabaseId::from_existing("sales".into()),
-        engine: yss_database_contract::DatabaseEngine::InMemory {
-            name: "sales".into(),
-        },
+        engine: yss_database_contract::DatabaseEngine::Dataset {},
         schema_version: 1,
         required: true,
         name: "Sales".into(),
