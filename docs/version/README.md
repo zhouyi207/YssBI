@@ -28,7 +28,7 @@ When history conflicts with maintained knowledge, use:
 | [v0_2.md](v0_2.md)                                     | v0.2                   | 2026-07-01 – 2026-08-24 | Resource lifecycle, graph, execution, and workbench convergence history |
 | [legacy-todo-2026-09-04.md](legacy-todo-2026-09-04.md) | pre-migration snapshot | through 2026-09-04      | Former mixed TODO/backlog/change-log content, preserved read-only       |
 
-Open v0.3/v1.0 items live in [`docs/roadmap/`](../roadmap/), not here. A roadmap moves into this directory only after the release line is completed and its entries have been converted into historical facts.
+Open v0.3/v1.0 items live in [`docs/roadmap/`](../roadmap), not here. A roadmap moves into this directory only after the release line is completed and its entries have been converted into historical facts.
 
 ## Retrieval guidance
 
