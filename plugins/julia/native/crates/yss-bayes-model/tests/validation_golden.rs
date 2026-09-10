@@ -4,19 +4,19 @@ use yss_bayes_model::{BayesModelDraft, validate_draft};
 const INVALID_FIXTURES: &[(&str, &str)] = &[
     (
         "missing_dataset",
-        include_str!("../../../tests/sci/fixtures/bayes/invalid/missing_dataset.json"),
+        include_str!("../../../../tests/fixtures/bayes/invalid/missing_dataset.json"),
     ),
     (
         "missing_sigma",
-        include_str!("../../../tests/sci/fixtures/bayes/invalid/missing_sigma.json"),
+        include_str!("../../../../tests/fixtures/bayes/invalid/missing_sigma.json"),
     ),
     (
         "unbound_predictor",
-        include_str!("../../../tests/sci/fixtures/bayes/invalid/unbound_predictor.json"),
+        include_str!("../../../../tests/fixtures/bayes/invalid/unbound_predictor.json"),
     ),
     (
         "invalid_prior_args",
-        include_str!("../../../tests/sci/fixtures/bayes/invalid/invalid_prior_args.json"),
+        include_str!("../../../../tests/fixtures/bayes/invalid/invalid_prior_args.json"),
     ),
 ];
 

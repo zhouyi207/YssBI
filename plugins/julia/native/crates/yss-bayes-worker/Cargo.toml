@@ -1,4 +1,5 @@
 [package]
+workspace = "../../../../../src-tauri"
 name = "yss-bayes-worker"
 version = "0.1.0"
 edition = "2024"
@@ -9,7 +10,7 @@ publish = false
 thiserror.workspace = true
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
-yss-sci-contract = { path = "../yss-sci-contract" }
+yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -37,34 +37,84 @@ fn repository_root() -> PathBuf {
     std::fs::canonicalize(manifest_root).expect("repository root must be canonicalizable")
 }
 
-fn assert_workspace_member_or_consumer_dependency(
-    root: &Path,
-    workspace_manifest: &str,
-    declaration: &str,
-) {
-    if declaration.starts_with("\"crates/") {
-        assert!(
-            workspace_manifest.contains(declaration),
-            "the workspace must declare member {declaration}"
-        );
-        return;
-    }
+fn workspace_facts() -> &'static super::model::RustWorkspaceModel {
+    static WORKSPACE: std::sync::OnceLock<super::model::RustWorkspaceModel> =
+        std::sync::OnceLock::new();
+    WORKSPACE.get_or_init(|| {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        super::cargo_targets::discover_rust_workspace_model(&manifest)
+            .expect("the real Cargo workspace must be discoverable")
+    })
+}
 
-    let member_declaration = declaration.replace("path = \"./crates/", "path = \"../");
-    let declared_by_member = std::fs::read_dir(root.join("src-tauri/crates"))
-        .expect("the workspace crate directory must be readable")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path().join("Cargo.toml"))
-        .filter(|manifest| manifest.is_file())
-        .any(|manifest| {
-            std::fs::read_to_string(manifest)
-                .map(|manifest| manifest.contains(&member_declaration))
-                .unwrap_or(false)
-        });
-    assert!(
-        workspace_manifest.contains(declaration) || declared_by_member,
-        "the root composition or a workspace consumer must declare {declaration}"
-    );
+fn declares_dependency(package: &str, declaration: &str) -> bool {
+    let name = declaration.trim().split([' ', '.', '=']).next().unwrap();
+    workspace_facts()
+        .dependency_declarations
+        .iter()
+        .any(|dependency| {
+            dependency.owning_package == package
+                && dependency.scope == CargoDependencyScope::Runtime
+                && (dependency.package_name == name
+                    || dependency.declared_name == name.replace('-', "_"))
+                && (!name.starts_with("yss-")
+                    || matches!(
+                        dependency.authority,
+                        CargoDependencyAuthority::WorkspaceMember { .. }
+                    ))
+        })
+}
+
+fn workspace_declares(declaration: &str) -> bool {
+    if declaration.starts_with('"') {
+        let package = declaration.trim_matches('"').rsplit('/').next().unwrap();
+        workspace_facts()
+            .roots
+            .iter()
+            .any(|root| root.package == package)
+    } else {
+        declares_dependency("yssbi", declaration)
+    }
+}
+
+fn declares_dependency_family(package: &str, declaration: &str) -> bool {
+    if declaration.contains('=') {
+        return declares_dependency(package, declaration);
+    }
+    let name = declaration.trim().split([' ', '.', '=']).next().unwrap();
+    workspace_facts()
+        .dependency_declarations
+        .iter()
+        .any(|dependency| {
+            dependency.owning_package == package
+                && dependency.scope == CargoDependencyScope::Runtime
+                && (dependency.package_name == name
+                    || dependency.package_name.starts_with(&format!("{name}-")))
+        })
+}
+
+fn assert_workspace_member_or_consumer_dependency(declaration: &str) {
+    if declaration.starts_with('"') {
+        assert!(
+            workspace_declares(declaration),
+            "the workspace must declare {declaration}"
+        );
+    } else {
+        let name = declaration.split(' ').next().unwrap();
+        assert!(
+            workspace_facts()
+                .dependency_declarations
+                .iter()
+                .any(|dependency| {
+                    dependency.package_name == name
+                        && matches!(
+                            dependency.authority,
+                            CargoDependencyAuthority::WorkspaceMember { .. }
+                        )
+                }),
+            "a workspace consumer must declare {declaration}"
+        );
+    }
 }
 
 struct ProductionFacts {
@@ -586,17 +636,11 @@ fn api_has_one_transport_owner_without_root_facades() {
         );
     }
 
-    let root_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the root Cargo manifest must be readable");
-    assert!(root_manifest.contains("\"crates/yss-api\""));
-    let root_runtime_dependencies = root_manifest
-        .split_once("[dependencies]")
-        .expect("the root manifest must have runtime dependencies")
-        .1
-        .split_once("[dev-dependencies]")
-        .expect("the root manifest must have development dependencies")
-        .0;
-    assert!(root_runtime_dependencies.contains("yss-api = { path = \"./crates/yss-api\" }"));
+    assert!(workspace_declares("\"crates/yss-api\""));
+    assert!(declares_dependency(
+        "yssbi",
+        "yss-api = { path = \"./crates/yss-api\" }"
+    ));
     for transport_dependency in [
         "\nyss-data-contract = ",
         "\nchrono.workspace = true",
@@ -606,20 +650,11 @@ fn api_has_one_transport_owner_without_root_facades() {
         "\nuuid.workspace = true",
     ] {
         assert!(
-            !root_runtime_dependencies.contains(transport_dependency),
+            !declares_dependency_family("yssbi", transport_dependency),
             "the root package must not restore transport dependency {transport_dependency}"
         );
     }
 
-    let api_manifest = std::fs::read_to_string(root.join("src-tauri/crates/yss-api/Cargo.toml"))
-        .expect("the API Cargo manifest must be readable");
-    let api_runtime_dependencies = api_manifest
-        .split_once("[dependencies]")
-        .expect("the API manifest must have runtime dependencies")
-        .1
-        .split_once("[dev-dependencies]")
-        .expect("the API manifest must have development dependencies")
-        .0;
     for direct_dependency in [
         "tauri.workspace = true",
         "yss-application = { path = \"../yss-application\" }",
@@ -627,7 +662,7 @@ fn api_has_one_transport_owner_without_root_facades() {
         "yss-sci-runtime = { path = \"../yss-sci-runtime\" }",
     ] {
         assert!(
-            api_runtime_dependencies.contains(direct_dependency),
+            declares_dependency("yss-api", direct_dependency),
             "the API transport owner must declare {direct_dependency}"
         );
     }
@@ -641,7 +676,7 @@ fn api_has_one_transport_owner_without_root_facades() {
         "tauri-plugin-opener",
     ] {
         assert!(
-            !api_runtime_dependencies.contains(composition_dependency),
+            !declares_dependency_family("yss-api", composition_dependency),
             "the API transport owner must not absorb composition dependency {composition_dependency}"
         );
     }
@@ -708,27 +743,19 @@ fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
         "the root package must not restore an Application owner or compatibility facade"
     );
 
-    let workspace = std::fs::read_to_string(facts.repository_root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-application\"",
         "yss-application = { path = \"./crates/yss-application\" }",
     ] {
         assert!(
-            workspace.contains(declaration),
+            workspace_declares(declaration),
             "the workspace and composition root must declare {declaration}"
         );
     }
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-application/Cargo.toml"),
-    )
-    .expect("the Application manifest must be readable");
     for backwards_dependency in ["tauri", "yssbi"] {
         assert!(
-            !manifest.contains(backwards_dependency),
+            !declares_dependency_family("yss-application", backwards_dependency),
             "Application must not depend backwards on {backwards_dependency}"
         );
     }
@@ -757,15 +784,16 @@ fn application_has_one_crate_owner_without_root_or_transport_back_edges() {
 #[test]
 fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners() {
     let facts = production_facts();
-    const CONTRACT_PREFIX: &str = "src-tauri/crates/yss-bayes-artifact-contract/src/";
-    const ADAPTER_SOURCE: &str = "src-tauri/crates/yss-bayes-artifact-datafusion/src/lib.rs";
+    const CONTRACT_PREFIX: &str = "plugins/julia/native/crates/yss-bayes-artifact-contract/src/";
+    const ADAPTER_SOURCE: &str =
+        "plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/lib.rs";
 
     for relative in [
-        "src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml",
-        "src-tauri/crates/yss-bayes-artifact-contract/README.md",
-        "src-tauri/crates/yss-bayes-artifact-contract/src/lib.rs",
-        "src-tauri/crates/yss-bayes-artifact-datafusion/Cargo.toml",
-        "src-tauri/crates/yss-bayes-artifact-datafusion/README.md",
+        "plugins/julia/native/crates/yss-bayes-artifact-contract/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-artifact-contract/README.md",
+        "plugins/julia/native/crates/yss-bayes-artifact-contract/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-artifact-datafusion/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-artifact-datafusion/README.md",
         ADAPTER_SOURCE,
     ] {
         assert!(
@@ -774,26 +802,17 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         );
     }
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml"),
-    )
-    .expect("Bayes artifact contract manifest must be readable");
-    assert!(manifest.contains("yss-bayes-result"));
+    assert!(declares_dependency(
+        "yss-bayes-artifact-contract",
+        "yss-bayes-result"
+    ));
     for backwards_dependency in ["polars", "tauri", "yss-application", "yss-tabular-io"] {
         assert!(
-            !manifest.contains(backwards_dependency),
+            !declares_dependency_family("yss-bayes-artifact-contract", backwards_dependency),
             "Bayes artifact contract must not depend on {backwards_dependency}"
         );
     }
 
-    let adapter_manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-bayes-artifact-datafusion/Cargo.toml"),
-    )
-    .expect("Bayes artifact DataFusion manifest must be readable");
     for dependency in [
         "arrow.workspace = true",
         "datafusion.workspace = true",
@@ -802,13 +821,17 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         "yss-sci-runtime",
     ] {
         assert!(
-            adapter_manifest.contains(dependency),
+            declares_dependency("yss-bayes-artifact-datafusion", dependency),
             "Bayes artifact DataFusion adapter must declare {dependency}"
         );
     }
-    for backwards_dependency in ["tauri", "yss-application", "yssbi"] {
+    for backwards_dependency in [
+        "tauri",
+        "yss-application",
+        "yssbi",
+    ] {
         assert!(
-            !adapter_manifest.contains(backwards_dependency),
+            !declares_dependency_family("yss-bayes-artifact-datafusion", backwards_dependency),
             "Bayes artifact DataFusion adapter must not depend on {backwards_dependency}"
         );
     }
@@ -823,13 +846,13 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application source must be readable");
     let adapter = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-artifact-datafusion/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/lib.rs"),
     )
     .expect("Bayes artifact adapter must be readable");
     for consumer in [&application, &adapter] {
@@ -859,7 +882,7 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
     let extension = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-julia-extension/src/main.rs"),
+            .join("plugins/julia/native/crates/yss-julia-extension/src/main.rs"),
     )
     .expect("plugin composition must be readable");
     assert!(
@@ -1555,9 +1578,9 @@ fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]>
     if source_file.starts_with("src-tauri/src/graph/") {
         Some(PERSISTED_SYMBOLS)
     } else if source_file.starts_with("src-tauri/crates/yss-sci-runtime/src/")
-        || source_file.starts_with("src-tauri/crates/yss-bayes-model/src/")
-        || source_file.starts_with("src-tauri/crates/yss-bayes-result/src/")
-        || source_file.starts_with("src-tauri/crates/yss-bayes-worker/src/")
+        || source_file.starts_with("plugins/julia/native/crates/yss-bayes-model/src/")
+        || source_file.starts_with("plugins/julia/native/crates/yss-bayes-result/src/")
+        || source_file.starts_with("plugins/julia/native/crates/yss-bayes-worker/src/")
         || source_file.starts_with("src-tauri/crates/yss-sci-contract/src/")
     {
         Some(SCI_SYMBOLS)
@@ -2151,17 +2174,12 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "the root library must not restore the removed database module"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-database-runtime\"",
         "yss-database-runtime = { path = \"./crates/yss-database-runtime\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
-    let runtime_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-database-runtime/Cargo.toml"))
-            .expect("the database runtime manifest must be readable");
     for dependency in [
         "arrow.workspace = true",
         "serde_json.workspace = true",
@@ -2176,7 +2194,7 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "yss-tabular-arrow = { path = \"../yss-tabular-arrow\" }",
     ] {
         assert!(
-            runtime_manifest.contains(dependency),
+            declares_dependency("yss-database-runtime", dependency),
             "the database runtime crate must declare {dependency}"
         );
     }
@@ -2187,7 +2205,7 @@ fn database_runtime_has_one_session_owner_without_root_facade_or_application_cyc
         "tauri",
     ] {
         assert!(
-            !runtime_manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-database-runtime", forbidden_dependency),
             "the database runtime manifest must not depend backwards on {forbidden_dependency}"
         );
     }
@@ -2323,17 +2341,15 @@ fn path_display_has_one_dependency_free_pure_owner_without_project_facade() {
         "Project must not retain the removed path display owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     assert!(
-        workspace_manifest.contains("\"crates/yss-path-display\""),
+        workspace_declares("\"crates/yss-path-display\""),
         "the workspace must include yss-path-display"
     );
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
     assert!(
-        application_manifest.contains("yss-path-display = { path = \"../yss-path-display\" }"),
+        declares_dependency(
+            "yss-application",
+            "yss-path-display = { path = \"../yss-path-display\" }"
+        ),
         "Application must declare its direct path-display dependency"
     );
 
@@ -2812,16 +2828,13 @@ fn graph_document_has_one_pure_crate_owner_without_compatibility_module() {
         "the root crate must not retain a graph document compatibility module"
     );
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-document/Cargo.toml"))
-            .expect("graph document manifest must be readable");
     assert!(
-        manifest.contains("yss-resource-naming"),
+        declares_dependency("yss-graph-document", "yss-resource-naming"),
         "graph resource paths must consume the canonical resource-name owner"
     );
     for obsolete_dependency in ["regex.workspace", "unicode-normalization.workspace"] {
         assert!(
-            !manifest.contains(obsolete_dependency),
+            !declares_dependency_family("yss-graph-document", obsolete_dependency),
             "graph document must not retain resource-name dependency {obsolete_dependency}"
         );
     }
@@ -2969,11 +2982,11 @@ fn display_naming_has_one_pure_crate_owner_without_root_facade() {
 
     let root_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
         .expect("root Cargo manifest must be readable");
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
     assert!(
-        application_manifest.contains("yss-display-naming = { path = \"../yss-display-naming\" }"),
+        declares_dependency(
+            "yss-application",
+            "yss-display-naming = { path = \"../yss-display-naming\" }"
+        ),
         "Application must declare its direct display-name dependency"
     );
     assert!(
@@ -3051,19 +3064,15 @@ fn graph_editor_has_one_graph_crate_owner_without_root_compatibility_modules() {
         );
     }
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-graph-editor\"",
         "yss-graph-editor = { path = \"./crates/yss-graph-editor\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
-    let editor_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-graph-editor/Cargo.toml"))
-            .expect("the graph editor manifest must be readable");
     assert!(
-        editor_manifest.contains(
+        declares_dependency(
+            "yss-graph-editor",
             "yss-graph-resource-contract = { path = \"../yss-graph-resource-contract\" }"
         ),
         "compatible-catalog filtering must consume the canonical resource contract"
@@ -3139,14 +3148,12 @@ fn graph_runtime_has_one_graph_crate_owner_without_root_facade_or_dead_state() {
         "the root crate must not retain a graph runtime facade"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-graph-runtime\"",
         "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\" }",
         "yss-graph-runtime = { path = \"./crates/yss-graph-runtime\", features = [\"test-support\"] }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let runtime =
@@ -3244,14 +3251,12 @@ fn project_identity_has_one_pure_crate_owner_without_root_facade() {
         );
     }
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-identity\"",
         "yss-project-identity = { path = \"./crates/yss-project-identity\" }",
         "yss-project-identity = { path = \"./crates/yss-project-identity\", features = [\"test-support\"] }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let project_module =
@@ -3332,8 +3337,6 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "the root crate must not retain the extracted SQLite registry adapter"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-registry\"",
         "\"crates/yss-project-registry-contract\"",
@@ -3342,7 +3345,7 @@ fn project_registry_contract_has_one_pure_owner_without_storage_or_identity_mirr
         "yss-project-registry-contract = { path = \"./crates/yss-project-registry-contract\" }",
         "yss-project-registry-sqlite = { path = \"./crates/yss-project-registry-sqlite\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let owner = std::fs::read_to_string(
@@ -3552,13 +3555,11 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         );
     }
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-layout\"",
         "yss-project-layout = { path = \"./crates/yss-project-layout\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let owner =
@@ -3589,14 +3590,9 @@ fn project_layout_has_one_pure_crate_owner_without_domain_mirrors() {
         );
     }
 
-    for relative in [
-        "src-tauri/crates/yss-graph-document/Cargo.toml",
-        "src-tauri/crates/yss-chart-document/Cargo.toml",
-    ] {
-        let manifest = std::fs::read_to_string(root.join(relative))
-            .unwrap_or_else(|error| panic!("{relative} must be readable: {error}"));
+    for relative in ["yss-graph-document", "yss-chart-document"] {
         assert!(
-            manifest.contains("yss-project-layout = { path = \"../yss-project-layout\" }"),
+            declares_dependency(relative, "yss-project-layout"),
             "{relative} must declare the canonical project layout dependency"
         );
     }
@@ -3682,35 +3678,30 @@ fn project_change_has_one_pure_owner_without_fake_watcher_files_or_root_facade()
         "the root crate must not retain a project-change contract owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     assert!(
-        workspace_manifest.contains("\"crates/yss-project-change\""),
+        workspace_declares("\"crates/yss-project-change\""),
         "the workspace must include yss-project-change"
     );
-    let application_manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-application/Cargo.toml"))
-            .expect("the Application manifest must be readable");
     assert!(
-        application_manifest.contains("yss-project-change = { path = \"../yss-project-change\" }"),
+        declares_dependency(
+            "yss-application",
+            "yss-project-change = { path = \"../yss-project-change\" }"
+        ),
         "Application must declare its direct project-change dependency"
     );
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-change/Cargo.toml"))
-            .expect("project change manifest must be readable");
     for dependency in [
         "yss-project-identity = { path = \"../yss-project-identity\" }",
         "yss-project-layout = { path = \"../yss-project-layout\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-change", dependency),
             "project change must declare its canonical dependency {dependency}"
         );
     }
     for forbidden in ["serde", "thiserror", "notify", "tauri"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project-change", forbidden),
             "project change must remain a Pure Leaf without external concern '{forbidden}'"
         );
     }
@@ -3825,24 +3816,19 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
         "the root crate must not retain a second project-discovery owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in ["\"crates/yss-project-discovery\""] {
         assert!(
-            workspace_manifest.contains(declaration),
+            workspace_declares(declaration),
             "the workspace must declare {declaration}"
         );
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-discovery/Cargo.toml"))
-            .expect("project discovery manifest must be readable");
     for dependency in [
         "yss-project-layout = { path = \"../yss-project-layout\" }",
         "yss-project-progress = { path = \"../yss-project-progress\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-discovery", dependency),
             "project discovery must declare its canonical dependency {dependency}"
         );
     }
@@ -3956,7 +3942,7 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         "\"crates/yss-project-history\"",
         "yss-project-history = { path = \"./crates/yss-project-history\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
     assert!(
         !workspace_manifest
@@ -3968,7 +3954,8 @@ fn project_history_has_one_project_crate_owner_without_root_facade_or_ghost_grap
         std::fs::read_to_string(root.join("src-tauri/crates/yss-project-history/Cargo.toml"))
             .expect("project history manifest must be readable");
     assert!(
-        !manifest.contains("yss-graph-document-edit") && !manifest.contains("test-support"),
+        !declares_dependency_family("yss-project-history", "yss-graph-document-edit")
+            && !manifest.contains("test-support"),
         "project history must not depend on Graph editing solely to preserve a dead test API"
     );
 
@@ -4087,14 +4074,12 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "the composition root must construct the project authority from its crate"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project\"",
         "yss-project = { path = \"./crates/yss-project\" }",
         "yss-project = { path = \"./crates/yss-project\", features = [\"test-support\"] }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
     for transitive_dependency in [
         "yss-project-discovery = { path = \"./crates/yss-project-discovery\" }",
@@ -4106,13 +4091,11 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "trash = \"5.2\"",
     ] {
         assert!(
-            !workspace_manifest.contains(transitive_dependency),
+            !workspace_declares(transitive_dependency),
             "the root package must not retain transitive Project dependency {transitive_dependency}"
         );
     }
 
-    let manifest = std::fs::read_to_string(root.join("src-tauri/crates/yss-project/Cargo.toml"))
-        .expect("project runtime manifest must be readable");
     for dependency in [
         "yss-project-discovery = { path = \"../yss-project-discovery\" }",
         "yss-project-filesystem = { path = \"../yss-project-filesystem\" }",
@@ -4123,13 +4106,13 @@ fn project_runtime_has_one_stateful_crate_owner_without_root_facade_or_transport
         "yss-resource-lifecycle = { path = \"../yss-resource-lifecycle\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project", dependency),
             "project runtime must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["tauri", "yss-database-runtime", "yss-backend"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project", forbidden),
             "project runtime must not depend backwards on {forbidden}"
         );
     }
@@ -4190,18 +4173,13 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         );
     }
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-model\"",
         "yss-project-model = { path = \"./crates/yss-project-model\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-model/Cargo.toml"))
-            .expect("project model manifest must be readable");
     for dependency in [
         "serde.workspace = true",
         "yss-database-contract = { path = \"../yss-database-contract\" }",
@@ -4211,13 +4189,13 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
         "yss-chart-document = { path = \"../yss-chart-document\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-model", dependency),
             "project model must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["chrono", "tauri", "sqlx", "polars"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project-model", forbidden),
             "project model must not absorb runtime dependency '{forbidden}'"
         );
     }
@@ -4453,30 +4431,25 @@ fn project_operation_has_one_stateful_owner_without_root_ledger_or_private_epoch
         "the root crate must not retain the project operation ledger owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in ["\"crates/yss-project-operation\""] {
         assert!(
-            workspace_manifest.contains(declaration),
+            workspace_declares(declaration),
             "the workspace must declare {declaration}"
         );
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-operation/Cargo.toml"))
-            .expect("project operation manifest must be readable");
     for dependency in [
         "thiserror.workspace = true",
         "yss-project-identity = { path = \"../yss-project-identity\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-operation", dependency),
             "project operation must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["uuid", "tauri", "sqlx", "polars"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project-operation", forbidden),
             "project operation must not absorb runtime concern '{forbidden}'"
         );
     }
@@ -4595,19 +4568,14 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         );
     }
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-filesystem\"",
         "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\" }",
         "yss-project-filesystem = { path = \"./crates/yss-project-filesystem\", features = [\"test-support\"] }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-filesystem/Cargo.toml"))
-            .expect("project filesystem manifest must be readable");
     for dependency in [
         "serde_json.workspace = true",
         "thiserror.workspace = true",
@@ -4618,13 +4586,13 @@ fn project_filesystem_has_one_stateful_owner_without_root_facade_or_session_cycl
         "yss-project-layout = { path = \"../yss-project-layout\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-filesystem", dependency),
             "project filesystem must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["tauri", "sqlx", "polars", "yssbi"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project-filesystem", forbidden),
             "project filesystem must not absorb runtime concern '{forbidden}'"
         );
     }
@@ -4744,18 +4712,13 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         "the root crate must not retain the resource lifecycle state-machine owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in ["\"crates/yss-resource-lifecycle\""] {
         assert!(
-            workspace_manifest.contains(declaration),
+            workspace_declares(declaration),
             "the workspace must declare {declaration}"
         );
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-resource-lifecycle/Cargo.toml"))
-            .expect("resource lifecycle manifest must be readable");
     for dependency in [
         "thiserror.workspace = true",
         "yss-graph-document = { path = \"../yss-graph-document\" }",
@@ -4763,13 +4726,13 @@ fn resource_lifecycle_has_one_stateful_owner_without_root_facade_or_disabled_tes
         "yss-chart-document = { path = \"../yss-chart-document\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-resource-lifecycle", dependency),
             "resource lifecycle must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["uuid", "tauri", "sqlx", "polars"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-resource-lifecycle", forbidden),
             "resource lifecycle must not absorb runtime concern '{forbidden}'"
         );
     }
@@ -4979,19 +4942,13 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
         "Project must not retain the old function editor projection owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-function-editor-projection\"",
         "yss-function-editor-projection = { path = \"./crates/yss-function-editor-projection\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
-    let manifest = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-function-editor-projection/Cargo.toml"),
-    )
-    .expect("function editor projection manifest must be readable");
     for dependency in [
         "serde.workspace = true",
         "thiserror.workspace = true",
@@ -5000,13 +4957,13 @@ fn function_editor_projection_has_one_project_owner_without_root_or_transport_mi
         "yss-project-identity = { path = \"../yss-project-identity\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-function-editor-projection", dependency),
             "function editor projection must declare canonical dependency {dependency}"
         );
     }
     for forbidden in ["chrono", "tauri", "sqlx", "polars"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-function-editor-projection", forbidden),
             "function editor projection must not absorb runtime dependency '{forbidden}'"
         );
     }
@@ -5145,13 +5102,11 @@ fn chart_document_has_one_strict_pure_crate_owner_without_project_facade() {
         "Project must not retain the old chart resource-path owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-chart-document\"",
         "yss-chart-document = { path = \"./crates/yss-chart-document\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let project_module =
@@ -5349,13 +5304,11 @@ fn project_progress_has_one_pure_crate_owner_without_root_or_stale_event_facades
         "the root crate must not retain a project task cancellation owner"
     );
 
-    let workspace_manifest = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("the Rust workspace manifest must be readable");
     for declaration in [
         "\"crates/yss-project-progress\"",
         "yss-project-progress = { path = \"./crates/yss-project-progress\" }",
     ] {
-        assert_workspace_member_or_consumer_dependency(&root, &workspace_manifest, declaration);
+        assert_workspace_member_or_consumer_dependency(declaration);
     }
 
     let project_module =
@@ -5526,40 +5479,33 @@ fn project_watcher_has_one_lifecycle_owner_and_notify_adapter_crate() {
             "the root crate must not retain watcher adapter {removed_root_adapter}"
         );
     }
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/Cargo.toml"))
-            .expect("project watcher manifest must be readable");
     for dependency in [
         "yss-project-change = { path = \"../yss-project-change\" }",
         "yss-project-filesystem = { path = \"../yss-project-filesystem\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-project-watcher", dependency),
             "project watcher must declare its canonical dependency {dependency}"
         );
     }
     for forbidden in ["notify", "tauri"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-project-watcher", forbidden),
             "the platform-neutral watcher must not depend on {forbidden}"
         );
     }
-    let adapter_manifest = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-project-watcher-notify/Cargo.toml"),
-    )
-    .expect("Notify watcher manifest must be readable");
     for dependency in [
         "notify.workspace = true",
         "yss-project-change = { path = \"../yss-project-change\" }",
         "yss-project-watcher = { path = \"../yss-project-watcher\" }",
     ] {
         assert!(
-            adapter_manifest.contains(dependency),
+            declares_dependency("yss-project-watcher-notify", dependency),
             "Notify watcher must declare its canonical dependency {dependency}"
         );
     }
     assert!(
-        !adapter_manifest.contains("tauri"),
+        !declares_dependency_family("yss-project-watcher-notify", "tauri"),
         "the Notify adapter must remain independent of Tauri"
     );
     let owner =
@@ -5595,16 +5541,16 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
     assert_eq!(
         facts
             .classification
-            .get("src-tauri/crates/yss-julia-runtime/src/lib.rs"),
+            .get("plugins/julia/native/crates/yss-julia-runtime/src/lib.rs"),
         Some(&RustLayer::BackendAdapter),
         "system Julia discovery and installation must be a Backend adapter"
     );
 
     let root = repository_root();
     for relative in [
-        "src-tauri/crates/yss-julia-runtime/Cargo.toml",
-        "src-tauri/crates/yss-julia-runtime/README.md",
-        "src-tauri/crates/yss-julia-runtime/src/lib.rs",
+        "plugins/julia/native/crates/yss-julia-runtime/Cargo.toml",
+        "plugins/julia/native/crates/yss-julia-runtime/README.md",
+        "plugins/julia/native/crates/yss-julia-runtime/src/lib.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -5617,22 +5563,21 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
         "the root Julia facade must stay absent"
     );
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-runtime/Cargo.toml"))
-            .expect("Julia runtime manifest must be readable");
     for dependency in ["serde.workspace = true", "thiserror.workspace = true"] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-julia-runtime", dependency),
             "Julia runtime must declare canonical dependency {dependency}"
         );
     }
     assert!(
-        !manifest.contains("tauri"),
+        !declares_dependency_family("yss-julia-runtime", "tauri"),
         "Julia runtime must remain independent of Tauri"
     );
 
-    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-runtime/src/lib.rs"))
-        .expect("Julia runtime owner must be readable");
+    let owner = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-julia-runtime/src/lib.rs"),
+    )
+    .expect("Julia runtime owner must be readable");
     for owned_api in [
         "pub enum JuliaRuntimeError",
         "pub enum JuliaRuntimeState",
@@ -5657,7 +5602,7 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
         );
     }
 
-    for consumer in ["src-tauri/crates/yss-julia-worker/src/lib.rs"] {
+    for consumer in ["plugins/julia/native/crates/yss-julia-worker/src/lib.rs"] {
         let source = std::fs::read_to_string(root.join(consumer))
             .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
         assert!(
@@ -5671,10 +5616,10 @@ fn julia_runtime_has_one_backend_owner_without_root_facade_or_string_errors() {
 fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
     let facts = production_facts();
     for relative in [
-        "src-tauri/crates/yss-julia-worker/src/lib.rs",
-        "src-tauri/crates/yss-julia-worker/src/assets.rs",
-        "src-tauri/crates/yss-julia-worker/src/error.rs",
-        "src-tauri/crates/yss-julia-worker/src/task_directory.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/lib.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/assets.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/error.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/task_directory.rs",
     ] {
         assert_eq!(
             facts.classification.get(relative),
@@ -5685,12 +5630,12 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
 
     let root = repository_root();
     for relative in [
-        "src-tauri/crates/yss-julia-worker/Cargo.toml",
-        "src-tauri/crates/yss-julia-worker/README.md",
-        "src-tauri/crates/yss-julia-worker/src/lib.rs",
-        "src-tauri/crates/yss-julia-worker/src/assets.rs",
-        "src-tauri/crates/yss-julia-worker/src/error.rs",
-        "src-tauri/crates/yss-julia-worker/src/task_directory.rs",
+        "plugins/julia/native/crates/yss-julia-worker/Cargo.toml",
+        "plugins/julia/native/crates/yss-julia-worker/README.md",
+        "plugins/julia/native/crates/yss-julia-worker/src/lib.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/assets.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/error.rs",
+        "plugins/julia/native/crates/yss-julia-worker/src/task_directory.rs",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -5714,9 +5659,6 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
         "the root Julia facade must stay absent"
     );
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-worker/Cargo.toml"))
-            .expect("Julia worker manifest must be readable");
     for dependency in [
         "serde.workspace = true",
         "serde_json.workspace = true",
@@ -5726,19 +5668,21 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
         "yss-file-replace = { path = \"../yss-file-replace\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-julia-worker", dependency),
             "Julia worker must declare canonical dependency {dependency}"
         );
     }
     for forbidden_dependency in ["tauri", "polars", "yss-sci"] {
         assert!(
-            !manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-julia-worker", forbidden_dependency),
             "Julia worker must remain independent of {forbidden_dependency}"
         );
     }
 
-    let owner = std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-worker/src/lib.rs"))
-        .expect("Julia worker owner must be readable");
+    let owner = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-julia-worker/src/lib.rs"),
+    )
+    .expect("Julia worker owner must be readable");
     for owned_api in [
         "pub struct JuliaWorkerManager",
         "pub struct JuliaWorkerTask",
@@ -5767,7 +5711,7 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
     );
 
     let task_directory = std::fs::read_to_string(
-        root.join("src-tauri/crates/yss-julia-worker/src/task_directory.rs"),
+        root.join("plugins/julia/native/crates/yss-julia-worker/src/task_directory.rs"),
     )
     .expect("Julia task directory owner must be readable");
     for forbidden_contract in ["crate::sci", "ResultArtifactOwner"] {
@@ -5778,9 +5722,9 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
     }
 
     for consumer in [
-        "src-tauri/crates/yss-julia-extension/src/main.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
+        "plugins/julia/native/crates/yss-julia-extension/src/main.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
         let source = std::fs::read_to_string(root.join(consumer))
             .unwrap_or_else(|error| panic!("{consumer} must be readable: {error}"));
@@ -5799,9 +5743,9 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
 fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
     let facts = production_facts();
     const ADAPTER_SOURCES: &[&str] = &[
-        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/predictor.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/fit.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/predictor.rs",
     ];
     for source in ADAPTER_SOURCES {
         assert_eq!(
@@ -5813,8 +5757,8 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
 
     let root = repository_root();
     for relative in [
-        "src-tauri/crates/yss-bayes-worker-julia/Cargo.toml",
-        "src-tauri/crates/yss-bayes-worker-julia/README.md",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/README.md",
     ]
     .into_iter()
     .chain(ADAPTER_SOURCES.iter().copied())
@@ -5836,18 +5780,13 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
         );
     }
 
-    let workspace = std::fs::read_to_string(root.join("src-tauri/Cargo.toml"))
-        .expect("workspace manifest must be readable");
     for declaration in ["\"crates/yss-bayes-worker-julia\""] {
         assert!(
-            workspace.contains(declaration),
+            workspace_declares(declaration),
             "workspace must declare the Julia Bayes adapter through {declaration}"
         );
     }
 
-    let manifest =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/Cargo.toml"))
-            .expect("Julia Bayes adapter manifest must be readable");
     for dependency in [
         "arrow.workspace = true",
         "serde.workspace = true",
@@ -5861,29 +5800,31 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
         "yss-sci-contract = { path = \"../yss-sci-contract\" }",
     ] {
         assert!(
-            manifest.contains(dependency),
+            declares_dependency("yss-bayes-worker-julia", dependency),
             "Julia Bayes adapter must declare boundary dependency {dependency}"
         );
     }
     for forbidden in ["tauri", "yssbi", "yss-database", "yss-project"] {
         assert!(
-            !manifest.contains(forbidden),
+            !declares_dependency_family("yss-bayes-worker-julia", forbidden),
             "Julia Bayes adapter must remain independent of {forbidden}"
         );
     }
 
-    let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/src/lib.rs"))
-            .expect("Julia Bayes adapter owner must be readable");
+    let owner = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-bayes-worker-julia/src/lib.rs"),
+    )
+    .expect("Julia Bayes adapter owner must be readable");
     assert!(
         owner.contains("pub struct JuliaBayesWorkerAdapter")
             && owner.contains("impl BayesWorkerPort for JuliaBayesWorkerAdapter")
             && owner.contains("use yss_julia_worker::{"),
         "the extracted crate must own the concrete Bayes worker port implementation"
     );
-    let fit =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-bayes-worker-julia/src/fit.rs"))
-            .expect("Julia Bayes fit adapter must be readable");
+    let fit = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-bayes-worker-julia/src/fit.rs"),
+    )
+    .expect("Julia Bayes fit adapter must be readable");
     assert!(
         fit.contains(
             "const JULIA_BAYES_WORKER_TRACING_TARGET: &str = \"yssbi::bayes_worker_julia\";",
@@ -5891,9 +5832,10 @@ fn julia_bayes_worker_adapter_has_one_crate_owner_without_root_facade() {
         "Julia Bayes tracing must use one target owned by the extracted crate"
     );
 
-    let composition =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-julia-extension/src/main.rs"))
-            .expect("plugin composition must be readable");
+    let composition = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-julia-extension/src/main.rs"),
+    )
+    .expect("plugin composition must be readable");
     assert!(
         composition.contains("yss_bayes_worker_julia::JuliaBayesWorkerAdapter::new")
             && !composition.contains("pub mod julia"),
@@ -5934,22 +5876,22 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
 
 #[test]
 fn bayes_model_has_one_pure_owner_without_root_facade() {
-    const MODEL_PREFIX: &str = "src-tauri/crates/yss-bayes-model/";
+    const MODEL_PREFIX: &str = "plugins/julia/native/crates/yss-bayes-model/";
     const MODEL_SOURCES: &[&str] = &[
-        "src-tauri/crates/yss-bayes-model/src/lib.rs",
-        "src-tauri/crates/yss-bayes-model/src/convert.rs",
-        "src-tauri/crates/yss-bayes-model/src/draft.rs",
-        "src-tauri/crates/yss-bayes-model/src/expression.rs",
-        "src-tauri/crates/yss-bayes-model/src/model.rs",
-        "src-tauri/crates/yss-bayes-model/src/spec_validation.rs",
-        "src-tauri/crates/yss-bayes-model/src/validation.rs",
-        "src-tauri/crates/yss-bayes-model/src/validators.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/convert.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/draft.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/expression.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/model.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/spec_validation.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/validation.rs",
+        "plugins/julia/native/crates/yss-bayes-model/src/validators.rs",
     ];
 
     let facts = production_facts();
     for relative in [
-        "src-tauri/crates/yss-bayes-model/Cargo.toml",
-        "src-tauri/crates/yss-bayes-model/README.md",
+        "plugins/julia/native/crates/yss-bayes-model/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-model/README.md",
     ]
     .into_iter()
     .chain(MODEL_SOURCES.iter().copied())
@@ -5989,17 +5931,14 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
         "the empty root Bayes model facade must stay absent"
     );
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-bayes-model/Cargo.toml"),
-    )
-    .expect("Bayes model manifest must be readable");
-    assert!(manifest.contains("serde.workspace = true"));
-    assert!(manifest.contains("yss-math-expr"));
+    assert!(declares_dependency(
+        "yss-bayes-model",
+        "serde.workspace = true"
+    ));
+    assert!(declares_dependency("yss-bayes-model", "yss-math-expr"));
     for forbidden_dependency in ["polars", "tauri", "yss-sci", "yss-julia"] {
         assert!(
-            !manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-bayes-model", forbidden_dependency),
             "Bayes model must not depend on {forbidden_dependency}"
         );
     }
@@ -6007,7 +5946,7 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     let validation_report = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-model/src/validation.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-model/src/validation.rs"),
     )
     .expect("Bayes validation report source must be readable");
     assert!(validation_report.contains("pub fn is_ok(&self) -> bool"));
@@ -6023,7 +5962,7 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     let conversion = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-model/src/convert.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-model/src/convert.rs"),
     )
     .expect("Bayes model conversion source must be readable");
     assert!(conversion.contains("report.with_error"));
@@ -6036,14 +5975,14 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     let spec_validation = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-model/src/spec_validation.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-model/src/spec_validation.rs"),
     )
     .expect("Bayes spec validation source must be readable");
     assert!(spec_validation.contains("pub fn model_spec_is_valid"));
     let worker_validation = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-worker/src/validation.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-worker/src/validation.rs"),
     )
     .expect("Bayes worker validation source must be readable");
     assert!(
@@ -6102,19 +6041,19 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
     for (symbol, expected_origin) in [
         (
             "BayesModelDraft",
-            "src-tauri/crates/yss-bayes-model/src/draft.rs",
+            "plugins/julia/native/crates/yss-bayes-model/src/draft.rs",
         ),
         (
             "ParsedExpression",
-            "src-tauri/crates/yss-bayes-model/src/expression.rs",
+            "plugins/julia/native/crates/yss-bayes-model/src/expression.rs",
         ),
         (
             "BayesModelSpec",
-            "src-tauri/crates/yss-bayes-model/src/model.rs",
+            "plugins/julia/native/crates/yss-bayes-model/src/model.rs",
         ),
         (
             "ValidationReport",
-            "src-tauri/crates/yss-bayes-model/src/validation.rs",
+            "plugins/julia/native/crates/yss-bayes-model/src/validation.rs",
         ),
     ] {
         let actual_origins = facts
@@ -6154,17 +6093,17 @@ fn bayes_model_has_one_pure_owner_without_root_facade() {
 
 #[test]
 fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
-    const RESULT_PREFIX: &str = "src-tauri/crates/yss-bayes-result/";
+    const RESULT_PREFIX: &str = "plugins/julia/native/crates/yss-bayes-result/";
     const RESULT_SOURCES: &[&str] = &[
-        "src-tauri/crates/yss-bayes-result/src/lib.rs",
-        "src-tauri/crates/yss-bayes-result/src/diagnostics.rs",
-        "src-tauri/crates/yss-bayes-result/src/result.rs",
+        "plugins/julia/native/crates/yss-bayes-result/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-result/src/diagnostics.rs",
+        "plugins/julia/native/crates/yss-bayes-result/src/result.rs",
     ];
 
     let facts = production_facts();
     for relative in [
-        "src-tauri/crates/yss-bayes-result/Cargo.toml",
-        "src-tauri/crates/yss-bayes-result/README.md",
+        "plugins/julia/native/crates/yss-bayes-result/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-result/README.md",
     ]
     .into_iter()
     .chain(RESULT_SOURCES.iter().copied())
@@ -6205,16 +6144,13 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
         "the empty root Bayes result facade must stay absent"
     );
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-bayes-result/Cargo.toml"),
-    )
-    .expect("Bayes result manifest must be readable");
-    assert!(manifest.contains("serde.workspace = true"));
+    assert!(declares_dependency(
+        "yss-bayes-result",
+        "serde.workspace = true"
+    ));
     for forbidden_dependency in ["polars", "tauri", "thiserror", "yss-julia", "yss-sci"] {
         assert!(
-            !manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-bayes-result", forbidden_dependency),
             "Bayes result must not depend on {forbidden_dependency}"
         );
     }
@@ -6222,7 +6158,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let result_source = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-result/src/result.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-result/src/result.rs"),
     )
     .expect("Bayes result source must be readable");
     for forbidden_lease in [
@@ -6239,7 +6175,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application workflow must be readable");
     assert!(application.contains("owned_artifacts: Vec<PathBuf>"));
@@ -6258,7 +6194,7 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     let worker = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-worker/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-worker/src/lib.rs"),
     )
     .expect("Bayes worker contract must be readable");
     assert!(worker.contains("ArrowIpc"));
@@ -6312,23 +6248,23 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
     for (symbol, expected_origin) in [
         (
             "ParameterSummary",
-            "src-tauri/crates/yss-bayes-result/src/diagnostics.rs",
+            "plugins/julia/native/crates/yss-bayes-result/src/diagnostics.rs",
         ),
         (
             "InferenceDiagnostics",
-            "src-tauri/crates/yss-bayes-result/src/diagnostics.rs",
+            "plugins/julia/native/crates/yss-bayes-result/src/diagnostics.rs",
         ),
         (
             "InferenceResult",
-            "src-tauri/crates/yss-bayes-result/src/result.rs",
+            "plugins/julia/native/crates/yss-bayes-result/src/result.rs",
         ),
         (
             "ResultArtifactManifest",
-            "src-tauri/crates/yss-bayes-result/src/result.rs",
+            "plugins/julia/native/crates/yss-bayes-result/src/result.rs",
         ),
         (
             "TaskError",
-            "src-tauri/crates/yss-bayes-result/src/result.rs",
+            "plugins/julia/native/crates/yss-bayes-result/src/result.rs",
         ),
     ] {
         let actual_origins = facts
@@ -6358,16 +6294,16 @@ fn bayes_result_has_one_pure_owner_without_root_facade_or_artifact_lease() {
 
 #[test]
 fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() {
-    const WORKER_PREFIX: &str = "src-tauri/crates/yss-bayes-worker/";
+    const WORKER_PREFIX: &str = "plugins/julia/native/crates/yss-bayes-worker/";
     const WORKER_SOURCES: &[&str] = &[
-        "src-tauri/crates/yss-bayes-worker/src/lib.rs",
-        "src-tauri/crates/yss-bayes-worker/src/validation.rs",
+        "plugins/julia/native/crates/yss-bayes-worker/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-worker/src/validation.rs",
     ];
 
     let facts = production_facts();
     for relative in [
-        "src-tauri/crates/yss-bayes-worker/Cargo.toml",
-        "src-tauri/crates/yss-bayes-worker/README.md",
+        "plugins/julia/native/crates/yss-bayes-worker/Cargo.toml",
+        "plugins/julia/native/crates/yss-bayes-worker/README.md",
     ]
     .into_iter()
     .chain(WORKER_SOURCES.iter().copied())
@@ -6404,12 +6340,6 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
         "the empty root Bayes worker facade must stay absent"
     );
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-bayes-worker/Cargo.toml"),
-    )
-    .expect("Bayes worker manifest must be readable");
     for required_dependency in [
         "thiserror.workspace = true",
         "yss-bayes-model",
@@ -6417,13 +6347,13 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
         "yss-sci-contract",
     ] {
         assert!(
-            manifest.contains(required_dependency),
+            declares_dependency("yss-bayes-worker", required_dependency),
             "Bayes worker manifest must declare {required_dependency}"
         );
     }
     for forbidden_dependency in ["polars", "tauri", "serde.workspace = true", "yss-julia"] {
         assert!(
-            !manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-bayes-worker", forbidden_dependency),
             "Bayes worker contract must not depend on {forbidden_dependency}"
         );
     }
@@ -6431,7 +6361,7 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
     let worker = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-worker/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-worker/src/lib.rs"),
     )
     .expect("Bayes worker source must be readable");
     for required_capability in [
@@ -6460,9 +6390,9 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
     }
 
     for direct_consumer in [
-        "src-tauri/crates/yss-bayes-runtime/src/lib.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
-        "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
+        "plugins/julia/native/crates/yss-bayes-runtime/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/lib.rs",
+        "plugins/julia/native/crates/yss-bayes-worker-julia/src/fit.rs",
     ] {
         let source = std::fs::read_to_string(facts.repository_root.join(direct_consumer))
             .expect("Bayes worker consumer must be readable");
@@ -6543,7 +6473,7 @@ fn bayes_worker_has_one_pure_owner_without_root_facade_or_forgeable_authority() 
             .collect::<BTreeSet<_>>();
         assert_eq!(
             actual_origins,
-            BTreeSet::from(["src-tauri/crates/yss-bayes-worker/src/lib.rs"]),
+            BTreeSet::from(["plugins/julia/native/crates/yss-bayes-worker/src/lib.rs"]),
             "{symbol} must have one canonical Bayes worker owner"
         );
     }
@@ -6581,7 +6511,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes application source must be readable");
     for required in [
@@ -6619,7 +6549,7 @@ fn bayes_application_uses_one_required_worker_route_without_test_backend_facade(
     let command = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-julia-extension/src/commands.rs"),
+            .join("plugins/julia/native/crates/yss-julia-extension/src/commands.rs"),
     )
     .expect("Bayes command source must be readable");
     for forbidden in [
@@ -6741,12 +6671,6 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         );
     }
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-sci-runtime/Cargo.toml"),
-    )
-    .expect("SCI runtime manifest must be readable");
     for required_dependency in [
         "ndarray.workspace = true",
         "rand.workspace = true",
@@ -6758,7 +6682,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "yss-sci-contract = { path = \"../yss-sci-contract\" }",
     ] {
         assert!(
-            manifest.contains(required_dependency),
+            declares_dependency("yss-sci-runtime", required_dependency),
             "SCI runtime manifest must declare {required_dependency}"
         );
     }
@@ -6771,35 +6695,23 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
         "yss-julia",
     ] {
         assert!(
-            !manifest.contains(forbidden_dependency),
+            !declares_dependency_family("yss-sci-runtime", forbidden_dependency),
             "SCI runtime must not depend on {forbidden_dependency}"
         );
     }
 
-    let root_manifest = std::fs::read_to_string(facts.repository_root.join("src-tauri/Cargo.toml"))
-        .expect("root Cargo manifest must be readable");
-    assert!(root_manifest.contains("\"crates/yss-sci-runtime\""));
-    let api_manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-api/Cargo.toml"),
-    )
-    .expect("API Cargo manifest must be readable");
-    assert!(api_manifest.contains("yss-sci-runtime = { path = \"../yss-sci-runtime\" }"));
-    let root_dependencies = root_manifest
-        .split_once("[dependencies]")
-        .expect("root Cargo manifest must have dependencies")
-        .1
-        .split_once("[dev-dependencies]")
-        .expect("root Cargo manifest must have dev dependencies")
-        .0;
+    assert!(workspace_declares("\"crates/yss-sci-runtime\""));
+    assert!(declares_dependency(
+        "yss-api",
+        "yss-sci-runtime = { path = \"../yss-sci-runtime\" }"
+    ));
     for removed_dependency in [
         "\nyss-sci = ",
         "\nrand.workspace = true",
         "\nstatrs.workspace = true",
     ] {
         assert!(
-            !root_dependencies.contains(removed_dependency),
+            !declares_dependency_family("yssbi", removed_dependency),
             "root package must not restore direct SCI implementation dependency {removed_dependency}"
         );
     }
@@ -6813,7 +6725,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     for consumer in [
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
-        "src-tauri/crates/yss-bayes-artifact-datafusion/src/plots.rs",
+        "plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/plots.rs",
         "src-tauri/src/lib.rs",
         "src-tauri/crates/yss-api/src/commands/command_panel_did.rs",
     ] {
@@ -6831,12 +6743,12 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     let bayes_application = std::fs::read_to_string(
         facts
             .repository_root
-            .join("src-tauri/crates/yss-bayes-runtime/src/lib.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-runtime/src/lib.rs"),
     )
     .expect("Bayes Application source must be readable");
     assert!(
         !bayes_application.contains("yss_sci_runtime"),
-        "Bayes Application must not restore the SCI density implementation moved to the artifact adapter"
+        "Bayes Application must not depend on the host SCI runtime"
     );
 
     let panel = std::fs::read_to_string(
@@ -6926,16 +6838,17 @@ fn sci_contract_has_one_pure_owner_without_root_facades_or_unchecked_inputs() {
         );
     }
 
-    let manifest = std::fs::read_to_string(
-        facts
-            .repository_root
-            .join("src-tauri/crates/yss-sci-contract/Cargo.toml"),
-    )
-    .expect("SCI contract manifest must be readable");
-    assert!(manifest.contains("serde.workspace = true"));
-    assert!(manifest.contains("thiserror.workspace = true"));
+    assert!(declares_dependency(
+        "yss-sci-contract",
+        "serde.workspace = true"
+    ));
+    assert!(declares_dependency(
+        "yss-sci-contract",
+        "thiserror.workspace = true"
+    ));
     assert!(
-        !manifest.contains("yss-data-contract") && !manifest.contains("tauri"),
+        !declares_dependency_family("yss-sci-contract", "yss-data-contract")
+            && !declares_dependency_family("yss-sci-contract", "tauri"),
         "SCI contract must not couple statistical values to persisted data or Tauri"
     );
 

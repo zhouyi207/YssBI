@@ -149,5 +149,5 @@ assert_eq!(schema.columns().len(), 1);
 
 需要验证 session 一致性、分页、catalog snapshot 或 mutation handoff 时，应通过
 `DatabaseRuntimeRegistry`、`DatabaseRuntimeSession` 与 `session_api` 构造真实 runtime；完整示例见
-[`database_test.rs`](./database_test.rs) 以及 crate 的
+[`database_test.rs`](database_test.rs) 以及 crate 的
 [`README.md`](../crates/yss-database-runtime/README.md)。

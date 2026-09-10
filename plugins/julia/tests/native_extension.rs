@@ -142,7 +142,7 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
         .attach_view("yssbi.julia", "analysis", "test")
         .unwrap();
     let fixture: Value = serde_json::from_str(include_str!(
-        "../../../tests/sci/fixtures/bayes/linear_normal/simple.json"
+        "fixtures/bayes/linear_normal/simple.json"
     ))
     .unwrap();
     let spec = &fixture["modelSpec"];

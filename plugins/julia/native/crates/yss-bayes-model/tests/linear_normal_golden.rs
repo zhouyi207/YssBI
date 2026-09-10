@@ -4,13 +4,13 @@ use yss_bayes_model::{
 };
 
 const SIMPLE_LINEAR_NORMAL: &str =
-    include_str!("../../../tests/sci/fixtures/bayes/linear_normal/simple.json");
+    include_str!("../../../../tests/fixtures/bayes/linear_normal/simple.json");
 const EXPONENTIAL_DECAY_NORMAL: &str =
-    include_str!("../../../tests/sci/fixtures/bayes/nonlinear_normal/exponential_decay.json");
+    include_str!("../../../../tests/fixtures/bayes/nonlinear_normal/exponential_decay.json");
 const SIMPLE_BERNOULLI_LOGIT: &str =
-    include_str!("../../../tests/sci/fixtures/bayes/bernoulli_logit/simple.json");
+    include_str!("../../../../tests/fixtures/bayes/bernoulli_logit/simple.json");
 const SIMPLE_POISSON_LOG: &str =
-    include_str!("../../../tests/sci/fixtures/bayes/poisson_log/simple.json");
+    include_str!("../../../../tests/fixtures/bayes/poisson_log/simple.json");
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

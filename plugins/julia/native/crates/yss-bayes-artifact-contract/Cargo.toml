@@ -1,4 +1,5 @@
 [package]
+workspace = "../../../../../src-tauri"
 name = "yss-bayes-artifact-contract"
 version = "0.1.0"
 edition = "2024"

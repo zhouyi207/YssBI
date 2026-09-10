@@ -14,7 +14,7 @@ pnpm plugin:julia:package
 
 在 YssBI 左下角「插件」中选择「从文件安装插件包」，打开生成或下载的 `.yssplugin`，检查发布者、签名指纹、权限与原生代码信任提示后安装。安装后会出现 Julia sidebar 入口；依赖准备是单独的显式操作，不在启动宿主、安装包或打开页面时自动执行。
 
-当前插件复用用户已安装的兼容 Julia（版本约束以 `src-tauri/julia/Project.toml` 为准）。依赖项目、首选 depot 和产物写入插件私有目录；用户原有 Julia/depot 不因禁用或卸载而删除。缺少 Julia 时页面显示依赖缺失，不伪装成插件未安装。
+当前插件复用用户已安装的兼容 Julia（版本约束以 `plugins/julia/runtime/julia/Project.toml` 为准）。依赖项目、首选 depot 和产物写入插件私有目录；用户原有 Julia/depot 不因禁用或卸载而删除。缺少 Julia 时页面显示依赖缺失，不伪装成插件未安装。
 
 ## 签名与信任
 

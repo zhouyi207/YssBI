@@ -12,7 +12,7 @@
 - Rust：使用根目录 `rust-toolchain.toml` 固定的版本和 components。
 - Node.js：以 `package.json#engines` 为准。
 - pnpm：以 `package.json#packageManager` 为准，使用 Corepack/对应版本运行。
-- Julia：仅 Julia-backed operations/tests 需要，以 `src-tauri/julia/Project.toml#compat` 为准。
+- Julia：仅 Julia-backed operations/tests 需要，以 `plugins/julia/runtime/julia/Project.toml#compat` 为准。
 
 不要在本文复制具体版本号；manifest 是机器可读事实源。
 
@@ -93,7 +93,7 @@ Rust 的 `-p` 选择 package，`--lib` / `--test` 选择测试目标，测试名
 ```sh
 pnpm test:ts src/tests/architecture/documentationContract.test.ts
 pnpm test:rs:package -p yssbi --lib architecture_tests
-julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
+julia --project=plugins/julia/runtime/julia plugins/julia/runtime/julia/tests/bayes_fit_tests.jl
 ```
 
 Rust 架构门禁仍需构建根包测试目标，不保证很快。`pnpm test:architecture` 是完整前端架构检查，按涉及的依赖边界、分类、策略或 source discovery 决定是否运行；不要为普通局部实现修改机械执行完整架构审计。
@@ -105,7 +105,7 @@ i18n 词条、翻译文案、语言切换和回退不单独维护测试或库存
 首次运行 Julia-backed operation/test 前初始化 manifest 环境：
 
 ```sh
-julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
+julia --project=plugins/julia/runtime/julia -e 'using Pkg; Pkg.instantiate()'
 ```
 
 ## Validation by change scope

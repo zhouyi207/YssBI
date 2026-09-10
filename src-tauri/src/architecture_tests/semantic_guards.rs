@@ -316,11 +316,11 @@ pub(super) fn project_to_graph_production_edges(
         .collect()
 }
 
-const WORKER_FILE: &str = "src-tauri/crates/yss-bayes-worker/src/lib.rs";
+const WORKER_FILE: &str = "plugins/julia/native/crates/yss-bayes-worker/src/lib.rs";
 const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
-    "src-tauri/crates/yss-bayes-worker-julia/src/lib.rs",
-    "src-tauri/crates/yss-bayes-worker-julia/src/fit.rs",
-    "src-tauri/crates/yss-bayes-worker-julia/src/predictor.rs",
+    "plugins/julia/native/crates/yss-bayes-worker-julia/src/lib.rs",
+    "plugins/julia/native/crates/yss-bayes-worker-julia/src/fit.rs",
+    "plugins/julia/native/crates/yss-bayes-worker-julia/src/predictor.rs",
 ];
 const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
     "src-tauri/crates/yss-sci-contract/src/scientific.rs",
@@ -605,17 +605,18 @@ struct UseBinding {
 
 fn source_module_path(source_file: &str) -> Vec<String> {
     let normalized = source_file.replace('\\', "/");
-    let (mut base, relative) =
-        if let Some(relative) = normalized.strip_prefix("src-tauri/crates/yss-bayes-worker/src/") {
-            (vec!["yss_bayes_worker".to_owned()], relative)
-        } else {
-            (
-                Vec::new(),
-                normalized
-                    .strip_prefix("src-tauri/src/")
-                    .unwrap_or(normalized.as_str()),
-            )
-        };
+    let (mut base, relative) = if let Some(relative) =
+        normalized.strip_prefix("plugins/julia/native/crates/yss-bayes-worker/src/")
+    {
+        (vec!["yss_bayes_worker".to_owned()], relative)
+    } else {
+        (
+            Vec::new(),
+            normalized
+                .strip_prefix("src-tauri/src/")
+                .unwrap_or(normalized.as_str()),
+        )
+    };
     let mut segments = relative.split('/').map(str::to_owned).collect::<Vec<_>>();
     let Some(file) = segments.pop() else {
         return Vec::new();
@@ -1565,7 +1566,7 @@ impl JuliaBayesAdapterVisitor<'_> {
             }
         }
         if !self.adapter_source
-            && self.source_file != "src-tauri/crates/yss-julia-extension/src/main.rs"
+            && self.source_file != "plugins/julia/native/crates/yss-julia-extension/src/main.rs"
             && path
                 .segments
                 .iter()
@@ -1686,7 +1687,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {}
     );
 
     let production_constructor = julia_bayes_adapter_source_violations(
-        "src-tauri/crates/yss-julia-extension/src/main.rs",
+        "plugins/julia/native/crates/yss-julia-extension/src/main.rs",
         "fn compose() { let _ = JuliaBayesWorkerAdapter::new(root, worker); }",
     )
     .expect("production constructor fixture must parse");
@@ -2221,7 +2222,7 @@ fn bayes_model_spec_exposes_only_validated_construction_and_read_projections() {
         .expect("the real Cargo workspace must be discoverable");
     let path = workspace
         .repository_root
-        .join("src-tauri/crates/yss-bayes-model/src/model.rs");
+        .join("plugins/julia/native/crates/yss-bayes-model/src/model.rs");
     let source = std::fs::read_to_string(&path).expect("Bayes model source must be readable");
     let syntax = syn::parse_file(&source).expect("Bayes model source must parse");
 
@@ -2328,13 +2329,13 @@ fn bayes_worker_result_is_neutral_and_path_free() {
     let diagnostics_source = std::fs::read_to_string(
         workspace
             .repository_root
-            .join("src-tauri/crates/yss-bayes-result/src/diagnostics.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-result/src/diagnostics.rs"),
     )
     .expect("Bayes diagnostics owner must be readable");
     let result_source = std::fs::read_to_string(
         workspace
             .repository_root
-            .join("src-tauri/crates/yss-bayes-result/src/result.rs"),
+            .join("plugins/julia/native/crates/yss-bayes-result/src/result.rs"),
     )
     .expect("Bayes result owner must be readable");
     let diagnostics =

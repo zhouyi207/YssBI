@@ -1,4 +1,5 @@
 [package]
+workspace = "../../../../../src-tauri"
 name = "yss-julia-extension"
 version = "0.1.0"
 edition = "2024"
@@ -6,8 +7,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-yss-plugin-protocol = { path = "../yss-plugin-protocol" }
-yss-plugin-sdk = { path = "../yss-plugin-sdk" }
+yss-plugin-protocol = { path = "../../../../../src-tauri/crates/yss-plugin-protocol" }
+yss-plugin-sdk = { path = "../../../../../src-tauri/crates/yss-plugin-sdk" }
 yss-bayes-runtime = { path = "../yss-bayes-runtime" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
@@ -15,10 +16,10 @@ yss-bayes-worker-julia = { path = "../yss-bayes-worker-julia" }
 yss-bayes-artifact-datafusion = { path = "../yss-bayes-artifact-datafusion" }
 yss-julia-runtime = { path = "../yss-julia-runtime" }
 yss-julia-worker = { path = "../yss-julia-worker" }
-yss-sci-contract = { path = "../yss-sci-contract" }
-yss-math-expr = { path = "../yss-math-expr" }
+yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }
+yss-math-expr = { path = "../../../../../src-tauri/crates/yss-math-expr" }
 arrow.workspace = true
-yss-tabular-io = { path = "../yss-tabular-io" }
+yss-tabular-io = { path = "../../../../../src-tauri/crates/yss-tabular-io" }
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

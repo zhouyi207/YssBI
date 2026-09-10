@@ -194,7 +194,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-julia-extension/src/commands.rs",
+        repository_relative_source_file: "plugins/julia/native/crates/yss-julia-extension/src/commands.rs",
         fully_qualified_owner: "yss_julia_extension::commands",
         canonical_origin_targets: &[
             "yss_bayes_runtime::BayesApplicationError",
@@ -203,7 +203,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-julia-extension/src/main.rs",
+        repository_relative_source_file: "plugins/julia/native/crates/yss-julia-extension/src/main.rs",
         fully_qualified_owner: "yss_julia_extension",
         canonical_origin_targets: &[
             "yss_bayes_runtime::BayesInferenceService",
@@ -230,13 +230,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-julia-worker/src/assets.rs",
+        repository_relative_source_file: "plugins/julia/native/crates/yss-julia-worker/src/assets.rs",
         fully_qualified_owner: "yss_julia_worker::assets",
         canonical_origin_targets: &["yss_file_replace::atomic_replace"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-bayes-artifact-datafusion/src/plots.rs",
+        repository_relative_source_file: "plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/plots.rs",
         fully_qualified_owner: "yss_bayes_artifact_datafusion::plots",
         canonical_origin_targets: &[
             "yss_bayes_artifact_contract::BayesArtifactReadError",

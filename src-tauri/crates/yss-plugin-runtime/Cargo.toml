@@ -27,3 +27,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 arrow.workspace = true
+
+[[test]]
+name = "native_extension"
+path = "../../../plugins/julia/tests/native_extension.rs"

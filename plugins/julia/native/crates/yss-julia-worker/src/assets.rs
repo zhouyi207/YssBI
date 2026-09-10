@@ -7,16 +7,16 @@ use uuid::Uuid;
 use super::WORKER_DIR;
 use super::error::{JuliaWorkerError, JuliaWorkerErrorCode};
 
-const WORKER_PROJECT: &str = include_str!("../../../julia/Project.toml");
-const WORKER_MANIFEST: &str = include_str!("../../../julia/Manifest.toml");
-const WORKER_SCRIPT: &str = include_str!("../../../julia/worker.jl");
-const WORKER_PROTOCOL: &str = include_str!("../../../julia/worker_protocol.jl");
-const WORKER_SCIENTIFIC_RUNTIME: &str = include_str!("../../../julia/scientific_runtime.jl");
-const WORKER_BAYES_FIT_OP: &str = include_str!("../../../julia/ops/bayes_fit.jl");
-const WORKER_BAYES_EXPRESSION_OP: &str = include_str!("../../../julia/ops/bayes/expression.jl");
-const WORKER_BAYES_RUNTIME_OP: &str = include_str!("../../../julia/ops/bayes/runtime.jl");
+const WORKER_PROJECT: &str = include_str!("../../../../runtime/julia/Project.toml");
+const WORKER_MANIFEST: &str = include_str!("../../../../runtime/julia/Manifest.toml");
+const WORKER_SCRIPT: &str = include_str!("../../../../runtime/julia/worker.jl");
+const WORKER_PROTOCOL: &str = include_str!("../../../../runtime/julia/worker_protocol.jl");
+const WORKER_SCIENTIFIC_RUNTIME: &str = include_str!("../../../../runtime/julia/scientific_runtime.jl");
+const WORKER_BAYES_FIT_OP: &str = include_str!("../../../../runtime/julia/ops/bayes_fit.jl");
+const WORKER_BAYES_EXPRESSION_OP: &str = include_str!("../../../../runtime/julia/ops/bayes/expression.jl");
+const WORKER_BAYES_RUNTIME_OP: &str = include_str!("../../../../runtime/julia/ops/bayes/runtime.jl");
 const WORKER_BAYES_TURING_GENERIC_NORMAL_OP: &str =
-    include_str!("../../../julia/ops/bayes/turing_generic_normal.jl");
+    include_str!("../../../../runtime/julia/ops/bayes/turing_generic_normal.jl");
 
 pub(super) fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, JuliaWorkerError> {
     let worker_dir = app_data_dir.join(WORKER_DIR);

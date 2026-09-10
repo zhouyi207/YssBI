@@ -1,4 +1,5 @@
 [package]
+workspace = "../../../../../src-tauri"
 name = "yss-bayes-runtime"
 version = "0.1.0"
 edition = "2024"
@@ -10,7 +11,7 @@ yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
 yss-bayes-worker = { path = "../yss-bayes-worker" }
-yss-sci-contract = { path = "../yss-sci-contract" }
+yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
