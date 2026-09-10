@@ -71,9 +71,9 @@ pub fn matrix_rank(matrix: ArrayView2<'_, f64>) -> Result<(usize, f64), LinalgEr
     if rows == 0 || cols == 0 {
         return Ok((0, 1.0));
     }
-    // Keep the full SVD path used by SCI's rank diagnostics during migration.
-    let decomposition = matrix.svd()?;
-    let values = decomposition.values();
+    // Rank/conditioning need only singular values. Full U would allocate rows² entries
+    // for a tall design matrix even though no caller uses its singular vectors here.
+    let values = matrix.singular_values()?;
     let largest = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let smallest = values.iter().copied().fold(f64::INFINITY, f64::min);
     if !largest.is_finite() || largest <= 0.0 {

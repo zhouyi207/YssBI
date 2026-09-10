@@ -117,6 +117,20 @@ fn svd_orientation_rank_and_empty_matrix_conventions_are_stable() {
 }
 
 #[test]
+fn rank_of_a_tall_design_does_not_require_square_singular_vectors() {
+    let design = Array2::from_shape_fn((100_000, 2), |(row, column)| {
+        if column == 0 {
+            1.0
+        } else {
+            row as f64 / 1000.0
+        }
+    });
+    let (rank, condition) = matrix_rank(design.view()).unwrap();
+    assert_eq!(rank, 2);
+    assert!(condition.is_finite() && condition > 100.0 && condition < 120.0);
+}
+
+#[test]
 fn eigenvectors_match_real_and_complex_eigenvalues_without_assuming_order() {
     let symmetric = array![[2., 1.], [1., 2.]];
     let decomposition = SymmetricEigen::factor(symmetric.view()).unwrap();

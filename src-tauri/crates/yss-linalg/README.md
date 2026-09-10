@@ -30,7 +30,8 @@ let reconstructed = a.matmul(&x);
 - Cholesky and `SymmetricEigen::factor` read the lower triangle of a square
   matrix. `SolveLowerTriangular` overwrites an exclusive RHS view.
 - SVD returns full left/right vectors and descending singular values. Its views
-  borrow the decomposition without copying the factors. `matrix_rank` uses
+  borrow the decomposition without copying the factors. `matrix_rank` computes only
+  singular values, so tall input matrices do not allocate a square left-vector matrix. It uses
   `max(rows, cols) * f64::EPSILON * largest_singular_value`; empty matrices return
   `(0, 1)`, and zero matrices return `(0, infinity)`. Failed decompositions return
   `LinalgError`; SCI callers retain their existing rank-failure fallback.
