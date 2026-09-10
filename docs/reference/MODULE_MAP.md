@@ -20,7 +20,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-application` | `src-tauri/crates/yss-application` | [Cargo.toml](../../src-tauri/crates/yss-application/Cargo.toml) | [README](../../src-tauri/crates/yss-application/README.md) |
 | `yss-automation-contract` | `src-tauri/crates/yss-automation-contract` | [Cargo.toml](../../src-tauri/crates/yss-automation-contract/Cargo.toml) | — |
 | `yss-bayes-artifact-contract` | `src-tauri/crates/yss-bayes-artifact-contract` | [Cargo.toml](../../src-tauri/crates/yss-bayes-artifact-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-artifact-contract/README.md) |
-| `yss-bayes-artifact-polars` | `src-tauri/crates/yss-bayes-artifact-polars` | [Cargo.toml](../../src-tauri/crates/yss-bayes-artifact-polars/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-artifact-polars/README.md) |
+| `yss-bayes-artifact-datafusion` | `src-tauri/crates/yss-bayes-artifact-datafusion` | [Cargo.toml](../../src-tauri/crates/yss-bayes-artifact-datafusion/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-artifact-datafusion/README.md) |
 | `yss-bayes-model` | `src-tauri/crates/yss-bayes-model` | [Cargo.toml](../../src-tauri/crates/yss-bayes-model/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-model/README.md) |
 | `yss-bayes-result` | `src-tauri/crates/yss-bayes-result` | [Cargo.toml](../../src-tauri/crates/yss-bayes-result/Cargo.toml) | [README](../../src-tauri/crates/yss-bayes-result/README.md) |
 | `yss-bayes-runtime` | `src-tauri/crates/yss-bayes-runtime` | [Cargo.toml](../../src-tauri/crates/yss-bayes-runtime/Cargo.toml) | — |
@@ -33,10 +33,11 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-database-edit` | `src-tauri/crates/yss-database-edit` | [Cargo.toml](../../src-tauri/crates/yss-database-edit/Cargo.toml) | — |
 | `yss-database-runtime` | `src-tauri/crates/yss-database-runtime` | [Cargo.toml](../../src-tauri/crates/yss-database-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-database-runtime/README.md) |
 | `yss-database-schema` | `src-tauri/crates/yss-database-schema` | [Cargo.toml](../../src-tauri/crates/yss-database-schema/Cargo.toml) | — |
+| `yss-datafusion` | `src-tauri/crates/yss-datafusion` | [Cargo.toml](../../src-tauri/crates/yss-datafusion/Cargo.toml) | — |
 | `yss-dataset-profile` | `src-tauri/crates/yss-dataset-profile` | [Cargo.toml](../../src-tauri/crates/yss-dataset-profile/Cargo.toml) | — |
+| `yss-dataset-store` | `src-tauri/crates/yss-dataset-store` | [Cargo.toml](../../src-tauri/crates/yss-dataset-store/Cargo.toml) | [README](../../src-tauri/crates/yss-dataset-store/README.md) |
 | `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | — |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
-| `yss-duckdb` | `src-tauri/crates/yss-duckdb` | [Cargo.toml](../../src-tauri/crates/yss-duckdb/Cargo.toml) | — |
 | `yss-execution` | `src-tauri/crates/yss-execution` | [Cargo.toml](../../src-tauri/crates/yss-execution/Cargo.toml) | — |
 | `yss-file-replace` | `src-tauri/crates/yss-file-replace` | [Cargo.toml](../../src-tauri/crates/yss-file-replace/Cargo.toml) | — |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
@@ -77,6 +78,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-project-registry-sqlite` | `src-tauri/crates/yss-project-registry-sqlite` | [Cargo.toml](../../src-tauri/crates/yss-project-registry-sqlite/Cargo.toml) | — |
 | `yss-project-watcher` | `src-tauri/crates/yss-project-watcher` | [Cargo.toml](../../src-tauri/crates/yss-project-watcher/Cargo.toml) | [README](../../src-tauri/crates/yss-project-watcher/README.md) |
 | `yss-project-watcher-notify` | `src-tauri/crates/yss-project-watcher-notify` | [Cargo.toml](../../src-tauri/crates/yss-project-watcher-notify/Cargo.toml) | [README](../../src-tauri/crates/yss-project-watcher-notify/README.md) |
+| `yss-relational-contract` | `src-tauri/crates/yss-relational-contract` | [Cargo.toml](../../src-tauri/crates/yss-relational-contract/Cargo.toml) | — |
 | `yss-resource-lifecycle` | `src-tauri/crates/yss-resource-lifecycle` | [Cargo.toml](../../src-tauri/crates/yss-resource-lifecycle/Cargo.toml) | — |
 | `yss-resource-naming` | `src-tauri/crates/yss-resource-naming` | [Cargo.toml](../../src-tauri/crates/yss-resource-naming/Cargo.toml) | — |
 | `yss-sci` | `src-tauri/crates/yss-sci` | [Cargo.toml](../../src-tauri/crates/yss-sci/Cargo.toml) | [README](../../src-tauri/crates/yss-sci/README.md) |
@@ -85,9 +87,9 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-sql-source` | `src-tauri/crates/yss-sql-source` | [Cargo.toml](../../src-tauri/crates/yss-sql-source/Cargo.toml) | — |
 | `yss-statistical-harness` | `src-tauri/crates/yss-statistical-harness` | [Cargo.toml](../../src-tauri/crates/yss-statistical-harness/Cargo.toml) | — |
 | `yss-statistical-harness-sqlite` | `src-tauri/crates/yss-statistical-harness-sqlite` | [Cargo.toml](../../src-tauri/crates/yss-statistical-harness-sqlite/Cargo.toml) | — |
+| `yss-tabular-arrow` | `src-tauri/crates/yss-tabular-arrow` | [Cargo.toml](../../src-tauri/crates/yss-tabular-arrow/Cargo.toml) | — |
 | `yss-tabular-contract` | `src-tauri/crates/yss-tabular-contract` | [Cargo.toml](../../src-tauri/crates/yss-tabular-contract/Cargo.toml) | — |
 | `yss-tabular-io` | `src-tauri/crates/yss-tabular-io` | [Cargo.toml](../../src-tauri/crates/yss-tabular-io/Cargo.toml) | — |
-| `yss-tabular-polars` | `src-tauri/crates/yss-tabular-polars` | [Cargo.toml](../../src-tauri/crates/yss-tabular-polars/Cargo.toml) | — |
 | `yss-tracing` | `src-tauri/crates/yss-tracing` | [Cargo.toml](../../src-tauri/crates/yss-tracing/Cargo.toml) | — |
 | `yss-window-state` | `src-tauri/crates/yss-window-state` | [Cargo.toml](../../src-tauri/crates/yss-window-state/Cargo.toml) | — |
 | `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | — |

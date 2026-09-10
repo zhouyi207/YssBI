@@ -30,7 +30,7 @@ flowchart LR
   API --> HARNESS[Statistical Harness]
   HARNESS --> GATEWAY[Application capability gateway]
   GATEWAY --> APP
-  PROJECT --> STORAGE[Project files and project DuckDB]
+  PROJECT --> STORAGE[Project files, dataset catalog and Parquet]
   API --> STREAMS[Events and ordered channels]
   STREAMS --> UI
 ```
@@ -116,6 +116,11 @@ Application session
 
 Project replacement 先关闭旧 session 的新任务准入并 drain 或取消活动工作，再构造和验证 candidate session，最后原子替换。旧 session 的 late event、result、database handle 和 Graph projection 因身份或 generation 不匹配而被拒绝；前端在 hydrate 新项目之前先清理旧的 backend-owned projection。
 
+打开项目先通过 Project 的 activation preparation 检查目标文件，再进入 replacement。
+旧格式、损坏文件或无效路径在这一阶段拒绝时，当前 Application session、准入、Draft 和 Results 保持不变。
+若最终文件重验在 drain 之后失败，则从仍然有效的 Project authority 重建可用会话并返回打开错误；
+只有 drain、authority 或会话重建确实无法完成时才保留恢复状态。
+
 Project 文件、resource revision 和提交事务由 Project owner 管理。Graph resource 可以存在于磁盘和 revision index 中但保持 unloaded；create/duplicate 只声明新资源，不为了发布事件而临时加载。需要 resident document 的 load/patch/move 路径统一经过 Project 的受验证安装边界。
 
 典型打开链路：
@@ -159,9 +164,10 @@ Open → Frontend Draft ──→ Compile complete draft ──→ immutable cac
 Database 用例由 Application 组合 Project declaration authority 和 session-scoped Database runtime：
 
 - typed import source 在 transport 边界解析；
-- project DuckDB 保存表内容、physical schema 和 display metadata；
-- 大表 query/edit/profile/export 保持在 Rust，使用分页、列投影、SQL aggregate 或批处理；
-- Polars materialization 只用于适合内存处理的路径；
+- 项目格式 5 使用 SQLite committed catalog 和不可变 Parquet 文件集；旧格式在读取入口拒绝，不自动改写；
+- 大表 query/edit/profile/export 保持在 Rust，使用 DataFusion、Arrow 分页、列投影、聚合与批处理；
+- 宿主与 Julia 插件均已移除 Polars，workspace 不再声明或锁定该依赖；插件结果由独立 DataFusion 适配器查询，Arrow 负责交换文件；
+- 宿主 IPC/CSV/Parquet 文件边界使用 Arrow batches；精确存储 Schema 与 Graph 语义 Schema 分开，见 [Database runtime](../../src-tauri/crates/yss-database-runtime/README.md)；
 - mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
 
 数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、窗口状态和 Julia worker assets 共用 `yss-file-replace` 的平台文件替换操作；临时文件、内容同步、会话重验和失败清理由各调用方负责。
@@ -180,7 +186,7 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 
 [`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 隔离线性代数后端，对 SCI 和 runtime 的条件数诊断暴露 `ndarray` 数据、分解对象和稳定错误类型。`faer` 只在该 crate 的私有 backend 中使用；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。
 
-[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；Polars 表格准备位于 `runtime::data`，核心算法不再依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。共享端口与实现之间不再保留额外的 Execution→SCI 适配 crate。
+[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。共享端口与实现之间不再保留额外的 Execution→SCI 适配 crate。
 
 ## 7. Statistical Harness
 

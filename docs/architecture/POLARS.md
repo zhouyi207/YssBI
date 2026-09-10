@@ -1,3 +1,11 @@
+> Status: Accepted Decision
+> Contract: Target Architecture
+> Scope: 数据引擎迁移的设计依据；不代表当前生产完成状态
+> Canonical owners: 可执行事实以源码和测试为准；实施顺序以迁移分析为准
+> Update when: 已接受的迁移方向或边界改变时
+
+实施结果见[数据引擎迁移验收](../reviews/2026-09-10-data-engine-migration.md)。以下保留原始设计分析，其中 DuckDB-first 等早期方向由后续 DataFusion 迁移目标细化。
+
 是的，**如果你已经决定“DuckDB 是 YssBI 的统一数据层 + 关系计算引擎 + 大数据执行引擎”，那么 Polars 的必要性会显著下降。** 对你现在这个架构方向，我认为你应该认真考虑：**是否可以把 Polars 从核心依赖降级为可选依赖，甚至最终删除。**
 
 原因是 DuckDB 和 Polars 在很多能力上确实高度重叠：

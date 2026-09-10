@@ -116,14 +116,33 @@ Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConst
 
 科学计算端口和 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 service 实现按 SCI Core 分类，依赖中性契约与模型。Composition root 只获 runtime 构造器的精确调用权限；Execution 不依赖 SCI runtime 或模型实现。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
-Activity panel command 的 capability 只开放 Nodes/Commands/Plugins 的 Application 文档查询、Plugin Manager 只读列表与
+Activity panel command 的 capability 只开放 Project/Nodes/Commands/Plugins 的 Application 文档查询、Plugin Manager 只读列表与
 Activity DTO，以及按游标返回增量的传输缓存。Composition root 只获缓存的构造权限，
 缓存按 Transport 分类，既不写入项目也不拥有 UI 状态。Transport mapper 只开放 Activity projection 类型及其固定 variants；
 不增加 Commands → Application 或 Transport → Application 的通配依赖。
-Project Activity 由前端投影已发布资源快照，不保留后端 Project Activity query 或对应 mapper variants。
+Project query 的精确 capability 还允许返回与同次 ProjectIndex 对应的面板增量；Project 文档由后端纯投影生成。
+前端资源与面板共用已有发布入口，不从 ResourceStore 再次生成或查询 Project 文档。
 文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 维护。
 
 ## 6. Changing the architecture policy
+
+数据库的语义 Schema/revision facts 归 `yss-database-schema`，按 Pure Leaf 分类；具体引擎映射归适配器。
+`yss-relational-contract` 是执行期关系句柄、快照绑定和 Arrow 流端口的 Pure Leaf 契约。
+`yss-tabular-arrow` 与 `yss-datafusion` 按 Database Core 分类，Arrow/DataFusion 外部依赖只授予实际声明的包；
+持久化 Graph 和统计数值算法不直接依赖 DataFusion。IPC/CSV/Parquet 宿主 I/O 不再获 Polars 物化权限。
+
+`yss-dataset-profile` 只拥有中性的统计 DTO 与显示规则，DataFusion 适配器在固定快照上执行聚合。
+SCI runtime 的输入准备使用 Arrow；其 Polars/Polars Arrow 使用权限已移除，数值核心不增加数据引擎依赖。
+profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polars 代码的历史迁移测试固定旧实现。
+旧 DuckDB/Polars 适配器及其依赖权限已删除。`yss-bayes-artifact-datafusion` 按 Backend Adapter 审计，
+只为该包声明 DataFusion 查询依赖；Julia exchange 的两个消费者使用 Arrow。密度计算权限绑定到该适配器的 `plots` 模块。
+独立 `dataset_engine_bench` example 与桌面 composition root 可装配 `SciRuntimeBackend`；
+其他 Application 源码继续通过 `ScientificBackend` 端口，不能引用该实现。
+
+`yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
+结果页 command 只调用 Application 查询；页面预算、快照读取和查询结束后的 currentness 检查位于 Application。
+其 DTO converter 仅获 ResultPageProjection/ResultPageKind 的精确读取权限。
+另存为枚举文件路径后使用现有文件事务的流式复制入口；目标必须不存在，源根必须在租约中，文档仍逐项验证。
 
 插件协议与清单属于 Pure Leaf；通用进程/签名安装和 IPC SDK 属于 Backend Adapter。`yss-bayes-runtime` 属于插件内部 Application，只有 Julia extension 的确切 adapter source 可访问其编排入口。宿主 composition root 只构造通用 Plugin Manager 和 HostServices；Julia adapter 构造器只允许出现在外部 extension 中。文件发布、Arrow 适配和签名库权限均为对应 source/package 的显式登记，不开放通配业务桥接。
 

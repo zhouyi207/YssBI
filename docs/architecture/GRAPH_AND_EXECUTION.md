@@ -138,7 +138,7 @@ Ready   { type: ready, artifactId, projection, cacheHit }
 Blocked { type: blocked, projection }
 ```
 
-两个分支都不回写 document。未绑定输入、类型/Schema 问题、orphan、cycle 和函数语义错误返回 Blocked；API 不把它转换成 diagnosed IPC failure，frontend 不为 Blocked 写执行 error log 或显示 Compile 失败弹窗。内部 resolver/compiler/cache 故障仍使用 incident-linked command rejection。
+两个分支都不回写 document。未绑定输入、类型/Schema 问题、orphan、cycle、函数语义错误和当前 Execution registry 不支持的 kernel 返回 Blocked；执行能力诊断也进入同一个 semantic snapshot，并在命中编译缓存前检查。API 不把 Blocked 转换成 diagnosed IPC failure，frontend 不为其写执行 error log 或显示 Compile 失败弹窗。内部 resolver/compiler/cache 故障仍使用 incident-linked command rejection。
 
 `semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。manifest 记录所用函数签名/正文、变量类型、数据库 Schema 以及 absent lookup；basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
 
@@ -164,7 +164,24 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
 
-OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。计算使用已物化的数值序列；当前接入不包含数据库/序列 handle 的物化、Cluster VCE、WLS 或其他统计模型的执行 kernel。配置编辑、编译与这些尚未接入的计算能力是独立边界。
+OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
+
+Execution 已注册 DataFrame source/project/filter.rows/series.select/limit/rename kernel。它们组合
+`yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
+关系和数列持有固定 session、dataset snapshot/revision、查询上下文及文件租约。资源准备检查句柄内的
+session/revision 与已授权资源一致。OLS 可以接收既有数值列表，或来自同一个关系句柄的数列；后者共同投影、
+消费异步 Arrow 批流，并使用独立输入内存预算准备数值矩阵。NULL/非有限值仍被拒绝，不隐式逐列删除缺失样本。
+不同关系上的数列不能按长度相同直接拼接。Cluster VCE、WLS 和其他统计模型 kernel 尚未接入。
+
+Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 DisplayOrder 列；读取按 DisplayOrder、RowId
+确定顺序，再向 Graph 投影用户列。统计输入与拟合值/残差不会以并行批次的到达顺序替代表格的显示顺序。
+文档内的物化常量使用其不可变行域内的顺序，不将文件/batch offset 当成项目数据集的长期身份。
+
+真实项目的 DataFrame 资源现由 DatabaseRuntime 捕获 catalog 快照，并以 Project grant 的版本封装关系句柄；
+固定 Parquet 链路与真实项目的 CSV 导入 → Graph Compile/Execute → OLS → Results 分页均已通过集成验证。
+最终提交使用准备时捕获的同一组资源授权，Project 在发布前再次检查版本；不以空授权跳过数据集依赖。
+关系候选 Results 持有懒句柄，不保存所有中间批次；计划准备不表示全部行已经成功扫描，分页扫描失败通过结果读取错误交付。
+逐项证据见[数据引擎迁移验收](../reviews/2026-09-10-data-engine-migration.md)。
 
 ## 6. Results
 
@@ -173,6 +190,12 @@ OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`�
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前释放这些输出的旧 payload 与 ResultId 索引。一个 operation 的所有 outputs 同时失效；未参与本次 demand 的输出保留当前结果。成功 finalization 在同一写锁内发布整批结果，并验证每个输出仍属于该 run；被后续运行或图失效淘汰的 run 不能重新发布。失败、取消不恢复上次成功的 payload。
 
 Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。
+
+关系和数列页面由 Application 捕获当前 Result，交给句柄在固定快照上执行有界查询；I/O 在计算线程、锁外执行。
+每页最多读取请求行数加一行，通过额外行判断 `hasMore`；不为了预览执行整表 COUNT。`totalCount` 可为 null，
+在能确认末页总数时返回精确值；列名/精确类型与行值一起交付。页大小和字节预算由 Result query owner 限制。
+读取完成后再次检查 Application session 和 ResultId；失效结果的迟到成功/失败均不重新发布。
+Frontend 在总数未知时照常请求首页，按后端 `hasMore` 翻页，在表格中显示列名；超出 JavaScript 精确整数范围的值以十进制文本显示。
 
 Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence 和 DataSeries renderer 都提供分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 

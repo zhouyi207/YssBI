@@ -29,6 +29,10 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Accepted architecture contracts
 
+- [数据引擎迁移分析](architecture/迁移.md)：基于源码的目标边界、实施顺序和验收，优先细化下面两份方向讨论。
+- [DataFusion 目标方向](architecture/DATAFUSION.md)：关系计算和数据集存储的目标职责；实际迁移范围由迁移分析收敛。
+- [Polars 边界分析](architecture/POLARS.md)：移除宿主重复 DataFrame 计算层的理由；引擎选择由 DataFusion 目标方向更新。
+
 - [Plugin 架构与契约](architecture/PLUGIN.md)：通用插件宿主、独立进程、声明式 UI、Webview、IPC、数据、生命周期和验收；状态为已接受的目标设计，不代表当前生产已全部实现。
 
 ## Focused implementation contracts
@@ -36,6 +40,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Tauri / IPC transport](../src-tauri/crates/yss-api/README.md)
 - [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
+- [Dataset snapshot store](../src-tauri/crates/yss-dataset-store/README.md)
 - [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI numerical models](../src-tauri/crates/yss-sci/README.md)
 - [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
@@ -57,10 +62,12 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Graph Compile / Execute follow-up](roadmap/v0_3.md)：条件性后续项按 release backlog 维护。
 - [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
 - [Generated module map](reference/MODULE_MAP.md)
+- [数据引擎测量记录](reference/DATA_ENGINE_BENCHMARK.md)：百万行查询、编辑、压实与 OLS 的本地观察。
 
 ## History
 
 - [Version history](version/README.md)
+- [2026-09-10 数据引擎迁移验收](reviews/2026-09-10-data-engine-migration.md)：DuckDB/宿主 Polars 替换的逐项证据与验证边界。
 - [2026-09-07 深度清理审计](reviews/2026-09-07-deep-cleanup-audit.md)：该次源码检查、复现证据和清理建议的快照。
 - [2026-09-07 Tolerance 分析](reviews/2026-09-07-tolerance-analysis.md)：删除全局近似比较配置后的取舍、数值问题与后续改造边界。
 

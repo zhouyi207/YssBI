@@ -1,3 +1,11 @@
+> Status: Accepted Decision
+> Contract: Target Architecture
+> Scope: 数据引擎迁移的设计依据；不代表当前生产完成状态
+> Canonical owners: 可执行事实以源码和测试为准；实施顺序以迁移分析为准
+> Update when: 已接受的迁移方向或边界改变时
+
+实施结果见[数据引擎迁移验收](../reviews/2026-09-10-data-engine-migration.md)。以下保留原始设计分析，其中 DuckDB-first 等早期方向由后续 DataFusion 迁移目标细化。
+
 **方向上可以这么理解，但我不建议你把它简单定义成“DuckDB + Polars 全部删掉，换成 DataFusion + Parquet + SQLite”。**
 
 更准确的目标架构应该是：

@@ -45,6 +45,11 @@ Node parameters with `editor: "configuration"` carry `configuration: { kind: "co
 
 ## Commands, events, and channels
 
+`get_result_page` 在 blocking worker 上调用 Application 的页面查询；命令不直接执行关系查询或持有数据库锁。
+`ResultPage.totalCount` 为可空整数，未知总数使用 null；`hasMore` 与 `nextOffset` 决定是否可继续翻页。
+关系页面的 metadata 为 `{ columns: [{ name, type }] }`，values 为按该列顺序排列的行数组。
+超出 JavaScript safe-integer 范围的单元格使用十进制文本，精确存储类型保留在列元数据中。
+
 Choose the transport by semantics:
 
 | Primitive      | Use                                                                                       |
@@ -61,20 +66,20 @@ Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save 
 
 ## Activity panel projection
 
-`get_activity_panel_document` accepts Nodes, Commands or Plugins, locale, and an explicit project identity
-for Nodes. A null project context requests its empty document before activation;
-Commands/Plugins are global and use null. The handler delegates to Application/Plugin Manager
-on the blocking boundary and maps to `ActivityPanelDocumentDto`. The request also carries a
-nullable cursor, never frontend resource rows or rendering callbacks. The invoking WebView
-supplies the window identity; a caller cannot name another window.
+`get_activity_panel_document` accepts Project, Nodes, Commands or Plugins, locale, and explicit project identity
+for Project/Nodes. A null project requests empty documents; Commands/Plugins require null.
+The invoking WebView supplies the window identity. Cursors and request size are validated at this transport seam.
 
-Project is not an Activity IPC panel. Its frontend document is a synchronous projection of the
-published ProjectIndex/ResourceStore snapshot; resource changes do not trigger another index query
-through the Activity endpoint.
+Normal Project synchronization uses `get_project_index` with locale and Project/Nodes cursor requests.
+It returns `{ index, activityPanels }`: the Application captures one ProjectIndex, maps its Project document,
+and uses that same index for the Nodes catalog. Version revalidation does not rescan files.
+Each requested panel is encoded through the existing ActivityPanelSyncState as snapshot or patch.
+The frontend validates the whole response, then installs resource and panel projections through its existing publication owner.
+A lost or invalid panel baseline causes one whole-response snapshot recovery; there is no follow-up Activity query driven by ResourceStore.
 
 The exact `yssbi.activity-panel.v1` envelope contains panel/project identity, publication revision,
 title, tools, complete depth-ordered rows, and optional empty-state presentation. Text is either
-a localization key or a literal. Category defaults and node, command and plugin item kinds are Rust-owned. The payload
+a localization key or a literal. Category defaults and graph, chart, database, node, command and plugin item kinds are Rust-owned. The payload
 contains resource references and node creation descriptors, not graph documents, database engines,
 connection strings, or table data. Row count, depth and serialized response size are bounded;
 invalid/oversized input is never partially rendered.
@@ -106,7 +111,7 @@ The frontend service validates identity, cursor continuity, allowed patch fields
 unique ids and final tree depth before publication. Malformed batches do not partially mutate
 the visible projection. A failed delta gets one explicit snapshot recovery; a repeated failure
 is surfaced. Requests within a binding are serialized and coalesced. Project/language/epoch
-replacement and unmount invalidate the binding; UI expansion creates no request.
+replacement invalidates the binding; mounted consumers share the existing sidebarStore document cache. UI expansion creates no request and only expansion preferences are persisted.
 See [Workbench](../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) for UI ownership.
 
 Resource command replies and matching `ResourceMutationCommitted` events enter the same frontend
