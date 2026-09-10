@@ -78,6 +78,8 @@ impl HostServices for PluginHostServices {
         input: Value,
         exchange_dir: &Path,
     ) -> Result<Value, PluginFailure> {
+        context.granted_budget.validate()?;
+        let snapshot_limit = context.granted_budget.snapshot_bytes;
         if context.project != self.current_project()? {
             return Err(fail("plugin_stale_context"));
         }
@@ -125,7 +127,7 @@ impl HostServices for PluginHostServices {
                 {
                     return Err(fail("plugin_dataset_invalid"));
                 }
-                let max_rows = (128 * 1024 * 1024 / (columns.len() * 64)).min(1_000_000);
+                let max_rows = ((snapshot_limit as usize) / (columns.len() * 64)).min(1_000_000);
                 let selected_columns = columns
                     .iter()
                     .map(|column| column.as_str().to_owned())
@@ -161,16 +163,19 @@ impl HostServices for PluginHostServices {
                 let bytes = fs::metadata(&path)
                     .map_err(|_| fail("plugin_snapshot_failed"))?
                     .len();
-                if bytes > 128 * 1024 * 1024
-                    || self
-                        .application
-                        .revalidate_captured_session(&captured)
-                        .is_err()
+                if bytes > snapshot_limit {
+                    let _ = fs::remove_file(path);
+                    return Err(fail("plugin_resource_exhausted"));
+                }
+                if self
+                    .application
+                    .revalidate_captured_session(&captured)
+                    .is_err()
                 {
                     let _ = fs::remove_file(path);
                     return Err(fail("plugin_stale_context"));
                 }
-                let snapshot_bytes = bounded_bytes(&path, 128 * 1024 * 1024)?;
+                let snapshot_bytes = bounded_bytes(&path, snapshot_limit)?;
                 let snapshot_hash = yss_canonical_hash::content_sha256(&snapshot_bytes);
                 let mut leases = self
                     .leases
@@ -215,9 +220,9 @@ impl HostServices for PluginHostServices {
                         .leases
                         .lock()
                         .map_err(|_| fail("plugin_state_unavailable"))?;
-                    if !leases
+                    if leases
                         .get(id)
-                        .is_some_and(|lease| lease.context == context.context_id)
+                        .is_none_or(|lease| lease.context != context.context_id)
                     {
                         return Err(fail("plugin_permission_denied"));
                     }
@@ -261,7 +266,7 @@ impl HostServices for PluginHostServices {
                             return Err(fail("plugin_artifact_invalid"));
                         }
                     }
-                    let contents = bounded_bytes(&path, 128 * 1024 * 1024 - bytes)?;
+                    let contents = bounded_bytes(&path, snapshot_limit.saturating_sub(bytes))?;
                     bytes += contents.len() as u64;
                     artifacts.push(yss_project::external_resources::ExternalArtifact {
                         name: path
@@ -289,9 +294,7 @@ impl HostServices for PluginHostServices {
                 let receipt = captured
                     .project()
                     .commit_external_artifacts(
-                        &ProjectInstanceId::from_existing(
-                            project.project_instance_id.clone().into(),
-                        ),
+                        &ProjectInstanceId::from_existing(project.project_instance_id.clone()),
                         &ProjectSessionId::new(project.project_session_id.clone()),
                         ExternalResourceProvenance {
                             provider_id: context.plugin_id.clone(),

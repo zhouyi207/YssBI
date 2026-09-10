@@ -8,6 +8,10 @@
 
 本文是面向实现、审查和验收的完整目标契约。“必须”“不得”是实现约束，不表示对应代码已经完成。当前生产行为仍以代码、测试、manifest 和各 Current 专项文档为准。原型文件存在、页面可打开或某个 RPC 可调用，均不能作为整个契约已满足的证据。
 
+当前生命周期实现见 [Plugin runtime](../../src-tauri/crates/yss-plugin-runtime/README.md)，源码与分发入口见
+[Julia 插件](../../plugins/julia/README.md)。当前协议 2 引入有保留期的操作标识、实际预算、进度和诊断投影；
+同仓库仍发布一个 `yssbi.julia` 包。在线目录、自动更新、OS sandbox 和 checkpoint/recover 等其余目标不因此视为完成。
+
 采用稳定 Extension API、声明式扩展点、宿主标准 UI、独立插件进程、隔离 Webview 和消息通信。源码组织、发布单位、进程边界和业务 authority 分别建模，不按 Rust crate 数量划分插件。
 
 ## 1. 目标与不可破坏的边界

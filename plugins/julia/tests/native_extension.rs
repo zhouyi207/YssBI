@@ -11,6 +11,14 @@ use std::{
 use yss_plugin_protocol::*;
 use yss_plugin_runtime::PluginManager;
 
+fn operation(nonce: &str) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    operation_id(now, nonce).unwrap()
+}
+
 struct Host {
     project: Mutex<Option<ProjectContext>>,
     root: PathBuf,
@@ -52,9 +60,15 @@ impl HostServices for Host {
                 ));
                 let data = RecordBatch::try_new(schema.clone(), columns).unwrap();
                 let path = exchange.join("fixture.arrow");
-                let mut writer = arrow::ipc::writer::FileWriter::try_new(
+                let mut writer = arrow::ipc::writer::FileWriter::try_new_with_options(
                     fs::File::create(&path).unwrap(),
                     &schema,
+                    arrow::ipc::writer::IpcWriteOptions::try_new(
+                        8,
+                        false,
+                        arrow::ipc::MetadataVersion::V5,
+                    )
+                    .unwrap(),
                 )
                 .unwrap();
                 writer.write(&data).unwrap();
@@ -80,7 +94,12 @@ fn wait(manager: &PluginManager, session: &str, id: &str, timeout: Duration) -> 
     loop {
         let value = manager
             .call_view(session, "test", "tasks.get", json!({"taskId":id}))
-            .unwrap();
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{error:?}; diagnostics: {:?}",
+                    manager.diagnostics("yssbi.julia")
+                )
+            });
         let state = value["state"].as_str().unwrap();
         if ["succeeded", "failed", "cancelled", "outcomeUnknown"].contains(&state) {
             return value;
@@ -112,7 +131,13 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
         .map(|inspection| (package, inspection))
         .unwrap();
     manager
-        .install(&package.0, &package.1.package_digest, "install-test", true)
+        .install(
+            &package.0,
+            &package.1.package_digest,
+            &operation("install-test"),
+            true,
+            None,
+        )
         .unwrap();
     let runtime = manager
         .attach_view("yssbi.julia", "runtime", "test")
@@ -130,7 +155,39 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
         dependency["runtimeState"], "ready",
         "compatible Julia must be installed for this test"
     );
-    let preparation=manager.call_view(&runtime.session_id,"test","tasks.start",json!({"operationId":"prepare-test","taskType":"runtime.prepare","parameters":{},"timeoutMs":600000})).unwrap();
+    let interrupted = manager.call_view(&runtime.session_id, "test", "tasks.start", json!({"operationId":operation("cancel-prepare"),"taskType":"runtime.prepare","parameters":{},"timeoutMs":600000})).unwrap();
+    let interrupted_id = interrupted["taskId"].as_str().unwrap();
+    // Give the real preparation process time to enter Pkg, then cancel this worker.
+    std::thread::sleep(Duration::from_secs(1));
+    assert_eq!(manager.call_view(&runtime.session_id, "test", "tasks.start", json!({"operationId":operation("overlap-prepare"),"taskType":"runtime.prepare","parameters":{},"timeoutMs":600000})).unwrap_err().code, "plugin_resource_exhausted");
+    let cancel_started = Instant::now();
+    manager
+        .call_view(
+            &runtime.session_id,
+            "test",
+            "tasks.cancel",
+            json!({"taskId":interrupted_id}),
+        )
+        .unwrap();
+    let interrupted = wait(
+        &manager,
+        &runtime.session_id,
+        interrupted_id,
+        Duration::from_secs(15),
+    );
+    assert_eq!(interrupted["state"], "cancelled", "{interrupted}");
+    assert!(cancel_started.elapsed() < Duration::from_secs(15));
+    assert!(
+        manager
+            .call_view(
+                &runtime.session_id,
+                "test",
+                "dependencies.inspect",
+                Value::Null
+            )
+            .is_ok()
+    );
+    let preparation=manager.call_view(&runtime.session_id,"test","tasks.start",json!({"operationId":operation("prepare-test"),"taskType":"runtime.prepare","parameters":{},"timeoutMs":600000})).unwrap();
     let prepared = wait(
         &manager,
         &runtime.session_id,
@@ -141,16 +198,15 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
     let analysis = manager
         .attach_view("yssbi.julia", "analysis", "test")
         .unwrap();
-    let fixture: Value = serde_json::from_str(include_str!(
-        "fixtures/bayes/linear_normal/simple.json"
-    ))
-    .unwrap();
+    let fixture: Value =
+        serde_json::from_str(include_str!("fixtures/bayes/linear_normal/simple.json")).unwrap();
     let spec = &fixture["modelSpec"];
     let mut draft = json!({"formulaText":"y = a*x+b","rawResponse":{"type":"symbol","name":"y"},"boundResponse":{"type":"data_variable","name":"y"},"symbols":[{"name":"y","role":"dependent","inferredRole":"dependent","userEdited":false},{"name":"x","role":"independent","inferredRole":"independent","userEdited":false},{"name":"a","role":"parameter","inferredRole":"parameter","userEdited":false},{"name":"b","role":"parameter","inferredRole":"parameter","userEdited":false},{"name":"sigma","role":"parameter","inferredRole":"parameter","userEdited":false}],"dataset":{"sourceType":"table","sourceId":"fixture-linear-normal","columns":[{"name":"x","dtype":"number","nullable":false},{"name":"y","dtype":"number","nullable":false}]},"responseBinding":{"symbol":"y","column":"y"},"dataBindings":{"x":"x"},"boundPredictor":spec["predictor"],"likelihood":spec["likelihood"],"parameters":spec["parameters"],"sampler":spec["sampler"]});
     draft["sampler"]["chains"] = json!(1);
     draft["sampler"]["samples"] = json!(64);
     draft["sampler"]["warmup"] = json!(64);
-    let admitted=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":"fit-test","taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
+    let fit_operation = operation("fit-test");
+    let admitted=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":fit_operation,"taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
     let task_id = admitted["taskId"].as_str().unwrap();
     let completed = wait(
         &manager,
@@ -169,10 +225,10 @@ fn independently_installs_executes_cancels_and_uninstalls_a_native_extension() {
         .unwrap();
     assert!(result["summaries"].as_array().unwrap().len() >= 3);
     assert!(root.join("retained-result.json").exists());
-    let duplicate=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":"fit-test","taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
+    let duplicate=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":fit_operation,"taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
     assert_eq!(duplicate["taskId"], task_id);
     draft["sampler"]["samples"] = json!(1_000_000);
-    let long=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":"cancel-test","taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
+    let long=manager.call_view(&analysis.session_id,"test","tasks.start",json!({"operationId":operation("cancel-test"),"taskType":"bayes.inference","parameters":draft,"timeoutMs":180000})).unwrap();
     let long_id = long["taskId"].as_str().unwrap();
     manager
         .call_view(
@@ -235,8 +291,9 @@ fn concurrent_activation_shares_process_and_respects_view_leases() {
         .install(
             &package,
             &inspected.package_digest,
-            "activation-install",
+            &operation("activation-install"),
             true,
+            None,
         )
         .unwrap();
     let barrier = Arc::new(Barrier::new(4));

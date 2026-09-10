@@ -22,6 +22,8 @@ pub struct CallContext {
     pub task_id: Option<String>,
     pub operation_id: Option<String>,
     pub parameters_hash: Option<String>,
+    #[serde(default)]
+    pub granted_budget: crate::ResourceBudget,
 }
 
 pub trait HostServices: Send + Sync {
@@ -44,6 +46,10 @@ pub struct InstalledPlugin {
     pub installation_generation: String,
     pub enabled: bool,
     pub process_state: String,
+    #[serde(default)]
+    pub granted_budget: crate::ResourceBudget,
+    #[serde(default)]
+    pub signer_key: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -51,6 +57,8 @@ pub struct PackageInspection {
     pub manifest: PluginManifest,
     pub package_digest: String,
     pub signer_key: String,
+    #[serde(default)]
+    pub previous_signer_key: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -70,6 +78,35 @@ pub struct TaskSnapshot {
     pub revision: String,
     pub error: Option<PluginFailure>,
     pub result: Option<Value>,
+    #[serde(default)]
+    pub progress: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskHistoryPage {
+    pub tasks: Vec<TaskSnapshot>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginDiagnostic {
+    pub plugin_id: String,
+    pub instance_id: String,
+    pub task_ids: Vec<String>,
+    pub stderr: String,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginStorageUsage {
+    pub plugin_id: String,
+    pub used_bytes: u64,
+    pub budget_bytes: u64,
+    pub cache_bytes: u64,
+    pub enforcement: String,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

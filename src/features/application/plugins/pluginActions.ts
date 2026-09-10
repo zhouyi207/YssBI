@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { pluginService } from "@/services/plugins/pluginService";
+import { createOperationId, pluginService } from "@/services/plugins/pluginService";
 import { openPathDialog, savePathDialog } from "@/services/platform/pathDialog";
 import { revealPath } from "@/services/platform/opener";
 import { ui } from "@/features/core/ui/ui";
@@ -12,6 +12,20 @@ export async function installLocalPlugin(t: TFunction) {
   if (!selection.ok) throw new Error("plugin_file_dialog_failed");
   if (typeof selection.value !== "string") return;
   const inspection = await pluginService.inspect(selection.value);
+  let approvedPreviousSigner: string | null = null;
+  if (inspection.previousSignerKey && inspection.previousSignerKey !== inspection.signerKey) {
+    const changed = await ui.confirm({
+      title: t("plugins.signerChangeTitle"),
+      message: t("plugins.signerChangeMessage", {
+        previous: inspection.previousSignerKey,
+        next: inspection.signerKey,
+      }),
+      confirmText: t("plugins.approveSignerChange"),
+      type: "danger",
+    });
+    if (!changed) return;
+    approvedPreviousSigner = inspection.previousSignerKey;
+  }
   const accepted = await ui.confirm({
     title: t("plugins.trustTitle", { name: inspection.manifest.name }),
     message: t("plugins.trustMessage", {
@@ -22,7 +36,15 @@ export async function installLocalPlugin(t: TFunction) {
     confirmText: t("plugins.install"),
     type: "danger",
   });
-  if (accepted) await pluginService.install(selection.value, inspection.packageDigest);
+  if (accepted) {
+    const operationId = createOperationId();
+    await pluginService.install(
+      selection.value,
+      inspection.packageDigest,
+      operationId,
+      approvedPreviousSigner,
+    );
+  }
 }
 export async function uninstallPlugin(id: string, name: string, t: TFunction): Promise<boolean> {
   const accepted = await ui.confirm({

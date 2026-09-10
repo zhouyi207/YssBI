@@ -8,7 +8,11 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
 use std::thread;
 use std::time::Duration;
 
@@ -17,12 +21,12 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use yss_julia_runtime::{
-    JuliaRuntimeState, background_command, command_output_failure_detail, get_runtime_status,
-    system_julia_executable,
+    JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable,
 };
 
 mod assets;
 mod error;
+mod preparation;
 mod task_directory;
 
 use assets::ensure_worker_assets;
@@ -41,6 +45,7 @@ pub struct JuliaWorkerTask {
     pub task_id: Option<String>,
     pub operation: String,
     pub parameters: Value,
+    pub cancellation: Option<Arc<AtomicBool>>,
 }
 
 #[derive(Debug)]
@@ -171,6 +176,14 @@ impl JuliaWorkerManager {
     }
 
     pub fn warm_up(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
+        self.warm_up_cancellable(app_data_dir, &AtomicBool::new(false))
+    }
+
+    pub fn warm_up_cancellable(
+        &self,
+        app_data_dir: &Path,
+        cancellation: &AtomicBool,
+    ) -> Result<(), JuliaWorkerError> {
         let _request_guard = self.inner.request_gate.lock().map_err(|_| {
             JuliaWorkerError::new(
                 JuliaWorkerErrorCode::StateUnavailable,
@@ -178,7 +191,10 @@ impl JuliaWorkerManager {
             )
         })?;
         self.set_startup_state(JuliaWorkerStartupState::Preparing);
-        let result = self.prepare(app_data_dir).and_then(|()| {
+        let result = preparation::run(app_data_dir, cancellation).and_then(|()| {
+            if cancellation.load(Ordering::Acquire) {
+                return Err(preparation::cancelled());
+            }
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
             worker.send(json!({
@@ -186,7 +202,7 @@ impl JuliaWorkerManager {
                 "id": request_id,
                 "method": "ping"
             }))?;
-            worker.await_response(&request_id, "startup", None)
+            worker.await_response_cancellable(&request_id, "startup", None, Some(cancellation))
         });
         match &result {
             Ok(()) => self.set_startup_state(JuliaWorkerStartupState::Idle),
@@ -196,34 +212,7 @@ impl JuliaWorkerManager {
     }
 
     pub fn prepare(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
-        let worker_dir = ensure_worker_assets(app_data_dir)?;
-        let executable = system_julia_executable().map_err(|error| {
-            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error.to_string())
-        })?;
-        let mut command = background_command(executable);
-        configure_dependency_cache(&mut command, &worker_dir);
-        let status = command
-            .arg(format!("--project={}", worker_dir.display()))
-            .args(["--startup-file=no", "-e", "using Pkg; Pkg.instantiate()"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|error| {
-                JuliaWorkerError::new(
-                    JuliaWorkerErrorCode::EnvironmentUnavailable,
-                    format!("Failed to prepare Julia worker packages: {error}"),
-                )
-            })?;
-        if status.status.success() {
-            Ok(())
-        } else {
-            let detail = command_output_failure_detail(&status);
-            Err(JuliaWorkerError::new(
-                JuliaWorkerErrorCode::EnvironmentUnavailable,
-                format!("Failed to prepare Julia worker packages: {detail}"),
-            ))
-        }
+        preparation::run(app_data_dir, &AtomicBool::new(false))
     }
 
     /// Runs a task whose input writer already returns the worker's typed error.
@@ -242,6 +231,13 @@ impl JuliaWorkerManager {
         })?;
 
         let task_id = task.task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        if task
+            .cancellation
+            .as_ref()
+            .is_some_and(|token| token.load(Ordering::Acquire))
+        {
+            return Err(preparation::cancelled());
+        }
         let task_directory = JuliaWorkerTaskDirectory::create(app_data_dir, &task_id)?;
         let input_path = task_directory.path().join("input.arrow");
         let output_path = task_directory.path().join("output.arrow");
@@ -249,6 +245,13 @@ impl JuliaWorkerManager {
 
         let result = (|| {
             write_input(&input_path)?;
+            if task
+                .cancellation
+                .as_ref()
+                .is_some_and(|token| token.load(Ordering::Acquire))
+            {
+                return Err(preparation::cancelled());
+            }
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
             self.set_active_task(Some(task_id.clone()))?;
@@ -266,7 +269,14 @@ impl JuliaWorkerManager {
                         "parameters": task.parameters
                     }
                 }))
-                .and_then(|()| worker.await_response(&request_id, &task_id, progress.as_ref()));
+                .and_then(|()| {
+                    worker.await_response_cancellable(
+                        &request_id,
+                        &task_id,
+                        progress.as_ref(),
+                        task.cancellation.as_deref(),
+                    )
+                });
             self.clear_active_task(&task_id);
             response
         })();
@@ -562,11 +572,12 @@ impl WorkerProcess {
         })
     }
 
-    fn await_response(
+    fn await_response_cancellable(
         &self,
         request_id: &str,
         task_id: &str,
         progress: Option<&JuliaWorkerProgressCallback>,
+        cancellation: Option<&AtomicBool>,
     ) -> Result<(), JuliaWorkerError> {
         let receiver = self.messages.lock().map_err(|_| {
             JuliaWorkerError::new(
@@ -574,13 +585,29 @@ impl WorkerProcess {
                 "Julia worker response channel is unavailable.",
             )
         })?;
+        let mut last_response = std::time::Instant::now();
         loop {
-            let message = receiver.recv_timeout(RESPONSE_TIMEOUT).map_err(|_| {
-                JuliaWorkerError::new(
-                    JuliaWorkerErrorCode::ResponseTimeout,
-                    self.worker_failure("Julia worker did not return a response."),
-                )
-            })?;
+            if cancellation.is_some_and(|token| token.load(Ordering::Acquire)) {
+                self.terminate();
+                return Err(preparation::cancelled());
+            }
+            let message = match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(message) => {
+                    last_response = std::time::Instant::now();
+                    message
+                }
+                Err(mpsc::RecvTimeoutError::Timeout)
+                    if last_response.elapsed() < RESPONSE_TIMEOUT =>
+                {
+                    continue;
+                }
+                Err(_) => {
+                    return Err(JuliaWorkerError::new(
+                        JuliaWorkerErrorCode::ResponseTimeout,
+                        self.worker_failure("Julia worker did not return a response."),
+                    ));
+                }
+            };
             if message.get("method").and_then(Value::as_str) == Some("progress") {
                 if let Some(progress) = progress
                     && let Some(params) = message.get("params")
@@ -610,8 +637,7 @@ impl WorkerProcess {
 
     fn terminate(&self) {
         if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
+            preparation::terminate_child(&mut child);
         }
     }
 
@@ -751,6 +777,7 @@ mod tests {
                     task_id: Some(task_id.to_string()),
                     operation: "bayes_fit".to_string(),
                     parameters: json!({}),
+                    cancellation: None,
                 },
                 |_| {
                     Err(JuliaWorkerError::new(
@@ -786,6 +813,7 @@ mod tests {
                     task_id: Some("../escape".to_string()),
                     operation: "bayes_fit".to_string(),
                     parameters: json!({}),
+                    cancellation: None,
                 },
                 |_| {
                     wrote_input.set(true);
@@ -828,6 +856,39 @@ mod tests {
                 "processState": "starting",
                 "projectDir": app_root.path().join(WORKER_DIR).to_string_lossy(),
             })
+        );
+    }
+
+    #[test]
+    fn cancellation_during_input_preparation_prevents_late_worker_start() {
+        let app_root = TemporaryAppRoot::new("julia-pending-cancel");
+        let manager = JuliaWorkerManager::new();
+        let cancellation = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let error = manager
+            .run_task_with_typed_input(
+                app_root.path(),
+                JuliaWorkerTask {
+                    task_id: Some("pending-task".into()),
+                    operation: "bayes_fit".into(),
+                    parameters: json!({}),
+                    cancellation: Some(cancellation.clone()),
+                },
+                |_| {
+                    cancellation.store(true, std::sync::atomic::Ordering::Release);
+                    Ok(())
+                },
+                None,
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), JuliaWorkerErrorCode::Cancelled);
+        assert!(manager.inner.worker.lock().unwrap().is_none());
+        assert!(
+            !app_root
+                .path()
+                .join(WORKER_DIR)
+                .join(TASK_DIR)
+                .join("pending-task")
+                .exists()
         );
     }
 

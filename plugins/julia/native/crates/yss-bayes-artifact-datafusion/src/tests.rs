@@ -10,8 +10,16 @@ impl Artifact {
         ));
         let batches = (0..batch.num_rows())
             .step_by(2)
-            .map(|offset| Ok(batch.slice(offset, 2.min(batch.num_rows() - offset))));
-        yss_tabular_io::write_ipc_batches(&path, &batch.schema(), batches).unwrap();
+            .map(|offset| batch.slice(offset, 2.min(batch.num_rows() - offset)));
+        let mut writer = arrow::ipc::writer::FileWriter::try_new(
+            std::fs::File::create(&path).unwrap(),
+            &batch.schema(),
+        )
+        .unwrap();
+        for batch in batches {
+            writer.write(&batch).unwrap();
+        }
+        writer.finish().unwrap();
         Self(path)
     }
 }
@@ -112,7 +120,11 @@ fn posterior_sample_page_filters_and_paginates() {
         1
     );
     assert_eq!(text.lines().count(), 6);
-    let batches = yss_tabular_io::read_csv_batches(&csv.0, b',', true, 20, 2).unwrap();
+    let batches = arrow::csv::ReaderBuilder::new(sample_batch().schema())
+        .with_header(true)
+        .with_batch_size(2)
+        .build(std::fs::File::open(&csv.0).unwrap())
+        .unwrap();
     assert_eq!(
         batches
             .map(|batch| batch.unwrap().num_rows())

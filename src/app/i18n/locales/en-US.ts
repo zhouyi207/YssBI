@@ -830,6 +830,39 @@ export const enUS = {
     },
   },
   plugins: {
+    signerChangeTitle: "Plugin signing identity changed",
+    signerChangeMessage:
+      "Previous fingerprint: {{previous}}\nNew fingerprint: {{next}}\nContinue only after confirming this key change with the publisher you trust.",
+    approveSignerChange: "Approve signer change",
+    maintenance: "Manage {{name}}",
+    maintenanceDescription:
+      "Inspect task history and diagnostics, and remove regenerable caches. Published project results are retained.",
+    manageData: "History, storage and diagnostics",
+    storage: "Private storage",
+    storageUsage: "{{used}} used / {{budget}} granted; {{cache}} in caches",
+    softBudget:
+      "This is an application soft limit. Native plugins still run as your user. Close plugin views and finish tasks before clearing caches.",
+    clearCache: "Clear listed cache directories",
+    collectPackages: "Collect unreferenced packages",
+    taskHistory: "Finished tasks",
+    clearHistory: "Clear history view and result cache",
+    historyRetention:
+      "History and idempotency receipts are retained for 30 days. Clearing the view preserves receipts within that period and does not repeat old requests.",
+    loadMore: "Load more",
+    diagnostics: "Plugin process diagnostics",
+    diagnosticsDescription:
+      "Bounded recent stderr output, tagged with the process and its active tasks.",
+    noDiagnostics: "No diagnostic output",
+    diagnosticsTruncated: "Earlier output was removed at the capacity limit.",
+    taskStates: {
+      admitted: "Admitted",
+      running: "Running",
+      cancelRequested: "Cancelling",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      cancelled: "Cancelled",
+      outcomeUnknown: "Outcome unknown",
+    },
     installPackage: "Install from package",
     loadFailed: "Could not read extension status. Try checking again.",
     operationFailed:

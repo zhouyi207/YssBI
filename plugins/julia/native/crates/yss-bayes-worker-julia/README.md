@@ -7,7 +7,8 @@ kernels, typed Julia exchange files, worker-task state, cancellation delivery, a
 materialization of worker results and artifacts. It implements `BayesWorkerPort` by composing the
 backend-neutral Bayes contracts with `yss-julia-worker`.
 
-Exchange tables use native Arrow Float64/Utf8 arrays and the shared tabular I/O writer. Batches
+Exchange tables use native Arrow Float64/Utf8 arrays and Arrow IPC directly, with 8-byte alignment
+for Julia interoperability. Batches
 preserve column order, nulls and categorical labels; existing Julia manifests and model code keep
 their format. This adapter has no Polars dependency.
 

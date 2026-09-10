@@ -367,6 +367,9 @@ impl BayesWorkerAuthority {
 }
 
 pub trait BayesWorkerPort: Send + Sync {
+    fn progress(&self, _handle: &BayesTaskHandle) -> Option<yss_bayes_result::TaskProgress> {
+        None
+    }
     fn start(
         &self,
         authority: &BayesWorkerAuthority,
@@ -401,6 +404,9 @@ pub struct BayesWorkerClient {
 }
 
 impl BayesWorkerClient {
+    pub fn progress(&self, handle: &BayesTaskHandle) -> Option<yss_bayes_result::TaskProgress> {
+        self.port.progress(handle)
+    }
     pub fn new(port: Arc<dyn BayesWorkerPort>) -> Self {
         Self { port }
     }

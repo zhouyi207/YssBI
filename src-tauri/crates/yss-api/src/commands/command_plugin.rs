@@ -3,7 +3,8 @@ use serde_json::{Value, json};
 use std::path::PathBuf;
 use tauri::{State, WebviewWindow};
 use yss_plugin_runtime::{
-    InstalledPlugin, PackageInspection, PluginFailure, PluginManager, TaskSnapshot, ViewSession,
+    InstalledPlugin, PackageInspection, PluginDiagnostic, PluginFailure, PluginManager,
+    PluginStorageUsage, TaskHistoryPage, TaskSnapshot, ViewSession,
 };
 
 pub(crate) fn plugin_error(error: PluginFailure) -> CommandError {
@@ -44,6 +45,7 @@ pub async fn install_plugin_package(
     expected_digest: String,
     operation_id: String,
     approve_native: bool,
+    approved_previous_signer: Option<String>,
 ) -> Result<InstalledPlugin, CommandError> {
     let manager = manager.inner().clone();
     blocking(move || {
@@ -52,6 +54,7 @@ pub async fn install_plugin_package(
             &expected_digest,
             &operation_id,
             approve_native,
+            approved_previous_signer.as_deref(),
         )
     })
     .await
@@ -112,6 +115,56 @@ pub async fn list_plugin_tasks(
 ) -> Result<Vec<TaskSnapshot>, CommandError> {
     let manager = manager.inner().clone();
     blocking(move || manager.list_tasks()).await
+}
+
+#[tauri::command]
+pub async fn get_plugin_task_history(
+    manager: State<'_, PluginManager>,
+    plugin_id: String,
+    cursor: Option<String>,
+    limit: usize,
+) -> Result<TaskHistoryPage, CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.task_history(&plugin_id, cursor.as_deref(), limit)).await
+}
+#[tauri::command]
+pub async fn clear_plugin_task_history(
+    manager: State<'_, PluginManager>,
+    plugin_id: String,
+) -> Result<(), CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.clear_task_history(&plugin_id)).await
+}
+#[tauri::command]
+pub async fn get_plugin_storage_usage(
+    manager: State<'_, PluginManager>,
+    plugin_id: String,
+) -> Result<PluginStorageUsage, CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.storage_usage(&plugin_id)).await
+}
+#[tauri::command]
+pub async fn clear_plugin_cache(
+    manager: State<'_, PluginManager>,
+    plugin_id: String,
+) -> Result<PluginStorageUsage, CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.clear_private_cache(&plugin_id)).await
+}
+#[tauri::command]
+pub async fn collect_plugin_garbage(
+    manager: State<'_, PluginManager>,
+) -> Result<usize, CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.collect_garbage()).await
+}
+#[tauri::command]
+pub async fn get_plugin_diagnostics(
+    manager: State<'_, PluginManager>,
+    plugin_id: String,
+) -> Result<Vec<PluginDiagnostic>, CommandError> {
+    let manager = manager.inner().clone();
+    blocking(move || manager.diagnostics(&plugin_id)).await
 }
 #[tauri::command]
 pub fn grant_plugin_export(

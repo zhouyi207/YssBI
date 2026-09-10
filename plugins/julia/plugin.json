@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "yssbi.julia",
+  "name": "Julia 计算支持",
+  "description": "Julia 科学计算、贝叶斯建模与结果分析。",
+  "publisher": "yssbi",
+  "version": "0.2.0",
+  "hostApi": "^1.0",
+  "protocol": {
+    "major": 2,
+    "minMinor": 0,
+    "maxMinor": 0,
+    "requiredFeatures": []
+  },
+  "target": "x86_64-pc-windows-msvc",
+  "executable": "bin/x86_64-pc-windows-msvc/yss-julia-extension.exe",
+  "execution": "trustedNative",
+  "contributes": {
+    "views": [
+      {
+        "id": "runtime",
+        "title": "Julia",
+        "entry": "web/index.html",
+        "location": "sidebar",
+        "scope": "application"
+      },
+      {
+        "id": "analysis",
+        "title": "贝叶斯分析",
+        "entry": "web/index.html",
+        "location": "editor",
+        "scope": "project"
+      }
+    ],
+    "commands": [
+      {
+        "id": "parse_bayes_expression",
+        "title": "parse_bayes_expression"
+      },
+      {
+        "id": "validate_bayes_model",
+        "title": "validate_bayes_model"
+      },
+      {
+        "id": "read_bayes_trace_plot_data",
+        "title": "read_bayes_trace_plot_data"
+      },
+      {
+        "id": "read_bayes_density_plot_data",
+        "title": "read_bayes_density_plot_data"
+      },
+      {
+        "id": "read_bayes_autocorrelation_data",
+        "title": "read_bayes_autocorrelation_data"
+      },
+      {
+        "id": "read_bayes_posterior_predictive",
+        "title": "read_bayes_posterior_predictive"
+      },
+      {
+        "id": "export_bayes_artifact_csv",
+        "title": "export_bayes_artifact_csv"
+      }
+    ],
+    "taskTypes": [
+      {
+        "id": "bayes.inference",
+        "producesArtifacts": true
+      },
+      {
+        "id": "runtime.prepare",
+        "producesArtifacts": false
+      }
+    ]
+  },
+  "permissions": ["data.read", "results.write", "files.export"],
+  "uiMethods": [
+    "commands.execute",
+    "tasks.start",
+    "tasks.get",
+    "tasks.cancel",
+    "tasks.result",
+    "dependencies.inspect",
+    "data.list",
+    "views.open",
+    "system.save_file",
+    "system.reveal_artifact"
+  ],
+  "resourceBudget": {
+    "frameBytes": 2097152,
+    "pendingRequests": 32,
+    "activeTasks": 1,
+    "queuedBytes": 8388608,
+    "snapshotBytes": 134217728,
+    "privateStorageBytes": 1073741824,
+    "views": 4
+  },
+  "cacheDirectories": [
+    "julia-worker/depot",
+    "julia-worker/tasks",
+    "bayes-results",
+    "exports",
+    "snapshots"
+  ]
+}

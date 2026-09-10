@@ -61,6 +61,92 @@ fn rows(app: &ApplicationState, id: &str) -> DatabaseRowsResult {
 }
 
 #[test]
+fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budget() {
+    use yss_plugin_protocol::{CallContext, HostServices, ResourceBudget};
+    let directory = Directory::new();
+    let project = Arc::new(ProjectState::new());
+    let created = project
+        .create_project_transaction(
+            "Plugin budgets",
+            &directory.0.join("project"),
+            OperationId::new(),
+        )
+        .unwrap();
+    project
+        .activate_project_from_path(&created.metadata_path)
+        .unwrap();
+    let app = application(project);
+    let csv = directory.0.join("input.csv");
+    std::fs::write(&csv, "x\n1\n2\n3\n").unwrap();
+    let id = app
+        .load_database_for_application(
+            app.capture_session().unwrap().project_instance_id().clone(),
+            OperationId::new(),
+            DatabaseImportSource::Csv {
+                path: csv.to_string_lossy().into(),
+                delimiter: ',',
+                has_header: true,
+                infer_schema_length: Some(10),
+            },
+        )
+        .unwrap()
+        .data
+        .id;
+    let host = crate::plugins::PluginHostServices::new(app);
+    let mut context = CallContext {
+        context_id: "budget-context".into(),
+        plugin_id: "example.plugin".into(),
+        installation_generation: "1".into(),
+        instance_id: "instance".into(),
+        package_digest: "a".repeat(64),
+        project: host.current_project().unwrap(),
+        task_id: Some("task".into()),
+        operation_id: Some("operation".into()),
+        parameters_hash: Some("b".repeat(64)),
+        granted_budget: ResourceBudget {
+            snapshot_bytes: 256,
+            ..ResourceBudget::default()
+        },
+    };
+    let selection = serde_json::json!({"datasetId":id,"columns":["x"]});
+    assert_eq!(
+        host.invoke(&context, "data.snapshot", selection.clone(), &directory.0)
+            .unwrap_err()
+            .code,
+        "plugin_resource_exhausted"
+    );
+    assert_eq!(
+        std::fs::read_dir(directory.0.join("snapshots"))
+            .unwrap()
+            .count(),
+        0
+    );
+    context.granted_budget.snapshot_bytes = 4096;
+    let snapshot = host
+        .invoke(&context, "data.snapshot", selection, &directory.0)
+        .unwrap();
+    assert!(Path::new(snapshot["path"].as_str().unwrap()).is_file());
+    host.release_context(&context.context_id);
+    assert!(!Path::new(snapshot["path"].as_str().unwrap()).exists());
+
+    context.granted_budget.snapshot_bytes = 8;
+    std::fs::write(directory.0.join("first.bin"), [0; 5]).unwrap();
+    std::fs::write(directory.0.join("second.bin"), [0; 5]).unwrap();
+    assert_eq!(
+        host.invoke(
+            &context,
+            "results.commit",
+            serde_json::json!({"artifacts":[{"path":"first.bin"},{"path":"second.bin"}]}),
+            &directory.0
+        )
+        .unwrap_err()
+        .code,
+        "plugin_resource_exhausted"
+    );
+    assert!(!directory.0.join("project/extension-results").exists());
+}
+
+#[test]
 fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots() {
     let directory = Directory::new();
     let root = directory.0.join("project");

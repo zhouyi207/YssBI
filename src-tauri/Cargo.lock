@@ -8859,8 +8859,6 @@ dependencies = [
  "uuid",
  "yss-bayes-artifact-contract",
  "yss-bayes-result",
- "yss-sci-runtime",
- "yss-tabular-io",
 ]
 
 [[package]]
@@ -8921,7 +8919,6 @@ dependencies = [
  "yss-bayes-worker",
  "yss-julia-worker",
  "yss-sci-contract",
- "yss-tabular-io",
 ]
 
 [[package]]
@@ -9285,7 +9282,6 @@ dependencies = [
  "yss-plugin-protocol",
  "yss-plugin-sdk",
  "yss-sci-contract",
- "yss-tabular-io",
 ]
 
 [[package]]
@@ -9331,7 +9327,7 @@ version = "0.1.0"
 
 [[package]]
 name = "yss-plugin-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "schemars 1.2.2",
  "semver",
@@ -9346,10 +9342,13 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "ed25519-dalek",
+ "semver",
  "serde",
  "serde_jcs",
  "serde_json",
  "sha2 0.10.9",
+ "sqlx",
+ "tokio",
  "uuid",
  "windows-sys 0.61.2",
  "yss-file-replace",
@@ -9360,7 +9359,7 @@ dependencies = [
 
 [[package]]
 name = "yss-plugin-sdk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

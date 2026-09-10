@@ -16,6 +16,9 @@ uuid.workspace = true
 zip = { version = "6", default-features = false, features = ["deflate"] }
 ed25519-dalek = "2.2"
 serde_jcs = "0.2"
+sqlx.workspace = true
+tokio.workspace = true
+semver.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

@@ -399,6 +399,15 @@ export const enUS = {
     switchToLight: "Switch to light theme",
   },
   bayes: {
+    timeoutMinutes: "Timeout (minutes)",
+    retrySubmission: "Retry same submission",
+    startNewTask: "Start new task",
+    submissionUnknownTitle: "Submission not confirmed",
+    submissionUnknownMessage:
+      "The host may have accepted this task. Retrying the same submission reuses its operation ID and will not create a duplicate task.",
+    outcomeUnknownTitle: "Task outcome unknown",
+    outcomeUnknownMessage:
+      "The computation may have run, but its result could not be confirmed. Check existing results first; starting a new task performs another computation.",
     title: "Bayesian Parameter Estimation",
     openWindow: "Open Bayesian Parameter Estimation",
     tabs: { model: "Model", results: "Results" },

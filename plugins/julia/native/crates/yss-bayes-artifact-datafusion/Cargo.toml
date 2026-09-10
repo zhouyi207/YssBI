@@ -12,10 +12,8 @@ datafusion.workspace = true
 futures-util.workspace = true
 tokio.workspace = true
 url.workspace = true
-yss-tabular-io = { path = "../../../../../src-tauri/crates/yss-tabular-io" }
 yss-bayes-artifact-contract = { path = "../yss-bayes-artifact-contract" }
 yss-bayes-result = { path = "../yss-bayes-result" }
-yss-sci-runtime = { path = "../../../../../src-tauri/crates/yss-sci-runtime" }
 
 [dev-dependencies]
 uuid.workspace = true

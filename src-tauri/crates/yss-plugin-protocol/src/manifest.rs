@@ -21,6 +21,8 @@ pub struct PluginManifest {
     pub permissions: Vec<String>,
     pub ui_methods: Vec<String>,
     pub resource_budget: ResourceBudget,
+    #[serde(default)]
+    pub cache_directories: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -124,6 +126,23 @@ pub fn valid_relative_path(value: &str) -> bool {
 impl PluginManifest {
     pub fn validate(&self) -> Result<(), PluginFailure> {
         let invalid = || PluginFailure::new("plugin_manifest_invalid");
+        if self.cache_directories.len() > 16
+            || self
+                .cache_directories
+                .iter()
+                .any(|path| !valid_relative_path(path))
+        {
+            return Err(invalid());
+        }
+        for (index, path) in self.cache_directories.iter().enumerate() {
+            if self.cache_directories[..index].iter().any(|other| {
+                path == other
+                    || path.starts_with(&format!("{other}/"))
+                    || other.starts_with(&format!("{path}/"))
+            }) {
+                return Err(invalid());
+            }
+        }
         if self.schema_version != 1
             || self.protocol.major != PROTOCOL_MAJOR
             || self.protocol.min_minor > PROTOCOL_MINOR

@@ -7,19 +7,30 @@ export type Contributions = {
 export type ExecutionMode = "trustedNative" | "sandboxRequired";
 export type InstalledPlugin = {
   enabled: boolean;
+  grantedBudget?: ResourceBudget;
   installationGeneration: string;
   manifest: PluginManifest;
   packageDigest: string;
   processState: string;
+  signerKey?: string;
 };
 export type PackageInspection = {
   manifest: PluginManifest;
   packageDigest: string;
+  previousSignerKey?: string | null;
   signerKey: string;
 };
 export type PluginCommand = { id: string; title: string };
+export type PluginDiagnostic = {
+  instanceId: string;
+  pluginId: string;
+  stderr: string;
+  taskIds: Array<string>;
+  truncated: boolean;
+};
 export type PluginFailure = { code: string; details?: unknown; incidentId?: string | null };
 export type PluginManifest = {
+  cacheDirectories?: Array<string>;
   contributes: Contributions;
   description: string;
   executable: string;
@@ -35,6 +46,13 @@ export type PluginManifest = {
   target: string;
   uiMethods: Array<string>;
   version: string;
+};
+export type PluginStorageUsage = {
+  budgetBytes: number;
+  cacheBytes: number;
+  enforcement: string;
+  pluginId: string;
+  usedBytes: number;
 };
 export type PluginView = {
   entry: string;
@@ -58,11 +76,13 @@ export type ResourceBudget = {
   snapshotBytes: number;
   views: number;
 };
+export type TaskHistoryPage = { nextCursor?: string | null; tasks: Array<TaskSnapshot> };
 export type TaskSnapshot = {
   error?: PluginFailure | null;
   operationId: string;
   packageDigest: string;
   pluginId: string;
+  progress?: unknown;
   result?: unknown;
   revision: string;
   state: TaskState;

@@ -1,5 +1,8 @@
+mod diagnostics;
+mod ledger;
 mod package;
 mod process;
+mod storage;
 mod tasks;
 use process::PluginProcess;
 use serde::{Deserialize, Serialize};
@@ -11,6 +14,15 @@ use std::{
     sync::{Arc, Condvar, Mutex, atomic::Ordering},
     time::Duration,
 };
+
+fn same_release(left: &str, right: &str) -> Result<bool, PluginFailure> {
+    let left = semver::Version::parse(left).map_err(|_| fail("plugin_manifest_invalid"))?;
+    let right = semver::Version::parse(right).map_err(|_| fail("plugin_manifest_invalid"))?;
+    Ok(left.major == right.major
+        && left.minor == right.minor
+        && left.patch == right.patch
+        && left.pre == right.pre)
+}
 pub use yss_plugin_protocol::*;
 
 #[derive(Clone)]
@@ -24,6 +36,7 @@ struct ManagerInner {
     registry: Mutex<Registry>,
     commit: Mutex<()>,
     state: Mutex<RuntimeState>,
+    ledger: Option<ledger::Ledger>,
 }
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct Registry {
@@ -33,6 +46,8 @@ struct Registry {
     tasks: BTreeMap<String, tasks::TaskRecord>,
     #[serde(default)]
     installations: BTreeMap<String, InstalledPlugin>,
+    #[serde(default)]
+    signers: BTreeMap<String, String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct Registration {
@@ -42,14 +57,18 @@ struct Registration {
     signer: String,
     enabled: bool,
     files: Vec<FileEntry>,
+    #[serde(default)]
+    granted_budget: ResourceBudget,
 }
 #[derive(Default)]
 struct RuntimeState {
+    maintenance: bool,
     processes: BTreeMap<String, Arc<PluginProcess>>,
     starting: BTreeMap<String, Arc<ProcessStart>>,
     mutating: BTreeSet<String>,
     contexts: BTreeMap<String, ContextBinding>,
     exports: BTreeMap<String, (String, PathBuf)>,
+    diagnostics: std::collections::VecDeque<Arc<diagnostics::DiagnosticBuffer>>,
 }
 
 #[derive(Default)]
@@ -151,6 +170,7 @@ impl PluginManager {
                     registry: Mutex::new(Registry::default()),
                     commit: Mutex::new(()),
                     state: Mutex::new(RuntimeState::default()),
+                    ledger: None,
                 }),
             },
         }
@@ -167,7 +187,10 @@ impl PluginManager {
             fs::create_dir_all(root.join(directory)).map_err(|_| fail("plugin_storage_failed"))?;
         }
         let root = fs::canonicalize(root).map_err(|_| fail("plugin_storage_failed"))?;
-        let mut registry: Registry = if root.join("registry.json").exists() {
+        let ledger = ledger::Ledger::open(&root)?;
+        let mut registry: Registry = if let Some(registry) = ledger.load()? {
+            registry
+        } else if root.join("registry.json").exists() {
             serde_json::from_slice(&read_bounded(
                 &root.join("registry.json"),
                 16 * 1024 * 1024,
@@ -176,6 +199,13 @@ impl PluginManager {
         } else {
             Registry::default()
         };
+        for (id, entry) in &mut registry.entries {
+            entry.granted_budget = entry.manifest.resource_budget.grant()?;
+            registry
+                .signers
+                .entry(id.clone())
+                .or_insert_with(|| entry.signer.clone());
+        }
         for task in registry
             .tasks
             .values_mut()
@@ -184,8 +214,9 @@ impl PluginManager {
             task.snapshot.state = TaskState::OutcomeUnknown;
             task.snapshot.error = Some(fail("plugin_process_restarted"));
         }
-        package::atomic_json(&root.join("registry.json"), &registry)?;
-        Ok(Self {
+        let registry = ledger.write(registry)?;
+        ledger.prune()?;
+        let manager = Self {
             inner: Arc::new(ManagerInner {
                 initialization_error: None,
                 root,
@@ -193,8 +224,18 @@ impl PluginManager {
                 registry: Mutex::new(registry),
                 commit: Mutex::new(()),
                 state: Mutex::new(RuntimeState::default()),
+                ledger: Some(ledger),
             }),
-        })
+        };
+        let _ = manager.collect_garbage();
+        Ok(manager)
+    }
+    fn ledger(&self) -> Result<&ledger::Ledger, PluginFailure> {
+        self.available()?;
+        self.inner
+            .ledger
+            .as_ref()
+            .ok_or_else(|| fail("plugin_storage_failed"))
     }
     fn registration(&self, id: &str) -> Result<Registration, PluginFailure> {
         self.available()?;
@@ -230,6 +271,8 @@ impl PluginManager {
         Ok(entries
             .into_iter()
             .map(|(id, entry)| InstalledPlugin {
+                granted_budget: entry.granted_budget,
+                signer_key: entry.signer,
                 manifest: entry.manifest,
                 package_digest: entry.digest,
                 installation_generation: entry.generation.to_string(),
@@ -249,7 +292,16 @@ impl PluginManager {
             .collect())
     }
     pub fn inspect(&self, path: &Path) -> Result<PackageInspection, PluginFailure> {
-        Ok(package::inspect(path)?.description)
+        let mut description = package::inspect(path)?.description;
+        description.previous_signer_key = self
+            .inner
+            .registry
+            .lock()
+            .map_err(|_| fail("plugin_state_unavailable"))?
+            .signers
+            .get(&description.manifest.id)
+            .cloned();
+        Ok(description)
     }
     pub fn install(
         &self,
@@ -257,37 +309,51 @@ impl PluginManager {
         expected_digest: &str,
         operation_id: &str,
         approve_native: bool,
+        approved_previous_signer: Option<&str>,
     ) -> Result<InstalledPlugin, PluginFailure> {
-        if !valid_id(operation_id) || !approve_native {
+        if !approve_native {
             return Err(fail("plugin_trust_required"));
         }
         self.available()?;
-        if let Some(receipt) = self
-            .inner
-            .registry
-            .lock()
-            .map_err(|_| fail("plugin_state_unavailable"))?
-            .installations
-            .get(operation_id)
-            .cloned()
-        {
+        self.ledger()?.prune()?;
+        if let Some(receipt) = self.ledger()?.installation(operation_id)? {
             if receipt.package_digest != expected_digest {
                 return Err(fail("plugin_operation_conflict"));
             }
             return Ok(receipt);
         }
+        validate_operation_id(operation_id, ledger::now_ms())?;
         let inspected = package::inspect(path)?;
         if inspected.description.package_digest != expected_digest {
             return Err(fail("plugin_package_changed"));
         }
         let id = inspected.description.manifest.id.clone();
         let reservation = self.reserve(&id)?;
+        let previous_signer = self
+            .inner
+            .registry
+            .lock()
+            .map_err(|_| fail("plugin_state_unavailable"))?
+            .signers
+            .get(&id)
+            .cloned();
+        if previous_signer
+            .as_deref()
+            .is_some_and(|signer| signer != inspected.description.signer_key)
+            && approved_previous_signer != previous_signer.as_deref()
+        {
+            return Err(fail("plugin_signer_change_requires_approval"));
+        }
         if let Ok(previous) = self.registration(&id)
-            && previous.manifest.version == inspected.description.manifest.version
+            && same_release(
+                &previous.manifest.version,
+                &inspected.description.manifest.version,
+            )?
             && previous.digest != expected_digest
         {
             return Err(fail("plugin_version_content_conflict"));
         }
+        let granted_budget = inspected.description.manifest.resource_budget.grant()?;
         let staging = self
             .inner
             .root
@@ -302,10 +368,7 @@ impl PluginManager {
             }
             self.stop_process(&id);
             self.update_registry(|registry| {
-                if registry.installations.len() >= 512 {
-                    return Err(fail("plugin_resource_exhausted"));
-                }
-                if let Some(previous) = registry.installations.get(operation_id) {
+                if let Some(previous) = self.ledger()?.installation(operation_id)? {
                     return if previous.package_digest == expected_digest {
                         Ok(())
                     } else {
@@ -313,6 +376,9 @@ impl PluginManager {
                     };
                 }
                 registry.revision += 1;
+                registry
+                    .signers
+                    .insert(id.clone(), inspected.description.signer_key.clone());
                 registry.entries.insert(
                     id.clone(),
                     Registration {
@@ -322,6 +388,7 @@ impl PluginManager {
                         signer: inspected.description.signer_key.clone(),
                         enabled: true,
                         files: inspected.files.clone(),
+                        granted_budget: granted_budget.clone(),
                     },
                 );
                 registry.installations.insert(
@@ -332,6 +399,8 @@ impl PluginManager {
                         installation_generation: registry.revision.to_string(),
                         enabled: true,
                         process_state: "stopped".into(),
+                        granted_budget: granted_budget.clone(),
+                        signer_key: inspected.description.signer_key.clone(),
                     },
                 );
                 Ok(())
@@ -348,6 +417,7 @@ impl PluginManager {
             let _ = fs::remove_dir_all(&staging);
         }
         drop(reservation);
+        let _ = self.collect_garbage();
         result
     }
     pub fn set_enabled(&self, id: &str, enabled: bool) -> Result<(), PluginFailure> {
@@ -401,14 +471,7 @@ impl PluginManager {
             .map_err(|_| fail("plugin_state_unavailable"))?
             .clone();
         update(&mut next)?;
-        if serde_json::to_vec(&next)
-            .map_err(|_| fail("plugin_registry_invalid"))?
-            .len()
-            > 16 * 1024 * 1024
-        {
-            return Err(fail("plugin_resource_exhausted"));
-        }
-        package::atomic_json(&self.inner.root.join("registry.json"), &next)?;
+        let next = self.ledger()?.write(next)?;
         *self
             .inner
             .registry
@@ -423,7 +486,8 @@ impl PluginManager {
             .state
             .lock()
             .map_err(|_| fail("plugin_state_unavailable"))?;
-        if state.mutating.contains(id)
+        if state.maintenance
+            || state.mutating.contains(id)
             || state.starting.contains_key(id)
             || state
                 .processes
@@ -472,6 +536,7 @@ impl PluginManager {
         }
     }
     pub fn acquire(&self, id: &str) -> Result<PluginLease, PluginFailure> {
+        self.enforce_private_budget(id, 0)?;
         let data_dir = self.inner.root.join("data").join(id);
         let (entry, flight, leader, retired) = {
             let mut state = self
@@ -479,7 +544,7 @@ impl PluginManager {
                 .state
                 .lock()
                 .map_err(|_| fail("plugin_state_unavailable"))?;
-            if state.mutating.contains(id) {
+            if state.maintenance || state.mutating.contains(id) {
                 return Err(fail("plugin_busy"));
             }
             // Registry reads are memory-only. The state lock excludes mutation admission
@@ -509,7 +574,7 @@ impl PluginManager {
             }
         };
         if !leader {
-            let process = flight.wait(entry.manifest.resource_budget.pending_requests as usize)?;
+            let process = flight.wait(entry.granted_budget.pending_requests as usize)?;
             let state = self
                 .inner
                 .state
@@ -568,6 +633,35 @@ impl PluginManager {
         }
         fs::create_dir_all(data_dir).map_err(|_| fail("plugin_storage_failed"))?;
         let instance_id = uuid::Uuid::new_v4().to_string();
+        let diagnostics = Arc::new(diagnostics::DiagnosticBuffer::new(
+            entry.manifest.id.clone(),
+            instance_id.clone(),
+        ));
+        {
+            let mut state = self
+                .inner
+                .state
+                .lock()
+                .map_err(|_| fail("plugin_state_unavailable"))?;
+            while state
+                .diagnostics
+                .iter()
+                .filter(|buffer| buffer.plugin == entry.manifest.id)
+                .count()
+                >= 4
+            {
+                let oldest = state
+                    .diagnostics
+                    .iter()
+                    .position(|buffer| buffer.plugin == entry.manifest.id)
+                    .unwrap();
+                state.diagnostics.remove(oldest);
+            }
+            state.diagnostics.push_back(diagnostics.clone());
+            while state.diagnostics.len() > 64 {
+                state.diagnostics.pop_front();
+            }
+        }
         let weak = Arc::downgrade(&self.inner);
         let plugin_id = entry.manifest.id.clone();
         let handler_instance = instance_id.clone();
@@ -577,7 +671,16 @@ impl PluginManager {
                 .ok_or_else(|| fail("plugin_process_exited"))?;
             PluginManager { inner }.host_request(&plugin_id, &handler_instance, request)
         });
-        PluginProcess::spawn(&entry.manifest, &package, data_dir, instance_id, handler)
+        let mut effective_manifest = entry.manifest.clone();
+        effective_manifest.resource_budget = entry.granted_budget.clone();
+        PluginProcess::spawn(
+            &effective_manifest,
+            &package,
+            data_dir,
+            instance_id,
+            handler,
+            diagnostics,
+        )
     }
     pub fn attach_view(
         &self,
@@ -627,6 +730,7 @@ impl PluginManager {
             task_id: None,
             operation_id: None,
             parameters_hash: None,
+            granted_budget: entry.granted_budget.clone(),
         };
         let session_id = context.context_id.clone();
         let mut state = self
@@ -639,7 +743,7 @@ impl PluginManager {
             .values()
             .filter(|binding| binding.context.plugin_id == id && binding.context.task_id.is_none())
             .count()
-            >= entry.manifest.resource_budget.views as usize
+            >= entry.granted_budget.views as usize
         {
             return Err(fail("plugin_view_limit"));
         }
@@ -767,6 +871,9 @@ impl PluginManager {
             _ => return Err(fail("plugin_method_unknown")),
         };
         let entry = self.registration(plugin)?;
+        if request.method == "data.snapshot" {
+            self.enforce_private_budget(plugin, 0)?;
+        }
         if !entry
             .manifest
             .permissions
@@ -807,7 +914,7 @@ impl PluginManager {
             if fs::metadata(&source)
                 .map_err(|_| fail("plugin_file_unavailable"))?
                 .len()
-                > entry.manifest.resource_budget.snapshot_bytes
+                > binding.context.granted_budget.snapshot_bytes
             {
                 return Err(fail("plugin_resource_exhausted"));
             }
@@ -820,12 +927,26 @@ impl PluginManager {
             }
             return Ok(Value::Null);
         }
-        self.inner.services.invoke(
+        let response = self.inner.services.invoke(
             &binding.context,
             &request.method,
             request.params["input"].clone(),
             &self.inner.root.join("data").join(plugin),
-        )
+        )?;
+        if request.method == "data.snapshot"
+            && let Err(error) = self.enforce_private_budget(plugin, 0)
+        {
+            if let Some(lease) = response.get("leaseId") {
+                let _ = self.inner.services.invoke(
+                    &binding.context,
+                    "data.release",
+                    json!({"leaseId":lease}),
+                    &self.inner.root.join("data").join(plugin),
+                );
+            }
+            return Err(error);
+        }
+        Ok(response)
     }
     pub fn call_view(
         &self,
@@ -868,6 +989,11 @@ impl PluginManager {
                 {
                     return Err(fail("plugin_resource_exhausted"));
                 }
+                let incoming = serde_json::to_vec(&input)
+                    .map_err(|_| fail("plugin_state_invalid"))?
+                    .len() as u64;
+                let previous = fs::metadata(&path).map_or(0, |metadata| metadata.len());
+                self.enforce_private_budget(id, incoming.saturating_sub(previous))?;
                 package::atomic_json(&path, &input)?;
                 Ok(Value::Null)
             }

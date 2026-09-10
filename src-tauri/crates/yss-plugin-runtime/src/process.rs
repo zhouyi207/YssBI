@@ -1,5 +1,6 @@
 use serde_json::{Value, json};
 use std::{
+    io::Read,
     path::Path,
     process::{Child, Command, Stdio},
     sync::{
@@ -16,16 +17,18 @@ pub struct PluginProcess {
     pub peer: Arc<Peer>,
     child: Mutex<Child>,
     pub leases: AtomicUsize,
+    pub(super) diagnostics: Arc<crate::diagnostics::DiagnosticBuffer>,
     #[cfg(windows)]
     job: ProcessJob,
 }
 impl PluginProcess {
-    pub fn spawn(
+    pub(super) fn spawn(
         manifest: &PluginManifest,
         package: &Path,
         data: &Path,
         instance_id: String,
         handler: Handler,
+        diagnostics: Arc<crate::diagnostics::DiagnosticBuffer>,
     ) -> Result<Arc<Self>, PluginFailure> {
         let mut command = Command::new(package.join(&manifest.executable));
         command
@@ -34,7 +37,7 @@ impl PluginProcess {
             .current_dir(package)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         command.env_clear();
         for key in [
             "PATH",
@@ -64,9 +67,23 @@ impl PluginProcess {
             use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
-        let mut child = command
-            .spawn()
-            .map_err(|_| PluginFailure::new("plugin_start_failed"))?;
+        let mut child = command.spawn().map_err(|error| {
+            diagnostics
+                .push(format!("plugin_start_failed: {:?}\n", error.raw_os_error()).as_bytes());
+            PluginFailure::new("plugin_start_failed")
+        })?;
+        if let Some(mut stderr) = child.stderr.take() {
+            let diagnostics = diagnostics.clone();
+            std::thread::spawn(move || {
+                let mut bytes = [0u8; 4096];
+                while let Ok(count) = stderr.read(&mut bytes) {
+                    if count == 0 {
+                        break;
+                    }
+                    diagnostics.push(&bytes[..count]);
+                }
+            });
+        }
         #[cfg(windows)]
         let job = match ProcessJob::assign_and_resume(&child) {
             Ok(job) => job,
@@ -90,6 +107,7 @@ impl PluginProcess {
             peer,
             child: Mutex::new(child),
             leases: AtomicUsize::new(0),
+            diagnostics,
             #[cfg(windows)]
             job,
         });
@@ -113,9 +131,9 @@ impl PluginProcess {
         });
         let response = process.request(
             "lifecycle.initialize",
-            json!({"input":{"protocolMajor": PROTOCOL_MAJOR, "protocolMinor": PROTOCOL_MINOR}}),
+            json!({"input":{"protocolMajor": PROTOCOL_MAJOR, "protocolMinor": PROTOCOL_MINOR,"resourceBudget":manifest.resource_budget}}),
             Duration::from_secs(10),
-        )?;
+        ).inspect_err(|error| process.diagnostics.push(format!("lifecycle.initialize: {}\n", error.code).as_bytes()))?;
         if response["pluginId"].as_str() != Some(&manifest.id)
             || response["version"].as_str() != Some(&manifest.version)
             || response["protocolMajor"].as_u64() != Some(u64::from(PROTOCOL_MAJOR))

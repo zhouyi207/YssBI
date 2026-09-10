@@ -92,7 +92,8 @@ impl DataFusionBayesArtifactReader {
     }
 
     fn source(&self, source: &Path) -> Result<DataFrame, BayesArtifactReadError> {
-        let schema = yss_tabular_io::read_ipc_batches(source, None)
+        let file = std::fs::File::open(source).map_err(|_| BayesArtifactReadError::Read)?;
+        let schema = arrow::ipc::reader::FileReader::try_new(file, None)
             .map_err(|_| BayesArtifactReadError::Read)?
             .schema();
         let path = std::fs::canonicalize(source).map_err(|_| BayesArtifactReadError::Read)?;

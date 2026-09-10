@@ -18,8 +18,12 @@ use yss_plugin_protocol::{
 };
 use yss_plugin_sdk::Peer;
 
-type DependencyTasks =
-    Arc<Mutex<BTreeMap<String, (yss_plugin_protocol::TaskState, Option<PluginFailure>)>>>;
+struct DependencyTask {
+    state: yss_plugin_protocol::TaskState,
+    error: Option<PluginFailure>,
+    cancellation: Arc<AtomicBool>,
+}
+type DependencyTasks = Arc<Mutex<BTreeMap<String, DependencyTask>>>;
 
 struct Extension {
     version: String,
@@ -30,6 +34,7 @@ struct Extension {
     stopping: AtomicBool,
     task_contexts: Mutex<BTreeMap<String, Value>>,
     dependency_tasks: DependencyTasks,
+    admission: Mutex<()>,
 }
 
 fn input(request: &RpcRequest) -> Value {
@@ -48,6 +53,10 @@ impl Extension {
             {
                 return Err(fail("plugin_protocol_incompatible"));
             }
+            peer.apply_budget(
+                serde_json::from_value(args["resourceBudget"].clone())
+                    .map_err(|_| fail("plugin_budget_invalid"))?,
+            )?;
             return Ok(
                 json!({"pluginId":"yssbi.julia", "version": self.version, "protocolMajor":PROTOCOL_MAJOR,"protocolMinor":PROTOCOL_MINOR}),
             );
@@ -62,7 +71,7 @@ impl Extension {
                     .lock()
                     .map_err(|_| fail("plugin_state_unavailable"))?
                     .values()
-                    .any(|(state, _)| !state.terminal())
+                    .any(|task| !task.state.terminal())
             {
                 return Err(fail("plugin_busy"));
             }
@@ -96,6 +105,10 @@ impl Extension {
                 commands::execute(&self.bayes, args, peer, &context, &self.data_dir)
             }
             "tasks.start" => {
+                let _admission = self
+                    .admission
+                    .lock()
+                    .map_err(|_| fail("plugin_state_unavailable"))?;
                 let task_id = args["taskId"]
                     .as_str()
                     .filter(|id| yss_plugin_protocol::valid_id(id))
@@ -111,19 +124,30 @@ impl Extension {
                     if expected["contextId"] != context["contextId"] {
                         return Err(fail("plugin_stale_context"));
                     }
-                    if let Some((state, error)) = self
+                    if let Some(task) = self
                         .dependency_tasks
                         .lock()
                         .map_err(|_| fail("plugin_state_unavailable"))?
                         .get(&task_id)
                     {
-                        return Ok(json!({"taskId":task_id,"state":state,"error":error}));
+                        return Ok(json!({"taskId":task_id,"state":task.state,"error":task.error}));
                     }
                     return task_snapshot(
                         self.bayes.status(&task_id).map_err(commands::bayes_error)?,
                     );
                 }
+                if self.bayes.has_active_tasks()
+                    || self
+                        .dependency_tasks
+                        .lock()
+                        .map_err(|_| fail("plugin_state_unavailable"))?
+                        .values()
+                        .any(|task| !task.state.terminal())
+                {
+                    return Err(fail("plugin_busy"));
+                }
                 if args["taskType"].as_str() == Some("runtime.prepare") {
+                    let cancellation = Arc::new(AtomicBool::new(false));
                     self.task_contexts
                         .lock()
                         .map_err(|_| fail("plugin_state_unavailable"))?
@@ -133,32 +157,29 @@ impl Extension {
                         .map_err(|_| fail("plugin_state_unavailable"))?
                         .insert(
                             task_id.clone(),
-                            (yss_plugin_protocol::TaskState::Running, None),
+                            DependencyTask {
+                                state: yss_plugin_protocol::TaskState::Running,
+                                error: None,
+                                cancellation: cancellation.clone(),
+                            },
                         );
                     let tasks = self.dependency_tasks.clone();
                     let worker = self.worker.clone();
                     let data_dir = self.data_dir.clone();
                     let id = task_id.clone();
                     std::thread::spawn(move || {
-                        let result = worker.warm_up(&data_dir);
-                        if let Ok(mut tasks) = tasks.lock() {
-                            let cancelled = tasks.get(&id).is_some_and(|(state, _)| {
-                                *state == yss_plugin_protocol::TaskState::CancelRequested
-                            });
-                            tasks.insert(
-                                id,
-                                if cancelled {
-                                    (yss_plugin_protocol::TaskState::Cancelled, None)
-                                } else {
-                                    match result {
-                                        Ok(()) => (yss_plugin_protocol::TaskState::Succeeded, None),
-                                        Err(_) => (
-                                            yss_plugin_protocol::TaskState::Failed,
-                                            Some(fail("plugin_dependency_unavailable")),
-                                        ),
-                                    }
-                                },
-                            );
+                        let result = worker.warm_up_cancellable(&data_dir, &cancellation);
+                        if let Ok(mut tasks) = tasks.lock()
+                            && let Some(task) = tasks.get_mut(&id)
+                        {
+                            if cancellation.load(Ordering::Acquire) {
+                                task.state = yss_plugin_protocol::TaskState::Cancelled;
+                            } else if result.is_ok() {
+                                task.state = yss_plugin_protocol::TaskState::Succeeded;
+                            } else {
+                                task.state = yss_plugin_protocol::TaskState::Failed;
+                                task.error = Some(fail("plugin_dependency_unavailable"));
+                            }
                         }
                     });
                     return Ok(json!({"taskId":task_id,"state":"running","error":null}));
@@ -219,17 +240,20 @@ impl Extension {
                         .dependency_tasks
                         .lock()
                         .map_err(|_| fail("plugin_state_unavailable"))?;
-                    if let Some((state, error)) = tasks.get_mut(task_id) {
+                    if let Some(task) = tasks.get_mut(task_id) {
                         if request.method == "tasks.cancel" {
-                            if !state.terminal() {
-                                *state = yss_plugin_protocol::TaskState::CancelRequested;
+                            if !task.state.terminal() {
+                                task.state = yss_plugin_protocol::TaskState::CancelRequested;
+                                task.cancellation.store(true, Ordering::Release);
                             }
                             return Ok(Value::Null);
                         }
                         if request.method == "tasks.result" {
                             return Ok(json!({"artifacts":[],"viewData":null}));
                         }
-                        return Ok(json!({"taskId":task_id,"state":state,"error":error}));
+                        return Ok(
+                            json!({"taskId":task_id,"state":task.state,"error":task.error,"progress":{"stage":"preparing_dependencies"}}),
+                        );
                     }
                 }
                 if request.method == "tasks.cancel" {
@@ -347,7 +371,9 @@ fn task_snapshot(task: yss_bayes_result::BayesInferenceTask) -> Result<Value, Pl
         Some("cancelled") => "cancelled",
         _ => "failed",
     };
-    Ok(json!({"taskId":value["taskId"],"state":state,"error":value["error"]}))
+    Ok(
+        json!({"taskId":value["taskId"],"state":state,"error":value["error"],"progress":value["progress"]}),
+    )
 }
 
 fn main() {
@@ -395,6 +421,7 @@ fn run() -> Result<(), PluginFailure> {
         stopping: AtomicBool::new(false),
         task_contexts: Mutex::new(BTreeMap::new()),
         dependency_tasks: Arc::new(Mutex::new(BTreeMap::new())),
+        admission: Mutex::new(()),
     });
     let handler_extension = extension.clone();
     let peer = Peer::connect(

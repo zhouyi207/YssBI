@@ -12,6 +12,7 @@ import type {
 import type { ValidationIssueDTO, ValidationReportDTO } from "./validation";
 
 const TASK_STATUSES = new Set<BayesInferenceTaskDTO["status"]>([
+  "outcome_unknown",
   "queued",
   "running",
   "cancelling",
@@ -44,7 +45,7 @@ export function parseBayesInferenceTaskDTO(value: unknown): BayesInferenceTaskDT
 
   const progress = value.progress === null ? null : parseTaskProgress(value.progress);
   const error = value.error === null ? null : parseTaskError(value.error);
-  if ((value.status === "failed") !== (error !== null)) {
+  if ((value.status === "failed" || value.status === "outcome_unknown") !== (error !== null)) {
     return fail("Invalid Bayes inference task response");
   }
 

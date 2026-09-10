@@ -128,6 +128,7 @@ pub(crate) fn inspect(path: &Path) -> Result<InspectedPackage, PluginFailure> {
             manifest,
             package_digest: hash(&signed),
             signer_key: hash(&public),
+            previous_signer_key: None,
         },
         files,
     })

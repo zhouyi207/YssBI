@@ -134,6 +134,8 @@ pub(super) fn run_manager_task(
     app_data_dir: &Path,
     worker_task_id: &str,
     task: &PreparedJuliaTask,
+    progress: Option<yss_julia_worker::JuliaWorkerProgressCallback>,
+    cancellation: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<JuliaTaskCompletion, JuliaWorkerError> {
     let mut output = worker.run_task_with_typed_input(
         app_data_dir,
@@ -141,9 +143,10 @@ pub(super) fn run_manager_task(
             task_id: Some(worker_task_id.to_owned()),
             operation: "bayes_fit".to_owned(),
             parameters: serde_json::Value::Object(serde_json::Map::new()),
+            cancellation: Some(cancellation),
         },
         |input_path| write_task_files(input_path, worker_task_id, task),
-        None,
+        progress,
     )?;
     let task_directory = output.take_task_directory().ok_or_else(|| {
         JuliaWorkerError::new(
@@ -255,9 +258,18 @@ fn write_input_table(
         RecordBatch::try_new(schema.clone(), columns).map_err(|_| task_generation_error())?;
     let batches = (0..batch.num_rows())
         .step_by(8192)
-        .map(|offset| Ok(batch.slice(offset, 8192.min(batch.num_rows() - offset))));
-    yss_tabular_io::write_ipc_batches(input_path, &schema, batches)
-        .map_err(|_| task_generation_error())
+        .map(|offset| batch.slice(offset, 8192.min(batch.num_rows() - offset)));
+    let file = fs::File::create(input_path).map_err(|_| task_generation_error())?;
+    // Julia Arrow reads its first message at offset 8.
+    let options =
+        arrow::ipc::writer::IpcWriteOptions::try_new(8, false, arrow::ipc::MetadataVersion::V5)
+            .map_err(|_| task_generation_error())?;
+    let mut writer = arrow::ipc::writer::FileWriter::try_new_with_options(file, &schema, options)
+        .map_err(|_| task_generation_error())?;
+    for batch in batches {
+        writer.write(&batch).map_err(|_| task_generation_error())?;
+    }
+    writer.finish().map_err(|_| task_generation_error())
 }
 
 fn input_column(input: &StatisticalInput) -> Result<ArrayRef, JuliaWorkerError> {
@@ -327,7 +339,8 @@ fn julia_exchange_preserves_numeric_category_and_null_values_across_batches() {
             .unwrap(),
     ];
     write_input_table(&file.0, &inputs).unwrap();
-    let reader = yss_tabular_io::read_ipc_batches(&file.0, None).unwrap();
+    let reader =
+        arrow::ipc::reader::FileReader::try_new(fs::File::open(&file.0).unwrap(), None).unwrap();
     assert_eq!(
         reader.schema().field(0).data_type(),
         &arrow::datatypes::DataType::Float64

@@ -47,6 +47,55 @@ fn workspace_facts() -> &'static super::model::RustWorkspaceModel {
     })
 }
 
+#[test]
+fn julia_plugin_depends_only_on_plugin_crates_and_explicit_common_libraries() {
+    let workspace = workspace_facts();
+    let plugin_root = workspace
+        .repository_root
+        .join("plugins/julia/native/crates");
+    let plugin_packages = workspace
+        .roots
+        .iter()
+        .filter(|root| root.source_path.starts_with(&plugin_root))
+        .map(|root| root.package.clone())
+        .collect::<BTreeSet<_>>();
+    assert!(!plugin_packages.is_empty());
+    let common = [
+        "yss-plugin-protocol",
+        "yss-plugin-sdk",
+        "yss-math-expr",
+        "yss-sci-contract",
+        "yss-file-replace",
+    ];
+    let mut pending = plugin_packages.iter().cloned().collect::<Vec<_>>();
+    let mut visited = BTreeSet::new();
+    while let Some(package) = pending.pop() {
+        if !visited.insert(package.clone()) {
+            continue;
+        }
+        for dependency in workspace
+            .dependency_declarations
+            .iter()
+            .filter(|dependency| {
+                dependency.owning_package == package
+                    && dependency.scope != CargoDependencyScope::Development
+                    && matches!(
+                        dependency.authority,
+                        CargoDependencyAuthority::WorkspaceMember { .. }
+                    )
+            })
+        {
+            assert!(
+                plugin_packages.contains(&dependency.package_name)
+                    || common.contains(&dependency.package_name.as_str()),
+                "plugin dependency chain reaches an unapproved host crate: {package} -> {}",
+                dependency.package_name
+            );
+            pending.push(dependency.package_name.clone());
+        }
+    }
+}
+
 fn declares_dependency(package: &str, declaration: &str) -> bool {
     let name = declaration.trim().split([' ', '.', '=']).next().unwrap();
     workspace_facts()
@@ -818,7 +867,6 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         "datafusion.workspace = true",
         "yss-bayes-artifact-contract",
         "yss-bayes-result",
-        "yss-sci-runtime",
     ] {
         assert!(
             declares_dependency("yss-bayes-artifact-datafusion", dependency),
@@ -829,6 +877,8 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         "tauri",
         "yss-application",
         "yssbi",
+        "yss-sci-runtime",
+        "yss-tabular-io",
     ] {
         assert!(
             !declares_dependency_family("yss-bayes-artifact-datafusion", backwards_dependency),
@@ -5705,8 +5755,12 @@ fn julia_worker_has_one_backend_owner_without_root_or_sci_facades() {
             "Julia worker must not restore compatibility or impossible branch {obsolete_compatibility}"
         );
     }
+    let preparation = std::fs::read_to_string(
+        root.join("plugins/julia/native/crates/yss-julia-worker/src/preparation.rs"),
+    )
+    .expect("Julia preparation owner must be readable");
     assert!(
-        owner.contains("command_output_failure_detail"),
+        preparation.contains("command_output_failure_detail"),
         "worker package preparation must reuse the runtime command diagnostic policy"
     );
 
@@ -6725,7 +6779,6 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     for consumer in [
         "src-tauri/crates/yss-application/src/hypothesis.rs",
         "src-tauri/crates/yss-application/src/statistics.rs",
-        "plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/plots.rs",
         "src-tauri/src/lib.rs",
         "src-tauri/crates/yss-api/src/commands/command_panel_did.rs",
     ] {

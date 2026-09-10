@@ -45,6 +45,13 @@
     "PluginManifest": {
       "additionalProperties": false,
       "properties": {
+        "cacheDirectories": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "contributes": {
           "$ref": "#/$defs/Contributions"
         },
@@ -245,6 +252,18 @@
         "enabled": {
           "type": "boolean"
         },
+        "grantedBudget": {
+          "$ref": "#/$defs/ResourceBudget",
+          "default": {
+            "activeTasks": 4,
+            "frameBytes": 2097152,
+            "pendingRequests": 32,
+            "privateStorageBytes": 1073741824,
+            "queuedBytes": 8388608,
+            "snapshotBytes": 134217728,
+            "views": 4
+          }
+        },
         "installationGeneration": {
           "type": "string"
         },
@@ -255,6 +274,10 @@
           "type": "string"
         },
         "processState": {
+          "type": "string"
+        },
+        "signerKey": {
+          "default": "",
           "type": "string"
         }
       },
@@ -277,12 +300,71 @@
         "packageDigest": {
           "type": "string"
         },
+        "previousSignerKey": {
+          "default": null,
+          "type": ["string", "null"]
+        },
         "signerKey": {
           "type": "string"
         }
       },
       "required": ["manifest", "packageDigest", "signerKey"],
       "title": "PackageInspection",
+      "type": "object"
+    },
+    "PluginDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "instanceId": {
+          "type": "string"
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "taskIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": ["pluginId", "instanceId", "taskIds", "stderr", "truncated"],
+      "title": "PluginDiagnostic",
+      "type": "object"
+    },
+    "PluginStorageUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "budgetBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cacheBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enforcement": {
+          "type": "string"
+        },
+        "pluginId": {
+          "type": "string"
+        },
+        "usedBytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": ["pluginId", "usedBytes", "budgetBytes", "cacheBytes", "enforcement"],
+      "title": "PluginStorageUsage",
       "type": "object"
     },
     "PluginFailure": {
@@ -298,18 +380,6 @@
       },
       "required": ["code"],
       "type": "object"
-    },
-    "TaskState": {
-      "enum": [
-        "admitted",
-        "running",
-        "cancelRequested",
-        "succeeded",
-        "failed",
-        "cancelled",
-        "outcomeUnknown"
-      ],
-      "type": "string"
     },
     "TaskSnapshot": {
       "additionalProperties": false,
@@ -333,6 +403,9 @@
         "pluginId": {
           "type": "string"
         },
+        "progress": {
+          "default": null
+        },
         "result": true,
         "revision": {
           "type": "string"
@@ -346,6 +419,35 @@
       },
       "required": ["taskId", "operationId", "pluginId", "packageDigest", "state", "revision"],
       "title": "TaskSnapshot",
+      "type": "object"
+    },
+    "TaskState": {
+      "enum": [
+        "admitted",
+        "running",
+        "cancelRequested",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "outcomeUnknown"
+      ],
+      "type": "string"
+    },
+    "TaskHistoryPage": {
+      "additionalProperties": false,
+      "properties": {
+        "nextCursor": {
+          "type": ["string", "null"]
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/TaskSnapshot"
+          },
+          "type": "array"
+        }
+      },
+      "required": ["tasks"],
+      "title": "TaskHistoryPage",
       "type": "object"
     },
     "ViewSession": {

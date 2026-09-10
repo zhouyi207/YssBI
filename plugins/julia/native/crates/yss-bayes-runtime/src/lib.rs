@@ -370,12 +370,25 @@ impl BayesInferenceService {
     }
 
     pub fn status(&self, task_id: &str) -> Result<BayesInferenceTask, BayesApplicationError> {
-        let state = self.lock_state()?;
-        state
-            .tasks
-            .get(task_id)
-            .cloned()
-            .ok_or(BayesApplicationError::TaskNotFound)
+        let (mut task, handle) = {
+            let state = self.lock_state()?;
+            (
+                state
+                    .tasks
+                    .get(task_id)
+                    .cloned()
+                    .ok_or(BayesApplicationError::TaskNotFound)?,
+                state.worker_handles.get(task_id).cloned(),
+            )
+        };
+        if matches!(task.status, TaskStatus::Running | TaskStatus::Cancelling)
+            && let Some(progress) = handle
+                .as_ref()
+                .and_then(|handle| self.worker.progress(handle))
+        {
+            task.progress = Some(progress);
+        }
+        Ok(task)
     }
 
     pub fn cancel(&self, task_id: &str) -> Result<(), BayesApplicationError> {

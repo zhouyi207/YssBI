@@ -34,12 +34,13 @@
     "generate:plugins": "node scripts/generate-plugin-contract.mjs",
     "generate:plugins:check": "node scripts/generate-plugin-contract.mjs --check",
     "plugin:julia:ui": "vite build --config plugins/julia/web/vite.config.ts",
-    "plugin:julia:package": "node scripts/package-julia-plugin.mjs",
+    "plugin:julia:package": "node plugins/julia/scripts/package.mjs",
     "check:plugin:julia": "tsc --noEmit -p plugins/julia/web/tsconfig.json",
     "test:plugin:julia": "vitest run --config plugins/julia/web/vite.config.ts",
-    "test:plugin:native": "node scripts/test-native-plugin.mjs",
+    "test:plugin:native": "node plugins/julia/scripts/test-native.mjs",
     "generate:diagnostics:check": "node scripts/generate-graph-diagnostics.mjs --check",
-    "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml"
+    "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:plugin:package": "node --test scripts/package-plugin.test.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.16",

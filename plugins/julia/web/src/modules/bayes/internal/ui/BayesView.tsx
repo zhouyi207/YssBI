@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,6 +19,7 @@ import type { BayesInferenceError } from "@/features/application/bayes";
 import { issueTargetStep } from "@/features/domain/bayes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FormulaStep } from "./components/model/FormulaStep";
 import { SamplerStep } from "./components/model/SamplerStep";
@@ -53,6 +54,7 @@ export function BayesView() {
   }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
   const inference = useBayesInferenceTask();
+  const [timeoutMinutes, setTimeoutMinutes] = useState(60);
   const applicationIssue = datasetsModel.issue ?? inference.error ?? validation.error;
   const symbolIssues =
     validation.stale || !validation.report
@@ -63,7 +65,7 @@ export function BayesView() {
   const run = async () => {
     const report = await validation.validate();
     if (!report?.ok) return;
-    await inference.run(modelDraft.draft);
+    await inference.run(modelDraft.draft, timeoutMinutes * 60_000);
   };
 
   return (
@@ -86,8 +88,29 @@ export function BayesView() {
             task={inference.task}
             onRun={run}
             onCancel={inference.cancel}
+            onRetrySubmission={inference.retrySubmission}
+            timeoutMinutes={timeoutMinutes}
+            onTimeoutChange={setTimeoutMinutes}
           />
         </section>
+        {inference.phase === "outcome_unknown" || inference.phase === "submission_unknown" ? (
+          <Alert className="mx-6 my-2 w-auto">
+            <AlertTitle>
+              {t(
+                inference.phase === "submission_unknown"
+                  ? "bayes.submissionUnknownTitle"
+                  : "bayes.outcomeUnknownTitle",
+              )}
+            </AlertTitle>
+            <AlertDescription>
+              {t(
+                inference.phase === "submission_unknown"
+                  ? "bayes.submissionUnknownMessage"
+                  : "bayes.outcomeUnknownMessage",
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <ScrollArea className="min-h-0 flex-1">
           <main className="p-6">
             <TabsContent value="model">
@@ -199,12 +222,18 @@ function BayesActionBar({
   task,
   onRun,
   onCancel,
+  onRetrySubmission,
+  timeoutMinutes,
+  onTimeoutChange,
 }: {
   validationLoading: boolean;
   phase: ReturnType<typeof useBayesInferenceTask>["phase"];
   task: BayesInferenceTaskDTO | null;
   onRun: () => void | Promise<unknown>;
   onCancel: () => void;
+  onRetrySubmission: () => void | Promise<unknown>;
+  timeoutMinutes: number;
+  onTimeoutChange: (value: number) => void;
 }) {
   const { t } = useTranslation();
   const taskStatus = task?.status ?? null;
@@ -214,9 +243,36 @@ function BayesActionBar({
   const stageOverride = phase === "reading_result" ? "rendering_result" : undefined;
   return (
     <div className="flex shrink-0 items-center gap-3">
+      <label className="flex items-center gap-2 text-xs">
+        {t("bayes.timeoutMinutes")}
+        <Input
+          type="number"
+          min={1}
+          max={1440}
+          step={1}
+          className="w-20"
+          value={timeoutMinutes}
+          disabled={busy}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (Number.isInteger(value) && value >= 1 && value <= 1440) onTimeoutChange(value);
+          }}
+        />
+      </label>
+      {phase === "submission_unknown" ? (
+        <Button size="sm" variant="outline" onClick={onRetrySubmission}>
+          {t("bayes.retrySubmission")}
+        </Button>
+      ) : null}
       {busy && task ? <BayesProgressStatus task={task} stageOverride={stageOverride} /> : null}
       <Button size="sm" onClick={onRun} disabled={busy || validationLoading}>
-        {busy ? t("bayes.actions.running") : t("bayes.actions.run")}
+        {busy
+          ? t("bayes.actions.running")
+          : t(
+              phase === "outcome_unknown" || phase === "submission_unknown"
+                ? "bayes.startNewTask"
+                : "bayes.actions.run",
+            )}
       </Button>
       <Button size="sm" variant="outline" onClick={onCancel} disabled={!cancellable}>
         {t("bayes.actions.cancel")}

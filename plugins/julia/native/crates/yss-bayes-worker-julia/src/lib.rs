@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,6 +36,8 @@ trait JuliaBayesRuntime: Send + Sync {
         app_data_dir: &Path,
         worker_task_id: &str,
         task: &PreparedJuliaTask,
+        progress: Option<yss_julia_worker::JuliaWorkerProgressCallback>,
+        cancellation: Arc<AtomicBool>,
     ) -> Result<JuliaTaskCompletion, JuliaWorkerError>;
 
     fn cancel(&self, worker_task_id: &str) -> Result<bool, JuliaWorkerError>;
@@ -51,8 +53,17 @@ impl JuliaBayesRuntime for ManagerJuliaBayesRuntime {
         app_data_dir: &Path,
         worker_task_id: &str,
         task: &PreparedJuliaTask,
+        progress: Option<yss_julia_worker::JuliaWorkerProgressCallback>,
+        cancellation: Arc<AtomicBool>,
     ) -> Result<JuliaTaskCompletion, JuliaWorkerError> {
-        fit::run_manager_task(&self.worker, app_data_dir, worker_task_id, task)
+        fit::run_manager_task(
+            &self.worker,
+            app_data_dir,
+            worker_task_id,
+            task,
+            progress,
+            cancellation,
+        )
     }
 
     fn cancel(&self, worker_task_id: &str) -> Result<bool, JuliaWorkerError> {
@@ -77,6 +88,8 @@ enum AdapterTaskState {
     Active {
         worker_task_id: Box<str>,
         completion: Option<mpsc::Receiver<Result<JuliaTaskCompletion, JuliaWorkerError>>>,
+        progress: Arc<Mutex<Option<yss_bayes_result::TaskProgress>>>,
+        cancellation: Arc<AtomicBool>,
     },
     Completed(Box<CompletedTaskState>),
     Cancelled,
@@ -205,6 +218,15 @@ impl JuliaBayesWorkerAdapter {
 }
 
 impl BayesWorkerPort for JuliaBayesWorkerAdapter {
+    fn progress(&self, handle: &BayesTaskHandle) -> Option<yss_bayes_result::TaskProgress> {
+        let state = self.state.lock().ok()?;
+        Self::validate_current(&state, handle).ok()?;
+        if let Some(AdapterTaskState::Active { progress, .. }) = state.tasks.get(handle) {
+            progress.lock().ok()?.clone()
+        } else {
+            None
+        }
+    }
     fn start(
         &self,
         authority: &BayesWorkerAuthority,
@@ -235,10 +257,37 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
         let runtime = Arc::clone(&self.runtime);
         let thread_worker_task_id = worker_task_id.clone();
         let (sender, receiver) = mpsc::sync_channel(1);
+        let progress = Arc::new(Mutex::new(None));
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let thread_cancellation = cancellation.clone();
+        let progress_slot = progress.clone();
+        let report: yss_julia_worker::JuliaWorkerProgressCallback = Arc::new(move |update| {
+            if update.stage.len() > 128
+                || update
+                    .completed
+                    .zip(update.total)
+                    .is_some_and(|(completed, total)| completed > total)
+            {
+                return;
+            }
+            if let Ok(mut slot) = progress_slot.lock() {
+                *slot = Some(yss_bayes_result::TaskProgress {
+                    stage: update.stage,
+                    completed: update.completed,
+                    total: update.total,
+                });
+            }
+        });
         thread::Builder::new()
             .name("julia-bayes-worker-adapter".to_owned())
             .spawn(move || {
-                let result = runtime.run_task(&app_data_dir, &thread_worker_task_id, &prepared);
+                let result = runtime.run_task(
+                    &app_data_dir,
+                    &thread_worker_task_id,
+                    &prepared,
+                    Some(report),
+                    thread_cancellation,
+                );
                 let _ = sender.send(result);
             })
             .map_err(|_| BayesWorkerError::WorkerUnavailable {
@@ -256,6 +305,8 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
             AdapterTaskState::Active {
                 worker_task_id: worker_task_id.into(),
                 completion: Some(receiver),
+                progress,
+                cancellation,
             },
         );
         Ok(handle)
@@ -279,6 +330,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 Some(AdapterTaskState::Active {
                     worker_task_id,
                     completion,
+                    ..
                 }) => (
                     completion
                         .take()
@@ -364,7 +416,7 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
         handle: &BayesTaskHandle,
         control: &CancelDeliveryControl,
     ) -> Result<BayesCancelTerminal, BayesWorkerError> {
-        let worker_task_id = {
+        let (worker_task_id, cancellation) = {
             let state = self
                 .state
                 .lock()
@@ -372,7 +424,11 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                     phase: BayesWorkerPhase::CancelDelivery,
                 })?;
             match Self::validate_current(&state, handle)? {
-                AdapterTaskState::Active { worker_task_id, .. } => worker_task_id.clone(),
+                AdapterTaskState::Active {
+                    worker_task_id,
+                    cancellation,
+                    ..
+                } => (worker_task_id.clone(), cancellation.clone()),
                 AdapterTaskState::Completed(_) => {
                     return Ok(BayesCancelTerminal::AlreadyTerminal {
                         terminal: BayesWorkerTerminalCode::Succeeded,
@@ -390,19 +446,13 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {
                 }
             }
         };
-        let delivered = self.runtime.cancel(&worker_task_id).map_err(|_| {
-            BayesWorkerError::WorkerUnavailable {
-                phase: BayesWorkerPhase::CancelDelivery,
-            }
-        })?;
+        // The token covers admission/input preparation as well as an already running worker.
+        // A protocol notification alone can miss a task whose Julia ID is not registered yet.
+        cancellation.store(true, Ordering::Release);
+        let _ = self.runtime.cancel(&worker_task_id);
         if control.is_expired(Instant::now()) {
             return Err(BayesWorkerError::CancelDeliveryDeadline {
                 task: handle.clone(),
-            });
-        }
-        if !delivered {
-            return Err(BayesWorkerError::WorkerUnavailable {
-                phase: BayesWorkerPhase::CancelDelivery,
             });
         }
         let mut state = self
@@ -596,6 +646,8 @@ mod tests {
             app_data_dir: &Path,
             worker_task_id: &str,
             _task: &PreparedJuliaTask,
+            progress: Option<yss_julia_worker::JuliaWorkerProgressCallback>,
+            _cancellation: Arc<std::sync::atomic::AtomicBool>,
         ) -> Result<JuliaTaskCompletion, JuliaWorkerError> {
             let run = self
                 .runs
@@ -604,6 +656,14 @@ mod tests {
                 .pop_front()
                 .expect("fake run must be configured");
             if let Some(gate) = &run.gate {
+                if let Some(report) = progress {
+                    report(yss_julia_worker::JuliaWorkerProgress {
+                        task_id: worker_task_id.into(),
+                        stage: "sampling".into(),
+                        completed: Some(10),
+                        total: Some(100),
+                    });
+                }
                 gate.wait_inside();
             }
             let directory = JuliaWorkerTaskDirectory::create(app_data_dir, worker_task_id)?;
@@ -800,6 +860,11 @@ mod tests {
             .start(validated_task("cancelled-task"), &run_control)
             .expect("active task must be accepted");
         gate.wait_until_entered();
+        let progress = adapter
+            .progress(&handle)
+            .expect("active worker progress must reach the contract");
+        assert_eq!(progress.stage, "sampling");
+        assert_eq!((progress.completed, progress.total), (Some(10), Some(100)));
         assert!(matches!(
             adapter.cancel(
                 &handle,

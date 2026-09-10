@@ -241,8 +241,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_bayes_artifact_contract::BayesArtifactReadError",
             "yss_bayes_artifact_contract::BayesArtifactReader",
-            "yss_sci_runtime::density::KernelDensityInput",
-            "yss_sci_runtime::density::compute_kernel_density",
         ],
     },
     InternalDependencyCapability {

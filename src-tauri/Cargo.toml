@@ -96,6 +96,7 @@ members = [
 rust-version = "1.94"
 
 [workspace.dependencies]
+semver = "1"
 arrow-array = "=59.3.0"
 futures-core = "0.3"
 futures-util = "0.3"

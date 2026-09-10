@@ -1,19 +1,21 @@
 mod host;
 mod manifest;
+mod operation;
 pub use host::*;
 pub use manifest::*;
+pub use operation::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::io::{self, Read, Write};
 
-pub const PROTOCOL_MAJOR: u32 = 1;
+pub const PROTOCOL_MAJOR: u32 = 2;
 pub const PROTOCOL_MINOR: u32 = 0;
 pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_PACKAGE_BYTES: u64 = 512 * 1024 * 1024;
 pub const MAX_ASSET_BYTES: u64 = 16 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceBudget {
     pub frame_bytes: u32,
@@ -38,6 +40,10 @@ impl Default for ResourceBudget {
     }
 }
 impl ResourceBudget {
+    pub fn grant(&self) -> Result<Self, PluginFailure> {
+        self.validate()?;
+        Ok(self.clone())
+    }
     pub fn validate(&self) -> Result<(), PluginFailure> {
         let max = Self::default();
         if self.frame_bytes == 0

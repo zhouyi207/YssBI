@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { createOperationId } from "@/sdk";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import i18n from "i18next";
 import { initReactI18next, useTranslation } from "react-i18next";
@@ -23,6 +24,8 @@ function RuntimePage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [task, setTask] = useState<{ taskId: string; state: string } | null>(null);
+  const preparationOperation = useRef<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const refresh = () =>
     void request<typeof status>("dependencies.inspect")
       .then((value) => {
@@ -45,6 +48,8 @@ function RuntimePage() {
         .then((value) => {
           if (stopped) return;
           setTask(value);
+          if (["succeeded", "failed", "cancelled", "outcomeUnknown"].includes(value.state))
+            preparationOperation.current = null;
           if (value.state === "succeeded") refresh();
           if (value.state === "failed" || value.state === "outcomeUnknown")
             setError(t("julia.worker.unavailable"));
@@ -52,7 +57,6 @@ function RuntimePage() {
         .catch(() => {
           if (!stopped) {
             setError(t("julia.worker.statusFailed"));
-            setTask(null);
           }
         })
         .finally(() => {
@@ -85,18 +89,25 @@ function RuntimePage() {
       )}
       <div className="flex flex-col items-start gap-3">
         <Button
-          disabled={!!busy || status?.runtimeState === "missing"}
+          disabled={submitting || !!busy || status?.runtimeState === "missing"}
           variant="outline"
           onClick={() => {
             setError(null);
+            setSubmitting(true);
+            preparationOperation.current ??= createOperationId();
             void request<{ taskId: string; state: string }>("tasks.start", {
               taskType: "runtime.prepare",
-              operationId: `op-${crypto.randomUUID()}`,
+              operationId: preparationOperation.current,
               parameters: {},
               timeoutMs: 600000,
             })
-              .then(setTask)
-              .catch(() => setError(t("julia.worker.unavailable")));
+              .then((value) => {
+                setTask(value);
+                if (["succeeded", "failed", "cancelled", "outcomeUnknown"].includes(value.state))
+                  preparationOperation.current = null;
+              })
+              .catch(() => setError(t("julia.worker.unavailable")))
+              .finally(() => setSubmitting(false));
           }}
         >
           {busy ? t("julia.worker.starting") : t("julia.menu.prepare")}

@@ -89,21 +89,60 @@ fn density_series(
     DensitySeries {
         parameter: parameter.to_string(),
         chain,
-        points: yss_sci_runtime::density::compute_kernel_density(
-            yss_sci_runtime::density::KernelDensityInput {
-                values,
-                grid_points,
-                min_x: None,
-            },
-        )
-        .points
-        .into_iter()
-        .map(|point| DensityPoint {
-            x: point.x,
-            density: point.density,
-        })
-        .collect(),
+        points: density_points(values, grid_points),
     }
+}
+
+fn density_points(values: &[f64], grid_points: usize) -> Vec<DensityPoint> {
+    if values.is_empty() || grid_points < 2 {
+        return Vec::new();
+    }
+    // Sample rows are already validated. Preserve the plugin's Gaussian/Silverman
+    // projection without linking the host's full scientific runtime.
+    let count = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / count;
+    let sigma = (values
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / (count - 1.0))
+        .sqrt();
+    let bandwidth = if sigma.is_finite() && sigma > 0.0 {
+        1.06 * sigma * count.powf(-0.2)
+    } else {
+        1.0
+    };
+    let min = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let padding = ((max - min) * 0.15).max(bandwidth * 2.0).max(0.1);
+    let lower = min - padding;
+    let upper = max + padding;
+    (0..grid_points)
+        .map(|index| {
+            let x = lower + index as f64 / (grid_points - 1) as f64 * (upper - lower);
+            let density = values
+                .iter()
+                .map(|value| {
+                    let standardized = (x - value) / bandwidth;
+                    0.398_942_280_401_432_7 * (-0.5 * standardized * standardized).exp()
+                })
+                .sum::<f64>()
+                / (count * bandwidth);
+            DensityPoint { x, density }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+#[test]
+fn density_grid_preserves_bandwidth_and_constant_chain_fallback() {
+    let points = density_points(&[0.0, 1.0, 2.0], 3);
+    assert!((points[0].x - -1.701_812_110_931_689_3).abs() < 1e-12);
+    assert!((points[1].x - 1.0).abs() < 1e-12);
+    assert!((points[1].density - 0.312_966_247_632_955_2).abs() < 1e-12);
+    let constant = density_points(&[4.0, 4.0], 5);
+    assert_eq!((constant[0].x, constant[4].x), (2.0, 6.0));
+    assert!((constant[2].density - 0.398_942_280_401_432_7).abs() < 1e-15);
 }
 
 pub(crate) fn autocorrelation_plot_data(

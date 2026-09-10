@@ -29,6 +29,24 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "semver",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-bayes-artifact-datafusion",
         mode: RustDependencyMode::Runtime,
         package_name: "datafusion",
@@ -1357,6 +1375,11 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "semver",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,

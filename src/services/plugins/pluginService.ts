@@ -5,6 +5,9 @@ import type {
   PackageInspection,
   ViewSession,
   TaskSnapshot,
+  TaskHistoryPage,
+  PluginStorageUsage,
+  PluginDiagnostic,
 } from "@/shared/types/plugins/generated";
 
 type Schema = {
@@ -85,14 +88,20 @@ export const pluginService = {
   async inspect(path: string): Promise<PackageInspection> {
     return parse("PackageInspection", await invokeCommand("inspect_plugin_package", { path }));
   },
-  async install(path: string, digest: string): Promise<InstalledPlugin> {
+  async install(
+    path: string,
+    digest: string,
+    operationId: string,
+    approvedPreviousSigner: string | null,
+  ): Promise<InstalledPlugin> {
     return parse(
       "InstalledPlugin",
       await invokeCommand("install_plugin_package", {
         path,
         expectedDigest: digest,
-        operationId: `op-${crypto.randomUUID()}`,
+        operationId,
         approveNative: true,
+        approvedPreviousSigner,
       }),
     );
   },
@@ -119,4 +128,35 @@ export const pluginService = {
     if (!Array.isArray(result)) throw new Error("plugin_wire_invalid");
     return result.map((task) => parse("TaskSnapshot", task));
   },
+  async history(pluginId: string, cursor: string | null = null): Promise<TaskHistoryPage> {
+    return parse(
+      "TaskHistoryPage",
+      await invokeCommand("get_plugin_task_history", { pluginId, cursor, limit: 25 }),
+    );
+  },
+  clearHistory(pluginId: string) {
+    return invokeCommand<void>("clear_plugin_task_history", { pluginId });
+  },
+  async storage(pluginId: string): Promise<PluginStorageUsage> {
+    return parse(
+      "PluginStorageUsage",
+      await invokeCommand("get_plugin_storage_usage", { pluginId }),
+    );
+  },
+  async clearCache(pluginId: string): Promise<PluginStorageUsage> {
+    return parse("PluginStorageUsage", await invokeCommand("clear_plugin_cache", { pluginId }));
+  },
+  collectGarbage() {
+    return invokeCommand<number>("collect_plugin_garbage");
+  },
+  async diagnostics(pluginId: string): Promise<PluginDiagnostic[]> {
+    const result = await invokeCommand<unknown>("get_plugin_diagnostics", { pluginId });
+    if (!Array.isArray(result)) throw new Error("plugin_wire_invalid");
+    return result.map((item) => parse("PluginDiagnostic", item));
+  },
 };
+
+/** Create once per logical operation; keep the returned value for transport retries. */
+export function createOperationId(): string {
+  return `op-${Date.now()}-${crypto.randomUUID()}`;
+}

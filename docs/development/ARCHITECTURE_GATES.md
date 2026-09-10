@@ -25,11 +25,15 @@ Production modules 不导入 classifier、policy、debt 或 test fixtures。门�
 
 Rust audit 从 Cargo metadata 发现 workspace 中的 library、binary、runnable example 和 custom-build roots，排除 test/bench targets，再沿每个 root 的真实 `mod` graph 收集 reachable production source。
 
+Cargo 成员和直接依赖断言读取解析后的 package identity、依赖种类与 workspace authority，避免把路径、版本字段的文本格式当成依赖关系。Julia/Bayes 专属 crates 位于插件目录，协议、SDK 和通用库保留原路径；它们均由同一 workspace 的 metadata 发现并执行层级检查。插件的本地依赖图只允许插件内部 crates、协议/SDK 及明确的纯通用库，禁止经过适配器间接引入宿主 SCI、项目或数据库实现。
+
 AST discovery 覆盖 use/re-export/path/macro/include/attribute、`#[path]` 和 cfg reachability。Custom build root 与其 local modules 单独分类，不能借普通 crate layer 获得依赖权限。
 
 ### Frontend
 
 Frontend audit inventory 完整 `src/` production tree，排除 `src/tests/`、test files、generated declarations 和明确 fixture。TypeScript module dependencies 与 repository stylesheet dependencies 进入同一个 dependency graph；relative CSS、`@import` 和 `url(...)` target 必须解析为存在的 repository asset 或允许的 exact external style target。
+
+插件网页使用自己的 `sdk.ts`。宿主前端不导入插件网页源码，也不通过额外 npm 包共享插件内部实现。
 
 参与运行的 generated modules 与 JSON imports 同样进入 discovery/classification；只有 declaration/fixture 被排除，生成文件名不是绕过生产依赖审计的依据。
 

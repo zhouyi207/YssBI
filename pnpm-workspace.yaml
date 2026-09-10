@@ -1,2 +1,4 @@
+packages:
+  - plugins/julia/web
 allowBuilds:
   esbuild: false

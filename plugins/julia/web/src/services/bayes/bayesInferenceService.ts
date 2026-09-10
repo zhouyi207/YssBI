@@ -16,9 +16,10 @@ import type {
 
 export async function submitBayesInference(
   input: BayesModelDraftDTO,
+  options: { operationId: string; timeoutMs: number },
 ): Promise<BayesInferenceTaskDTO> {
   return parseBayesInferenceTaskDTO(
-    await invokeCommand<unknown>("submit_bayes_inference", { input }),
+    await invokeCommand<unknown>("submit_bayes_inference", { input, ...options }),
   );
 }
 

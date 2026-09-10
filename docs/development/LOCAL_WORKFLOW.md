@@ -19,6 +19,7 @@
 ## Cargo output
 
 仓库不提供 `.cargo/` target 覆盖。以 `src-tauri/Cargo.toml` 为 workspace manifest 时，Cargo metadata 当前解析到 `src-tauri/target/`。所有 root Rust scripts 都显式指定该 manifest，并保留 Cargo 默认 build jobs 和 libtest threads。
+该 workspace 还包含 `plugins/julia/native/crates` 中的显式成员；协议、Rust SDK 和已有通用基础库继续位于 `src-tauri/crates`，共用锁文件和根构建入口。
 
 Windows 上 Rust linking 与 production architecture audit 成本较高。增量循环先选择 package、target 和相关用例；小修改不默认启动整个 workspace 的 check、lint 或 test。完整验证的升级条件见下文 L1/L2/L3。
 
@@ -58,6 +59,7 @@ TypeScript check 使用 `tsc`，lint 使用 Oxlint，format 使用 Oxfmt，tests
 Rust 局部写入格式化使用 `pnpm format:rs:package -p <crate-name>`，可以重复 `-p`，不自动格式化其他包。
 
 独立 Julia/Bayes 插件的构建、签名与安装见 [插件开发说明](../../plugins/julia/README.md)。宿主构建不自动构建或捆绑该插件。
+`pnpm test:plugin:package` 验证清单内容身份与发布版本规则。Web SDK 保留在插件内部，当前不维护独立 SDK 包或源码分发入口。
 
 | 目的                     | 根目录命令                                              |
 | ------------------------ | ------------------------------------------------------- |
@@ -68,6 +70,7 @@ Rust 局部写入格式化使用 `pnpm format:rs:package -p <crate-name>`，可�
 | 真实插件进程集成测试     | `pnpm test:plugin:native`                               |
 
 原生集成测试需要已构建的包和兼容 Julia，涵盖环境准备、推断、取消、上下文失效和卸载。冷环境准备与 Julia 编译可能耗时数分钟；普通单元测试不会隐式启动它。
+可通过 `YSSBI_PLUGIN_TEST_PACKAGE` 指定待验证的 `.yssplugin`，验证该产物在宿主中的安装和运行；未指定时选取本地最新包。
 
 单栈 scripts 将其余参数透传给 Vitest 或 Cargo。以下是模板，替换文件、crate、target 和测试名称后执行：
 

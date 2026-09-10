@@ -17,7 +17,12 @@ export function isIpcError(value: unknown): value is IpcError {
   return !!value && typeof value === "object" && "code" in value;
 }
 function task(value: unknown) {
-  const state = value as { taskId: string; state: string; error: IpcError | null };
+  const state = value as {
+    taskId: string;
+    state: string;
+    error: IpcError | null;
+    progress?: unknown;
+  };
   const statuses: Record<string, string> = {
     admitted: "queued",
     running: "running",
@@ -25,12 +30,12 @@ function task(value: unknown) {
     succeeded: "completed",
     failed: "failed",
     cancelled: "cancelled",
-    outcomeUnknown: "failed",
+    outcomeUnknown: "outcome_unknown",
   };
   return {
     taskId: state.taskId,
-    status: statuses[state.state] ?? "failed",
-    progress: null,
+    status: statuses[state.state],
+    progress: state.progress ?? null,
     error: state.error,
   };
 }
@@ -43,9 +48,9 @@ export async function invokeCommand<T>(
       return task(
         await request("tasks.start", {
           taskType: "bayes.inference",
-          operationId: `op-${crypto.randomUUID()}`,
+          operationId: args.operationId,
           parameters: args.input,
-          timeoutMs: 3_600_000,
+          timeoutMs: args.timeoutMs,
         }),
       ) as T;
     if (command === "get_bayes_inference_status")

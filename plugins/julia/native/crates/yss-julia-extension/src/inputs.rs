@@ -12,8 +12,8 @@ fn invalid() -> PluginFailure {
 }
 
 pub fn read_inputs(path: &str) -> Result<Arc<[StatisticalInput]>, PluginFailure> {
-    let reader = yss_tabular_io::read_ipc_batches(std::path::Path::new(path), None)
-        .map_err(|_| invalid())?;
+    let file = std::fs::File::open(path).map_err(|_| invalid())?;
+    let reader = arrow::ipc::reader::FileReader::try_new(file, None).map_err(|_| invalid())?;
     let schema = reader.schema();
     let mut columns = vec![Vec::new(); schema.fields().len()];
     let mut bytes = 0usize;
@@ -155,12 +155,15 @@ fn arrow_snapshot_preserves_batch_alignment_labels_temporal_values_and_missingne
         ),
     ])
     .unwrap();
-    yss_tabular_io::write_ipc_batches(
-        &file.0,
+    let mut writer = arrow::ipc::writer::FileWriter::try_new(
+        std::fs::File::create(&file.0).unwrap(),
         &batch.schema(),
-        [Ok(batch.slice(0, 1)), Ok(batch.slice(1, 2))],
     )
     .unwrap();
+    writer.write(&batch.slice(0, 1)).unwrap();
+    writer.write(&batch.slice(1, 2)).unwrap();
+    writer.finish().unwrap();
+    drop(writer);
     let values = read_inputs(file.0.to_str().unwrap()).unwrap();
     assert_eq!(values.len(), 6);
     assert!(
@@ -198,8 +201,14 @@ fn arrow_snapshot_preserves_batch_alignment_labels_temporal_values_and_missingne
         Arc::new(Float64Array::from(vec![1., f64::NAN])) as ArrayRef,
     )])
     .unwrap();
-    yss_tabular_io::write_ipc_batches(&file.0, &invalid_batch.schema(), [Ok(invalid_batch)])
-        .unwrap();
+    let mut writer = arrow::ipc::writer::FileWriter::try_new(
+        std::fs::File::create(&file.0).unwrap(),
+        &invalid_batch.schema(),
+    )
+    .unwrap();
+    writer.write(&invalid_batch).unwrap();
+    writer.finish().unwrap();
+    drop(writer);
     assert_eq!(
         read_inputs(file.0.to_str().unwrap()).unwrap_err().code,
         "plugin_snapshot_invalid"

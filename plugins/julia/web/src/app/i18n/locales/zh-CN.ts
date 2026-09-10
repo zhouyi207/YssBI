@@ -379,6 +379,15 @@ export const zhCN = {
     switchToLight: "切换为浅色主题",
   },
   bayes: {
+    timeoutMinutes: "超时（分钟）",
+    retrySubmission: "重试同一提交",
+    startNewTask: "开始新任务",
+    submissionUnknownTitle: "提交结果尚未确认",
+    submissionUnknownMessage:
+      "宿主可能已接受该任务。重试同一提交会复用操作标识，不会重复创建任务。",
+    outcomeUnknownTitle: "任务结果未知",
+    outcomeUnknownMessage:
+      "计算可能已经执行，但结果未能确认。请先核对已有结果；开始新任务会产生一次新的计算。",
     title: "贝叶斯参数估计",
     openWindow: "打开贝叶斯参数估计",
     tabs: { model: "模型", results: "结果" },

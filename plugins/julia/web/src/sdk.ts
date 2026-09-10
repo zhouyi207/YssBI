@@ -73,3 +73,8 @@ export async function request<T = unknown>(method: string, input: unknown = null
     port!.postMessage({ id, method, input });
   });
 }
+
+/** Create once per logical operation; keep the returned value for transport retries. */
+export function createOperationId(): string {
+  return `op-${Date.now()}-${crypto.randomUUID()}`;
+}

@@ -22,7 +22,7 @@ pub struct Peer {
     alive: AtomicBool,
     next: AtomicU64,
     prefix: String,
-    budget: ResourceBudget,
+    budget: Mutex<ResourceBudget>,
 }
 
 impl Peer {
@@ -42,7 +42,7 @@ impl Peer {
             alive: AtomicBool::new(true),
             next: AtomicU64::new(1),
             prefix: uuid::Uuid::new_v4().to_string(),
-            budget,
+            budget: Mutex::new(budget),
         });
         let weak_writer = Arc::downgrade(&peer);
         std::thread::spawn(move || {
@@ -100,7 +100,7 @@ impl Peer {
                 let Some(peer) = weak.upgrade().filter(|peer| peer.is_alive()) else {
                     break;
                 };
-                if frame.len() > peer.budget.frame_bytes as usize {
+                if frame.len() > peer.budget().frame_bytes as usize {
                     break;
                 }
                 let Ok(value) = serde_json::from_slice::<Value>(&frame) else {
@@ -197,7 +197,7 @@ impl Peer {
                 .pending
                 .lock()
                 .map_err(|_| PluginFailure::new("plugin_state_unavailable"))?;
-            if pending.len() >= self.budget.pending_requests as usize {
+            if pending.len() >= self.budget().pending_requests as usize {
                 return Err(PluginFailure::new("plugin_resource_exhausted"));
             }
             pending.insert(id.clone(), sender);
@@ -233,14 +233,15 @@ impl Peer {
     fn send(&self, value: &impl serde::Serialize) -> Result<(), PluginFailure> {
         let bytes =
             serde_json::to_vec(value).map_err(|_| PluginFailure::new("plugin_response_invalid"))?;
-        if bytes.len() > self.budget.frame_bytes as usize {
+        let budget = self.budget();
+        if bytes.len() > budget.frame_bytes as usize {
             return Err(PluginFailure::new("plugin_payload_too_large"));
         }
         self.outgoing_bytes
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |queued| {
                 queued
                     .checked_add(bytes.len())
-                    .filter(|next| *next <= self.budget.queued_bytes as usize)
+                    .filter(|next| *next <= budget.queued_bytes as usize)
             })
             .map_err(|_| PluginFailure::new("plugin_resource_exhausted"))?;
         let size = bytes.len();
@@ -252,6 +253,31 @@ impl Peer {
     }
     pub fn is_alive(&self) -> bool {
         self.alive.load(Ordering::Acquire)
+    }
+    pub fn budget(&self) -> ResourceBudget {
+        self.budget
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+    pub fn apply_budget(&self, granted: ResourceBudget) -> Result<(), PluginFailure> {
+        granted.validate()?;
+        let mut current = self
+            .budget
+            .lock()
+            .map_err(|_| PluginFailure::new("plugin_state_unavailable"))?;
+        if granted.frame_bytes > current.frame_bytes
+            || granted.pending_requests > current.pending_requests
+            || granted.queued_bytes > current.queued_bytes
+            || granted.active_tasks > current.active_tasks
+            || granted.snapshot_bytes > current.snapshot_bytes
+            || granted.private_storage_bytes > current.private_storage_bytes
+            || granted.views > current.views
+        {
+            return Err(PluginFailure::new("plugin_budget_invalid"));
+        }
+        *current = granted;
+        Ok(())
     }
     pub fn pending_count(&self) -> usize {
         self.pending
@@ -312,6 +338,29 @@ mod tests {
             host.call("null", Value::Null, Duration::from_secs(2))
                 .unwrap(),
             Value::Null
+        );
+        let granted = ResourceBudget {
+            frame_bytes: 256,
+            ..ResourceBudget::default()
+        };
+        host.apply_budget(granted.clone()).unwrap();
+        assert_eq!(host.budget(), granted);
+        assert_eq!(
+            host.call(
+                "roundtrip",
+                serde_json::json!({"payload":"x".repeat(512)}),
+                Duration::from_secs(2)
+            )
+            .unwrap_err()
+            .code,
+            "plugin_payload_too_large"
+        );
+        assert_eq!(host.pending_count(), 0);
+        assert_eq!(
+            host.apply_budget(ResourceBudget::default())
+                .unwrap_err()
+                .code,
+            "plugin_budget_invalid"
         );
         host.close();
         plugin.close();

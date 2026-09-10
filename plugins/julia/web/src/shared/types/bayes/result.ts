@@ -146,7 +146,14 @@ export interface TaskErrorDTO {
 
 export interface BayesInferenceTaskDTO {
   taskId: string;
-  status: "queued" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
+  status:
+    | "queued"
+    | "running"
+    | "cancelling"
+    | "cancelled"
+    | "completed"
+    | "failed"
+    | "outcome_unknown";
   progress: TaskProgressDTO | null;
   error: TaskErrorDTO | null;
 }
