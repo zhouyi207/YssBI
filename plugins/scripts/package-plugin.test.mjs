@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { hash, packagePlugin, signedPayload, validateVersion } from "./package-plugin.mjs";
 
-const fixture = new URL("../plugins/julia/plugin.json", import.meta.url);
+const fixture = new URL("../julia/plugin.json", import.meta.url);
 test("signed identity includes permissions and granted-budget requests", () => {
   const manifest = JSON.parse(readFileSync(fixture, "utf8"));
   const files = [{ path: manifest.executable, size: "1", sha256: "a".repeat(64) }];

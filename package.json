@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "docs:module-map": "node scripts/generate-module-map.mjs",
-    "docs:module-map:check": "node scripts/generate-module-map.mjs --check",
+    "docs:module-map": "node docs/reference/generate-module-map.mjs",
+    "docs:module-map:check": "node docs/reference/generate-module-map.mjs --check",
     "preview": "vite preview",
     "check": "pnpm check:ts && pnpm check:rs",
     "check:ts": "tsc --noEmit",
@@ -30,17 +30,17 @@
     "format:check:ts": "oxfmt --check",
     "format:check:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "ci": "pnpm format:check && pnpm check && pnpm lint && pnpm test",
-    "generate:diagnostics": "node scripts/generate-graph-diagnostics.mjs",
-    "generate:plugins": "node scripts/generate-plugin-contract.mjs",
-    "generate:plugins:check": "node scripts/generate-plugin-contract.mjs --check",
+    "generate:diagnostics": "node src-tauri/crates/yss-graph-compiler-diagnostics/scripts/generate-graph-diagnostics.mjs",
+    "generate:plugins": "node src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs",
+    "generate:plugins:check": "node src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs --check",
     "plugin:julia:ui": "vite build --config plugins/julia/web/vite.config.ts",
     "plugin:julia:package": "node plugins/julia/scripts/package.mjs",
     "check:plugin:julia": "tsc --noEmit -p plugins/julia/web/tsconfig.json",
     "test:plugin:julia": "vitest run --config plugins/julia/web/vite.config.ts",
     "test:plugin:native": "node plugins/julia/scripts/test-native.mjs",
-    "generate:diagnostics:check": "node scripts/generate-graph-diagnostics.mjs --check",
+    "generate:diagnostics:check": "node src-tauri/crates/yss-graph-compiler-diagnostics/scripts/generate-graph-diagnostics.mjs --check",
     "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "test:plugin:package": "node --test scripts/package-plugin.test.mjs"
+    "test:plugin:package": "node --test plugins/scripts/package-plugin.test.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.16",

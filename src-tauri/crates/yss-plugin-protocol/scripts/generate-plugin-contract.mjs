@@ -1,8 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const schemas = JSON.parse(
   execFileSync(
     "cargo",
@@ -16,7 +18,7 @@ const schemas = JSON.parse(
       "--bin",
       "plugin-schema",
     ],
-    { encoding: "utf8" },
+    { cwd: root, encoding: "utf8" },
   ),
 );
 const definitions = {};
@@ -59,7 +61,7 @@ function type(schema) {
       return "unknown";
   }
 }
-const directory = resolve("src/shared/types/plugins");
+const directory = resolve(root, "src/shared/types/plugins");
 mkdirSync(directory, { recursive: true });
 const outputs = {
   "generated.ts":

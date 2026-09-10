@@ -7,6 +7,17 @@
 
 所有命令从仓库根目录运行。`package.json#scripts` 是本地和自动化任务的唯一命令矩阵；本文不为 TypeScript、Rust 或 Tauri 另建平行手册。设计或实现 feature、fix、refactor 和行为变更前先使用[变更流程](CHANGE_PROCESS.md)。
 
+项目流程脚本随对应功能放置，根 `scripts/` 只保留目录树和代码统计的四个可选 Python 工具。
+
+| 脚本                 | 所属位置                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| Graph 诊断模板生成器 | `src-tauri/crates/yss-graph-compiler-diagnostics/scripts/generate-graph-diagnostics.mjs` |
+| 插件协议生成器       | `src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs`              |
+| 通用插件打包器及测试 | `plugins/scripts/package-plugin.mjs`、`plugins/scripts/package-plugin.test.mjs`          |
+| 模块索引生成器       | `docs/reference/generate-module-map.mjs`                                                 |
+
+通过下方根命令调用这些脚本；插件专属构建入口继续归属各插件目录。
+
 ## 开发环境
 
 - Rust：使用根目录 `rust-toolchain.toml` 固定的版本和 components。

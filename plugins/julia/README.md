@@ -11,6 +11,7 @@ pnpm plugin:julia:package
 ```
 
 输出在 `target/plugin-packages/`。发布版本由本目录的 `plugin.json` 显式维护；相同发布版本不能覆盖不同内容。
+本插件的构建入口调用 `plugins/scripts/package-plugin.mjs` 完成通用签名与封装；打包规则测试也位于该目录。
 需要优化构建时使用 `pnpm plugin:julia:package --release`；`--skip-build` 只封装已有产物。
 开发迭代使用 `--dev`，生成带时间顺序和完整清单/资产摘要的预发布版本。`packageDigest` 始终标识完整签名载荷，
 版本中的 build metadata 不用于新旧排序，遵循 [SemVer](https://semver.org/)。

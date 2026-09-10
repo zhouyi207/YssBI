@@ -156,7 +156,7 @@ describe("documentation contract", () => {
 
     const generationCheck = spawnSync(
       process.execPath,
-      [resolve(REPOSITORY_ROOT, "scripts/generate-module-map.mjs"), "--check"],
+      [resolve(REPOSITORY_ROOT, "docs/reference/generate-module-map.mjs"), "--check"],
       { cwd: REPOSITORY_ROOT, encoding: "utf8" },
     );
     expect(generationCheck.status, generationCheck.stderr || generationCheck.stdout).toBe(0);

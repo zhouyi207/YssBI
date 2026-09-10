@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { packagePlugin } from "../../../scripts/package-plugin.mjs";
+import { packagePlugin } from "../../scripts/package-plugin.mjs";
 
 const root = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const release = process.argv.includes("--release");
