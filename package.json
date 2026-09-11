@@ -21,7 +21,7 @@
     "test": "pnpm test:ts && pnpm test:rs",
     "test:ts": "vitest run",
     "test:rs": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
-    "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/observabilityPolicyContract.test.ts src/services/userFeedbackArchitectureContract.test.ts",
+    "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/userFeedbackArchitectureContract.test.ts",
     "format": "pnpm format:ts && pnpm format:rs",
     "format:ts": "oxfmt",
     "format:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
