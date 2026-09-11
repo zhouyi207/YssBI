@@ -378,7 +378,7 @@ describe("executeFunctionSignatureMutation", () => {
         projectInstanceId,
         projectName: "Recovery fixture",
 
-        exportTime: "2026-08-07T00:00:00.000Z",
+        exportTime: "2026-08-07",
         publicationRevision: 1,
         graphs: [
           {
