@@ -2,6 +2,8 @@
 
 mod dataset;
 pub use dataset::{DatasetColumnPatch, DatasetOverlay, DatasetRelationInput};
+mod series;
+pub use series::{NumericOperation, NumericType, SeriesHandle, SeriesOperand, SeriesPlan};
 
 use std::fmt;
 use std::future::Future;
@@ -81,6 +83,10 @@ pub enum RelationError {
     DeadlineExceeded,
     #[error("statistical input memory budget was exceeded")]
     MemoryLimitExceeded,
+    #[error("division by zero")]
+    DivisionByZero,
+    #[error("numeric result is not finite or representable")]
+    NonFiniteResult,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,6 +124,14 @@ pub trait RelationPlan: Send + Sync {
     fn filter(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError>;
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError>;
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError>;
+    fn select_series(&self, column: &str) -> Result<Arc<dyn SeriesPlan>, RelationError>;
+    fn project_series(&self, series: &[SeriesHandle]) -> Result<RelationHandle, RelationError>;
+    fn numeric_series(
+        &self,
+        operation: NumericOperation,
+        operands: &[SeriesOperand],
+        output_type: NumericType,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream>;
 }
 
@@ -166,10 +180,43 @@ impl RelationHandle {
         self.schema()
             .index_of(column)
             .map_err(|_| RelationError::InvalidInput)?;
-        Ok(SeriesHandle {
-            relation: self.clone(),
-            column: column.into(),
-        })
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan.select_series(column)?,
+        ))
+    }
+
+    pub fn project_series(&self, series: &[SeriesHandle]) -> Result<Self, RelationError> {
+        if series.is_empty() {
+            return Err(RelationError::InvalidInput);
+        }
+        if series.iter().any(|series| series.relation() != self) {
+            return Err(RelationError::UnalignedSeries);
+        }
+        self.plan.project_series(series)
+    }
+
+    pub fn numeric_series(
+        &self,
+        operation: NumericOperation,
+        operands: &[SeriesOperand],
+        output_type: NumericType,
+    ) -> Result<SeriesHandle, RelationError> {
+        if !operands
+            .iter()
+            .any(|value| matches!(value, SeriesOperand::Series(_)))
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if operands.iter().any(
+            |value| matches!(value, SeriesOperand::Series(series) if series.relation() != self),
+        ) {
+            return Err(RelationError::UnalignedSeries);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan.numeric_series(operation, operands, output_type)?,
+        ))
     }
 
     pub fn page(
@@ -193,21 +240,6 @@ impl fmt::Debug for RelationHandle {
         f.debug_struct("RelationHandle")
             .field("binding", self.binding())
             .finish_non_exhaustive()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SeriesHandle {
-    relation: RelationHandle,
-    column: Box<str>,
-}
-
-impl SeriesHandle {
-    pub fn relation(&self) -> &RelationHandle {
-        &self.relation
-    }
-    pub fn column(&self) -> &str {
-        &self.column
     }
 }
 

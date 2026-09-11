@@ -89,6 +89,7 @@ export class HarnessService {
         }),
       );
       subscriptionId = snapshot.subscriptionId;
+      if (cleaned) await HarnessService.unsubscribeEvents(subscriptionId).catch(() => {});
     } catch (error) {
       cleanup();
       throw error;
@@ -104,9 +105,13 @@ export class HarnessService {
     };
   }
 
-  static async submitTurn(sessionId: string, message: string): Promise<HarnessTurnResult> {
+  static async submitTurn(
+    sessionId: string,
+    message: string,
+    activeGraphPath: string | null = null,
+  ): Promise<HarnessTurnResult> {
     return parseHarnessTurnResult(
-      await invokeCommand("submit_harness_turn", { sessionId, message }),
+      await invokeCommand("submit_harness_turn", { sessionId, message, activeGraphPath }),
     );
   }
 

@@ -33,6 +33,22 @@ impl ResultStore {
             .cloned()
     }
 
+    pub(crate) fn query_graph_results(
+        &self,
+        graph: &str,
+        limit: usize,
+    ) -> Vec<StoredResultSnapshot> {
+        self.registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner())
+            .values
+            .values()
+            .filter(|result| result.output().graph().as_str() == graph)
+            .take(limit)
+            .cloned()
+            .collect()
+    }
+
     pub(crate) fn begin_run(&self, run: RunId, outputs: &[PlanOutputRef]) -> bool {
         let mut registry = self
             .registry
@@ -219,7 +235,7 @@ mod tests {
                 .result_id(),
             ResultId::from_existing(2)
         );
-        assert!(store.begin_run(second, &[other.clone()]));
+        assert!(store.begin_run(second, std::slice::from_ref(&other)));
         assert!(store.begin_run(third, &[output()]));
         assert!(!store.publish(&[result(3, second), other_result(4, second)]));
         assert!(store.query_pin_result(&other).is_none());

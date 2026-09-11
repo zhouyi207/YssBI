@@ -11,8 +11,8 @@ mod subgraph;
 mod tests;
 
 pub use compatibility::{
-    CatalogCompatibilityError, CatalogFunctionParameter, CatalogFunctionSignature,
-    CatalogMutationResource, CatalogMutationValidationSnapshot, filter_compatible_catalog,
+    CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
+    CatalogMutationValidationSnapshot, SourcePort, filter_compatible_catalog,
 };
 pub use mutation::{
     EditorGraphMutation, EditorMutationError, EditorMutationErrorCode, MutationConflict,

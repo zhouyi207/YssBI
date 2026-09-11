@@ -38,7 +38,7 @@
 | D：另存为与路径边界                         | 复用 Project filesystem transaction，Parquet 和其他大文件流式复制；64 MiB 文件首尾内容及复制后数据集重开有回归。catalog/generation 路径拒绝 symlink 和 Windows reparse point，清理不跟随重定向。 | 通过 |
 | E：清理旧宿主依赖和适配器                   | `yss-duckdb`、`yss-tabular-polars` 源码/manifests/成员及权限已删除；宿主生产和测试夹具不再使用 Polars。SCI 数据准备采用 Arrow，数值核心不依赖 DataFusion。                                       | 通过 |
 | E：插件边界与依赖兼容                       | 仅 Julia extension、Bayes worker 和 artifact adapter 内部保留 Polars。三个 crate 的编译检查通过；宿主插件快照夹具改用 Arrow，native_extension 测试目标编译通过。                                 | 通过 |
-| E：性能验收                                 | 百万行首次/重复预览、窄列/全列扫描、高选择性筛选、编辑后查询、cast/compaction、OLS 输入与矩阵阶段分别测量，见[测量记录](../reference/DATA_ENGINE_BENCHMARK.md)。                                 | 通过 |
+| E：性能验收                                 | 百万行首次/重复预览、窄列/全列扫描、高选择性筛选、编辑后查询、cast/compaction、OLS 输入与矩阵阶段分别测量，见[测量记录](../benchmark/DATA_ENGINE_BENCHMARK.md)。                                 | 通过 |
 
 首条关系执行闭环采用迁移分析明确指定的 Source → Project → Filter → Series → OLS。
 Join、全部时间序列、其他统计模型和函数子图执行属于该文档明确保留的后续范围；未实现能力在 Compile 被拒绝。

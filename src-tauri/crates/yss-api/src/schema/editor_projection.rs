@@ -532,6 +532,8 @@ mod tests {
 
         let wire = serde_json::to_value(EditorGraphProjectionDto::from(&model))
             .expect("editor wire should serialize");
+        assert_eq!(wire["outcome"], json!({ "type": "success" }));
+        assert_eq!(wire["hasBlockingDiagnostics"], false);
         assert_eq!(wire["basis"]["graphPath"], "events/contract.yssbi-event");
         assert_eq!(
             wire["basis"]["resourceVersions"],
@@ -593,5 +595,23 @@ mod tests {
             json!({"kind": "selectOptions", "options": ["nonrobust", "HC1"]})
         );
         assert_eq!(field["value"], "HC1");
+
+        model.outcome = EditorResolutionOutcome::Incomplete;
+        model.diagnostics[0].blocking = true;
+        model.nodes[0].diagnostics[0].blocking = true;
+        let blocked = super::super::graph_draft::compile_graph_draft_to_transport(
+            &yss_application::graph_compile::CompileGraphDraftReceipt::Blocked {
+                projection: model,
+            },
+        );
+        let wire = serde_json::to_value(blocked).unwrap();
+        assert_eq!(wire.as_object().unwrap().len(), 2);
+        assert_eq!(wire["type"], "blocked");
+        assert_eq!(
+            wire["projection"]["outcome"],
+            json!({ "type": "analysisBlocked" })
+        );
+        assert_eq!(wire["projection"]["hasBlockingDiagnostics"], true);
+        assert_eq!(wire["projection"]["diagnostics"][0]["blocking"], true);
     }
 }

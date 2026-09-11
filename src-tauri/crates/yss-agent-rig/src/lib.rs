@@ -4,25 +4,26 @@
 
 use std::future::IntoFuture;
 use std::sync::{
-    Arc, RwLock,
+    Arc, Mutex, RwLock,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::Duration;
 
 use rig_agent::agent::AgentBuilder;
-use rig_agent::completion::Prompt;
-use rig_agent::core::client::CompletionClient;
-use rig_agent::core::completion::{CompletionModel, Message};
-use rig_agent::core::providers::openai;
+use rig_agent::completion::{Prompt, PromptError};
 use rig_agent::tool::{DynamicTool, ToolExecutionError, ToolOutput};
+use rig_core::client::CompletionClient;
+use rig_core::completion::{CompletionError, CompletionModel, Message};
+use rig_core::providers::openai;
 use yss_automation_contract::{
     AgentDriverConfigurationFailure, AgentDriverConfigurationPort, AgentDriverFailure,
     AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput, AgentMessage,
     AgentMessageRole, AgentTurnRequest, AgentTurnResult, ApplyGraphEditRequest,
-    AutomationCapabilityRequest, CancellationToken, CapabilityFailure, CapabilityFailureCode,
-    CapabilityId, InspectDatasetProfileRequest, InspectDatasetSchemaRequest, InspectGraphRequest,
-    InspectProjectRequest, InspectResultRequest, ModelCapabilityExecutor, ModelCapabilityRequest,
-    SearchNodeCatalogRequest, SecretCredential, StatisticalPlan, ToolDescriptor,
-    statistical_plan_schema,
+    AutomationCapabilityRequest, CancellationReason, CancellationToken, CapabilityFailure,
+    CapabilityFailureCode, CapabilityId, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
+    InspectGraphRequest, InspectProjectRequest, InspectResultRequest, ModelCapabilityExecutor,
+    ModelCapabilityRequest, SearchNodeCatalogRequest, SecretCredential, StatisticalPlan,
+    ToolDescriptor, statistical_plan_schema,
 };
 
 pub fn openai_agent_driver(
@@ -39,6 +40,13 @@ pub fn openai_agent_driver(
     let client = openai::Client::builder()
         .api_key(api_key.expose())
         .base_url(base_url)
+        .http_client(
+            rig_core::http_client::ReqwestClient::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(60))
+                .build()
+                .map_err(|_| RigProviderConfigurationError::Invalid)?,
+        )
         .build()
         .map_err(|_| RigProviderConfigurationError::Invalid)?;
     let driver = RigAgentDriver::new(client.completion_model(model), config)
@@ -162,13 +170,15 @@ fn is_valid_base_url(base_url: &str) -> bool {
 pub struct RigAgentDriverConfig {
     pub maximum_model_turns: usize,
     pub maximum_output_tokens: u64,
+    pub maximum_turn_duration: Duration,
 }
 
 impl Default for RigAgentDriverConfig {
     fn default() -> Self {
         Self {
-            maximum_model_turns: 8,
+            maximum_model_turns: 16,
             maximum_output_tokens: 4_096,
+            maximum_turn_duration: Duration::from_secs(180),
         }
     }
 }
@@ -187,6 +197,8 @@ where
             || config.maximum_model_turns > 32
             || config.maximum_output_tokens == 0
             || config.maximum_output_tokens > 65_536
+            || config.maximum_turn_duration.is_zero()
+            || config.maximum_turn_duration > Duration::from_secs(600)
         {
             return Err(RigAgentDriverConfigError::Invalid);
         }
@@ -204,11 +216,16 @@ where
             return Err(cancelled());
         }
         let prepared = prepare_messages(request.messages)?;
+        let tool_tasks = Arc::new(Mutex::new(Vec::new()));
         let mut tools = request
             .tools
             .into_iter()
             .map(|descriptor| {
-                dynamic_tool(descriptor, Arc::clone(&capabilities), Arc::clone(&output))
+                dynamic_tool(
+                    descriptor,
+                    Arc::clone(&capabilities),
+                    Arc::clone(&tool_tasks),
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
         tools.push(statistical_plan_tool(Arc::clone(&output))?);
@@ -223,16 +240,44 @@ where
         } else {
             builder.dynamic_tools(tools).build()
         };
-        let prompt = agent
-            .prompt(prepared.prompt)
-            .history(prepared.history)
-            .tool_concurrency(1)
-            .max_turns(self.config.maximum_model_turns)
-            .into_future();
-        let final_text = tokio::select! {
-            result = prompt => result.map_err(|_| provider_unavailable())?,
-            _ = cancellation.cancelled() => return Err(cancelled()),
+        let maximum_model_turns = self.config.maximum_model_turns;
+        let mut prompt = tokio::spawn(async move {
+            agent
+                .prompt(prepared.prompt)
+                .history(prepared.history)
+                .tool_concurrency(1)
+                .max_turns(maximum_model_turns)
+                .into_future()
+                .await
+        });
+        let mut result = tokio::select! {
+            result = &mut prompt => result
+                .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure))
+                .and_then(|result| result.map_err(map_prompt_failure)),
+            _ = cancellation.cancelled() => {
+                prompt.abort();
+                let _ = prompt.await;
+                Err(cancelled())
+            },
+            _ = tokio::time::sleep(self.config.maximum_turn_duration) => {
+                cancellation.cancel(CancellationReason::DeadlineElapsed);
+                prompt.abort();
+                let _ = prompt.await;
+                Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed))
+            },
         };
+        // Stopping the model must not drop the ledger update in an admitted capability.
+        // The gateway observes the same cancellation token and bounds every read-only query.
+        let tasks =
+            std::mem::take(&mut *tool_tasks.lock().unwrap_or_else(|error| error.into_inner()));
+        for task in tasks {
+            if task.await.is_err() {
+                result = Err(AgentDriverFailure::new(
+                    AgentDriverFailureCode::InternalFailure,
+                ));
+            }
+        }
+        let final_text = result?;
         if cancellation.is_cancelled() {
             return Err(cancelled());
         }
@@ -297,7 +342,7 @@ fn prepare_messages(messages: Vec<AgentMessage>) -> Result<PreparedMessages, Age
 fn dynamic_tool(
     descriptor: ToolDescriptor,
     capabilities: Arc<dyn ModelCapabilityExecutor>,
-    output: Arc<dyn AgentEventOutput>,
+    tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
 ) -> Result<DynamicTool, AgentDriverFailure> {
     let parameters =
         serde_json::to_value(&descriptor.input_schema).map_err(|_| invalid_response())?;
@@ -308,24 +353,24 @@ fn dynamic_tool(
         parameters,
         move |_context, arguments| {
             let capabilities = Arc::clone(&capabilities);
-            let output = Arc::clone(&output);
+            let tasks = Arc::clone(&tasks);
             Box::pin(async move {
                 let request = decode_request(capability_id, arguments)?;
-                output
-                    .emit(AgentEvent::ToolInvocationRequested { capability_id })
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                let task = tokio::spawn(async move {
+                    let outcome = capabilities
+                        .execute(ModelCapabilityRequest { request })
+                        .await;
+                    let _ = sender.send(outcome);
+                });
+                tasks
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .push(task);
+                let outcome = receiver
                     .await
-                    .map_err(map_output_failure)?;
-                let outcome = capabilities
-                    .execute(ModelCapabilityRequest { request })
-                    .await
+                    .map_err(|_| ToolExecutionError::other("tool execution interrupted"))?
                     .map_err(map_capability_failure)?;
-                output
-                    .emit(AgentEvent::ToolInvocationCompleted {
-                        invocation_id: outcome.invocation_id,
-                        capability_id,
-                    })
-                    .await
-                    .map_err(map_output_failure)?;
                 let result = serde_json::to_value(outcome.result)
                     .map_err(|_| ToolExecutionError::other("tool result encoding failed"))?;
                 Ok(ToolOutput::json(result))
@@ -396,12 +441,31 @@ fn decode_request(
             .map(AutomationCapabilityRequest::InspectProject),
         CapabilityId::ApplyGraphEdit => serde_json::from_value::<ApplyGraphEditRequest>(arguments)
             .map(AutomationCapabilityRequest::ApplyGraphEdit),
+        CapabilityId::CompileGraph => {
+            serde_json::from_value::<yss_automation_contract::CompileGraphRequest>(arguments)
+                .map(AutomationCapabilityRequest::CompileGraph)
+        }
+        CapabilityId::ExecuteGraph => {
+            serde_json::from_value::<yss_automation_contract::ExecuteGraphRequest>(arguments)
+                .map(AutomationCapabilityRequest::ExecuteGraph)
+        }
+        CapabilityId::SaveGraph => {
+            serde_json::from_value::<yss_automation_contract::SaveGraphRequest>(arguments)
+                .map(AutomationCapabilityRequest::SaveGraph)
+        }
+        CapabilityId::ListGraphResults => {
+            serde_json::from_value::<yss_automation_contract::ListGraphResultsRequest>(arguments)
+                .map(AutomationCapabilityRequest::ListGraphResults)
+        }
     }
     .map_err(|_| ToolExecutionError::invalid_args("tool arguments did not match the schema"))
 }
 
 fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
-    let code = failure.code.to_string();
+    let code = failure.details.get("reason").map_or_else(
+        || failure.code.to_string(),
+        |reason| format!("{}: {reason}", failure.code),
+    );
     match failure.code {
         CapabilityFailureCode::InvalidRequest | CapabilityFailureCode::ResultTooLarge => {
             ToolExecutionError::invalid_args(code)
@@ -416,12 +480,18 @@ fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
         | CapabilityFailureCode::ProjectSessionChanged
         | CapabilityFailureCode::ProjectSessionUnavailable
         | CapabilityFailureCode::ApprovalRequired => ToolExecutionError::permission_denied(code),
-        CapabilityFailureCode::RevisionConflict | CapabilityFailureCode::MutationRejected => {
+        CapabilityFailureCode::RevisionConflict
+        | CapabilityFailureCode::MutationRejected
+        | CapabilityFailureCode::OutcomeUnknown => {
             ToolExecutionError::other(code).with_retryable(false)
         }
         CapabilityFailureCode::InvocationConflict
         | CapabilityFailureCode::PersistenceUnavailable
-        | CapabilityFailureCode::InternalFailure => ToolExecutionError::other(code),
+        | CapabilityFailureCode::InternalFailure
+        | CapabilityFailureCode::GraphClientUnavailable
+        | CapabilityFailureCode::GraphDraftChanged
+        | CapabilityFailureCode::GraphCompileFailed
+        | CapabilityFailureCode::GraphExecutionFailed => ToolExecutionError::other(code),
     }
     .with_code(failure.code.to_string())
 }
@@ -429,27 +499,70 @@ fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
         CapabilityId::InspectGraph => {
-            "Inspect a bounded project graph snapshot with typed nodes and connections."
+            "Inspect the current editor draft: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or compiling."
         }
         CapabilityId::SearchNodeCatalog => {
-            "Search the localized YssBI node catalog without mutating the project."
+            "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. This searches nodes, not compile/run commands."
         }
         CapabilityId::InspectDatasetSchema => {
             "Inspect a bounded dataset schema and its current runtime/schema revisions."
         }
         CapabilityId::InspectDatasetProfile => {
-            "Inspect bounded data-quality and shape statistics for a current dataset revision."
+            "Inspect bounded data-quality and shape statistics. null metrics (including duplicatedRows) mean unknown or not computed, never zero."
         }
         CapabilityId::InspectResult => {
-            "Inspect a bounded structured execution result produced by YssBI."
+            "Inspect a bounded structured execution result produced by YssBI. For table/series previews, offset and limit paginate rows; use nextOffset only when hasMore is true. Lists/records indicate truncation explicitly."
         }
         CapabilityId::InspectProject => {
             "Inspect bounded project metadata and resource identities without reading raw data."
         }
         CapabilityId::ApplyGraphEdit => {
-            "Apply one approved revision-aware graph edit batch with one durable commit."
+            "Apply one atomic, undoable batch to the current editor draft after the user requests edits. Use revision as baseRevision and graphHash from inspect_graph; use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/configuration/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters merges supplied keys with existing parameters. This updates the canvas, not the saved file; save_graph is separate."
+        }
+        CapabilityId::CompileGraph => {
+            "Compile the inspected current draft, passing its graphHash. Returns ready/artifactId or concrete blocking diagnostics. Does not save or execute."
+        }
+        CapabilityId::ExecuteGraph => {
+            "Execute the current draft using the matching artifactId from compile_graph and current graphHash. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not implicitly compile or save."
+        }
+        CapabilityId::SaveGraph => {
+            "Save the current draft only when the user requests saving. Pass the current graphHash. Uses the editor save operation and clears its draft undo history as a normal Save does."
+        }
+        CapabilityId::ListGraphResults => {
+            "List currently retained result IDs, run IDs and output ports for a graph, including manual runs. Use these IDs with inspect_result; do not ask the user to invent or locate an ID."
         }
     }
+}
+
+fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
+    use AgentDriverFailureCode::*;
+    let code = match error
+        .provider_response_status()
+        .map(|status| status.as_u16())
+    {
+        Some(401 | 403) => ProviderAuthenticationFailed,
+        Some(429) => ProviderRateLimited,
+        Some(408 | 504) => ProviderTransportFailed,
+        Some(400..=499) => ProviderRequestRejected,
+        Some(500..=599) => ProviderUnavailable,
+        Some(_) => InvalidProviderResponse,
+        None => match error {
+            PromptError::CompletionError(CompletionError::HttpError(_)) => ProviderTransportFailed,
+            PromptError::CompletionError(
+                CompletionError::UrlError(_) | CompletionError::RequestError(_),
+            ) => ProviderRequestRejected,
+            PromptError::CompletionError(
+                CompletionError::JsonError(_)
+                | CompletionError::ResponseError(_)
+                | CompletionError::ProviderResponse(_),
+            )
+            | PromptError::UnknownToolCall { .. } => InvalidProviderResponse,
+            PromptError::CompletionError(CompletionError::ProviderError(_)) => ProviderUnavailable,
+            PromptError::PromptCancelled { .. } => Cancelled,
+            PromptError::MemoryError(_) | PromptError::MaxTurnsError { .. } => InternalFailure,
+        },
+    };
+    AgentDriverFailure::new(code)
 }
 
 fn cancelled() -> AgentDriverFailure {
@@ -483,10 +596,10 @@ mod tests {
 
     use super::*;
     use rig_agent::completion::message::{ToolCall, ToolFunction};
-    use rig_agent::core::completion::{
+    use rig_agent::streaming::StreamingCompletionResponse;
+    use rig_core::completion::{
         AssistantContent, CompletionError, CompletionRequest, CompletionResponse, Usage,
     };
-    use rig_agent::streaming::StreamingCompletionResponse;
     use yss_automation_contract::{
         AgentFuture, AgentOutputFailure, AutomationCapabilityResult, CapabilityFailure,
         DatasetSchemaInspection, HarnessSessionId, HarnessTurnId, ModelCapabilityOutcome,
@@ -636,19 +749,7 @@ mod tests {
             .clone();
 
         assert_eq!(result.final_text, "The schema inspection completed.");
-        assert!(matches!(
-            events.as_slice(),
-            [
-                AgentEvent::ToolInvocationRequested {
-                    capability_id: CapabilityId::InspectDatasetSchema
-                },
-                AgentEvent::ToolInvocationCompleted {
-                    capability_id: CapabilityId::InspectDatasetSchema,
-                    ..
-                },
-                AgentEvent::TextDelta { .. }
-            ]
-        ));
+        assert!(matches!(events.as_slice(), [AgentEvent::TextDelta { .. }]));
     }
 
     #[test]
@@ -660,6 +761,112 @@ mod tests {
             token.reason(),
             Some(yss_automation_contract::CancellationReason::User)
         );
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_model_turn_waits_for_admitted_tool_cleanup() {
+        struct WaitingExecutor {
+            cancellation: CancellationToken,
+            entered: tokio::sync::Notify,
+            settled: AtomicBool,
+        }
+        impl ModelCapabilityExecutor for WaitingExecutor {
+            fn execute<'a>(
+                &'a self,
+                _: ModelCapabilityRequest,
+            ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+                Box::pin(async move {
+                    self.entered.notify_one();
+                    self.cancellation.cancelled().await;
+                    tokio::task::yield_now().await;
+                    self.settled.store(true, Ordering::Release);
+                    Err(CapabilityFailure::new(CapabilityFailureCode::Cancelled))
+                })
+            }
+        }
+        let cancellation = CancellationToken::default();
+        let executor = Arc::new(WaitingExecutor {
+            cancellation: cancellation.clone(),
+            entered: tokio::sync::Notify::new(),
+            settled: AtomicBool::new(false),
+        });
+        let model =
+            ScriptedCompletionModel::new([vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                "call-1",
+                ToolFunction::new(
+                    "inspect_dataset_schema".into(),
+                    serde_json::json!({"databaseId": "database-1"}),
+                ),
+            ))]]);
+        let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
+        let (result, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(
+                driver.run_turn(
+                    request(vec![
+                        ToolDescriptor::for_capability(CapabilityId::InspectDatasetSchema).unwrap()
+                    ]),
+                    executor.clone(),
+                    Arc::new(CollectingOutput::default()),
+                    cancellation.clone()
+                ),
+                async {
+                    executor.entered.notified().await;
+                    cancellation.cancel(CancellationReason::User);
+                }
+            )
+        })
+        .await
+        .unwrap();
+        assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
+        assert!(executor.settled.load(Ordering::Acquire));
+    }
+
+    #[tokio::test]
+    async fn provider_timeout_and_panic_return_terminal_failures() {
+        #[derive(Clone)]
+        struct BrokenModel {
+            panic: bool,
+        }
+        impl CompletionModel for BrokenModel {
+            async fn completion(
+                &self,
+                _: CompletionRequest,
+            ) -> Result<CompletionResponse, CompletionError> {
+                assert!(!self.panic, "synthetic provider panic");
+                std::future::pending().await
+            }
+            async fn stream(
+                &self,
+                _: CompletionRequest,
+            ) -> Result<StreamingCompletionResponse, CompletionError> {
+                unreachable!()
+            }
+        }
+        for (panic, expected) in [
+            (false, AgentDriverFailureCode::DeadlineElapsed),
+            (true, AgentDriverFailureCode::InternalFailure),
+        ] {
+            let driver = RigAgentDriver::new(
+                BrokenModel { panic },
+                RigAgentDriverConfig {
+                    maximum_turn_duration: Duration::from_millis(20),
+                    ..RigAgentDriverConfig::default()
+                },
+            )
+            .unwrap();
+            let result = tokio::time::timeout(
+                Duration::from_secs(2),
+                driver.run_turn(
+                    request(Vec::new()),
+                    Arc::new(StaticExecutor),
+                    Arc::new(CollectingOutput::default()),
+                    CancellationToken::default(),
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(result.unwrap_err().code, expected);
+        }
     }
 
     #[test]
@@ -677,5 +884,79 @@ mod tests {
             false
         );
         assert!(!driver.is_configured());
+    }
+
+    #[tokio::test]
+    async fn configured_https_provider_attempts_a_tls_handshake() {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let cancellation = CancellationToken::default();
+        let client = openai::Client::builder()
+            .api_key("test-credential")
+            .base_url(format!("https://{}/v1", listener.local_addr().unwrap()))
+            .http_client(
+                rig_core::http_client::ReqwestClient::builder()
+                    .no_proxy()
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+        let driver = RigAgentDriver::new(
+            client.completion_model("test-model"),
+            RigAgentDriverConfig::default(),
+        )
+        .unwrap();
+        let server = async {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut record = [0; 5];
+            stream.read_exact(&mut record).await.unwrap();
+            // Stop after ClientHello so the probe needs neither a trusted certificate nor an API key.
+            cancellation.cancel(yss_automation_contract::CancellationReason::User);
+            record
+        };
+        let (result, record) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            tokio::join!(
+                driver.run_turn(
+                    request(vec![]),
+                    Arc::new(StaticExecutor),
+                    Arc::new(CollectingOutput::default()),
+                    cancellation.clone()
+                ),
+                server,
+            )
+        })
+        .await
+        .expect("the HTTPS transport must initiate TLS");
+        assert_eq!(&record[..2], &[22, 3]);
+        assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
+    }
+
+    #[test]
+    fn provider_failures_keep_safe_categories_without_response_contents() {
+        use AgentDriverFailureCode::*;
+        for (status, expected) in [
+            (401, ProviderAuthenticationFailed),
+            (429, ProviderRateLimited),
+            (400, ProviderRequestRejected),
+            (503, ProviderUnavailable),
+            (200, InvalidProviderResponse),
+        ] {
+            let error = CompletionError::from_http_response(
+                status.try_into().unwrap(),
+                "private-provider-response",
+            );
+            let failure = map_prompt_failure(error.into());
+            assert_eq!(failure.code, expected);
+            assert_eq!(
+                serde_json::to_value(&failure).unwrap(),
+                serde_json::json!({"code": expected.to_string()})
+            );
+        }
+        assert_eq!(
+            map_prompt_failure(CompletionError::ResponseError("private-response".into()).into())
+                .code,
+            InvalidProviderResponse
+        );
     }
 }

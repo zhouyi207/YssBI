@@ -231,7 +231,7 @@ impl DraftResolutionContext {
         })
     }
 
-    fn include_functions(
+    pub(crate) fn include_functions(
         &mut self,
         captured: &ApplicationSession,
         document: &GraphDocument,

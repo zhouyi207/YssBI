@@ -1,11 +1,11 @@
 //! Reproducible data-engine measurements; run separately from correctness tests.
-use arrow::array::{ArrayRef, Float64Array};
+use arrow::array::{ArrayRef, Float64Array, Int64Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 use yss_datafusion::DataFusionRuntime;
-use yss_dataset_store::{DatasetCellEdit, DatasetColumnCast, DatasetStore};
+use yss_dataset_store::{DatasetCellEdit, DatasetColumnCast, DatasetSnapshot, DatasetStore};
 use yss_relational_contract::{
     RelationComparison, RelationControl, RelationHandle, RelationLiteral, RelationPredicate,
 };
@@ -29,15 +29,90 @@ fn report(name: &str, start: Instant, detail: serde_json::Value) {
 fn scan(
     engine: &DataFusionRuntime,
     relation: &RelationHandle,
-) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+) -> Result<(usize, usize, Option<f64>), Box<dyn std::error::Error>> {
     let mut rows = 0;
     let mut maximum = 0;
+    let mut first = None;
     engine.visit_relation(relation, &control(), &mut |batch| {
+        if rows == 0 && batch.num_rows() > 0 {
+            first = Some(
+                batch
+                    .column_by_name("c0")
+                    .unwrap()
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .unwrap()
+                    .value(0),
+            );
+        }
         rows += batch.num_rows();
         maximum = maximum.max(batch.get_array_memory_size());
         Ok(())
     })?;
-    Ok((rows, maximum))
+    Ok((rows, maximum, first))
+}
+
+fn filter_scan(
+    engine: &DataFusionRuntime,
+    relation: &RelationHandle,
+    name: &str,
+    edited: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let start = Instant::now();
+    let filtered = relation.filter(&RelationPredicate {
+        column: "c0".into(),
+        comparison: RelationComparison::Greater,
+        value: Some(RelationLiteral::Decimal("999".into())),
+    })?;
+    let (rows, maximum, first) = scan(engine, &filtered)?;
+    assert_eq!(rows, if edited { 1000 } else { 999 });
+    assert_eq!(first, Some(if edited { 1001.0 } else { 999.001 }));
+    report(
+        name,
+        start,
+        serde_json::json!({"rows":rows,"columns":relation.schema().fields().len(),"first_c0":first,"largest_batch_buffer_bytes":maximum}),
+    );
+    Ok(())
+}
+
+fn verify_rewritten_rows(
+    snapshot: &Arc<DatasetSnapshot>,
+    engine: &Arc<DataFusionRuntime>,
+    casted: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let query = snapshot.query(engine, "verify")?;
+    let row_columns = yss_tabular_arrow::dataset_row_columns(&snapshot.metadata().schema)?.unwrap();
+    for id in [0, ROWS as i64 - 1] {
+        let row = query.row(id, &control())?.unwrap();
+        assert_eq!(
+            row.column_by_name(&row_columns.row_id)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(0),
+            id
+        );
+        let expected = if id == 0 { 1001.0 } else { id as f64 / 1000.0 };
+        let expected = if casted {
+            f64::from(expected as f32)
+        } else {
+            expected
+        };
+        let actual = arrow::compute::cast(
+            row.column_by_name("c0").unwrap().as_ref(),
+            &DataType::Float64,
+        )?;
+        assert_eq!(
+            actual
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap()
+                .value(0),
+            expected
+        );
+    }
+    Ok(())
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::args_os()
@@ -81,6 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             batches,
         )?)?;
         store.acknowledge_publication(&committed.publication)?;
+        assert_eq!(committed.snapshot.metadata().row_count, ROWS);
         report(
             "generate",
             start,
@@ -101,6 +177,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for name in ["first_page", "repeat_page"] {
         let start = Instant::now();
         let page = relation.page(0, 1000, &control())?;
+        assert_eq!(page.row_count, 1000);
+        assert!(page.has_more);
         report(
             name,
             start,
@@ -110,25 +188,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let narrow = relation.project(&["c0".into(), "c1".into()])?;
     for (name, relation) in [("narrow_scan", &narrow), ("full_scan", &relation)] {
         let start = Instant::now();
-        let (rows, maximum) = scan(&engine, relation)?;
+        let (rows, maximum, first) = scan(&engine, relation)?;
+        assert_eq!(rows, ROWS);
+        assert_eq!(first, Some(0.0));
         report(
             name,
             start,
             serde_json::json!({"rows":rows,"largest_batch_buffer_bytes":maximum}),
         );
     }
-    let filtered = narrow.filter(&RelationPredicate {
-        column: "c0".into(),
-        comparison: RelationComparison::Greater,
-        value: Some(RelationLiteral::Decimal("999".into())),
-    })?;
-    let start = Instant::now();
-    let (rows, maximum) = scan(&engine, &filtered)?;
-    report(
-        "selective_filter",
-        start,
-        serde_json::json!({"rows":rows,"largest_batch_buffer_bytes":maximum}),
-    );
+    filter_scan(&engine, &narrow, "selective_filter", false)?;
+    filter_scan(&engine, &relation, "selective_filter_full", false)?;
     let start = Instant::now();
     let edited = store.commit(store.prepare_cell_edit(
         &snapshot,
@@ -147,22 +217,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start,
         serde_json::json!({"edited_cells":1}),
     );
-    let start = Instant::now();
-    let filtered = edited
-        .snapshot
-        .query(&engine, "benchmark")?
-        .relation()?
-        .filter(&RelationPredicate {
-            column: "c0".into(),
-            comparison: RelationComparison::Greater,
-            value: Some(RelationLiteral::Decimal("999".into())),
-        })?;
-    let (rows, maximum) = scan(&engine, &filtered)?;
-    report(
-        "edited_filter",
-        start,
-        serde_json::json!({"rows":rows,"largest_batch_buffer_bytes":maximum}),
-    );
+    let edited_relation = edited.snapshot.query(&engine, "benchmark")?.relation()?;
+    filter_scan(&engine, &edited_relation, "edited_filter", true)?;
+    let edited_narrow = edited_relation.project(&["c0".into(), "c1".into()])?;
+    filter_scan(&engine, &edited_narrow, "edited_filter_narrow", true)?;
     let sample = narrow.limit(0, 100_000)?;
     let start = Instant::now();
     let mut columns = sample.numeric_columns(
@@ -174,6 +232,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start,
         serde_json::json!({"rows":columns[0].len(),"columns":2}),
     );
+    assert_eq!(columns[0].len(), 100_000);
+    assert_eq!(columns[1].len(), 100_000);
+    assert_eq!(columns[1].first(), Some(&0.0));
+    assert_eq!(columns[1].last(), Some(&99.999));
     let response = columns.remove(0);
     let start = Instant::now();
     let result = yss_sci_runtime::SciRuntimeBackend::new().ols(
@@ -192,6 +254,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start,
         serde_json::json!({"rows":result.fitted.len(),"coefficients":result.coefficients}),
     );
+    assert_eq!(result.fitted.len(), 100_000);
     let start = Instant::now();
     let compact = store.commit(store.prepare_compaction(
         &edited.snapshot,
@@ -205,6 +268,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start,
         serde_json::json!({"rows":compact.snapshot.metadata().row_count}),
     );
+    verify_rewritten_rows(&compact.snapshot, &engine, false)?;
     let start = Instant::now();
     let cast = store.commit(store.prepare_cast_column(
         &compact.snapshot,
@@ -223,5 +287,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         start,
         serde_json::json!({"rows":cast.snapshot.metadata().row_count}),
     );
+    assert_eq!(
+        cast.snapshot
+            .metadata()
+            .schema
+            .field_with_name("c0")?
+            .data_type(),
+        &DataType::Float32
+    );
+    verify_rewritten_rows(&cast.snapshot, &engine, true)?;
     Ok(())
 }

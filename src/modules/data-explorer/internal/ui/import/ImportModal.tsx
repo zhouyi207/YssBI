@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   VscDatabase,
@@ -10,13 +10,7 @@ import {
 } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type {
   ImportDataSourceType,
@@ -29,39 +23,33 @@ type CategoryId = "file" | "sql" | "other";
 type ImportTypeConfig = {
   id: ImportDataSourceType;
   icon: React.ReactNode;
-  tone: string;
   comingSoon: boolean;
 };
 
-const CATEGORIES: { id: CategoryId; icon: React.ReactNode; tone: string }[] = [
+const CATEGORIES: { id: CategoryId; icon: React.ReactNode }[] = [
   {
     id: "file",
-    icon: <VscFile size={16} />,
-    tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300",
+    icon: <VscFile aria-hidden="true" className="size-3.5" />,
   },
   {
     id: "sql",
-    icon: <VscDatabase size={16} />,
-    tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
+    icon: <VscDatabase aria-hidden="true" className="size-3.5" />,
   },
   {
     id: "other",
-    icon: <VscCloudDownload size={16} />,
-    tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300",
+    icon: <VscCloudDownload aria-hidden="true" className="size-3.5" />,
   },
 ];
 
 const FILE_TYPES: ImportTypeConfig[] = [
   {
     id: "csv",
-    icon: <VscFile size={20} />,
-    tone: "text-emerald-600 bg-emerald-500/10 dark:text-emerald-300",
+    icon: <VscFile aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
   {
     id: "xlsx",
-    icon: <VscTable size={20} />,
-    tone: "text-green-600 bg-green-500/10 dark:text-green-300",
+    icon: <VscTable aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
 ];
@@ -69,26 +57,22 @@ const FILE_TYPES: ImportTypeConfig[] = [
 const SQL_TYPES: ImportTypeConfig[] = [
   {
     id: "sqlite",
-    icon: <VscDatabase size={19} />,
-    tone: "text-blue-600 bg-blue-500/10 dark:text-blue-300",
+    icon: <VscDatabase aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
   {
     id: "postgres",
-    icon: <VscDatabase size={19} />,
-    tone: "text-cyan-600 bg-cyan-500/10 dark:text-cyan-300",
+    icon: <VscDatabase aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
   {
     id: "mysql",
-    icon: <VscDatabase size={19} />,
-    tone: "text-orange-600 bg-orange-500/10 dark:text-orange-300",
+    icon: <VscDatabase aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
   {
     id: "mariadb",
-    icon: <VscDatabase size={19} />,
-    tone: "text-amber-600 bg-amber-500/10 dark:text-amber-300",
+    icon: <VscDatabase aria-hidden="true" className="size-4" />,
     comingSoon: false,
   },
 ];
@@ -96,8 +80,7 @@ const SQL_TYPES: ImportTypeConfig[] = [
 const OTHER_TYPES: ImportTypeConfig[] = [
   {
     id: "api",
-    icon: <VscCloudDownload size={20} />,
-    tone: "text-violet-600 bg-violet-500/10 dark:text-violet-300",
+    icon: <VscCloudDownload aria-hidden="true" className="size-4" />,
     comingSoon: true,
   },
 ];
@@ -108,7 +91,7 @@ const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
   other: OTHER_TYPES,
 };
 
-function TypeOptionCard({
+function TypeOption({
   type,
   onSelect,
   onClose,
@@ -124,44 +107,37 @@ function TypeOptionCard({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
       disabled={type.comingSoon}
       onClick={() => {
         if (type.comingSoon) return;
         onSelect(type.id);
         onClose();
       }}
-      className={cn(
-        "group h-auto min-h-[72px] w-full flex-col items-start gap-2 rounded-lg px-4 py-3 text-left",
-        type.comingSoon && "cursor-default opacity-60",
-      )}
+      className="group h-auto min-h-[90px] w-full justify-start gap-4 whitespace-normal rounded-none border-0 border-b border-border px-0 py-5 text-left font-normal focus-visible:ring-inset disabled:opacity-60"
     >
-      <div className="flex w-full items-start gap-3">
-        <div
-          className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", type.tone)}
-        >
-          {type.icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground">{label}</span>
-            {type.comingSoon && (
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                {t("importModal.developing")}
-              </Badge>
-            )}
-          </div>
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+      <span className="flex min-w-0 flex-1 items-start gap-3">
+        <span className="mt-0.5 shrink-0 text-muted-foreground">{type.icon}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] leading-normal text-foreground">{label}</span>
+          <span className="mt-1 block text-xs leading-[1.65] text-muted-foreground">
             {description}
-          </p>
-        </div>
-        {!type.comingSoon && (
-          <VscChevronRight
-            className="mt-1 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
-            size={16}
-          />
-        )}
-      </div>
+          </span>
+        </span>
+      </span>
+      {type.comingSoon ? (
+        <Badge
+          variant="outline"
+          className="shrink-0 rounded-sm px-1.5 text-[10px] font-normal text-muted-foreground"
+        >
+          {t("importModal.developing")}
+        </Badge>
+      ) : (
+        <VscChevronRight
+          aria-hidden="true"
+          className="size-4 text-muted-foreground group-hover:text-foreground"
+        />
+      )}
     </Button>
   );
 }
@@ -174,76 +150,79 @@ export const ImportModal = ({
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
+  const sectionHeadingId = useId();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
   const types = CATEGORY_TYPES[selectedCategory];
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[min(480px,85vh)] max-w-[640px] flex-col gap-0 p-0">
-        <DialogHeader className="shrink-0 border-b border-border px-6 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 space-y-1">
-              <DialogTitle className="flex items-center gap-2 normal-case tracking-normal">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <VscDatabase size={18} />
-                </span>
-                {t("importModal.title")}
-              </DialogTitle>
-              <DialogDescription>{t("importModal.subtitle")}</DialogDescription>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={onClose}
-              aria-label={t("importModal.close")}
-              className="shrink-0"
-            >
-              <VscClose size={18} />
-            </Button>
-          </div>
-        </DialogHeader>
+      <DialogContent className="flex h-[min(720px,88dvh)] max-w-[min(1000px,92vw)] flex-col gap-0 rounded-md bg-[var(--workbench-bg)] p-0 motion-reduce:animate-none max-[720px]:h-[92dvh] max-[720px]:max-w-[96vw]">
+        <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-b border-border bg-[var(--sidebar-bg)] pl-3.5 pr-2.5">
+          <DialogTitle className="flex min-w-0 items-center gap-2 text-xs font-medium normal-case tracking-normal">
+            <VscDatabase aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate">{t("importModal.title")}</span>
+          </DialogTitle>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            aria-label={t("importModal.close")}
+            className="h-[26px] w-7 shrink-0 rounded-sm text-muted-foreground"
+          >
+            <VscClose aria-hidden="true" className="size-3.5" />
+          </Button>
+        </div>
 
-        <div className="flex min-h-0 flex-1">
-          <nav className="flex w-[148px] shrink-0 flex-col gap-1 border-r border-border bg-muted/20 p-2">
+        <div className="flex min-h-0 flex-1 overflow-hidden max-[720px]:flex-col">
+          <nav
+            aria-label={t("importModal.title")}
+            className="flex w-56 shrink-0 flex-col gap-0.5 border-r border-border bg-[var(--sidebar-bg)] px-2.5 py-3 min-[721px]:max-[900px]:w-[200px] max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-3"
+          >
             {CATEGORIES.map((cat) => {
               const active = selectedCategory === cat.id;
               return (
                 <Button
                   key={cat.id}
                   type="button"
-                  variant={active ? "secondary" : "ghost"}
+                  variant="ghost"
                   onClick={() => setSelectedCategory(cat.id)}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
-                    "h-9 w-full justify-start gap-2 px-2.5 text-xs font-medium",
-                    active && "bg-background shadow-sm",
+                    "h-7 w-full justify-start gap-2.5 rounded-sm px-2.5 text-[13px] font-normal text-muted-foreground max-[720px]:w-auto",
+                    active &&
+                      "border-[color-mix(in_srgb,var(--foreground)_8%,transparent)] bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] text-foreground hover:bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] dark:hover:bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)]",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex h-6 w-6 shrink-0 items-center justify-center rounded",
-                      cat.tone,
-                    )}
-                  >
-                    {cat.icon}
-                  </span>
+                  {cat.icon}
                   <span className="truncate">{t(`importModal.categories.${cat.id}`)}</span>
                 </Button>
               );
             })}
           </nav>
 
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="grid gap-2 p-4 sm:grid-cols-1">
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
+            <section
+              aria-labelledby={sectionHeadingId}
+              className="w-full max-w-[920px] px-8 pb-10 pt-7 min-[721px]:max-[900px]:px-6 max-[720px]:px-5 max-[720px]:py-6"
+            >
+              <div className="border-b border-border pb-5">
+                <h2 id={sectionHeadingId} className="text-base font-medium leading-normal">
+                  {t(`importModal.categories.${selectedCategory}`)}
+                </h2>
+                <DialogDescription className="mt-3 text-xs leading-[1.6]">
+                  {t("importModal.subtitle")}
+                </DialogDescription>
+              </div>
               {types.map((type) => (
-                <TypeOptionCard
+                <TypeOption
                   key={type.id}
                   type={type}
                   onSelect={options.onSelect}
                   onClose={onClose}
                 />
               ))}
-            </div>
+            </section>
           </ScrollArea>
         </div>
       </DialogContent>

@@ -20,9 +20,9 @@ use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot,
 };
 use yss_relational_contract::{
-    RelationBatchStream, RelationBinding, RelationColumn, RelationControl, RelationError,
-    RelationExecutor, RelationFuture, RelationHandle, RelationPage, RelationPlan,
-    RelationPredicate, SeriesHandle,
+    NumericOperation, NumericType, RelationBatchStream, RelationBinding, RelationColumn,
+    RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle, RelationPage,
+    RelationPlan, RelationPredicate, SeriesHandle, SeriesOperand, SeriesPlan,
 };
 use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
@@ -56,6 +56,20 @@ impl RelationPlan for DelayedPage {
     }
     fn stream(&self, _: RelationControl) -> RelationFuture<'_, RelationBatchStream> {
         Box::pin(async { Err(RelationError::InvalidPlan) })
+    }
+    fn select_series(&self, _: &str) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidPlan)
+    }
+    fn project_series(&self, _: &[SeriesHandle]) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidPlan)
+    }
+    fn numeric_series(
+        &self,
+        _: NumericOperation,
+        _: &[SeriesOperand],
+        _: NumericType,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidPlan)
     }
 }
 

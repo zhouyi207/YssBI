@@ -148,6 +148,35 @@ const SCHEMA: &[&str] = &[
 ];
 
 impl HarnessSessionStorePort for SqliteHarnessStore {
+    fn recent_completed_turns<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+        limit: usize,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            let mut turns = sqlx::query_scalar::<_, String>("SELECT payload_json FROM assistant_turn WHERE session_id = ? AND state = 'completed' ORDER BY rowid DESC LIMIT ?")
+                .bind(session_id.as_str()).bind(i64::try_from(limit.min(20)).map_err(|_| invalid_record())?).fetch_all(&self.pool).await.map_err(|_| unavailable())?
+                .into_iter().map(|payload| decode(&payload)).collect::<Result<Vec<HarnessTurnRecord>, _>>()?;
+            turns.reverse();
+            Ok(turns)
+        })
+    }
+    fn load_running_turns<'a>(
+        &'a self,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        Box::pin(async {
+            sqlx::query_scalar::<_, String>(
+                "SELECT payload_json FROM assistant_turn WHERE state = 'running' ORDER BY rowid",
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| unavailable())?
+            .into_iter()
+            .map(|payload| decode(&payload))
+            .collect()
+        })
+    }
+
     fn create_session<'a>(
         &'a self,
         record: &'a HarnessSessionRecord,
@@ -461,6 +490,22 @@ impl WorkflowStorePort for SqliteHarnessStore {
 }
 
 impl ToolInvocationLedgerPort for SqliteHarnessStore {
+    fn load_running_invocations<'a>(
+        &'a self,
+    ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>> {
+        Box::pin(async {
+            sqlx::query_scalar::<_, String>(
+                "SELECT payload_json FROM tool_invocation WHERE state = 'running' ORDER BY rowid",
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| unavailable())?
+            .into_iter()
+            .map(|payload| decode(&payload))
+            .collect()
+        })
+    }
+
     fn begin<'a>(
         &'a self,
         record: &'a ToolInvocationRecord,
@@ -1052,6 +1097,47 @@ mod tests {
             store.begin(&invocation).await.unwrap(),
             ToolInvocationBegin::Existing(existing) if *existing == invocation
         ));
+        assert_eq!(
+            store.load_running_invocations().await.unwrap(),
+            [invocation.clone()]
+        );
+        let mut finished = invocation.clone();
+        finished.state = ToolInvocationState::Failed;
+        finished.finished_at = Some(UnixMillis::from_existing(43));
+        finished.failure = Some(yss_automation_contract::CapabilityFailure::new(
+            yss_automation_contract::CapabilityFailureCode::InternalFailure,
+        ));
+        store.finish(&finished).await.unwrap();
+        assert!(store.load_running_invocations().await.unwrap().is_empty());
+        let mut turn = HarnessTurnRecord {
+            id: invocation.turn_id.clone(),
+            session_id: session.id.clone(),
+            state: HarnessTurnState::Running,
+            user_message: "Profile".into(),
+            final_text: None,
+            started_at: UnixMillis::from_existing(12),
+            finished_at: None,
+        };
+        store.create_turn(&turn).await.unwrap();
+        assert_eq!(store.load_running_turns().await.unwrap(), [turn.clone()]);
+        turn.state = HarnessTurnState::Failed;
+        turn.finished_at = Some(UnixMillis::from_existing(43));
+        store.update_turn(&turn).await.unwrap();
+        assert!(store.load_running_turns().await.unwrap().is_empty());
+        assert!(
+            store
+                .recent_completed_turns(&session.id, 8)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        turn.state = HarnessTurnState::Completed;
+        turn.final_text = Some("Completed".into());
+        store.update_turn(&turn).await.unwrap();
+        assert_eq!(
+            store.recent_completed_turns(&session.id, 1).await.unwrap(),
+            [turn]
+        );
         assert_eq!(store.latest_sequence(&session.id).await.unwrap(), 1);
         assert_eq!(
             store.load_session(&session.id).await.unwrap(),

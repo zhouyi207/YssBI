@@ -87,6 +87,7 @@ fn initialize_harness_state(
         yss_statistical_harness_sqlite::SqliteHarnessStore::connect(app_dir),
     )?);
     let channels = Arc::new(yss_api::HarnessChannelHub::new());
+    let graph_clients = Arc::new(yss_api::HarnessGraphClientHub::new());
     let agent_driver = Arc::new(yss_agent_rig::ConfigurableAgentDriver::new());
     let clock = Arc::new(SystemHarnessClock);
     tauri::async_runtime::block_on(
@@ -95,7 +96,10 @@ fn initialize_harness_state(
     let host = Arc::new(yss_statistical_harness::HarnessHost::new(
         yss_statistical_harness::HarnessPorts {
             agent_driver: agent_driver.clone(),
-            capability_gateway: Arc::new(application),
+            capability_gateway: Arc::new(yss_api::ApplicationCapabilityGateway::new(
+                application,
+                graph_clients.clone(),
+            )),
             sessions: store.clone(),
             events: store.clone(),
             event_sink: channels.clone(),
@@ -108,12 +112,14 @@ fn initialize_harness_state(
             ids: Arc::new(HarnessIdGenerator),
         },
     )?);
+    tauri::async_runtime::block_on(host.recover_interrupted_turns())?;
     tauri::async_runtime::block_on(host.reconcile_project_session(&current_project))?;
     tauri::async_runtime::block_on(host.recover_workflows())?;
     Ok(yss_api::HarnessRuntimeState::new(
         host,
         channels,
         agent_driver,
+        graph_clients,
     ))
 }
 

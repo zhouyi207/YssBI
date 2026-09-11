@@ -29,7 +29,13 @@ A command handler may:
 
 A command handler may not own filesystem transactions, long workflows, duplicated domain validation, Project/Graph reconciliation, statistical computation, or durable state. A delivery failure can produce a transport failure, but it does not pretend that an already committed authority mutation never occurred.
 
+`ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
+
+Graph tools additionally use the ephemeral `HarnessGraphClientHub` channel because the webview owns unsaved drafts and their FIFO/history. The webview supplies that explicit draft to one Application action; Rust retains the capability receipt and sends an existing draft/compile/save projection for adoption. Claim and completion acknowledge adoption only, never accept model-authored results. Identity/hash checks reject stale or misrouted updates. This is a draft-owner boundary, not a generic command dispatcher.
+
 ## DTO ownership
+
+Harness tool start/completion/failure events carry the same invocation ID. Failure events expose only the stable `failureCode`, including cancellation and timeout. Harness channel subscriptions buffer live events until historical replay has been merged, then deliver each sequence once. The frontend consumes this stream as a projection.
 
 Wire DTOs are explicit transport types. Internal structs are not exposed merely because they implement serialization. Mapping is owned at this seam; domain/application crates do not depend on Tauri or frontend wire schema.
 
@@ -44,6 +50,10 @@ Node parameter editors carry one effective `value`, display/editor metadata, and
 Node parameters with `editor: "configuration"` carry `configuration: { kind: "configuration", fields }` containing the active `ParameterEditorDto` fields for a Detail form. Select fields use `configuration: { kind: "selectOptions", options }`. The `setConfiguration` mutation carries `{ nodeId, key, values }`, with partial field values merged, normalized, and validated against the current node parameters by Graph Editor. Configuration objects persist in the node's parameter map and use the existing draft undo/redo and Save path. Static configurations have no input binding, source selector, or connection mutation.
 
 ## Commands, events, and channels
+
+`get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
+The frontend keeps these stable row identities and rejects bare row arrays or incomplete pages;
+it does not substitute an empty identity array for an obsolete response shape.
 
 `get_result_page` 在 blocking worker 上调用 Application 的页面查询；命令不直接执行关系查询或持有数据库锁。
 `ResultPage.totalCount` 为可空整数，未知总数使用 null；`hasMore` 与 `nextOffset` 决定是否可继续翻页。
@@ -146,6 +156,8 @@ Editor diagnostics carry code, messageKey, safe arguments, severity, explicit bl
 Compile returns Ready { artifactId, projection, cacheHit } or Blocked { projection }; neither branch returns a replacement document. Expected semantic failures remain Blocked without diagnostic incidents. Internal failures still reject with the error wire above. The read-only resolve_graph_draft command supplies current projections for dirty refresh and history validation; execute_compiled_graph accepts compiledArtifactId and explicit demand. See [Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
 
 Frontend application code localizes `code + safe details`; `IpcError.message` is a technical summary and must not be rendered directly.
+
+Harness event types use snake_case while envelope and payload fields use camelCase. Provider turn failures retain stable categories for authentication, rate limits, rejected requests, connection failures, unavailable services and invalid responses. The error wire never includes a raw provider response or credential. See [Statistical Harness](../../../docs/architecture/STATISTICAL_HARNESS.md).
 
 Execution terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire.
 

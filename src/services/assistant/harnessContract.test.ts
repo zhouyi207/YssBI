@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import harnessEvents from "@/tests/fixtures/node-system-contracts/harness-events.json";
 
 import {
   InvalidHarnessPayloadError,
@@ -8,6 +9,7 @@ import {
 
 describe("Harness wire contract", () => {
   it("parses ordered turn events without accepting malformed capability ids", () => {
+    for (const event of harnessEvents) expect(parseHarnessEvent(event)).toEqual(event);
     expect(
       parseHarnessEvent({
         sequence: 2,

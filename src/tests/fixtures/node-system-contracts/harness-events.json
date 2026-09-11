@@ -1,0 +1,61 @@
+[
+  {
+    "sequence": 1,
+    "sessionId": "session-1",
+    "turnId": null,
+    "occurredAt": 1000,
+    "type": "session_created"
+  },
+  {
+    "sequence": 2,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "turn_started",
+    "payload": { "userMessage": "Inspect the dataset" }
+  },
+  {
+    "sequence": 3,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "tool_invocation_started",
+    "payload": { "invocationId": "tool-1", "capabilityId": "inspect_dataset_schema" }
+  },
+  {
+    "sequence": 4,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "turn_completed",
+    "payload": { "finalText": "Schema inspected." }
+  },
+  {
+    "sequence": 5,
+    "sessionId": "session-1",
+    "turnId": null,
+    "occurredAt": 1000,
+    "type": "memory_deleted",
+    "payload": { "recordId": "memory-1" }
+  },
+  {
+    "sequence": 6,
+    "sessionId": "session-1",
+    "turnId": null,
+    "occurredAt": 1000,
+    "type": "workflow_step_failed",
+    "payload": { "runId": "workflow-1", "stepId": "schema", "retriable": true }
+  },
+  {
+    "sequence": 7,
+    "sessionId": "session-1",
+    "turnId": "turn-1",
+    "occurredAt": 1000,
+    "type": "tool_invocation_failed",
+    "payload": {
+      "invocationId": "tool-2",
+      "capabilityId": "inspect_dataset_profile",
+      "failureCode": "deadline_elapsed"
+    }
+  }
+]

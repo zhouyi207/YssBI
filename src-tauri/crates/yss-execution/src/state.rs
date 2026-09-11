@@ -22,6 +22,7 @@ use crate::run_output::RunOutputMessage;
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
 use crate::value::RuntimeValue;
+use yss_relational_contract::NumericOperation;
 use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Clone)]
@@ -569,7 +570,9 @@ fn select_execution(
     })
 }
 
-fn check_kernel_control(control: &RunExecutionControl) -> Result<(), KernelExecutionError> {
+pub(crate) fn check_kernel_control(
+    control: &RunExecutionControl,
+) -> Result<(), KernelExecutionError> {
     if control.cancellation.load(Ordering::Acquire) {
         return Err(KernelExecutionError::Cancelled);
     }
@@ -623,9 +626,13 @@ fn apply_input_coercions(
 ) -> Result<RuntimeValue, KernelExecutionError> {
     for coercion in coercions {
         value = match coercion {
-            crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => value
-                .coerce_to(&yss_data_contract::DataType::Float64)
-                .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+            crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => match value {
+                // Element casts, like broadcasting, belong to the consuming numeric kernel.
+                RuntimeValue::Series(_) | RuntimeValue::List(_) => value,
+                value => value
+                    .coerce_to(&yss_data_contract::DataType::Float64)
+                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+            },
             // Broadcast is a kernel-owned shape operation. Keeping the scalar
             // value here makes the coercion explicit without fabricating a
             // DataSeries length in the scheduler.
@@ -659,11 +666,9 @@ impl PreparedKernelInvocation<'_> {
 enum BuiltinKernel {
     Statistical(crate::statistics::StatisticalKernel),
     Relational(crate::relational::RelationalKernel),
+    Decompose,
     Constant,
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
+    Numeric(NumericOperation),
     And,
     Or,
     Not,
@@ -683,13 +688,16 @@ struct KernelRegistry {
 
 /// Compile admission uses the same registry that dispatches execution.
 pub fn supports_kernel(id: &str) -> bool {
-    KernelRegistry::default().kernels.contains_key(&crate::plan::KernelId::from_existing(id.into()))
+    KernelRegistry::default()
+        .kernels
+        .contains_key(&crate::plan::KernelId::from_existing(id.into()))
 }
 
 impl Default for KernelRegistry {
     fn default() -> Self {
         use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
         use BuiltinKernel::*;
+        use NumericOperation::{Add, Divide, Multiply, Subtract};
         Self {
             kernels: [
                 ("yssbi.statistics.ols.fit", Statistical(OlsFit)),
@@ -710,6 +718,7 @@ impl Default for KernelRegistry {
                     "yssbi.dataframe.series.select",
                     Relational(crate::relational::RelationalKernel::Series),
                 ),
+                ("yssbi.dataframe.decompose", Decompose),
                 (
                     "yssbi.dataframe.limit",
                     Relational(crate::relational::RelationalKernel::Limit),
@@ -719,10 +728,10 @@ impl Default for KernelRegistry {
                     Relational(crate::relational::RelationalKernel::Rename),
                 ),
                 ("yssbi.constant.get", Constant),
-                ("yssbi.numeric.add", Add),
-                ("yssbi.numeric.subtract", Subtract),
-                ("yssbi.numeric.multiply", Multiply),
-                ("yssbi.numeric.divide", Divide),
+                ("yssbi.numeric.add", Numeric(Add)),
+                ("yssbi.numeric.subtract", Numeric(Subtract)),
+                ("yssbi.numeric.multiply", Numeric(Multiply)),
+                ("yssbi.numeric.divide", Numeric(Divide)),
                 ("yssbi.logic.and", And),
                 ("yssbi.logic.or", Or),
                 ("yssbi.logic.not", Not),
@@ -783,27 +792,13 @@ fn execute_kernel(
             return crate::statistics::execute(kind, invocation, backend);
         }
         BuiltinKernel::Relational(kind) => crate::relational::execute(kind, invocation),
+        BuiltinKernel::Decompose => return crate::relational::decompose(invocation),
         BuiltinKernel::Constant => invocation
             .parameter("value")
             .map(|value| parameter_value(value, resources))
             .transpose()?
             .ok_or(KernelExecutionError::Failed),
-        BuiltinKernel::Add => numeric_fold(inputs, specialization, |left, right| left + right),
-        BuiltinKernel::Subtract => {
-            binary_numeric(inputs, specialization, |left, right| left - right)
-        }
-        BuiltinKernel::Multiply => {
-            binary_numeric(inputs, specialization, |left, right| left * right)
-        }
-        BuiltinKernel::Divide => {
-            let left = numeric_input(inputs.first())?;
-            let right = numeric_input(inputs.get(1))?;
-            if right == 0.0 {
-                Err(KernelExecutionError::DivisionByZero)
-            } else {
-                numeric_result(left / right, specialization)
-            }
-        }
+        BuiltinKernel::Numeric(operation) => crate::numeric::execute(operation, invocation),
         BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
         BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
         BuiltinKernel::Not => unary_bool(inputs, |value| !value),
@@ -840,69 +835,6 @@ pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelE
         Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
         Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
         _ => Err(KernelExecutionError::InvalidNumericInput),
-    }
-}
-
-fn binary_numeric(
-    inputs: &[RuntimeValue],
-    specialization: &crate::plan::PlanKernelSpecialization,
-    operation: impl FnOnce(f64, f64) -> f64,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    let value = operation(
-        numeric_input(inputs.first())?,
-        numeric_input(inputs.get(1))?,
-    );
-    numeric_result(value, specialization)
-}
-
-fn numeric_fold(
-    inputs: &[RuntimeValue],
-    specialization: &crate::plan::PlanKernelSpecialization,
-    operation: impl Fn(f64, f64) -> f64,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    let mut values = inputs.iter();
-    let mut result = numeric_input(values.next())?;
-    for value in values {
-        result = operation(result, numeric_input(Some(value))?);
-    }
-    numeric_result(result, specialization)
-}
-
-fn numeric_result(
-    value: f64,
-    specialization: &crate::plan::PlanKernelSpecialization,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    if !value.is_finite() {
-        return Err(KernelExecutionError::NonFiniteResult);
-    }
-    match specialization
-        .output_types()
-        .first()
-        .map(crate::plan::PlanTypeBinding::data_type)
-    {
-        Some(yss_data_contract::DataType::Int64)
-            if value.fract() == 0.0 && value >= i64::MIN as f64 && value <= i64::MAX as f64 =>
-        {
-            Ok(RuntimeValue::Integer(value as i64))
-        }
-        Some(yss_data_contract::DataType::Float64) => Ok(RuntimeValue::Decimal(value)),
-        Some(
-            yss_data_contract::DataType::DataSeries(_)
-            | yss_data_contract::DataType::Int64
-            | yss_data_contract::DataType::Boolean
-            | yss_data_contract::DataType::String
-            | yss_data_contract::DataType::Date
-            | yss_data_contract::DataType::Datetime
-            | yss_data_contract::DataType::Time
-            | yss_data_contract::DataType::Categorical
-            | yss_data_contract::DataType::Array(_)
-            | yss_data_contract::DataType::Object
-            | yss_data_contract::DataType::DataFrame
-            | yss_data_contract::DataType::Struct(_)
-            | yss_data_contract::DataType::OneOf(_)
-            | yss_data_contract::DataType::Any,
-        )
-        | None => Err(KernelExecutionError::Failed),
     }
 }
 
@@ -1174,6 +1106,10 @@ impl ExecutionRuntimeState {
 
     pub fn query_result(&self, result_id: ResultId) -> Option<StoredResultSnapshot> {
         self.results.get(result_id)
+    }
+
+    pub fn query_graph_results(&self, graph: &str, limit: usize) -> Vec<StoredResultSnapshot> {
+        self.results.query_graph_results(graph, limit)
     }
 
     pub fn query_pin_result(

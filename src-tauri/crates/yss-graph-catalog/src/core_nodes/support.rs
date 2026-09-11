@@ -135,7 +135,7 @@ pub(crate) fn data_port_with_cardinality(
         direction,
         value_type,
         cardinality,
-        connections: ConnectionsPerPort::Single,
+        connections: crate::data_connections(direction),
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,
             default_value: None,

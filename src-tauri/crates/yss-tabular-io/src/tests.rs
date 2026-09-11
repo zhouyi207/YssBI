@@ -98,6 +98,126 @@ fn batches_round_trip_exact_schema_and_values_through_ipc_and_parquet() {
 }
 
 #[test]
+fn parquet_float_encoding_preserves_bits_nulls_and_column_identity() {
+    use arrow::array::{Float32Array, Float64Array};
+    use parquet::basic::Encoding;
+
+    let directory = TestDirectory::create();
+    let path = directory.path().join("floats.parquet");
+    let schema = Arc::new(Schema::new(vec![
+        with_column_metadata(
+            Field::new("double.value", DataType::Float64, true),
+            "double",
+            None,
+        )
+        .unwrap(),
+        with_column_metadata(
+            Field::new("single", DataType::Float32, true),
+            "single",
+            None,
+        )
+        .unwrap(),
+        with_column_metadata(Field::new("label", DataType::Utf8, false), "label", None).unwrap(),
+    ]));
+    let double = vec![
+        Some(0.0),
+        Some(-0.0),
+        Some(f64::from_bits(0x7ff8_0000_0000_0042)),
+        Some(f64::INFINITY),
+        Some(f64::NEG_INFINITY),
+        Some(f64::MIN_POSITIVE),
+        Some(1.25),
+        None,
+    ];
+    let single = vec![
+        Some(0.0),
+        Some(-0.0),
+        Some(f32::from_bits(0x7fc0_0042)),
+        Some(f32::INFINITY),
+        Some(f32::NEG_INFINITY),
+        Some(f32::MIN_POSITIVE),
+        Some(1.25),
+        None,
+    ];
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Float64Array::from(double.clone())),
+            Arc::new(Float32Array::from(single.clone())),
+            Arc::new(StringArray::from(vec!["same"; double.len()])),
+        ],
+    )
+    .unwrap();
+    write_parquet_batches(
+        &path,
+        schema.clone(),
+        [Ok(batch.slice(0, 4)), Ok(batch.slice(4, 4))],
+    )
+    .unwrap();
+    let builder = ParquetRecordBatchReaderBuilder::try_new(File::open(&path).unwrap()).unwrap();
+    let group = builder.metadata().row_group(0);
+    for column in [0, 1] {
+        assert!(
+            group
+                .column(column)
+                .encodings()
+                .any(|encoding| encoding == Encoding::BYTE_STREAM_SPLIT)
+        );
+        assert!(
+            !group
+                .column(column)
+                .encodings()
+                .any(|encoding| encoding == Encoding::RLE_DICTIONARY)
+        );
+    }
+    assert!(
+        group
+            .column(2)
+            .encodings()
+            .any(|encoding| encoding == Encoding::RLE_DICTIONARY)
+    );
+    let reader = read_parquet_batches(&path, 3, None).unwrap();
+    assert_eq!(reader.schema(), schema);
+    let mut doubles = Vec::new();
+    let mut singles = Vec::new();
+    for batch in reader {
+        let batch = batch.unwrap();
+        doubles.extend(
+            batch
+                .column(0)
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap()
+                .iter()
+                .map(|value| value.map(f64::to_bits)),
+        );
+        singles.extend(
+            batch
+                .column(1)
+                .as_any()
+                .downcast_ref::<Float32Array>()
+                .unwrap()
+                .iter()
+                .map(|value| value.map(f32::to_bits)),
+        );
+    }
+    assert_eq!(
+        doubles,
+        double
+            .into_iter()
+            .map(|value| value.map(f64::to_bits))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        singles,
+        single
+            .into_iter()
+            .map(|value| value.map(f32::to_bits))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
 fn csv_stream_has_one_header_and_propagates_late_batch_failure() {
     let directory = TestDirectory::create();
     let csv = directory.path().join("data.csv");

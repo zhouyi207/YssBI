@@ -389,8 +389,9 @@ impl DatabaseRuntimeSession {
     pub(crate) fn read_physical_dataset_overview(
         &self,
         database: &DatabaseId,
+        control: &yss_relational_contract::RelationControl,
     ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
-        self.physical.read_dataset_overview(database)
+        self.physical.read_dataset_overview(database, control)
     }
 
     pub(crate) fn read_physical_edit_state(

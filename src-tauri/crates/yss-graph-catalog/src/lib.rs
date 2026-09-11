@@ -12,6 +12,19 @@ mod plot;
 mod project;
 mod statistics;
 
+pub(crate) const fn data_connections(
+    direction: yss_graph_protocol::PortDirection,
+) -> yss_graph_protocol::ConnectionsPerPort {
+    use yss_graph_protocol::{ConnectionsPerPort, PortDirection};
+    match direction {
+        PortDirection::Input => ConnectionsPerPort::Single,
+        PortDirection::Output => ConnectionsPerPort::Multiple {
+            max: None,
+            ordered: false,
+        },
+    }
+}
+
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
@@ -44,6 +57,43 @@ mod tests {
 
     use super::build_builtin_node_system;
     use yss_graph_protocol::{NodeTypeId, PortCardinality};
+
+    #[test]
+    fn builtin_output_pins_support_unbounded_fan_out() {
+        use yss_graph_protocol::{ConnectionsPerPort, PortDirection};
+        let system = build_builtin_node_system().unwrap();
+        let mut outputs = 0;
+        for (node_type, _) in system.registry.iter() {
+            let protocol = system.registry.protocol(node_type).unwrap();
+            for port in &protocol.interface.ports {
+                if port.direction == PortDirection::Output {
+                    outputs += 1;
+                    assert_eq!(
+                        port.connections,
+                        ConnectionsPerPort::Multiple {
+                            max: None,
+                            ordered: false
+                        },
+                        "{node_type}:{}",
+                        port.key
+                    );
+                }
+            }
+        }
+        assert!(outputs > 0);
+        let subtract = system
+            .registry
+            .protocol(&NodeTypeId::new("yssbi.numeric.subtract").unwrap())
+            .unwrap();
+        assert!(
+            subtract
+                .interface
+                .ports
+                .iter()
+                .filter(|port| port.direction == PortDirection::Input)
+                .all(|port| port.connections == ConnectionsPerPort::Single)
+        );
+    }
 
     #[test]
     fn numeric_type_class_contains_only_int64_and_float64() {

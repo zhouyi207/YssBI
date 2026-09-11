@@ -26,11 +26,6 @@ pub struct CatalogMutationValidationSnapshot {
     pub resources: BTreeMap<CatalogResourcePath, CatalogMutationResource>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CatalogCompatibilityError {
-    SourceInvalid,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CatalogFunctionParameter {
     pub id: yss_graph_document::FunctionParameterId,
@@ -130,7 +125,7 @@ fn mutation_validation_error(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SourcePort {
+pub struct SourcePort {
     pub address: PortAddress,
     pub direction: PortDirection,
     pub value_type: TypeExpr,
@@ -439,16 +434,15 @@ fn connection_type_unavailable(detail: impl Into<Box<str>>) -> EditorMutationErr
     )
 }
 
+/// Query sources are resolved and validated against the current semantic snapshot by Graph Runtime.
 pub fn filter_compatible_catalog(
     graph_path: &GraphResourcePath,
-    document: &GraphDocument,
     registry: &NodeRegistry,
-    source: &PortAddress,
+    source: &SourcePort,
     catalog: &ResourceCatalogSnapshot,
     resources: &[CatalogResourceEntry],
     mut localized: LocalizedCatalog,
-) -> Result<LocalizedCatalog, CatalogCompatibilityError> {
-    let source = catalog_query_source_port(document, registry, source, catalog)?;
+) -> LocalizedCatalog {
     localized.items.retain(|item| {
         let Ok(node_type) = yss_graph_protocol::NodeTypeId::new(item.node_type_id.as_ref()) else {
             return false;
@@ -462,7 +456,7 @@ pub fn filter_compatible_catalog(
             .is_some_and(|candidates| {
                 candidates
                     .iter()
-                    .any(|candidate| ports_are_compatible(&source, candidate))
+                    .any(|candidate| ports_are_compatible(source, candidate))
             })
     });
     let categories = localized
@@ -473,34 +467,7 @@ pub fn filter_compatible_catalog(
     localized
         .categories
         .retain(|category| categories.contains(category.category_id.as_ref()));
-    Ok(localized)
-}
-
-pub(crate) fn catalog_query_source_port(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
-    address: &PortAddress,
-    catalog: &ResourceCatalogSnapshot,
-) -> Result<SourcePort, CatalogCompatibilityError> {
-    let resolved = resolve_editor_port(document, registry, address)
-        .map_err(|_| CatalogCompatibilityError::SourceInvalid)?;
-    if matches!(resolved.binding, Some(DynamicPortBinding::Orphan { .. })) {
-        return Err(CatalogCompatibilityError::SourceInvalid);
-    }
-    let mut value_type = resolved.spec.value_type.clone();
-    refine_constant_type(&mut value_type, address, document, resolved.protocol);
-    refine_catalog_query_resource_type(
-        &mut value_type,
-        &document.nodes[&address.node_id],
-        resolved.protocol,
-        catalog,
-    )?;
-    Ok(SourcePort {
-        address: address.clone(),
-        direction: resolved.spec.direction,
-        value_type,
-        type_parameters: resolved.protocol.interface.type_parameters.clone(),
-    })
+    localized
 }
 
 fn refine_constant_type(
@@ -528,35 +495,6 @@ fn refine_constant_type(
     }) {
         *value_type = resolved;
     }
-}
-
-fn refine_catalog_query_resource_type(
-    value_type: &mut TypeExpr,
-    node: &DocumentNode,
-    protocol: &NodeProtocol,
-    catalog: &ResourceCatalogSnapshot,
-) -> Result<(), CatalogCompatibilityError> {
-    let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } = &protocol.instance_display
-    else {
-        return Ok(());
-    };
-    let resource = node
-        .parameters
-        .get(parameter)
-        .and_then(serde_json::Value::as_str)
-        .ok_or(CatalogCompatibilityError::SourceInvalid)?;
-    let resource = GraphResourceId::new(resource);
-    match kind {
-        ResourceDisplayKind::Database => {
-            catalog
-                .database_schema(&resource)
-                .ok_or(CatalogCompatibilityError::SourceInvalid)?;
-            *value_type = yss_graph_type_mapping::type_expr_from_data_type(&DataType::DataFrame)
-                .map_err(|_| CatalogCompatibilityError::SourceInvalid)?;
-        }
-        ResourceDisplayKind::Function => {}
-    }
-    Ok(())
 }
 
 fn catalog_query_candidate_ports(

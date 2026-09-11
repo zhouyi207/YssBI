@@ -89,7 +89,7 @@ export class DatabaseService {
   }
 
   /**
-   * 重命名数据库（显示名，写入 DuckDB meta）
+   * 重命名项目数据集的显示名
    */
   static async renameDatabase(
     projectInstanceId: string,
@@ -116,16 +116,23 @@ export class DatabaseService {
     offset: number,
     limit: number,
   ): Promise<DatabaseRowsResult> {
-    const payload = await invokeCommand<
-      { rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]
-    >("get_database_rows", { projectInstanceId, id, offset, limit });
-    if (Array.isArray(payload)) {
-      return { rows: payload, rowIds: [] };
+    const payload = await invokeCommand<DatabaseRowsResult>("get_database_rows", {
+      projectInstanceId,
+      id,
+      offset,
+      limit,
+    });
+    if (
+      !payload ||
+      !Array.isArray(payload.rows) ||
+      !Array.isArray(payload.rowIds) ||
+      payload.rows.length !== payload.rowIds.length ||
+      !payload.rows.every(Array.isArray) ||
+      !payload.rowIds.every(Number.isInteger)
+    ) {
+      throw new TypeError("Invalid database rows response");
     }
-    return {
-      rows: payload.rows ?? [],
-      rowIds: payload.rowIds ?? [],
-    };
+    return payload;
   }
 
   /**

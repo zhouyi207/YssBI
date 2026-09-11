@@ -103,7 +103,12 @@ pub struct HarnessEventDto {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
+#[serde(
+    tag = "type",
+    content = "payload",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum HarnessEventKindDto {
     SessionCreated,
     SessionClosed,
@@ -126,6 +131,11 @@ pub enum HarnessEventKindDto {
     ToolInvocationCompleted {
         invocation_id: String,
         capability_id: CapabilityId,
+    },
+    ToolInvocationFailed {
+        invocation_id: String,
+        capability_id: CapabilityId,
+        failure_code: yss_automation_contract::CapabilityFailureCode,
     },
     TurnCompleted {
         final_text: String,
@@ -276,6 +286,65 @@ impl From<&AgentEvent> for HarnessEventKindDto {
                 invocation_id: invocation_id.to_string(),
                 capability_id: *capability_id,
             },
+            AgentEvent::ToolInvocationFailed {
+                invocation_id,
+                capability_id,
+                failure_code,
+            } => Self::ToolInvocationFailed {
+                invocation_id: invocation_id.to_string(),
+                capability_id: *capability_id,
+                failure_code: *failure_code,
+            },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn harness_events_match_the_frontend_wire_fixture() {
+        let events = [
+            HarnessEventKindDto::SessionCreated,
+            HarnessEventKindDto::TurnStarted {
+                user_message: "Inspect the dataset".into(),
+            },
+            HarnessEventKindDto::ToolInvocationStarted {
+                invocation_id: "tool-1".into(),
+                capability_id: CapabilityId::InspectDatasetSchema,
+            },
+            HarnessEventKindDto::TurnCompleted {
+                final_text: "Schema inspected.".into(),
+            },
+            HarnessEventKindDto::MemoryDeleted {
+                record_id: "memory-1".into(),
+            },
+            HarnessEventKindDto::WorkflowStepFailed {
+                run_id: "workflow-1".into(),
+                step_id: "schema".into(),
+                retriable: true,
+            },
+            HarnessEventKindDto::ToolInvocationFailed {
+                invocation_id: "tool-2".into(),
+                capability_id: CapabilityId::InspectDatasetProfile,
+                failure_code: yss_automation_contract::CapabilityFailureCode::DeadlineElapsed,
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, event)| HarnessEventDto {
+            sequence: index as u64 + 1,
+            session_id: "session-1".into(),
+            turn_id: ((1..=3).contains(&index) || index == 6).then(|| "turn-1".into()),
+            occurred_at: 1000,
+            event,
+        })
+        .collect::<Vec<_>>();
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../../src/tests/fixtures/node-system-contracts/harness-events.json"
+        ))
+        .unwrap();
+        assert_eq!(serde_json::to_value(events).unwrap(), fixture);
     }
 }

@@ -8,9 +8,9 @@ use datafusion::dataframe::DataFrame;
 use datafusion::logical_expr::Expr;
 use futures_util::StreamExt;
 use yss_relational_contract::{
-    RelationBatchStream, RelationBinding, RelationComparison, RelationControl, RelationError,
-    RelationExecutor, RelationFuture, RelationHandle, RelationLiteral, RelationPlan,
-    RelationPredicate,
+    NumericOperation, NumericType, RelationBatchStream, RelationBinding, RelationComparison,
+    RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle,
+    RelationLiteral, RelationPlan, RelationPredicate, SeriesHandle, SeriesOperand, SeriesPlan,
 };
 
 pub(crate) struct DataFusionRelation {
@@ -21,6 +21,7 @@ pub(crate) struct DataFusionRelation {
     binding: RelationBinding,
     lease: Arc<dyn Send + Sync>,
     executor: Arc<dyn RelationExecutor>,
+    ordered_single_file: bool,
 }
 
 impl DataFusionRelation {
@@ -30,6 +31,7 @@ impl DataFusionRelation {
         binding: RelationBinding,
         lease: Arc<dyn Send + Sync>,
         executor: Arc<dyn RelationExecutor>,
+        ordered_single_file: bool,
     ) -> Result<RelationHandle, RelationError> {
         let native = frame.schema().as_arrow();
         if native.fields().len() != schema.fields().len()
@@ -50,6 +52,7 @@ impl DataFusionRelation {
                 binding,
                 lease,
                 executor: executor.clone(),
+                ordered_single_file,
             }),
             executor,
         ))
@@ -58,6 +61,7 @@ impl DataFusionRelation {
         &self,
         frame: DataFrame,
         schema: SchemaRef,
+        ordered_single_file: bool,
     ) -> Result<RelationHandle, RelationError> {
         Self::handle(
             frame,
@@ -65,6 +69,7 @@ impl DataFusionRelation {
             self.binding.clone(),
             self.lease.clone(),
             self.executor.clone(),
+            ordered_single_file,
         )
     }
 }
@@ -97,7 +102,7 @@ impl RelationPlan for DataFusionRelation {
             .clone()
             .select(expressions)
             .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, schema))
+            .and_then(|frame| self.derived(frame, schema, self.ordered_single_file))
     }
     fn filter(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError> {
         let schema = self.schema();
@@ -167,14 +172,13 @@ impl RelationPlan for DataFusionRelation {
             .clone()
             .filter(expression)
             .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, self.schema.clone()))
+            .and_then(|frame| self.derived(frame, self.schema.clone(), false))
     }
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError> {
-        self.frame
-            .clone()
-            .limit(offset, Some(limit))
-            .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, self.schema.clone()))
+        // This limit fixes the scan strategy. A later limit must not turn an existing
+        // large-offset query into a single-partition prefix scan.
+        crate::limit_frame(self.frame.clone(), offset, limit, self.ordered_single_file)
+            .and_then(|frame| self.derived(frame, self.schema.clone(), false))
     }
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError> {
         if new.trim().is_empty()
@@ -203,7 +207,7 @@ impl RelationPlan for DataFusionRelation {
             .clone()
             .with_column_renamed(old, new)
             .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, schema))
+            .and_then(|frame| self.derived(frame, schema, self.ordered_single_file))
     }
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream> {
         Box::pin(async move {
@@ -237,6 +241,47 @@ impl RelationPlan for DataFusionRelation {
             Ok(Box::pin(stream) as RelationBatchStream)
         })
     }
+
+    fn select_series(&self, column: &str) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        let field = self
+            .schema
+            .field_with_name(column)
+            .map_err(|_| RelationError::InvalidInput)?;
+        Ok(crate::series::column(field))
+    }
+
+    fn project_series(&self, series: &[SeriesHandle]) -> Result<RelationHandle, RelationError> {
+        let mut names = std::collections::BTreeSet::new();
+        let mut fields = Vec::with_capacity(series.len());
+        let mut expressions = Vec::with_capacity(series.len());
+        for series in series {
+            let mut name = series.column().to_owned();
+            while !names.insert(name.clone()) {
+                name.push('_');
+            }
+            fields.push(series.plan().field().clone().with_name(&name));
+            expressions.push(crate::series::expression(series)?.alias(name));
+        }
+        let schema = Arc::new(Schema::new_with_metadata(
+            fields,
+            self.schema.metadata().clone(),
+        ));
+        let frame = self
+            .frame
+            .clone()
+            .select(expressions)
+            .map_err(|_| RelationError::InvalidPlan)?;
+        self.derived(frame, schema, self.ordered_single_file)
+    }
+
+    fn numeric_series(
+        &self,
+        operation: NumericOperation,
+        operands: &[SeriesOperand],
+        output_type: NumericType,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::series::arithmetic(operation, operands, output_type)
+    }
 }
 
 pub(crate) fn query_error(error: datafusion::common::DataFusionError) -> RelationError {
@@ -246,6 +291,10 @@ pub(crate) fn query_error(error: datafusion::common::DataFusionError) -> Relatio
             DataFusionError::ResourcesExhausted(_) => RelationError::MemoryLimitExceeded,
             DataFusionError::Context(_, inner) => classify(inner),
             DataFusionError::Shared(inner) => classify(inner),
+            DataFusionError::External(inner) => inner
+                .downcast_ref::<RelationError>()
+                .copied()
+                .unwrap_or(RelationError::QueryFailed),
             _ => RelationError::QueryFailed,
         }
     }

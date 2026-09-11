@@ -126,6 +126,30 @@ export const enUS = {
     assistantStatusReady: "Press Ctrl+Enter to send",
     assistantStatusRunning: "Analyzing…",
     assistantStatusError: "Assistant is temporarily unavailable",
+    assistantErrors: {
+      assistant_authentication_failed:
+        "Authentication failed. Check your API key and model access.",
+      assistant_rate_limited:
+        "The service is rate limited or out of quota. Check your quota and try again later.",
+      assistant_provider_request_rejected:
+        "The service rejected the request. Check the model, API URL, and API compatibility.",
+      assistant_provider_connection_failed:
+        "Could not connect to the model service. Check your network, proxy, and API URL, then retry.",
+      assistant_provider_unavailable:
+        "The model service is temporarily unavailable. Send your message again later.",
+      assistant_invalid_provider_response:
+        "The model response could not be parsed. Check API compatibility and retry.",
+      assistant_provider_configuration_invalid:
+        "Invalid model configuration. Check the model name and API URL.",
+      assistant_turn_failed: "This analysis failed. You can send another message.",
+      assistant_turn_timed_out: "This analysis timed out. You can send another message.",
+      assistant_stream_failed:
+        "Assistant message synchronization failed. Reopen the assistant panel.",
+      assistant_session_failed:
+        "Could not create an assistant session. Reopen the assistant panel.",
+      project_session_unavailable: "The project is not ready. Open a project and try again.",
+      harness_session_not_active: "The assistant session has expired. Reopen the assistant panel.",
+    },
     assistantActivity: "Running: {{activity}}",
     assistantPlan: "Statistical plan",
     assistantPlanMode: "Analysis mode",
@@ -136,6 +160,10 @@ export const enUS = {
     assistantToolRunning: "Running",
     assistantToolCompleted: "Completed",
     assistantToolFailed: "Failed",
+    assistantToolCancelled: "Cancelled",
+    assistantToolTimedOut: "Timed out",
+    assistantToolInterrupted: "Interrupted",
+    assistantToolUnknown: "Outcome unknown",
     details: "Details",
     inspect: "Inspect",
     logs: "Logs",
@@ -1249,7 +1277,7 @@ export const enUS = {
   },
   importModal: {
     title: "Import External Data",
-    subtitle: "Choose a source; imported data is stored in the project DuckDB",
+    subtitle: "Choose a source to import as a project dataset",
     close: "Close",
     comingSoon: "Coming soon",
     developing: "In development",

@@ -1,0 +1,943 @@
+{
+  "measured_on": "2026-09-10",
+  "platform": "Windows",
+  "cpu": "Intel Core i9-13900HX",
+  "physical_cores": 24,
+  "logical_processors": 32,
+  "ram_gib": 31.8,
+  "build": "dev, unoptimized + debuginfo",
+  "os_file_cache_cleared": false,
+  "data_rows": 1000000,
+  "user_columns": 16,
+  "initial_column_type": "Float64",
+  "engine_memory_bytes": 536870912,
+  "normal_target_partitions": 8,
+  "sample_sleep_ms": 50,
+  "external_stop_private_bytes": 2147483648,
+  "notes": [
+    "Each run generated data in a new directory and measured in a separate process.",
+    "Final runs followed the nested-limit strategy guard; the benchmark uses the same query shapes.",
+    "Final runs overlapped with other Cargo processes in the workspace; whole-machine background load was not isolated.",
+    "Operator times are wall-clock observations, not guaranteed latency percentiles."
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "stage": "initial",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 3399.0125,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 22.3074,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 37.9581,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 29.971799999999998,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 791.6600999999999,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1494.6419,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 29.764200000000002,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 57.052899999999994,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 36.0168,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 79.394,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 41.3678,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 20.8466,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 84.4226,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 4217.1582,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 4337.4736,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 1,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 35258368,
+        "sample_peak_private_bytes": 34004992,
+        "os_peak_working_set_bytes": 37801984,
+        "sample_count": 54,
+        "process_wall_seconds": 3.5139614999999997,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 1,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 197992448,
+        "sample_peak_private_bytes": 245571584,
+        "os_peak_working_set_bytes": 200663040,
+        "sample_count": 174,
+        "process_wall_seconds": 11.4571509,
+        "exit_code": 0
+      }
+    },
+    {
+      "run": 2,
+      "stage": "initial",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 3615.9676,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 16.204,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 36.8001,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 30.4503,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 845.253,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1576.9182,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 29.4484,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 54.8715,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 44.877,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 92.9378,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 42.8951,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 20.172,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 78.19969999999999,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 4581.3957,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 4342.1344,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 2,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 33710080,
+        "sample_peak_private_bytes": 32968704,
+        "os_peak_working_set_bytes": 37793792,
+        "sample_count": 54,
+        "process_wall_seconds": 3.6569149,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 2,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 198492160,
+        "sample_peak_private_bytes": 245100544,
+        "os_peak_working_set_bytes": 202051584,
+        "sample_count": 179,
+        "process_wall_seconds": 11.99358,
+        "exit_code": 0
+      }
+    },
+    {
+      "run": 3,
+      "stage": "initial",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 3731.6281999999997,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 19.622899999999998,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 40.1038,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 33.958000000000006,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 826.8482,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1581.8718999999999,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 30.319399999999998,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 53.421099999999996,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 44.344,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 85.45469999999999,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 46.059599999999996,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 20.4825,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 88.88799999999999,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 4510.2365,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 4665.836300000001,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 3,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 35028992,
+        "sample_peak_private_bytes": 34758656,
+        "os_peak_working_set_bytes": 37605376,
+        "sample_count": 61,
+        "process_wall_seconds": 3.8135233,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 3,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 197210112,
+        "sample_peak_private_bytes": 244707328,
+        "os_peak_working_set_bytes": 198262784,
+        "sample_count": 190,
+        "process_wall_seconds": 12.230618,
+        "exit_code": 0
+      }
+    },
+    {
+      "run": 4,
+      "stage": "final",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 4441.0454,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 25.2318,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 50.5837,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 38.8484,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 991.8941,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1823.7581,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 33.163,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 72.7794,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 43.3706,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 105.2169,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 48.8213,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 25.213900000000002,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 111.1694,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 5124.4915,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 5250.2068,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 4,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 36495360,
+        "sample_peak_private_bytes": 38232064,
+        "os_peak_working_set_bytes": 39059456,
+        "sample_count": 67,
+        "process_wall_seconds": 4.50428,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 4,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 198582272,
+        "sample_peak_private_bytes": 244256768,
+        "os_peak_working_set_bytes": 201543680,
+        "sample_count": 203,
+        "process_wall_seconds": 13.9780527,
+        "exit_code": 0
+      }
+    },
+    {
+      "run": 5,
+      "stage": "final",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 3989.6891,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 16.287300000000002,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 39.1117,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 29.754800000000003,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 915.1108999999999,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1705.9893000000002,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 30.3101,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 58.2164,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 37.348,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 94.29769999999999,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 48.9507,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 22.9773,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 283.6681,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 4811.9373000000005,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 5032.4373,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 5,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 37502976,
+        "sample_peak_private_bytes": 36663296,
+        "os_peak_working_set_bytes": 39120896,
+        "sample_count": 63,
+        "process_wall_seconds": 4.1044034,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 5,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 197877760,
+        "sample_peak_private_bytes": 243355648,
+        "os_peak_working_set_bytes": 199974912,
+        "sample_count": 204,
+        "process_wall_seconds": 13.3460887,
+        "exit_code": 0
+      }
+    },
+    {
+      "run": 6,
+      "stage": "final",
+      "generate": {
+        "scenario": "generate",
+        "elapsed_ms": 4127.896299999999,
+        "detail": {
+          "rows": 1000000,
+          "columns": 16,
+          "parquet_bytes": 92602382
+        }
+      },
+      "measure": [
+        {
+          "scenario": "open_and_plan",
+          "elapsed_ms": 16.500999999999998,
+          "detail": {
+            "rows": 1000000,
+            "columns": 16,
+            "engine_memory_bytes": 536870912
+          }
+        },
+        {
+          "scenario": "first_page",
+          "elapsed_ms": 36.4859,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "repeat_page",
+          "elapsed_ms": 33.3477,
+          "detail": {
+            "rows": 1000,
+            "has_more": true
+          }
+        },
+        {
+          "scenario": "narrow_scan",
+          "elapsed_ms": 919.7610000000001,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 131264
+          }
+        },
+        {
+          "scenario": "full_scan",
+          "elapsed_ms": 1778.7060999999999,
+          "detail": {
+            "rows": 1000000,
+            "largest_batch_buffer_bytes": 1050112
+          }
+        },
+        {
+          "scenario": "selective_filter",
+          "elapsed_ms": 34.2102,
+          "detail": {
+            "rows": 999,
+            "columns": 2,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 16176
+          }
+        },
+        {
+          "scenario": "selective_filter_full",
+          "elapsed_ms": 62.7938,
+          "detail": {
+            "rows": 999,
+            "columns": 16,
+            "first_c0": 999.001,
+            "largest_batch_buffer_bytes": 129408
+          }
+        },
+        {
+          "scenario": "sparse_edit_commit",
+          "elapsed_ms": 34.3317,
+          "detail": {
+            "edited_cells": 1
+          }
+        },
+        {
+          "scenario": "edited_filter",
+          "elapsed_ms": 97.7191,
+          "detail": {
+            "rows": 1000,
+            "columns": 16,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 129536
+          }
+        },
+        {
+          "scenario": "edited_filter_narrow",
+          "elapsed_ms": 52.2325,
+          "detail": {
+            "rows": 1000,
+            "columns": 2,
+            "first_c0": 1001,
+            "largest_batch_buffer_bytes": 16192
+          }
+        },
+        {
+          "scenario": "ols_input",
+          "elapsed_ms": 24.541400000000003,
+          "detail": {
+            "rows": 100000,
+            "columns": 2
+          }
+        },
+        {
+          "scenario": "ols_matrix",
+          "elapsed_ms": 392.9703,
+          "detail": {
+            "rows": 100000,
+            "coefficients": [3.2271202929952874, 1.9960493812755966]
+          }
+        },
+        {
+          "scenario": "compaction",
+          "elapsed_ms": 4914.9412999999995,
+          "detail": {
+            "rows": 1000000
+          }
+        },
+        {
+          "scenario": "column_cast",
+          "elapsed_ms": 5236.4265000000005,
+          "detail": {
+            "rows": 1000000
+          }
+        }
+      ],
+      "generation_memory": {
+        "run": 6,
+        "phase": "generate",
+        "sample_peak_working_set_bytes": 35213312,
+        "sample_peak_private_bytes": 34410496,
+        "os_peak_working_set_bytes": 38256640,
+        "sample_count": 64,
+        "process_wall_seconds": 4.2090023,
+        "exit_code": 0
+      },
+      "measurement_memory": {
+        "run": 6,
+        "phase": "measure",
+        "sample_peak_working_set_bytes": 196681728,
+        "sample_peak_private_bytes": 243920896,
+        "os_peak_working_set_bytes": 199610368,
+        "sample_count": 216,
+        "process_wall_seconds": 13.907592399999999,
+        "exit_code": 0
+      }
+    }
+  ]
+}

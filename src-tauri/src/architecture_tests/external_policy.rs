@@ -29,6 +29,18 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-automation-contract",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-api",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-plugin-runtime",
         mode: RustDependencyMode::Runtime,
         package_name: "semver",
@@ -416,6 +428,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-agent-rig",
         mode: RustDependencyMode::Runtime,
         package_name: "rig-agent",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-agent-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "rig-core",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1376,6 +1394,11 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Commands,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+    },
+    ExternalDependencyUseAllowance {
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "semver",
@@ -1474,6 +1497,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::BackendAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "rig-agent",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "rig-core",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,

@@ -12,6 +12,7 @@ yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true
+tokio = { workspace = true, features = ["time"] }
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true

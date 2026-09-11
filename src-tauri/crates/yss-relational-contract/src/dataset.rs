@@ -23,6 +23,9 @@ pub struct DatasetOverlay {
 pub struct DatasetRelationInput {
     pub base_schema: SchemaRef,
     pub schema: SchemaRef,
+    /// Managed generation files are each ordered by the base schema's DisplayOrder,
+    /// then RowId, ascending with nulls last. File list order need not be global row order.
+    /// Arbitrary Parquet files without this guarantee use the generic relation boundary.
     pub files: Box<[PathBuf]>,
     pub overlay: DatasetOverlay,
 }

@@ -458,20 +458,14 @@ fn data_output(
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = port(
+    port(
         key,
         title,
         PortDirection::Output,
         value_type,
         PortCardinality::Declared,
         schema,
-    )?;
-    // Values are immutable handles; multiple consumers do not share a consumed Arrow stream.
-    spec.connections = ConnectionsPerPort::Multiple {
-        max: None,
-        ordered: false,
-    };
-    Ok(spec)
+    )
 }
 
 fn streaming_output(
@@ -517,7 +511,7 @@ fn port(
         direction,
         value_type,
         cardinality,
-        connections: ConnectionsPerPort::Single,
+        connections: crate::data_connections(direction),
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Forbidden,
             default_value: None,

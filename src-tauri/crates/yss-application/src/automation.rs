@@ -3,13 +3,11 @@
 use std::sync::Arc;
 
 use yss_automation_contract::{
-    ApplyGraphEditRequest, AutomationCapabilityRequest, AutomationCapabilityResult,
-    CapabilityContractError, CapabilityFailure, CapabilityFailureCode, CapabilityFuture,
-    CapabilityGatewayPort, CapabilityId, CapabilityInvocationContext, DatasetColumnSchema,
-    DatasetProfileInspection, DatasetSchemaInspection, GraphConnectionInspection,
-    GraphEditOperation, GraphEditPortRef, GraphEditReceipt, GraphInspection, GraphNodeInspection,
-    GraphPortInspection, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
-    InspectGraphRequest, InspectProjectRequest, InspectResultRequest, NodeCatalogMatch,
+    AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityContractError,
+    CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
+    CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
+    DatasetSchemaInspection, GraphPortInspection, InspectDatasetProfileRequest,
+    InspectDatasetSchemaRequest, InspectProjectRequest, InspectResultRequest, NodeCatalogMatch,
     NodeCatalogSearchResult, ProjectInspection, ProjectResourceInspection,
     ProjectResourceKindInspection, ResultCategoryInspection, ResultInspection,
     ResultValueInspection, SearchNodeCatalogRequest,
@@ -20,14 +18,7 @@ use yss_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
 use yss_execution::result::{ResultId, StoredResult};
 use yss_execution::value::RuntimeValue;
 use yss_graph_catalog::LocalizedCatalogItem;
-use yss_graph_document::{
-    ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
-    PortRef,
-};
-use yss_graph_document_edit::{GraphDocumentPatch, apply_graph_document_patch};
-use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
-use yss_graph_protocol::PortKey;
-use yss_project_identity::{OperationId, ResourceRevision};
+use yss_graph_document::{PortAddress, PortRef};
 
 use crate::catalog_query::{
     CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,
@@ -35,16 +26,21 @@ use crate::catalog_query::{
 use crate::execution::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::graph_commit::commit_captured_graph_candidate;
-use crate::resource_mutation::build_catalog_mutation_validation_snapshot;
+mod graph;
+pub use graph::{
+    AutomationGraphAction, AutomationGraphDraft, AutomationGraphUpdate,
+    prepare_automation_graph_action,
+};
 
-impl CapabilityGatewayPort for ApplicationState {
-    fn invoke<'a>(
-        &'a self,
+impl ApplicationState {
+    /// Synchronous business entry point; async adapters must dispatch it to a blocking worker.
+    pub fn invoke_automation_capability(
+        &self,
         context: CapabilityInvocationContext,
         request: AutomationCapabilityRequest,
-    ) -> CapabilityFuture<'a> {
-        Box::pin(async move { invoke_capability(self, context, request) })
+        control: &CapabilityControl,
+    ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
+        invoke_capability(self, context, request, control)
     }
 }
 
@@ -52,7 +48,11 @@ fn invoke_capability(
     application: &ApplicationState,
     context: CapabilityInvocationContext,
     request: AutomationCapabilityRequest,
+    control: &CapabilityControl,
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
+    control.check()?;
+    let read_only =
+        request.capability_id().descriptor().effect == yss_automation_contract::ToolEffect::Inspect;
     request
         .validate()
         .map_err(|error| invalid_request(request.capability_id(), error))?;
@@ -63,7 +63,8 @@ fn invoke_capability(
 
     let result = match request {
         AutomationCapabilityRequest::InspectGraph(request) => {
-            inspect_graph(&captured, request).map(AutomationCapabilityResult::GraphInspection)
+            graph::inspect_saved_graph(application, &captured, request)
+                .map(AutomationCapabilityResult::GraphInspection)
         }
         AutomationCapabilityRequest::SearchNodeCatalog(request) => {
             search_node_catalog(application, &captured, request)
@@ -74,20 +75,37 @@ fn invoke_capability(
                 .map(AutomationCapabilityResult::DatasetSchemaInspection)
         }
         AutomationCapabilityRequest::InspectDatasetProfile(request) => {
-            inspect_dataset_profile(&captured, request)
+            inspect_dataset_profile(&captured, request, control)
                 .map(AutomationCapabilityResult::DatasetProfileInspection)
         }
         AutomationCapabilityRequest::InspectResult(request) => {
-            inspect_result(&captured, request).map(AutomationCapabilityResult::ResultInspection)
+            inspect_result(application, &captured, request, control)
+                .map(AutomationCapabilityResult::ResultInspection)
         }
         AutomationCapabilityRequest::InspectProject(request) => {
             inspect_project(&captured, request).map(AutomationCapabilityResult::ProjectInspection)
         }
+        AutomationCapabilityRequest::ListGraphResults(request) => {
+            graph::list_graph_results(&captured, request.graph_path)
+                .map(AutomationCapabilityResult::GraphResults)
+        }
+        AutomationCapabilityRequest::CompileGraph(_)
+        | AutomationCapabilityRequest::ExecuteGraph(_)
+        | AutomationCapabilityRequest::SaveGraph(_) => Err(CapabilityFailure::new(
+            CapabilityFailureCode::GraphClientUnavailable,
+        )),
         AutomationCapabilityRequest::ApplyGraphEdit(request) => {
-            apply_graph_edit(application, &captured, &context, request)
-                .map(AutomationCapabilityResult::GraphEditReceipt)
+            let _ = request;
+            Err(CapabilityFailure::new(
+                CapabilityFailureCode::GraphClientUnavailable,
+            ))
         }
     }?;
+
+    // A committed mutation receipt must not be replaced by a late cancellation or timeout.
+    if read_only {
+        control.check()?;
+    }
 
     application
         .revalidate_captured_session(&captured)
@@ -108,212 +126,6 @@ fn ensure_project_binding(
         ));
     }
     Ok(())
-}
-
-fn apply_graph_edit(
-    application: &ApplicationState,
-    captured: &Arc<ApplicationSession>,
-    context: &CapabilityInvocationContext,
-    request: ApplyGraphEditRequest,
-) -> Result<GraphEditReceipt, CapabilityFailure> {
-    if context.approval_grant_id().is_none() {
-        return Err(CapabilityFailure::new(
-            CapabilityFailureCode::ApprovalRequired,
-        ));
-    }
-    let graph_path = GraphResourcePath::new(&request.graph_path).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
-            .with_detail("field", "graphPath")
-    })?;
-    let localized = localized_node_catalog_in_session(
-        application,
-        captured,
-        LocalizedCatalogRequest::new(
-            captured.project_instance_id().clone(),
-            request.locale.clone(),
-        ),
-    )
-    .map_err(map_catalog_error)?
-    .into_transport_parts()
-    .into_fields()
-    .3;
-    let catalog = build_catalog_mutation_validation_snapshot(captured).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
-            .with_detail("graphPath", graph_path.as_str())
-    })?;
-    let operation_id = OperationId::new();
-    let capture = captured
-        .project()
-        .capture_graph_operation(
-            captured.project_instance_id(),
-            &graph_path,
-            ResourceRevision::new(request.base_revision),
-            operation_id,
-        )
-        .map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
-                .with_detail("graphPath", graph_path.as_str())
-                .with_detail("baseRevision", request.base_revision.to_string())
-        })?;
-    let original = capture.document.as_ref().clone();
-    let resolution = crate::resource_mutation::DraftResolutionContext::capture(captured, &original)
-        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::MutationRejected))?;
-    let mut staged = original.clone();
-    let mut combined_operations = Vec::new();
-    for operation in request.operations {
-        let mutation = editor_mutation(operation, &localized.items)?;
-        let analysis = resolution.resolve(captured, &graph_path, &staged, &request.locale);
-        let patch = captured
-            .graph()
-            .plan_editor_mutation(
-                &graph_path,
-                &staged,
-                mutation,
-                &catalog,
-                analysis.semantic_snapshot(),
-            )
-            .map_err(|_| {
-                CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
-                    .with_detail("graphPath", graph_path.as_str())
-            })?;
-        apply_graph_document_patch(&mut staged, &patch).map_err(|_| {
-            CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
-                .with_detail("graphPath", graph_path.as_str())
-        })?;
-        combined_operations.extend(patch.operations);
-    }
-    resolution
-        .revalidate(captured)
-        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::RevisionConflict))?;
-    let combined = GraphDocumentPatch::new(combined_operations);
-    if combined.is_empty() {
-        return Err(CapabilityFailure::new(
-            CapabilityFailureCode::MutationRejected,
-        ));
-    }
-    let mut candidate = original;
-    apply_graph_document_patch(&mut candidate, &combined).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
-            .with_detail("graphPath", graph_path.as_str())
-    })?;
-    let receipt =
-        commit_captured_graph_candidate(application, captured, capture, Arc::new(candidate))
-            .map_err(|_| {
-                CapabilityFailure::new(CapabilityFailureCode::RevisionConflict)
-                    .with_detail("graphPath", graph_path.as_str())
-            })?;
-    Ok(GraphEditReceipt {
-        graph_path: graph_path.into_string(),
-        from_revision: receipt.from_revision.get(),
-        to_revision: receipt.to_revision.get(),
-        operation_id: receipt.operation_id.to_string(),
-        client_key: request.client_key,
-    })
-}
-
-fn editor_mutation(
-    operation: GraphEditOperation,
-    catalog: &[LocalizedCatalogItem],
-) -> Result<EditorGraphMutation, CapabilityFailure> {
-    match operation {
-        GraphEditOperation::CreateNode {
-            node_type_id,
-            resource_path,
-            x,
-            y,
-            user_label,
-        } => {
-            let descriptor = catalog
-                .iter()
-                .find(|item| {
-                    item.node_type_id.as_ref() == node_type_id
-                        && item.resource_path.as_ref().map(|path| path.as_str())
-                            == resource_path.as_deref()
-                })
-                .map(|item| item.creation.clone())
-                .ok_or_else(|| {
-                    CapabilityFailure::new(CapabilityFailureCode::MutationRejected)
-                        .with_detail("nodeTypeId", node_type_id)
-                })?;
-            Ok(EditorGraphMutation::CreateNode {
-                descriptor,
-                position: NodePosition { x, y },
-                user_label,
-                connect_from: None,
-            })
-        }
-        GraphEditOperation::MoveNodes { positions } => Ok(EditorGraphMutation::MoveNodes {
-            positions: positions
-                .into_iter()
-                .map(|position| {
-                    Ok(NodePositionMutation {
-                        node_id: parse_node_id(&position.node_id)?,
-                        position: NodePosition {
-                            x: position.x,
-                            y: position.y,
-                        },
-                    })
-                })
-                .collect::<Result<Vec<_>, CapabilityFailure>>()?,
-        }),
-        GraphEditOperation::DeleteNodes { node_ids } => Ok(EditorGraphMutation::DeleteNodes {
-            node_ids: node_ids
-                .iter()
-                .map(|node_id| parse_node_id(node_id))
-                .collect::<Result<Vec<_>, _>>()?,
-        }),
-        GraphEditOperation::Connect {
-            output,
-            input,
-            order,
-        } => Ok(EditorGraphMutation::Connect {
-            output: parse_edit_port(output)?,
-            input: parse_edit_port(input)?,
-            order: order.map(OrderKey::new),
-        }),
-        GraphEditOperation::DisconnectConnections { connection_ids } => {
-            Ok(EditorGraphMutation::DisconnectConnections {
-                connection_ids: connection_ids
-                    .iter()
-                    .map(|id| {
-                        uuid::Uuid::parse_str(id)
-                            .map(ConnectionId::from_uuid)
-                            .map_err(|_| invalid_edit_identity("connectionId"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-            })
-        }
-    }
-}
-
-fn parse_node_id(value: &str) -> Result<NodeId, CapabilityFailure> {
-    uuid::Uuid::parse_str(value)
-        .map(NodeId::from_uuid)
-        .map_err(|_| invalid_edit_identity("nodeId"))
-}
-
-fn parse_edit_port(value: GraphEditPortRef) -> Result<PortAddress, CapabilityFailure> {
-    match value {
-        GraphEditPortRef::Declared { node_id, port_key } => Ok(PortAddress::declared(
-            parse_node_id(&node_id)?,
-            PortKey::new(port_key).map_err(|_| invalid_edit_identity("portKey"))?,
-        )),
-        GraphEditPortRef::Instance {
-            node_id,
-            template_key,
-            instance_id,
-        } => Ok(PortAddress::instance(
-            parse_node_id(&node_id)?,
-            PortKey::new(template_key).map_err(|_| invalid_edit_identity("templateKey"))?,
-            uuid::Uuid::parse_str(&instance_id)
-                .map(PortInstanceId::from_uuid)
-                .map_err(|_| invalid_edit_identity("instanceId"))?,
-        )),
-    }
-}
-
-fn invalid_edit_identity(field: &'static str) -> CapabilityFailure {
-    CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
 }
 
 fn inspect_project(
@@ -371,59 +183,6 @@ fn inspect_project(
     })
 }
 
-fn inspect_graph(
-    captured: &ApplicationSession,
-    request: InspectGraphRequest,
-) -> Result<GraphInspection, CapabilityFailure> {
-    let graph_path = GraphResourcePath::new(&request.graph_path).map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::InvalidRequest)
-            .with_detail("field", "graphPath")
-    })?;
-    let project = captured.project().get_data().map_err(|_| {
-        CapabilityFailure::new(CapabilityFailureCode::GraphUnavailable)
-            .with_detail("graphPath", graph_path.as_str())
-    })?;
-    let graph = project.graphs.get(&graph_path).ok_or_else(|| {
-        CapabilityFailure::new(CapabilityFailureCode::GraphUnavailable)
-            .with_detail("graphPath", graph_path.as_str())
-    })?;
-    let result_count = graph
-        .document
-        .nodes
-        .len()
-        .saturating_add(graph.document.connections.len());
-    enforce_result_bound(CapabilityId::InspectGraph, result_count)?;
-
-    let nodes = graph
-        .document
-        .nodes
-        .values()
-        .map(|node| GraphNodeInspection {
-            node_id: node.id.to_string(),
-            node_type_id: node.node_type.as_str().to_owned(),
-            user_label: node.user_label.clone(),
-            x: node.position.x,
-            y: node.position.y,
-        })
-        .collect();
-    let connections = graph
-        .document
-        .connections
-        .values()
-        .map(|connection| GraphConnectionInspection {
-            connection_id: connection.id.to_string(),
-            output: inspect_port(&connection.output),
-            input: inspect_port(&connection.input),
-        })
-        .collect();
-
-    Ok(GraphInspection {
-        graph_path: graph_path.into_string(),
-        nodes,
-        connections,
-    })
-}
-
 fn inspect_port(address: &PortAddress) -> GraphPortInspection {
     match &address.port {
         PortRef::Declared { key } => GraphPortInspection::Declared {
@@ -460,34 +219,43 @@ fn search_node_catalog(
     let mut matches = catalog
         .items
         .iter()
-        .filter(|item| catalog_item_matches(item, &normalized_query))
-        .map(|item| NodeCatalogMatch {
-            node_type_id: item.node_type_id.to_string(),
-            title: item.title.to_string(),
-            category_id: item.category_id.to_string(),
-            style_id: item.style_id.to_string(),
-            resource_path: item
-                .resource_path
-                .as_ref()
-                .map(|path| path.as_str().to_owned()),
+        .filter_map(|item| {
+            let score = catalog_item_score(item, &normalized_query);
+            (score > 0).then_some((score, item))
+        })
+        .map(|(score, item)| {
+            (
+                score,
+                NodeCatalogMatch {
+                    node_type_id: item.node_type_id.to_string(),
+                    title: item.title.to_string(),
+                    category_id: item.category_id.to_string(),
+                    style_id: item.style_id.to_string(),
+                    resource_path: item
+                        .resource_path
+                        .as_ref()
+                        .map(|path| path.as_str().to_owned()),
+                },
+            )
         })
         .collect::<Vec<_>>();
-    matches.sort_by(|left, right| {
-        left.title
-            .cmp(&right.title)
+    matches.sort_by(|(left_score, left), (right_score, right)| {
+        right_score
+            .cmp(left_score)
+            .then_with(|| left.title.cmp(&right.title))
             .then_with(|| left.node_type_id.cmp(&right.node_type_id))
     });
     matches.truncate(usize::from(request.limit));
 
     Ok(NodeCatalogSearchResult {
         locale: catalog.locale.into_string(),
-        matches,
+        matches: matches.into_iter().map(|(_, item)| item).collect(),
     })
 }
 
-fn catalog_item_matches(item: &LocalizedCatalogItem, normalized_query: &str) -> bool {
-    if normalized_query.is_empty() {
-        return true;
+fn catalog_item_score(item: &LocalizedCatalogItem, normalized_query: &str) -> usize {
+    if normalized_query.trim().is_empty() {
+        return 1;
     }
     let fixed_fields = [
         item.node_type_id.as_ref(),
@@ -495,13 +263,26 @@ fn catalog_item_matches(item: &LocalizedCatalogItem, normalized_query: &str) -> 
         item.category_id.as_ref(),
         item.style_id.as_ref(),
     ];
-    fixed_fields
+    let fields = fixed_fields
         .into_iter()
         .chain(item.aliases.iter().map(AsRef::as_ref))
         .chain(item.technical_terms.iter().map(AsRef::as_ref))
         .chain(item.backend_search_text.iter().map(AsRef::as_ref))
         .chain(item.resource_names.iter().map(AsRef::as_ref))
-        .any(|value| value.to_lowercase().contains(normalized_query))
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>();
+    let exact = usize::from(
+        fields
+            .iter()
+            .any(|value| value.contains(normalized_query.trim())),
+    ) * 100;
+    let tokens = normalized_query
+        .split(|c: char| c.is_whitespace() || matches!(c, '.' | '_' | '-' | '/' | ',' | '|'))
+        .filter(|token| !token.is_empty());
+    exact
+        + tokens
+            .filter(|token| fields.iter().any(|value| value.contains(token)))
+            .count()
 }
 
 fn inspect_dataset_schema(
@@ -556,6 +337,7 @@ fn inspect_dataset_schema(
 fn inspect_dataset_profile(
     captured: &ApplicationSession,
     request: InspectDatasetProfileRequest,
+    control: &CapabilityControl,
 ) -> Result<DatasetProfileInspection, CapabilityFailure> {
     let project = captured.project().get_data().map_err(|_| {
         CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
@@ -579,14 +361,20 @@ fn inspect_dataset_profile(
             CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
                 .with_detail("databaseId", &request.database_id)
         })?;
-    let overview = yss_database_runtime::session_api::dataset_overview(
+    let overview = yss_database_runtime::session_api::dataset_overview_with_control(
         captured.database(),
         DatabaseId::from_existing(request.database_id.clone().into_boxed_str()),
+        &yss_relational_contract::RelationControl {
+            cancellation: control.cancellation_flag(),
+            deadline: control.deadline(),
+            max_input_bytes: 16 * 1024 * 1024,
+        },
     )
     .map_err(|_| {
         CapabilityFailure::new(CapabilityFailureCode::DatabaseUnavailable)
             .with_detail("databaseId", &request.database_id)
     })?;
+    control.check()?;
     let inspection = DatasetProfileInspection {
         database_id: request.database_id.clone(),
         runtime_revision: schema.runtime_revision().get(),
@@ -613,8 +401,10 @@ fn inspect_dataset_profile(
 }
 
 fn inspect_result(
+    application: &ApplicationState,
     captured: &ApplicationSession,
     request: InspectResultRequest,
+    control: &CapabilityControl,
 ) -> Result<ResultInspection, CapabilityFailure> {
     let result = captured
         .execution()
@@ -626,7 +416,56 @@ fn inspect_result(
     let mut budget = ResultProjectionBudget {
         remaining: usize::from(CapabilityId::InspectResult.descriptor().maximum_results),
     };
-    let value = inspect_stored_result(result.value(), &mut budget)?;
+    let value = if matches!(
+        result.value().value(),
+        StoredResult::Runtime(RuntimeValue::Relation(_) | RuntimeValue::Series(_))
+    ) {
+        let page = application
+            .query_result_page_with_control(
+                ResultId::from_existing(request.result_id),
+                request.offset,
+                usize::from(request.limit),
+                &yss_relational_contract::RelationControl {
+                    cancellation: control.cancellation_flag(),
+                    deadline: control.deadline(),
+                    max_input_bytes: 1024 * 1024,
+                },
+            )
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
+            .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?;
+        let count = page
+            .values
+            .len()
+            .min(budget.remaining / (page.columns.len().max(1) + 1));
+        if count == 0 && !page.values.is_empty() {
+            return Err(CapabilityFailure::new(
+                CapabilityFailureCode::ResultTooLarge,
+            ));
+        }
+        let rows = page
+            .values
+            .iter()
+            .take(count)
+            .map(|row| inspect_runtime_value(row, 0, &mut budget))
+            .collect::<Result<_, _>>()?;
+        ResultValueInspection::Table {
+            columns: page
+                .columns
+                .iter()
+                .map(|column| column.name.to_string())
+                .collect(),
+            column_types: page
+                .columns
+                .iter()
+                .map(|column| column.data_type.to_string())
+                .collect(),
+            rows,
+            next_offset: request.offset + count,
+            has_more: page.has_more || count < page.values.len(),
+        }
+    } else {
+        inspect_stored_result(result.value(), &mut budget)?
+    };
     Ok(ResultInspection {
         result_id: request.result_id,
         category: inspect_result_category(result.value().category()),
@@ -854,7 +693,11 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 
 #[cfg(test)]
 mod tests {
+    use super::graph::editor_mutation;
     use super::*;
+    use yss_automation_contract::GraphEditOperation;
+    use yss_graph_document::{NodeId, NodePosition};
+    use yss_graph_editor::EditorGraphMutation;
 
     #[test]
     fn result_bounds_fail_closed_at_the_contract_descriptor_limit() {

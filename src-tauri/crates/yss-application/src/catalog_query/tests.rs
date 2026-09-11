@@ -261,10 +261,17 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
         "compatible-draft-source",
         GraphRuntimeTestControl::default(),
     );
+    let mut document = compatible_draft(source_node);
+    document
+        .nodes
+        .get_mut(&source_node)
+        .unwrap()
+        .parameters
+        .insert("aaa".parse().unwrap(), serde_json::json!("databases/wrong"));
     let request = CompatibleCatalogRequest::new(
         session.session.project_instance_id().clone(),
         graph_path,
-        compatible_draft(source_node),
+        document,
         PortAddress::declared(source_node, PortKey::new("value").unwrap()),
         "en-US",
     );
@@ -282,6 +289,204 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
 
     assert!(ids.contains("yssbi.numeric.add"));
     assert!(!ids.contains("yssbi.logic.not"));
+}
+
+#[test]
+fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_a_connection() {
+    use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::{ConnectionId, DocumentConnection};
+
+    let graph = GraphResourcePath::new("events/Columns.yssbi-event").unwrap();
+    let session = staged_session(
+        compatible_project(&graph),
+        "compatible-derived",
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = session.session.project_instance_id().clone();
+    let source = NodeId::new();
+    let decompose = NodeId::new();
+    let mut document = compatible_draft(source);
+    set_constant(
+        &mut document,
+        source,
+        DataType::DataFrame,
+        DataValue::DataFrame(r#"{"amount":[1.5,2.5],"label":["a","b"]}"#.into()),
+    );
+    yss_graph_document::normalize_constant_value(document.constants.values_mut().next().unwrap())
+        .unwrap();
+    document.nodes.insert(
+        decompose,
+        DocumentNode {
+            id: decompose,
+            node_type: "yssbi.dataframe.decompose".parse().unwrap(),
+            position: NodePosition { x: 200., y: 0. },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: PortAddress::declared(decompose, "dataframe".parse().unwrap()),
+            order: None,
+        },
+    );
+    let projection = session
+        .application
+        .resolve_graph_draft(
+            instance.clone(),
+            graph.clone(),
+            document.clone(),
+            "en-US".into(),
+        )
+        .unwrap();
+    let node = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == decompose)
+        .unwrap();
+    let column = |name: &str| {
+        node.ports
+            .iter()
+            .find(|port| port.display.label.as_ref() == name)
+            .unwrap()
+            .address
+            .clone()
+    };
+    let amount = column("amount");
+    let before = document.clone();
+    for (output, numeric) in [(amount.clone(), true), (column("label"), false)] {
+        let catalog = session
+            .application
+            .compatible_node_catalog(CompatibleCatalogRequest::new(
+                instance.clone(),
+                graph.clone(),
+                document.clone(),
+                output,
+                "en-US",
+            ))
+            .expect("unclaimed column pins must query compatible nodes");
+        assert_eq!(
+            catalog
+                .catalog
+                .items
+                .iter()
+                .any(|item| item.node_type_id.as_ref()
+                    == "yssbi.dataframe.series.inverse_standardize"),
+            numeric
+        );
+        assert!(
+            !catalog
+                .catalog
+                .items
+                .iter()
+                .any(|item| item.node_type_id.as_ref() == "yssbi.logic.not")
+        );
+    }
+    assert_eq!(document, before);
+    assert!(document.port_bindings.is_empty());
+    let catalog = session
+        .application
+        .compatible_node_catalog(CompatibleCatalogRequest::new(
+            instance.clone(),
+            graph.clone(),
+            document.clone(),
+            amount.clone(),
+            "en-US",
+        ))
+        .unwrap();
+    let descriptor = catalog
+        .catalog
+        .items
+        .iter()
+        .find(|item| item.node_type_id.as_ref() == "yssbi.debug.view")
+        .unwrap()
+        .creation
+        .clone();
+    let updated = session
+        .application
+        .transform_graph_draft(
+            instance.clone(),
+            graph.clone(),
+            "en-US".into(),
+            document,
+            yss_graph_editor::EditorGraphMutation::CreateNode {
+                descriptor: descriptor.clone(),
+                position: NodePosition { x: 400., y: 0. },
+                user_label: None,
+                connect_from: Some(amount.clone()),
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.document.port_bindings.len(), 1);
+    assert!(updated.document.port_bindings.contains_key(&amount));
+    assert!(
+        updated
+            .document
+            .connections
+            .values()
+            .any(|connection| connection.output == amount)
+    );
+    let first_connections = updated.document.connections.clone();
+    let updated = session
+        .application
+        .transform_graph_draft(
+            instance.clone(),
+            graph.clone(),
+            "en-US".into(),
+            updated.document,
+            yss_graph_editor::EditorGraphMutation::CreateNode {
+                descriptor,
+                position: NodePosition { x: 400., y: 200. },
+                user_label: None,
+                connect_from: Some(amount.clone()),
+            },
+        )
+        .unwrap();
+    assert_eq!(updated.document.port_bindings.len(), 1);
+    assert_eq!(
+        updated.document.connections.len(),
+        first_connections.len() + 1
+    );
+    for (id, connection) in first_connections {
+        assert_eq!(updated.document.connections.get(&id), Some(&connection));
+    }
+    let port = updated
+        .projection_replacement
+        .projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == decompose)
+        .unwrap()
+        .ports
+        .iter()
+        .find(|port| port.address == amount)
+        .unwrap();
+    assert_eq!(port.connections.current, 2);
+    assert_eq!(port.connections.maximum, None);
+    assert!(port.connections.can_append);
+    assert!(!port.connections.can_replace);
+    let mut stale = updated.document;
+    let constant = stale.constants.values_mut().next().unwrap();
+    let yss_data_contract::DataValue::DataFrame(_) = constant.data_value else {
+        panic!("dataframe literal");
+    };
+    constant.tabular = None;
+    constant.data_value = DataValue::DataFrame(r#"{"label":["a","b"]}"#.into());
+    yss_graph_document::normalize_constant_value(constant).unwrap();
+    let error = session
+        .application
+        .compatible_node_catalog(CompatibleCatalogRequest::new(
+            instance, graph, stale, amount, "en-US",
+        ))
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        CatalogQueryApplicationError::Graph(GraphCatalogQueryError::CompatibleSourceInvalid)
+    ));
 }
 
 #[test]

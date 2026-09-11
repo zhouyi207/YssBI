@@ -4,7 +4,12 @@ export type HarnessCapabilityId =
   | "inspect_dataset_schema"
   | "inspect_dataset_profile"
   | "inspect_result"
-  | "inspect_project";
+  | "inspect_project"
+  | "apply_graph_edit"
+  | "compile_graph"
+  | "execute_graph"
+  | "save_graph"
+  | "list_graph_results";
 
 export type WorkflowRunState =
   | "planned"
@@ -63,6 +68,10 @@ export type HarnessEvent = Readonly<{
     | Readonly<{
         type: "tool_invocation_started" | "tool_invocation_completed";
         payload: { invocationId: string; capabilityId: HarnessCapabilityId };
+      }>
+    | Readonly<{
+        type: "tool_invocation_failed";
+        payload: { invocationId: string; capabilityId: HarnessCapabilityId; failureCode: string };
       }>
     | Readonly<{ type: "turn_completed"; payload: { finalText: string } }>
     | Readonly<{ type: "knowledge_cited"; payload: { citation: HarnessKnowledgeCitation } }>
@@ -125,6 +134,11 @@ const CAPABILITY_IDS = new Set<HarnessCapabilityId>([
   "inspect_dataset_profile",
   "inspect_result",
   "inspect_project",
+  "apply_graph_edit",
+  "compile_graph",
+  "execute_graph",
+  "save_graph",
+  "list_graph_results",
 ]);
 
 const WORKFLOW_STATES = new Set<WorkflowRunState>([
@@ -315,6 +329,13 @@ export function parseHarnessEvent(value: unknown): HarnessEvent {
     const capabilityId = capability(eventPayload.capabilityId);
     if (invocationId && capabilityId) {
       return { ...base, type, payload: { invocationId, capabilityId } };
+    }
+  } else if (type === "tool_invocation_failed") {
+    const invocationId = stringField(eventPayload, "invocationId");
+    const capabilityId = capability(eventPayload.capabilityId);
+    const failureCode = stringField(eventPayload, "failureCode");
+    if (invocationId && capabilityId && failureCode) {
+      return { ...base, type, payload: { invocationId, capabilityId, failureCode } };
     }
   } else if (type === "turn_completed") {
     const finalText = eventPayload.finalText;

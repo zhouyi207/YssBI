@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use yss_automation_contract::{
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalPolicy, ApprovalStorePort,
-    AutomationCapabilityRequest, AutomationIdKind, ClockPort, HarnessSessionId, IdGeneratorPort,
-    PersistenceFailure, PrincipalId, ProjectSessionBinding, SourceHash,
+    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
+    AutomationIdKind, ClockPort, HarnessSessionId, IdGeneratorPort, PersistenceFailure,
+    PrincipalId, ProjectSessionBinding, SourceHash,
 };
 
 pub struct ApprovalService {
@@ -32,7 +32,9 @@ impl ApprovalService {
         request
             .validate()
             .map_err(|_| ApprovalError::InvalidRequest)?;
-        if request.capability_id().descriptor().approval != ApprovalPolicy::Required {
+        if request.capability_id().descriptor().effect
+            != yss_automation_contract::ToolEffect::Mutate
+        {
             return Err(ApprovalError::NotRequired);
         }
         if ttl_ms == 0 || ttl_ms > 10 * 60 * 1_000 {
@@ -146,6 +148,7 @@ mod tests {
             ProjectSessionId::new("project-session-1"),
         );
         let request = AutomationCapabilityRequest::ApplyGraphEdit(ApplyGraphEditRequest {
+            graph_hash: "0".repeat(64),
             graph_path: "events/Main.yssbi-event".to_owned(),
             base_revision: 1,
             client_key: "assistant-edit-1".to_owned(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EditorGraphMutationDto } from "./editorMutation";
 import {
+  parseCompileGraphDraftDto,
   parseEditorGraphMutationDto,
   parseGraphDraftTransformDto,
   parseGraphProjectionReplacementDto,
@@ -129,6 +130,46 @@ function functionEditorProjection(revision = 5) {
 }
 
 describe("editor mutation wire parser", () => {
+  it("requires compile outcomes to agree with kernel availability diagnostics", () => {
+    const ready = {
+      type: "ready",
+      artifactId: "a".repeat(64),
+      cacheHit: false,
+      projection: projection(graphPath),
+    };
+    expect(parseCompileGraphDraftDto(ready)).toEqual(ready);
+
+    const blocked = {
+      type: "blocked",
+      projection: {
+        ...projection(graphPath),
+        outcome: { type: "analysisBlocked" },
+        hasBlockingDiagnostics: true,
+        diagnostics: [
+          {
+            code: "compiler.node.kernel_unavailable",
+            messageKey: "diagnostics.compiler.node.kernel_unavailable",
+            arguments: { node_type: "yssbi.dataframe.decompose" },
+            severity: "error",
+            blocking: true,
+            location: { kind: "node", nodeId },
+            related: [],
+          },
+        ],
+      },
+    };
+    expect(parseCompileGraphDraftDto(blocked)).toEqual(blocked);
+    expect(() =>
+      parseCompileGraphDraftDto({
+        ...blocked,
+        projection: { ...blocked.projection, outcome: { type: "success" } },
+      }),
+    ).toThrow("Graph draft compilation result is malformed");
+    expect(() => parseCompileGraphDraftDto({ ...ready, projection: blocked.projection })).toThrow(
+      "Graph draft compilation outcome is malformed",
+    );
+  });
+
   it("parses the atomic Graph draft transform result", () => {
     const transformed = {
       changed: true,

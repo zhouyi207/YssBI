@@ -108,6 +108,7 @@ impl CapabilityGatewayPort for RejectingCapabilityGateway {
         &'a self,
         _context: CapabilityInvocationContext,
         _request: yss_automation_contract::AutomationCapabilityRequest,
+        _control: yss_automation_contract::CapabilityControl,
     ) -> CapabilityFuture<'a> {
         Box::pin(async {
             Err(CapabilityFailure::new(
@@ -145,6 +146,7 @@ impl CapabilityGatewayPort for StaticCapabilityGateway {
         &'a self,
         _context: CapabilityInvocationContext,
         request: yss_automation_contract::AutomationCapabilityRequest,
+        _control: yss_automation_contract::CapabilityControl,
     ) -> CapabilityFuture<'a> {
         Box::pin(async move {
             self.results
@@ -184,6 +186,16 @@ struct InMemoryState {
 }
 
 impl InMemoryHarnessStore {
+    pub fn tool_invocations(&self) -> Vec<ToolInvocationRecord> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .invocations
+            .values()
+            .cloned()
+            .collect()
+    }
+
     pub fn published_events(&self) -> Vec<HarnessEventEnvelope> {
         self.state
             .lock()
@@ -194,6 +206,49 @@ impl InMemoryHarnessStore {
 }
 
 impl HarnessSessionStorePort for InMemoryHarnessStore {
+    fn recent_completed_turns<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+        limit: usize,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            let mut turns = state
+                .turns
+                .values()
+                .filter(|turn| {
+                    &turn.session_id == session_id
+                        && turn.state == yss_automation_contract::HarnessTurnState::Completed
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            turns.sort_by_key(|turn| turn.started_at);
+            Ok(turns
+                .into_iter()
+                .rev()
+                .take(limit)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect())
+        })
+    }
+    fn load_running_turns<'a>(
+        &'a self,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        Box::pin(async {
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .turns
+                .values()
+                .filter(|record| record.state == yss_automation_contract::HarnessTurnState::Running)
+                .cloned()
+                .collect())
+        })
+    }
+
     fn create_session<'a>(
         &'a self,
         record: &'a HarnessSessionRecord,
@@ -469,6 +524,24 @@ impl WorkflowStorePort for InMemoryHarnessStore {
 }
 
 impl ToolInvocationLedgerPort for InMemoryHarnessStore {
+    fn load_running_invocations<'a>(
+        &'a self,
+    ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>> {
+        Box::pin(async {
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .invocations
+                .values()
+                .filter(|record| {
+                    record.state == yss_automation_contract::ToolInvocationState::Running
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn begin<'a>(
         &'a self,
         record: &'a ToolInvocationRecord,

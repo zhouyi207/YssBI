@@ -22,6 +22,7 @@ pub(crate) struct DerivedSchemaPortMember {
     pub locator: DynamicMemberLocator,
     pub label: Box<str>,
     pub value_type: TypeExpr,
+    pub schema: ResolvedSchemaFact,
 }
 
 pub(crate) fn resolve_graph_schemas(
@@ -156,6 +157,16 @@ pub(crate) fn derived_schema_port_members(
                 },
                 label: field.name.0.clone(),
                 value_type: field_series_type(field.scalar_type),
+                schema: ResolvedSchemaFact {
+                    expression: SchemaExpr::Project {
+                        input: Box::new(SchemaExpr::Input(
+                            PortKey::new(DATAFRAME_INPUT_PORT)
+                                .expect("built-in dataframe input key is valid"),
+                        )),
+                        columns: ColumnSelectionExpr::Explicit(vec![field.name.clone()]),
+                    },
+                    fields: vec![field.clone()],
+                },
             }
         })
         .collect()

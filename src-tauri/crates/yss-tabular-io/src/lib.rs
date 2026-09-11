@@ -9,7 +9,7 @@ use std::io::Seek;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow::datatypes::{Schema, SchemaRef};
+use arrow::datatypes::{DataType, Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow::ipc::{
     MetadataVersion,
@@ -321,7 +321,7 @@ pub struct ParquetBatchWriter {
 
 impl ParquetBatchWriter {
     pub fn new(file: File, schema: SchemaRef) -> Result<Self, TabularIoError> {
-        let properties = parquet::file::properties::WriterProperties::builder()
+        let mut properties = parquet::file::properties::WriterProperties::builder()
             .set_compression(parquet::basic::Compression::ZSTD(Default::default()))
             .set_key_value_metadata(Some(
                 schema
@@ -332,10 +332,19 @@ impl ParquetBatchWriter {
                     })
                     .collect(),
             ))
-            .set_max_row_group_row_count(Some(50_000))
-            .build();
-        let writer =
-            ArrowWriter::try_new(file, schema, Some(properties)).map_err(parquet_write_error)?;
+            .set_max_row_group_row_count(Some(50_000));
+        // Continuous floating-point columns rarely benefit from a dictionary. Small row
+        // groups can keep rebuilding one without ever reaching Parquet's fallback threshold.
+        for field in schema.fields() {
+            if matches!(field.data_type(), DataType::Float32 | DataType::Float64) {
+                let path = parquet::schema::types::ColumnPath::new(vec![field.name().clone()]);
+                properties = properties
+                    .set_column_dictionary_enabled(path.clone(), false)
+                    .set_column_encoding(path, parquet::basic::Encoding::BYTE_STREAM_SPLIT);
+            }
+        }
+        let writer = ArrowWriter::try_new(file, schema, Some(properties.build()))
+            .map_err(parquet_write_error)?;
         Ok(Self { writer })
     }
     pub fn write(&mut self, batch: &RecordBatch) -> Result<(), TabularIoError> {

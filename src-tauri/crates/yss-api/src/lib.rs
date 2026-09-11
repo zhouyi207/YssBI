@@ -7,7 +7,9 @@ mod event;
 mod schema;
 
 pub use activity_panel_sync::ActivityPanelSyncState;
-pub use commands::{HarnessChannelHub, HarnessRuntimeState};
+pub use commands::{
+    ApplicationCapabilityGateway, HarnessChannelHub, HarnessGraphClientHub, HarnessRuntimeState,
+};
 
 /// Builds the single invoke handler consumed by the root composition crate.
 pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
@@ -100,6 +102,11 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_harness_runtime_status,
         configure_harness_provider,
         create_harness_session,
+        subscribe_harness_graph_tools,
+        unsubscribe_harness_graph_tools,
+        prepare_harness_graph_tool,
+        complete_harness_graph_tool,
+        claim_harness_graph_tool,
         subscribe_harness_events,
         unsubscribe_harness_events,
         submit_harness_turn,

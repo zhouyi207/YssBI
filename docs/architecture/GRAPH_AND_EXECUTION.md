@@ -52,6 +52,10 @@ capture active Project session and coherent resource facts
 
 Open、Hydrate、Transform、Save、Compile 共用 Runtime Resolve。只读 `resolve_graph_draft` command 还用于 dirty Draft 的资源刷新及 undo/redo 目标验证；它不保存文件、不 claim 端口、不改变 Draft。
 
+从 Pin 打开的兼容节点目录也对当前 Draft 调用同一 Resolve。Runtime 从 semantic snapshot 验证源端口，
+输出端口使用解析后的类型，输入端口使用接受类型域，再交由 Graph Editor 筛选创建候选。
+未引用的派生端口无需先有 document binding；查询不 claim 端口，真正创建连接时才原子登记，orphan 或不存在的端口仍被拒绝。
+
 Mutation 和 history requests 由 frontend application 的同一 Graph FIFO 协调。返回后检查 Project identity、Draft session/generation 和 coordinator epoch；Compile 还检查独立 request ID。关闭重开、Project replacement、后续编辑及新 Compile 都会使旧回调失效，旧失败不能清除新 artifact。
 
 Draft/history/projection 在写入前完成 projection preparation，避免先改 Draft 再发现 projection 无效。`GraphProjectionStore` 单个 Graph bucket 一次替换 topology、端口、顶层 diagnostics、basis、outcome 和 run gate。无效 response 保留原 document/history；不同 Store 的发布仍由 Application 协调。
@@ -72,6 +76,8 @@ GraphEditorSession，使 document 保存基线与 projection 同步；dirty/savi
 函数签名修改由 Rust 同一文件事务持久化后发布，watcher 不会用旧磁盘签名覆盖已提交修改。
 
 没有 Graph Projection background channel、独立 ProblemsStore 或面板自有 subscription。关闭 Problems 不影响 Canvas、Details 或 Run Gate。Dirty Draft 的重新解析只替换解析结果，不覆盖未保存 document。
+
+Assistant 的图操作也进入同一 Graph Draft FIFO。它通过临时工具请求 channel 捕获当前草稿，由 Rust Application 验证 hash/generation 并准备批量变更、编译或执行，前端确认安装既有 projection 后才完成工具。一个编辑批次对应一个正常草稿 undo 条目，不直接修改旧的已保存图；显式 Save 仍按下述独立流程执行。工具通道不构成另一个 Graph Projection authority，详见 [Statistical Harness](STATISTICAL_HARNESS.md)。
 
 ## 4. Semantic resolution
 
@@ -98,6 +104,10 @@ Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识�
 未知但被文档引用的端口以有 canonical address 的 orphan fact 展示，便于定位和断开损坏连接。Template 只表示新增能力。普通连接错误保留在 canonical Problems 中；只有附有阻断连接诊断的错误方向连接才可通过 frontend projection 验证。
 
 Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Workflow。
+
+内置节点的每个数据输出端口允许连接多个下游输入，包括 Decompose 列端口和函数派生输出。
+新增分支保留已有连线；输入端口仍遵循自身容量，替换单连接输入时只移除该输入的旧连线。
+连接数量与动态端口数量是独立约束，同一个输出值由多个消费者共享。
 
 命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 Graph Draft FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
 
@@ -140,6 +150,8 @@ Blocked { type: blocked, projection }
 
 两个分支都不回写 document。未绑定输入、类型/Schema 问题、orphan、cycle、函数语义错误和当前 Execution registry 不支持的 kernel 返回 Blocked；执行能力诊断也进入同一个 semantic snapshot，并在命中编译缓存前检查。API 不把 Blocked 转换成 diagnosed IPC failure，frontend 不为其写执行 error log 或显示 Compile 失败弹窗。内部 resolver/compiler/cache 故障仍使用 incident-linked command rejection。
 
+执行能力检查新增阻断诊断时，同步将完整解析的 snapshot 标为 Incomplete，投影为 `analysisBlocked`；`success` 不得同时携带阻断诊断。已有 InternalFailure 保留原故障信息。
+
 `semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。manifest 记录所用函数签名/正文、变量类型、数据库 Schema 以及 absent lookup；basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
 
 Frontend 区分 `saveDirty` 和 `compileDirty`：只移动布局可保留匹配 artifact；语义输入改变使其失效。请求通过 session/generation/request ID 判定 currentness，不依赖 JSON 字符串比较。保存基线的 document 比较仍是 frontend 自己的 dirty 计算。
@@ -164,12 +176,26 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
 
+加、减、乘、除按已编译 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算，
+仅在编译契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
+已物化的常量数列按位置广播/运算，要求等长并约束输出内存；带关系身份的数列保留固定行域和文件租约，
+通过 DataFusion 原生表达式及 Arrow 批运算执行，不在节点求值时整列 collect。
+原始列和计算数列都由 `SeriesHandle` 持有 adapter-owned 表达式，表达式不进入持久化 Graph 文档。
+同一关系的数列可以连续运算并联合投影，名称重复的计算列按投影位置区分；不同关系或无对齐证明的物化列表
+不能按长度相同与关系数列拼接。Results 分页调用数列表达式投影，不按其显示名回查基表字段。
+标量除零在节点求值时拒绝；数据内的 NULL、除零、非有限值或溢出在批流实际消费时返回类型化错误。
+分页、统计输入消费沿用各自的取消、deadline 和内存边界，不将非法计算值写成正常结果。
+
 OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
-Execution 已注册 DataFrame source/project/filter.rows/series.select/limit/rename kernel。它们组合
+Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
+Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
+Compiler 将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
+也不为每列提前扫描数据；下游统计消费或 Results 分页时才交由 DataFusion 投影和读取。
+文档内已物化的 DataFrame 常量按同一输出契约返回对应列的值列表。
 关系和数列持有固定 session、dataset snapshot/revision、查询上下文及文件租约。资源准备检查句柄内的
-session/revision 与已授权资源一致。OLS 可以接收既有数值列表，或来自同一个关系句柄的数列；后者共同投影、
+session/revision 与已授权资源一致。OLS 可以接收既有数值列表，或来自同一个关系句柄的原始/计算数列；后者共同投影、
 消费异步 Arrow 批流，并使用独立输入内存预算准备数值矩阵。NULL/非有限值仍被拒绝，不隐式逐列删除缺失样本。
 不同关系上的数列不能按长度相同直接拼接。Cluster VCE、WLS 和其他统计模型 kernel 尚未接入。
 

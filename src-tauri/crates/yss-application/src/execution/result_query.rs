@@ -62,11 +62,30 @@ impl ApplicationState {
         offset: usize,
         limit: usize,
     ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
+        self.query_result_page_with_control(
+            result_id,
+            offset,
+            limit,
+            &RelationControl {
+                cancellation: Arc::new(AtomicBool::new(false)),
+                deadline: Instant::now() + Duration::from_secs(30),
+                max_input_bytes: MAX_RESULT_PAGE_BYTES,
+            },
+        )
+    }
+
+    pub fn query_result_page_with_control(
+        &self,
+        result_id: ResultId,
+        offset: usize,
+        limit: usize,
+        control: &RelationControl,
+    ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
         let Some(result) = captured.execution().query_result(result_id) else {
             return Ok(None);
         };
-        let page = project_result_page(result.value(), offset, limit);
+        let page = project_result_page(result.value(), offset, limit, control);
         self.revalidate_captured_session(&captured)
             .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
         // A failed/finished old scan cannot republish a result invalidated while it was reading.
@@ -100,6 +119,7 @@ fn project_result_page(
     result: &StoredResult,
     offset: usize,
     limit: usize,
+    control: &RelationControl,
 ) -> Result<ResultPageProjection, ResultQueryApplicationError> {
     if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
         return Err(ResultQueryApplicationError::InvalidPageRequest);
@@ -107,22 +127,12 @@ fn project_result_page(
     let result = result.value();
     let relation = match result {
         StoredResult::Runtime(RuntimeValue::Relation(relation)) => Some(relation.clone()),
-        StoredResult::Runtime(RuntimeValue::Series(series)) => {
-            Some(series.relation().project(&[series.column().into()])?)
-        }
+        StoredResult::Runtime(RuntimeValue::Series(series)) => Some(series.as_relation()?),
         _ => None,
     };
     let page = if let Some(relation) = relation {
         let page = relation
-            .page(
-                offset,
-                limit,
-                &RelationControl {
-                    cancellation: Arc::new(AtomicBool::new(false)),
-                    deadline: Instant::now() + Duration::from_secs(30),
-                    max_input_bytes: MAX_RESULT_PAGE_BYTES,
-                },
-            )
+            .page(offset, limit, control)
             .map_err(|error| match error {
                 RelationError::MemoryLimitExceeded => ResultQueryApplicationError::PageTooLarge,
                 error => ResultQueryApplicationError::Relation(error),

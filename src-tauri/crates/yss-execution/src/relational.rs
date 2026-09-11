@@ -8,6 +8,39 @@ use yss_relational_contract::{
 use crate::state::{KernelExecutionError, PreparedKernelInvocation, parameter_value};
 use crate::value::RuntimeValue;
 
+pub(crate) fn decompose(
+    invocation: &PreparedKernelInvocation<'_>,
+) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
+    let [input @ (RuntimeValue::Relation(_) | RuntimeValue::Record(_))] = invocation.inputs else {
+        return Err(KernelExecutionError::Failed);
+    };
+    invocation
+        .outputs
+        .iter()
+        .map(|output| {
+            let [field] = output
+                .contract()
+                .schema
+                .as_deref()
+                .ok_or(KernelExecutionError::Failed)?
+            else {
+                return Err(KernelExecutionError::Failed);
+            };
+            let value = match input {
+                RuntimeValue::Relation(relation) => {
+                    RuntimeValue::Series(relation.select_series(&field.name).map_err(kernel_error)?)
+                }
+                RuntimeValue::Record(columns) => match columns.get(&field.name) {
+                    Some(column @ RuntimeValue::List(_)) => column.clone(),
+                    _ => return Err(KernelExecutionError::Failed),
+                },
+                _ => return Err(KernelExecutionError::Failed),
+            };
+            Ok((output.output().clone(), value))
+        })
+        .collect()
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum RelationalKernel {
     Source,
@@ -129,6 +162,8 @@ fn predicate(
     })
 }
 
+pub(crate) const MAX_NUMERIC_INPUT_BYTES: usize = 128 * 1024 * 1024;
+
 pub(crate) fn numeric_columns(
     series: &[SeriesHandle],
     invocation: &PreparedKernelInvocation<'_>,
@@ -143,16 +178,18 @@ pub(crate) fn numeric_columns(
             &RelationControl {
                 cancellation: invocation.control.cancellation.clone(),
                 deadline: invocation.control.deadline,
-                max_input_bytes: 128 * 1024 * 1024,
+                max_input_bytes: MAX_NUMERIC_INPUT_BYTES,
             },
         )
         .map_err(kernel_error)
 }
 
-fn kernel_error(error: RelationError) -> KernelExecutionError {
+pub(crate) fn kernel_error(error: RelationError) -> KernelExecutionError {
     match error {
         RelationError::Cancelled => KernelExecutionError::Cancelled,
         RelationError::DeadlineExceeded => KernelExecutionError::DeadlineExceeded,
+        RelationError::DivisionByZero => KernelExecutionError::DivisionByZero,
+        RelationError::NonFiniteResult => KernelExecutionError::NonFiniteResult,
         RelationError::InvalidInput | RelationError::UnalignedSeries => {
             KernelExecutionError::InvalidNumericInput
         }

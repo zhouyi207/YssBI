@@ -771,6 +771,18 @@ pub fn dataset_overview(
     session: &DatabaseRuntimeSession,
     database: DatabaseId,
 ) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
+    dataset_overview_with_control(
+        session,
+        database,
+        &crate::database_instance::query_control(16 * 1024 * 1024),
+    )
+}
+
+pub fn dataset_overview_with_control(
+    session: &DatabaseRuntimeSession,
+    database: DatabaseId,
+    control: &yss_relational_contract::RelationControl,
+) -> Result<yss_dataset_profile::DatasetOverview, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::Query)?;
     if !runtime_snapshot.revisions.contains_key(&database) {
         return Err(DatabaseError::not_found(
@@ -778,7 +790,7 @@ pub fn dataset_overview(
             Some(database),
         ));
     }
-    session.read_physical_dataset_overview(&database)
+    session.read_physical_dataset_overview(&database, control)
 }
 
 pub fn edit_state(

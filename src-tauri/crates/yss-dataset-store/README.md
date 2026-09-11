@@ -18,6 +18,18 @@ closed and synced before the preparation can be committed. Nothing is entered in
 index during file preparation. Dropping a preparation before attempting a catalog commit removes
 only its own generated directory.
 
+Each managed generation part is ordered by DisplayOrder, then RowId, ascending. Import assigns
+monotonic order keys; compaction and casts stream that same order into their parts. This is the
+ordering guarantee of `DatasetRelationInput`, including existing generations. DataFusion receives
+the per-file order explicitly; file membership order alone is not a global ordering guarantee.
+Small prefixes of one base file without filters or overlays use a single query partition so LIMIT
+can stop the scan without parallel TopK/merge buffers. Other queries retain budgeted parallelism.
+Arbitrary Parquet relations do not acquire the managed-file ordering guarantee.
+
+The shared Parquet writer uses BYTE_STREAM_SPLIT with ZSTD for Float32/Float64 columns and
+disables their Parquet dictionaries. Other column types retain their existing encoding policy;
+Arrow schema metadata and category identities remain unchanged.
+
 User columns are nullable because DataView admits blank cells and blank inserted rows. This is
 an explicit editable-dataset policy; integer width/sign, decimal precision/scale, time units,
 time zones, column identities, and category domains remain exact. Internal RowId and DisplayOrder
@@ -30,8 +42,13 @@ labels under a byte budget. Keys can differ across batches without changing cate
 An ordered source with incompatible dictionary orders is rejected rather than reordered silently.
 
 `DatasetSnapshot::query` composes the effective view in native DataFusion plans. Base/inserted
-batches align by column identity, row tombstones use an anti join, and column patches use presence
-tests so a null edit replaces the old value. Filters and limits apply to that effective view.
+batches align by column identity and row tombstones use an anti join. Column edits divide this
+view into unchanged and changed RowIds with native anti/semi joins; only the changed branch
+passes through the patch joins. An explicit RowId range also permits pruning the changed source
+without expanding the delta into a large literal list. Patch presence tests make a null edit
+replace the old value. Native UNION allows filters to reach unchanged base values while filters
+on edited columns apply after their patches. Both branches retain inserted rows, deletions and
+exact column identities; limits and display ordering apply to the combined effective view.
 Relation projections carry the exact source Arrow schema and reattach it to streamed batches;
 native CASE/projection optimization must not erase column identity or category metadata.
 Profiles use native aggregate/top-group queries over the same snapshot and return the existing

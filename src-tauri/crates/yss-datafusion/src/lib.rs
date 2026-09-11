@@ -5,6 +5,7 @@ mod page;
 mod profile;
 pub use dataset::{DatasetQuery, DatasetQueryPage};
 mod relation;
+mod series;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -124,7 +125,7 @@ impl DataFusionRuntime {
             .read_table(Arc::new(table))
             .map_err(|_| RelationError::InvalidPlan)?;
         let (frame, schema) = ordered_user_frame(frame, &schema)?;
-        relation::DataFusionRelation::handle(frame, schema, binding, lease, self.clone())
+        relation::DataFusionRelation::handle(frame, schema, binding, lease, self.clone(), false)
     }
 
     /// Useful at the already-materialized literal boundary; external imports use batch readers.
@@ -169,7 +170,14 @@ impl DataFusionRuntime {
             .read_batch(batch)
             .map_err(|_| RelationError::InvalidPlan)?;
         let (frame, schema) = ordered_user_frame(frame, &schema)?;
-        relation::DataFusionRelation::handle(frame, schema, binding, Arc::new(()), self.clone())
+        relation::DataFusionRelation::handle(
+            frame,
+            schema,
+            binding,
+            Arc::new(()),
+            self.clone(),
+            false,
+        )
     }
 
     pub async fn prepare_numeric_columns(
@@ -184,16 +192,7 @@ impl DataFusionRuntime {
         {
             return Err(RelationError::UnalignedSeries);
         }
-        let mut columns: Vec<Box<str>> = Vec::new();
-        for series in series {
-            if !columns
-                .iter()
-                .any(|column| column.as_ref() == series.column())
-            {
-                columns.push(series.column().into());
-            }
-        }
-        let relation = first.relation().project(&columns)?;
+        let relation = first.relation().project_series(series)?;
         let mut stream = relation.stream(control.clone()).await?;
         let mut values: Vec<Vec<f64>> = vec![Vec::new(); series.len()];
         let mut rows = 0usize;
@@ -213,10 +212,7 @@ impl DataFusionRuntime {
             if bytes > control.max_input_bytes {
                 return Err(RelationError::MemoryLimitExceeded);
             }
-            for (series, values) in series.iter().zip(&mut values) {
-                let source = batch
-                    .column_by_name(series.column())
-                    .ok_or(RelationError::InvalidInput)?;
+            for (source, values) in batch.columns().iter().zip(&mut values) {
                 if !source.data_type().is_numeric() || source.null_count() != 0 {
                     return Err(RelationError::InvalidInput);
                 }
@@ -238,6 +234,31 @@ impl DataFusionRuntime {
             }
         }
         Ok(values)
+    }
+}
+
+fn limit_frame(
+    frame: DataFrame,
+    offset: usize,
+    limit: usize,
+    ordered_single_file: bool,
+) -> Result<DataFrame, RelationError> {
+    let frame = frame
+        .limit(offset, Some(limit))
+        .map_err(|_| RelationError::InvalidPlan)?;
+    // A small prefix of one ordered file needs neither parallel range reads nor a merge.
+    // Keep normal parallelism for filters, overlays, multiple files and large offsets.
+    const MAX_SEQUENTIAL_PREFIX_ROWS: usize = 128 * 1024;
+    if ordered_single_file
+        && offset
+            .checked_add(limit)
+            .is_some_and(|rows| rows <= MAX_SEQUENTIAL_PREFIX_ROWS)
+    {
+        let (mut state, plan) = frame.into_parts();
+        *state.config_mut() = state.config().clone().with_target_partitions(1);
+        Ok(DataFrame::new(state, plan))
+    } else {
+        Ok(frame)
     }
 }
 

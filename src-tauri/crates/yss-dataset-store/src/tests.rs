@@ -752,6 +752,171 @@ fn sparse_edits_merge_before_filters_and_nulls_survive_column_rename_and_reopen(
 }
 
 #[test]
+fn filtered_edit_branches_preserve_multicolumn_null_insert_delete_and_snapshot_semantics() {
+    use arrow::array::{Float64Array, Int64Array};
+    use yss_relational_contract::{RelationComparison, RelationLiteral, RelationPredicate};
+
+    let directory = Directory::new();
+    let store = DatasetStore::create(directory.path()).unwrap();
+    let engine = yss_datafusion::DataFusionRuntime::new(128 * 1024 * 1024, 2).unwrap();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("x", DataType::Float64, true),
+        Field::new("y", DataType::Float64, true),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Float64Array::from_iter_values((0..6).map(f64::from))),
+            Arc::new(Float64Array::from_iter_values((10..16).map(f64::from))),
+        ],
+    )
+    .unwrap();
+    let original = store
+        .commit(
+            store
+                .prepare_import(identity(), "Branches", "import", schema, [Ok(batch)])
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let mut current = store
+        .commit(
+            store
+                .prepare_add_row(&original, &engine, "insert", 2, &control())
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    for (index, (row_id, column, value)) in [
+        (0, "x", serde_json::json!(10)),
+        (4, "x", serde_json::Value::Null),
+        (2, "y", serde_json::json!(99)),
+        (6, "x", serde_json::json!(20)),
+        (6, "y", serde_json::json!(60)),
+        (0, "y", serde_json::json!(100)),
+        (1, "y", serde_json::json!(21)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        current = store
+            .commit(
+                store
+                    .prepare_cell_edit(
+                        &current,
+                        &engine,
+                        &format!("edit-{index}"),
+                        DatasetCellEdit {
+                            row_id,
+                            column,
+                            value,
+                        },
+                        &control(),
+                    )
+                    .unwrap(),
+            )
+            .unwrap()
+            .snapshot;
+    }
+    current = store
+        .commit(
+            store
+                .prepare_delete_rows(&current, &engine, "delete", &[5], &control())
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let filtered = |snapshot: &Arc<DatasetSnapshot>| {
+        let relation = snapshot
+            .query(&engine, "branches")
+            .unwrap()
+            .relation()
+            .unwrap()
+            .project(&["x".into(), "y".into()])
+            .unwrap()
+            .filter(&RelationPredicate {
+                column: "x".into(),
+                comparison: RelationComparison::Greater,
+                value: Some(RelationLiteral::Integer(2)),
+            })
+            .unwrap();
+        relation
+            .numeric_columns(
+                &[
+                    relation.select_series("x").unwrap(),
+                    relation.select_series("y").unwrap(),
+                ],
+                &control(),
+            )
+            .unwrap()
+    };
+    assert_eq!(
+        filtered(&current),
+        vec![vec![10., 20., 3.], vec![100., 60., 13.]]
+    );
+    assert_eq!(
+        filtered(&original),
+        vec![vec![3., 4., 5.], vec![13., 14., 15.]]
+    );
+    let nulls = current
+        .query(&engine, "nulls")
+        .unwrap()
+        .relation()
+        .unwrap()
+        .filter(&RelationPredicate {
+            column: "x".into(),
+            comparison: RelationComparison::IsNull,
+            value: None,
+        })
+        .unwrap();
+    assert_eq!(
+        nulls
+            .numeric_columns(&[nulls.select_series("y").unwrap()], &control())
+            .unwrap(),
+        vec![vec![14.]]
+    );
+    let compacted = store
+        .commit(
+            store
+                .prepare_compaction(&current, &engine, "compact", &control())
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    assert_eq!(filtered(&compacted), filtered(&current));
+    let row_name = yss_tabular_arrow::dataset_row_columns(&compacted.metadata().schema)
+        .unwrap()
+        .unwrap()
+        .row_id;
+    let page = compacted
+        .query(&engine, "ordered")
+        .unwrap()
+        .page(0, 10, &control())
+        .unwrap();
+    let ids = page
+        .batches
+        .iter()
+        .flat_map(|batch| {
+            batch
+                .column_by_name(&row_name)
+                .unwrap()
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .values()
+                .iter()
+                .copied()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec![0, 1, 6, 2, 3, 4]);
+    let reopened = DatasetStore::open(directory.path())
+        .unwrap()
+        .snapshot(&current.metadata().id)
+        .unwrap();
+    assert_eq!(filtered(&reopened), filtered(&current));
+}
+
+#[test]
 fn inserted_rows_keep_display_position_and_restore_does_not_reuse_row_ids() {
     use arrow::array::Int64Array;
     let (_directory, store, original, engine) = editable_fixture();
@@ -1384,4 +1549,35 @@ fn multipart_import_keeps_row_identity_continuous_across_batch_and_file_boundari
         .unwrap()
         .value(0);
     assert_eq!(row_id, 1_000_000);
+    let engine = yss_datafusion::DataFusionRuntime::new(128 * 1024 * 1024, 8192).unwrap();
+    let mut input = snapshot.relation_input();
+    input.files.reverse();
+    let query = engine
+        .dataset_query(
+            RelationBinding {
+                project_session: "reversed-parts".into(),
+                dataset: snapshot.metadata().id.clone(),
+                snapshot: snapshot.metadata().snapshot_id.clone(),
+                revision: snapshot.metadata().data_revision,
+            },
+            input,
+            snapshot.clone(),
+        )
+        .unwrap();
+    let relation = query
+        .relation()
+        .unwrap()
+        .project(&["value".into()])
+        .unwrap();
+    for (offset, expected) in [
+        (0, vec![0., 1., 2.]),
+        (999_998, vec![999_998., 999_999., 1_000_000.]),
+    ] {
+        let page = relation.limit(offset, 3).unwrap();
+        assert_eq!(
+            page.numeric_columns(&[page.select_series("value").unwrap()], &control())
+                .unwrap(),
+            vec![expected]
+        );
+    }
 }

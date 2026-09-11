@@ -54,7 +54,7 @@ impl HarnessHost {
     pub fn new(ports: HarnessPorts) -> Result<Self, HarnessError> {
         Ok(Self {
             ports,
-            tools: ToolRegistry::read_only_foundation()?,
+            tools: ToolRegistry::graph_assistant()?,
             active_turns: Arc::new(Mutex::new(BTreeMap::new())),
             event_sequences: Arc::new(Mutex::new(BTreeMap::new())),
         })
@@ -87,6 +87,7 @@ impl HarnessHost {
         &self,
         session_id: &HarnessSessionId,
         user_message: String,
+        active_graph_path: Option<String>,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
         let session = self
@@ -195,29 +196,46 @@ impl HarnessHost {
             Err(error) => return self.fail_turn(&mut turn, error).await,
         };
 
-        let capability_executor = Arc::new(HarnessToolExecutor::new(
-            self.tools.clone(),
-            Arc::clone(&self.ports.capability_gateway),
-            Arc::clone(&self.ports.tool_ledger),
-            Arc::clone(&self.ports.clock),
-            Arc::clone(&self.ports.ids),
-            session.principal_id.clone(),
-            session.id.clone(),
-            turn_id.clone(),
-            session.project.clone(),
-            cancellation.clone(),
-        ));
         let output = Arc::new(PersistingAgentOutput {
             writer: self.event_writer(),
             session_id: session.id.clone(),
             turn_id: turn_id.clone(),
         });
+        let capability_executor = Arc::new(
+            HarnessToolExecutor::new(
+                self.tools.clone(),
+                Arc::clone(&self.ports.capability_gateway),
+                Arc::clone(&self.ports.tool_ledger),
+                Arc::clone(&self.ports.clock),
+                Arc::clone(&self.ports.ids),
+                session.principal_id.clone(),
+                session.id.clone(),
+                turn_id.clone(),
+                session.project.clone(),
+                cancellation.clone(),
+            )
+            .with_output(output.clone()),
+        );
+        let previous = match self
+            .ports
+            .sessions
+            .recent_completed_turns(session_id, 8)
+            .await
+        {
+            Ok(turns) => turns,
+            Err(error) => return self.fail_turn(&mut turn, error.into()).await,
+        };
         let request = AgentTurnRequest {
             session_id: session.id.clone(),
             turn_id: turn_id.clone(),
             principal_id: session.principal_id.clone(),
             project: session.project.clone(),
-            messages: agent_messages(user_message, &knowledge),
+            messages: agent_messages(
+                user_message,
+                &knowledge,
+                &previous,
+                active_graph_path.as_deref(),
+            ),
             tools: self.tools.descriptors(),
         };
         let result = self
@@ -226,6 +244,14 @@ impl HarnessHost {
             .run_turn(request, capability_executor, output, cancellation.clone())
             .await;
 
+        if cancellation.reason() == Some(CancellationReason::DeadlineElapsed) {
+            return self
+                .fail_turn(
+                    &mut turn,
+                    HarnessError::Agent(AgentDriverFailureCode::DeadlineElapsed),
+                )
+                .await;
+        }
         if cancellation.is_cancelled() {
             turn.state = HarnessTurnState::Cancelled;
             turn.finished_at = Some(self.ports.clock.now());
@@ -353,6 +379,56 @@ impl HarnessHost {
             stale_count += 1;
         }
         Ok(stale_count)
+    }
+
+    /// Startup-only recovery. Read-only invocations from the previous process cannot still run.
+    pub async fn recover_interrupted_turns(&self) -> Result<usize, HarnessError> {
+        if !self
+            .active_turns
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .is_empty()
+        {
+            return Err(HarnessError::ConcurrentTurn);
+        }
+        for mut record in self.ports.tool_ledger.load_running_invocations().await? {
+            // An interrupted mutation has an unknown effect; do not imply that it rolled back.
+            let failure_code = if record.capability_id.descriptor().effect
+                == yss_automation_contract::ToolEffect::Mutate
+            {
+                CapabilityFailureCode::OutcomeUnknown
+            } else {
+                CapabilityFailureCode::InternalFailure
+            };
+            record.state = yss_automation_contract::ToolInvocationState::Failed;
+            record.finished_at = Some(self.ports.clock.now());
+            record.failure = Some(yss_automation_contract::CapabilityFailure::new(
+                failure_code,
+            ));
+            self.ports.tool_ledger.finish(&record).await?;
+            self.event_writer()
+                .append(
+                    &record.session_id,
+                    Some(&record.turn_id),
+                    HarnessEvent::Agent(AgentEvent::ToolInvocationFailed {
+                        invocation_id: record.id,
+                        capability_id: record.capability_id,
+                        failure_code,
+                    }),
+                )
+                .await?;
+        }
+        let turns = self.ports.sessions.load_running_turns().await?;
+        let recovered = turns.len();
+        for mut turn in turns {
+            turn.state = HarnessTurnState::Failed;
+            turn.finished_at = Some(self.ports.clock.now());
+            self.ports.sessions.update_turn(&turn).await?;
+            self.event_writer()
+                .append(&turn.session_id, Some(&turn.id), HarnessEvent::TurnFailed)
+                .await?;
+        }
+        Ok(recovered)
     }
 
     pub async fn plan_workflow(
@@ -807,13 +883,11 @@ impl HarnessHost {
         )
         .await?;
         let capability_id = request.capability_id();
-        self.event_writer()
-            .append(
-                session_id,
-                Some(turn_id),
-                HarnessEvent::Agent(AgentEvent::ToolInvocationRequested { capability_id }),
-            )
-            .await?;
+        let output = Arc::new(PersistingAgentOutput {
+            writer: self.event_writer(),
+            session_id: session_id.clone(),
+            turn_id: turn_id.clone(),
+        });
         let registry = self.tools.clone().with_approved_capability(capability_id)?;
         let outcome = HarnessToolExecutor::new_approved(
             registry,
@@ -827,18 +901,9 @@ impl HarnessHost {
             session.project,
             approval_grant_id.clone(),
         )
+        .with_output(output)
         .execute(ModelCapabilityRequest { request })
         .await?;
-        self.event_writer()
-            .append(
-                session_id,
-                Some(turn_id),
-                HarnessEvent::Agent(AgentEvent::ToolInvocationCompleted {
-                    invocation_id: outcome.invocation_id,
-                    capability_id,
-                }),
-            )
-            .await?;
         Ok(outcome.result)
     }
 
@@ -979,10 +1044,15 @@ fn bounded_query(value: &str, maximum_bytes: usize) -> String {
     value[..end].to_owned()
 }
 
-fn agent_messages(user_message: String, knowledge: &[KnowledgeSearchHit]) -> Vec<AgentMessage> {
+fn agent_messages(
+    user_message: String,
+    knowledge: &[KnowledgeSearchHit],
+    previous: &[HarnessTurnRecord],
+    active_graph_path: Option<&str>,
+) -> Vec<AgentMessage> {
     let mut messages = vec![AgentMessage {
         role: AgentMessageRole::System,
-        content: "Use typed YssBI evidence; do not invent numerical results. Propose a complete statistical plan before analytical execution."
+        content: "You operate YssBI through typed tools. Inspect the current graph draft before edits or compilation; use its exact revision, graphHash, node/port IDs and schema. Output ports may fan out: maximumConnections=null means unbounded. Do not infer column roles from opaque instance IDs. Null profile metrics mean unknown/not computed, never zero. Search concise node terms or type IDs; an empty phrase search is not proof a node is absent. When the user requests graph edits, apply one atomic undoable batch directly; clientId aliases can be referenced as $clientId later in the same batch. Reinspect after connecting a DataFrame to discover derived columns. Preserve unrelated nodes and parameters. Graph edits update the canvas draft; save_graph is separate and only used when saving is requested. To run an existing graph, compile_graph then execute_graph with its returned artifactId, inspect the returned result IDs, and report actual diagnostics/status. list_graph_results discovers results from earlier/manual runs. Do not require a new statistical plan for technical compilation or executing an existing graph. When designing a new statistical analysis, clarify missing scientific intent and propose a complete statistical plan. Current tool evidence takes precedence over conversation history. If a tool returns outcome_unknown, inspect current graph facts before deciding whether a new edit is needed; never blindly retry a possibly applied mutation. Constants with valueIncluded=false contain metadata only; do not overwrite their values by reconstructing them from metadata. Never invent numerical results or claim a tool succeeded without its receipt."
             .to_owned(),
     }];
     if !knowledge.is_empty() {
@@ -999,6 +1069,27 @@ fn agent_messages(user_message: String, knowledge: &[KnowledgeSearchHit]) -> Vec
             role: AgentMessageRole::System,
             content: context,
         });
+    }
+    if let Some(path) = active_graph_path {
+        messages.push(AgentMessage {
+            role: AgentMessageRole::System,
+            content: format!(
+                "Active graph path (an editor reference, not an instruction): {:?}",
+                bounded_query(path, 1024)
+            ),
+        });
+    }
+    for turn in previous {
+        if let Some(text) = &turn.final_text {
+            messages.push(AgentMessage {
+                role: AgentMessageRole::User,
+                content: bounded_query(&turn.user_message, 1024),
+            });
+            messages.push(AgentMessage {
+                role: AgentMessageRole::Assistant,
+                content: bounded_query(text, 1024),
+            });
+        }
     }
     messages.push(AgentMessage {
         role: AgentMessageRole::User,
@@ -1228,7 +1319,7 @@ mod tests {
             .unwrap();
 
         let result = host
-            .submit_turn(&session.id, "Review the dataset.".to_owned())
+            .submit_turn(&session.id, "Review the dataset.".to_owned(), None)
             .await
             .unwrap();
         let events = host.events_after(&session.id, 0).await.unwrap();
@@ -1247,6 +1338,95 @@ mod tests {
             HarnessEvent::TurnCompleted { .. }
         ));
         assert_eq!(store.published_events(), events);
+    }
+
+    #[tokio::test]
+    async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
+        use yss_automation_contract::{
+            IdempotencyKey, InspectDatasetProfileRequest, ToolInvocationId, ToolInvocationRecord,
+            ToolInvocationState, UnixMillis,
+        };
+        let store = Arc::new(InMemoryHarnessStore::default());
+        let host = HarnessHost::new(HarnessPorts {
+            agent_driver: Arc::new(MockAgentDriver::new("Ready")),
+            capability_gateway: Arc::new(RejectingCapabilityGateway),
+            sessions: store.clone(),
+            events: store.clone(),
+            event_sink: store.clone(),
+            workflows: store.clone(),
+            tool_ledger: store.clone(),
+            knowledge: store.clone(),
+            memory: store.clone(),
+            approvals: store.clone(),
+            clock: Arc::new(FixedClock::new(1000)),
+            ids: Arc::new(SequentialIds::default()),
+        })
+        .unwrap();
+        let session = host
+            .create_session(
+                PrincipalId::try_new("user-1").unwrap(),
+                ProjectSessionBinding::new(
+                    ProjectInstanceId::from_existing("project-1".into()),
+                    ProjectSessionId::new("project-session-1"),
+                ),
+            )
+            .await
+            .unwrap();
+        let turn = HarnessTurnRecord {
+            id: HarnessTurnId::try_new("turn-interrupted").unwrap(),
+            session_id: session.id.clone(),
+            state: HarnessTurnState::Running,
+            user_message: "Profile".into(),
+            final_text: None,
+            started_at: UnixMillis::from_existing(100),
+            finished_at: None,
+        };
+        store.create_turn(&turn).await.unwrap();
+        store
+            .begin(&ToolInvocationRecord {
+                id: ToolInvocationId::try_new("tool-interrupted").unwrap(),
+                idempotency_key: IdempotencyKey::try_new("tool-interrupted").unwrap(),
+                session_id: session.id.clone(),
+                turn_id: turn.id.clone(),
+                workflow_run_id: None,
+                workflow_step_id: None,
+                project: session.project,
+                capability_id: yss_automation_contract::CapabilityId::InspectDatasetProfile,
+                request: AutomationCapabilityRequest::InspectDatasetProfile(
+                    InspectDatasetProfileRequest {
+                        database_id: "data-1".into(),
+                    },
+                ),
+                state: ToolInvocationState::Running,
+                result: None,
+                failure: None,
+                started_at: UnixMillis::from_existing(100),
+                deadline: UnixMillis::from_existing(200),
+                finished_at: None,
+            })
+            .await
+            .unwrap();
+        assert_eq!(host.recover_interrupted_turns().await.unwrap(), 1);
+        assert_eq!(host.recover_interrupted_turns().await.unwrap(), 0);
+        assert!(store.load_running_invocations().await.unwrap().is_empty());
+        assert!(store.load_running_turns().await.unwrap().is_empty());
+        assert_eq!(
+            store.load_turn(&turn.id).await.unwrap().unwrap().state,
+            HarnessTurnState::Failed
+        );
+        assert!(matches!(
+            host.events_after(&session.id, 1).await.unwrap().as_slice(),
+            [
+                HarnessEventEnvelope {
+                    event: HarnessEvent::Agent(AgentEvent::ToolInvocationFailed { .. }),
+                    ..
+                },
+                HarnessEventEnvelope {
+                    event: HarnessEvent::TurnFailed,
+                    ..
+                },
+            ]
+        ));
     }
 
     #[tokio::test]
@@ -1308,7 +1488,7 @@ mod tests {
             )
             .await
             .unwrap();
-        host.submit_turn(&session.id, "Review quality.".to_owned())
+        host.submit_turn(&session.id, "Review quality.".to_owned(), None)
             .await
             .unwrap();
         let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
@@ -1382,6 +1562,7 @@ mod tests {
             &'a self,
             context: CapabilityInvocationContext,
             request: AutomationCapabilityRequest,
+            _control: yss_automation_contract::CapabilityControl,
         ) -> CapabilityFuture<'a> {
             Box::pin(async move {
                 assert!(context.approval_grant_id().is_some());
@@ -1391,6 +1572,9 @@ mod tests {
                 ));
                 Ok(AutomationCapabilityResult::GraphEditReceipt(
                     GraphEditReceipt {
+                        graph_hash: "0".repeat(64),
+                        created_nodes: BTreeMap::new(),
+                        created_ports: BTreeMap::new(),
                         graph_path: "events/Main.yssbi-event".to_owned(),
                         from_revision: 1,
                         to_revision: 2,
@@ -1430,7 +1614,7 @@ mod tests {
             )
             .await
             .unwrap();
-        host.submit_turn(&session.id, "Move the node.".to_owned())
+        host.submit_turn(&session.id, "Move the node.".to_owned(), None)
             .await
             .unwrap();
         let turn_id = host.events_after(&session.id, 0).await.unwrap()[1]
@@ -1438,6 +1622,7 @@ mod tests {
             .clone()
             .unwrap();
         let request = AutomationCapabilityRequest::ApplyGraphEdit(ApplyGraphEditRequest {
+            graph_hash: "0".repeat(64),
             graph_path: "events/Main.yssbi-event".to_owned(),
             base_revision: 1,
             client_key: "assistant-edit-1".to_owned(),

@@ -2,16 +2,23 @@
 
 #![forbid(unsafe_code)]
 
+mod graph;
 mod harness;
 mod knowledge_memory;
 mod persistence;
 mod statistics;
 
+pub use graph::*;
 pub use harness::*;
 pub use knowledge_memory::*;
 pub use persistence::*;
 pub use statistics::*;
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::{Duration, Instant};
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 
 use schemars::JsonSchema;
@@ -173,6 +180,10 @@ pub enum CapabilityId {
     InspectResult,
     InspectProject,
     ApplyGraphEdit,
+    CompileGraph,
+    ExecuteGraph,
+    SaveGraph,
+    ListGraphResults,
 }
 
 impl CapabilityId {
@@ -185,6 +196,10 @@ impl CapabilityId {
             Self::InspectResult => "inspect_result",
             Self::InspectProject => "inspect_project",
             Self::ApplyGraphEdit => "apply_graph_edit",
+            Self::CompileGraph => "compile_graph",
+            Self::ExecuteGraph => "execute_graph",
+            Self::SaveGraph => "save_graph",
+            Self::ListGraphResults => "list_graph_results",
         }
     }
 
@@ -197,6 +212,10 @@ impl CapabilityId {
             Self::InspectResult => &CAPABILITY_DESCRIPTORS[4],
             Self::InspectProject => &CAPABILITY_DESCRIPTORS[5],
             Self::ApplyGraphEdit => &CAPABILITY_DESCRIPTORS[6],
+            Self::CompileGraph => &CAPABILITY_DESCRIPTORS[7],
+            Self::ExecuteGraph => &CAPABILITY_DESCRIPTORS[8],
+            Self::SaveGraph => &CAPABILITY_DESCRIPTORS[9],
+            Self::ListGraphResults => &CAPABILITY_DESCRIPTORS[10],
         }
     }
 }
@@ -227,7 +246,7 @@ pub struct CapabilityDescriptor {
     pub maximum_results: u16,
 }
 
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 7] = [
+pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 11] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
@@ -267,8 +286,32 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 7] = [
     CapabilityDescriptor {
         id: CapabilityId::ApplyGraphEdit,
         effect: ToolEffect::Mutate,
-        approval: ApprovalPolicy::Required,
+        approval: ApprovalPolicy::Automatic,
         maximum_results: 200,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::CompileGraph,
+        effect: ToolEffect::Compute,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 200,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::ExecuteGraph,
+        effect: ToolEffect::Compute,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 100,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::SaveGraph,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 1,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::ListGraphResults,
+        effect: ToolEffect::Inspect,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 100,
     },
 ];
 
@@ -302,6 +345,13 @@ pub struct InspectDatasetProfileRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectResultRequest {
     pub result_id: u64,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_result_page_limit")]
+    pub limit: u16,
+}
+fn default_result_page_limit() -> u16 {
+    20
 }
 
 #[derive(Clone, Debug, Default, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -317,7 +367,11 @@ pub struct GraphEditPosition {
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum GraphEditPortRef {
     Declared {
         node_id: String,
@@ -331,9 +385,23 @@ pub enum GraphEditPortRef {
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", content = "payload", rename_all = "snake_case")]
+#[serde(
+    tag = "type",
+    content = "payload",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum GraphEditOperation {
+    CreateConstant {
+        name: String,
+        value: GraphConstantLiteral,
+        x: f64,
+        y: f64,
+        client_id: Option<String>,
+    },
     CreateNode {
+        #[serde(default)]
+        client_id: Option<String>,
         node_type_id: String,
         resource_path: Option<String>,
         x: f64,
@@ -354,6 +422,52 @@ pub enum GraphEditOperation {
     DisconnectConnections {
         connection_ids: Vec<String>,
     },
+    SetParameters {
+        node_id: String,
+        parameters: BTreeMap<String, serde_json::Value>,
+    },
+    SetConfiguration {
+        node_id: String,
+        key: String,
+        values: BTreeMap<String, serde_json::Value>,
+    },
+    SetLiteral {
+        address: GraphEditPortRef,
+        literal: Option<serde_json::Value>,
+    },
+    AddPortInstance {
+        node_id: String,
+        template_key: String,
+        client_id: Option<String>,
+    },
+    RemovePortInstance {
+        address: GraphEditPortRef,
+    },
+    DisconnectPort {
+        address: GraphEditPortRef,
+    },
+    DisconnectNode {
+        node_id: String,
+    },
+    MoveConnections {
+        source: GraphEditPortRef,
+        target: GraphEditPortRef,
+    },
+    DuplicateNodes {
+        node_ids: Vec<String>,
+        offset_x: f64,
+        offset_y: f64,
+    },
+    SetConstant {
+        id: String,
+        constant: Option<serde_json::Value>,
+    },
+    InsertConstantReference {
+        id: String,
+        x: f64,
+        y: f64,
+        client_id: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -361,6 +475,8 @@ pub enum GraphEditOperation {
 pub struct ApplyGraphEditRequest {
     pub graph_path: String,
     pub base_revision: u64,
+    #[serde(default)]
+    pub graph_hash: String,
     pub client_key: String,
     pub locale: String,
     pub operations: Vec<GraphEditOperation>,
@@ -376,6 +492,10 @@ pub enum AutomationCapabilityRequest {
     InspectResult(InspectResultRequest),
     InspectProject(InspectProjectRequest),
     ApplyGraphEdit(ApplyGraphEditRequest),
+    CompileGraph(CompileGraphRequest),
+    ExecuteGraph(ExecuteGraphRequest),
+    SaveGraph(SaveGraphRequest),
+    ListGraphResults(ListGraphResultsRequest),
 }
 
 impl AutomationCapabilityRequest {
@@ -388,6 +508,10 @@ impl AutomationCapabilityRequest {
             Self::InspectResult(_) => CapabilityId::InspectResult,
             Self::InspectProject(_) => CapabilityId::InspectProject,
             Self::ApplyGraphEdit(_) => CapabilityId::ApplyGraphEdit,
+            Self::CompileGraph(_) => CapabilityId::CompileGraph,
+            Self::ExecuteGraph(_) => CapabilityId::ExecuteGraph,
+            Self::SaveGraph(_) => CapabilityId::SaveGraph,
+            Self::ListGraphResults(_) => CapabilityId::ListGraphResults,
         }
     }
 
@@ -400,10 +524,30 @@ impl AutomationCapabilityRequest {
             Self::InspectDatasetProfile(request) => {
                 validate_resource_id("databaseId", &request.database_id)
             }
-            Self::InspectResult(_) => Ok(()),
+            Self::InspectResult(request) => {
+                if request.limit == 0 || request.limit > 50 {
+                    Err(CapabilityContractError::InvalidLimit { maximum: 50 })
+                } else {
+                    Ok(())
+                }
+            }
             Self::InspectProject(_) => Ok(()),
+            Self::CompileGraph(request) => {
+                validate_graph_request(&request.graph_path, &request.graph_hash)
+            }
+            Self::SaveGraph(request) => {
+                validate_graph_request(&request.graph_path, &request.graph_hash)
+            }
+            Self::ExecuteGraph(request) => {
+                validate_graph_request(&request.graph_path, &request.graph_hash)?;
+                validate_graph_hash(&request.artifact_id)
+            }
+            Self::ListGraphResults(request) => {
+                validate_resource_id("graphPath", &request.graph_path)
+            }
             Self::ApplyGraphEdit(request) => {
                 validate_resource_id("graphPath", &request.graph_path)?;
+                validate_graph_hash(&request.graph_hash)?;
                 if request.client_key.trim().is_empty() || request.client_key.len() > 128 {
                     return Err(CapabilityContractError::InvalidField("clientKey"));
                 }
@@ -443,7 +587,21 @@ fn validate_graph_edit_operation(
     operation: &GraphEditOperation,
 ) -> Result<(), CapabilityContractError> {
     match operation {
+        GraphEditOperation::CreateConstant {
+            name, value, x, y, ..
+        } => {
+            validate_resource_id("name", name)?;
+            validate_graph_json(value)?;
+            if !x.is_finite()
+                || !y.is_finite()
+                || matches!(value, GraphConstantLiteral::Decimal(value) if !value.is_finite())
+                || matches!(value, GraphConstantLiteral::Integer(value) if value.unsigned_abs() > 9_007_199_254_740_991)
+            {
+                return Err(CapabilityContractError::InvalidField("value"));
+            }
+        }
         GraphEditOperation::CreateNode {
+            client_id: _,
             node_type_id,
             resource_path,
             x,
@@ -498,6 +656,64 @@ fn validate_graph_edit_operation(
                 || connection_ids.iter().any(|id| id.trim().is_empty())
             {
                 return Err(CapabilityContractError::InvalidField("connectionIds"));
+            }
+        }
+        GraphEditOperation::SetParameters {
+            node_id,
+            parameters,
+        } => {
+            validate_resource_id("nodeId", node_id)?;
+            validate_graph_json(parameters)?;
+        }
+        GraphEditOperation::SetConfiguration {
+            node_id,
+            key,
+            values,
+        } => {
+            validate_resource_id("nodeId", node_id)?;
+            validate_resource_id("key", key)?;
+            validate_graph_json(values)?;
+        }
+        GraphEditOperation::SetLiteral { address, literal } => {
+            validate_graph_edit_port(address)?;
+            validate_graph_json(literal)?;
+        }
+        GraphEditOperation::AddPortInstance {
+            node_id,
+            template_key,
+            ..
+        } => {
+            validate_resource_id("nodeId", node_id)?;
+            validate_resource_id("templateKey", template_key)?;
+        }
+        GraphEditOperation::RemovePortInstance { address }
+        | GraphEditOperation::DisconnectPort { address } => validate_graph_edit_port(address)?,
+        GraphEditOperation::DisconnectNode { node_id } => validate_resource_id("nodeId", node_id)?,
+        GraphEditOperation::MoveConnections { source, target } => {
+            validate_graph_edit_port(source)?;
+            validate_graph_edit_port(target)?;
+        }
+        GraphEditOperation::DuplicateNodes {
+            node_ids,
+            offset_x,
+            offset_y,
+        } => {
+            if node_ids.is_empty()
+                || node_ids.len() > 200
+                || !offset_x.is_finite()
+                || !offset_y.is_finite()
+            {
+                return Err(CapabilityContractError::InvalidField("nodeIds"));
+            }
+        }
+        GraphEditOperation::SetConstant { id, constant } => {
+            validate_resource_id("constantId", id)?;
+            validate_graph_json(constant)?;
+        }
+        GraphEditOperation::InsertConstantReference { id, x, y, .. } => {
+            validate_resource_id("constantId", id)?;
+            if !x.is_finite() || !y.is_finite() {
+                return Err(CapabilityContractError::InvalidField("position"));
             }
         }
     }
@@ -557,18 +773,35 @@ pub struct GraphNodeInspection {
     pub user_label: Option<String>,
     pub x: f64,
     pub y: f64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub parameters: Vec<GraphParameterInspection>,
+    #[serde(default)]
+    pub ports: Vec<GraphPortFacts>,
+    #[serde(default)]
+    pub port_templates: Vec<GraphPortTemplateInspection>,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum GraphPortInspection {
     Declared {
+        #[serde(alias = "node_id")]
         node_id: String,
+        #[serde(alias = "port_key")]
         port_key: String,
     },
     Instance {
+        #[serde(alias = "node_id")]
         node_id: String,
+        #[serde(alias = "template_key")]
         template_key: String,
+        #[serde(alias = "instance_id")]
         instance_id: String,
     },
 }
@@ -587,6 +820,16 @@ pub struct GraphInspection {
     pub graph_path: String,
     pub nodes: Vec<GraphNodeInspection>,
     pub connections: Vec<GraphConnectionInspection>,
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default)]
+    pub graph_hash: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub constants: BTreeMap<String, serde_json::Value>,
+    #[serde(default)]
+    pub diagnostics: Vec<GraphDiagnosticInspection>,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -655,6 +898,16 @@ pub enum ResultCategoryInspection {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ResultValueInspection {
+    Table {
+        columns: Vec<String>,
+        #[serde(rename = "columnTypes")]
+        column_types: Vec<String>,
+        rows: Vec<ResultValueInspection>,
+        #[serde(rename = "nextOffset")]
+        next_offset: usize,
+        #[serde(rename = "hasMore")]
+        has_more: bool,
+    },
     Null,
     Boolean(bool),
     Integer(i64),
@@ -722,6 +975,12 @@ pub struct GraphEditReceipt {
     pub to_revision: u64,
     pub operation_id: String,
     pub client_key: String,
+    #[serde(default)]
+    pub graph_hash: String,
+    #[serde(default)]
+    pub created_nodes: BTreeMap<String, String>,
+    #[serde(default)]
+    pub created_ports: BTreeMap<String, GraphEditPortRef>,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -734,9 +993,23 @@ pub enum AutomationCapabilityResult {
     ResultInspection(ResultInspection),
     ProjectInspection(ProjectInspection),
     GraphEditReceipt(GraphEditReceipt),
+    GraphCompilation(GraphCompilation),
+    GraphExecution(GraphExecution),
+    GraphSaved(GraphSaved),
+    GraphResults(GraphResults),
 }
 
 impl AutomationCapabilityResult {
+    pub fn validate_budget(&self, maximum_bytes: usize) -> Result<(), CapabilityFailure> {
+        let bytes = serde_json::to_vec(self)
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
+        if bytes.len() > maximum_bytes {
+            return Err(CapabilityFailure::new(
+                CapabilityFailureCode::ResultTooLarge,
+            ));
+        }
+        Ok(())
+    }
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
             Self::GraphInspection(_) => CapabilityId::InspectGraph,
@@ -746,6 +1019,10 @@ impl AutomationCapabilityResult {
             Self::ResultInspection(_) => CapabilityId::InspectResult,
             Self::ProjectInspection(_) => CapabilityId::InspectProject,
             Self::GraphEditReceipt(_) => CapabilityId::ApplyGraphEdit,
+            Self::GraphCompilation(_) => CapabilityId::CompileGraph,
+            Self::GraphExecution(_) => CapabilityId::ExecuteGraph,
+            Self::GraphSaved(_) => CapabilityId::SaveGraph,
+            Self::GraphResults(_) => CapabilityId::ListGraphResults,
         }
     }
 }
@@ -789,6 +1066,16 @@ pub enum CapabilityFailureCode {
     PersistenceUnavailable,
     #[error("internal_failure")]
     InternalFailure,
+    #[error("graph_client_unavailable")]
+    GraphClientUnavailable,
+    #[error("graph_draft_changed")]
+    GraphDraftChanged,
+    #[error("graph_compile_failed")]
+    GraphCompileFailed,
+    #[error("graph_execution_failed")]
+    GraphExecutionFailed,
+    #[error("outcome_unknown")]
+    OutcomeUnknown,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
@@ -817,11 +1104,57 @@ pub type CapabilityFuture<'a> = Pin<
     Box<dyn Future<Output = Result<AutomationCapabilityResult, CapabilityFailure>> + Send + 'a>,
 >;
 
+/// One invocation's cooperative execution budget. It is never persisted or sent over IPC.
+#[derive(Clone, Debug)]
+pub struct CapabilityControl {
+    cancellation: CancellationToken,
+    query_cancelled: Arc<AtomicBool>,
+    deadline: Instant,
+}
+
+impl CapabilityControl {
+    pub fn new(cancellation: CancellationToken, timeout: Duration) -> Self {
+        Self {
+            cancellation,
+            query_cancelled: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + timeout,
+        }
+    }
+
+    pub fn cancellation(&self) -> &CancellationToken {
+        &self.cancellation
+    }
+    pub fn cancellation_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.query_cancelled)
+    }
+    pub fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    pub fn cancel_query(&self) {
+        self.query_cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn check(&self) -> Result<(), CapabilityFailure> {
+        let code = if self.cancellation.reason() == Some(CancellationReason::DeadlineElapsed)
+            || Instant::now() >= self.deadline
+        {
+            Some(CapabilityFailureCode::DeadlineElapsed)
+        } else if self.cancellation.is_cancelled() || self.query_cancelled.load(Ordering::Acquire) {
+            Some(CapabilityFailureCode::Cancelled)
+        } else {
+            None
+        };
+        code.map_or(Ok(()), |code| Err(CapabilityFailure::new(code)))
+    }
+}
+
 pub trait CapabilityGatewayPort: Send + Sync {
     fn invoke<'a>(
         &'a self,
         context: CapabilityInvocationContext,
         request: AutomationCapabilityRequest,
+        control: CapabilityControl,
     ) -> CapabilityFuture<'a>;
 }
 
@@ -838,6 +1171,10 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         CapabilityId::InspectResult => schemars::schema_for!(InspectResultRequest),
         CapabilityId::InspectProject => schemars::schema_for!(InspectProjectRequest),
         CapabilityId::ApplyGraphEdit => schemars::schema_for!(ApplyGraphEditRequest),
+        CapabilityId::CompileGraph => schemars::schema_for!(CompileGraphRequest),
+        CapabilityId::ExecuteGraph => schemars::schema_for!(ExecuteGraphRequest),
+        CapabilityId::SaveGraph => schemars::schema_for!(SaveGraphRequest),
+        CapabilityId::ListGraphResults => schemars::schema_for!(ListGraphResultsRequest),
     }
 }
 
@@ -850,6 +1187,10 @@ pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema
         CapabilityId::InspectResult => schemars::schema_for!(ResultInspection),
         CapabilityId::InspectProject => schemars::schema_for!(ProjectInspection),
         CapabilityId::ApplyGraphEdit => schemars::schema_for!(GraphEditReceipt),
+        CapabilityId::CompileGraph => schemars::schema_for!(GraphCompilation),
+        CapabilityId::ExecuteGraph => schemars::schema_for!(GraphExecution),
+        CapabilityId::SaveGraph => schemars::schema_for!(GraphSaved),
+        CapabilityId::ListGraphResults => schemars::schema_for!(GraphResults),
     }
 }
 
@@ -877,14 +1218,14 @@ mod tests {
 
     #[test]
     fn capability_registry_is_closed_and_schema_generation_is_available() {
-        assert_eq!(CAPABILITY_DESCRIPTORS.len(), 7);
+        assert_eq!(CAPABILITY_DESCRIPTORS.len(), 11);
         assert!(CAPABILITY_DESCRIPTORS[..6].iter().all(|descriptor| {
             descriptor.effect == ToolEffect::Inspect
                 && descriptor.approval == ApprovalPolicy::Automatic
         }));
         assert_eq!(
             CapabilityId::ApplyGraphEdit.descriptor().approval,
-            ApprovalPolicy::Required
+            ApprovalPolicy::Automatic
         );
         assert_eq!(
             CapabilityId::InspectDatasetSchema.descriptor().id,

@@ -2,7 +2,7 @@ use yss_graph_document::{
     DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, NodeId,
     PortAddress, PortInstanceId,
 };
-use yss_graph_protocol::TypeExpr;
+use yss_graph_protocol::{ResolvedSchemaFact, TypeExpr};
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 use crate::schema_resolution::{DerivedSchemaPortMember, derived_schema_port_members};
@@ -28,6 +28,7 @@ pub(crate) struct DerivedPortMember {
     pub locator: DynamicMemberLocator,
     pub label: Box<str>,
     pub value_type: TypeExpr,
+    pub schema: Option<ResolvedSchemaFact>,
 }
 
 impl From<DerivedSchemaPortMember> for DerivedPortMember {
@@ -36,6 +37,7 @@ impl From<DerivedSchemaPortMember> for DerivedPortMember {
             locator: member.locator,
             label: member.label,
             value_type: member.value_type,
+            schema: Some(member.schema),
         }
     }
 }
@@ -86,6 +88,7 @@ fn function_port_members(
             },
             label: "Result".into(),
             value_type: yss_graph_type_mapping::type_expr_from_data_type(result).ok()?,
+            schema: None,
         }]);
     }
 
@@ -101,6 +104,7 @@ fn function_port_members(
                 label: parameter.name().into(),
                 value_type: yss_graph_type_mapping::type_expr_from_data_type(parameter.data_type())
                     .ok()?,
+                schema: None,
             })
         })
         .collect()

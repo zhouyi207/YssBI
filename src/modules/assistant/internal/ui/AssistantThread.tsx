@@ -60,11 +60,22 @@ const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => {
 
 const ToolCallCard: ToolCallMessagePartComponent = ({ toolName, result, isError }) => {
   const { t } = useTranslation();
-  const state = isError
-    ? t("panel.assistantToolFailed")
-    : result === undefined
-      ? t("panel.assistantToolRunning")
-      : t("panel.assistantToolCompleted");
+  const status =
+    typeof result === "object" && result !== null && "status" in result ? result.status : null;
+  const state =
+    status === "cancelled"
+      ? t("panel.assistantToolCancelled")
+      : status === "timed-out"
+        ? t("panel.assistantToolTimedOut")
+        : status === "unknown"
+          ? t("panel.assistantToolUnknown")
+          : status === "interrupted"
+            ? t("panel.assistantToolInterrupted")
+            : isError
+              ? t("panel.assistantToolFailed")
+              : result === undefined
+                ? t("panel.assistantToolRunning")
+                : t("panel.assistantToolCompleted");
   return (
     <div className="my-2 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-2 text-[0.6875rem]">
       <span className="min-w-0 flex-1 truncate font-mono">{toolName}</span>
@@ -103,8 +114,11 @@ export function AssistantThread() {
   const { t } = useTranslation();
   const snapshot = useAssistantHarnessSnapshot();
   const { deleteMemory } = useAssistantHarnessActions();
-  const statusText =
-    snapshot.status === "initializing"
+  const statusText = snapshot.error
+    ? t(`panel.assistantErrors.${snapshot.error.code}`, {
+        defaultValue: t("panel.assistantStatusError"),
+      })
+    : snapshot.status === "initializing"
       ? t("panel.assistantStatusInitializing")
       : snapshot.status === "provider-unavailable"
         ? t("panel.assistantStatusProviderUnavailable")
@@ -189,7 +203,10 @@ export function AssistantThread() {
                   </PopoverContent>
                 </Popover>
               ) : null}
-              <span className="min-w-0 flex-1 text-[0.6875rem] leading-4 text-muted-foreground">
+              <span
+                role={snapshot.error ? "alert" : undefined}
+                className={`min-w-0 flex-1 text-[0.6875rem] leading-4 ${snapshot.error ? "text-destructive" : "text-muted-foreground"}`}
+              >
                 {snapshot.activity
                   ? t("panel.assistantActivity", { activity: snapshot.activity })
                   : statusText}

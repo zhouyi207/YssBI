@@ -142,6 +142,25 @@ pub(super) struct InternalDependencyCapability {
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_harness/graph_client.rs",
+        fully_qualified_owner: "yss_api::commands::command_harness::graph_client",
+        canonical_origin_targets: &[
+            "yss_application::automation::graph::AutomationGraphAction",
+            "yss_application::automation::graph::AutomationGraphDraft",
+            "yss_application::automation::graph::AutomationGraphUpdate",
+            "yss_application::automation::graph::prepare_automation_graph_action",
+            "yss_application::execution::session_slot::ApplicationState",
+            "yss_api::error::CommandError",
+            "yss_api::schema::graph_draft::CompileGraphDraftDto",
+            "yss_api::schema::graph_draft::GraphDraftSaveDto",
+            "yss_api::schema::graph_draft::GraphDraftTransformDto",
+            "yss_api::schema::graph_draft::compile_graph_draft_to_transport",
+            "yss_api::schema::graph_draft::graph_draft_save_to_transport",
+            "yss_api::schema::graph_draft::graph_draft_transform_to_transport",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-api/src/lib.rs",
         fully_qualified_owner: "yss_api",
         canonical_origin_targets: &["yss_api::activity_panel_sync::ActivityPanelSyncState"],
@@ -290,6 +309,12 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_statistical_harness::knowledge::install_builtin_statistical_knowledge",
             "yss_statistical_harness_sqlite::SqliteHarnessStore::connect",
         ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Commands,
+        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_harness/gateway.rs",
+        fully_qualified_owner: "yss_api::commands::command_harness::gateway",
+        canonical_origin_targets: &["yss_application::execution::session_slot::ApplicationState"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,

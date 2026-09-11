@@ -25,10 +25,11 @@ use yss_graph_document_edit::{
     GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch, validate_graph_document,
 };
 use yss_graph_editor::{
-    CatalogCompatibilityError, CatalogMutationValidationSnapshot, ClipboardSubgraph,
-    EditorGraphMutation, MutationConflict, export_subgraph, filter_compatible_catalog,
+    CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
+    SourcePort, export_subgraph, filter_compatible_catalog,
 };
-use yss_graph_registry::NodeRegistry;
+use yss_graph_protocol::{PortDirection, ResolvedType, TypeExpr};
+use yss_graph_registry::{NodeRegistry, RegistryFingerprint};
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -599,6 +600,51 @@ impl GraphRuntimeState {
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> Result<LocalizedCatalog, GraphRuntimeCatalogError> {
+        let basis = CompilationBasis {
+            registry_fingerprint: RegistryFingerprint::from_bytes(self.registry_fingerprint()),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        };
+        let analysis =
+            self.resolve_graph_draft(graph_path, document, &basis, catalog, resources, locale);
+        let node = analysis
+            .semantic_snapshot()
+            .node(source.node_id)
+            .ok_or(GraphRuntimeCatalogError::SourceInvalid)?;
+        let port = node
+            .ports
+            .iter()
+            .find(|port| &port.address == source)
+            .filter(|port| !port.orphan)
+            .ok_or(GraphRuntimeCatalogError::SourceInvalid)?;
+        if port.direction == PortDirection::Output
+            && matches!(
+                port.schema_state,
+                yss_graph_analysis::GraphSchemaState::Unavailable(_)
+            )
+        {
+            return Err(GraphRuntimeCatalogError::SourceInvalid);
+        }
+        let domain = match port.direction {
+            PortDirection::Output => port.type_state.domain(),
+            PortDirection::Input => port.accepted_domain.as_ref().map(|domain| domain.types()),
+        };
+        let value_type = match domain {
+            Some([value]) => resolved_type_expr(value),
+            Some(values) => TypeExpr::Union(values.iter().map(resolved_type_expr).collect()),
+            None => port.accepted_type.clone(),
+        };
+        let protocol = self
+            .components
+            .registry
+            .protocol(&node.node_type)
+            .ok_or(GraphRuntimeCatalogError::SourceInvalid)?;
+        let source = SourcePort {
+            address: source.clone(),
+            direction: port.direction,
+            value_type,
+            type_parameters: protocol.interface.type_parameters.clone(),
+        };
         let localized = self.components.catalog.localize_with_resources(
             self.components.registry.as_ref(),
             locale,
@@ -606,19 +652,30 @@ impl GraphRuntimeState {
         );
         let localized = filter_compatible_catalog(
             graph_path,
-            document,
             self.components.registry.as_ref(),
-            source,
+            &source,
             catalog,
             resources,
             localized,
-        )
-        .map_err(GraphRuntimeCatalogError::from)?;
+        );
         #[cfg(any(test, feature = "test-support"))]
         if let Some(control) = &self.test_control {
             control.after_catalog_compute();
         }
         Ok(localized)
+    }
+}
+
+fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
+    match value {
+        ResolvedType::Nominal(id) => TypeExpr::Concrete(id.clone()),
+        ResolvedType::Applied {
+            constructor,
+            arguments,
+        } => TypeExpr::Applied {
+            constructor: constructor.clone(),
+            arguments: arguments.iter().map(resolved_type_expr).collect(),
+        },
     }
 }
 
@@ -736,14 +793,6 @@ fn localize_semantic_snapshot(
 pub enum GraphRuntimeCatalogError {
     #[error("compatible source port is invalid")]
     SourceInvalid,
-}
-
-impl From<CatalogCompatibilityError> for GraphRuntimeCatalogError {
-    fn from(error: CatalogCompatibilityError) -> Self {
-        match error {
-            CatalogCompatibilityError::SourceInvalid => Self::SourceInvalid,
-        }
-    }
 }
 
 #[derive(Debug, Error)]
@@ -1082,6 +1131,18 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(outputs.len(), 2);
+        for (port, name) in outputs.iter().zip(["customer_id", "amount"]) {
+            let schema = port
+                .schema_state
+                .exact()
+                .expect("column output retains its schema");
+            assert_eq!(schema.fields.len(), 1);
+            assert_eq!(schema.fields[0].name.0.as_ref(), name);
+            assert_eq!(
+                schema.fields[0].lineage.as_ref().unwrap().field.as_ref(),
+                name
+            );
+        }
         assert_eq!(
             outputs
                 .iter()
@@ -1121,6 +1182,53 @@ mod tests {
                     port.backing,
                     yss_graph_analysis::GraphPortBacking::ProjectedDerived { .. }
                 )
+        }));
+        assert!(document.port_bindings.is_empty());
+        for output in &outputs {
+            let compatible = runtime
+                .compatible_catalog_with_resources(
+                    &graph,
+                    &document,
+                    &output.address,
+                    &resources,
+                    &[],
+                    "en-US",
+                )
+                .expect("projected columns must support compatible node queries before connection");
+            assert!(
+                compatible
+                    .items
+                    .iter()
+                    .any(|item| item.node_type_id.as_ref() == "yssbi.debug.view")
+            );
+            assert!(
+                !compatible
+                    .items
+                    .iter()
+                    .any(|item| item.node_type_id.as_ref() == "yssbi.logic.not")
+            );
+        }
+        assert!(document.port_bindings.is_empty());
+        assert_eq!(
+            analysis.semantic_snapshot().outcome(),
+            &yss_graph_analysis::GraphResolutionOutcome::Complete
+        );
+        let compiled = runtime
+            .compile_draft(&document, graph.clone(), &resources, &basis, &|kernel| {
+                kernel != "yssbi.dataframe.decompose"
+            })
+            .expect("unavailable Decompose kernel is a compile diagnostic");
+        assert!(compiled.artifact_id().is_none());
+        let snapshot = compiled.analysis().semantic_snapshot();
+        assert_eq!(
+            snapshot.outcome(),
+            &yss_graph_analysis::GraphResolutionOutcome::Incomplete
+        );
+        assert!(snapshot.diagnostics().iter().any(|diagnostic| {
+            diagnostic.blocking
+                && diagnostic.code.as_str() == "compiler.node.kernel_unavailable"
+                && diagnostic.primary
+                    == yss_graph_analysis::GraphDiagnosticLocation::Node(decompose_id)
         }));
         assert!(document.port_bindings.is_empty());
         let claimed_address = outputs[0].address.clone();
@@ -1182,6 +1290,17 @@ mod tests {
             &[],
             "en-US",
         );
+        assert!(matches!(
+            runtime.compatible_catalog_with_resources(
+                &graph,
+                &document,
+                &claimed_address,
+                &changed_resources,
+                &[],
+                "en-US",
+            ),
+            Err(GraphRuntimeCatalogError::SourceInvalid)
+        ));
         assert!(
             orphaned
                 .semantic_snapshot()
@@ -1295,6 +1414,25 @@ mod tests {
         labels.sort_unstable();
         assert_eq!(labels, ["Horizon", "Result", "Series"]);
         assert!(document.port_bindings.is_empty());
+        for port in &node.ports {
+            let compatible = runtime
+                .compatible_catalog_with_resources(
+                    &graph,
+                    &document,
+                    &port.address,
+                    &resources,
+                    &[],
+                    "en-US",
+                )
+                .expect("unclaimed function pins are valid catalog query sources");
+            assert!(
+                !compatible
+                    .items
+                    .iter()
+                    .any(|item| item.node_type_id.as_ref() == "yssbi.logic.not")
+            );
+        }
+        assert!(document.port_bindings.is_empty());
         assert_eq!(
             runtime.resolve_graph_draft(
                 &graph,
@@ -1361,6 +1499,10 @@ mod tests {
             )
             .expect("unavailable execution capability is a compile diagnostic");
         assert!(unsupported.artifact_id().is_none());
+        assert_eq!(
+            unsupported.analysis().semantic_snapshot().outcome(),
+            &yss_graph_analysis::GraphResolutionOutcome::Incomplete
+        );
         assert!(
             unsupported
                 .analysis()
@@ -1386,6 +1528,16 @@ mod tests {
             .expect("layout-only draft compiles");
         assert!(layout_only.cache_hit());
         assert_eq!(layout_only.artifact_id(), first.artifact_id());
+        assert_eq!(
+            layout_only.analysis().semantic_snapshot().outcome(),
+            &yss_graph_analysis::GraphResolutionOutcome::Complete
+        );
+        assert!(
+            !layout_only
+                .analysis()
+                .semantic_snapshot()
+                .has_blocking_diagnostics()
+        );
 
         set_constant(
             &mut document,

@@ -162,6 +162,11 @@ impl GraphSemanticSnapshot {
             }
         }
         self.diagnostics = diagnostics.into_boxed_slice();
+        if matches!(self.outcome, GraphResolutionOutcome::Complete)
+            && self.has_blocking_diagnostics()
+        {
+            self.outcome = GraphResolutionOutcome::Incomplete;
+        }
         self
     }
 
@@ -683,7 +688,7 @@ fn resolve_graph_semantics_inner(
                                 can_remove: false,
                                 instance_label: Some(member.label),
                                 value_type: member.value_type,
-                                resolved_schema: None,
+                                resolved_schema: member.schema,
                             },
                         ));
                     }
@@ -691,6 +696,10 @@ fn resolve_graph_semantics_inner(
             }
             sort_concrete_ports(protocol, document, &mut ports, &derived_orders);
             for port in &mut ports {
+                // Derived columns acquire their field schema when their concrete interface resolves.
+                if port.schema_state.exact().is_some() {
+                    continue;
+                }
                 port.schema_state = resolved_schemas
                     .state(&port.address)
                     .cloned()

@@ -54,7 +54,7 @@ const defaultDependencies: GraphDraftCoordinatorDependencies = {
 const mutationTails = new Map<string, Promise<void>>();
 let coordinatorEpoch = 0;
 
-function installDraftProjection(graphPath: string, result: GraphDraftTransformDto): void {
+export function installDraftProjection(graphPath: string, result: GraphDraftTransformDto): void {
   const prepared = prepareGraphProjectionReplacements([
     { graphPath, projection: result.projection },
   ]);

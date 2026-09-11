@@ -1,5 +1,5 @@
 use super::{core_nodes, dataframe, distribution, plot, project, statistics};
-use crate::{Aliases, BuiltinCatalog, Message, Text};
+use crate::{Aliases, BuiltinCatalog, Message, Text, data_connections};
 use yss_graph_compiler_diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
     validate_compiler_diagnostic_definitions,
@@ -682,7 +682,7 @@ fn data_port_expr(
         direction,
         value_type,
         cardinality: PortCardinality::Declared,
-        connections: ConnectionsPerPort::Single,
+        connections: data_connections(direction),
         input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
             literal_policy: LiteralPolicy::Allowed,
             default_value: None,

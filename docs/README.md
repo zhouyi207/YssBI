@@ -62,7 +62,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Graph Compile / Execute follow-up](roadmap/v0_3.md)：条件性后续项按 release backlog 维护。
 - [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
 - [Generated module map](reference/MODULE_MAP.md)
-- [数据引擎测量记录](reference/DATA_ENGINE_BENCHMARK.md)：百万行查询、编辑、压实与 OLS 的本地观察。
+- [数据引擎测量记录](benchmark/DATA_ENGINE_BENCHMARK.md)：百万行查询、编辑、压实与 OLS 的本地观察。
 
 ## History
 

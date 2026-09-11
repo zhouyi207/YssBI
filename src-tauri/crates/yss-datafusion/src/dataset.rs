@@ -24,6 +24,7 @@ pub struct DatasetQuery {
     binding: RelationBinding,
     lease: Arc<dyn Send + Sync>,
     pub(crate) engine: Arc<DataFusionRuntime>,
+    ordered_single_file: bool,
 }
 
 pub struct DatasetQueryPage {
@@ -81,6 +82,13 @@ impl DataFusionRuntime {
         let rows = yss_tabular_arrow::dataset_row_columns(&input.schema)
             .map_err(|_| RelationError::InvalidInput)?
             .ok_or(RelationError::InvalidInput)?;
+        let base_rows = yss_tabular_arrow::dataset_row_columns(&input.base_schema)
+            .map_err(|_| RelationError::InvalidInput)?
+            .ok_or(RelationError::InvalidInput)?;
+        let ordered_single_file = input.files.len() == 1
+            && input.overlay.columns.is_empty()
+            && input.overlay.inserted.is_empty()
+            && input.overlay.deleted.is_empty();
         let paths = input
             .files
             .iter()
@@ -98,7 +106,11 @@ impl DataFusionRuntime {
             ListingTableConfig::new_with_multi_paths(paths)
                 .with_listing_options(
                     ListingOptions::new(Arc::new(ParquetFormat::default()))
-                        .with_file_extension(".parquet"),
+                        .with_file_extension(".parquet")
+                        .with_file_sort_order(vec![vec![
+                            column(None, &base_rows.display_order).sort(true, false),
+                            column(None, &base_rows.row_id).sort(true, false),
+                        ]]),
                 )
                 .with_schema(input.base_schema.clone()),
         )
@@ -146,6 +158,8 @@ impl DataFusionRuntime {
                 .map_err(|_| RelationError::InvalidPlan)?;
         }
         let mut seen_columns = BTreeSet::new();
+        let mut patches = Vec::new();
+        let mut changed_rows = BTreeSet::new();
         for patch in input.overlay.columns.iter() {
             if !seen_columns.insert(patch.column_id.as_ref())
                 || patch.row_ids.len() != patch.values.len()
@@ -164,6 +178,51 @@ impl DataFusionRuntime {
             {
                 return Err(RelationError::InvalidInput);
             }
+            changed_rows.extend(patch.row_ids.iter().copied());
+            patches.push((patch, field));
+        }
+        let unchanged =
+            if let (Some(&first), Some(&last)) = (changed_rows.first(), changed_rows.last()) {
+                let changed = RecordBatch::try_new(
+                    Arc::new(Schema::new(vec![Field::new(
+                        "row_id",
+                        DataType::Int64,
+                        false,
+                    )])),
+                    vec![Arc::new(Int64Array::from_iter_values(changed_rows))],
+                )
+                .map_err(|_| RelationError::InvalidInput)?;
+                let changed = context
+                    .read_batch(changed)
+                    .and_then(|frame| frame.alias("changed"))
+                    .map_err(|_| RelationError::InvalidPlan)?;
+                let current = frame
+                    .alias("current")
+                    .map_err(|_| RelationError::InvalidPlan)?;
+                let key = column(Some("current"), &rows.row_id);
+                let on = key.clone().eq(column(Some("changed"), "row_id"));
+                let unchanged = current
+                    .clone()
+                    .join_on(changed.clone(), JoinType::LeftAnti, [on.clone()])
+                    .map_err(|_| RelationError::InvalidPlan)?;
+                // Expose a bounded source predicate as well as exact membership. The range
+                // enables Parquet pruning without expanding a large delta into SQL literals.
+                let range = if first == last {
+                    key.eq(Expr::Literal(ScalarValue::Int64(Some(first)), None))
+                } else {
+                    key.clone()
+                        .gt_eq(Expr::Literal(ScalarValue::Int64(Some(first)), None))
+                        .and(key.lt_eq(Expr::Literal(ScalarValue::Int64(Some(last)), None)))
+                };
+                frame = current
+                    .filter(range)
+                    .and_then(|frame| frame.join_on(changed, JoinType::LeftSemi, [on]))
+                    .map_err(|_| RelationError::InvalidPlan)?;
+                Some(unchanged)
+            } else {
+                None
+            };
+        for (patch, field) in patches {
             let edits = RecordBatch::try_new(
                 Arc::new(Schema::new(vec![
                     Field::new("row_id", DataType::Int64, false),
@@ -214,12 +273,20 @@ impl DataFusionRuntime {
                 .select(expressions)
                 .map_err(|_| RelationError::InvalidPlan)?;
         }
+        if let Some(unchanged) = unchanged {
+            // Native UNION lets filters reach unchanged base values while edited values
+            // retain CASE/NULL semantics. Only changed rows pass through the patch joins.
+            frame = unchanged
+                .union(frame)
+                .map_err(|_| RelationError::InvalidPlan)?;
+        }
         Ok(DatasetQuery {
             frame,
             schema: input.schema,
             binding,
             lease,
             engine: self.clone(),
+            ordered_single_file,
         })
     }
 }
@@ -252,6 +319,7 @@ impl DatasetQuery {
             binding: self.binding.clone(),
             lease: self.lease.clone(),
             engine: self.engine.clone(),
+            ordered_single_file: self.ordered_single_file,
         })
     }
 
@@ -307,6 +375,7 @@ impl DatasetQuery {
             self.binding.clone(),
             self.lease.clone(),
             self.engine.clone(),
+            self.ordered_single_file,
         )
     }
 
@@ -330,8 +399,8 @@ impl DatasetQuery {
                 column(None, &rows.display_order).sort(true, false),
                 column(None, &rows.row_id).sort(true, false),
             ])
-            .and_then(|frame| frame.limit(offset, Some(probe)))
             .map_err(|_| RelationError::InvalidPlan)?;
+        let frame = crate::limit_frame(frame, offset, probe, self.ordered_single_file)?;
         self.read_bounded(frame, limit, control)
     }
 

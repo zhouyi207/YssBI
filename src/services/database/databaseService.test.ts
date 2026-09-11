@@ -23,6 +23,25 @@ beforeEach(() => {
 });
 
 describe("DatabaseService project lifecycle contract", () => {
+  it("keeps the backend row identities aligned with their page rows", async () => {
+    const page = { rows: [[7], [9]], rowIds: [101, 3] };
+    vi.mocked(invoke).mockResolvedValue(page);
+
+    await expect(
+      DatabaseService.getDatabaseRows(projectInstanceId, "sales", 50, 2),
+    ).resolves.toEqual(page);
+  });
+
+  it("rejects legacy rows and pages without matching row identities", async () => {
+    for (const payload of [[[7]], { rows: [[7]] }, { rows: [[7]], rowIds: [] }]) {
+      vi.mocked(invoke).mockResolvedValue(payload);
+
+      await expect(
+        DatabaseService.getDatabaseRows(projectInstanceId, "sales", 0, 1),
+      ).rejects.toThrow("Invalid database rows response");
+    }
+  });
+
   it.each([
     ["getDatabaseMeta", "get_database_meta", [projectInstanceId, "sales"], {}],
     [

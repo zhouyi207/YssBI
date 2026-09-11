@@ -6,6 +6,8 @@ import {
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { getSettingsSnapshot, useSettingsRead } from "@/features/core/settings/read";
+import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import { assistantActiveGraphPath, subscribeAssistantGraphTools } from "./assistantGraphTools";
 import {
   HarnessService,
   type HarnessEvent,
@@ -23,7 +25,14 @@ type ProjectionMessageStatus =
 interface ProjectionToolCall {
   readonly invocationId: string;
   readonly capabilityId: string;
-  readonly completed: boolean;
+  readonly state:
+    | "running"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "timed-out"
+    | "interrupted"
+    | "unknown";
 }
 
 interface ProjectionMessage {
@@ -39,6 +48,7 @@ interface ProjectionMessage {
 
 export interface AssistantHarnessSnapshot {
   readonly status: ProjectionStatus;
+  readonly error: ErrorReference | null;
   readonly providerConfigured: boolean;
   readonly sessionId: string | null;
   readonly lastSequence: number;
@@ -51,6 +61,7 @@ export interface AssistantHarnessSnapshot {
 
 const INITIAL_SNAPSHOT: AssistantHarnessSnapshot = Object.freeze({
   status: "initializing",
+  error: null,
   providerConfigured: false,
   sessionId: null,
   lastSequence: 0,
@@ -60,6 +71,19 @@ const INITIAL_SNAPSHOT: AssistantHarnessSnapshot = Object.freeze({
   memoryCount: 0,
   memoryRecords: Object.freeze([]),
 });
+
+const TERMINAL_TURN_ERRORS = new Set([
+  "assistant_provider_unavailable",
+  "assistant_authentication_failed",
+  "assistant_rate_limited",
+  "assistant_provider_request_rejected",
+  "assistant_provider_connection_failed",
+  "assistant_invalid_provider_response",
+  "assistant_turn_failed",
+  "assistant_turn_timed_out",
+  "harness_turn_cancelled",
+  "invalid_harness_request",
+]);
 
 function convertProjectionMessage(message: ProjectionMessage): ThreadMessageLike {
   return {
@@ -82,11 +106,13 @@ function convertProjectionMessage(message: ProjectionMessage): ThreadMessageLike
         toolCallId: tool.invocationId,
         toolName: tool.capabilityId,
         args: {},
-        ...(tool.completed ? { result: { status: "completed" } } : {}),
+        ...(tool.state !== "running"
+          ? { result: { status: tool.state }, isError: tool.state !== "completed" }
+          : {}),
       })),
     ],
     createdAt: message.createdAt,
-    status: message.status,
+    ...(message.role === "assistant" ? { status: message.status } : {}),
   };
 }
 
@@ -105,8 +131,11 @@ class AssistantHarnessProjection {
   private snapshot: AssistantHarnessSnapshot = INITIAL_SNAPSHOT;
   private readonly listeners = new Set<() => void>();
   private subscription: HarnessEventSubscription | null = null;
+  private graphTools: Awaited<ReturnType<typeof subscribeAssistantGraphTools>> | null = null;
   private generation = 0;
+  private streamGeneration = 0;
   private recovering = false;
+  private submitting = false;
   private readonly citationsByTurn = new Map<string, HarnessKnowledgeCitation[]>();
   private readonly plansByTurn = new Map<string, unknown>();
   private readonly toolsByTurn = new Map<string, ProjectionToolCall[]>();
@@ -120,6 +149,9 @@ class AssistantHarnessProjection {
 
   readonly start = async (): Promise<void> => {
     const generation = ++this.generation;
+    this.citationsByTurn.clear();
+    this.plansByTurn.clear();
+    this.toolsByTurn.clear();
     this.update({ ...INITIAL_SNAPSHOT, status: "initializing" });
     try {
       const settings = getSettingsSnapshot();
@@ -128,29 +160,63 @@ class AssistantHarnessProjection {
           settings.ai.openAiModel,
           settings.ai.openAiBaseUrl,
           settings.ai.openAiApiKey,
-        ).catch(() => undefined);
+        ).catch((error: unknown) => {
+          if (generation === this.generation)
+            this.update({
+              ...this.snapshot,
+              error: toErrorReference(error, "assistant_provider_configuration_invalid"),
+            });
+        });
       }
       if (generation !== this.generation) return;
-      const [runtime, session] = await Promise.all([
-        HarnessService.runtimeStatus(),
-        HarnessService.createSession(),
-      ]);
+      const runtime = await HarnessService.runtimeStatus();
       if (generation !== this.generation) return;
+      const session = await HarnessService.createSession();
+      if (generation !== this.generation) {
+        await HarnessService.closeSession(session.sessionId).catch(() => {});
+        return;
+      }
       this.update({
         ...this.snapshot,
         providerConfigured: runtime.providerConfigured,
         sessionId: session.sessionId,
-        status: runtime.providerConfigured ? "ready" : "provider-unavailable",
+        status: "initializing",
       });
-      this.subscription = await HarnessService.subscribeEvents(
+      const graphTools = await subscribeAssistantGraphTools(session.sessionId);
+      if (generation !== this.generation) {
+        await graphTools.close();
+        return;
+      }
+      this.graphTools = graphTools;
+      const streamGeneration = ++this.streamGeneration;
+      const subscription = await HarnessService.subscribeEvents(
         session.sessionId,
         0,
-        this.onEvent,
-        this.onStreamError,
+        (event) => {
+          if (generation === this.generation && streamGeneration === this.streamGeneration)
+            this.onEvent(event);
+        },
+        () => {
+          if (generation === this.generation && streamGeneration === this.streamGeneration)
+            this.onStreamError();
+        },
       );
-      if (generation !== this.generation) await this.subscription.unsubscribe();
-    } catch {
-      if (generation === this.generation) this.update({ ...this.snapshot, status: "error" });
+      if (generation !== this.generation || streamGeneration !== this.streamGeneration) {
+        await subscription.unsubscribe();
+        return;
+      }
+      this.subscription = subscription;
+      this.update({
+        ...this.snapshot,
+        status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
+      });
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          ...this.snapshot,
+          status: "error",
+          error: toErrorReference(error, "assistant_session_failed"),
+        });
     }
   };
 
@@ -162,28 +228,39 @@ class AssistantHarnessProjection {
       this.update({
         ...this.snapshot,
         providerConfigured: runtime.providerConfigured,
+        error: null,
         status:
-          runtime.providerConfigured && this.snapshot.status !== "closed"
+          runtime.providerConfigured &&
+          this.snapshot.sessionId &&
+          this.subscription &&
+          (this.snapshot.status === "ready" || this.snapshot.status === "provider-unavailable")
             ? "ready"
             : runtime.providerConfigured
               ? this.snapshot.status
               : "provider-unavailable",
       });
-    } catch {
+    } catch (error) {
       if (generation !== this.generation) return;
       this.update({
         ...this.snapshot,
         providerConfigured: false,
         status: "provider-unavailable",
+        error: toErrorReference(error, "assistant_provider_configuration_invalid"),
       });
     }
   };
 
   readonly stop = (): void => {
     this.generation += 1;
+    this.streamGeneration += 1;
+    this.submitting = false;
+    this.recovering = false;
     const subscription = this.subscription;
     const sessionId = this.snapshot.sessionId;
     this.subscription = null;
+    const graphTools = this.graphTools;
+    this.graphTools = null;
+    if (graphTools) void graphTools.close().catch(() => {});
     if (subscription) void subscription.unsubscribe().catch(() => {});
     if (sessionId) void HarnessService.closeSession(sessionId).catch(() => {});
   };
@@ -192,16 +269,39 @@ class AssistantHarnessProjection {
     const sessionId = this.snapshot.sessionId;
     const text = appendedText(message);
     if (!sessionId || !text || this.isSendDisabled()) return;
-    this.update({ ...this.snapshot, isRunning: true, activity: null });
+    const generation = this.generation;
+    this.submitting = true;
+    this.update({ ...this.snapshot, isRunning: true, activity: null, error: null });
     try {
-      await HarnessService.submitTurn(sessionId, text);
-    } catch {
-      this.update({ ...this.snapshot, isRunning: false, status: "error" });
+      await HarnessService.submitTurn(sessionId, text, assistantActiveGraphPath());
+    } catch (error) {
+      if (generation !== this.generation || sessionId !== this.snapshot.sessionId) return;
+      const failure = toErrorReference(error, "assistant_turn_failed");
+      this.update({
+        ...this.snapshot,
+        activity: null,
+        error: failure.code === "harness_turn_cancelled" ? null : failure,
+        status: TERMINAL_TURN_ERRORS.has(failure.code) ? this.snapshot.status : "error",
+      });
+    } finally {
+      if (generation === this.generation && sessionId === this.snapshot.sessionId) {
+        this.submitting = false;
+        this.update({ ...this.snapshot, isRunning: false });
+      }
     }
   };
 
   readonly cancel = async (): Promise<void> => {
-    if (this.snapshot.sessionId) await HarnessService.cancelTurn(this.snapshot.sessionId);
+    const generation = this.generation;
+    if (!this.snapshot.sessionId) return;
+    try {
+      await HarnessService.cancelTurn(this.snapshot.sessionId);
+    } catch (error) {
+      if (generation !== this.generation) return;
+      const failure = toErrorReference(error, "assistant_turn_failed");
+      if (failure.code !== "harness_turn_not_running")
+        this.update({ ...this.snapshot, error: failure });
+    }
   };
 
   readonly deleteMemory = async (recordId: string): Promise<void> => {
@@ -214,6 +314,7 @@ class AssistantHarnessProjection {
     this.snapshot.status !== "ready" ||
     !this.snapshot.providerConfigured ||
     !this.snapshot.sessionId ||
+    this.submitting ||
     this.snapshot.isRunning;
 
   private readonly onEvent = (event: HarnessEvent): void => {
@@ -232,19 +333,47 @@ class AssistantHarnessProjection {
 
   private async recoverStream(): Promise<void> {
     if (this.recovering || !this.snapshot.sessionId) return;
+    const generation = this.generation;
+    const sessionId = this.snapshot.sessionId;
     this.recovering = true;
+    const streamGeneration = ++this.streamGeneration;
+    const previous = this.subscription;
+    this.subscription = null;
+    this.update({ ...this.snapshot, status: "initializing" });
     try {
-      await this.subscription?.unsubscribe();
-      this.subscription = await HarnessService.subscribeEvents(
-        this.snapshot.sessionId,
+      await previous?.unsubscribe().catch(() => {});
+      if (generation !== this.generation) return;
+      const subscription = await HarnessService.subscribeEvents(
+        sessionId,
         this.snapshot.lastSequence,
-        this.onEvent,
-        this.onStreamError,
+        (event) => {
+          if (generation === this.generation && streamGeneration === this.streamGeneration)
+            this.onEvent(event);
+        },
+        () => {
+          if (generation === this.generation && streamGeneration === this.streamGeneration)
+            this.onStreamError();
+        },
       );
-    } catch {
-      this.update({ ...this.snapshot, status: "error", isRunning: false });
+      if (generation !== this.generation || streamGeneration !== this.streamGeneration)
+        await subscription.unsubscribe();
+      else {
+        this.subscription = subscription;
+        this.update({
+          ...this.snapshot,
+          status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
+        });
+      }
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          ...this.snapshot,
+          status: "error",
+          isRunning: false,
+          error: toErrorReference(error, "assistant_stream_failed"),
+        });
     } finally {
-      this.recovering = false;
+      if (generation === this.generation) this.recovering = false;
     }
   }
 
@@ -282,6 +411,7 @@ class AssistantHarnessProjection {
       );
       isRunning = true;
     } else if (event.type === "turn_completed" && event.turnId) {
+      this.settleTurnTools(event.turnId, "interrupted");
       messages = completeAssistantMessage(
         messages,
         event.turnId,
@@ -294,6 +424,10 @@ class AssistantHarnessProjection {
       isRunning = false;
       activity = null;
     } else if ((event.type === "turn_failed" || event.type === "turn_cancelled") && event.turnId) {
+      this.settleTurnTools(
+        event.turnId,
+        event.type === "turn_cancelled" ? "cancelled" : "interrupted",
+      );
       messages = failAssistantMessage(
         messages,
         event.turnId,
@@ -312,7 +446,7 @@ class AssistantHarnessProjection {
         {
           invocationId: `pending-${event.sequence}`,
           capabilityId: event.payload.capabilityId,
-          completed: false,
+          state: "running" as const,
         },
       ];
       this.toolsByTurn.set(turnId, tools);
@@ -325,16 +459,44 @@ class AssistantHarnessProjection {
         tools,
       );
       activity = event.payload.capabilityId;
-    } else if (event.type === "tool_invocation_started" && event.turnId) {
+    } else if (
+      (event.type === "tool_invocation_started" ||
+        event.type === "tool_invocation_completed" ||
+        event.type === "tool_invocation_failed") &&
+      event.turnId
+    ) {
       const turnId = event.turnId;
-      const tools = [
-        ...(this.toolsByTurn.get(turnId) ?? []),
-        {
-          invocationId: event.payload.invocationId,
-          capabilityId: event.payload.capabilityId,
-          completed: false,
-        },
-      ];
+      const failureCode =
+        event.type === "tool_invocation_failed" ? event.payload.failureCode : null;
+      const state: ProjectionToolCall["state"] =
+        event.type === "tool_invocation_started"
+          ? "running"
+          : event.type === "tool_invocation_completed"
+            ? "completed"
+            : failureCode === "cancelled"
+              ? "cancelled"
+              : failureCode === "outcome_unknown"
+                ? "unknown"
+                : failureCode === "deadline_elapsed"
+                  ? "timed-out"
+                  : "failed";
+      const tools = [...(this.toolsByTurn.get(turnId) ?? [])];
+      let index = tools.findIndex((tool) => tool.invocationId === event.payload.invocationId);
+      // Older persisted streams contain a requested placeholder before the identified event.
+      if (index < 0)
+        index = tools.findIndex(
+          (tool) =>
+            tool.invocationId.startsWith("pending-") &&
+            tool.state === "running" &&
+            tool.capabilityId === event.payload.capabilityId,
+        );
+      const tool = {
+        invocationId: event.payload.invocationId,
+        capabilityId: event.payload.capabilityId,
+        state,
+      };
+      if (index < 0) tools.push(tool);
+      else tools[index] = tool;
       this.toolsByTurn.set(turnId, tools);
       messages = upsertToolMessage(
         messages,
@@ -344,34 +506,7 @@ class AssistantHarnessProjection {
         this.plansByTurn.get(turnId) ?? null,
         tools,
       );
-      activity = event.payload.capabilityId;
-    } else if (event.type === "tool_invocation_completed" && event.turnId) {
-      const turnId = event.turnId;
-      let matched = false;
-      const tools = (this.toolsByTurn.get(turnId) ?? []).map((tool) => {
-        if (!matched && !tool.completed && tool.capabilityId === event.payload.capabilityId) {
-          matched = true;
-          return { ...tool, invocationId: event.payload.invocationId, completed: true };
-        }
-        return tool;
-      });
-      if (!matched) {
-        tools.push({
-          invocationId: event.payload.invocationId,
-          capabilityId: event.payload.capabilityId,
-          completed: true,
-        });
-      }
-      this.toolsByTurn.set(turnId, tools);
-      messages = upsertToolMessage(
-        messages,
-        turnId,
-        event.occurredAt,
-        this.citationsByTurn.get(turnId) ?? [],
-        this.plansByTurn.get(turnId) ?? null,
-        tools,
-      );
-      activity = null;
+      activity = tools.find((tool) => tool.state === "running")?.capabilityId ?? null;
     } else if (event.type === "workflow_started") {
       activity = event.payload.runId;
     } else if (
@@ -427,6 +562,15 @@ class AssistantHarnessProjection {
       memoryCount,
       memoryRecords,
     });
+  }
+
+  private settleTurnTools(turnId: string, state: "cancelled" | "interrupted"): void {
+    this.toolsByTurn.set(
+      turnId,
+      (this.toolsByTurn.get(turnId) ?? []).map((tool) =>
+        tool.state === "running" ? { ...tool, state } : tool,
+      ),
+    );
   }
 
   private update(snapshot: AssistantHarnessSnapshot): void {

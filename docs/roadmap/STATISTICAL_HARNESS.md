@@ -9,15 +9,14 @@
 
 ## Baseline
 
-当前 foundation 已提供 Rust-authoritative sessions/turns/events、read-only typed capabilities、SQLite persistence、Rig driver、Assistant projection、一个 dataset-quality workflow、builtin Skill、lexical Knowledge 和 Session Memory。
+当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面草稿编辑/编译/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill、lexical Knowledge 和 Session Memory。
 
-以下能力仍 gated：Project write、external MCP exposure/client、unknown commit reconciliation、persistent User/Project Memory、vector retrieval、remote Skill 和 autonomous/background execution。
+以下能力仍 gated：桌面图工作流之外的 Project write、external MCP exposure/client、unknown commit reconciliation、persistent User/Project Memory、vector retrieval、remote Skill 和 autonomous/background execution。
 
 ## 1. Production write capabilities
 
 候选能力：
 
-- `apply_graph_edit`；
 - chart create/update；
 - variable annotation；
 - reproducible report save。
@@ -33,7 +32,7 @@
 - crash 后能够区分 not-started、committed 和 unknown outcome；
 - Assistant UI 可显示 pending approval、receipt、failure 和 undo/recovery action。
 
-`apply_graph_edit` 的 contract/Application 基础已经存在，但在上述 gate 完成前不得加入默认 Tool Registry 或外部 adapter。
+桌面 `apply_graph_edit` 已接入当前草稿 FIFO、Rust staged validation 和单批撤销；显式图 Save 复用正常保存入口，见 current architecture。上述 gate 约束未来其他持久写能力及 external/headless graph adapters，不把桌面草稿投影扩展为外部写授权。
 
 ## 2. Commit outcome reconciliation and recovery
 
@@ -43,7 +42,7 @@
 - project replacement 将 bound runs/turns 标记 stale 或 paused；
 - 完成 restart recovery、duplicate delivery 和 point-of-no-return tests。
 
-该阶段是所有 production write tools 的硬前置。
+该阶段是扩展 external/background 持久写能力的前置；桌面当前仅提供实际 receipt 保留和 unknown outcome 标识。
 
 ## 3. MCP external integration
 

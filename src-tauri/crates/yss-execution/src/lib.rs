@@ -5,6 +5,7 @@
 pub mod error;
 pub mod finalization;
 pub mod identity;
+mod numeric;
 pub mod package_preparation;
 pub mod plan;
 pub mod ports;

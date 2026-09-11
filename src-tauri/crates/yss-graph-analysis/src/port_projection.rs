@@ -221,7 +221,10 @@ pub(super) fn project_bound_port(
             can_remove,
             instance_label,
             value_type,
-            resolved_schema: resolved_schema.cloned(),
+            resolved_schema: current_member
+                .and_then(|member| member.schema.as_ref())
+                .or(resolved_schema)
+                .cloned(),
         },
     )
 }

@@ -1,6 +1,7 @@
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -236,7 +237,11 @@ impl ToolDescriptor {
             } else {
                 DataAccessPolicy::MetadataOnly
             },
-            timeout_ms: 30_000,
+            timeout_ms: if capability.effect == ToolEffect::Compute {
+                60_000
+            } else {
+                30_000
+            },
             idempotency: if capability.effect == ToolEffect::Mutate {
                 IdempotencyPolicy::InvocationBound
             } else {
@@ -315,6 +320,11 @@ pub enum AgentEvent {
         invocation_id: ToolInvocationId,
         capability_id: CapabilityId,
     },
+    ToolInvocationFailed {
+        invocation_id: ToolInvocationId,
+        capability_id: CapabilityId,
+        failure_code: crate::CapabilityFailureCode,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, thiserror::Error)]
@@ -324,6 +334,16 @@ pub enum AgentDriverFailureCode {
     Cancelled,
     #[error("provider_unavailable")]
     ProviderUnavailable,
+    #[error("provider_authentication_failed")]
+    ProviderAuthenticationFailed,
+    #[error("provider_rate_limited")]
+    ProviderRateLimited,
+    #[error("provider_request_rejected")]
+    ProviderRequestRejected,
+    #[error("provider_transport_failed")]
+    ProviderTransportFailed,
+    #[error("deadline_elapsed")]
+    DeadlineElapsed,
     #[error("invalid_provider_response")]
     InvalidProviderResponse,
     #[error("output_unavailable")]
@@ -409,7 +429,8 @@ pub enum CancellationReason {
 #[derive(Debug, Default)]
 struct CancellationState {
     reason: AtomicU8,
-    waiter: Mutex<Option<Waker>>,
+    next_waiter: AtomicUsize,
+    waiters: Mutex<BTreeMap<usize, Waker>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -424,15 +445,17 @@ impl CancellationToken {
             .reason
             .compare_exchange(0, reason as u8, Ordering::AcqRel, Ordering::Acquire)
             .is_ok();
-        if cancelled
-            && let Some(waiter) = self
-                .state
-                .waiter
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .take()
-        {
-            waiter.wake();
+        if cancelled {
+            let waiters = std::mem::take(
+                &mut *self
+                    .state
+                    .waiters
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner()),
+            );
+            for waiter in waiters.into_values() {
+                waiter.wake();
+            }
         }
         cancelled
     }
@@ -454,12 +477,14 @@ impl CancellationToken {
     pub fn cancelled(&self) -> CancellationFuture {
         CancellationFuture {
             token: self.clone(),
+            waiter_id: self.state.next_waiter.fetch_add(1, Ordering::Relaxed),
         }
     }
 }
 
 pub struct CancellationFuture {
     token: CancellationToken,
+    waiter_id: usize,
 }
 
 impl Future for CancellationFuture {
@@ -472,13 +497,26 @@ impl Future for CancellationFuture {
         *self
             .token
             .state
-            .waiter
+            .waiters
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(context.waker().clone());
+            .unwrap_or_else(|error| error.into_inner())
+            .entry(self.waiter_id)
+            .or_insert_with(|| context.waker().clone()) = context.waker().clone();
         match self.token.reason() {
             Some(reason) => Poll::Ready(reason),
             None => Poll::Pending,
         }
+    }
+}
+
+impl Drop for CancellationFuture {
+    fn drop(&mut self) {
+        self.token
+            .state
+            .waiters
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&self.waiter_id);
     }
 }
 
@@ -535,4 +573,46 @@ pub enum CredentialFailure {
     Unavailable,
     #[error("credential is invalid")]
     Invalid,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::task::Wake;
+
+    #[test]
+    fn cancellation_wakes_every_waiter_and_unregisters_dropped_futures() {
+        #[derive(Default)]
+        struct Counter(AtomicUsize);
+        impl Wake for Counter {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let token = CancellationToken::default();
+        let counters = [
+            Arc::new(Counter::default()),
+            Arc::new(Counter::default()),
+            Arc::new(Counter::default()),
+        ];
+        let mut futures = Vec::new();
+        for counter in &counters {
+            let waker = Waker::from(counter.clone());
+            let mut future = Box::pin(token.cancelled());
+            assert!(
+                future
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+            futures.push(future);
+        }
+        drop(futures.pop());
+        assert!(token.cancel(CancellationReason::User));
+        assert_eq!(
+            counters.map(|counter| counter.0.load(Ordering::Relaxed)),
+            [1, 1, 0]
+        );
+        assert!(token.state.waiters.lock().unwrap().is_empty());
+    }
 }

@@ -167,7 +167,6 @@ fn port_placement_appends_moves_and_undoes_without_uuid_ordering() {
     apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
     assert_eq!(document, before_move);
 }
-use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
@@ -218,6 +217,66 @@ fn function_node_scope_remains_restricted_without_an_event_scope_variant() {
 
     assert!(crate::mutation::validate_node_scope(&graph_path(), function_entry).is_err());
     assert!(crate::mutation::validate_node_scope(&function_path, function_entry).is_ok());
+}
+
+#[test]
+fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone() {
+    let system = build_builtin_node_system().unwrap();
+    let mut document = GraphDocument::default();
+    let source = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    let replacement = insert_node(&mut document, document_node("yssbi.constant.get", 0.0));
+    for node in [source, replacement] {
+        set_constant(
+            &mut document,
+            node,
+            DataType::Int64,
+            yss_data_contract::DataValue::Int64(1),
+        );
+    }
+    let first = insert_node(&mut document, document_node("yssbi.debug.view", 200.0));
+    let second = insert_node(&mut document, document_node("yssbi.debug.view", 400.0));
+    let connect = |document: &GraphDocument, source, target| {
+        EditorGraphMutation::Connect {
+            output: declared(source, "value"),
+            input: declared(target, "data"),
+            order: None,
+        }
+        .into_patch(&graph_path(), document, &system.registry)
+    };
+    for target in [first, second] {
+        let patch = connect(&document, source, target).unwrap();
+        apply_graph_document_patch(&mut document, &patch).unwrap();
+    }
+    assert_eq!(
+        document.connections.len(),
+        2,
+        "the second consumer must not disconnect the first"
+    );
+    let before = document.clone();
+    assert!(
+        matches!(connect(&document, source, second), Err(crate::MutationConflict::Editor(error)) if error.code == EditorMutationErrorCode::GraphConnectionAlreadyExists)
+    );
+    let patch = connect(&document, replacement, first).unwrap();
+    apply_graph_document_patch(&mut document, &patch).unwrap();
+    assert_eq!(document.connections.len(), 2);
+    assert!(
+        document
+            .connections
+            .values()
+            .any(|connection| connection.output == declared(source, "value")
+                && connection.input == declared(second, "data"))
+    );
+    assert!(
+        document
+            .connections
+            .values()
+            .any(
+                |connection| connection.output == declared(replacement, "value")
+                    && connection.input == declared(first, "data")
+            )
+    );
+    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
+    assert_eq!(document, before);
 }
 
 #[test]
@@ -440,55 +499,6 @@ fn remove_port_instance_cleans_up_an_orphaned_derived_port() {
         .expect("orphan cleanup patch must remain structurally valid");
 
     assert!(!document.port_bindings.contains_key(&address));
-}
-
-#[test]
-fn compatible_catalog_source_uses_the_protocol_binding_parameter() {
-    let registry = build_builtin_node_system()
-        .expect("built-in registry must assemble")
-        .registry;
-    let constant_id = yss_graph_document::ConstantId::new();
-    let mut node = document_node("yssbi.constant.get", 0.0);
-    node.parameters.insert(
-        ParameterKey::new("aaa").expect("fixture key must be valid"),
-        serde_json::Value::String("databases/wrong".into()),
-    );
-    node.parameters.insert(
-        ParameterKey::new("constant").expect("fixture key must be valid"),
-        serde_json::Value::String(constant_id.to_string()),
-    );
-    let mut document = GraphDocument::default();
-    document.constants.insert(
-        constant_id,
-        yss_graph_document::GraphConstant {
-            id: constant_id,
-            name: "Threshold".into(),
-            data_type: DataType::Int64,
-            data_value: yss_data_contract::DataValue::Int64(42),
-            tabular: None,
-            description: String::new(),
-            tags: vec![],
-        },
-    );
-    let node_id = insert_node(&mut document, node);
-    let catalog = ResourceCatalogSnapshot::new(
-        BTreeMap::new(),
-        BTreeMap::new(),
-        ResourceCatalogFingerprint::from_bytes([7; 32]),
-    );
-
-    let source = crate::compatibility::catalog_query_source_port(
-        &document,
-        registry.as_ref(),
-        &declared(node_id, "value"),
-        &catalog,
-    )
-    .expect("compatible catalog source must use the protocol-owned binding");
-
-    assert_eq!(
-        source.value_type,
-        TypeExpr::Concrete("core.int64".parse().expect("fixture type ID must be valid"))
-    );
 }
 
 #[test]
