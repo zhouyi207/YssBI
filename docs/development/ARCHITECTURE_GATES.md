@@ -140,6 +140,10 @@ Application 的 `serde` 直接依赖用于静态目录和离线源定义的反�
 
 ## 6. Changing the architecture policy
 
+React Flow 的运行时、类型与基础样式依赖仅开放给 Views；Application、Core 和 Domain
+不导入该画布库。graph-editor 的局部样式按确切 consumer/asset 路径登记，视图只获
+Graph read snapshot 和既有 viewport 契约，不增加 projection 写权限。
+
 数据库的语义 Schema/revision facts 归 `yss-database-schema`，按 Pure Leaf 分类；具体引擎映射归适配器。
 `yss-relational-contract` 是执行期关系句柄、快照绑定和 Arrow 流端口的 Pure Leaf 契约。
 `yss-tabular-arrow` 与 `yss-datafusion` 按 Database Core 分类，Arrow/DataFusion 外部依赖只授予实际声明的包；

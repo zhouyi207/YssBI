@@ -1,24 +1,15 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  type PointerEvent as ReactPointerEvent,
-  type RefObject,
-} from "react";
-import { useCanvasInteraction } from "@/features/core/canvas";
+import { useCallback, useMemo } from "react";
+import { useCanvasInteraction } from "./useCanvasInteraction";
 import { useNodeManagement } from "@/features/application/dataManagement";
 import {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
   useEditorPaneStateStore,
+  workbenchDockviewRead,
 } from "@/modules/workbench/public";
 import { setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
-import { editorViewportScope, getViewport, subscribeToViewport } from "@/features/core/viewport";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { captureActiveEditorCommandTarget, type EditorCommandTarget } from "./editorCommandFocus";
-import { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
 import type {
   EditorCanvasCommandsSlice,
   EditorCanvasInteractionSlice,
@@ -51,41 +42,62 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
     (state) => state.sessions[scope.graphPath]?.compileStatus ?? "uncompiled",
   );
   const interactive = mode === "interactive";
-  const groupIdRef = useRef(scope.groupId);
-  const graphPathRef = useRef<string | null>(scope.graphPath);
-  const viewportRef = useRef(getViewport(editorViewportScope(scope.groupId, scope.graphPath)));
-  groupIdRef.current = scope.groupId;
-  graphPathRef.current = scope.graphPath;
 
-  useEffect(() => {
-    const viewportScope = editorViewportScope(scope.groupId, scope.graphPath);
-    viewportRef.current = getViewport(viewportScope);
-    return subscribeToViewport(viewportScope, (viewport) => {
-      viewportRef.current = viewport;
-    });
-  }, [scope.graphPath, scope.groupId]);
-
+  const paneStillMatches = useCallback(() => {
+    const panel = workbenchDockviewRead.getPanel(scope.panelInstanceId);
+    return (
+      panel?.groupId === scope.groupId &&
+      panel.metadata.role === "editor" &&
+      panel.metadata.resourceRef === scope.graphPath
+    );
+  }, [scope.panelInstanceId, scope.groupId, scope.graphPath]);
+  const syncInspection = useCallback(
+    (nodeIds: string[]) => {
+      const target = captureActiveEditorCommandTarget();
+      if (
+        target?.panelInstanceId === scope.panelInstanceId &&
+        target.resourceRef === scope.graphPath
+      ) {
+        setInspectionContext(scope.graphPath, nodeIds);
+      }
+    },
+    [scope.graphPath, scope.panelInstanceId],
+  );
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-      if (targetGroupId && targetGroupId !== scope.groupId) return;
-      const current = getPaneSelection(scope.panelInstanceId).selectedNodeIds;
+      if ((targetGroupId && targetGroupId !== scope.groupId) || !paneStillMatches()) return;
+      const selection = getPaneSelection(scope.panelInstanceId);
+      const current = selection.selectedNodeIds;
       const next = typeof updater === "function" ? updater(current) : updater;
       const nodeIds = [...new Set(next)];
+      if (
+        !selection.selectedConnectionIds.length &&
+        current.length === nodeIds.length &&
+        current.every((id, index) => id === nodeIds[index])
+      )
+        return;
       useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
-      setInspectionContext(scope.graphPath, nodeIds);
+      syncInspection(nodeIds);
     },
-    [scope.graphPath, scope.groupId, scope.panelInstanceId],
+    [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],
   );
 
   const setSelectedConnectionIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-      if (targetGroupId && targetGroupId !== scope.groupId) return;
-      const current = getPaneSelection(scope.panelInstanceId).selectedConnectionIds;
+      if ((targetGroupId && targetGroupId !== scope.groupId) || !paneStillMatches()) return;
+      const selection = getPaneSelection(scope.panelInstanceId);
+      const current = selection.selectedConnectionIds;
       const next = typeof updater === "function" ? updater(current) : updater;
+      if (
+        !selection.selectedNodeIds.length &&
+        current.length === next.length &&
+        current.every((id, index) => id === next[index])
+      )
+        return;
       useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
-      setInspectionContext(scope.graphPath, []);
+      syncInspection([]);
     },
-    [scope.graphPath, scope.groupId, scope.panelInstanceId],
+    [scope.groupId, scope.panelInstanceId, paneStillMatches, syncInspection],
   );
 
   const setContextMenu = useCallback(
@@ -118,45 +130,11 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   );
 
   const canvasInteraction = useCanvasInteraction({
-    activeGroupIdRef: groupIdRef as RefObject<string>,
-    activeResourceRefRef: graphPathRef,
-    panelInstanceId: scope.panelInstanceId,
-    viewportRef,
-    setSelectedNodeIds,
-    setContextMenu,
-    handlers: mutationHandlers,
+    scope,
     enabled: interactive,
-    uiEnabled: interactive,
+    handlers: mutationHandlers,
+    setSelectedNodeIds,
   });
-
-  const prepareForInteraction = useCallback(() => {
-    prepareEditorGroupForInteraction(scope.groupId);
-    return true;
-  }, [scope.groupId]);
-
-  const onCanvasPointerDown = useCallback(
-    (event: ReactPointerEvent) => {
-      if (!prepareForInteraction()) return;
-      canvasInteraction.onCanvasPointerDown(event, scope.groupId);
-    },
-    [canvasInteraction.onCanvasPointerDown, prepareForInteraction, scope.groupId],
-  );
-
-  const onNodePointerDown = useCallback(
-    (nodeId: string, event: ReactPointerEvent) => {
-      if (!prepareForInteraction()) return;
-      canvasInteraction.onNodePointerDown(nodeId, event, scope.groupId);
-    },
-    [canvasInteraction.onNodePointerDown, prepareForInteraction, scope.groupId],
-  );
-
-  const onPinPointerDown = useCallback(
-    (pin: PinData, event: ReactPointerEvent) => {
-      if (!prepareForInteraction()) return;
-      canvasInteraction.onPinPointerDown(pin, event, scope.groupId);
-    },
-    [canvasInteraction.onPinPointerDown, prepareForInteraction, scope.groupId],
-  );
 
   const commands = useMemo(
     (): EditorCanvasCommandsSlice => ({
@@ -227,9 +205,9 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       setContextMenu,
       pendingConnection: canvasInteraction.pendingConnection,
       setPendingConnection: canvasInteraction.setPendingConnection,
-      onCanvasPointerDown,
-      onNodePointerDown,
-      onPinPointerDown,
+      beginGesture: canvasInteraction.beginGesture,
+      isInteractive: canvasInteraction.isInteractive,
+      mutations: canvasInteraction.mutations,
       insertRerouteAtConnection: canvasInteraction.insertRerouteAtConnection,
     }),
     [
@@ -238,9 +216,9 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       canvasInteraction.pendingConnection,
       canvasInteraction.setPendingConnection,
       canvasInteraction.insertRerouteAtConnection,
-      onCanvasPointerDown,
-      onNodePointerDown,
-      onPinPointerDown,
+      canvasInteraction.beginGesture,
+      canvasInteraction.isInteractive,
+      canvasInteraction.mutations,
     ],
   );
 

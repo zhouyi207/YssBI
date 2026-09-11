@@ -1,0 +1,76 @@
+.yss-flow {
+  --xy-background-color: transparent;
+  --xy-selection-background-color: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  --xy-selection-border: 1px solid var(--accent-color);
+}
+
+/* Preserve the group-drag hit target; only the in-progress marquee should be painted. */
+.yss-flow .react-flow__nodesselection-rect {
+  border: 0;
+  background: transparent;
+}
+
+.yss-flow .react-flow__node-graph {
+  border: 0;
+  background: transparent;
+}
+
+.yss-flow .react-flow__handle.yss-flow-handle {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+}
+
+.yss-flow-handle::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+}
+
+.yss-flow-handle[data-connection-feedback="append"]::after {
+  box-shadow: 0 0 0 2px var(--status-success);
+}
+.yss-flow-handle[data-connection-feedback="replace"]::after {
+  box-shadow: 0 0 0 2px var(--status-warning);
+}
+.yss-flow-handle[data-connection-feedback="invalid"]::after {
+  box-shadow: 0 0 0 2px var(--status-danger);
+}
+
+@keyframes edgeFlowData {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+@keyframes edgePullData {
+  to {
+    stroke-dashoffset: 40;
+  }
+}
+@keyframes edgeGlowData {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+@keyframes edgePullGlow {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

@@ -1,5 +1,10 @@
 import type { useNodeManagement } from "@/features/application/dataManagement/useNodeManagement";
-import type { CanvasMutationOutcome } from "@/features/core/canvas";
+import type {
+  CanvasMutationOutcome,
+  CanvasInteractionHandlers,
+  CanvasGestureLease,
+} from "@/features/core/canvas/canvasMutationContracts";
+import type { CanvasGestureType } from "@/features/core/graphInteraction/graphInteractionStore";
 import type { EditorContextMenuState } from "@/features/core/editor";
 import type { GraphSelection } from "@/modules/workbench/public";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
@@ -58,9 +63,9 @@ export interface EditorCanvasInteractionSlice {
   setContextMenu: (menu: EditorContextMenuState | null) => void;
   pendingConnection: PinData | null;
   setPendingConnection: (pin: PinData | null) => void;
-  onCanvasPointerDown: (event: React.PointerEvent) => void;
-  onNodePointerDown: (nodeId: string, event: React.PointerEvent) => void;
-  onPinPointerDown: (pin: PinData, event: React.PointerEvent) => void;
+  beginGesture(type: CanvasGestureType, onCancel: () => void): CanvasGestureLease | null;
+  isInteractive(): boolean;
+  mutations: CanvasInteractionHandlers;
   insertRerouteAtConnection: (
     connectionId: string,
     position: Readonly<{ x: number; y: number }>,

@@ -42,6 +42,7 @@ export interface GraphPinViewProps {
   shouldPulse: boolean;
   tooltip: string;
   inputSlot?: ReactNode;
+  handleSlot?: ReactNode;
   contextMenuSlot?: ReactNode;
   onContextMenu: MouseEventHandler<HTMLDivElement>;
   onPointerDown?: PointerEventHandler<HTMLDivElement>;
@@ -179,6 +180,7 @@ export function GraphPinView({
   shouldPulse,
   tooltip,
   inputSlot,
+  handleSlot,
   contextMenuSlot,
   onContextMenu,
   onPointerDown,
@@ -200,7 +202,7 @@ export function GraphPinView({
         >
           <div
             data-pin-connection-anchor={id}
-            className={`relative z-20 flex h-6 w-6 shrink-0 cursor-crosshair items-center justify-center rounded-full pin-circle ${
+            className={`nodrag nopan relative z-20 flex h-6 w-6 shrink-0 cursor-crosshair items-center justify-center rounded-full pin-circle ${
               direction === "input" ? "mr-1" : "ml-1"
             } ${contextMenuOpen ? "ring-2 ring-[var(--accent-color)]/60" : ""} ${
               diagnosticMessage ? "ring-2 ring-amber-500/80" : ""
@@ -232,6 +234,7 @@ export function GraphPinView({
                 <circle cx="6" cy="6" r="1.2" fill="white" className="pointer-events-none" />
               ) : null}
             </svg>
+            {handleSlot}
           </div>
 
           <span

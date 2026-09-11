@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import type { GraphContextMenuActions } from "@/features/application/editor";
@@ -27,8 +27,8 @@ export interface GraphNodeControllerProps {
   selected?: boolean;
   activePin?: PinData | null;
   contextMenuActions?: GraphContextMenuActions | null;
-  onPointerDown?: (nodeId: string, event: React.PointerEvent) => void;
-  onPinPointerDown?: (pin: PinData, event: React.PointerEvent) => void;
+  renderPinHandle?: (pin: PinData) => ReactNode;
+  canConnectPin?: (pin: PinData) => boolean;
 }
 
 export const GraphNodeController = memo(function GraphNodeController({
@@ -38,8 +38,8 @@ export const GraphNodeController = memo(function GraphNodeController({
   selected,
   activePin,
   contextMenuActions,
-  onPointerDown,
-  onPinPointerDown,
+  renderPinHandle,
+  canConnectPin,
 }: GraphNodeControllerProps) {
   const { i18n } = useTranslation();
   const node = useNodeView(id, graphPath);
@@ -63,14 +63,10 @@ export const GraphNodeController = memo(function GraphNodeController({
 
   const nodeDimmed = useMemo(() => {
     if (!node || !activePin || activePin.nodeId === node.id) return false;
-    return ![...node.inputs, ...node.outputs].some((pin) => isPinCompatible(pin, activePin));
-  }, [activePin, node]);
-  const handlePinPointerDown = useCallback(
-    (event: React.PointerEvent, pin: PinData) => {
-      onPinPointerDown?.(pin, event);
-    },
-    [onPinPointerDown],
-  );
+    return ![...node.inputs, ...node.outputs].some((pin) =>
+      canConnectPin ? canConnectPin(pin) : isPinCompatible(pin, activePin),
+    );
+  }, [activePin, canConnectPin, node]);
 
   if (!node) return null;
 
@@ -81,7 +77,8 @@ export const GraphNodeController = memo(function GraphNodeController({
     graphPath,
     groupId,
     contextMenuActions,
-    onPinPointerDown: handlePinPointerDown,
+    renderPinHandle,
+    canConnectPin,
   };
   const isReroute = isRerouteNodeView(node);
   const contentSlot = isReroute ? (
@@ -91,7 +88,7 @@ export const GraphNodeController = memo(function GraphNodeController({
       graphPath={graphPath}
       groupId={groupId}
       contextMenuActions={contextMenuActions}
-      onPinPointerDown={handlePinPointerDown}
+      renderPinHandle={renderPinHandle}
     />
   ) : (
     <DefaultNodeLayout {...layoutProps} />
@@ -151,7 +148,6 @@ export const GraphNodeController = memo(function GraphNodeController({
       className={className}
       style={{
         ...minSize,
-        transform: `translate3d(${node.position.x}px, ${node.position.y}px, 0)`,
         background: getNodeBackgroundStyle({ hasError, isCompleted }),
         opacity: nodeDimmed ? 0.35 : undefined,
         transition: useStoreExecVisual
@@ -164,7 +160,6 @@ export const GraphNodeController = memo(function GraphNodeController({
       executionBadgeSlot={executionBadgeSlot}
       diagnosticBadgeSlot={diagnosticBadgeSlot}
       contextMenuSlot={contextMenuSlot}
-      onPointerDown={(event) => onPointerDown?.(node.id, event)}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();

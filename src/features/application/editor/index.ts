@@ -39,7 +39,6 @@ export { clearDetailFocusForClosedPanel } from "./clearDetailFocusForClosedPanel
 export { useIsActiveEditorPanel } from "./useIsActiveEditorPanel";
 export type { GraphContextMenuActions } from "./graphContextMenuActions";
 export { useCanvasViewport } from "./useCanvasViewport";
-export { useCanvasWheelZoom } from "./useCanvasWheelZoom";
 export { useCanvasDrop } from "./useCanvasDrop";
 export { useCanvasOverlayHandlers } from "./useCanvasOverlayHandlers";
 export {

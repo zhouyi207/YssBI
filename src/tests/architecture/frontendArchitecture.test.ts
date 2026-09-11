@@ -759,7 +759,7 @@ describe("frontend architecture model", () => {
       const viewContracts = [
         {
           path: "src/modules/graph-editor/internal/ui/Canvas/core/GraphCanvasView.tsx",
-          slots: ["viewportGridSlot", "connectionPreviewSlot", "graphContentSlot", "overlaySlot"],
+          slots: ["viewportGridSlot", "graphContentSlot", "overlaySlot"],
         },
         {
           path: "src/modules/graph-editor/internal/ui/Nodes/GraphNodeView.tsx",
@@ -964,6 +964,7 @@ describe("frontend architecture model", () => {
 
   it("audits frontend packages and stylesheet assets by layer mode and origin", () => {
     const productionSources = [
+      "src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx",
       "src/modules/settings/internal/ui/SettingsView.tsx",
       "src/app/App.tsx",
       "src/app/main.tsx",
@@ -1079,6 +1080,7 @@ describe("frontend architecture model", () => {
         "src/app/App.css",
         "src/app/workbench-dockview.css",
         "src/modules/settings/internal/ui/settings.css",
+        "src/modules/graph-editor/internal/ui/Canvas/core/graphFlow.css",
       ],
       dependencies: stylesheetDependencies,
       errors: [
@@ -1130,6 +1132,15 @@ describe("frontend architecture model", () => {
         resourceKind: "stylesheet",
         consumerSourceFile: "src/modules/settings/internal/ui/SettingsView.tsx",
         repositoryRelativeAssetPath: "src/modules/settings/internal/ui/settings.css",
+      },
+      {
+        sourceLayer: "views",
+        mode: "runtime",
+        dependencyKind: "side-effect-import",
+        resourceKind: "stylesheet",
+        consumerSourceFile: "src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx",
+        repositoryRelativeAssetPath:
+          "src/modules/graph-editor/internal/ui/Canvas/core/graphFlow.css",
       },
     ]);
 

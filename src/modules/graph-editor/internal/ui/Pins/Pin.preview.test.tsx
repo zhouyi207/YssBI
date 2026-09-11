@@ -99,7 +99,7 @@ describe("Pin preview production path", () => {
     vi.restoreAllMocks();
   });
 
-  it("emits cloneable Pin data without component callbacks on pointer down", () => {
+  it("renders the canvas handle slot without swallowing its pointer event", () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(
       useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
@@ -127,15 +127,18 @@ describe("Pin preview production path", () => {
             pin={pin}
             graphPath={graphPath}
             contextMenuActions={contextMenuActions}
-            onPinPointerDown={onPinPointerDown}
+            handleSlot={
+              <span data-flow-handle onPointerDown={(event) => onPinPointerDown(event, pin)} />
+            }
           />
         </TooltipProvider>,
       ),
     );
-    const pinElement = container.querySelector(
-      `[data-pin-connection-anchor="${fixture.outputKey}"]`,
-    );
+    const pinElement = container.querySelector("[data-flow-handle]");
     if (!pinElement) throw new Error("expected rendered pin");
+    const anchor = pinElement.closest("[data-pin-connection-anchor]");
+    expect(anchor?.classList.contains("nodrag")).toBe(true);
+    expect(anchor?.classList.contains("nopan")).toBe(true);
     act(() => {
       pinElement.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     });

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import {
@@ -12,7 +12,6 @@ import {
   pinViewDisabledTitle,
 } from "@/features/core/execution/pinViewTarget";
 import { useGraphRead } from "@/features/core/graph/read";
-import { useGraphInteractionUi } from "@/features/core/graphInteraction/ui";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useTheme } from "@/features/core/theme/useTheme";
 import type { PinData, PinView } from "@/features/domain/editorProjection/graphRuntimeTypes";
@@ -25,7 +24,7 @@ import { deserializeDataValue, dataValueToRaw } from "@/shared/types/domain/data
 import { PRIMITIVE_SCALAR_INPUT_KEYS, scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinContextMenu } from "../ContextMenu";
-import { GraphPinView, type GraphPinConnectionFeedbackViewModel } from "./GraphPinView";
+import { GraphPinView } from "./GraphPinView";
 import { PinInput } from "./PinInput";
 
 function toDisplayValue(value: unknown): unknown {
@@ -55,7 +54,7 @@ export interface GraphPinControllerProps {
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  onPinPointerDown?: (event: React.PointerEvent, pin: PinData) => void;
+  handleSlot?: ReactNode;
   isActive?: boolean;
   pinDragState?: GraphPinDragState;
 }
@@ -64,9 +63,8 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const {
     pin,
     graphPath,
-    groupId,
     contextMenuActions,
-    onPinPointerDown,
+    handleSlot,
     isActive,
     pinDragState = "normal",
   } = props;
@@ -99,25 +97,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
-  const connectionFeedback = useGraphInteractionUi((state) => {
-    if (!graphPath || !groupId) return null;
-    const interaction = state.interactions[graphPath];
-    if (!interaction || interaction.type === "idle" || interaction.session.groupId !== groupId) {
-      return null;
-    }
-    if (interaction.type !== "drawingConnection" && interaction.type !== "movingConnections") {
-      return null;
-    }
-    const session = interaction.session;
-    return session.snappedTarget?.id === id || session.hoveredTarget?.id === id
-      ? session.feedback
-      : null;
-  });
-  const connectionFeedbackModel: GraphPinConnectionFeedbackViewModel | null = connectionFeedback
-    ? connectionFeedback.kind === "invalid"
-      ? { kind: "invalid", invalidReason: connectionFeedback.reason }
-      : { kind: connectionFeedback.kind }
-    : null;
   const connectionIds = useGraphRead((snapshot) =>
     graphPath
       ? (snapshot.graphEntities[graphPath]?.pinConnections[id] ?? EMPTY_CONNECTION_IDS)
@@ -211,15 +190,9 @@ export function GraphPinController(props: GraphPinControllerProps) {
       : effectivePinDragState === "highlighted"
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
-  const feedbackTooltip =
-    connectionFeedback?.kind === "invalid"
-      ? t(`canvas.connection.feedback.${connectionFeedback.reason}`)
-      : null;
-  const tooltip =
-    feedbackTooltip ??
-    (pinDiagnostic
-      ? `${name} (${visualSpec.label}) — ${formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage)}`
-      : `${name} (${visualSpec.label})`);
+  const tooltip = pinDiagnostic
+    ? `${name} (${visualSpec.label}) — ${formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage)}`
+    : `${name} (${visualSpec.label})`;
 
   const inputSlot = showInput ? (
     <PinInput
@@ -260,7 +233,8 @@ export function GraphPinController(props: GraphPinControllerProps) {
         pinDiagnostic ? formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage) : undefined
       }
       dragStyle={dragStyle}
-      connectionFeedback={connectionFeedbackModel}
+      connectionFeedback={null}
+      handleSlot={handleSlot}
       visualSpec={visualSpec}
       renderStyle={renderStyle}
       baseColor={baseColor}
@@ -272,12 +246,6 @@ export function GraphPinController(props: GraphPinControllerProps) {
         event.preventDefault();
         event.stopPropagation();
         setContextMenu({ x: event.clientX, y: event.clientY });
-      }}
-      onPointerDown={(event) => {
-        if (!onPinPointerDown) return;
-        event.stopPropagation();
-        event.preventDefault();
-        onPinPointerDown(event, pin);
       }}
       onClick={(event) => {
         event.stopPropagation();

@@ -175,7 +175,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep("viewport", () => useViewportStore.setState({ viewports: {} }));
   commitProjectLoadStep("graph interaction", () =>
     useGraphInteractionStore.setState({
-      positionOverrides: {},
+      interactions: {},
     }),
   );
   commitProjectLoadStep("column stats", () =>

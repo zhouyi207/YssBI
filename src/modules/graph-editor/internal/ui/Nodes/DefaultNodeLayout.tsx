@@ -12,7 +12,8 @@ interface DefaultNodeLayoutProps {
   graphPath?: string;
   groupId?: string;
   contextMenuActions?: GraphContextMenuActions | null;
-  onPinPointerDown?: (e: React.PointerEvent, pin: PinData) => void;
+  renderPinHandle?: (pin: PinData) => React.ReactNode;
+  canConnectPin?: (pin: PinData) => boolean;
 }
 
 const formatInlineSummary = (value: unknown): string => {
@@ -35,7 +36,8 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   graphPath,
   groupId,
   contextMenuActions,
-  onPinPointerDown,
+  renderPinHandle,
+  canConnectPin,
 }) => {
   const inlineParameters = node.parameterEditors.filter(
     (parameter) => parameter.presentation === "inlineAndDetail",
@@ -44,10 +46,11 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
     (pin: PinData): "normal" | "highlighted" | "dimmed" => {
       if (!activePin) return "normal";
       if (pin.id === activePin.id) return "highlighted";
-      if (isPinCompatible(pin, activePin)) return "highlighted";
+      if (canConnectPin ? canConnectPin(pin) : isPinCompatible(pin, activePin))
+        return "highlighted";
       return "dimmed";
     },
-    [activePin],
+    [activePin, canConnectPin],
   );
 
   return (
@@ -90,7 +93,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
-                  onPinPointerDown={onPinPointerDown}
+                  handleSlot={renderPinHandle?.(pin)}
                 />
               );
             })}
@@ -108,7 +111,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   contextMenuActions={contextMenuActions}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
-                  onPinPointerDown={onPinPointerDown}
+                  handleSlot={renderPinHandle?.(pin)}
                 />
               );
             })}

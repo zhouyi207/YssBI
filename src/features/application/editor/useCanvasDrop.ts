@@ -67,7 +67,7 @@ export function useCanvasDrop({
   }, [enabled, canvasElementRef, setPendingConnection]);
 
   const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | MouseEvent) => {
       e.preventDefault();
       if (useGestureStore.getState().consumeSuppressContextMenu()) {
         return;

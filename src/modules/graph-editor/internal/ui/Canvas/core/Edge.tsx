@@ -24,6 +24,7 @@ const DATA_PULL_STYLE = {
 };
 
 interface EdgeProps {
+  interactive?: boolean;
   edgeId?: string;
   fromPinId?: string;
   toPinId?: string;
@@ -49,37 +50,10 @@ interface EdgeProps {
   onDoubleClick?: (event: React.MouseEvent<SVGPathElement>) => void;
 }
 
-export function drawEdge(
-  ctx: CanvasRenderingContext2D,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  color: string = "var(--muted-foreground)",
-  thickness: number = 2,
-  startIsInput: boolean = false,
-) {
-  const dx = Math.abs(x1 - x2);
-  const curvature = Math.max(dx * 0.5, 40);
-  const dir = startIsInput ? -1 : 1;
-
-  const c1x = x1 + curvature * dir;
-  const c1y = y1;
-  const c2x = x2 - curvature * dir;
-  const c2y = y2;
-
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.bezierCurveTo(c1x, c1y, c2x, c2y, x2, y2);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = thickness;
-  ctx.lineCap = "round";
-  ctx.stroke();
-}
-
 export const Edge = React.memo<EdgeProps>(
   ({
     edgeId,
+    interactive = false,
     fromPinId: _fromPinId,
     toPinId: _toPinId,
     x1,
@@ -238,7 +212,7 @@ export const Edge = React.memo<EdgeProps>(
           />
         )}
 
-        {(onPointerDown || onClick || onContextMenu || onDoubleClick) && (
+        {(interactive || onPointerDown || onClick || onContextMenu || onDoubleClick) && (
           <path
             data-edge-hit-target={edgeId}
             d={pathData}

@@ -4,7 +4,6 @@ import {
   type CanvasInteraction,
 } from "@/features/core/graphInteraction/graphInteractionStore";
 import { useGestureStore } from "@/features/core/gesture/useGestureStore";
-import { clearCanvasPointerScope } from "./pointerScope";
 
 type ActiveInteractionType = Exclude<CanvasInteraction["type"], "idle">;
 interface CleanupScope {
@@ -60,27 +59,26 @@ export function cancelCanvasInteraction(
     runCleanupKey(key);
   }
   const result = useGraphInteractionStore.getState().cancelInteraction(graphPath, groupId);
-  clearCanvasPointerScope(graphPath);
   return result;
 }
 
 export function clearCanvasInteractionGraph(graphPath: string): void {
-  for (const key of [...cleanups.keys()]) {
+  // Cleanup callbacks may unregister or replace entries; consume only this lifecycle's snapshot.
+  const keysToClear = [...cleanups.keys()];
+  for (const key of keysToClear) {
     if (key.startsWith(`${graphPath}\u0000`)) runCleanupKey(key);
   }
   useGraphInteractionStore.getState().clearGraphInteraction(graphPath);
   useGestureStore.getState().clearGesture(false);
-  clearCanvasPointerScope(graphPath);
 }
 
 export function clearCanvasInteractionProject(): void {
-  for (const key of [...cleanups.keys()]) runCleanupKey(key);
-  useGraphInteractionStore.setState({ interactions: {}, positionOverrides: {} });
+  const keysToClear = [...cleanups.keys()];
+  for (const key of keysToClear) runCleanupKey(key);
+  useGraphInteractionStore.setState({ interactions: {} });
   useGestureStore.getState().clearGesture(false);
-  clearCanvasPointerScope();
 }
 
 export function resetCanvasInteractionCleanupForTests(): void {
   cleanups.clear();
-  clearCanvasPointerScope();
 }

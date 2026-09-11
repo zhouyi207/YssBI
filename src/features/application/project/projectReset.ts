@@ -46,8 +46,7 @@ export async function resetClientProjectState(
   if (!runOwnedReset(owner, resetFunctionSignatureCoordinator)) return;
   if (!runOwnedReset(owner, resetGraphDraftCoordinator)) return;
   if (!runOwnedReset(owner, resetHistoryCoordinator)) return;
-  if (!runOwnedReset(owner, () => useGraphInteractionStore.setState({ positionOverrides: {} })))
-    return;
+  if (!runOwnedReset(owner, () => useGraphInteractionStore.setState({ interactions: {} }))) return;
   if (!runOwnedReset(owner, () => useColumnStatsStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useColumnDistributionStore.getState().clear())) return;
   if (!runOwnedReset(owner, () => useDatasetOverviewStore.getState().clear())) return;

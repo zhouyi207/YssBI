@@ -13,7 +13,7 @@ export interface PinInputProps {
 }
 
 const INPUT_CLASS =
-  "h-[18px] box-border rounded-sm px-1.5 text-[10px] leading-[18px] placeholder:text-muted-foreground";
+  "nodrag nowheel h-[18px] box-border rounded-sm px-1.5 text-[10px] leading-[18px] placeholder:text-muted-foreground";
 
 const MIN_WIDTH = 28;
 
@@ -184,7 +184,7 @@ export const PinInput: React.FC<PinInputProps> = ({
 
     case "bool":
       return (
-        <div className="ml-0.5" onClick={stop} onPointerDown={stop}>
+        <div className="nodrag nowheel ml-0.5" onClick={stop} onPointerDown={stop}>
           <Switch
             size="sm"
             checked={Boolean(value)}

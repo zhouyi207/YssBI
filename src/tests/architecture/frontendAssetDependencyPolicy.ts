@@ -37,6 +37,14 @@ export const FRONTEND_ASSET_DEPENDENCY_POLICY: AssetDependencyPolicy = {
       consumerSourceFile: "src/modules/settings/internal/ui/SettingsView.tsx",
       repositoryRelativeAssetPath: "src/modules/settings/internal/ui/settings.css",
     },
+    {
+      sourceLayer: "views",
+      mode: "runtime",
+      dependencyKind: "side-effect-import",
+      resourceKind: "stylesheet",
+      consumerSourceFile: "src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx",
+      repositoryRelativeAssetPath: "src/modules/graph-editor/internal/ui/Canvas/core/graphFlow.css",
+    },
   ],
 };
 

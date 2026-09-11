@@ -1,4 +1,4 @@
-/** Shared bezier path math for SVG edges and drag-preview updates. */
+/** Shared bezier path math for project-styled edges and connection previews. */
 export function computeEdgePath(
   x1: number,
   y1: number,

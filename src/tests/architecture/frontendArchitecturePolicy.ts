@@ -105,17 +105,7 @@ function viewCoreCapability(
 }
 
 const VIEW_CORE_CAPABILITIES = [
-  viewCoreCapability("src/features/core/canvas/connectionInteraction.ts", ["ConnectionFeedback"]),
-  viewCoreCapability("src/features/core/canvas/connectPreview.ts", [
-    "getConnectPreview",
-    "subscribeConnectPreview",
-  ]),
   viewCoreCapability("src/features/core/canvas/edgePath.ts", ["computeEdgePath"]),
-  viewCoreCapability("src/features/core/canvas/useEdgeDragPreview.ts", ["useEdgeDragPreview"]),
-  viewCoreCapability("src/features/core/canvas/useNodeDragPreview.ts", ["useNodeDragPreview"]),
-  viewCoreCapability("src/features/core/canvas/useSelectionBoxPreview.ts", [
-    "useSelectionBoxPreview",
-  ]),
   viewCoreCapability("src/features/core/database/read.ts", ["useDatabaseRead"]),
   viewCoreCapability("src/features/core/dataStore/graphEntityAccess.ts", [
     "GraphEntitiesState",
@@ -178,8 +168,10 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/execution/useExecutionVisualBinder.ts", [
     "useExecutionVisualBinder",
   ]),
-  viewCoreCapability("src/features/core/graph/read.ts", ["useGraphRead"]),
-  viewCoreCapability("src/features/core/graphInteraction/ui.ts", ["useGraphInteractionUi"]),
+  viewCoreCapability("src/features/core/graph/read.ts", [
+    "useGraphRead",
+    "GraphProjectionSnapshot",
+  ]),
   viewCoreCapability("src/features/core/graphSession/graphSessionStore.ts", [
     "FocusedGraphSession",
   ]),
@@ -260,7 +252,6 @@ const VIEW_CORE_CAPABILITIES = [
 ];
 
 const VIEW_DOMAIN_CAPABILITIES = [
-  viewCoreCapability("src/features/domain/canvas/edgeData.ts", ["EdgeData"]),
   viewCoreCapability("src/features/domain/graphDiagnostics/nodeDiagnostics.ts", [
     "collectGraphProblems",
     "findPrimaryPortDiagnostic",
@@ -274,6 +265,13 @@ const VIEW_DOMAIN_CAPABILITIES = [
     "nodeDisplayTitle",
     "pinDisplayTitle",
     "resolveNodePinDisplayLabel",
+  ]),
+  viewCoreCapability("src/features/domain/editorProjection/interactionPinData.ts", [
+    "toInteractionPinData",
+  ]),
+  viewCoreCapability("src/features/core/viewport/editorViewport.ts", [
+    "EditorViewport",
+    "EDITOR_VIEWPORT_SCALE_LIMITS",
   ]),
   viewCoreCapability("src/features/domain/editorProjection/connectionRules.ts", [
     "isPinCompatible",

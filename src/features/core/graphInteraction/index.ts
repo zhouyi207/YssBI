@@ -1,6 +1,5 @@
 export {
-  getPositionOverride,
   useGraphInteractionStore,
   type GraphInteractionState,
-  type NodePosition,
+  type CanvasGestureType,
 } from "./graphInteractionStore";

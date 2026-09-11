@@ -81,7 +81,14 @@ function renderNode(node: UINode, onPinPointerDown = vi.fn(), onPointerDown = vi
           nodeId={node.id}
           className=""
           style={{}}
-          contentSlot={<RerouteNodeLayout node={node} onPinPointerDown={onPinPointerDown} />}
+          contentSlot={
+            <RerouteNodeLayout
+              node={node}
+              renderPinHandle={(pin) => (
+                <span data-flow-handle onPointerDown={(event) => onPinPointerDown(event, pin)} />
+              )}
+            />
+          }
           onPointerDown={(event) => onPointerDown(node.id, event)}
           onContextMenu={vi.fn()}
         />
@@ -105,7 +112,7 @@ describe("RerouteNodeLayout", () => {
     expect(container.textContent).not.toContain("Hidden");
     expect(container.querySelector("input")).toBeNull();
 
-    const inputAnchor = pins[0].querySelector<HTMLElement>("[data-pin-connection-anchor]");
+    const inputAnchor = pins[0].querySelector<HTMLElement>("[data-flow-handle]");
     expect(inputAnchor).not.toBeNull();
     act(() =>
       inputAnchor!.dispatchEvent(
