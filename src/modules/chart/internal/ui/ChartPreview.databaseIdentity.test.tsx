@@ -20,8 +20,7 @@ vi.mock("./ChartEmptyState", () => ({ ChartEmptyState: () => <div>empty</div> })
 const projectA = "00000000-0000-0000-0000-000000000601";
 const projectB = "00000000-0000-0000-0000-000000000602";
 const chart: ChartDocument = {
-  schemaVersion: 3,
-  revision: 0,
+  schemaVersion: 4,
   databaseId: "sales",
   chartType: "scatter",
   encodings: { x: "x", y: "y" },

@@ -9,8 +9,7 @@ const projectInstanceId = "00000000-0000-0000-0000-000000000611";
 
 function document(chartType: ChartType): ChartDocument {
   return {
-    schemaVersion: 3,
-    revision: 0,
+    schemaVersion: 4,
     databaseId: "sales",
     chartType,
     encodings: chartType === "histogram" ? { x: "amount" } : { x: "amount", y: "cost" },

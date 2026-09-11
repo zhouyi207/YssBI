@@ -24,8 +24,7 @@ function deferred<T>() {
 }
 
 const DOCUMENT: ChartDocument = {
-  schemaVersion: 3,
-  revision: 0,
+  schemaVersion: 4,
   databaseId: "database-1",
   chartType: "scatter",
   encodings: { x: "x", y: "y" },

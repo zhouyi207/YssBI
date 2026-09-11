@@ -13,7 +13,6 @@ export interface ChartDocumentState {
 
 export interface ChartDocument extends ChartDocumentState {
   schemaVersion: number;
-  revision: number;
 }
 
 export interface ChartIndexEntry {

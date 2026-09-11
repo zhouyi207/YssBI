@@ -61,8 +61,7 @@ describe("chart detail metadata lifecycle ownership", () => {
           chartPath="charts/Path Does Not Reveal Label.yssbi-chart"
           name="Rust supplied label"
           document={{
-            schemaVersion: 3,
-            revision: 7,
+            schemaVersion: 4,
             databaseId: "",
             chartType: "scatter",
             encodings: {},

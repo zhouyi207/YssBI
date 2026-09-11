@@ -45,11 +45,15 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         chart_path: &ChartResourcePath,
+        expected_publication_revision: Option<u64>,
     ) -> Result<ChartDocument, ProjectFilesystemError> {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let (_, _, data) = self.coherent_project_read_snapshot(&session)?;
+        let (_, publication_revision, data) = self.coherent_project_read_snapshot(&session)?;
+        if expected_publication_revision.is_some_and(|expected| expected != publication_revision) {
+            return Err(stale_catalog("chart changed during index preparation"));
+        }
         let document = data.charts.get(chart_path).cloned().ok_or_else(|| {
             ProjectFilesystemError::ChartNotFound {
                 path: chart_path.clone(),
@@ -95,6 +99,7 @@ struct ProjectIndexAuthorityCapture {
     data: ProjectData,
     graph_resource_revisions:
         std::collections::HashMap<yss_graph_document::GraphResourcePath, ResourceRevision>,
+    chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     database_revisions: std::collections::HashMap<String, u64>,
 }
 
@@ -112,6 +117,7 @@ fn read_project_index_with(
     overlay_authoritative_project_index(
         &capture.data,
         &capture.graph_resource_revisions,
+        &capture.chart_revisions,
         &capture.database_revisions,
         &mut index,
     )?;
@@ -142,6 +148,7 @@ fn capture_project_index_authority_with(
     }
     let data = state.project_data.read().unwrap().clone();
     let graph_resource_revisions = state.graph_resource_revisions.read().unwrap().clone();
+    let chart_revisions = state.chart_revisions.read().unwrap().clone();
     after_declaration_capture();
     let database_revisions = state.database_authority_revisions.read().unwrap().clone();
     if data
@@ -159,6 +166,7 @@ fn capture_project_index_authority_with(
         authority_generation: publication.authority_generation(),
         data,
         graph_resource_revisions,
+        chart_revisions,
         database_revisions,
     })
 }
@@ -182,6 +190,7 @@ fn overlay_authoritative_project_index(
         yss_graph_document::GraphResourcePath,
         ResourceRevision,
     >,
+    chart_revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
 ) -> Result<(), ProjectFilesystemError> {
@@ -205,9 +214,10 @@ fn overlay_authoritative_project_index(
         .sort_by(|left, right| left.id.cmp(&right.id));
     // Disk owns membership; resident revision overrides must never resurrect a deleted file.
     for chart in &mut index.charts {
-        if let Some(resident) = data.charts.get(&chart.chart_path) {
-            chart.revision = resident.revision;
-        }
+        chart.revision = chart_revisions
+            .get(&chart.chart_path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
     }
     for entry in &mut index.graphs {
         let Ok(path) = yss_graph_document::GraphResourcePath::new(&entry.path) else {

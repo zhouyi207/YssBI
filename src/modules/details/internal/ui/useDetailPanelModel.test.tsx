@@ -48,15 +48,14 @@ describe("Chart detail subscriptions", () => {
   it("opens a chart with a stable document reference and follows subsequent updates", () => {
     const chartPath = "charts/Report.yssbi-chart";
     const document: ChartDocument = {
-      schemaVersion: 3,
-      revision: 1,
+      schemaVersion: 4,
       databaseId: "sales",
       chartType: "scatter",
       encodings: { x: "time", y: "amount" },
     };
     const store = useChartDocumentStore.getState();
     store.upsertDocument(chartPath, document);
-    store.setIndex([{ chartPath, name: "Report", ...document }]);
+    store.setIndex([{ chartPath, name: "Report", revision: 1, ...document }]);
     act(() =>
       root.render(
         <StrictMode>
@@ -71,7 +70,7 @@ describe("Chart detail subscriptions", () => {
     expect(latest.chartDocument).toBe(document);
     expect(latest.model).toMatchObject({ kind: "chart", document });
 
-    act(() => store.setIndex([{ chartPath, name: "Renamed report", ...document }]));
+    act(() => store.setIndex([{ chartPath, name: "Renamed report", revision: 2, ...document }]));
     expect(latest.chartName).toBe("Renamed report");
     expect(latest.chartDocument).toBe(document);
 

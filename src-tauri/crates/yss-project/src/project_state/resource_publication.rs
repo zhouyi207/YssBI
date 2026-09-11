@@ -254,7 +254,9 @@ pub(super) fn chart_publication_deltas(
             };
             let (from_revision, payload) = if let Some(before) = before {
                 (
-                    before.revision,
+                    retained.ok_or_else(|| ProjectFilesystemError::ResourceRevisionConflict {
+                        message: format!("chart '{}' has no resource revision", path.as_str()),
+                    })?,
                     yss_project_history::ResourceDocumentPatch::Chart(
                         yss_project_history::ChartDocumentPatch {
                             before: chart_document_state(before),
@@ -300,11 +302,16 @@ pub(super) fn chart_publication_deltas(
                 ),
             }])
         }
-        ProjectDataPatch::MoveChart { from, to, moved } => {
+        ProjectDataPatch::MoveChart { from, to, .. } => {
+            let from_revision = revisions.get(from).copied().ok_or_else(|| {
+                ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!("chart '{}' has no resource revision", from.as_str()),
+                }
+            })?;
             Ok(vec![yss_project_history::ResourceDeltaEvent {
                 resource: chart_key(to),
-                from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
-                to_revision: moved.revision,
+                from_revision,
+                to_revision: checked_resource_revision(from.as_str(), from_revision)?,
                 caused_by: Some(operation_id),
                 payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
                     yss_project_history::ResourcePathMovePatch {

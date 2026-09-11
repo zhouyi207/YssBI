@@ -63,11 +63,14 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         chart_path: ChartResourcePath,
+        expected_publication_revision: Option<u64>,
     ) -> Result<ChartDocument, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
-        let result = captured
-            .project()
-            .load_chart_document(&project_instance_id, &chart_path)?;
+        let result = captured.project().load_chart_document(
+            &project_instance_id,
+            &chart_path,
+            expected_publication_revision,
+        )?;
         self.revalidate_captured_session(&captured)
             .map_err(ChartApplicationError::SessionChanged)?;
         Ok(result)
@@ -78,14 +81,12 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
         chart_path: ChartResourcePath,
-        expected_revision: ResourceRevision,
         document: ChartDocument,
     ) -> Result<CommittedResourceMutation, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
         let result = captured.project().save_chart_document(
             &project_instance_id,
             &chart_path,
-            expected_revision,
             operation_id,
             document,
         )?;

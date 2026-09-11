@@ -142,6 +142,12 @@ not separate delta and snapshot Store writers. The installer uses receipts for c
 prepares loaded clean documents, and deduplicates late receipts already covered by its snapshot.
 Unchanged indexes do not republish sidebar state. Watcher refreshes do not reactivate the project or rebuild the workbench.
 
+`save_chart` takes project identity, operation ID, resource path and a complete document, with no
+`expectedRevision` argument. Chart documents carry no resource revision. `load_chart` accepts an optional
+`expectedPublicationRevision` for reads prepared against an authoritative index; Rust rejects a mismatched
+project snapshot before returning the document. Save and publication ownership are defined in
+[Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md#save).
+
 ## Error contract
 
 Every command rejection serializes the Rust-owned `CommandError` with exactly three camelCase keys:

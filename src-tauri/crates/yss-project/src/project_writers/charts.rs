@@ -28,23 +28,11 @@ impl ProjectState {
             .collect::<Vec<_>>();
         let unique = allocate_unique_resource_name(name, existing);
         let chart_path = ChartResourcePath::from_name(&unique);
-        let mut document = ChartDocument::new(
+        let document = ChartDocument::new(
             database_id
                 .or_else(|| current.databases.keys().min().cloned())
                 .unwrap_or_default(),
         );
-        document.revision = match self
-            .chart_revisions
-            .read()
-            .unwrap()
-            .get(&chart_path)
-            .copied()
-        {
-            Some(retained) => {
-                crate::project_state::checked_resource_revision(chart_path.as_str(), retained)?
-            }
-            None => ResourceRevision::INITIAL,
-        };
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -52,14 +40,8 @@ impl ProjectState {
             BTreeMap::new(),
             BTreeSet::from([chart_key(&chart_path)]),
         );
-        let result = self.write_chart_patch(
-            &snapshot,
-            mutation_context,
-            lease,
-            chart_path,
-            None,
-            document,
-        );
+        let result =
+            self.write_chart_patch(&snapshot, mutation_context, lease, chart_path, document);
         if result.is_ok() {
             reservation.complete();
         }
@@ -90,13 +72,6 @@ impl ProjectState {
             .collect::<Vec<_>>();
         let unique = allocate_unique_resource_name(source.display_name(), existing);
         let target = ChartResourcePath::from_name(&unique);
-        let mut duplicate = source_document;
-        duplicate.revision = match self.chart_revisions.read().unwrap().get(&target).copied() {
-            Some(retained) => {
-                crate::project_state::checked_resource_revision(target.as_str(), retained)?
-            }
-            None => ResourceRevision::INITIAL,
-        };
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -105,7 +80,7 @@ impl ProjectState {
             BTreeSet::from([chart_key(&target)]),
         );
         let result =
-            self.write_chart_patch(&snapshot, mutation_context, lease, target, None, duplicate);
+            self.write_chart_patch(&snapshot, mutation_context, lease, target, source_document);
         if result.is_ok() {
             reservation.complete();
         }
@@ -118,16 +93,9 @@ impl ProjectState {
         context: ProjectTransactionContext,
         lease: yss_project_filesystem::ProjectFilesystemLeaseSet,
         chart_path: ChartResourcePath,
-        before: Option<ChartDocument>,
         document: ChartDocument,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let retained_revision = self
-            .chart_revisions
-            .read()
-            .unwrap()
-            .get(&chart_path)
-            .copied();
         let (new_path, contents) =
             crate::serialize_chart(&chart_path, &document).map_err(prepare_error)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
@@ -141,11 +109,11 @@ impl ProjectState {
         )?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_project_resource_document_patch(
+        let result = match self.apply_project_resource_document_patch(
             &context,
             ProjectDataPatch::UpsertChart {
-                path: chart_path.clone(),
-                document: document.clone(),
+                path: chart_path,
+                document,
             },
             None,
         ) {
@@ -158,14 +126,6 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.deltas = vec![chart_resource_delta(
-            &chart_path,
-            context.operation_id,
-            retained_revision,
-            before.as_ref(),
-            Some(&document),
-        )?]
-        .into_boxed_slice();
         Ok(result)
     }
 
@@ -173,28 +133,29 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         chart_path: &ChartResourcePath,
-        expected_revision: ResourceRevision,
         operation_id: OperationId,
-        mut document: ChartDocument,
+        document: ChartDocument,
     ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        let before = self
-            .project_data
-            .read()
-            .unwrap()
-            .charts
-            .get(chart_path)
-            .cloned()
-            .ok_or_else(|| ProjectFilesystemError::ChartNotFound {
+        if !snapshot.data.charts.contains_key(chart_path) {
+            return Err(ProjectFilesystemError::ChartNotFound {
                 path: chart_path.clone(),
+            });
+        }
+        // Explicit Save overwrites the resource; its transaction baseline is Rust-owned.
+        let expected_revision = snapshot
+            .chart_revisions
+            .get(chart_path)
+            .copied()
+            .ok_or_else(|| {
+                prepare_error(format!(
+                    "Chart '{}' has no resource revision",
+                    chart_path.as_str()
+                ))
             })?;
-        document.revision = crate::project_state::checked_resource_revision(
-            chart_path.as_str(),
-            expected_revision,
-        )?;
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -207,7 +168,6 @@ impl ProjectState {
             mutation_context,
             lease,
             chart_path.clone(),
-            Some(before),
             document,
         );
         if result.is_ok() {
@@ -248,7 +208,7 @@ impl ProjectState {
 
         let target = ChartResourcePath::from_name(new_name);
         let current = self.project_data.read().unwrap().clone();
-        let mut moved = current.charts.get(chart_path).cloned().ok_or_else(|| {
+        let moved = current.charts.get(chart_path).cloned().ok_or_else(|| {
             ProjectFilesystemError::ChartNotFound {
                 path: chart_path.clone(),
             }
@@ -261,10 +221,6 @@ impl ProjectState {
                 message: format!("a chart named '{}' already exists", new_name.as_str()),
             });
         }
-        moved.revision = crate::project_state::checked_resource_revision(
-            chart_path.as_str(),
-            expected_revision,
-        )?;
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -284,12 +240,12 @@ impl ProjectState {
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_project_resource_document_patch(
+        let result = match self.apply_project_resource_document_patch(
             &mutation_context,
             ProjectDataPatch::MoveChart {
                 from: chart_path.clone(),
-                to: target.clone(),
-                moved: moved.clone(),
+                to: target,
+                moved,
             },
             Some(&mut ownership),
         ) {
@@ -302,14 +258,6 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.deltas = vec![chart_move_delta(
-            chart_path,
-            &target,
-            operation_id,
-            expected_revision,
-            moved.revision,
-        )]
-        .into_boxed_slice();
         reservation.complete();
         Ok(result)
     }
@@ -325,23 +273,11 @@ impl ProjectState {
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        let document = self
-            .project_data
-            .read()
-            .unwrap()
-            .charts
-            .get(chart_path)
-            .cloned()
-            .ok_or_else(|| ProjectFilesystemError::ChartNotFound {
+        if !snapshot.data.charts.contains_key(chart_path) {
+            return Err(ProjectFilesystemError::ChartNotFound {
                 path: chart_path.clone(),
-            })?;
-        let delta = chart_resource_delta(
-            chart_path,
-            operation_id,
-            Some(document.revision),
-            Some(&document),
-            None,
-        )?;
+            });
+        }
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -359,7 +295,7 @@ impl ProjectState {
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_project_resource_document_patch(
+        let result = match self.apply_project_resource_document_patch(
             &mutation_context,
             ProjectDataPatch::RemoveChart {
                 path: chart_path.clone(),
@@ -376,8 +312,147 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.deltas = vec![delta].into_boxed_slice();
         reservation.complete();
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures;
+
+    #[test]
+    fn chart_lifecycle_uses_project_receipts_without_persisted_revisions() {
+        use yss_project_history::ResourceDocumentPatch;
+
+        let fixture = fixtures::TempProject::activate("chart-lifecycle", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let name = ResourceName::parse("Chart").unwrap();
+        let path = ChartResourcePath::from_name(&name);
+        let created = state
+            .create_chart_resource(&session.instance_id, &name, None, OperationId::new())
+            .unwrap()
+            .into_parts();
+        let duplicate = state
+            .duplicate_chart_resource(
+                &session.instance_id,
+                &path,
+                created.deltas[0].to_revision,
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        assert!(
+            matches!(&duplicate.deltas[0].payload, ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.is_none() && patch.after.is_some())
+        );
+        let renamed = state
+            .rename_chart_resource(
+                &session.instance_id,
+                &path,
+                created.deltas[0].to_revision,
+                &ResourceName::parse("Renamed").unwrap(),
+                1,
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        let target = ChartResourcePath::parse("charts/Renamed.yssbi-chart").unwrap();
+        assert!(
+            matches!(&renamed.deltas[0].payload, ResourceDocumentPatch::ResourceMove(patch) if patch.from.as_ref() == path.as_str() && patch.to.as_ref() == target.as_str())
+        );
+        assert_eq!(
+            renamed.deltas[0].from_revision,
+            created.deltas[0].to_revision
+        );
+        let index = state.read_project_index(&session.instance_id).unwrap();
+        assert_eq!(
+            index
+                .charts
+                .iter()
+                .find(|entry| entry.chart_path == target)
+                .unwrap()
+                .revision,
+            renamed.deltas[0].to_revision
+        );
+        let bytes = std::fs::read(session.root.as_path().join(target.relative_path())).unwrap();
+        assert!(
+            serde_json::from_slice::<serde_json::Value>(&bytes)
+                .unwrap()
+                .get("revision")
+                .is_none()
+        );
+        let removed = state
+            .remove_chart_resource(
+                &session.instance_id,
+                &target,
+                renamed.deltas[0].to_revision,
+                OperationId::new(),
+            )
+            .unwrap()
+            .into_parts();
+        assert!(
+            matches!(&removed.deltas[0].payload, ResourceDocumentPatch::ResourceLifecycle(patch) if patch.before.as_ref().is_some_and(|before| before.revision == renamed.deltas[0].to_revision) && patch.after.is_none())
+        );
+        assert!(!session.root.as_path().join(target.relative_path()).exists());
+    }
+
+    #[test]
+    fn chart_save_overwrites_an_older_draft_using_the_current_resource_revision() {
+        let fixture = fixtures::TempProject::activate("chart-overwrite-save", ProjectData::new());
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let name = ResourceName::parse("Chart").unwrap();
+        let path = ChartResourcePath::from_name(&name);
+        state
+            .create_chart_resource(&session.instance_id, &name, None, OperationId::new())
+            .unwrap();
+        let mut draft = state
+            .load_chart_document(&session.instance_id, &path, None)
+            .unwrap();
+        let mut other = draft.clone();
+        other.chart_type = "scatter".into();
+        let first = state
+            .save_chart_document(&session.instance_id, &path, OperationId::new(), other)
+            .unwrap()
+            .into_parts();
+        draft.chart_type = "line".into();
+        draft.encodings.x = Some("month".into());
+        draft.encodings.y = Some("sales".into());
+        let operation_id = OperationId::new();
+        let saved = state
+            .save_chart_document(&session.instance_id, &path, operation_id, draft.clone())
+            .unwrap()
+            .into_parts();
+
+        assert_eq!(saved.operation_id, operation_id);
+        assert!(saved.publication_revision > first.publication_revision);
+        assert_eq!(saved.deltas[0].from_revision, first.deltas[0].to_revision);
+        assert_eq!(saved.deltas[0].to_revision.get(), 2);
+        let disk: ChartDocument = serde_json::from_slice(
+            &std::fs::read(session.root.as_path().join(path.relative_path())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(disk, draft);
+        assert_eq!(state.get_data().unwrap().charts[&path], draft);
+        assert!(matches!(
+            state.load_chart_document(
+                &session.instance_id,
+                &path,
+                Some(first.publication_revision)
+            ),
+            Err(ProjectFilesystemError::CatalogResourceStale { .. })
+        ));
+        assert_eq!(
+            state
+                .load_chart_document(
+                    &session.instance_id,
+                    &path,
+                    Some(saved.publication_revision)
+                )
+                .unwrap(),
+            draft
+        );
     }
 }

@@ -53,14 +53,10 @@ impl ProjectState {
         }
         let mut chart_changes = Vec::new();
         for (path, incoming) in &charts {
-            let mut incoming = incoming.clone();
-            if let Some(previous) = current.charts.get(path) {
-                incoming.revision = previous.revision;
-                if &incoming == previous {
-                    continue;
-                }
+            if current.charts.get(path) == Some(incoming) {
+                continue;
             }
-            chart_changes.push((path.clone(), Some(incoming)));
+            chart_changes.push((path.clone(), Some(incoming.clone())));
         }
         for path in current
             .charts
@@ -106,8 +102,7 @@ impl ProjectState {
             }
             for ((path, incoming), revision) in chart_changes.into_iter().zip(next_chart_revisions)
             {
-                if let Some(mut document) = incoming {
-                    document.revision = revision;
+                if let Some(document) = incoming {
                     data.charts.insert(path.clone(), document);
                 } else {
                     data.charts.remove(&path);

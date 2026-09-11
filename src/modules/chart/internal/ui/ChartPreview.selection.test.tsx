@@ -27,8 +27,7 @@ vi.mock("./ChartEmptyState", () => ({ ChartEmptyState: () => <div>empty</div> })
 
 const projectId = "00000000-0000-0000-0000-000000000701";
 const chart: ChartDocument = {
-  schemaVersion: 3,
-  revision: 0,
+  schemaVersion: 4,
   databaseId: "sales",
   chartType: "histogram",
   encodings: { x: "amount" },

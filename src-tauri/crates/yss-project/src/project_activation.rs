@@ -98,8 +98,8 @@ impl PreparedProjectActivation {
             .collect();
         let chart_revisions = data
             .charts
-            .iter()
-            .map(|(path, document)| (path.clone(), document.revision))
+            .keys()
+            .map(|path| (path.clone(), ResourceRevision::INITIAL))
             .collect();
         Ok(Self {
             session_root,

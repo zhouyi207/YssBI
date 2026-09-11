@@ -106,11 +106,16 @@ pub fn load_chart(
     application: State<yss_application::execution::ApplicationState>,
     project_instance_id: String,
     chart_path: ChartResourcePath,
+    expected_publication_revision: Option<u64>,
 ) -> Result<ChartDocument, CommandError> {
     let project_instance_id =
         yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     application
-        .load_chart_resource(project_instance_id, chart_path)
+        .load_chart_resource(
+            project_instance_id,
+            chart_path,
+            expected_publication_revision,
+        )
         .map_err(|error| chart_application_command_error(&error))
 }
 
@@ -121,17 +126,10 @@ pub fn save_chart(
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     chart_path: ChartResourcePath,
-    expected_revision: ResourceRevision,
     document: ChartDocument,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
-        .save_chart_resource(
-            project_instance_id,
-            operation_id,
-            chart_path,
-            expected_revision,
-            document,
-        )
+        .save_chart_resource(project_instance_id, operation_id, chart_path, document)
         .map_err(|error| chart_application_command_error(&error))?;
     let result = crate::schema::application_event::resource_mutation_to_transport(&result);
     emit_chart_application_result(&app, &result)?;

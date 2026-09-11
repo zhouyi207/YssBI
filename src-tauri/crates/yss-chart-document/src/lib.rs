@@ -2,11 +2,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use yss_project_identity::ResourceRevision;
 use yss_project_layout::{CHART_EXTENSION, CHARTS_DIR};
 use yss_resource_naming::{ResourceName, ResourceNameValidationError};
 
-pub const CURRENT_CHART_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_CHART_SCHEMA_VERSION: u32 = 4;
 
 fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
@@ -35,7 +34,6 @@ pub struct ChartEncodings {
 pub struct ChartDocument {
     #[serde(deserialize_with = "deserialize_current_schema_version")]
     schema_version: u32,
-    pub revision: ResourceRevision,
     pub database_id: String,
     pub chart_type: String,
     pub encodings: ChartEncodings,
@@ -45,7 +43,6 @@ impl ChartDocument {
     pub fn new(database_id: impl Into<String>) -> Self {
         Self {
             schema_version: CURRENT_CHART_SCHEMA_VERSION,
-            revision: ResourceRevision::INITIAL,
             database_id: database_id.into(),
             chart_type: "histogram".to_owned(),
             encodings: ChartEncodings { x: None, y: None },
@@ -191,7 +188,6 @@ mod tests {
             serde_json::to_value(&document).unwrap(),
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
-                "revision": 0,
                 "databaseId": "db-1",
                 "chartType": "histogram",
                 "encodings": {}
@@ -201,21 +197,18 @@ mod tests {
         for invalid in [
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION + 1,
-                "revision": 0,
                 "databaseId": "db-1",
                 "chartType": "histogram",
                 "encodings": {}
             }),
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
-                "revision": 0,
                 "databaseId": "db-1",
                 "chartType": "histogram",
                 "encodings": { "unknown": true }
             }),
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
-                "revision": 0,
                 "databaseId": "db-1",
                 "chartType": "histogram",
                 "encodings": {},
@@ -223,6 +216,7 @@ mod tests {
             }),
             json!({
                 "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
+                "revision": 0,
                 "databaseId": "db-1",
                 "chartType": "histogram",
                 "encodings": {}

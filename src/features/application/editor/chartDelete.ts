@@ -7,7 +7,7 @@ import {
 } from "@/features/application/projectCommandContext";
 
 import { uiStore } from "@/features/core/ui/UIStore";
-import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
+import { resourceKey, useResourceStore } from "@/features/core/resource";
 import { ChartService } from "@/services/chart/chartService";
 
 import { showBlockingIpcError } from "./blockingErrorDialog";
@@ -17,15 +17,15 @@ export async function performChartDelete(
   chartPath: string,
   context: ProjectCommandContext = captureProjectCommandContext(),
 ): Promise<boolean> {
-  const document =
-    useChartDocumentStore.getState().documents[chartPath] ??
-    (await ChartService.loadChart(context.projectInstanceId, chartPath));
   if (!context.isCurrent()) return false;
+  const resource =
+    useResourceStore.getState().resources[resourceKey({ id: chartPath, kind: "chart" })];
+  if (resource?.revision == null) throw new Error("chart has no authoritative resource revision");
   const committed = await ChartService.removeChart(
     context.projectInstanceId,
     context.operationId,
     chartPath,
-    document.revision,
+    resource.revision,
   );
   if (!context.isCurrent()) return false;
   await projectPublicationCoordinator.submit({ result: committed });

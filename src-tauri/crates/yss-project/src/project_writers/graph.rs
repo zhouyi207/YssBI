@@ -45,7 +45,17 @@ impl ProjectState {
                     path.as_str()
                 ))
             })?;
-            expected.insert(chart_key(&path), document.revision);
+            let revision = snapshot
+                .chart_revisions
+                .get(&path)
+                .copied()
+                .ok_or_else(|| {
+                    prepare_error(format!(
+                        "Chart '{}' has no resource revision",
+                        path.as_str()
+                    ))
+                })?;
+            expected.insert(chart_key(&path), revision);
             let (relative_path, contents) =
                 crate::serialize_chart(&path, document).map_err(prepare_error)?;
             mutations.push(StagedFilesystemMutation::Write {

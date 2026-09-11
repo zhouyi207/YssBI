@@ -37,15 +37,22 @@ export class ChartService {
     );
   }
 
-  static async loadChart(projectInstanceId: string, chartPath: string): Promise<ChartDocument> {
-    return await invokeCommand("load_chart", { projectInstanceId, chartPath });
+  static async loadChart(
+    projectInstanceId: string,
+    chartPath: string,
+    expectedPublicationRevision?: number,
+  ): Promise<ChartDocument> {
+    return await invokeCommand("load_chart", {
+      projectInstanceId,
+      chartPath,
+      expectedPublicationRevision,
+    });
   }
 
   static async saveChart(
     projectInstanceId: string,
     operationId: string,
     chartPath: string,
-    expectedRevision: number,
     document: ChartDocument,
   ): Promise<ResourceMutationResultDto> {
     return parseResourceMutationResultDto(
@@ -53,7 +60,6 @@ export class ChartService {
         projectInstanceId,
         operationId,
         chartPath,
-        expectedRevision,
         document,
       }),
     );

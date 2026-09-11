@@ -116,7 +116,11 @@ export interface ProjectPublicationDependencies {
     locale: string,
     previous: Partial<Record<ProjectActivityPanelId, ActivityPanelSnapshot>>,
   ): Promise<ProjectIndexSnapshot>;
-  loadChartDocument(projectInstanceId: string, path: string): Promise<ChartDocument>;
+  loadChartDocument(
+    projectInstanceId: string,
+    path: string,
+    publicationRevision: number,
+  ): Promise<ChartDocument>;
   prepareGraphSession(
     path: string,
     projectInstanceId: string,
@@ -439,6 +443,10 @@ export class ProjectPublicationCoordinator {
                 [...chartPathRemaps].find(([, to]) => to === chart.chartPath)?.[0] ??
                 chart.chartPath;
               const cached = useChartDocumentStore.getState().documents[previousPath];
+              const previous =
+                useResourceStore.getState().resources[
+                  resourceKey({ id: previousPath, kind: "chart" })
+                ];
               const dirty =
                 useDocumentStateStore.getState().documents[
                   resourceKey({ id: previousPath, kind: "chart" })
@@ -456,16 +464,17 @@ export class ProjectPublicationCoordinator {
                 chartDocuments.has(chart.chartPath) ||
                 (!created &&
                   (!cached ||
-                    (cached.revision === chart.revision && previousPath === chart.chartPath)))
+                    (previous?.revision === chart.revision &&
+                      !previous.hasStaleDocument &&
+                      previousPath === chart.chartPath)))
               )
                 continue;
               const document = await this.dependencies.loadChartDocument(
                 identity.projectInstanceId,
                 chart.chartPath,
+                index.publicationRevision,
               );
               this.assertCurrent(identity);
-              if (document.revision !== chart.revision)
-                throw protocolError("chart changed during index preparation");
               chartDocuments.set(chart.chartPath, document);
             }
             // Include receipts delivered while documents were being prepared before committing moves.
@@ -536,7 +545,7 @@ export class ProjectPublicationCoordinator {
 }
 export const projectPublicationCoordinator = new ProjectPublicationCoordinator({
   loadProjectIndex: (id, locale, previous) => ProjectService.getProjectIndex(id, locale, previous),
-  loadChartDocument: (id, path) => ChartService.loadChart(id, path),
+  loadChartDocument: (id, path, revision) => ChartService.loadChart(id, path, revision),
   prepareGraphSession: prepareGraphSessionForPublication,
   captureLoadedGraphPaths: () =>
     new Set(Object.keys(useGraphProjectionStore.getState().graphEntities)),

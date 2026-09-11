@@ -118,105 +118,12 @@ pub struct ProjectResourceMutationParts {
     pub projection_status: ProjectProjectionStatus,
 }
 
-fn chart_document_state(document: &ChartDocument) -> yss_project_history::ChartDocumentState {
-    yss_project_history::ChartDocumentState {
-        database_id: document.database_id.clone(),
-        chart_type: document.chart_type.clone(),
-        encodings: document.encodings.clone(),
-    }
-}
-
-fn chart_lifecycle_state(
-    path: &ChartResourcePath,
-    revision: ResourceRevision,
-) -> yss_project_history::ResourceLifecycleState {
-    yss_project_history::ResourceLifecycleState {
-        revision,
-        path: path.as_str().into(),
-        kind: yss_project_history::ResourceLifecycleKind::Chart,
-        name: path.display_name().as_str().to_string(),
-    }
-}
-
-fn chart_move_delta(
-    from: &ChartResourcePath,
-    to: &ChartResourcePath,
-    operation_id: OperationId,
-    from_revision: ResourceRevision,
-    to_revision: ResourceRevision,
-) -> yss_project_history::ResourceDeltaEvent {
-    yss_project_history::ResourceDeltaEvent {
-        resource: chart_key(to),
-        from_revision,
-        to_revision,
-        caused_by: Some(operation_id),
-        payload: yss_project_history::ResourceDocumentPatch::ResourceMove(
-            yss_project_history::ResourcePathMovePatch {
-                from: from.as_str().into(),
-                to: to.as_str().into(),
-            },
-        ),
-    }
-}
-
-fn chart_resource_delta(
-    path: &ChartResourcePath,
-    operation_id: OperationId,
-    retained_revision: Option<ResourceRevision>,
-    before: Option<&ChartDocument>,
-    after: Option<&ChartDocument>,
-) -> Result<yss_project_history::ResourceDeltaEvent, ProjectFilesystemError> {
-    let (from_revision, to_revision, payload) = match (before, after) {
-        (Some(before), Some(after)) => (
-            before.revision,
-            after.revision,
-            yss_project_history::ResourceDocumentPatch::Chart(
-                yss_project_history::ChartDocumentPatch {
-                    before: chart_document_state(before),
-                    after: chart_document_state(after),
-                },
-            ),
-        ),
-        (None, Some(after)) => (
-            retained_revision.unwrap_or(after.revision),
-            after.revision,
-            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
-                yss_project_history::ResourceLifecyclePatch {
-                    before: None,
-                    after: Some(chart_lifecycle_state(path, after.revision)),
-                },
-            ),
-        ),
-        (Some(before), None) => (
-            before.revision,
-            super::project_state::checked_resource_revision(path.as_str(), before.revision)?,
-            yss_project_history::ResourceDocumentPatch::ResourceLifecycle(
-                yss_project_history::ResourceLifecyclePatch {
-                    before: Some(chart_lifecycle_state(path, before.revision)),
-                    after: None,
-                },
-            ),
-        ),
-        (None, None) => {
-            return Err(prepare_error(
-                "chart resource delta has neither a before nor an after document",
-            ));
-        }
-    };
-    Ok(yss_project_history::ResourceDeltaEvent {
-        resource: chart_key(path),
-        from_revision,
-        to_revision,
-        caused_by: Some(operation_id),
-        payload,
-    })
-}
-
 pub(crate) struct WriterSnapshot {
     pub(crate) session: ProjectSession,
     pub(crate) data: ProjectData,
     pub(crate) graph_resource_revisions:
         std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+    pub(crate) chart_revisions: std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     pub(crate) authority_generation: u64,
 }
 
@@ -315,10 +222,12 @@ impl ProjectState {
         }
         let data = self.project_data.read().unwrap().clone();
         let graph_resource_revisions = self.graph_resource_revisions.read().unwrap().clone();
+        let chart_revisions = self.chart_revisions.read().unwrap().clone();
         let snapshot = WriterSnapshot {
             session,
             data,
             graph_resource_revisions,
+            chart_revisions,
             authority_generation: publication.authority_generation(),
         };
         drop(publication);

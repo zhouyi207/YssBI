@@ -27,7 +27,7 @@ pub fn read_chart_index_entries(root: &Path) -> Result<Vec<ProjectChartIndexEntr
             chart_path,
             database_id: document.database_id,
             chart_type: document.chart_type,
-            revision: document.revision,
+            revision: yss_project_identity::ResourceRevision::INITIAL,
         })
         .collect::<Vec<_>>();
     entries.sort_by(|a, b| {
@@ -204,15 +204,8 @@ mod tests {
         ChartResourcePath::from_name(&ResourceName::parse(name).unwrap())
     }
 
-    fn document(revision: u64) -> ChartDocument {
-        serde_json::from_value(serde_json::json!({
-            "schemaVersion": CURRENT_CHART_SCHEMA_VERSION,
-            "revision": revision,
-            "databaseId": "db-1",
-            "chartType": "histogram",
-            "encodings": { "x": null, "y": null }
-        }))
-        .unwrap()
+    fn document() -> ChartDocument {
+        ChartDocument::new("db-1")
     }
 
     fn assert_all_read_entries_reject(root: &Path, chart_path: &ChartResourcePath) {
@@ -225,7 +218,7 @@ mod tests {
     fn canonical_name_path_is_shared_by_activation_index_and_direct_load() {
         let root = temp_project_dir();
         let path = chart_path("Root Sheet");
-        let document = document(3);
+        let document = document();
         crate::fixtures::write_chart(root.as_path(), &path, &document).unwrap();
         let canonical = root.join(path.relative_path());
 
@@ -238,7 +231,7 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].chart_path, path);
         assert_eq!(entries[0].name, "Root Sheet");
-        assert_eq!(entries[0].revision.get(), 3);
+        assert_eq!(entries[0].revision.get(), 0);
         assert_eq!(
             load_chart_from_file(root.as_path(), &path).unwrap(),
             document
@@ -251,7 +244,7 @@ mod tests {
     fn chart_load_rejects_unsupported_schema_version() {
         let root = temp_project_dir();
         let path = chart_path("Unsupported");
-        let mut value = serde_json::to_value(document(0)).unwrap();
+        let mut value = serde_json::to_value(document()).unwrap();
         value["schemaVersion"] = serde_json::json!(CURRENT_CHART_SCHEMA_VERSION + 1);
         let file = root.join(path.relative_path());
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -262,7 +255,7 @@ mod tests {
         assert!(matches!(
             error,
             ProjectError::Deserialize(source)
-                if source.to_string().contains("unsupported schema version 4")
+                if source.to_string().contains(&format!("unsupported schema version {}", CURRENT_CHART_SCHEMA_VERSION + 1))
         ));
         let _ = std::fs::remove_dir_all(root);
     }
@@ -274,7 +267,7 @@ mod tests {
         let file = root
             .join(CHARTS_DIR)
             .join(format!("{uuid}.{CHART_EXTENSION}"));
-        write_document_at(&file, &document(0));
+        write_document_at(&file, &document());
 
         let error = load_charts_from_root(&root).unwrap_err().to_string();
         assert!(error.contains("invalid chart resource path"), "{error}");
@@ -289,7 +282,7 @@ mod tests {
         let noncanonical = noncanonical_root
             .join(CHARTS_DIR)
             .join(format!("Report.{}", CHART_EXTENSION.to_uppercase()));
-        write_document_at(&noncanonical, &document(0));
+        write_document_at(&noncanonical, &document());
         let error = load_charts_from_root(&noncanonical_root)
             .unwrap_err()
             .to_string();
@@ -297,7 +290,7 @@ mod tests {
 
         let wrong_extension_root = temp_project_dir();
         let wrong_extension = wrong_extension_root.join(CHARTS_DIR).join("Report.json");
-        write_document_at(&wrong_extension, &document(0));
+        write_document_at(&wrong_extension, &document());
         let error = load_charts_from_root(&wrong_extension_root)
             .unwrap_err()
             .to_string();
@@ -309,7 +302,7 @@ mod tests {
                 &duplicate_root
                     .join(CHARTS_DIR)
                     .join(format!("{name}.{CHART_EXTENSION}")),
-                &document(0),
+                &document(),
             );
         }
         let error = load_charts_from_root(&duplicate_root)
@@ -323,10 +316,10 @@ mod tests {
     }
 
     #[test]
-    fn chart_index_derives_name_from_path_and_includes_revision() {
+    fn chart_index_derives_name_from_path_and_starts_at_initial_resource_revision() {
         let root = temp_project_dir();
         let path = chart_path("销售分析 2");
-        crate::fixtures::write_chart(&root, &path, &document(9)).unwrap();
+        crate::fixtures::write_chart(&root, &path, &document()).unwrap();
 
         let entries = read_chart_index_entries(&root).unwrap();
 
@@ -335,7 +328,7 @@ mod tests {
         assert_eq!(entries[0].name, "销售分析 2");
         assert_eq!(entries[0].database_id, "db-1");
         assert_eq!(entries[0].chart_type, "histogram");
-        assert_eq!(entries[0].revision.get(), 9);
+        assert_eq!(entries[0].revision.get(), 0);
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -348,7 +341,7 @@ mod tests {
             .join(CHARTS_DIR)
             .join("nested")
             .join(format!("Nested.{CHART_EXTENSION}"));
-        write_document_at(&nested, &document(0));
+        write_document_at(&nested, &document());
 
         assert_all_read_entries_reject(root.as_path(), &path);
         assert!(nested.is_file(), "read paths must not flatten nested files");
@@ -365,7 +358,7 @@ mod tests {
         let root = temp_project_dir();
         let external_root = temp_project_dir();
         let path = chart_path("External");
-        let document = document(0);
+        let document = document();
         let external = external_root.join(format!("External.{CHART_EXTENSION}"));
         write_document_at(&external, &document);
         let link = root.join(path.relative_path());
@@ -399,7 +392,7 @@ mod tests {
         let root = temp_project_dir();
         let external_root = temp_project_dir();
         let path = chart_path("External");
-        let document = document(0);
+        let document = document();
         crate::fixtures::write_chart(external_root.as_path(), &path, &document).unwrap();
         let charts = root.join(CHARTS_DIR);
         std::fs::create_dir_all(&charts).unwrap();

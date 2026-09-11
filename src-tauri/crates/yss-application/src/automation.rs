@@ -160,17 +160,12 @@ fn inspect_project(
                 revision: None,
             }),
     );
-    resources.extend(
-        project
-            .charts
-            .iter()
-            .map(|(path, chart)| ProjectResourceInspection {
-                kind: ProjectResourceKindInspection::Chart,
-                resource_id: path.as_str().to_owned(),
-                display_name: path.display_name().as_str().to_owned(),
-                revision: Some(chart.revision.get()),
-            }),
-    );
+    resources.extend(project.charts.keys().map(|path| ProjectResourceInspection {
+        kind: ProjectResourceKindInspection::Chart,
+        resource_id: path.as_str().to_owned(),
+        display_name: path.display_name().as_str().to_owned(),
+        revision: None,
+    }));
     enforce_result_bound(CapabilityId::InspectProject, resources.len())?;
     resources.sort_by(|left, right| {
         left.kind

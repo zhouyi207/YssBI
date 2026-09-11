@@ -187,25 +187,13 @@ impl ProjectState {
                         }
                     }
                 }
-                ProjectDataPatch::UpsertChart { path, mut document } => {
+                ProjectDataPatch::UpsertChart { path, document } => {
                     validate_chart_path_insertion(&data, &path)?;
                     let retained_revision = chart_revisions.get(&path).copied();
                     let revision = match retained_revision {
                         Some(retained) => checked_resource_revision(path.as_str(), retained)?,
                         None => ResourceRevision::INITIAL,
                     };
-                    if document.revision != revision && Some(document.revision) != retained_revision
-                    {
-                        return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                            message: format!(
-                                "chart '{}' submitted revision {} but authority requires {}",
-                                path.as_str(),
-                                document.revision.get(),
-                                revision.get()
-                            ),
-                        });
-                    }
-                    document.revision = revision;
                     data.charts.insert(path.clone(), document);
                     chart_revisions.insert(path, revision);
                 }
@@ -214,14 +202,10 @@ impl ProjectState {
                     data.charts.remove(&path);
                     chart_revisions.insert(path, next_revision);
                 }
-                ProjectDataPatch::MoveChart {
-                    from,
-                    to,
-                    mut moved,
-                } => {
-                    let revision = moved.revision;
+                ProjectDataPatch::MoveChart { from, to, moved } => {
+                    let revision =
+                        checked_resource_revision(from.as_str(), chart_revisions[&from])?;
                     data.charts.remove(&from);
-                    moved.revision = revision;
                     data.charts.insert(to.clone(), moved);
                     chart_revisions.insert(from, revision);
                     chart_revisions.insert(to, revision);

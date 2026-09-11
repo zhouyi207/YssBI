@@ -8,7 +8,6 @@ publish = false
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
-yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 

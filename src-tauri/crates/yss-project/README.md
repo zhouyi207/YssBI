@@ -60,3 +60,8 @@ Watcher 的 rescan 在 filesystem lease 下读取文件，重验项目身份后�
 预先校验全部版本推进，再发布变更。无内容变化的重复 rescan 不再次推进版本。
 未打开的 graph 保持按需加载；本地未保存 Graph Draft 不属于 Rust 驻留快照。
 ProjectIndex 的文件成员来自磁盘扫描，内存只提供适用的权威版本，不得复活已删除的 chart。
+
+Chart 文档和文件不包含资源 revision；`chart_revisions` 是其唯一版本 authority，在项目激活时从初始版本开始，
+与 Graph 的资源版本生命周期一致。Chart 的创建、保存、复制、移动和删除复用资源 patch 的标准回执，
+writer 不再重复构造 delta。刷新文档时可绑定 Project publication revision，在同一次一致读取中验证。
+图表文件采用 `yss-chart-document::CURRENT_CHART_SCHEMA_VERSION` 定义的严格格式，不读取含旧文档版本字段的格式，也不自动迁移。

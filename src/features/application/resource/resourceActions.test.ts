@@ -13,6 +13,7 @@ import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { deleteResource, renameResource } from "./resourceActions";
+import { performChartDelete } from "@/features/application/editor/chartDelete";
 
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
   projectPublicationCoordinator: {
@@ -257,6 +258,19 @@ describe("renameResource project ownership", () => {
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
     expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
+  });
+
+  it("deletes an unloaded chart using resource metadata without loading its document", async () => {
+    const path = "charts/Report.yssbi-chart";
+    useResourceStore.getState().patchResource({ id: path, kind: "chart" }, { loaded: false });
+    const load = vi.spyOn(ChartService, "loadChart");
+    const committed = { ...deleteResult("project-instance-current"), deltas: [] };
+    const remove = vi.spyOn(ChartService, "removeChart").mockResolvedValue(committed);
+
+    await expect(performChartDelete(path)).resolves.toBe(true);
+    expect(remove).toHaveBeenCalledWith("project-instance-current", expect.any(String), path, 4);
+    expect(load).not.toHaveBeenCalled();
+    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
   });
 
   it("renames a chart from captured revision and token without load or save fallback", async () => {

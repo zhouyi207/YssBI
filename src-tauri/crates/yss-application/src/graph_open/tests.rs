@@ -278,7 +278,7 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
         GraphRuntimeTestControl::default(),
     );
     let instance = active.session.project_instance_id().clone();
-    let created = active
+    active
         .application
         .create_chart_resource(
             instance.clone(),
@@ -290,7 +290,7 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
     let path = yss_chart_document::ChartResourcePath::parse("charts/Chart.yssbi-chart").unwrap();
     let mut document = active
         .application
-        .load_chart_resource(instance.clone(), path.clone())
+        .load_chart_resource(instance.clone(), path.clone(), None)
         .unwrap();
     document.chart_type = "scatter".into();
     active
@@ -299,14 +299,13 @@ fn chart_edits_preserve_the_active_graph_and_execution_session() {
             instance.clone(),
             yss_project_identity::OperationId::new(),
             path.clone(),
-            created.deltas[0].to_revision,
             document,
         )
         .unwrap();
     assert_eq!(
         active
             .application
-            .load_chart_resource(instance, path)
+            .load_chart_resource(instance, path, None)
             .unwrap()
             .chart_type,
         "scatter"

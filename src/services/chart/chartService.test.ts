@@ -54,23 +54,21 @@ describe("ChartService authoritative mutation contract", () => {
     });
   });
 
-  it("invokes save with path, expected revision, and path-free document", async () => {
+  it("invokes overwrite save with a path-free document and no expected revision", async () => {
     vi.mocked(invoke).mockResolvedValue(mutationResult());
     const document = {
-      schemaVersion: 3,
-      revision: 3,
+      schemaVersion: 4,
       databaseId: "database-1",
       chartType: "line" as const,
       encodings: { x: "month", y: "sales" },
     };
 
-    await ChartService.saveChart(projectInstanceId, operationId, chartPath, 3, document);
+    await ChartService.saveChart(projectInstanceId, operationId, chartPath, document);
 
     expect(invoke).toHaveBeenCalledWith("save_chart", {
       projectInstanceId,
       operationId,
       chartPath,
-      expectedRevision: 3,
       document,
     });
   });
@@ -116,9 +114,8 @@ describe("ChartService authoritative mutation contract", () => {
     [
       "save",
       () =>
-        ChartService.saveChart(projectInstanceId, operationId, chartPath, 3, {
-          schemaVersion: 3,
-          revision: 3,
+        ChartService.saveChart(projectInstanceId, operationId, chartPath, {
+          schemaVersion: 4,
           databaseId: "",
           chartType: "histogram",
           encodings: {},
@@ -138,6 +135,20 @@ describe("ChartService authoritative mutation contract", () => {
 });
 
 describe("ChartService database read lifecycle contract", () => {
+  it("binds document loading to the requested project publication", async () => {
+    const document = { schemaVersion: 4, databaseId: "sales", chartType: "line", encodings: {} };
+    vi.mocked(invoke).mockResolvedValue(document);
+
+    await expect(ChartService.loadChart(projectInstanceId, chartPath, 7)).resolves.toEqual(
+      document,
+    );
+    expect(invoke).toHaveBeenCalledWith("load_chart", {
+      projectInstanceId,
+      chartPath,
+      expectedPublicationRevision: 7,
+    });
+  });
+
   it("passes exact project identity to plot column reads", async () => {
     vi.mocked(invoke).mockResolvedValue({
       data: [{ x: 1, y: 2 }],
