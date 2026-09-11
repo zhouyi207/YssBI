@@ -723,6 +723,7 @@ function GraphFlowRuntime({
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         autoPanOnSelection={false}
+        proOptions={{ hideAttribution: true }}
       >
         {interaction.pendingConnection && interaction.contextMenu ? (
           <PendingFlowConnection
