@@ -13,7 +13,7 @@ function record(sequence: number): DiagnosticRecordDto {
   return {
     streamId: "stream-1",
     sequence,
-    timestamp: "2026-08-16T10:11:12.000Z",
+    timestamp: "2026-08-16T10:11:12.000",
     level: "info",
     origin: "rust",
     domain: "application",

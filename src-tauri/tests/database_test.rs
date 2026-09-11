@@ -494,7 +494,7 @@ fn large_export_preserves_wide_integers_decimals_and_timestamps_without_internal
     assert_eq!(reader.schema().fields().len(), 3);
     assert_eq!(
         reader.schema().field(2).data_type(),
-        &DataType::Timestamp(TimeUnit::Nanosecond, Some("UTC".into()))
+        &DataType::Timestamp(TimeUnit::Nanosecond, None)
     );
     let first = reader.next().unwrap().unwrap();
     assert_eq!(

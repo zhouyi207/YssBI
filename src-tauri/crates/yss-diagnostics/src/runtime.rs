@@ -98,7 +98,7 @@ impl SubmitFrontendDiagnosticsError {
 
 fn frontend_pending(entry: &ValidatedFrontendDiagnostic) -> PendingDiagnostic {
     PendingDiagnostic {
-        timestamp: super::rfc3339_now(),
+        timestamp: super::local_timestamp_now(),
         level: entry.level,
         origin: DiagnosticOrigin::Frontend,
         domain: entry.domain,
@@ -146,7 +146,10 @@ mod tests {
         assert_eq!(record.origin, DiagnosticOrigin::Frontend);
         assert_eq!(record.domain, DiagnosticDomain::Ui);
         assert_eq!(record.fields["selectedCount"], 2);
-        assert!(chrono::DateTime::parse_from_rfc3339(&record.timestamp).is_ok());
+        assert!(
+            chrono::NaiveDateTime::parse_from_str(&record.timestamp, "%Y-%m-%dT%H:%M:%S%.f")
+                .is_ok()
+        );
         runtime.unsubscribe(subscription.subscription_id).unwrap();
 
         let error = runtime.submit_frontend(Vec::new()).unwrap_err();

@@ -73,6 +73,7 @@ impl DatasetStore {
             data_type,
             force,
         } = cast;
+        let data_type = yss_tabular_arrow::timezone_free_data_type(&data_type);
         let field = user_column(before, name)?;
         let query = before.query(engine, "dataset-cast")?;
         let categories = if matches!(data_type, DataType::Dictionary(..)) {
@@ -447,7 +448,11 @@ impl DatasetStore {
         }
         let mut fields = before.metadata.schema.fields().to_vec();
         let field = yss_tabular_arrow::with_column_metadata(
-            Field::new(name, data_type, true),
+            Field::new(
+                name,
+                yss_tabular_arrow::timezone_free_data_type(&data_type),
+                true,
+            ),
             &Uuid::new_v4().to_string(),
             None,
         )

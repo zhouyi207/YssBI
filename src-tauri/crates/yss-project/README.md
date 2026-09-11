@@ -16,6 +16,10 @@
 - 对外返回 Project-owned typed facts，由 Application 和 API 层投影为事件与 DTO；
 - `test-support` 只暴露跨 crate 测试所需的 fixture 与故障注入 seam。
 
+项目元数据的 `exportTime` 使用不带时区的本机钟面时间。Manifest 构造与读取时遇到
+旧的带偏移日期时间会保留其原日期、钟面和小数精度并去掉偏移，不换算到另一个时区。
+日历展示不再依赖浏览器的本地时区转换；registry 的 Unix 秒计数保持数值时间点语义。
+
 Graph 撤销/重做由前端 Graph Draft 管理，数据库编辑历史由 Database runtime 管理。Project 提交发布资源版本和 delta，不维护项目级撤销栈。`yss-project-history` 保留共享的资源身份、变更请求、函数文档、delta、错误及图驻留状态契约；文件事务回滚与失败恢复继续由 Project 和 filesystem owner 负责。
 
 ## Graph resource revisions

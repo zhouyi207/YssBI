@@ -14,8 +14,11 @@ pub use runtime::{
     DiagnosticsInitializationError, DiagnosticsRuntime, SubmitFrontendDiagnosticsError,
 };
 
-fn rfc3339_now() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+fn local_timestamp_now() -> String {
+    chrono::Local::now()
+        .naive_local()
+        .format("%Y-%m-%dT%H:%M:%S%.3f")
+        .to_string()
 }
 
 #[cfg(test)]

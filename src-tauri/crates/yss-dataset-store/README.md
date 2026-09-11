@@ -32,7 +32,12 @@ Arrow schema metadata and category identities remain unchanged.
 
 User columns are nullable because DataView admits blank cells and blank inserted rows. This is
 an explicit editable-dataset policy; integer width/sign, decimal precision/scale, time units,
-time zones, column identities, and category domains remain exact. Internal RowId and DisplayOrder
+column identities, and category domains remain exact. Datetimes are stored without a timezone:
+import removes the source zone while retaining its calendar/clock fields, timestamp unit and nulls.
+CSV timestamps are decoded from their original text before any offset conversion. Cell edits and
+whole-column temporal casts use the same rule; forced invalid casts become null. Export and display
+also retain calendar/clock fields when reading older zoned data. Existing project files are not
+rewritten merely by opening or displaying them. Internal RowId and DisplayOrder
 columns stay non-null. Row IDs increase monotonically; insertion creates an independent order
 key between adjacent rows. Renaming a column changes its label and keeps its identity.
 

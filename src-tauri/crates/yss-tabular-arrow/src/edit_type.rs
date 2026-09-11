@@ -57,24 +57,14 @@ pub fn editable_data_type(source: &str) -> Result<DataType, TabularArrowError> {
         .strip_prefix("Datetime(")
         .and_then(|value| value.strip_suffix(')'))
     {
-        let (unit, timezone) = parameters
-            .split_once(',')
-            .map_or((parameters, None), |(unit, timezone)| {
-                (unit, Some(timezone.trim()))
-            });
-        let unit = match unit.trim() {
+        let unit = match parameters.trim() {
             "s" => TimeUnit::Second,
             "ms" => TimeUnit::Millisecond,
             "us" => TimeUnit::Microsecond,
             "ns" => TimeUnit::Nanosecond,
             _ => return Err(TabularArrowError::InvalidValue),
         };
-        if let Some(timezone) = timezone {
-            timezone
-                .parse::<arrow::array::timezone::Tz>()
-                .map_err(|_| TabularArrowError::InvalidValue)?;
-        }
-        return Ok(DataType::Timestamp(unit, timezone.map(Into::into)));
+        return Ok(DataType::Timestamp(unit, None));
     }
     Err(TabularArrowError::UnsupportedType)
 }

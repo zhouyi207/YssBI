@@ -1,4 +1,4 @@
-use arrow::datatypes::SchemaRef;
+use arrow::datatypes::{DataType, Schema, SchemaRef};
 use arrow::error::ArrowError;
 use arrow::record_batch::{RecordBatch, RecordBatchReader};
 use std::fs::File;
@@ -55,7 +55,23 @@ impl CsvBatchReader {
         format: arrow::csv::reader::Format,
         batch_rows: usize,
     ) -> Self {
-        let decoder = arrow::csv::ReaderBuilder::new(schema.clone())
+        let schema = std::sync::Arc::new(yss_tabular_arrow::timezone_free_schema(&schema));
+        // Decode datetime cells as text first, before a parser can apply their input offsets.
+        let decoder_schema = Schema::new_with_metadata(
+            schema
+                .fields()
+                .iter()
+                .map(|field| {
+                    if matches!(field.data_type(), DataType::Timestamp(..)) {
+                        field.as_ref().clone().with_data_type(DataType::Utf8)
+                    } else {
+                        field.as_ref().clone()
+                    }
+                })
+                .collect::<Vec<_>>(),
+            schema.metadata().clone(),
+        );
+        let decoder = arrow::csv::ReaderBuilder::new(std::sync::Arc::new(decoder_schema))
             .with_format(format)
             .with_batch_size(batch_rows)
             .build_decoder();
@@ -77,7 +93,38 @@ impl CsvBatchReader {
         {
             return Err(budget_error());
         }
-        Ok(batch)
+        batch
+            .map(|batch| {
+                let arrays = batch
+                    .columns()
+                    .iter()
+                    .zip(self.schema.fields())
+                    .map(|(array, field)| {
+                        if matches!(field.data_type(), DataType::Timestamp(..)) {
+                            let strings = array
+                                .as_any()
+                                .downcast_ref::<arrow::array::StringArray>()
+                                .ok_or_else(|| {
+                                    ArrowError::SchemaError("invalid CSV datetime column".into())
+                                })?;
+                            yss_tabular_arrow::datetime_strings_without_timezone(
+                                strings,
+                                field.data_type(),
+                            )
+                            .map_err(|error| ArrowError::ExternalError(Box::new(error)))
+                        } else {
+                            Ok(array.clone())
+                        }
+                    })
+                    .collect::<Result<Vec<_>, ArrowError>>()?;
+                RecordBatch::try_new_with_options(
+                    self.schema.clone(),
+                    arrays,
+                    &arrow::record_batch::RecordBatchOptions::new()
+                        .with_row_count(Some(batch.num_rows())),
+                )
+            })
+            .transpose()
     }
     fn read_batch(&mut self) -> Result<Option<RecordBatch>, ArrowError> {
         loop {

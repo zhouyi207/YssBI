@@ -4356,7 +4356,8 @@ fn project_model_has_one_clock_free_owner_without_root_facade_or_duplicate_graph
             .expect("project lifecycle must be readable");
     assert!(
         lifecycle.contains("data.metadata.export_time = current_export_time();")
-            && lifecycle.contains("chrono::Utc::now().to_rfc3339()"),
+            && lifecycle.contains("chrono::Local::now()")
+            && lifecycle.contains("%Y-%m-%dT%H:%M:%S%.3f"),
         "lifecycle must own the explicit export-time clock read"
     );
 

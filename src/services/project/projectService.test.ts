@@ -31,7 +31,7 @@ function projectIndex(): Record<string, unknown> {
     projectInstanceId: "project-a",
     publicationRevision: 4,
     projectName: "Projection contract",
-    exportTime: "2026-08-07T00:00:00Z",
+    exportTime: "2026-08-07T00:00:00",
     graphs: [
       {
         path: "functions/forecast.yssbi-function",

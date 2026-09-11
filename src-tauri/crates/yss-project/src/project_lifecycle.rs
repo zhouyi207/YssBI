@@ -288,7 +288,10 @@ impl ProjectState {
 }
 
 fn current_export_time() -> String {
-    chrono::Utc::now().to_rfc3339()
+    chrono::Local::now()
+        .naive_local()
+        .format("%Y-%m-%dT%H:%M:%S%.3f")
+        .to_string()
 }
 
 #[cfg(any(test, feature = "test-support"))]

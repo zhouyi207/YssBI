@@ -211,6 +211,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-tabular-arrow",
         mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-tabular-arrow",
+        mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },

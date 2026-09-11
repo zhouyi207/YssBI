@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 arrow.workspace = true
 arrow-schema.workspace = true
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

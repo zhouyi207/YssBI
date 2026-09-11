@@ -9,6 +9,84 @@ use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, Tabu
 use super::*;
 
 #[test]
+fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
+    use arrow::array::{StructArray, TimestampNanosecondArray, TimestampSecondArray};
+    let timestamps =
+        Arc::new(TimestampNanosecondArray::from(vec![Some(-1), None]).with_timezone("+08:00"));
+    let field = with_column_metadata(
+        Field::new("at", timestamps.data_type().clone(), true),
+        "clock-column",
+        None,
+    )
+    .unwrap();
+    let nested = StructArray::from(vec![(
+        Arc::new(field),
+        timestamps as arrow::array::ArrayRef,
+    )]);
+    let normalized = timezone_free_array(&nested).unwrap();
+    let normalized = normalized.as_any().downcast_ref::<StructArray>().unwrap();
+    assert_eq!(
+        column_identity(normalized.fields()[0].as_ref()).unwrap(),
+        "clock-column"
+    );
+    assert_eq!(
+        normalized.column(0).data_type(),
+        &DataType::Timestamp(TimeUnit::Nanosecond, None)
+    );
+    assert_eq!(
+        array_to_json(normalized.column(0).as_ref()).unwrap(),
+        vec![json!("1970-01-01T07:59:59.999999999"), json!(null)]
+    );
+    let ticks = ["2024-03-10T06:30:00Z", "2024-03-10T07:30:00Z"].map(|value| {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .timestamp()
+    });
+    let dst = TimestampSecondArray::from(ticks.to_vec()).with_timezone("America/New_York");
+    assert_eq!(
+        array_to_json(&dst).unwrap(),
+        vec![json!("2024-03-10T01:30:00"), json!("2024-03-10T03:30:00")]
+    );
+    assert_eq!(data_type_name(dst.data_type()), "Datetime(s)");
+}
+
+#[test]
+fn temporal_edits_and_forced_casts_drop_input_zones_without_moving_the_clock() {
+    let dtype = DataType::Timestamp(TimeUnit::Nanosecond, None);
+    let field = Field::new("at", dtype.clone(), true);
+    let edited = json_to_array(
+        &field,
+        &[
+            json!("2026-09-11T10:00:00+08:00"),
+            json!("1969-12-31T23:59:59.123456789-05:00"),
+            json!(null),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        array_to_json(edited.as_ref()).unwrap(),
+        vec![
+            json!("2026-09-11T10:00:00"),
+            json!("1969-12-31T23:59:59.123456789"),
+            json!(null)
+        ]
+    );
+    let strings = StringArray::from(vec![
+        "2026-09-11 10:00:00+08:00",
+        "2026-09-11T10:00:00+99:00",
+        "bad date",
+    ]);
+    assert!(cast_temporal_without_timezone(&strings, &dtype, false).is_err());
+    let forced = cast_temporal_without_timezone(&strings, &dtype, true).unwrap();
+    assert_eq!(
+        array_to_json(forced.as_ref()).unwrap(),
+        vec![json!("2026-09-11T10:00:00"), json!(null), json!(null)]
+    );
+    assert_eq!(editable_data_type("Datetime(ns)").unwrap(), dtype);
+    assert!(editable_data_type("Datetime(ns, UTC)").is_err());
+}
+
+#[test]
 fn storage_schema_preserves_identity_exact_types_and_category_domain() {
     let domain = CategoryDomain {
         labels: vec!["high".into(), "low".into()],

@@ -59,6 +59,8 @@ it does not substitute an empty identity array for an obsolete response shape.
 `ResultPage.totalCount` 为可空整数，未知总数使用 null；`hasMore` 与 `nextOffset` 决定是否可继续翻页。
 关系页面的 metadata 为 `{ columns: [{ name, type }] }`，values 为按该列顺序排列的行数组。
 超出 JavaScript safe-integer 范围的单元格使用十进制文本，精确存储类型保留在列元数据中。
+日期时间单元格使用不带时区的日历/钟面字符串，类型名只包含时间单位；其转换语义由
+[Dataset store](../yss-dataset-store/README.md) 维护。
 
 Choose the transport by semantics:
 

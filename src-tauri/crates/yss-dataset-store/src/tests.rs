@@ -34,6 +34,99 @@ fn control() -> RelationControl {
     }
 }
 
+#[test]
+fn datetime_column_cast_retains_clock_values_and_forced_nulls_in_persisted_data() {
+    use arrow::array::StringArray;
+    let directory = Directory::new();
+    let store = DatasetStore::create(directory.path()).unwrap();
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new("at", DataType::Utf8, true)])),
+        vec![Arc::new(StringArray::from(vec![
+            "2026-09-11T10:00:00+08:00",
+            "2026-09-11T10:00:00-05:00",
+            "bad date",
+        ]))],
+    )
+    .unwrap();
+    let original = store
+        .commit(
+            store
+                .prepare_import(identity(), "Dates", "import", batch.schema(), [Ok(batch)])
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let engine = yss_datafusion::DataFusionRuntime::new(64 * 1024 * 1024, 8192).unwrap();
+    let target = DataType::Timestamp(TimeUnit::Nanosecond, None);
+    assert!(
+        store
+            .prepare_cast_column(
+                &original,
+                &engine,
+                "strict",
+                DatasetColumnCast {
+                    column: "at",
+                    data_type: target.clone(),
+                    force: false
+                },
+                &control()
+            )
+            .is_err()
+    );
+    assert_eq!(
+        store
+            .snapshot(&original.metadata().id)
+            .unwrap()
+            .metadata()
+            .snapshot_id,
+        original.metadata().snapshot_id
+    );
+    let cast = store
+        .commit(
+            store
+                .prepare_cast_column(
+                    &original,
+                    &engine,
+                    "forced",
+                    DatasetColumnCast {
+                        column: "at",
+                        data_type: target.clone(),
+                        force: true,
+                    },
+                    &control(),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let reopened = DatasetStore::open(directory.path())
+        .unwrap()
+        .snapshot(&cast.metadata().id)
+        .unwrap();
+    assert_eq!(
+        reopened
+            .metadata()
+            .schema
+            .field_with_name("at")
+            .unwrap()
+            .data_type(),
+        &target
+    );
+    let data = yss_tabular_io::read_parquet_batches(&reopened.file_paths()[0], 10, None)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        yss_tabular_arrow::array_to_json(data.column_by_name("at").unwrap().as_ref()).unwrap(),
+        vec![
+            serde_json::json!("2026-09-11T10:00:00"),
+            serde_json::json!("2026-09-11T10:00:00"),
+            serde_json::json!(null)
+        ]
+    );
+}
+
 #[cfg(any(unix, windows))]
 fn directory_link(link: &Path, target: &Path) {
     #[cfg(unix)]
@@ -1257,6 +1350,10 @@ fn committed_catalog_reopens_exact_data_and_recovers_pending_publication() {
         )
         .unwrap();
     let expected_schema = prepared.metadata().schema.clone();
+    assert_eq!(
+        expected_schema.field(2).data_type(),
+        &DataType::Timestamp(TimeUnit::Nanosecond, None)
+    );
     assert!(store.catalog_metadata().unwrap().is_empty());
     assert!(
         DatasetStore::open(directory.path())

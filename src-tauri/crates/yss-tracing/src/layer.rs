@@ -2,7 +2,7 @@ use std::fmt::{self, Write as _};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
-use chrono::{SecondsFormat, Utc};
+use chrono::Local;
 use serde_json::{Number, Value};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Subscriber};
@@ -58,7 +58,10 @@ where
         event.record(&mut visitor);
 
         let record = Arc::new(LogRecord {
-            timestamp: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            timestamp: Local::now()
+                .naive_local()
+                .format("%Y-%m-%dT%H:%M:%S%.3f")
+                .to_string(),
             level: LogLevel::from(metadata.level()),
             target: crate::sanitize_target(metadata.target()),
             message: visitor

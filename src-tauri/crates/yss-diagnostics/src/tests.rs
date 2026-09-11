@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use chrono::DateTime;
+use chrono::NaiveDateTime;
 use serde_json::json;
 use tracing_subscriber::layer::SubscriberExt;
 use yss_tracing::{LogLayer, LogLimits as DiagnosticLimits, REDACTED_VALUE};
@@ -20,7 +20,7 @@ use super::validation::{MAX_FRONTEND_DIAGNOSTIC_BATCH, validate_frontend_batch};
 
 fn pending(message: impl Into<String>) -> PendingDiagnostic {
     PendingDiagnostic {
-        timestamp: super::rfc3339_now(),
+        timestamp: super::local_timestamp_now(),
         level: DiagnosticLevel::Info,
         origin: DiagnosticOrigin::Rust,
         domain: DiagnosticDomain::Application,
@@ -49,7 +49,7 @@ fn diagnostic_record_serializes_strict_camel_case_contract() {
     let record = DiagnosticRecordDto {
         stream_id: "stream-1".into(),
         sequence: 7,
-        timestamp: super::rfc3339_now(),
+        timestamp: super::local_timestamp_now(),
         level: DiagnosticLevel::Warn,
         origin: DiagnosticOrigin::Rust,
         domain: DiagnosticDomain::Execution,
@@ -70,7 +70,8 @@ fn diagnostic_record_serializes_strict_camel_case_contract() {
     assert_eq!(value["fields"]["runId"], 42);
     assert!(value.get("stream_id").is_none());
     assert!(value.get("source").is_none());
-    DateTime::parse_from_rfc3339(value["timestamp"].as_str().unwrap()).unwrap();
+    NaiveDateTime::parse_from_str(value["timestamp"].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.f")
+        .unwrap();
 }
 
 #[test]
@@ -99,7 +100,7 @@ fn batch_and_subscription_serialize_exact_entries_contract() {
     let record = DiagnosticRecordDto {
         stream_id: "stream-1".into(),
         sequence: 1,
-        timestamp: super::rfc3339_now(),
+        timestamp: super::local_timestamp_now(),
         level: DiagnosticLevel::Info,
         origin: DiagnosticOrigin::Frontend,
         domain: DiagnosticDomain::Ui,
@@ -368,7 +369,7 @@ fn recent_layer_maps_structured_tracing_events_without_file_io() {
     let encoded = serde_json::to_string(record).unwrap();
     assert!(!encoded.contains("trace-secret"));
     assert!(!encoded.contains("private-clipboard"));
-    DateTime::parse_from_rfc3339(&record.timestamp).unwrap();
+    NaiveDateTime::parse_from_str(&record.timestamp, "%Y-%m-%dT%H:%M:%S%.f").unwrap();
     hub.unsubscribe(subscription.subscription_id).unwrap();
 }
 

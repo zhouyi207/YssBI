@@ -151,11 +151,19 @@ pub fn read_numeric_column_pair(
         for (index, output) in [(0, &mut x), (1, &mut y)] {
             let column = batch.column(index);
             let physical = match column.data_type() {
-                ArrowDataType::Timestamp(_, timezone) => arrow::compute::cast(
-                    column.as_ref(),
-                    &ArrowDataType::Timestamp(TimeUnit::Microsecond, timezone.clone()),
-                )
-                .and_then(|array| arrow::compute::cast(array.as_ref(), &ArrowDataType::Int64)),
+                ArrowDataType::Timestamp(..) => {
+                    yss_tabular_arrow::timezone_free_array(column.as_ref())
+                        .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))
+                        .and_then(|array| {
+                            arrow::compute::cast(
+                                array.as_ref(),
+                                &ArrowDataType::Timestamp(TimeUnit::Microsecond, None),
+                            )
+                        })
+                        .and_then(|array| {
+                            arrow::compute::cast(array.as_ref(), &ArrowDataType::Int64)
+                        })
+                }
                 data_type if data_type.is_temporal() => {
                     arrow::compute::cast(column.as_ref(), &ArrowDataType::Int64)
                 }

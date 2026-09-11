@@ -122,6 +122,8 @@ impl DatasetStore {
         source_schema: SchemaRef,
         batches: impl IntoIterator<Item = Result<RecordBatch, ArrowError>>,
     ) -> Result<PreparedDataset, DatasetStoreError> {
+        let input_schema = source_schema;
+        let source_schema = Arc::new(yss_tabular_arrow::timezone_free_schema(&input_schema));
         let schema = import_schema(&source_schema)?;
         let metadata = DatasetMetadata {
             id,
@@ -149,9 +151,11 @@ impl DatasetStore {
         }
         for batch in batches {
             let batch = batch?;
-            if batch.schema() != source_schema {
+            if batch.schema() != input_schema {
                 return Err(DatasetStoreError::InvalidSchema);
             }
+            let batch = yss_tabular_arrow::timezone_free_batch(&batch)
+                .map_err(|_| DatasetStoreError::InvalidSchema)?;
             for (index, domain) in &mut domains {
                 let data = batch.column(*index).to_data();
                 let dictionary = data

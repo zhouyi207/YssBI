@@ -8,6 +8,32 @@ use yss_tabular_arrow::{array_to_json, with_column_metadata};
 
 use super::*;
 
+#[test]
+fn csv_datetime_offsets_are_removed_before_timestamp_decoding() {
+    let directory = TestDirectory::create();
+    fs::create_dir_all(directory.path()).unwrap();
+    let path = directory.path().join("dates.csv");
+    fs::write(&path, "at,label\n2026-09-11T10:00:00+08:00,keep +08:00\n2026-09-11T10:00:00-05:00,keep -05:00\n,blank\n").unwrap();
+    let reader = read_csv_batches(&path, b',', true, 10, 10).unwrap();
+    assert!(matches!(
+        reader.schema().field(0).data_type(),
+        DataType::Timestamp(_, None)
+    ));
+    let batch = reader.collect::<Result<Vec<_>, _>>().unwrap().remove(0);
+    assert_eq!(
+        array_to_json(batch.column(0).as_ref()).unwrap(),
+        vec![
+            serde_json::json!("2026-09-11T10:00:00"),
+            serde_json::json!("2026-09-11T10:00:00"),
+            serde_json::json!(null)
+        ]
+    );
+    assert_eq!(
+        array_to_json(batch.column(1).as_ref()).unwrap()[0],
+        serde_json::json!("keep +08:00")
+    );
+}
+
 struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn create() -> Self {

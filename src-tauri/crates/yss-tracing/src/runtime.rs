@@ -376,7 +376,7 @@ mod tests {
         let directory = unique_temp_directory();
         let mut sink = create_file_sink(&directory).unwrap();
         let record = LogRecord {
-            timestamp: "2026-01-01T00:00:00.000Z".into(),
+            timestamp: "2026-01-01".into(),
             level: LogLevel::Info,
             target: "yssbi::test".into(),
             message: "hello".into(),
@@ -438,7 +438,7 @@ mod tests {
 
     fn test_record() -> LogRecord {
         LogRecord {
-            timestamp: "2026-01-01T00:00:00.000Z".into(),
+            timestamp: "2026-01-01".into(),
             level: LogLevel::Info,
             target: "yssbi::test".into(),
             message: "hello".into(),

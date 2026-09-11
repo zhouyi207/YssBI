@@ -25,7 +25,11 @@ export function sortAndFilterProjects(
 }
 
 export function formatProjectStamp(value: string): string {
-  const date = new Date(value);
+  const calendar = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(value);
+  if (calendar) return `${calendar[1]} ${calendar[2]}`;
+  // Registry stamps are Unix seconds. Calendar strings above already own their clock fields.
+  if (!/^\d+$/.test(value)) return value;
+  const date = new Date(Number(value) * 1000);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString(undefined, {
     year: "numeric",

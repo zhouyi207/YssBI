@@ -606,14 +606,14 @@ mod project_manifest_adapter_tests {
     fn project_manifest_serialization_uses_the_canonical_validated_contract() {
         let mut data = ProjectData::new();
         data.metadata.project_name = "Canonical Manifest".into();
-        data.metadata.export_time = "2026-08-30T00:00:00Z".into();
+        data.metadata.export_time = "2026-08-30T00:00:00".into();
 
         let contents = serialize_project_manifest(&data).unwrap();
         let manifest: ProjectManifest = serde_json::from_slice(&contents).unwrap();
 
         assert_eq!(
             manifest.into_parts(),
-            ("Canonical Manifest".into(), "2026-08-30T00:00:00Z".into())
+            ("Canonical Manifest".into(), "2026-08-30T00:00:00".into())
         );
     }
 }

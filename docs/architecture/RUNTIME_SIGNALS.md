@@ -82,6 +82,12 @@ Rust diagnostics 只来自 `yss-tracing` 已清理的 `LogRecord`。Frontend 可
 - frontend 使用 snapshot + live handoff，激活前发现 pending overflow 或 sequence gap 时进行有界重试；
 - timestamp 用于显示，`streamId + sequence` 才用于 diagnostics 顺序和去重。
 
+项目与日志新产生的日历时间使用本机钟面时间，序列化为不带时区的
+`YYYY-MM-DDTHH:mm:ss.SSS`；不附加 `Z`、UTC 名称或偏移。已有项目元数据的带偏移
+时间在解析时保留原日期和钟面并移除偏移。Unix 秒/毫秒和单调时钟仍用于内部时间点、
+排序或耗时，不添加时区文本。图表中的日期/日期时间数值代表无时区日历字段，
+显示时不得通过浏览器的本地时区移动它们。
+
 `src/modules/logs/` 只展示 operational diagnostics。它不拥有 Graph Problems、Results 或 Run Output，关闭 Logs panel 也不影响任何 domain workflow。
 
 实时 receiver 发现 gap、stream replacement 或 malformed batch 后停止交付和推进 watermark。LogService 释放旧 channel/subscriber，Application 执行有界自动重订阅；过期回调不能写入当前 buffer。连续有效 batch 或手动刷新会重置恢复预算。

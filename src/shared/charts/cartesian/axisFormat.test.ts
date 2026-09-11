@@ -13,6 +13,11 @@ describe("axisFormat", () => {
 
   it("plotAxisTickFormatter formats date ticks", () => {
     const format = plotAxisTickFormatter("date");
-    expect(format?.({ valueOf: () => 0 })).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(format?.({ valueOf: () => 0 })).toBe("1970-01-01");
+    expect(format?.({ valueOf: () => -1 })).toBe("1969-12-31");
+    const datetime = plotAxisTickFormatter("datetime");
+    expect(datetime?.({ valueOf: () => 0 })).toBe("1970-01-01 00:00");
+    expect(datetime?.({ valueOf: () => -1_000_000 })).toBe("1969-12-31 23:59");
+    expect(datetime?.({ valueOf: () => 36_000_000_000 })).toBe("1970-01-01 10:00");
   });
 });

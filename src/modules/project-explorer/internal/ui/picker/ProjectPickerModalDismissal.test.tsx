@@ -22,7 +22,7 @@ const project: ManagedProject = {
   id: "project-a",
   name: "Project A",
   path: "C:/Project A/metadata.yssbi",
-  lastOpenedAt: "2026-08-16T00:00:00Z",
+  lastOpenedAt: "2026-08-16T00:00:00",
 };
 
 function PendingProjectDialog({

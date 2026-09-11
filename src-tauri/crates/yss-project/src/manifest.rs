@@ -21,7 +21,22 @@ pub struct ProjectManifest {
     #[serde(deserialize_with = "deserialize_current_project_schema_version")]
     schema_version: u32,
     project_name: String,
+    #[serde(deserialize_with = "deserialize_export_time")]
     export_time: String,
+}
+
+fn normalize_export_time(value: String) -> String {
+    chrono::DateTime::parse_from_rfc3339(&value).map_or(value, |time| {
+        time.naive_local()
+            .format("%Y-%m-%dT%H:%M:%S%.f")
+            .to_string()
+    })
+}
+
+fn deserialize_export_time<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    String::deserialize(deserializer).map(normalize_export_time)
 }
 
 impl ProjectManifest {
@@ -29,7 +44,7 @@ impl ProjectManifest {
         Self {
             schema_version: CURRENT_PROJECT_SCHEMA_VERSION,
             project_name: project_name.into(),
-            export_time: export_time.into(),
+            export_time: normalize_export_time(export_time.into()),
         }
     }
 
@@ -44,15 +59,26 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn manifest_times_keep_the_input_calendar_clock_without_offset() {
+        let input = "2026-09-11T10:00:00.123+08:00";
+        let manifest = ProjectManifest::new("Clock", input);
+        assert_eq!(manifest.export_time, "2026-09-11T10:00:00.123");
+        let loaded: ProjectManifest = serde_json::from_value(json!({
+            "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION, "projectName": "Clock", "exportTime": input,
+        })).unwrap();
+        assert_eq!(loaded, manifest);
+    }
+
+    #[test]
     fn constructor_mints_only_the_current_project_schema_version() {
-        let manifest = ProjectManifest::new("Example", "2026-08-30T00:00:00Z");
+        let manifest = ProjectManifest::new("Example", "2026-08-30T00:00:00");
 
         assert_eq!(
             serde_json::to_value(&manifest).unwrap(),
             json!({
                 "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION,
                 "projectName": "Example",
-                "exportTime": "2026-08-30T00:00:00Z"
+                "exportTime": "2026-08-30T00:00:00"
             })
         );
         assert_eq!(manifest.schema_version, CURRENT_PROJECT_SCHEMA_VERSION);
@@ -63,7 +89,7 @@ mod tests {
         let mut value = json!({
             "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION,
             "projectName": "Example",
-            "exportTime": "2026-08-30T00:00:00Z"
+            "exportTime": "2026-08-30T00:00:00"
         });
 
         for schema_version in [
@@ -81,7 +107,7 @@ mod tests {
         let value = json!({
             "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION,
             "projectName": "Example",
-            "exportTime": "2026-08-30T00:00:00Z",
+            "exportTime": "2026-08-30T00:00:00",
             "computationSettings": {
                 "numeric": { "tolerance": { "absolute": 1e-12, "relative": 1e-9 } },
                 "missingValues": { "statistics": "listwise" }
@@ -93,13 +119,13 @@ mod tests {
 
     #[test]
     fn validated_manifest_parts_round_trip_without_public_mutation_seams() {
-        let manifest = ProjectManifest::new("Round Trip", "2026-08-30T00:00:00Z");
+        let manifest = ProjectManifest::new("Round Trip", "2026-08-30T00:00:00");
 
         assert_eq!(manifest.project_name, "Round Trip");
-        assert_eq!(manifest.export_time, "2026-08-30T00:00:00Z");
+        assert_eq!(manifest.export_time, "2026-08-30T00:00:00");
         assert_eq!(
             manifest.into_parts(),
-            ("Round Trip".to_owned(), "2026-08-30T00:00:00Z".to_owned())
+            ("Round Trip".to_owned(), "2026-08-30T00:00:00".to_owned())
         );
     }
 }

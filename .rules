@@ -49,6 +49,8 @@ add or commit them unless explicitly requested.
 
 * Rust is the authority for committed project state, persistence, graph
   compilation/execution, databases, results, and scientific orchestration.
+* Project calendar values and user-facing timestamps are timezone-free. Removing
+  an input timezone must preserve its original calendar and wall-clock fields.
 * React stores only Rust projections, explicit unsaved drafts, and UI/runtime
   state. Do not create a second frontend authority for backend-owned state.
 * Do not merge or reconcile parallel committed Rust and React models. Replace

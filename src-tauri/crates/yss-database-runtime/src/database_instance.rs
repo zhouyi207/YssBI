@@ -112,13 +112,16 @@ impl DatabaseInstance {
         let relation = self.query()?.relation()?;
         let engine = self.engine()?;
         let control = query_control(128 * 1024 * 1024);
+        let schema = Arc::new(yss_tabular_arrow::timezone_free_schema(&relation.schema()));
         let file = std::fs::File::create(path)?;
         match format {
             DatabaseExportFormat::Csv => {
                 let mut writer = arrow::csv::Writer::new(file);
-                writer.write(&RecordBatch::new_empty(relation.schema()))?;
+                writer.write(&RecordBatch::new_empty(schema))?;
                 let mut failure = None;
                 let result = engine.visit_relation(&relation, &control, &mut |batch| {
+                    let batch = yss_tabular_arrow::timezone_free_batch(&batch)
+                        .map_err(|_| RelationError::QueryFailed)?;
                     writer.write(&batch).map_err(|error| {
                         failure = Some(error);
                         RelationError::QueryFailed
@@ -131,9 +134,11 @@ impl DatabaseInstance {
                 writer.into_inner().sync_all()?;
             }
             DatabaseExportFormat::Parquet => {
-                let mut writer = yss_tabular_io::ParquetBatchWriter::new(file, relation.schema())?;
+                let mut writer = yss_tabular_io::ParquetBatchWriter::new(file, schema)?;
                 let mut failure = None;
                 let result = engine.visit_relation(&relation, &control, &mut |batch| {
+                    let batch = yss_tabular_arrow::timezone_free_batch(&batch)
+                        .map_err(|_| RelationError::QueryFailed)?;
                     writer.write(&batch).map_err(|error| {
                         failure = Some(error);
                         RelationError::QueryFailed

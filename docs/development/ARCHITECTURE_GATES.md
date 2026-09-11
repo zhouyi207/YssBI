@@ -128,6 +128,10 @@ Project query 的精确 capability 还允许返回与同次 ProjectIndex 对应�
 前端资源与面板共用已有发布入口，不从 ResourceStore 再次生成或查询 Project 文档。
 文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 维护。
 
+`yss-tabular-arrow` 的 `chrono` 依赖用于将外部带时区的时间转换为保留钟面的无时区值；
+这属于 Database Core 的类型适配职责。Project 与 Logging 自己生成无时区的展示时间，
+不依赖 tabular adapter 作为时钟服务。
+
 ## 6. Changing the architecture policy
 
 数据库的语义 Schema/revision facts 归 `yss-database-schema`，按 Pure Leaf 分类；具体引擎映射归适配器。

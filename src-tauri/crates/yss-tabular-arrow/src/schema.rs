@@ -154,7 +154,7 @@ pub fn validate_storage_schema(schema: &Schema) -> Result<(), TabularArrowError>
 }
 
 /// This is a one-way semantic projection. In particular Int64/Float64 do not describe the
-/// storage width, sign, decimal precision, temporal unit, timezone, or dictionary encoding.
+/// storage width, sign, decimal precision, temporal unit, or dictionary encoding.
 pub fn semantic_data_type(dtype: &DataType) -> SemanticType {
     match dtype {
         DataType::Boolean => SemanticType::Boolean,
@@ -190,21 +190,19 @@ pub fn semantic_data_type(dtype: &DataType) -> SemanticType {
 }
 
 pub fn data_type_name(dtype: &DataType) -> String {
-    match dtype {
+    let dtype = crate::timezone_free_data_type(dtype);
+    match &dtype {
         DataType::Boolean => "Boolean".into(),
         DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => "String".into(),
         DataType::Date32 | DataType::Date64 => "Date".into(),
-        DataType::Timestamp(unit, timezone) => {
+        DataType::Timestamp(unit, _) => {
             let unit = match unit {
                 arrow::datatypes::TimeUnit::Second => "s",
                 arrow::datatypes::TimeUnit::Millisecond => "ms",
                 arrow::datatypes::TimeUnit::Microsecond => "us",
                 arrow::datatypes::TimeUnit::Nanosecond => "ns",
             };
-            timezone.as_ref().map_or_else(
-                || format!("Datetime({unit})"),
-                |timezone| format!("Datetime({unit}, {timezone})"),
-            )
+            format!("Datetime({unit})")
         }
         DataType::Time32(_) | DataType::Time64(_) => "Time".into(),
         DataType::Decimal32(p, s)

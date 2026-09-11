@@ -56,7 +56,7 @@ impl PendingDiagnostic {
 
     fn records_dropped(dropped_count: u64) -> Self {
         Self {
-            timestamp: super::rfc3339_now(),
+            timestamp: super::local_timestamp_now(),
             level: DiagnosticLevel::Warn,
             origin: DiagnosticOrigin::Rust,
             domain: DiagnosticDomain::System,

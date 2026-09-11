@@ -5,6 +5,7 @@
 
 mod edit_type;
 mod scalar;
+mod temporal;
 pub use edit_type::editable_data_type;
 mod schema;
 
@@ -13,6 +14,10 @@ pub use schema::{
     CategoryDomain, DatasetRowColumns, column_identity, data_type_name, database_schema_fact,
     dataset_row_columns, semantic_data_type, validate_storage_schema, with_column_metadata,
     with_row_columns, without_row_metadata,
+};
+pub use temporal::{
+    cast_temporal_without_timezone, datetime_strings_without_timezone, timezone_free_array,
+    timezone_free_batch, timezone_free_data_type, timezone_free_schema, timezone_free_text,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

@@ -114,7 +114,7 @@ mod tests {
 
     fn record(fields: yss_tracing::LogFields) -> LogRecord {
         LogRecord {
-            timestamp: "2026-01-01T00:00:00.000Z".into(),
+            timestamp: "2026-01-01".into(),
             level: LogLevel::Warn,
             target: "yssbi::database".into(),
             message: "failed".into(),

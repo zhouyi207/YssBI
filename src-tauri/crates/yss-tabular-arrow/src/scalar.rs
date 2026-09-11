@@ -163,7 +163,7 @@ pub fn json_to_array(field: &Field, values: &[Value]) -> Result<ArrayRef, Tabula
                 .iter()
                 .map(|value| match value {
                     Value::Null => Ok(None),
-                    Value::String(value) => Ok(Some(value.as_str())),
+                    Value::String(value) => Ok(Some(crate::timezone_free_text(value)?)),
                     _ => Err(invalid()),
                 })
                 .collect::<Result<Vec<_>, _>>()?;
@@ -345,6 +345,8 @@ fn decimal_coefficient(text: &str, precision: u8, scale: i8) -> Result<String, T
 /// temporal and category values use text. NaN/infinity have the existing UI null representation.
 pub fn array_to_json(array: &dyn Array) -> Result<Vec<Value>, TabularArrowError> {
     use arrow::util::display::array_value_to_string;
+    let normalized = crate::timezone_free_array(array)?;
+    let array = normalized.as_ref();
     if matches!(array.data_type(), DataType::Dictionary(_, _)) {
         return array_to_json(strict_cast(array, &DataType::Utf8)?.as_ref());
     }
