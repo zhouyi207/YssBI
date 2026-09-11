@@ -20,3 +20,38 @@
 - [Statistical Harness](docs/roadmap/STATISTICAL_HARNESS.md)
 - [v0.3](docs/roadmap/v0_3.md)
 - [v1.0](docs/roadmap/v1_0.md)
+
+
+数据驱动：Immer 库处理 json
+
+
+1. json-render：最贴近你的目标
+
+Vercel Labs 的 json-render 本身就是：
+
+JSON Spec → Component Registry → React Components
+
+而且它明确支持“AI 只能使用你注册过的组件”，非常适合你以后 YssBI 让 AI 生成 UI。
+
+
+2. Zod：强烈建议一起使用
+
+你的 JSON Renderer 最大风险不是渲染，而是：
+
+JSON 是不是合法？
+
+尤其以后 AI 生成：
+
+
+3. Zustand + Immer：负责“JSON 局部变化”
+
+这个还是保留。
+
+整个架构建议是：
+
+
+4. JSON Patch：我也很推荐
+
+如果后端或者 AI 会不断修改页面：
+
+不要：.图表格式从 schema 3 升到 4
