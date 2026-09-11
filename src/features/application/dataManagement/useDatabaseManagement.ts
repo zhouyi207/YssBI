@@ -138,7 +138,7 @@ async function loadCsv(path: string) {
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
 export function triggerImportData() {
-  uiStore.showImportDialog({
+  const importModalId = uiStore.showImportDialog({
     onSelect: async (type) => {
       if (type === "csv") {
         try {
@@ -150,6 +150,7 @@ export function triggerImportData() {
           const selected = result.value;
           if (selected && !Array.isArray(selected)) {
             await loadCsv(selected);
+            uiStore.closeModal(importModalId);
           }
         } catch (error) {
           logDataOperationFailure(error, "load_database", "CSV import");
@@ -180,17 +181,20 @@ export function triggerImportData() {
             }
             if (tables.length === 1) {
               await loadSqliteTable(selected, tables[0]);
+              uiStore.closeModal(importModalId);
             } else {
               uiStore.showSqliteTableSelectDialog({
                 dbPath: selected,
                 tables,
                 onSelect: (table) => {
-                  loadSqliteTable(selected, table).catch((error) => {
-                    logDataOperationFailure(error, "load_database", "SQLite table load");
-                    showDataOperationError(error, "load_database", (code) =>
-                      i18n.t("dataOperation.importFailed", { error: code }),
-                    );
-                  });
+                  loadSqliteTable(selected, table)
+                    .then(() => uiStore.closeModal(importModalId))
+                    .catch((error) => {
+                      logDataOperationFailure(error, "load_database", "SQLite table load");
+                      showDataOperationError(error, "load_database", (code) =>
+                        i18n.t("dataOperation.importFailed", { error: code }),
+                      );
+                    });
                 },
               });
             }
@@ -220,18 +224,21 @@ export function triggerImportData() {
               }
               if (tables.length === 1) {
                 await loadSqlRemoteTable(engine, connectionString, tables[0]);
+                uiStore.closeModal(importModalId);
               } else {
                 uiStore.showSqlRemoteTableSelectDialog({
                   connectionString,
                   engine,
                   tables,
                   onSelect: (table) => {
-                    loadSqlRemoteTable(engine, connectionString, table).catch((error) => {
-                      logDataOperationFailure(error, "load_database", `${label} table load`);
-                      showDataOperationError(error, "load_database", (code) =>
-                        i18n.t("dataOperation.importFailed", { error: code }),
-                      );
-                    });
+                    loadSqlRemoteTable(engine, connectionString, table)
+                      .then(() => uiStore.closeModal(importModalId))
+                      .catch((error) => {
+                        logDataOperationFailure(error, "load_database", `${label} table load`);
+                        showDataOperationError(error, "load_database", (code) =>
+                          i18n.t("dataOperation.importFailed", { error: code }),
+                        );
+                      });
                   },
                 });
               }
@@ -266,17 +273,20 @@ export function triggerImportData() {
             }
             if (sheets.length === 1) {
               await loadExcelSheet(selected, sheets[0]);
+              uiStore.closeModal(importModalId);
             } else {
               uiStore.showExcelSheetSelectDialog({
                 filePath: selected,
                 sheets,
                 onSelect: (sheet) => {
-                  loadExcelSheet(selected, sheet).catch((error) => {
-                    logDataOperationFailure(error, "load_database", "Excel sheet load");
-                    showDataOperationError(error, "load_database", (code) =>
-                      i18n.t("dataOperation.importFailed", { error: code }),
-                    );
-                  });
+                  loadExcelSheet(selected, sheet)
+                    .then(() => uiStore.closeModal(importModalId))
+                    .catch((error) => {
+                      logDataOperationFailure(error, "load_database", "Excel sheet load");
+                      showDataOperationError(error, "load_database", (code) =>
+                        i18n.t("dataOperation.importFailed", { error: code }),
+                      );
+                    });
                 },
               });
             }

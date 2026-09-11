@@ -124,18 +124,20 @@ class UIStore {
   }
 
   showImportDialog(options: ImportDialogOptions) {
+    const id = crypto.randomUUID();
     this.state = {
       ...this.state,
       modals: [
         ...this.state.modals,
         {
-          id: crypto.randomUUID(),
+          id,
           type: "import",
           options,
         },
       ],
     };
     this.emit();
+    return id;
   }
 
   showSqliteTableSelectDialog(options: SqliteTableSelectDialogOptions) {

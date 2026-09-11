@@ -94,11 +94,9 @@ const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
 function TypeOption({
   type,
   onSelect,
-  onClose,
 }: {
   type: ImportTypeConfig;
   onSelect: (id: ImportDataSourceType) => void;
-  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const label = t(`importModal.types.${type.id}.label`);
@@ -112,7 +110,6 @@ function TypeOption({
       onClick={() => {
         if (type.comingSoon) return;
         onSelect(type.id);
-        onClose();
       }}
       className="group h-auto min-h-[90px] w-full justify-start gap-4 whitespace-normal rounded-none border-0 border-b border-border px-0 py-5 text-left font-normal focus-visible:ring-inset disabled:opacity-60"
     >
@@ -219,7 +216,6 @@ export const ImportModal = ({
                   key={type.id}
                   type={type}
                   onSelect={options.onSelect}
-                  onClose={onClose}
                 />
               ))}
             </section>

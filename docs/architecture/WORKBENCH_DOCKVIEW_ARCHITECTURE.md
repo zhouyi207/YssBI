@@ -46,6 +46,10 @@ Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSessi
 
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
+`UIHost` 按 `UIStore` 的弹窗栈保持各层挂载，后打开的弹窗及其遮罩位于前一层之上；
+只有最上层接受交互与关闭操作，关闭后恢复下层的焦点和本地输入状态。
+导入外部数据时，选择数据源、取消文件选择或内层弹窗均保留导入弹窗及当前分类；
+导入成功后由导入流程按弹窗 ID 关闭对应的导入弹窗。
 
 `src/app/windows/workbench/rootPanelRegistry.tsx` 是唯一同时组合多个业务 panel contribution 的位置，
 `editorRendererRegistry.ts` 是唯一把 event/function/chart/database 映射到具体 editor 的位置。Workbench module

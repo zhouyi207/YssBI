@@ -10,6 +10,7 @@ import { ProjectService } from "@/services/project/projectService";
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
 import { DatabaseService } from "@/services/database/databaseService";
 import { normalizeIpcError } from "@/services/ipc";
+import { openPathDialog } from "@/services/platform/pathDialog";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { useDatabaseManagement } from "./useDatabaseManagement";
 
@@ -114,6 +115,67 @@ describe("useDatabaseManagement revision authority", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    while (uiStore.getState().modals.length) uiStore.closeModal();
+    uiStore.finishProgress();
+  });
+
+  it("keeps a canceled import open and closes only that dialog after a sheet finishes importing", async () => {
+    vi.mocked(openPathDialog)
+      .mockResolvedValueOnce({ ok: true, value: null })
+      .mockResolvedValueOnce({ ok: true, value: "C:/sales.xlsx" });
+    vi.spyOn(DatabaseService, "listExcelSheets").mockResolvedValue(["Sales", "Forecast"]);
+    let completeImport!: () => void;
+    vi.spyOn(DatabaseService, "loadDatabase").mockImplementation(
+      (_project, operation) =>
+        new Promise((resolve) => {
+          completeImport = () =>
+            resolve({
+              ...aggregate("Imported sales", operation),
+              data: {
+                id: "sales",
+                name: "Imported sales",
+                rowCount: 1,
+                columnCount: 1,
+                columns: [{ name: "value", type: "Int64" }],
+              },
+            });
+        }),
+    );
+    actions.triggerImportData();
+    const importDialog = uiStore.getState().modals[0];
+    if (importDialog.type !== "import") throw new Error("missing import dialog");
+
+    await importDialog.options.onSelect("xlsx");
+    expect(uiStore.getState().modals).toEqual([importDialog]);
+    expect(DatabaseService.listExcelSheets).not.toHaveBeenCalled();
+    expect(DatabaseService.loadDatabase).not.toHaveBeenCalled();
+
+    await importDialog.options.onSelect("xlsx");
+    const sheetDialog = uiStore.getState().modals[1];
+    if (sheetDialog.type !== "excelSheetSelect") throw new Error("missing sheet dialog");
+    sheetDialog.options.onSelect("Sales");
+    uiStore.closeModal(sheetDialog.id);
+    await vi.waitFor(() => expect(DatabaseService.loadDatabase).toHaveBeenCalledOnce());
+    expect(uiStore.getState().modals).toEqual([importDialog]);
+
+    const noticeDismissed = uiStore.alert({
+      title: "Notice",
+      message: "Another dialog",
+      closeText: "Close",
+      type: "info",
+    });
+    const notice = uiStore.getState().modals[1];
+    completeImport();
+    await vi.waitFor(() => expect(uiStore.getState().modals).toEqual([notice]));
+
+    expect(DatabaseService.loadDatabase).toHaveBeenCalledWith(
+      projectInstanceId,
+      expect.any(String),
+      { excel: { path: "C:/sales.xlsx", sheet: "Sales" } },
+    );
+    expect(useDatabaseStore.getState().databases.sales?.name).toBe("Imported sales");
+    uiStore.closeModal(notice.id);
+    await noticeDismissed;
   });
 
   it("passes exact database revision and submits the canonical aggregate mutation", async () => {

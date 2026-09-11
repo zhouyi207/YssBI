@@ -3,6 +3,12 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+const DialogStackContext = React.createContext(0);
+
+function DialogStackLayer({ index, children }: { index: number; children: React.ReactNode }) {
+  return <DialogStackContext.Provider value={index}>{children}</DialogStackContext.Provider>;
+}
+
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
@@ -34,17 +40,37 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  style,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+  const stackIndex = React.useContext(DialogStackContext);
+  const returnFocusRef = React.useRef<HTMLElement | null>(null);
+
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay style={{ zIndex: 500 + stackIndex * 2 }} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
           "fixed left-1/2 top-1/2 z-[501] grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl outline-none data-[state=open]:animate-zoom-in",
           className,
         )}
+        style={{ zIndex: 501 + stackIndex * 2, ...style }}
+        onOpenAutoFocus={(event) => {
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          // Stack dialogs open through actions, so Radix has no DialogTrigger to return to.
+          if (!event.defaultPrevented && stackIndex > 0 && returnFocusRef.current?.isConnected) {
+            event.preventDefault();
+            returnFocusRef.current.focus({ preventScroll: true });
+          }
+        }}
         {...props}
       >
         {children}
@@ -104,5 +130,6 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogStackLayer,
   DialogTitle,
 };

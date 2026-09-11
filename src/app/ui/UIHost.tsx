@@ -1,3 +1,4 @@
+import { DialogStackLayer } from "@/components/ui/dialog";
 import { applicationUi, useApplicationUiRead } from "@/features/application/ui/applicationUi";
 import {
   ExcelSheetSelectModal,
@@ -11,75 +12,67 @@ import { InputModal, MessageDialog, Modal, ProgressOverlay } from "@/shared/ui";
 
 export const UIHost = () => {
   const { modals, progress } = useApplicationUiRead();
-  const top = modals[modals.length - 1];
 
   return (
     <>
       {progress && <ProgressOverlay progress={progress} onCancel={applicationUi.cancelProgress} />}
 
-      {top?.type === "message" && (
-        <MessageDialog
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+      {modals.map((modal, index) => (
+        <DialogStackLayer key={modal.id} index={index}>
+          {modal.type === "message" && (
+            <MessageDialog
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "confirm" && (
-        <Modal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "confirm" && (
+            <Modal options={modal.options} onClose={() => applicationUi.closeModal(modal.id)} />
+          )}
 
-      {top?.type === "input" && (
-        <InputModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "input" && (
+            <InputModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "import" && (
-        <ImportModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "import" && (
+            <ImportModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "sqliteTableSelect" && (
-        <SqliteTableSelectModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "sqliteTableSelect" && (
+            <SqliteTableSelectModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "excelSheetSelect" && (
-        <ExcelSheetSelectModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "excelSheetSelect" && (
+            <ExcelSheetSelectModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "sqlConnection" && (
-        <SqlConnectionModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "sqlConnection" && (
+            <SqlConnectionModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
 
-      {top?.type === "sqlRemoteTableSelect" && (
-        <SqlRemoteTableSelectModal
-          key={top.id}
-          options={top.options}
-          onClose={() => applicationUi.closeModal(top.id)}
-        />
-      )}
+          {modal.type === "sqlRemoteTableSelect" && (
+            <SqlRemoteTableSelectModal
+              options={modal.options}
+              onClose={() => applicationUi.closeModal(modal.id)}
+            />
+          )}
+        </DialogStackLayer>
+      ))}
     </>
   );
 };
