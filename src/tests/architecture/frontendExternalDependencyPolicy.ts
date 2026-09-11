@@ -21,6 +21,7 @@ const DECLARED_RUNTIME_PACKAGES = [
   "@tauri-apps/plugin-clipboard-manager",
   "@tauri-apps/plugin-dialog",
   "@tauri-apps/plugin-opener",
+  "@xyflow/react",
   "ag-grid-community",
   "ag-grid-react",
   "class-variance-authority",
@@ -124,6 +125,7 @@ const APP_USES = [
 
 const VIEW_USES = [
   ...pairedModuleAllowances("views", [
+    ["@xyflow/react", [null]],
     ["@assistant-ui/react", [null]],
     ["react", [null]],
     ["react-dom", [null]],
@@ -141,6 +143,7 @@ const VIEW_USES = [
   allowance("views", "runtime", "katex", [null]),
   allowance("views", "runtime", "react-icons", [null, "fi", "vsc"]),
   allowance("views", "runtime", "katex", ["dist::katex.min.css"], "stylesheet"),
+  allowance("views", "runtime", "@xyflow/react", ["dist::base.css"], "stylesheet"),
 ];
 
 const APPLICATION_USES = [
