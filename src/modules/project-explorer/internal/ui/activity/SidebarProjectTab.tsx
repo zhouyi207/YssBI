@@ -1,5 +1,6 @@
 import { useGraphDiagnosticCounts } from "@/features/application/graphDiagnostics/useGraphDiagnosticCounts";
 import { useActivityPanelDocument } from "@/features/application/sidebar/useActivityPanelDocument";
+import { useActiveProjectGraph } from "@/features/application/sidebar/useActiveProjectGraph";
 import { useDetailTarget } from "@/features/application/editor";
 import { ActivityPanelDocumentView } from "@/modules/workbench/public";
 import {
@@ -11,6 +12,7 @@ import { SidebarProjectTreeRow, type SidebarProjectTreeActions } from "./Sidebar
 export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActions }) {
   const query = useActivityPanelDocument("project");
   const detailTarget = useDetailTarget();
+  const activeGraph = useActiveProjectGraph();
   const graphDiagnosticCounts = useGraphDiagnosticCounts();
   return (
     <ActivityPanelDocumentView
@@ -36,6 +38,7 @@ export function SidebarProjectTab({ actions }: { actions: SidebarProjectTreeActi
           depth={depth}
           actions={actions}
           detailTarget={detailTarget}
+          activeGraph={activeGraph}
           graphDiagnosticCounts={graphDiagnosticCounts}
         />
       )}

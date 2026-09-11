@@ -17,6 +17,10 @@ import { useProjectIOStore } from "@/features/application/project/projectIOStore
 import * as activityService from "@/services/workbench/activityPanelService";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
+import { useEditorStore } from "@/features/core/editor";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
+import { setInspectionContext } from "@/features/application/editor/rightSidebarActions";
+import { workbenchDockviewRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 
 import { SidebarProjectTab } from "./SidebarProjectTab";
 
@@ -49,9 +53,103 @@ function categoryIds(host: HTMLElement): Array<string | null> {
 describe("SidebarProjectTab", () => {
   let host: HTMLDivElement;
   let root: Root;
+  let activeEditor: WorkbenchEditorPanelInfo | undefined;
+  let groupEditors: Map<string, WorkbenchEditorPanelInfo>;
+  let dockviewSnapshot: { revision: number; ready: boolean; hydrated: boolean };
+  let dockviewListeners: Set<() => void>;
+
+  function publishDockview() {
+    dockviewSnapshot = { ...dockviewSnapshot, revision: dockviewSnapshot.revision + 1 };
+    for (const listener of dockviewListeners) listener();
+  }
+
+  function renderProjectTab() {
+    act(() =>
+      root.render(
+        <I18nextProvider i18n={i18n}>
+          <TooltipProvider>
+            <SidebarProjectTab actions={actions} />
+          </TooltipProvider>
+        </I18nextProvider>,
+      ),
+    );
+  }
+
+  function graphRowSelected(name: string): boolean {
+    const label = [...host.querySelectorAll("span")].find(
+      (element) => element.textContent === name,
+    );
+    if (!label?.parentElement) throw new Error(`Missing graph row: ${name}`);
+    return label.parentElement.classList.contains("bg-[var(--sidebar-item-active)]");
+  }
+
+  function installGraphs() {
+    const first = buildGraphResourceMeta("event", "events/First.yssbi-event", "First Event");
+    const second = buildGraphResourceMeta(
+      "function",
+      "functions/Second.yssbi-function",
+      "Second Function",
+    );
+    useResourceStore.getState().setResources([first, second]);
+    const panel = useSidebarStore.getState().panels.project!;
+    useSidebarStore.getState().publishPanels([
+      {
+        binding: panel.binding,
+        snapshot: {
+          cursor: "graphs",
+          document: activityPanelFixture("project", [
+            categoryFixture(PROJECT_TREE_CATEGORY_IDS.events, "Events", 0, true),
+            {
+              id: first.uri,
+              kind: "item",
+              depth: 1,
+              item: { kind: "graph", path: first.id, name: first.name, graphType: "event" },
+            },
+            categoryFixture(PROJECT_TREE_CATEGORY_IDS.functions, "Functions", 0, true),
+            {
+              id: second.uri,
+              kind: "item",
+              depth: 1,
+              item: { kind: "graph", path: second.id, name: second.name, graphType: "function" },
+            },
+          ]),
+        },
+      },
+    ]);
+    activeEditor = {
+      panelInstanceId: "first-editor",
+      groupId: "first-group",
+      component: "EditorResource",
+      title: first.name,
+      active: true,
+      location: { type: "grid" },
+      metadata: { role: "editor", resourceRef: first.id, resourceKind: "event" },
+    };
+    groupEditors.set(activeEditor.groupId, activeEditor);
+    useGraphSessionStore.getState().setFocusedSession(activeEditor.groupId, first.id);
+    useEditorStore.getState().setDetailFocus({ kind: "event", path: first.id });
+    return { first, second };
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    activeEditor = undefined;
+    groupEditors = new Map();
+    dockviewSnapshot = { revision: 0, ready: true, hydrated: true };
+    dockviewListeners = new Set();
+    vi.spyOn(workbenchDockviewRead, "getActiveEditorPanel").mockImplementation(() => activeEditor);
+    vi.spyOn(workbenchDockviewRead, "getActiveEditorPanelInGroup").mockImplementation((groupId) =>
+      groupEditors.get(groupId),
+    );
+    vi.spyOn(workbenchDockviewRead, "getSnapshot").mockImplementation(() => dockviewSnapshot);
+    vi.spyOn(workbenchDockviewRead, "subscribe").mockImplementation((listener) => {
+      dockviewListeners.add(listener);
+      return () => {
+        dockviewListeners.delete(listener);
+      };
+    });
+    useEditorStore.setState({ detailFocus: null });
+    useGraphSessionStore.getState().reset();
     startProjectLifecycle("project-1");
     useSidebarStore.setState({ expandedCategories: {}, panels: {} });
     useResourceStore.getState().clear();
@@ -80,6 +178,8 @@ describe("SidebarProjectTab", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    useEditorStore.setState({ detailFocus: null });
+    useGraphSessionStore.getState().reset();
     useResourceStore.getState().clear();
     useProjectIOStore.setState({ projectInstanceId: null });
     clearProjectLifecycle();
@@ -173,5 +273,62 @@ describe("SidebarProjectTab", () => {
     expect(host.textContent).not.toContain("First Event");
     expect(host.querySelector('[role="status"]')).toBeNull();
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current graph highlighted across single, multiple and cleared node selections", () => {
+    const { first } = installGraphs();
+    renderProjectTab();
+    expect(graphRowSelected(first.name)).toBe(true);
+    act(() => setInspectionContext(first.id, ["node-1"]));
+    expect(useEditorStore.getState().detailFocus).toMatchObject({ kind: "node", id: "node-1" });
+    expect(graphRowSelected(first.name)).toBe(true);
+    act(() => setInspectionContext(first.id, ["node-1", "node-2"]));
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event", path: first.id });
+    expect(graphRowSelected(first.name)).toBe(true);
+    act(() => setInspectionContext(first.id, ["node-2"]));
+    expect(graphRowSelected(first.name)).toBe(true);
+    act(() => setInspectionContext(first.id, []));
+    expect(graphRowSelected(first.name)).toBe(true);
+    act(() => {
+      activeEditor = undefined;
+      useEditorStore.getState().setDetailFocus({ kind: "nodeDefinition", nodeType: "tests.other" });
+      publishDockview();
+    });
+    expect(graphRowSelected(first.name)).toBe(true);
+  });
+
+  it("follows Dockview switches and closure without waiting for a Details or graph-session update", () => {
+    const { first, second } = installGraphs();
+    renderProjectTab();
+    act(() => {
+      activeEditor = {
+        ...activeEditor!,
+        panelInstanceId: "second-editor",
+        groupId: "second-group",
+        title: second.name,
+        metadata: { role: "editor", resourceRef: second.id, resourceKind: "function" },
+      };
+      groupEditors.set(activeEditor.groupId, activeEditor);
+      publishDockview();
+    });
+    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event", path: first.id });
+    expect(graphRowSelected(first.name)).toBe(false);
+    expect(graphRowSelected(second.name)).toBe(true);
+    act(() => {
+      activeEditor = {
+        ...activeEditor!,
+        metadata: { role: "editor", resourceRef: "chart", resourceKind: "chart" },
+      };
+      publishDockview();
+    });
+    expect(graphRowSelected(first.name)).toBe(false);
+    expect(graphRowSelected(second.name)).toBe(false);
+    act(() => {
+      activeEditor = undefined;
+      groupEditors.clear();
+      publishDockview();
+    });
+    expect(graphRowSelected(first.name)).toBe(false);
+    expect(graphRowSelected(second.name)).toBe(false);
   });
 });

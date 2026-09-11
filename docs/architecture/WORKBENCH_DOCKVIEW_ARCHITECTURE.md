@@ -40,6 +40,11 @@ Project sidebar 按 Events → Functions → Charts → Data 展示同级资源�
 
 Graph 分类与 Chart、Data 使用同一打开语义：单击即在当前 central grid 打开并固定资源标签，同一资源复用已有标签。Graph 不再区分侧栏预览与双击固定，也不再通过替换旧预览标签来控制标签数量。
 
+Graph 条目的选中背景由现有编辑器资源上下文决定，不使用 Details 的查看对象。
+实际活动的资源编辑器优先；工具面板获得焦点时，保留既有图会话所在组中仍活动的图标签高亮。
+切换到另一张图时跟随切换，切换到非图编辑器或已无对应图标签时清除旧高亮。
+画布内单选、多选、框选和清空节点选择只改变节点选择及 Details，不改变所属 Graph 条目的背景。
+
 Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSession`，保持资源编辑器为物理活动面板，并被动同步 Details 上下文。打开资源不额外激活 Details 或 Project sidebar，避免 `Ctrl+W` 的目标从编辑器转移到固定面板；Project 分类展开不改变活动面板。
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。

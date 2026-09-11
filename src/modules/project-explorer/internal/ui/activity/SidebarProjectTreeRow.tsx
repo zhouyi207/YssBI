@@ -1,5 +1,6 @@
 import type { ActivityItem } from "@/shared/types/domain/activityPanel";
 import type { DetailTarget } from "@/features/core/editor/detail/detailTypes";
+import type { ActiveProjectGraph } from "@/features/application/sidebar/useActiveProjectGraph";
 import type { ProjectTreeCategoryId } from "@/features/core/sidebar/projectTreeState";
 import type { GraphResourceType } from "./projectSidebarTypes";
 import { SidebarGraphRow } from "./SidebarGraphRow";
@@ -26,12 +27,14 @@ export function SidebarProjectTreeRow({
   depth,
   actions,
   detailTarget,
+  activeGraph,
   graphDiagnosticCounts,
 }: {
   item: ActivityItem;
   depth: number;
   actions: SidebarProjectTreeActions;
   detailTarget: DetailTarget | null;
+  activeGraph: Pick<ActiveProjectGraph, "path" | "kind"> | null;
   graphDiagnosticCounts: Record<string, number>;
 }) {
   switch (item.kind) {
@@ -42,7 +45,7 @@ export function SidebarProjectTreeRow({
           name={item.name}
           graphType={item.graphType}
           indentDepth={depth}
-          isSelected={detailTarget?.kind === item.graphType && detailTarget.path === item.path}
+          isSelected={activeGraph?.kind === item.graphType && activeGraph.path === item.path}
           diagnosticCount={graphDiagnosticCounts[item.path] ?? 0}
           onContextMenu={(event) =>
             actions.onGraphContextMenu(event, {
