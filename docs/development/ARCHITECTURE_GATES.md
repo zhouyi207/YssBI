@@ -156,6 +156,9 @@ profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polar
 `yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
 结果页 command 只调用 Application 查询；页面预算、快照读取和查询结束后的 currentness 检查位于 Application。
 其 DTO converter 仅获 ResultPageProjection/ResultPageKind 的精确读取权限。
+结果租约 commands 只获 Application state、结果快照及引用 DTO 的登记权限；报告 commands 只获报告查询错误和相关 DTO。
+`schema/result.rs` 只映射结果引用、表和分析投影，不能访问 ApplicationState；假设检验输出的转换归 statistics schema。
+这些 capability 绑定到具体 source 和 symbol，不开放 Commands/Transport 对 Application 的通配依赖。
 另存为枚举文件路径后使用现有文件事务的流式复制入口；目标必须不存在，源根必须在租约中，文档仍逐项验证。
 
 插件协议与清单属于 Pure Leaf；通用进程/签名安装和 IPC SDK 属于 Backend Adapter。`yss-bayes-runtime` 属于插件内部 Application，只有 Julia extension 的确切 adapter source 可访问其编排入口。宿主 composition root 只构造通用 Plugin Manager 和 HostServices；Julia adapter 构造器只允许出现在外部 extension 中。文件发布、Arrow 适配和签名库权限均为对应 source/package 的显式登记，不开放通配业务桥接。

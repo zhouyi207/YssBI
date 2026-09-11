@@ -26,6 +26,6 @@ export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openLogsWindow } from "./openLogsWindow";
 export { openExternalUrlWithDialog } from "./openExternalUrlWithDialog";
 export { createEphemeralWindowLabel } from "./windowLabels";
-export { usePresentationWindowLifecycle } from "./usePresentationWindowLifecycle";
+export { useResultSession } from "./useResultSession";
 export { PresentationWindowShell } from "./PresentationWindowShell";
 export { windowKindForRoute } from "./windowRoute";

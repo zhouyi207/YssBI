@@ -1,5 +1,10 @@
 import { ResultService } from "@/services/result/resultService";
 import {
+  isResultReference,
+  resultReference,
+  type ResultReference,
+} from "@/shared/types/domain/result";
+import {
   isResultPlotKind,
   type ResultDescriptor,
   type ResultPlotKind,
@@ -34,7 +39,7 @@ async function loadReadyPayload(descriptor: ResultDescriptor): Promise<Presentat
   }
 
   if (descriptor.valueKind === "scalar") {
-    const value = await ResultService.getValue(descriptor.resultId);
+    const value = await ResultService.getValue(resultReference(descriptor));
     if (!value || value.kind !== "value") {
       throw new Error("Presentation results require a canonical scalar value");
     }
@@ -43,7 +48,7 @@ async function loadReadyPayload(descriptor: ResultDescriptor): Promise<Presentat
       : { mode: "report", report: descriptor.presentation.report, data: value.value };
   }
 
-  const page = await ResultService.getPage(descriptor.resultId, 0, PAGE_SIZE);
+  const page = await ResultService.getPage(resultReference(descriptor), 0, PAGE_SIZE);
   if (!page) throw new Error("Result data was not found");
   if (descriptor.presentation.kind === "report") {
     throw new Error("Report results require a canonical scalar object");
@@ -51,10 +56,12 @@ async function loadReadyPayload(descriptor: ResultDescriptor): Promise<Presentat
   return { mode: "plot", chart: resolvePlotChart(descriptor), data: page.values };
 }
 
-export async function loadPresentationWindow(resultId: string): Promise<PresentationWindowState> {
-  if (!resultId.trim()) return { status: "missing_result_id" };
+export async function loadPresentationWindow(
+  reference: ResultReference,
+): Promise<PresentationWindowState> {
+  if (!isResultReference(reference)) return { status: "missing_result_id" };
   try {
-    const descriptor = await ResultService.getDescriptor(resultId);
+    const descriptor = await ResultService.getDescriptor(reference);
     if (!descriptor) return { status: "not_found" };
     return { status: "ready", descriptor, payload: await loadReadyPayload(descriptor) };
   } catch (error) {

@@ -10,10 +10,10 @@ import {
   filterPinResultSearchEntries,
   type PinResultSearchEntry,
 } from "@/features/application/results/pinResultSearch";
-import { useResultDescriptors } from "@/features/application/results/runtime";
+import { useCurrentResultDescriptors } from "@/features/application/results/runtime";
 
 export function usePinResultSearch(graphPath: string, query: string) {
-  const descriptors = useResultDescriptors();
+  const descriptors = useCurrentResultDescriptors();
   const graphBucket = useGraphProjectionStore((state) => state.graphEntities[graphPath]);
 
   const entries = useMemo(() => {

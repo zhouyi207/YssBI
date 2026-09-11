@@ -125,8 +125,7 @@ fn shared_ols_options_reach_the_model_and_typed_report() {
     assert_eq!(result.coefficients, numerical.betas.to_vec());
     assert_eq!(result.fitted, numerical.fitted.to_vec());
     assert_eq!(result.residuals, numerical.residuals.to_vec());
-    assert_eq!(result.report.diagnostic_info.fitted_values, result.fitted);
-    assert_eq!(result.report.diagnostic_info.residuals, result.residuals);
+    assert_eq!(result.design, predictors);
     assert_eq!(result.report.model_basic_info.covariance_type, "HC3");
     assert_eq!(
         result.report.model_basic_info.df_residual,

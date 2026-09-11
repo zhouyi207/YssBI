@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import { regressionHypothesisSource } from "@/features/application/stats/useHypothesisTestBlock";
 import { useMemo } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -173,7 +174,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
         <OmittedVariablesAlert diag={fe_twoway.diagnostic_info} />
       ) : null}
 
-      <HypothesisTestBlock data={ols} />
+      <HypothesisTestBlock source={regressionHypothesisSource(ols)} />
 
       {parallel_trends ? (
         <div className="mb-6 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-4 text-sm text-foreground">

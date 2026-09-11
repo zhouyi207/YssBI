@@ -1,3 +1,4 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import type { SerializedDockview } from "dockview-react";
 import { describe, expect, it } from "vitest";
 
@@ -309,11 +310,10 @@ describe("workbench layout persistence", () => {
         component: "Result",
         metadata: {
           role: "result",
-          resultKey: "summary",
-          resultId: "42",
+          leaseId: resultLeaseIdFixture(1),
+          reference: resultReferenceFixture("42"),
           title: "Summary",
           presentation: { kind: "inspector" },
-          source: null,
         },
       },
     });
@@ -494,11 +494,10 @@ describe("workbench layout persistence", () => {
         component: "Result",
         metadata: {
           role: "result",
-          resultKey: "summary",
-          resultId: "42",
+          leaseId: resultLeaseIdFixture(2),
+          reference: resultReferenceFixture("42"),
           title: "Summary",
           presentation: { kind: "inspector" },
-          source: null,
         },
       },
       logs: {
@@ -638,11 +637,10 @@ describe("workbench layout persistence", () => {
         component: "Result",
         metadata: {
           role: "result",
-          resultKey: "summary",
-          resultId: "42",
+          leaseId: resultLeaseIdFixture(3),
+          reference: resultReferenceFixture("42"),
           title: "Summary",
           presentation: { kind: "inspector" },
-          source: null,
         },
       },
       logs: {

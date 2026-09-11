@@ -11,6 +11,7 @@ import type {
   ResultReportKind,
   ResultValue,
   ResultValueKind,
+  ResultLease,
 } from "./result";
 
 type UnknownRecord = Record<string, unknown>;
@@ -169,6 +170,7 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
     !isRecord(value) ||
     !hasExactKeys(value, [
       "resultId",
+      "executionSessionId",
       "provenance",
       "presentation",
       "valueKind",
@@ -177,12 +179,14 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
       "title",
     ]) ||
     !isDecimalId(value.resultId) ||
+    !isUuid(value.executionSessionId) ||
     !(value.totalCount === null || isNonNegativeInteger(value.totalCount)) ||
     typeof value.title !== "string"
   )
     return fail("result descriptor");
   return {
     resultId: value.resultId,
+    executionSessionId: value.executionSessionId,
     provenance: parseResultProvenance(value.provenance),
     presentation: parseResultPresentation(value.presentation),
     valueKind: parseValueKind(value.valueKind),
@@ -190,6 +194,12 @@ export function parseResultDescriptor(value: unknown): ResultDescriptor {
     totalCount: value.totalCount,
     title: value.title,
   };
+}
+
+export function parseResultLease(value: unknown): ResultLease {
+  if (!isRecord(value) || !hasExactKeys(value, ["leaseId", "descriptor"]) || !isUuid(value.leaseId))
+    return fail("result lease");
+  return { leaseId: value.leaseId, descriptor: parseResultDescriptor(value.descriptor) };
 }
 
 export function parseResultValue(value: unknown): ResultValue {

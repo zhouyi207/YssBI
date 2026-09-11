@@ -1,3 +1,6 @@
+import { resultReferenceKey } from "@/shared/types/domain/result";
+import type { ResultReference } from "@/shared/types/domain/result";
+import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -29,11 +32,19 @@ function createFixture() {
   const pages = new Map<string, DeepReadonly<ResultPage | null>>();
   const pinResults = new Map<string, DeepReadonly<ResultDescriptor | null>>();
   const service = {
-    getDescriptor: vi.fn(async (_resultId: string): Promise<ResultDescriptor | null> => null),
-    getValue: vi.fn(async (_resultId: string): Promise<ResultValue | null> => null),
+    analyze: vi.fn(async () => {
+      throw new Error("unexpected analysis");
+    }),
+    getDescriptor: vi.fn(
+      async (_reference: ResultReference): Promise<ResultDescriptor | null> => null,
+    ),
+    getValue: vi.fn(async (_reference: ResultReference): Promise<ResultValue | null> => null),
     getPage: vi.fn(
-      async (_resultId: string, _offset: number, _limit: number): Promise<ResultPage | null> =>
-        null,
+      async (
+        _reference: ResultReference,
+        _offset: number,
+        _limit: number,
+      ): Promise<ResultPage | null> => null,
     ),
     getPinResult: vi.fn(
       async (_graphPath: string, _output: PortAddressDto): Promise<ResultDescriptor | null> => null,
@@ -41,17 +52,20 @@ function createFixture() {
   } satisfies ResultQueryDependencies["service"];
   const key = (value: object): string => JSON.stringify(value);
   const publication: ResultQueryPublication = {
+    publishAnalysis: vi.fn(),
     releasePayload: vi.fn(),
-    publishDescriptor: (_projectId, resultId, value) => descriptors.set(resultId, value),
-    publishValue: (_projectId, resultId, value) => values.set(resultId, value),
+    publishDescriptor: (_projectId, resultId, value) =>
+      descriptors.set(resultReferenceKey(resultId), value),
+    publishValue: (_projectId, resultId, value) => values.set(resultReferenceKey(resultId), value),
     publishPage: (_projectId, request, value) => pages.set(key(request), value),
     publishPinResult: (_projectId, request, value) => pinResults.set(key(request), value),
     publishFailure: () => undefined,
   };
   const read: ResultQueryReadCapability = {
+    getAnalysis: () => null,
     subscribe: () => () => undefined,
-    getDescriptor: (resultId) => descriptors.get(resultId) ?? null,
-    getValue: (resultId) => values.get(resultId) ?? null,
+    getDescriptor: (resultId) => descriptors.get(resultReferenceKey(resultId)) ?? null,
+    getValue: (resultId) => values.get(resultReferenceKey(resultId)) ?? null,
     getPage: (request) => pages.get(key(request)) ?? null,
     getPinResult: (request) => pinResults.get(key(request)) ?? null,
     getFailure: () => null,
@@ -78,9 +92,9 @@ describe("resolveInspectableResult", () => {
     const fixture = createFixture();
     fixture.service.getDescriptor.mockResolvedValue(null);
     await expect(
-      resolveInspectableResult(resultRef("17"), queryDependencies(fixture)),
+      resolveInspectableResult(resultRef(resultReferenceFixture("17")), queryDependencies(fixture)),
     ).resolves.toBeNull();
-    expect(fixture.service.getDescriptor).toHaveBeenCalledWith("17");
+    expect(fixture.service.getDescriptor).toHaveBeenCalledWith(resultReferenceFixture("17"));
   });
 
   it("resolves the current output result and clears it when the backend has no result", async () => {
@@ -88,6 +102,7 @@ describe("resolveInspectableResult", () => {
     const descriptor: ResultDescriptor = {
       resultId: "18",
 
+      executionSessionId: resultSessionFixture,
       provenance: {
         runId: "2",
         createdAtMs: "1000",
@@ -105,7 +120,7 @@ describe("resolveInspectableResult", () => {
     const dependencies = queryDependencies(fixture);
     const ref = outputPinRef(graphPath, output);
     await expect(resolveInspectableResultRef(ref, dependencies)).resolves.toEqual({
-      ref: resultRef("18"),
+      ref: resultRef(resultReferenceFixture("18")),
       status: "published",
     });
     await expect(resolveInspectableResultRef(ref, dependencies)).resolves.toEqual({

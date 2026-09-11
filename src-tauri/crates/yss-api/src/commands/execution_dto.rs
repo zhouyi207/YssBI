@@ -437,6 +437,7 @@ pub enum ResultValueKindDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultDescriptorDto {
+    execution_session_id: String,
     result_id: String,
     provenance: ResultProvenanceDto,
     presentation: ResultPresentationDto,
@@ -465,6 +466,11 @@ impl ResultDescriptorDto {
         };
         let output = result.output();
         let provenance = result.provenance();
+        let execution_session_id = provenance
+            .reference()
+            .execution_session_id
+            .as_uuid()
+            .to_string();
         let output_dto = output_dto(output)?;
         let node_id = match &output_dto.port {
             PortAddressDto::Declared { node_id, .. } | PortAddressDto::Instance { node_id, .. } => {
@@ -479,6 +485,7 @@ impl ResultDescriptorDto {
             created_at_ms: provenance.created_at_ms().to_string(),
         };
         Ok(Self {
+            execution_session_id,
             result_id: result_id.get().to_string(),
             provenance,
             presentation: result_presentation(result.value().category()),
@@ -648,7 +655,7 @@ pub(crate) fn runtime_value_to_json(
             .map(serde_json::Value::Number)
             .ok_or(RunEventDtoError::InvalidOutput)?,
         RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::Ols(_) => {
             return Err(RunEventDtoError::InvalidOutput);
         }
         RuntimeValue::List(values) => values

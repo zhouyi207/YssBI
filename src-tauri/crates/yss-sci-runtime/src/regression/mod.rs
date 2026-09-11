@@ -306,7 +306,7 @@ pub fn fit_regression(
 
 pub fn fit_ols(
     response: Vec<f64>,
-    predictors: Vec<Vec<f64>>,
+    predictors: &[Vec<f64>],
     config: OlsOptions,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
@@ -323,7 +323,7 @@ pub fn fit_ols(
     }
     let y = Array1::from_vec(response);
     let x = design_matrix(
-        &predictors,
+        predictors,
         y.len(),
         config.constant,
         SciOperationCode::Regression,
@@ -622,7 +622,15 @@ mod tests {
 
         let report = regression_report(&fit).expect("regression report must serialize");
 
-        assert_eq!(report["betas"], serde_json::json!(fit.coefficients));
+        assert_eq!(
+            report["coefficients"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|coefficient| coefficient["coef"].as_f64().unwrap())
+                .collect::<Vec<_>>(),
+            fit.coefficients
+        );
         assert_eq!(report["cov_beta"].as_array().map(Vec::len), Some(2));
         assert!(
             report["cov_beta"]

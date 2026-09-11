@@ -11,7 +11,7 @@ import {
   type PresentationWindowState,
 } from "@/features/application/presentation";
 import { UnifiedResultView, ResultViewPresentationProvider } from "@/features/application/results";
-import type { ResultDescriptor } from "@/shared/types/domain/result";
+import type { ResultDescriptor, ResultReference } from "@/shared/types/domain/result";
 import { ReportView } from "../info/ReportView";
 import { PlotResultView } from "@/features/application/presentation/PlotResultView";
 
@@ -24,7 +24,7 @@ function ResultStatus({ message }: { message: string }) {
   );
 }
 
-export function ResultContent({ resultId }: { resultId: string }) {
+export function ResultContent({ reference }: { reference: ResultReference }) {
   const { t } = useTranslation();
   const [reload, setReload] = useState(0);
   const [state, setState] = useState<PresentationWindowState>({ status: "loading" });
@@ -36,14 +36,14 @@ export function ResultContent({ resultId }: { resultId: string }) {
     expandRequestGeneration.current += 1;
     setExpandFailed(false);
     setState({ status: "loading" });
-    void loadPresentationWindow(resultId).then((next) => {
+    void loadPresentationWindow(reference).then((next) => {
       if (!cancelled) setState(next);
     });
     return () => {
       cancelled = true;
       expandRequestGeneration.current += 1;
     };
-  }, [resultId, reload]);
+  }, [reference.executionSessionId, reference.resultId, reload]);
 
   const expandPlot = async (descriptor: ResultDescriptor) => {
     const requestGeneration = ++expandRequestGeneration.current;

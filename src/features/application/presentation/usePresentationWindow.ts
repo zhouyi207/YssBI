@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WindowKind } from "@/shared/types/settings";
 import { usePersistedWindow } from "@/features/application/window/usePersistedWindow";
-import { usePresentationWindowLifecycle } from "@/features/application/window/usePresentationWindowLifecycle";
+import { useResultSession } from "@/features/application/window/useResultSession";
+import { ResultService } from "@/services/result/resultService";
+import { resultReferenceKey } from "@/shared/types/domain/result";
 import {
   useCurrentWindowActions,
   type CurrentWindowActions,
@@ -11,12 +13,12 @@ import { parsePresentationWindowQuery } from "./parsePresentationWindowQuery";
 
 export function usePresentationWindow(windowKind: WindowKind) {
   const query = useMemo(() => parsePresentationWindowQuery(), []);
-  const resultId = query.resultId;
+  const reference = query.reference;
   const [state, setState] = useState<PresentationWindowState>(() =>
-    resultId ? { status: "loading" } : { status: "missing_result_id" },
+    reference && query.leaseId ? { status: "loading" } : { status: "missing_result_id" },
   );
 
-  const isCurrent = usePresentationWindowLifecycle(resultId);
+  const sessionActive = useResultSession(reference);
   usePersistedWindow(windowKind);
   const windowActions = useCurrentWindowActions();
 
@@ -28,18 +30,27 @@ export function usePresentationWindow(windowKind: WindowKind) {
       await windowActions.show();
     };
 
-    if (!isCurrent) {
+    if (!sessionActive) {
       setState({ status: "not_found" });
+      void windowActions.close();
       return;
     }
 
-    if (!resultId) {
+    if (!reference || !query.leaseId) {
       void revealWindow();
       return;
     }
 
     void (async () => {
-      const next = await loadPresentationWindow(resultId);
+      let next: PresentationWindowState;
+      try {
+        const held = await ResultService.claim(query.leaseId!);
+        if (resultReferenceKey(held.descriptor) !== resultReferenceKey(reference))
+          throw new Error("Mismatched result lease");
+        next = await loadPresentationWindow(reference);
+      } catch {
+        next = { status: "not_found" };
+      }
       if (cancelled) return;
       setState(next);
       if (next.status === "ready") {
@@ -52,10 +63,10 @@ export function usePresentationWindow(windowKind: WindowKind) {
     return () => {
       cancelled = true;
     };
-  }, [resultId, windowActions, isCurrent]);
+  }, [reference, query.leaseId, windowActions, sessionActive]);
 
   return {
-    resultId,
+    reference,
     state,
     windowActions: windowActions as CurrentWindowActions,
   };

@@ -1,8 +1,9 @@
 //! 假设检验 Tauri 命令（薄包装）
 
 use crate::error::CommandError;
-use serde::{Deserialize, Serialize};
-use yss_application::hypothesis::{HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test};
+use crate::schema::statistics::HypothesisTestResponseDto as HypothesisTestResponse;
+use serde::Deserialize;
+use yss_application::hypothesis::{HypothesisTestInput, run_hypothesis_test};
 
 /// 假设检验请求
 #[derive(Debug, Deserialize)]
@@ -19,24 +20,6 @@ pub struct HypothesisTestRequest {
     pub hypothesis: String,
 }
 
-/// 假设检验结果（统一格式，便于前端）
-#[derive(Debug, Serialize)]
-pub struct HypothesisTestResponse {
-    /// 检验类型："t" | "wald"
-    pub test_type: String,
-    /// 原假设 H0 的线性形式（恒为 Rβ = r）
-    pub h0_form: String,
-    /// 备择假设 H1 的线性形式（= / ≠ / < / ≤ / > / ≥）
-    pub h1_form: String,
-    pub alternative: String,
-    pub r_beta_minus_r: f64,
-    /// t 统计量或 F 统计量
-    pub stat: f64,
-    pub df1: usize,
-    pub df2: usize,
-    pub p_value: f64,
-}
-
 impl From<HypothesisTestRequest> for HypothesisTestInput {
     fn from(req: HypothesisTestRequest) -> Self {
         Self {
@@ -45,22 +28,6 @@ impl From<HypothesisTestRequest> for HypothesisTestInput {
             df_residual: req.df_residual,
             param_names: req.param_names,
             hypothesis: req.hypothesis,
-        }
-    }
-}
-
-impl From<HypothesisTestOutput> for HypothesisTestResponse {
-    fn from(out: HypothesisTestOutput) -> Self {
-        Self {
-            test_type: out.test_type,
-            h0_form: out.h0_form,
-            h1_form: out.h1_form,
-            alternative: out.alternative,
-            r_beta_minus_r: out.r_beta_minus_r,
-            stat: out.stat,
-            df1: out.df1,
-            df2: out.df2,
-            p_value: out.p_value,
         }
     }
 }

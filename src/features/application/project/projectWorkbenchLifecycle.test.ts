@@ -1,3 +1,4 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
@@ -173,11 +174,10 @@ describe("project workbench lifecycle", () => {
     lifecycleMocks.state.panels.push(
       panel("result-old", {
         role: "result",
-        resultKey: "result-key",
-        resultId: "result-old",
+        leaseId: resultLeaseIdFixture(1),
+        reference: resultReferenceFixture("42"),
         title: "Old result",
         presentation: { kind: "inspector" },
-        source: null,
       }),
       panel("details-old", { role: "view", viewId: "details" }),
       panel("inspect-old", { role: "view", viewId: "inspect" }),

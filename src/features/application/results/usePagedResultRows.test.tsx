@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -13,6 +14,7 @@ it("loads unknown-length relations and stops at the backend's final page", async
   const pages = new Map<number, ResultPage>();
   const listeners = new Set<() => void>();
   const read: ResultQueryReadCapability = {
+    getAnalysis: () => null,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -43,6 +45,9 @@ it("loads unknown-length relations and stops at the backend's final page", async
     return { status: "published" as const };
   });
   const coordinator: ResultQueryCoordinator = {
+    resetPinResult: () => {},
+    isPayloadRetained: () => false,
+    loadAnalysis: async () => ({ status: "notReady" }),
     loadPage,
     retainPayload: () => () => {},
     resetProject: () => {},
@@ -53,13 +58,13 @@ it("loads unknown-length relations and stops at the backend's final page", async
   };
   let state!: PagedResultRowsState;
   function Probe() {
-    state = usePagedResultRows("1", null, 2, { coordinator, read });
+    state = usePagedResultRows(resultReferenceFixture("1"), null, 2, { coordinator, read });
     return null;
   }
   const root = createRoot(document.createElement("div"));
   try {
     await act(async () => root.render(<Probe />));
-    expect(loadPage).toHaveBeenCalledWith({ resultId: "1", offset: 0, limit: 2 });
+    expect(loadPage).toHaveBeenCalledWith({ ...resultReferenceFixture("1"), offset: 0, limit: 2 });
     expect(state.totalCount).toBeNull();
     expect(state.rows).toEqual([[1], [2]]);
     expect(state.columns).toEqual([{ name: "value", type: "Int64" }]);

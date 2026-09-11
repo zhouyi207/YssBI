@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { regressionHypothesisSource } from "@/features/application/stats/useHypothesisTestBlock";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -374,7 +375,9 @@ export const PanelComponent: React.FC<{ data: PanelSummaryResult }> = ({ data })
             <OmittedVariablesAlert diag={currentData.diagnostic_info} />
           ) : null}
 
-          <HypothesisTestBlock data={currentData as LinearRegressionResultData} />
+          <HypothesisTestBlock
+            source={regressionHypothesisSource(currentData as LinearRegressionResultData)}
+          />
 
           {(currentMethod === "re_mle" ||
             currentMethod === "re_mle_time" ||

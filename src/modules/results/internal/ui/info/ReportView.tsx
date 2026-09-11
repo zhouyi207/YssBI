@@ -16,7 +16,7 @@ interface ReportViewProps {
 }
 
 export function ReportView({ descriptor, report, data }: ReportViewProps) {
-  const loaded = useResultValue(data === undefined ? descriptor.resultId : null);
+  const loaded = useResultValue(data === undefined ? descriptor : null);
   const resolvedData =
     data ?? (loaded.value ? reportResultValuePayload(loaded.value) : loaded.value);
   const validation = useMemo(

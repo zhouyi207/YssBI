@@ -217,10 +217,7 @@ pub fn ols_report(fit: &RegressionFit) -> Result<OlsSummary, SciError> {
         coefficients: report_coefficients(fit),
         diagnostic_info: OlsDiagnostics {
             cond_no: model.condition_number,
-            fitted_values: fit.fitted.clone(),
-            residuals: fit.residuals.clone(),
         },
-        betas: fit.coefficients.clone(),
         cov_beta: fit.statistics.coefficient_statistics().covariance.clone(),
     })
 }

@@ -12,6 +12,7 @@ pub mod catalog;
 pub mod editor_projection;
 pub mod editor_projection_types;
 pub mod graph_clipboard;
+pub mod result;
 pub mod statistics;
 
 pub use database::*;

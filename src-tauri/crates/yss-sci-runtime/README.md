@@ -20,7 +20,7 @@ matrix decomposition.
 | `hypothesis`         | Validated t/Wald-test entry points over shared contract results |
 | `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points           |
 | `panel`              | Panel inference workflows                                       |
-| `data`               | Arrow panel/time alignment and tabular transformations         |
+| `data`               | Arrow panel/time alignment and tabular transformations          |
 | `density`            | Density computation entry point                                 |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Each
@@ -34,10 +34,13 @@ from that contract. The runtime passes the selected options to the model without
 an intermediate configuration mirror.
 
 `regression::fit_ols` projects `OlsFit`, including its already-computed fitted
-values and residuals. `regression::report::ols_report` returns the typed contract
-summary consumed by Execution. Conversion into runtime values happens at that
-output boundary; the scientific port does not return an opaque JSON report.
-Existing report field names and statistical calculations are preserved.
+values and residuals. `regression::report::ols_report` returns typed model and
+coefficient statistics without duplicating observation arrays. The shared scientific
+port returns these statistics alongside native fitted/residual vectors and the fitted
+design columns. Execution shares that immutable result across its report outputs;
+Application projects report references and performs subsequent analysis against the
+same fit. No opaque JSON report crosses the scientific port. Numerical calculations
+remain unchanged.
 
 Tabular preparation accepts Arrow arrays and `RecordBatch` values. Time alignment preserves
 Int64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and

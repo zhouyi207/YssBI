@@ -18,6 +18,7 @@ import { openInspectableResult } from "@/features/application/execution/openInsp
 import { resultRef } from "@/features/application/results";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
+import type { ResultReference } from "@/shared/types/domain/result";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 
 import {
@@ -43,7 +44,7 @@ export interface PinPreviewFailure {
 }
 
 export type PinPreviewRequestResult =
-  | { status: "completed"; generation: number; resultId: string }
+  | { status: "completed"; generation: number; reference: ResultReference }
   | { status: "rejected"; reason: PinPreviewRejectionReason }
   | { status: "failed"; generation: number; error: PinPreviewFailure };
 
@@ -223,11 +224,16 @@ export async function requestPinPreview(
     captured.output.port,
   );
   if (preview?.generation !== generation) return staleSettlement();
-  if (observation.terminal === "completed" && preview.status === "ready" && preview.resultId) {
+  if (
+    observation.terminal === "completed" &&
+    preview.status === "ready" &&
+    preview.resultId &&
+    observation.executionSessionId
+  ) {
     return {
       status: "completed",
       generation,
-      resultId: preview.resultId,
+      reference: { resultId: preview.resultId, executionSessionId: observation.executionSessionId },
     };
   }
   if (observation.terminal === "pending" || observation.terminal === "completed") {
@@ -248,5 +254,5 @@ export async function requestAndOpenPinPreview(
 ): Promise<boolean> {
   const result = await requestPinPreview(graphPath, pinId);
   if (result.status !== "completed") return false;
-  return openInspectableResult(resultRef(result.resultId), t);
+  return openInspectableResult(resultRef(result.reference), t);
 }

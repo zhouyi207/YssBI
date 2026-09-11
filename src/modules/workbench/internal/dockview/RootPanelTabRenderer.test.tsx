@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -84,11 +85,10 @@ function resultParams(): WorkbenchPanelParams {
   return {
     metadata: {
       role: "result",
-      resultKey: "output:main",
-      resultId: "result-1",
+      leaseId: resultLeaseIdFixture(1),
+      reference: resultReferenceFixture("1"),
       title: "Distribution",
       presentation: { kind: "inspector" },
-      source: null,
     },
   };
 }

@@ -2,6 +2,8 @@ import { createPersistedWindow } from "./createPersistedWindow";
 import { windowKindForRoute } from "./windowRoute";
 import { logger } from "@/features/application/observability/appLogger";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
+import { resultLeases } from "@/features/application/results/resultLeases";
+import type { ResultReference } from "@/shared/types/domain/result";
 import {
   plotTypeFromPresentation,
   presentationRoute,
@@ -33,16 +35,22 @@ export function presentationWindowPayloadFromDescriptor(
 }
 
 export async function openPresentationWindow(
-  resultId: string,
+  reference: ResultReference,
   presentation: PresentationWindowPayload,
 ): Promise<void> {
   const route = presentation.route || "/info";
   const labelKind = route.replace(/^\//, "") || "source";
-  const label = `${labelKind}-${Math.random().toString(36).substring(2, 10)}`;
-  const params = new URLSearchParams({ resultId });
+  const label = `${labelKind}-${crypto.randomUUID()}`;
+  const held = await resultLeases.acquire(reference, label);
+  const params = new URLSearchParams({
+    resultId: reference.resultId,
+    executionSessionId: reference.executionSessionId,
+    leaseId: held.leaseId,
+  });
   if (presentation.plotType) params.set("plotType", presentation.plotType);
   const url = `index.html#${route}?${params.toString()}`;
 
+  let created = false;
   try {
     await createPersistedWindow({
       geometry: { source: "backend", kind: windowKindForRoute(route) },
@@ -50,6 +58,7 @@ export async function openPresentationWindow(
       url,
       title: presentation.windowTitle.trim() || "Source Inspector",
     });
+    created = true;
   } catch (error) {
     const ipcError = normalizeApplicationIpcError("open_presentation_window", error);
     logger.exec.error(
@@ -57,5 +66,7 @@ export async function openPresentationWindow(
       "Window",
     );
     throw error;
+  } finally {
+    await resultLeases.finish(held.leaseId, created);
   }
 }

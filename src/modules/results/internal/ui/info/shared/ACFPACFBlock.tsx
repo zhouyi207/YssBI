@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { computeAcfPacf } from "@/features/application/stats/statsActions";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import type { AcfPacfResponse } from "@/features/application/stats/statsActions";
 import { acfSeriesToBars, pacfSeriesToBars } from "@/shared/types/report";
@@ -14,10 +13,12 @@ import { InfoAccentButton } from "./InfoViewControls";
 const CorrelogramChart = React.lazy(() => import("@/shared/charts/statistical/CorrelogramChart"));
 
 export function ACFPACFBlock({
-  residuals,
+  observationCount,
+  compute,
   residualLabel,
 }: {
-  residuals?: number[];
+  observationCount: number;
+  compute: (maxLag: number) => Promise<AcfPacfResponse | null>;
   residualLabel?: string;
 }) {
   const { t } = useTranslation();
@@ -27,15 +28,15 @@ export function ACFPACFBlock({
   const [loading, setLoading] = useState(false);
   const { series: seriesColors } = useChartTheme();
 
-  const canRun = residuals != null && residuals.length >= 4 && lag >= 1 && lag <= 40;
+  const canRun = observationCount >= 4 && lag >= 1 && lag <= 40;
 
   const handleRun = async () => {
-    if (!canRun || !residuals) return;
+    if (!canRun) return;
     setError(null);
     setResult(null);
     setLoading(true);
     try {
-      const res = await computeAcfPacf({ residuals, max_lag: lag });
+      const res = await compute(lag);
       setResult(res);
     } catch (e) {
       setError(formatInlineUserError(e, t));
@@ -44,9 +45,9 @@ export function ACFPACFBlock({
     }
   };
 
-  if (!residuals || residuals.length < 4) return null;
+  if (observationCount < 4) return null;
 
-  const ciHalfWidth = 1.96 / Math.sqrt(residuals.length);
+  const ciHalfWidth = 1.96 / Math.sqrt(result?.n ?? observationCount);
 
   return (
     <div className="mt-6">

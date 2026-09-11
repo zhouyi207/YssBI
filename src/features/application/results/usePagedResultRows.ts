@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState, useRef, useSyncExternalStore } from "
 
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import type { ResultPage } from "@/shared/types/domain/result";
+import type { ResultPage, ResultReference } from "@/shared/types/domain/result";
+import type { ResultTablePart } from "@/shared/types/domain/resultReport";
 import type {
   ResultPageRequest,
   ResultQueryCoordinator,
@@ -46,13 +47,14 @@ function rowsFromPage(page: DeepReadonly<ResultPage> | null): readonly (readonly
 }
 
 export function usePagedResultRows(
-  resultId: string | null,
+  reference: ResultReference | null,
   totalCount: number | null,
   pageSize = DEFAULT_PAGE_SIZE,
   dependencies: PagedResultRowsHookDependencies = {
     coordinator: resultQueryCoordinator,
     read: resultQueryRead,
   },
+  part?: ResultTablePart,
 ): PagedResultRowsState {
   const safePageSize = Math.max(1, Math.floor(pageSize));
   const [pageIndex, setPageIndex] = useState(0);
@@ -60,14 +62,16 @@ export function usePagedResultRows(
   const requestGeneration = useRef(0);
   const requestedOffset = pageIndex * safePageSize;
   const request: ResultPageRequest = {
-    resultId: resultId ?? "",
+    resultId: reference?.resultId ?? "",
+    executionSessionId: reference?.executionSessionId ?? "",
     offset: requestedOffset,
     limit: safePageSize,
+    ...(part ? { part } : {}),
   };
   const page = useSyncExternalStore(
     dependencies.read.subscribe,
-    () => (resultId === null ? null : dependencies.read.getPage(request)),
-    () => (resultId === null ? null : dependencies.read.getPage(request)),
+    () => (reference === null ? null : dependencies.read.getPage(request)),
+    () => (reference === null ? null : dependencies.read.getPage(request)),
   );
   const effectiveTotalCount =
     page?.totalCount ?? (totalCount === null ? null : Math.max(0, totalCount));
@@ -78,48 +82,55 @@ export function usePagedResultRows(
   const boundedPageIndex = totalPages === null ? pageIndex : Math.min(pageIndex, totalPages - 1);
   const hasMore = page?.hasMore ?? (totalPages !== null && boundedPageIndex < totalPages - 1);
   const error =
-    resultId === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
+    reference === null ? null : dependencies.read.getFailure({ kind: "page", ...request });
 
   useEffect(() => {
     setPageIndex(0);
-  }, [resultId, totalCount, safePageSize]);
+  }, [reference?.resultId, reference?.executionSessionId, totalCount, safePageSize, part]);
 
   useEffect(() => {
     const releasePayload =
-      resultId === null ? undefined : dependencies.coordinator.retainPayload(resultId);
+      reference === null ? undefined : dependencies.coordinator.retainPayload(reference);
     return () => {
       requestGeneration.current += 1;
       releasePayload?.();
     };
-  }, [dependencies.coordinator, resultId]);
+  }, [dependencies.coordinator, reference?.resultId, reference?.executionSessionId]);
 
   const loadPage = useCallback(
     async (nextPageIndex: number): Promise<ResultQueryOutcome> => {
-      if (resultId === null) return { status: "notReady" };
+      if (reference === null) return { status: "notReady" };
       const nextOffset = Math.max(0, nextPageIndex) * safePageSize;
       const generation = ++requestGeneration.current;
       setLoading(true);
       try {
         const outcome = await dependencies.coordinator.loadPage({
-          resultId,
+          ...reference,
           offset: nextOffset,
           limit: safePageSize,
+          ...(part ? { part } : {}),
         });
         return outcome;
       } finally {
         if (requestGeneration.current === generation) setLoading(false);
       }
     },
-    [dependencies.coordinator, resultId, safePageSize],
+    [
+      dependencies.coordinator,
+      reference?.resultId,
+      reference?.executionSessionId,
+      safePageSize,
+      part,
+    ],
   );
 
   useEffect(() => {
-    if (resultId === null || totalCount === 0) {
+    if (reference === null || totalCount === 0) {
       setLoading(false);
       return;
     }
     void loadPage(boundedPageIndex);
-  }, [boundedPageIndex, totalCount, loadPage, resultId]);
+  }, [boundedPageIndex, totalCount, loadPage, reference?.resultId, reference?.executionSessionId]);
 
   const goToPage = useCallback(
     (nextPageIndex: number): void => {

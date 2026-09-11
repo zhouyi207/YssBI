@@ -226,7 +226,11 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             .unwrap();
         assert!(runtime.publish_committed_results(execution.handoff()));
         let result_id = execution.handoff().results()[0].result_id();
-        let worker = std::thread::spawn(move || app.query_result_page(result_id, 0, 1));
+        let reference = yss_execution::result::ResultReference {
+            execution_session_id: captured.execution_session_id(),
+            result_id,
+        };
+        let worker = std::thread::spawn(move || app.query_result_page(reference, 0, 1));
         entered_rx.recv_timeout(Duration::from_secs(10)).unwrap();
         runtime.invalidate_graph_results(graph.as_str());
         resume_tx.send(()).unwrap();

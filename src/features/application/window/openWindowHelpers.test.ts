@@ -1,3 +1,10 @@
+import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
+vi.mock("@/features/application/results/resultLeases", () => ({
+  resultLeases: {
+    acquire: vi.fn(async () => ({ leaseId: "00000000-0000-0000-0000-000000000100" })),
+    finish: vi.fn(async () => {}),
+  },
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_TRANSPORT_FAILURE_CODE, normalizeIpcError } from "@/services/ipc";
 import { openDatabaseEditorWindow } from "./openDatabaseEditor";
@@ -57,7 +64,7 @@ describe("window opening helpers", () => {
     createPersistedWindow.mockRejectedValueOnce(failure);
 
     await expect(
-      openPresentationWindow("result-1", {
+      openPresentationWindow(resultReferenceFixture("result-1"), {
         route: "/plot",
         windowTitle: "Plot",
       }),

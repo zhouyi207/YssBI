@@ -1,4 +1,5 @@
-import * as invalidationChannel from "@/services/result/resultInvalidationChannel";
+import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
+import * as invalidationChannel from "@/services/result/resultSessionChannel";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResultDescriptor, ResultPage } from "@/shared/types/domain/result";
 import type { RunEventKind } from "@/shared/types/domain/runEvent";
@@ -25,6 +26,7 @@ const request = { graphPath, output: output.port };
 const descriptor = (id: string): ResultDescriptor => ({
   resultId: id,
 
+  executionSessionId: resultSessionFixture,
   provenance: {
     runId: id,
     createdAtMs: "1000",
@@ -51,7 +53,10 @@ const page = (id: string): ResultPage => ({
   values: [[1]],
 });
 function event(runId: string, kind: RunEventKind) {
-  observeResultRunEvent({ run: { runId, graphPath, executionSessionId: "session" }, kind });
+  observeResultRunEvent({
+    run: { runId, graphPath, executionSessionId: resultSessionFixture },
+    kind,
+  });
 }
 
 beforeEach(() => {
@@ -64,13 +69,21 @@ beforeEach(() => {
 
 describe("current result lifecycle", () => {
   it("evicts values and pages on rerun, rejects late requests, and publishes only the current result", async () => {
-    const publishInvalidation = vi.spyOn(invalidationChannel, "publishResultInvalidation");
+    const publishInvalidation = vi.spyOn(invalidationChannel, "publishResultSessionEnd");
     vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
     vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "sequence", value: [[1]] });
     vi.spyOn(ResultService, "getPage").mockResolvedValue(page("1"));
     await resultQueryCoordinator.loadPinResult(request);
-    await resultQueryCoordinator.loadValue({ resultId: "1" });
-    const pageRequest = { resultId: "1", offset: 0, limit: 200 };
+    await resultQueryCoordinator.loadValue({
+      executionSessionId: resultSessionFixture,
+      resultId: "1",
+    });
+    const pageRequest = {
+      executionSessionId: resultSessionFixture,
+      resultId: "1",
+      offset: 0,
+      limit: 200,
+    };
     await resultQueryCoordinator.loadPage(pageRequest);
     let settle!: (value: ResultPage) => void;
     vi.mocked(ResultService.getPage).mockImplementationOnce(
@@ -81,12 +94,12 @@ describe("current result lifecycle", () => {
     );
     const pending = resultQueryCoordinator.loadPage(pageRequest);
     event("2", { type: "runStarted", outputs: [output] });
-    expect(resultQueryRead.getDescriptor("1")).toBeNull();
-    expect(resultQueryRead.getValue("1")).toBeNull();
+    expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
+    expect(resultQueryRead.getValue(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPage(pageRequest)).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
     expect(readPinResultStatus(request)).toBe("running");
-    expect(publishInvalidation).toHaveBeenCalledWith(["1"]);
+    expect(publishInvalidation).not.toHaveBeenCalled();
     settle(page("1"));
     await expect(pending).resolves.toEqual({ status: "stale" });
     expect(resultQueryRead.getPage(pageRequest)).toBeNull();
@@ -98,7 +111,7 @@ describe("current result lifecycle", () => {
     event("3", { type: "runStarted", outputs: [output] });
     event("3", { type: "runCancelled" });
     expect(resultQueryRead.getPinResult(request)).toBeNull();
-    expect(resultQueryRead.getDescriptor("2")).toBeNull();
+    expect(resultQueryRead.getDescriptor(resultReferenceFixture("2"))).toBeNull();
     expect(readPinResultStatus(request)).toBe("cancelled");
     vi.mocked(ResultService.getPinResult).mockResolvedValue(descriptor("1"));
     observeResultRunEvent({
@@ -111,35 +124,53 @@ describe("current result lifecycle", () => {
       kind: { type: "runCompleted" },
     });
     await vi.waitFor(() => expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1"));
-    expect(resultQueryRead.getDescriptor("2")).toBeNull();
+    expect(resultQueryRead.getDescriptor(resultReferenceFixture("2"))).toBeNull();
     event("1", { type: "runCancelled" });
     expect(resultQueryRead.getPinResult(request)?.resultId).toBe("1");
   });
 
-  it("releases results when the graph semantic inputs change or its projection is unloaded", async () => {
+  it("keeps held snapshots separate from current pins when a graph changes", async () => {
     vi.spyOn(ResultService, "getPinResult").mockResolvedValue(descriptor("1"));
     await resultQueryCoordinator.loadPinResult(request);
+    const reference = resultReferenceFixture("1");
+    const release = resultQueryCoordinator.retainPayload(reference);
+    vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: 42 });
+    vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(descriptor("1"));
+    await resultQueryCoordinator.loadValue(reference);
     const changed = structuredClone(fixture.projection);
     changed.basis.semanticInputHash = "1".repeat(64);
     useGraphProjectionStore.getState().replaceProjection(graphPath, changed);
     expect(resultQueryRead.getPinResult(request)).toBeNull();
-    expect(resultQueryRead.getDescriptor("1")).toBeNull();
+    expect(resultQueryRead.getDescriptor(reference)?.resultId).toBe("1");
+    expect(resultQueryRead.getValue(reference)).toEqual({ kind: "value", value: 42 });
+    await resultQueryCoordinator.loadDescriptor(reference);
+    expect(resultQueryRead.getPinResult(request)).toBeNull();
+    release();
+    expect(resultQueryRead.getDescriptor(reference)).toBeNull();
     await resultQueryCoordinator.loadPinResult(request);
     useGraphProjectionStore.getState().clearGraph(graphPath);
-    expect(resultQueryRead.getDescriptor("1")).toBeNull();
+    expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
     expect(resultQueryRead.getPinResult(request)).toBeNull();
   });
   it("keeps one page, releases closed-view payloads, and supports detached result reads", async () => {
     clearProjectLifecycle();
-    const releasePayload = resultQueryCoordinator.retainPayload("1");
+    const releasePayload = resultQueryCoordinator.retainPayload(resultReferenceFixture("1"));
     vi.spyOn(ResultService, "getDescriptor").mockResolvedValue(descriptor("1"));
     vi.spyOn(ResultService, "getPage").mockImplementation(async (id, offset, limit) => ({
-      ...page(id),
+      ...page(id.resultId),
       offset,
       requestedLimit: limit,
     }));
-    await resultQueryCoordinator.loadDescriptor({ resultId: "1" });
-    const first = { resultId: "1", offset: 0, limit: 200 };
+    await resultQueryCoordinator.loadDescriptor({
+      executionSessionId: resultSessionFixture,
+      resultId: "1",
+    });
+    const first = {
+      executionSessionId: resultSessionFixture,
+      resultId: "1",
+      offset: 0,
+      limit: 200,
+    };
     const second = { ...first, offset: 200 };
     await resultQueryCoordinator.loadPage(first);
     await resultQueryCoordinator.loadPage(second);
@@ -155,7 +186,7 @@ describe("current result lifecycle", () => {
     const pending = resultQueryCoordinator.loadPage(first);
     releasePayload();
     expect(resultQueryRead.getPage(second)).toBeNull();
-    expect(resultQueryRead.getDescriptor("1")?.resultId).toBe("1");
+    expect(resultQueryRead.getDescriptor(resultReferenceFixture("1"))).toBeNull();
     settle(page("1"));
     await expect(pending).resolves.toEqual({ status: "stale" });
     expect(resultQueryRead.getPage(first)).toBeNull();

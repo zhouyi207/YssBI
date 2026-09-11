@@ -10,7 +10,7 @@ import { ResultReadError } from "../ResultReadError";
 
 export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
   const totalCount = payload.totalCount;
-  const paging = usePagedResultRows(payload.resultId, totalCount);
+  const paging = usePagedResultRows(payload, totalCount);
   return (
     <ResultViewShell
       title={payload.title}
@@ -48,7 +48,7 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
   const totalCount =
     payload.totalCount ??
     (payload.metadata && "length" in payload.metadata ? payload.metadata.length : null);
-  const paging = usePagedResultRows(payload.resultId, totalCount);
+  const paging = usePagedResultRows(payload, totalCount);
   return (
     <ResultViewShell
       title={payload.title}
@@ -78,7 +78,7 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
 }
 
 export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
-  const { value, loading, error } = useResultValue(payload.resultId);
+  const { value, loading, error } = useResultValue(payload);
   return (
     <ResultViewShell title={payload.title}>
       {error ? (
@@ -95,7 +95,7 @@ export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
 }
 
 export function JsonResultView({ payload }: { payload: ResultDescriptor }) {
-  const { value, loading, error } = useResultValue(payload.resultId);
+  const { value, loading, error } = useResultValue(payload);
   return (
     <ResultViewShell title={payload.title}>
       {error ? (

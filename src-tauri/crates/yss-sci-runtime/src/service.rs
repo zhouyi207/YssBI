@@ -55,20 +55,26 @@ impl ScientificBackend for SciRuntimeBackend {
             dropped_nan_count: 0,
             missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
         };
+        let constant = request.options.constant;
         let fit = crate::regression::fit_ols(
             request.response,
-            request.predictors,
+            &request.predictors,
             request.options,
             metadata,
         )
         .map_err(|_| ScientificBackendError::ComputationFailed)?;
         let report = crate::regression::report::ols_report(&fit)
             .map_err(|_| ScientificBackendError::ComputationFailed)?;
+        let mut design = request.predictors;
+        if constant {
+            design.insert(0, vec![1.0; observations]);
+        }
         admit(control)?;
         Ok(OlsResult {
             coefficients: fit.coefficients,
             fitted: fit.fitted,
             residuals: fit.residuals,
+            design,
             report,
         })
     }

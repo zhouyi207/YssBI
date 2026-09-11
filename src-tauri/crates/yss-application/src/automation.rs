@@ -422,7 +422,7 @@ fn inspect_result(
     ) {
         let page = application
             .query_result_page_with_control(
-                ResultId::from_existing(request.result_id),
+                result.provenance().reference(),
                 request.offset,
                 usize::from(request.limit),
                 &yss_relational_contract::RelationControl {
@@ -527,6 +527,27 @@ fn inspect_runtime_value(
         }),
         RuntimeValue::Series(series) => Ok(ResultValueInspection::Resource {
             resource_id: series.relation().binding().snapshot.to_string(),
+        }),
+        RuntimeValue::Ols(result) => Ok(ResultValueInspection::Record {
+            entries: std::collections::BTreeMap::from([
+                (
+                    "title".into(),
+                    ResultValueInspection::String {
+                        value: result.report.title.clone(),
+                        truncated: false,
+                    },
+                ),
+                (
+                    "observations".into(),
+                    ResultValueInspection::Unsigned(result.residuals.len() as u64),
+                ),
+                (
+                    "rSquared".into(),
+                    ResultValueInspection::Decimal(result.report.model_basic_info.r_squared),
+                ),
+            ]),
+            total_count: 3,
+            truncated: false,
         }),
         RuntimeValue::List(values) => {
             let total_count = values.len();

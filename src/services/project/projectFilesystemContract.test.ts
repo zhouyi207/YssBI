@@ -159,8 +159,14 @@ const processGlobalAllocatorCommandExemptions = [
 const capabilityCommandExemptions = [
   "cancel_graph_run",
   "get_result_descriptor",
+  "retain_result",
+  "claim_result_lease",
+  "release_result_lease",
+  "reconcile_result_leases",
   "get_result_value",
   "get_result_page",
+  "get_result_table_page",
+  "analyze_result",
   "get_pin_result",
 
   // Plugin view capabilities are bound to the installed plugin, window and backend session.

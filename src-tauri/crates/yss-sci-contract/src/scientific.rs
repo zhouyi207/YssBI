@@ -71,6 +71,8 @@ pub struct OlsResult {
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
     pub residuals: Vec<f64>,
+    /// Design columns in fitted parameter order; each column retains observation order.
+    pub design: Vec<Vec<f64>>,
     pub report: crate::regression::report::OlsSummary,
 }
 

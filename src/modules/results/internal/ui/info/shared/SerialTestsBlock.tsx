@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { computeSerialTests } from "@/features/application/stats/statsActions";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import type { SerialTestsResponse } from "@/features/application/stats/statsActions";
 import { SectionHeader } from "./RegressionShared";
@@ -11,12 +10,12 @@ import { InfoAccentButton } from "./InfoViewControls";
 import { formatNum } from "./utils";
 
 export function SerialTestsBlock({
-  residuals,
-  exog,
+  observationCount,
+  compute,
   residualLabel,
 }: {
-  residuals?: number[];
-  exog?: number[][];
+  observationCount: number;
+  compute: (lags: number, bgNomiss0: boolean) => Promise<SerialTestsResponse | null>;
   residualLabel?: string;
 }) {
   const { t } = useTranslation();
@@ -26,20 +25,15 @@ export function SerialTestsBlock({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const canRun = residuals != null && residuals.length >= 4 && lag >= 1 && lag <= 40;
+  const canRun = observationCount >= 4 && lag >= 1 && lag <= 40;
 
   const handleRun = async () => {
-    if (!canRun || !residuals) return;
+    if (!canRun) return;
     setError(null);
     setResult(null);
     setLoading(true);
     try {
-      const res = await computeSerialTests({
-        residuals,
-        exog,
-        lags: lag,
-        bg_nomiss0: !bgDropMissing,
-      });
+      const res = await compute(lag, !bgDropMissing);
       setResult(res);
     } catch (e) {
       setError(formatInlineUserError(e, t));
@@ -48,7 +42,7 @@ export function SerialTestsBlock({
     }
   };
 
-  if (!residuals || residuals.length < 4) return null;
+  if (observationCount < 4) return null;
 
   return (
     <div className="mt-6">

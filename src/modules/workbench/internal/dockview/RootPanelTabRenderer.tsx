@@ -134,7 +134,7 @@ function titleForMetadata(
 ): string {
   if (metadata.role === "plugin") return metadata.title;
   if (metadata.role === "result") {
-    return metadata.title || panelTitle || metadata.resultId;
+    return metadata.title || panelTitle || metadata.reference.resultId;
   }
   if (metadata.role === "editor") return panelTitle || metadata.resourceRef;
   return translate(VIEW_TITLE_KEYS[metadata.viewId]);

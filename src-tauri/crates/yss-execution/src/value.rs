@@ -17,6 +17,7 @@ pub enum RuntimeValue {
     Resource(Box<str>),
     Relation(yss_relational_contract::RelationHandle),
     Series(yss_relational_contract::SeriesHandle),
+    Ols(std::sync::Arc<yss_sci_contract::scientific::OlsResult>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]

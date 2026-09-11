@@ -1,3 +1,4 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -354,11 +355,10 @@ function resultPanel(panelInstanceId: string, groupId = "group-a"): WorkbenchPan
     title: "Result",
     metadata: {
       role: "result",
-      resultKey: "output:main",
-      resultId: "result-a",
+      leaseId: resultLeaseIdFixture(1),
+      reference: resultReferenceFixture("42"),
       title: "Result",
       presentation: { kind: "inspector" },
-      source: null,
     },
     active: false,
     location: { type: "grid" },

@@ -18,16 +18,16 @@ import {
   resolveInspectableResultRef,
   type InspectableResultRef,
 } from "@/features/application/results";
-import type { ResultDescriptor } from "@/shared/types/domain/result";
+import { resultReference, type ResultDescriptor } from "@/shared/types/domain/result";
+import { resultLeases } from "@/features/application/results/resultLeases";
 import { resultQueryCoordinator, resultQueryRead } from "@/features/application/results";
-import { resultPanelKey } from "@/features/domain/result";
 
 export async function launchInspectablePresentation(
   descriptor: ResultDescriptor,
   titleFallback: string,
 ): Promise<void> {
   await openPresentationWindow(
-    descriptor.resultId,
+    resultReference(descriptor),
     presentationWindowPayloadFromDescriptor(descriptor, titleFallback),
   );
 }
@@ -36,9 +36,10 @@ export async function openInspectableResult(
   ref: InspectableResultRef,
   _t: TFunction,
 ): Promise<boolean> {
+  let project: ReturnType<typeof captureProjectIdentity>;
   let descriptor: ResultDescriptor | null;
   try {
-    const project = captureProjectIdentity();
+    project = captureProjectIdentity();
     const dependencies = {
       coordinator: resultQueryCoordinator,
       read: resultQueryRead,
@@ -55,18 +56,25 @@ export async function openInspectableResult(
     return false;
   }
 
+  let leaseId: string | undefined;
+  let installed = false;
   try {
-    await workbenchDockviewControl.upsertResult({
-      resultKey: resultPanelKey(descriptor),
-      resultId: descriptor.resultId,
-      title: descriptor.title,
-      presentation: descriptor.presentation,
-      source: descriptor.provenance.output,
+    const held = await resultLeases.acquire(descriptor);
+    leaseId = held.leaseId;
+    if (!isCurrentProjectIdentity(project)) return false;
+    const panel = await workbenchDockviewControl.upsertResult({
+      reference: resultReference(held.descriptor),
+      leaseId,
+      title: held.descriptor.title,
+      presentation: held.descriptor.presentation,
     });
+    installed = panel.metadata.role === "result" && panel.metadata.leaseId === leaseId;
     return true;
   } catch (error) {
     showWorkbenchLayoutError(error);
     return false;
+  } finally {
+    if (leaseId) await resultLeases.finish(leaseId, installed);
   }
 }
 

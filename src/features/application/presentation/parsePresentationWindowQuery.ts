@@ -1,5 +1,8 @@
+import { isResultReference, type ResultReference } from "@/shared/types/domain/result";
+
 export interface PresentationWindowQuery {
-  resultId: string | null;
+  reference: ResultReference | null;
+  leaseId: string | null;
   plotType: string | null;
 }
 
@@ -14,7 +17,15 @@ export function parsePresentationWindowQueryFromParts(
   search = "",
 ): PresentationWindowQuery {
   const params = new URLSearchParams(readLocationQueryString(hash, search));
-  return { resultId: params.get("resultId"), plotType: params.get("plotType") };
+  const reference = {
+    executionSessionId: params.get("executionSessionId"),
+    resultId: params.get("resultId"),
+  };
+  return {
+    reference: isResultReference(reference) ? reference : null,
+    leaseId: params.get("leaseId"),
+    plotType: params.get("plotType"),
+  };
 }
 
 export function parsePresentationWindowQuery(): PresentationWindowQuery {

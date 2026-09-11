@@ -4,11 +4,16 @@ use thiserror::Error;
 
 use super::session_slot::{ApplicationState, SessionCaptureError};
 use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{ResultId, StoredResult, StoredResultSnapshot};
+use yss_execution::result::{
+    ResultReference, ResultRetentionError, StoredResult, StoredResultSnapshot,
+};
 use yss_execution::value::RuntimeValue;
 use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 use yss_tabular_contract::TabularScalar;
+
+pub mod report;
+mod retention;
 
 pub struct ResultPinQuery {
     graph_path: GraphResourcePath,
@@ -27,6 +32,8 @@ pub enum ResultQueryApplicationError {
     SessionCapture(#[from] SessionCaptureError),
     #[error("result query session changed")]
     SessionChanged,
+    #[error(transparent)]
+    Retention(#[from] ResultRetentionError),
     #[error("result page request is invalid")]
     InvalidPageRequest,
     #[error("result page exceeds its payload budget")]
@@ -58,12 +65,12 @@ pub struct ResultPageProjection {
 impl ApplicationState {
     pub fn query_result_page(
         &self,
-        result_id: ResultId,
+        reference: ResultReference,
         offset: usize,
         limit: usize,
     ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
         self.query_result_page_with_control(
-            result_id,
+            reference,
             offset,
             limit,
             &RelationControl {
@@ -76,19 +83,23 @@ impl ApplicationState {
 
     pub fn query_result_page_with_control(
         &self,
-        result_id: ResultId,
+        reference: ResultReference,
         offset: usize,
         limit: usize,
         control: &RelationControl,
     ) -> Result<Option<ResultPageProjection>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
+        if captured.execution_session_id() != reference.execution_session_id {
+            return Err(ResultQueryApplicationError::SessionChanged);
+        }
+        let result_id = reference.result_id;
         let Some(result) = captured.execution().query_result(result_id) else {
             return Ok(None);
         };
         let page = project_result_page(result.value(), offset, limit, control);
         self.revalidate_captured_session(&captured)
             .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
-        // A failed/finished old scan cannot republish a result invalidated while it was reading.
+        // A query may outlive its last owner, but it cannot publish after reclamation.
         if captured.execution().query_result(result_id).is_none() {
             return Ok(None);
         }
@@ -96,10 +107,16 @@ impl ApplicationState {
     }
     pub fn query_result(
         &self,
-        result_id: ResultId,
+        reference: ResultReference,
     ) -> Result<Option<StoredResultSnapshot>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
-        Ok(captured.execution().query_result(result_id))
+        if captured.execution_session_id() != reference.execution_session_id {
+            return Err(ResultQueryApplicationError::SessionChanged);
+        }
+        let result = captured.execution().query_result(reference.result_id);
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
+        Ok(result)
     }
 
     pub fn query_pin_result(
@@ -274,6 +291,7 @@ fn charge_value(
             }
             Some(2)
         }
+        RuntimeValue::Ols(_) => return Err(ResultQueryApplicationError::InvalidPageRequest),
         _ => Some(24),
     }
     .ok_or(ResultQueryApplicationError::PageTooLarge)?;

@@ -1226,7 +1226,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         StoredResult::Runtime(RuntimeValue::Relation(_))
     ));
     let page = app
-        .query_result_page(relation.provenance().result_id(), 0, 2)
+        .query_result_page(relation.provenance().reference(), 0, 2)
         .unwrap()
         .unwrap();
     assert_eq!(page.values.len(), 2);
@@ -1250,7 +1250,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         assert_eq!(column.column(), name);
         series.push(column.clone());
         let page = app
-            .query_result_page(result.provenance().result_id(), 0, 2)
+            .query_result_page(result.provenance().reference(), 0, 2)
             .unwrap()
             .unwrap();
         assert_eq!(page.columns.len(), 1);
@@ -1271,7 +1271,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     };
     assert_eq!(computed.relation(), series[0].relation());
     let page = app
-        .query_result_page(result.provenance().result_id(), 0, 2)
+        .query_result_page(result.provenance().reference(), 0, 2)
         .unwrap()
         .unwrap();
     assert_eq!(page.columns.len(), 1);

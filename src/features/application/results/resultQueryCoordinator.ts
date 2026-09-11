@@ -2,15 +2,52 @@ import { toErrorReference, type ErrorReference } from "@/features/application/er
 import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
+import type {
+  ResultAnalysis,
+  ResultAnalysisRequest,
+  ResultTablePart,
+} from "@/shared/types/domain/resultReport";
+import {
+  isResultReference,
+  resultReference,
+  resultReferenceKey,
+  type ResultReference,
+} from "@/shared/types/domain/result";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
-export interface ResultIdentityRequest {
-  readonly resultId: string;
-}
+export type ResultIdentityRequest = ResultReference;
 
 export interface ResultPageRequest extends ResultIdentityRequest {
   readonly offset: number;
   readonly limit: number;
+  readonly part?: ResultTablePart;
+}
+
+export interface ResultAnalysisQuery {
+  readonly reference: ResultReference;
+  readonly analysis: ResultAnalysisRequest;
+}
+
+export function resultPageKey(request: ResultPageRequest): string {
+  return `${resultReferenceKey(request)}:${request.part ?? "value"}`;
+}
+
+export function resultAnalysisKey(request: ResultAnalysisQuery): string {
+  return `${resultReferenceKey(request.reference)}:${request.analysis.kind}`;
+}
+
+export function resultAnalysisParameters(request: ResultAnalysisQuery): string {
+  const analysis = request.analysis;
+  switch (analysis.kind) {
+    case "residualPlot":
+      return JSON.stringify([analysis.maxPoints, analysis.xRange ?? null]);
+    case "acfPacf":
+      return String(analysis.maxLag);
+    case "serialTests":
+      return JSON.stringify([analysis.lags, analysis.bgNomiss0]);
+    case "hypothesis":
+      return analysis.hypothesis;
+  }
 }
 
 export interface ResultPinRequest {
@@ -21,6 +58,7 @@ export interface ResultPinRequest {
 export type ResultQueryScope =
   | ({ readonly kind: "descriptor" | "value" } & ResultIdentityRequest)
   | ({ readonly kind: "page" } & ResultPageRequest)
+  | ({ readonly kind: "analysis" } & ResultAnalysisQuery)
   | ({ readonly kind: "pinResult" } & ResultPinRequest);
 
 export type ResultQueryOutcome =
@@ -33,16 +71,28 @@ export interface ResultQueryCoordinator {
   loadDescriptor(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadValue(request: ResultIdentityRequest): Promise<ResultQueryOutcome>;
   loadPage(request: ResultPageRequest): Promise<ResultQueryOutcome>;
+  loadAnalysis(request: ResultAnalysisQuery): Promise<ResultQueryOutcome>;
   loadPinResult(request: ResultPinRequest): Promise<ResultQueryOutcome>;
-  retainPayload(resultId: string): () => void;
+  retainPayload(reference: ResultReference): () => void;
   resetProject(): void;
-  resetResult(resultId: string): void;
+  resetResult(reference: ResultReference): void;
+  resetPinResult(request: ResultPinRequest): void;
+  isPayloadRetained(reference: ResultReference): boolean;
 }
 
 export interface ResultQueryServicePort {
-  readonly getDescriptor: (resultId: string) => Promise<ResultDescriptor | null>;
-  readonly getValue: (resultId: string) => Promise<ResultValue | null>;
-  readonly getPage: (resultId: string, offset: number, limit: number) => Promise<ResultPage | null>;
+  readonly getDescriptor: (reference: ResultReference) => Promise<ResultDescriptor | null>;
+  readonly getValue: (reference: ResultReference) => Promise<ResultValue | null>;
+  readonly getPage: (
+    reference: ResultReference,
+    offset: number,
+    limit: number,
+    part?: ResultTablePart,
+  ) => Promise<ResultPage | null>;
+  readonly analyze: (
+    reference: ResultReference,
+    analysis: ResultAnalysisRequest,
+  ) => Promise<ResultAnalysis>;
   readonly getPinResult: (
     graphPath: string,
     output: PortAddressDto,
@@ -50,21 +100,26 @@ export interface ResultQueryServicePort {
 }
 
 export interface ResultQueryPublication {
-  readonly releasePayload: (resultId: string) => void;
+  readonly releasePayload: (reference: ResultReference) => void;
   readonly publishDescriptor: (
     projectInstanceId: string | null,
-    resultId: string,
+    reference: ResultReference,
     descriptor: DeepReadonly<ResultDescriptor | null>,
   ) => void;
   readonly publishValue: (
     projectInstanceId: string | null,
-    resultId: string,
+    reference: ResultReference,
     value: DeepReadonly<ResultValue | null>,
   ) => void;
   readonly publishPage: (
     projectInstanceId: string | null,
     request: ResultPageRequest,
     page: DeepReadonly<ResultPage | null>,
+  ) => void;
+  readonly publishAnalysis: (
+    projectInstanceId: string | null,
+    request: ResultAnalysisQuery,
+    value: DeepReadonly<ResultAnalysis | null>,
   ) => void;
   readonly publishPinResult: (
     projectInstanceId: string | null,
@@ -81,9 +136,10 @@ export interface ResultQueryPublication {
 /** Read side of the Application-owned result projection used by staged hooks. */
 export interface ResultQueryReadCapability {
   readonly subscribe: (listener: () => void) => () => void;
-  readonly getDescriptor: (resultId: string) => DeepReadonly<ResultDescriptor | null>;
-  readonly getValue: (resultId: string) => DeepReadonly<ResultValue | null>;
+  readonly getDescriptor: (reference: ResultReference) => DeepReadonly<ResultDescriptor | null>;
+  readonly getValue: (reference: ResultReference) => DeepReadonly<ResultValue | null>;
   readonly getPage: (request: ResultPageRequest) => DeepReadonly<ResultPage | null>;
+  readonly getAnalysis: (request: ResultAnalysisQuery) => DeepReadonly<ResultAnalysis | null>;
   readonly getPinResult: (
     request: ResultPinRequest,
   ) => DeepReadonly<ResultDescriptor | null> | null;
@@ -104,7 +160,7 @@ interface RequestOwner {
   readonly scope: ResultQueryScope;
 }
 
-type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage;
+type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage | ResultAnalysis;
 
 function queryPart(value: string): string {
   return `${value.length}:${value}`;
@@ -114,16 +170,18 @@ function queryKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
     case "descriptor":
     case "value":
-      return `${scope.kind}:${queryPart(scope.resultId)}`;
+      return `${scope.kind}:${queryPart(resultReferenceKey(scope))}`;
     case "page":
-      return `${scope.kind}:${queryPart(scope.resultId)}`;
+      return `${scope.kind}:${queryPart(resultPageKey(scope))}`;
+    case "analysis":
+      return `${scope.kind}:${queryPart(resultAnalysisKey(scope))}`;
     case "pinResult":
       return `${scope.kind}:${queryPart(scope.graphPath)}:${portAddressKey(scope.output)}`;
   }
 }
 
-function resultIdFor(scope: ResultQueryScope): string | null {
-  return scope.kind === "pinResult" ? null : scope.resultId;
+function referenceFor(scope: ResultQueryScope): ResultReference | null {
+  return scope.kind === "analysis" ? scope.reference : scope.kind === "pinResult" ? null : scope;
 }
 
 function validIdentity(value: string | null): value is string {
@@ -131,7 +189,7 @@ function validIdentity(value: string | null): value is string {
 }
 
 function validIdentityRequest(request: ResultIdentityRequest): boolean {
-  return validIdentity(request.resultId);
+  return isResultReference(request);
 }
 
 function validPageRequest(request: ResultPageRequest): boolean {
@@ -241,24 +299,24 @@ export function createResultQueryCoordinator(
 
   const loadDescriptor = (request: ResultIdentityRequest): Promise<ResultQueryOutcome> => {
     if (!validIdentityRequest(request)) return Promise.resolve({ status: "notReady" });
-    const scope: ResultQueryScope = { kind: "descriptor", resultId: request.resultId };
+    const scope: ResultQueryScope = { kind: "descriptor", ...resultReference(request) };
     return load(
       scope,
-      () => dependencies.service.getDescriptor(request.resultId),
+      () => dependencies.service.getDescriptor(resultReference(request)),
       (projectInstanceId, value) =>
-        dependencies.publication.publishDescriptor(projectInstanceId, request.resultId, value),
+        dependencies.publication.publishDescriptor(projectInstanceId, request, value),
       "result_descriptor_read_failed",
     );
   };
 
   const loadValue = (request: ResultIdentityRequest): Promise<ResultQueryOutcome> => {
     if (!validIdentityRequest(request)) return Promise.resolve({ status: "notReady" });
-    const scope: ResultQueryScope = { kind: "value", resultId: request.resultId };
+    const scope: ResultQueryScope = { kind: "value", ...resultReference(request) };
     return load(
       scope,
-      () => dependencies.service.getValue(request.resultId),
+      () => dependencies.service.getValue(resultReference(request)),
       (projectInstanceId, value) =>
-        dependencies.publication.publishValue(projectInstanceId, request.resultId, value),
+        dependencies.publication.publishValue(projectInstanceId, request, value),
       "result_value_read_failed",
     );
   };
@@ -267,16 +325,36 @@ export function createResultQueryCoordinator(
     if (!validPageRequest(request)) return Promise.resolve({ status: "notReady" });
     const scope: ResultQueryScope = {
       kind: "page",
-      resultId: request.resultId,
+      ...resultReference(request),
       offset: request.offset,
       limit: request.limit,
+      ...(request.part ? { part: request.part } : {}),
     };
     return load(
       scope,
-      () => dependencies.service.getPage(request.resultId, request.offset, request.limit),
+      () =>
+        request.part
+          ? dependencies.service.getPage(
+              resultReference(request),
+              request.offset,
+              request.limit,
+              request.part,
+            )
+          : dependencies.service.getPage(resultReference(request), request.offset, request.limit),
       (projectInstanceId, value) =>
         dependencies.publication.publishPage(projectInstanceId, request, value),
       "result_page_read_failed",
+    );
+  };
+
+  const loadAnalysis = (request: ResultAnalysisQuery): Promise<ResultQueryOutcome> => {
+    const scope: ResultQueryScope = { kind: "analysis", ...request };
+    return load(
+      scope,
+      () => dependencies.service.analyze(request.reference, request.analysis),
+      (projectInstanceId, value) =>
+        dependencies.publication.publishAnalysis(projectInstanceId, request, value),
+      "result_analysis_failed",
     );
   };
 
@@ -300,24 +378,26 @@ export function createResultQueryCoordinator(
     loadDescriptor,
     loadValue,
     loadPage,
+    loadAnalysis,
     loadPinResult,
-    retainPayload: (resultId) => {
-      const consumers = payloadConsumers.get(resultId) ?? new Set<symbol>();
+    isPayloadRetained: (reference) =>
+      (payloadConsumers.get(resultReferenceKey(reference))?.size ?? 0) > 0,
+    retainPayload: (reference) => {
+      const key = resultReferenceKey(reference);
+      const consumers = payloadConsumers.get(key) ?? new Set<symbol>();
       const consumer = Symbol();
       consumers.add(consumer);
-      payloadConsumers.set(resultId, consumers);
+      payloadConsumers.set(key, consumers);
       return () => {
-        if (!consumers.delete(consumer) || payloadConsumers.get(resultId) !== consumers) return;
+        if (!consumers.delete(consumer) || payloadConsumers.get(key) !== consumers) return;
         if (consumers.size > 0) return;
-        payloadConsumers.delete(resultId);
-        for (const [key, owner] of requests) {
-          if (
-            (owner.scope.kind === "value" || owner.scope.kind === "page") &&
-            owner.scope.resultId === resultId
-          )
-            requests.delete(key);
+        payloadConsumers.delete(key);
+        for (const [query, owner] of requests) {
+          const target = referenceFor(owner.scope);
+          if (owner.scope.kind !== "descriptor" && target && resultReferenceKey(target) === key)
+            requests.delete(query);
         }
-        dependencies.publication.releasePayload(resultId);
+        dependencies.publication.releasePayload(reference);
       };
     },
     resetProject: () => {
@@ -325,10 +405,13 @@ export function createResultQueryCoordinator(
       requests.clear();
       payloadConsumers.clear();
     },
-    resetResult: (resultId) => {
+    resetResult: (reference) => {
       for (const [key, owner] of requests) {
-        if (resultIdFor(owner.scope) === resultId) requests.delete(key);
+        const target = referenceFor(owner.scope);
+        if (target && resultReferenceKey(target) === resultReferenceKey(reference))
+          requests.delete(key);
       }
     },
+    resetPinResult: (request) => requests.delete(queryKey({ kind: "pinResult", ...request })),
   };
 }

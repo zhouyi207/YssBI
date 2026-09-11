@@ -3,6 +3,7 @@ import { useEffect, useSyncExternalStore, useState } from "react";
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { ResultValue } from "./types";
+import type { ResultReference } from "@/shared/types/domain/result";
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,
@@ -23,7 +24,7 @@ export interface ResultValueQueryState {
 }
 
 export function useResultValue(
-  resultId: string | null,
+  reference: ResultReference | null,
   dependencies: ResultValueHookDependencies = {
     coordinator: resultQueryCoordinator,
     read: resultQueryRead,
@@ -32,30 +33,30 @@ export function useResultValue(
   const [loading, setLoading] = useState(false);
   const value = useSyncExternalStore(
     dependencies.read.subscribe,
-    () => (resultId === null ? null : dependencies.read.getValue(resultId)),
-    () => (resultId === null ? null : dependencies.read.getValue(resultId)),
+    () => (reference === null ? null : dependencies.read.getValue(reference)),
+    () => (reference === null ? null : dependencies.read.getValue(reference)),
   );
   const error =
-    resultId === null ? null : dependencies.read.getFailure({ kind: "value", resultId });
+    reference === null ? null : dependencies.read.getFailure({ kind: "value", ...reference });
 
   const reload = async (): Promise<ResultQueryOutcome> => {
-    if (resultId === null) return { status: "notReady" };
-    return dependencies.coordinator.loadValue({ resultId });
+    if (reference === null) return { status: "notReady" };
+    return dependencies.coordinator.loadValue(reference);
   };
 
   useEffect(() => {
     let mounted = true;
-    if (resultId === null) {
+    if (reference === null) {
       setLoading(false);
       return () => {
         mounted = false;
       };
     }
 
-    const releasePayload = dependencies.coordinator.retainPayload(resultId);
+    const releasePayload = dependencies.coordinator.retainPayload(reference);
     setLoading(true);
     void dependencies.coordinator
-      .loadValue({ resultId })
+      .loadValue(reference)
       .then(() => {
         if (mounted) setLoading(false);
       })
@@ -67,7 +68,7 @@ export function useResultValue(
       mounted = false;
       releasePayload();
     };
-  }, [dependencies.coordinator, resultId]);
+  }, [dependencies.coordinator, reference?.executionSessionId, reference?.resultId]);
 
   return { value, loading, error, reload };
 }

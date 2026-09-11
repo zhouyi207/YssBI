@@ -1,3 +1,4 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import type {
   AddGroupOptions,
   AddPanelOptions,
@@ -629,18 +630,16 @@ describe("workbench Dockview port", () => {
     const logsA = port.ensureView({ viewId: "logs", title: "Logs" });
     const logsB = port.ensureView({ viewId: "logs", title: "Logs" });
     const resultA = port.upsertResult({
-      resultKey: "output:main",
-      resultId: "result-1",
+      leaseId: resultLeaseIdFixture(1),
+      reference: resultReferenceFixture("1"),
       title: "Summary",
       presentation: { kind: "inspector" },
-      source: null,
     });
     const resultB = port.upsertResult({
-      resultKey: "output:main",
-      resultId: "result-2",
+      leaseId: resultLeaseIdFixture(2),
+      reference: resultReferenceFixture("2"),
       title: "Summary",
       presentation: { kind: "inspector" },
-      source: null,
     });
 
     internal.bind(fake.api);
@@ -649,8 +648,22 @@ describe("workbench Dockview port", () => {
 
     expect(port.listPanels().filter((panel) => panel.metadata.role === "view")).toHaveLength(1);
     const results = port.listPanels().filter((panel) => panel.metadata.role === "result");
-    expect(results).toHaveLength(1);
-    expect(results[0]?.metadata).toMatchObject({ resultId: "result-2" });
+    expect(results).toHaveLength(2);
+    expect(results.map((panel) => panel.metadata)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ reference: resultReferenceFixture("1") }),
+        expect.objectContaining({ reference: resultReferenceFixture("2") }),
+      ]),
+    );
+    const repeated = await port.upsertResult({
+      reference: resultReferenceFixture("1"),
+      leaseId: resultLeaseIdFixture(99),
+      title: "Repeated",
+      presentation: { kind: "inspector" },
+    });
+    expect(repeated.panelInstanceId).toBe((await resultA).panelInstanceId);
+    expect(repeated.metadata).toMatchObject({ leaseId: resultLeaseIdFixture(1), title: "Summary" });
+    expect(port.listPanels().filter((panel) => panel.metadata.role === "result")).toHaveLength(2);
   });
 
   it("invalidates an unbound project-scoped open before a replacement root hydrates", async () => {
@@ -824,11 +837,10 @@ describe("workbench Dockview port", () => {
       layoutTab: { id: editorRequest.resourceRef },
     });
     const result = await port.upsertResult({
-      resultKey: "shared-result",
-      resultId: "result-1",
+      leaseId: resultLeaseIdFixture(3),
+      reference: resultReferenceFixture("1"),
       title: "Shared result",
       presentation: { kind: "inspector" },
-      source: null,
     });
     await port.move({
       panelInstanceId: result.panelInstanceId,

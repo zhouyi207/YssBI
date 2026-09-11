@@ -7484,6 +7484,59 @@ fn sample_catalog_composition_capability_does_not_grant_business_queries() {
     );
 }
 
+#[test]
+fn result_projection_capability_does_not_grant_application_state_access() {
+    let source = "src-tauri/crates/yss-api/src/schema/result.rs";
+    let projection = "src-tauri/crates/yss-application/src/execution/result_query/report.rs";
+    let state = "src-tauri/crates/yss-application/src/execution/session_slot.rs";
+    let classification = BTreeMap::from([
+        (source.to_owned(), RustLayer::Transport),
+        (projection.to_owned(), RustLayer::Application),
+        (state.to_owned(), RustLayer::Application),
+    ]);
+    let dependency = |declaration: &str, target: &str, symbol: &str| CanonicalDependency {
+        owning_package: "yss-api".into(),
+        source_file: source.into(),
+        owner: "yss_api::schema::result".into(),
+        kind: RustDependencyKind::Use,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: "yss-application".into(),
+            repository_relative_declaration_file: declaration.into(),
+            fully_qualified_target: target.into(),
+            symbol: symbol.into(),
+        },
+        canonical_origin_target: target.into(),
+        line: 1,
+        column: 1,
+    };
+    assert!(
+        rust_dependency_findings(
+            &[dependency(
+                projection,
+                "yss_application::execution::result_query::report::OlsReportProjection",
+                "OlsReportProjection"
+            )],
+            &classification
+        )
+        .unwrap()
+        .is_empty()
+    );
+    assert_eq!(
+        rust_dependency_findings(
+            &[dependency(
+                state,
+                "yss_application::execution::session_slot::ApplicationState",
+                "ApplicationState"
+            )],
+            &classification
+        )
+        .unwrap()
+        .len(),
+        1
+    );
+}
+
 fn external_declaration(
     package_name: &str,
     scope: CargoDependencyScope,

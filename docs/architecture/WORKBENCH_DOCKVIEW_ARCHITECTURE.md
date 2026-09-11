@@ -193,7 +193,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
 
-right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
+right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
@@ -228,7 +228,7 @@ Logs layout 有两种明确生命周期：
 ```text
 editor → { role, resourceRef, resourceKind, sticky? }
 view   → { role, viewId }
-result → { role, resultKey, resultId, title, presentation, source }
+result → { role, reference, leaseId, title, presentation }
 ```
 
 以下 identity 永远分离：
@@ -236,12 +236,12 @@ result → { role, resultKey, resultId, title, presentation, source }
 | Identity          | 含义                                                                                                           |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
 | `resourceRef`     | editor 打开的 opaque backend resource key：图/图表使用路径，数据使用 DatabaseId；同一资源可有多个 editor panel |
-| `resultKey`       | logical Result panel key；同 key 执行 upsert，不同 key 可并存                                                  |
-| `resultId`        | Rust `ResultStore` 中当前 payload 的 opaque identity                                                           |
+| `reference`       | `{ executionSessionId, resultId }`，标识 Rust ResultStore 中的不可变快照                                       |
+| `leaseId`         | 当前面板持有的后端租约 token，不随移动、隐藏或重新渲染改变                                                     |
 | `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity                                                              |
 | `groupId`         | Dockview 当前物理 group 的 identity；panel 移动后可改变                                                        |
 
-不得从 `panelInstanceId` 或 `groupId` 推导 `resourceRef`、`resultKey` 或 `resultId`，也不得把这些 identity 合并为一个 tab id。
+不得从 `panelInstanceId` 或 `groupId` 推导 `resourceRef`、结果引用或 `leaseId`，也不得把这些 identity 合并为一个 tab id。
 
 Singleton 与 multi-instance contract：
 
@@ -250,10 +250,13 @@ Singleton 与 multi-instance contract：
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
 - Inspect 只在上下文有效时按需创建；
-- Result 按 `resultKey` upsert，同 key 更新 metadata 并 reveal，多个不同 `resultKey` 同时存在；
-- `resultId` 可以在同一个 `resultKey` panel 上更新，而不改变其 `panelInstanceId`。
+- Result 按完整结果引用复用并 reveal，不同运行产生的新引用创建独立面板；
+- 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
-Result panel 通过 `source` 的 output address 订阅当前结果；重算时卸载旧内容并显示运行状态，成功后在原 panel 渲染新 ResultId，失败或取消只显示状态。菜单不提供历史值选择。独立展示窗口收到结果失效或 Project replacement 通知后释放本地 payload。
+Result panel 固定读取 `reference`，不订阅 pin 的当前结果。删除来源节点或重新运行不会清空已打开的报告。
+Application 的结果租约控制器订阅完成 hydration 后的真实面板集合，按 `leaseId` 与后端对账；切换标签、移动、重置布局保留持有关系，真实关闭才释放。
+跨窗口交接和后端窗口销毁负责独立报告的租约生命周期，详见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)。
+结果引用的来源信息留在不可变 provenance 中，不随图重命名改写；会话结束后关闭对应独立窗口并移除项目面板。
 
 ## 5. Module seams 与布局 mutation
 
@@ -336,7 +339,7 @@ Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
 
 ### 7.1 Reveal
 
-Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；Inspect 创建还要求有效 context；同 `resultKey` 的 Result 只更新并 reveal 既有 panel。
+Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；Inspect 创建还要求有效 context；同一结果引用的 Result 只 reveal 既有 panel。
 
 ### 7.2 Reset
 

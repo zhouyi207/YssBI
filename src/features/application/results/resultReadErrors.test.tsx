@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { resultReferenceKey } from "@/shared/types/domain/result";
+import type { ResultReference } from "@/shared/types/domain/result";
+import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -43,6 +46,8 @@ function pageKey(request: ResultPageRequest): string {
 
 function scopeKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
+    case "analysis":
+      return `analysis:${scope.reference.resultId}:${scope.analysis.kind}`;
     case "descriptor":
     case "value":
       return `${scope.kind}:${scope.resultId}`;
@@ -62,22 +67,29 @@ function createTestRuntime(): TestRuntime {
   const notify = () => listeners.forEach((listener) => listener());
 
   const service = {
-    getDescriptor: vi.fn(async (_resultId: string) => null),
-    getValue: vi.fn(async (_resultId: string): Promise<ResultValue | null> => null),
+    analyze: vi.fn(async () => {
+      throw new Error("unexpected analysis");
+    }),
+    getDescriptor: vi.fn(async (_reference: ResultReference) => null),
+    getValue: vi.fn(async (_reference: ResultReference): Promise<ResultValue | null> => null),
     getPage: vi.fn(
-      async (_resultId: string, _offset: number, _limit: number): Promise<ResultPage | null> =>
-        null,
+      async (
+        _reference: ResultReference,
+        _offset: number,
+        _limit: number,
+      ): Promise<ResultPage | null> => null,
     ),
     getPinResult: vi.fn(async (_graphPath: string, _output: ResultPinRequest["output"]) => null),
   };
 
   const read: ResultQueryReadCapability = {
+    getAnalysis: () => null,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
     getDescriptor: () => null,
-    getValue: (resultId) => values.get(resultId) ?? null,
+    getValue: (resultId) => values.get(resultReferenceKey(resultId)) ?? null,
     getPage: (request) => pages.get(pageKey(request)) ?? null,
     getPinResult: () => null,
     getFailure: (scope) => failures.get(scopeKey(scope)) ?? null,
@@ -87,14 +99,15 @@ function createTestRuntime(): TestRuntime {
     readCurrentProjectInstanceId: () => projectInstanceId,
     service,
     publication: {
+      publishAnalysis: () => undefined,
       releasePayload: (resultId) => {
-        values.delete(resultId);
+        values.delete(resultReferenceKey(resultId));
         for (const key of pages.keys()) if (key.startsWith(`${resultId}:`)) pages.delete(key);
         notify();
       },
       publishDescriptor: () => undefined,
       publishValue: (_project, resultId, value) => {
-        values.set(resultId, value);
+        values.set(resultReferenceKey(resultId), value);
         notify();
       },
       publishPage: (_project, request, page) => {
@@ -117,12 +130,12 @@ function createTestRuntime(): TestRuntime {
 }
 
 function ValueHarness({ showError = false }: { showError?: boolean }) {
-  valueState = useResultValue("42", runtime);
+  valueState = useResultValue(resultReferenceFixture("42"), runtime);
   return showError && valueState.error ? <ResultReadError error={valueState.error} /> : null;
 }
 
 function PageHarness() {
-  pageState = usePagedResultRows("42", 1, 200, runtime);
+  pageState = usePagedResultRows(resultReferenceFixture("42"), 1, 200, runtime);
   return null;
 }
 
@@ -173,9 +186,12 @@ describe("result read machine errors", () => {
       </div>,
     );
     expect(valueState?.value).toEqual({ kind: "value", value: 42 });
-    expect(runtime.read.getValue("42")).toEqual({ kind: "value", value: 42 });
+    expect(runtime.read.getValue(resultReferenceFixture("42"))).toEqual({
+      kind: "value",
+      value: 42,
+    });
     await render(null);
-    expect(runtime.read.getValue("42")).toBeNull();
+    expect(runtime.read.getValue(resultReferenceFixture("42"))).toBeNull();
   });
 
   it("stores a stable value fallback for parser failures without parser prose", async () => {

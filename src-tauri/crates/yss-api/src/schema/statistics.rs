@@ -14,6 +14,35 @@ pub struct AcfPacfResponseDto {
     pub n: usize,
 }
 
+#[derive(Debug, Serialize)]
+pub struct HypothesisTestResponseDto {
+    pub test_type: String,
+    pub h0_form: String,
+    pub h1_form: String,
+    pub alternative: String,
+    pub r_beta_minus_r: f64,
+    pub stat: f64,
+    pub df1: usize,
+    pub df2: usize,
+    pub p_value: f64,
+}
+
+impl From<yss_application::hypothesis::HypothesisTestOutput> for HypothesisTestResponseDto {
+    fn from(out: yss_application::hypothesis::HypothesisTestOutput) -> Self {
+        Self {
+            test_type: out.test_type,
+            h0_form: out.h0_form,
+            h1_form: out.h1_form,
+            alternative: out.alternative,
+            r_beta_minus_r: out.r_beta_minus_r,
+            stat: out.stat,
+            df1: out.df1,
+            df2: out.df2,
+            p_value: out.p_value,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SerialTestsRequestDto {

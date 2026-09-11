@@ -81,7 +81,10 @@ export async function applyAssistantGraphTool(
               observeGraphRunEvent(request.graphPath, event, runState);
               if (event.kind.type === "resultInspectionRequested")
                 void openInspectableResult(
-                  resultRef(event.kind.resultId),
+                  resultRef({
+                    resultId: event.kind.resultId,
+                    executionSessionId: event.run.executionSessionId,
+                  }),
                   getI18n().t.bind(getI18n()),
                 );
             },

@@ -220,7 +220,7 @@ describe("useProjectOperations execution demand", () => {
 
     expect(openInspectableResult).toHaveBeenCalledOnce();
     expect(openInspectableResult).toHaveBeenCalledWith(
-      { kind: "result", resultId: "17" },
+      { kind: "result", executionSessionId: "backend-session-1", resultId: "17" },
       expect.any(Function),
     );
   });

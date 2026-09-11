@@ -287,19 +287,4 @@ function regressionReportField<ModelInfo>(
 }
 export const linearRegressionReportField = regressionReportField(linearModelInfoField);
 export const binaryRegressionReportField = regressionReportField(binaryModelInfoField);
-const olsCoefficientField = objectField<Coefficient>({
-  variable: stringField,
-  category: optionalField(stringField),
-  coef: numberField,
-  std_err: numberField,
-  t_value: numberField,
-  p_value: numberField,
-  "confidence_interval_0.025": numberField,
-  "confidence_interval_0.975": numberField,
-  is_significant: booleanField,
-});
-export const canonicalOlsReportField = regressionReportField(
-  linearModelInfoField,
-  olsCoefficientField,
-  literalField("OLS Summary"),
-);
+export { olsReportField as canonicalOlsReportField } from "./parseOls";

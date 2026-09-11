@@ -40,8 +40,6 @@ pub struct OlsModelSummary {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OlsDiagnostics {
     pub cond_no: f64,
-    pub fitted_values: Vec<f64>,
-    pub residuals: Vec<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -51,6 +49,5 @@ pub struct OlsSummary {
     pub model_basic_info: OlsModelSummary,
     pub coefficients: Vec<RegressionCoefficient>,
     pub diagnostic_info: OlsDiagnostics,
-    pub betas: Vec<f64>,
     pub cov_beta: Vec<Vec<f64>>,
 }

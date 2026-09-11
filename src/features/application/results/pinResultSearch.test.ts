@@ -1,3 +1,4 @@
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 import { describe, expect, it } from "vitest";
 import type { ResultDescriptor } from "./types";
 import { graphOutputKey } from "@/features/domain/editorProjection";
@@ -12,6 +13,7 @@ function currentResult(portKey: string, resultId: string): ResultDescriptor {
   const port = { kind: "declared" as const, nodeId: `node-${portKey}`, portKey };
   return {
     resultId,
+    executionSessionId: resultSessionFixture,
     provenance: {
       runId: resultId,
       createdAtMs: "1000",

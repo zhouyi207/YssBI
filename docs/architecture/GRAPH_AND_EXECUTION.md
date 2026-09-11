@@ -211,11 +211,19 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 
 ## 6. Results
 
-`ResultStore` 是 session-scoped result authority，每个 output address 只保存当前结果。每个当前结果拥有 ResultId、type/presentation、payload 和 provenance；不存在结果历史列表、历史选择或结果保留设置。
+`ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
+结果以 `{ executionSessionId, resultId }` 标识，保留 type/presentation、payload 与生成时的 provenance。
+当前输出和显式报告租约是结果的持有者；输出不再指向结果且最后一个租约释放后，移除结果索引。
+计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。
 
-Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前释放这些输出的旧 payload 与 ResultId 索引。一个 operation 的所有 outputs 同时失效；未参与本次 demand 的输出保留当前结果。成功 finalization 在同一写锁内发布整批结果，并验证每个输出仍属于该 run；被后续运行或图失效淘汰的 run 不能重新发布。失败、取消不恢复上次成功的 payload。
+Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前解除这些输出的旧结果绑定。
+一个 operation 的所有当前 outputs 同时失效；未参与本次 demand 的输出保留当前结果。已打开报告的租约保留旧快照，
+但不把它重新绑定为当前输出。成功 finalization 在同一写锁内发布整批结果，并验证每个输出仍属于该 run；
+被后续运行或图失效淘汰的 run 不能重新发布。失败、取消不恢复上次成功的当前输出。
 
-Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，通过 descriptor/value/page queries 读取当前数据。`RunStarted { outputs }` 公告本次失效范围；完成后重查当前输出。Frontend 同时删除旧 descriptor、value、pages、查询错误并拒绝迟到请求，搜索只索引当前输出。
+Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 null，descriptor/value/page queries 使用完整结果引用。
+`RunStarted { outputs }` 公告当前输出的失效范围；完成后重查当前输出。Frontend 只撤销这些 pin 查询和未被读取组件持有的缓存，
+不清空已打开报告或中断其分页/分析。Pin 预览与搜索只索引当前输出，按引用读取保留快照不会重写当前 pin 绑定。
 
 关系和数列页面由 Application 捕获当前 Result，交给句柄在固定快照上执行有界查询；I/O 在计算线程、锁外执行。
 每页最多读取请求行数加一行，通过额外行判断 `hasMore`；不为了预览执行整表 COUNT。`totalCount` 可为 null，
@@ -225,11 +233,37 @@ Frontend 在总数未知时照常请求首页，按后端 `hasMore` 翻页，在
 
 Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence 和 DataSeries renderer 都提供分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 
-已打开的 Result panel 绑定 output address，在原位置清空并更新；独立展示窗口收到失效通知后释放旧内容。
+显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
+Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，
+便于丢失响应后清理；Rust 确认结果和窗口身份，同 token 的重复申请/释放不会重复计数。
+Dockview 的真实面板集合驱动窗口内租约对账，移动、隐藏和 React 重新挂载不代表面板关闭；打开失败会释放申请的租约。
 
-语义输入改变会清除该图的当前结果；变量等资源的已提交变更按 Rust 公告的受影响图清除结果和前端缓存；移动节点等不改变语义输入的操作可保留结果。删除、重命名、卸载图和 Project session replacement 释放对应结果。Project replacement 更换 ResultStore 并清空前端投影，旧查询不能写入新 session。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除当前 Results。
+独立窗口使用指定接收窗口的租约交接：父窗口先保留结果，新窗口通过 `claim_result_lease` 原子接管，
+不存在创建窗口期间无人持有数据的间隙。窗口销毁时后端清理所属租约及尚未接管的交接，并拒绝该 owner 的迟到申请；
+独立结果窗口使用唯一实例 label。前端卸载事件不是唯一回收来源。
+所有权操作按窗口串行协调，查询与统计计算不进入该队列；每次对账只遍历该窗口的租约。
+
+语义输入改变、删除、重命名或卸载图解除其当前输出绑定，有租约的结果继续可读。
+移动节点等不改变语义输入的操作保留当前输出。执行会话结束（包括项目关闭、切换或会话重建）撤销所属租约并释放 ResultStore，
+前端清理 project-scoped 面板并通知独立报告窗口关闭。跨窗口通道只通知会话结束，不再把输出失效广播成结果销毁。
+旧会话引用不能读取新会话中的同号结果。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除 Results。
 
 统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
+
+OLS 的 `result` 与 `report` outputs 共享不可变的原生 `OlsResult`，仍由当前 `ResultStore` 拥有。
+拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 只包含模型概览、条件数、
+`{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
+引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
+`get_result_table_page` 复用有界页面投影；`analyze_result` 按类型执行残差图投影、ACF/PACF、
+序列相关与假设检验。图形投影可按拟合值范围筛选、跨整个匹配总体进行系统抽样，并标明总体/匹配数和抽样状态；
+统计检验使用完整拟合数据。Application 捕获共享结果后在锁外读取/计算，返回前重验 session 与结果可用性，
+结果回收或会话结束后的迟到成功和失败均被丢弃；仅当前输出失效不撤销有租约的快照读取。
+数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
+
+OLS 报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
+前端复用 Result query coordinator，以执行会话、结果和 part/analysis kind 隔离请求；每张表和每类分析仅保留当前投影，
+分析参数参与读取匹配。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
+报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
 报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
 

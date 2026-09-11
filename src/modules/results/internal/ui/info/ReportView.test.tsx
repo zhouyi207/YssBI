@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,6 +21,7 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 const descriptor: ResultDescriptor = {
   resultId: "42",
 
+  executionSessionId: resultSessionFixture,
   provenance: {
     runId: "7",
     graphPath: "events/main.yssbi-event",
@@ -39,6 +41,9 @@ const descriptor: ResultDescriptor = {
 
 const malformedOlsReport = {
   title: "OLS Summary",
+  endog_name: "response",
+  resultRef: { executionSessionId: "00000000-0000-0000-0000-000000000001", resultId: "42" },
+  observations: { kind: "tableRef", part: "observations", rowCount: 3 },
   model_basic_info: {
     model_type: "OLS",
     method: "Least Squares",
@@ -58,17 +63,7 @@ const malformedOlsReport = {
     ms_total: 1.25,
     covariance_type: "nonrobust",
   },
-  coefficients: [
-    {
-      variable: "x",
-      coef: 1,
-      t_value: 2,
-      p_value: 0.05,
-      "confidence_interval_0.025": 0.5,
-      "confidence_interval_0.975": 1.5,
-      is_significant: true,
-    },
-  ],
+  coefficients: { kind: "tableRef", part: "coefficients" },
   diagnostic_info: { cond_no: 1 },
 };
 
@@ -119,7 +114,7 @@ describe("ReportView", () => {
     });
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Unable to render OLS report: coefficients[0].std_err missing required field.",
+      "Unable to render OLS report: coefficients.rowCount missing required field.",
     );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(logError).toHaveBeenCalledTimes(1);
@@ -130,7 +125,7 @@ describe("ReportView", () => {
       outputPinId: "report",
       presentation: { kind: "report", report: "olsSummary" },
       valueKind: "scalar",
-      fieldPath: "coefficients[0].std_err",
+      fieldPath: "coefficients.rowCount",
       reason: "missing required field",
     });
     expect(logError).toHaveBeenCalledWith(expect.any(String), "ReportValidation");
@@ -148,7 +143,7 @@ describe("ReportView", () => {
               ...malformedOlsReport.model_basic_info,
               covariance_type: undefined,
             },
-            coefficients: [{ ...malformedOlsReport.coefficients[0], std_err: 0.2 }],
+            coefficients: { ...malformedOlsReport.coefficients, rowCount: 1 },
           }}
         />,
       );

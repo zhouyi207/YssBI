@@ -72,9 +72,7 @@ const PluginDockPanel: RootDockviewPanelComponent = ({ params, api }) => {
 
 const ResultDockPanel: RootDockviewPanelComponent = ({ params }) => {
   const { metadata } = params;
-  return metadata.role === "result" ? (
-    <ResultPanel resultId={metadata.resultId} source={metadata.source} />
-  ) : null;
+  return metadata.role === "result" ? <ResultPanel reference={metadata.reference} /> : null;
 };
 
 export const rootPanelRegistry = {

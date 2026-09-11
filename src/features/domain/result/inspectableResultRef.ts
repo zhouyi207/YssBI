@@ -1,11 +1,12 @@
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
+import { resultReference, type ResultReference } from "@/shared/types/domain/result";
 
 export type InspectableResultRef =
-  | { readonly kind: "result"; readonly resultId: string }
+  | ({ readonly kind: "result" } & ResultReference)
   | { readonly kind: "outputPin"; readonly graphPath: string; readonly output: PortAddressDto };
 
-export function resultRef(resultId: string): InspectableResultRef {
-  return { kind: "result", resultId };
+export function resultRef(reference: ResultReference): InspectableResultRef {
+  return { kind: "result", ...resultReference(reference) };
 }
 
 export function outputPinRef(graphPath: string, output: PortAddressDto): InspectableResultRef {

@@ -1,8 +1,10 @@
 import {
   isResultPlotKind,
-  type GraphOutputRefDto,
+  isResultReference,
+  type ResultReference,
   type ResultPresentation,
 } from "@/shared/types/domain/result";
+import { isUuid } from "@/shared/types/domain/editorProjectionGuards";
 
 export const WORKBENCH_ACTIVITY_VIEW_IDS = ["project", "nodes", "commands", "plugins"] as const;
 
@@ -51,11 +53,10 @@ export type ViewPanelMetadata = {
 
 export type ResultPanelMetadata = {
   readonly role: "result";
-  readonly resultKey: string;
-  readonly resultId: string;
+  readonly reference: ResultReference;
+  readonly leaseId: string;
   readonly title: string;
   readonly presentation: ResultPresentation;
-  readonly source: GraphOutputRefDto | null;
 };
 
 export type PluginPanelMetadata = {
@@ -155,36 +156,6 @@ function isResultPresentation(value: unknown): value is ResultPresentation {
   }
 }
 
-function isPortAddress(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.kind !== "string") return false;
-
-  if (value.kind === "declared") {
-    return (
-      hasKnownKeys(value, ["kind", "nodeId", "portKey"]) &&
-      isNonEmptyString(value.nodeId) &&
-      isNonEmptyString(value.portKey)
-    );
-  }
-  if (value.kind === "instance") {
-    return (
-      hasKnownKeys(value, ["kind", "nodeId", "templateKey", "instanceId"]) &&
-      isNonEmptyString(value.nodeId) &&
-      isNonEmptyString(value.templateKey) &&
-      isNonEmptyString(value.instanceId)
-    );
-  }
-  return false;
-}
-
-function isGraphOutputRef(value: unknown): value is GraphOutputRefDto {
-  return (
-    isRecord(value) &&
-    hasKnownKeys(value, ["graphPath", "port"]) &&
-    isNonEmptyString(value.graphPath) &&
-    isPortAddress(value.port)
-  );
-}
-
 export function isWorkbenchActivityViewId(value: string): value is WorkbenchActivityViewId {
   return WORKBENCH_ACTIVITY_VIEW_ID_SET.has(value as WorkbenchActivityViewId);
 }
@@ -237,12 +208,11 @@ export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPane
       );
     case "result":
       return (
-        hasKnownKeys(value, ["role", "resultKey", "resultId", "title", "presentation", "source"]) &&
-        isNonEmptyString(value.resultKey) &&
-        isNonEmptyString(value.resultId) &&
+        hasKnownKeys(value, ["role", "reference", "leaseId", "title", "presentation"]) &&
+        isResultReference(value.reference) &&
+        isUuid(value.leaseId) &&
         typeof value.title === "string" &&
-        isResultPresentation(value.presentation) &&
-        (value.source === null || isGraphOutputRef(value.source))
+        isResultPresentation(value.presentation)
       );
     default:
       return false;

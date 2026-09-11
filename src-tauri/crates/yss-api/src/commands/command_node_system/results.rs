@@ -1,13 +1,13 @@
-use super::common::parse_opaque_u64;
 use crate::commands::execution_dto::{
     ResultDescriptorDto, ResultPageDto, ResultValueDto, runtime_value_to_json,
 };
 use crate::error::CommandError;
+use crate::schema::result::ResultReferenceDto;
 use serde::Serialize;
 use tauri::State;
 use yss_application::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
 use yss_application::execution::{ApplicationState, SessionCaptureError};
-use yss_execution::result::{ResultId, StoredResult};
+use yss_execution::result::{ResultId, ResultRetentionError, StoredResult};
 use yss_execution::value::RuntimeValue;
 
 pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
@@ -19,12 +19,18 @@ struct ResultPagingErrorDetails {
     value_kind: &'static str,
 }
 
-fn result_query_command_error(error: ResultQueryApplicationError) -> CommandError {
+pub(super) fn result_query_command_error(error: ResultQueryApplicationError) -> CommandError {
     match error {
         ResultQueryApplicationError::SessionCapture(error) => session_capture_command_error(error),
         ResultQueryApplicationError::SessionChanged => {
-            CommandError::expected("stale_project_lifecycle")
+            CommandError::expected("stale_result_reference")
         }
+        ResultQueryApplicationError::Retention(error) => CommandError::expected(match error {
+            ResultRetentionError::Unavailable => "result_not_found",
+            ResultRetentionError::LeaseConflict => "result_lease_conflict",
+            ResultRetentionError::WrongOwner => "result_lease_owner_mismatch",
+            ResultRetentionError::OwnerClosed => "result_lease_owner_closed",
+        }),
         ResultQueryApplicationError::InvalidPageRequest => {
             CommandError::expected("invalid_result_page_request")
         }
@@ -37,7 +43,7 @@ fn result_query_command_error(error: ResultQueryApplicationError) -> CommandErro
     }
 }
 
-fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
+pub(super) fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
     match error {
         SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
         SessionCaptureError::Replacing => {
@@ -53,11 +59,12 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
 #[tauri::command]
 pub fn get_result_descriptor(
     state: State<'_, ApplicationState>,
-    result_id: String,
+    reference: ResultReferenceDto,
 ) -> Result<Option<ResultDescriptorDto>, CommandError> {
-    let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
+    let reference = reference.try_into()?;
+    let yss_execution::result::ResultReference { result_id, .. } = reference;
     state
-        .query_result(result_id)
+        .query_result(reference)
         .map_err(result_query_command_error)?
         .map(|snapshot| ResultDescriptorDto::from_execution(result_id, &snapshot))
         .transpose()
@@ -69,11 +76,12 @@ pub fn get_result_descriptor(
 #[tauri::command]
 pub fn get_result_value(
     state: State<'_, ApplicationState>,
-    result_id: String,
+    reference: ResultReferenceDto,
 ) -> Result<Option<ResultValueDto>, CommandError> {
-    let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
+    let reference = reference.try_into()?;
+    let yss_execution::result::ResultReference { result_id, .. } = reference;
     let Some(result) = state
-        .query_result(result_id)
+        .query_result(reference)
         .map_err(result_query_command_error)?
     else {
         return Ok(None);
@@ -87,6 +95,13 @@ pub fn get_result_value(
         return Err(result_requires_paging(result_id, "sequence"));
     }
     let value = match result.value().value() {
+        StoredResult::Runtime(RuntimeValue::Ols(_)) => {
+            let report = state
+                .query_ols_report(reference)
+                .map_err(super::reports::report_query_error)?;
+            serde_json::to_value(crate::schema::result::OlsReportDto::from(report))
+                .map_err(|_| CommandError::expected("result_value_not_json"))?
+        }
         StoredResult::Runtime(value) => runtime_value_to_json(value)
             .map_err(|_| CommandError::expected("result_value_not_json"))?,
         StoredResult::Scalar(value) => runtime_value_to_json(&RuntimeValue::Decimal(*value))
@@ -109,15 +124,16 @@ pub fn get_result_value(
 #[tauri::command]
 pub async fn get_result_page(
     state: State<'_, ApplicationState>,
-    result_id: String,
+    reference: ResultReferenceDto,
     offset: usize,
     limit: usize,
 ) -> Result<Option<ResultPageDto>, CommandError> {
-    let result_id = ResultId::from_existing(parse_opaque_u64("resultId", &result_id)?);
+    let reference = reference.try_into()?;
+    let yss_execution::result::ResultReference { result_id, .. } = reference;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         state
-            .query_result_page(result_id, offset, limit)
+            .query_result_page(reference, offset, limit)
             .map_err(result_query_command_error)?
             .map(|page| {
                 ResultPageDto::from_application(result_id, page)

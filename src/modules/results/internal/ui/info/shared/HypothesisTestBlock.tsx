@@ -1,10 +1,12 @@
 import { Input } from "@/components/ui/input";
-import { useHypothesisTestBlock } from "@/features/application/stats/useHypothesisTestBlock";
+import {
+  useHypothesisTestBlock,
+  type HypothesisTestSource,
+} from "@/features/application/stats/useHypothesisTestBlock";
 import { InfoAccentButton } from "./InfoViewControls";
 import { ReportSection } from "./ReportLayout";
 import { formatNum } from "./RegressionShared";
 import { linearFormToLatex, renderHypothesisLatex } from "./utils";
-import type { RegressionResultData } from "@/shared/types/report";
 
 function HypothesisFormulas({
   form,
@@ -35,13 +37,9 @@ function HypothesisFormulas({
   );
 }
 
-export function HypothesisTestBlock({
-  data,
-}: {
-  data: RegressionResultData<{ df_residual: number }>;
-}) {
+export function HypothesisTestBlock({ source }: { source: HypothesisTestSource }) {
   const { hypothesis, setHypothesis, result, error, loading, paramNames, canRun, run } =
-    useHypothesisTestBlock(data);
+    useHypothesisTestBlock(source);
 
   return (
     <div className="mt-6">

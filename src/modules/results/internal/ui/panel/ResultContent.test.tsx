@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -78,6 +80,7 @@ const parsedPlotPayload = {
 const descriptor: ResultDescriptor = {
   resultId: "plot-1",
 
+  executionSessionId: resultSessionFixture,
   provenance: {
     runId: "run-1",
     graphPath: "events/Main.yssbi-event",
@@ -168,7 +171,7 @@ describe("ResultContent", () => {
       payload: { mode: "inspector", descriptor: inspectorDescriptor },
     });
 
-    act(() => root.render(<ResultContent resultId="inspector-1" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("inspector-1")} />));
     await flush();
 
     expect(container.querySelector("h1")).toBeNull();
@@ -184,7 +187,7 @@ describe("ResultContent", () => {
       payload: { mode: "report", data: preloadedReportData },
     });
 
-    act(() => root.render(<ResultContent resultId="report-1" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("report-1")} />));
     await flush();
 
     expect(mocks.reportView).toHaveBeenCalledOnce();
@@ -212,7 +215,7 @@ describe("ResultContent", () => {
   });
 
   it("renders a plot preview and expands only after the user requests it", async () => {
-    act(() => root.render(<ResultContent resultId="plot-1" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("plot-1")} />));
     await flush();
 
     expect(container.querySelector('[data-testid="plot-preview"]')).not.toBeNull();
@@ -257,14 +260,14 @@ describe("ResultContent", () => {
       });
     mocks.launchInspectablePresentation.mockReturnValueOnce(expansion.promise);
 
-    act(() => root.render(<ResultContent resultId="plot-1" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("plot-1")} />));
     await flush();
     const expand = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "detail.result.expandPlot",
     );
     act(() => expand?.click());
 
-    act(() => root.render(<ResultContent resultId="plot-2" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("plot-2")} />));
     await flush();
     await act(async () => {
       expansion.reject(new Error("stale window failure"));
@@ -277,7 +280,7 @@ describe("ResultContent", () => {
 
   it("keeps the preview mounted and shows an Alert when expansion fails", async () => {
     mocks.launchInspectablePresentation.mockRejectedValueOnce(new Error("window failed"));
-    act(() => root.render(<ResultContent resultId="plot-1" />));
+    act(() => root.render(<ResultContent reference={resultReferenceFixture("plot-1")} />));
     await flush();
 
     const expand = [...container.querySelectorAll("button")].find(

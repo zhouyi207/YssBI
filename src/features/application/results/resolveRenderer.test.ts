@@ -1,3 +1,4 @@
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 import { describe, expect, it } from "vitest";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { resolveResultRenderer } from "./resolveRenderer";
@@ -6,6 +7,7 @@ function descriptor(valueKind: ResultDescriptor["valueKind"]): ResultDescriptor 
   return {
     resultId: "17",
 
+    executionSessionId: resultSessionFixture,
     provenance: {
       runId: "1",
       graphPath: "events/Main.yssbi-event",

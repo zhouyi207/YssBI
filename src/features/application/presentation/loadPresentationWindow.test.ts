@@ -1,3 +1,4 @@
+import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResultDescriptor } from "@/shared/types/domain/result";
 import { loadPresentationWindow } from "./loadPresentationWindow";
@@ -27,6 +28,7 @@ const provenance = {
 function descriptor(resultId: string, partial: Partial<ResultDescriptor> = {}): ResultDescriptor {
   return {
     resultId,
+    executionSessionId: resultSessionFixture,
     provenance,
     presentation: { kind: "inspector" },
     valueKind: "scalar",
@@ -51,11 +53,11 @@ describe("loadPresentationWindow", () => {
     );
     vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: report });
 
-    await expect(loadPresentationWindow("20")).resolves.toMatchObject({
+    await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
       status: "ready",
       payload: { mode: "report", report: "olsSummary", data: report },
     });
-    expect(ResultService.getValue).toHaveBeenCalledWith("20");
+    expect(ResultService.getValue).toHaveBeenCalledWith(resultReferenceFixture("20"));
     expect(ResultService.getPage).not.toHaveBeenCalled();
   });
 
@@ -79,7 +81,7 @@ describe("loadPresentationWindow", () => {
       values: [{ title: "OLS Summary" }],
     });
 
-    await expect(loadPresentationWindow("21")).resolves.toEqual({
+    await expect(loadPresentationWindow(resultReferenceFixture("21"))).resolves.toEqual({
       status: "load_failed",
     });
   });
@@ -104,14 +106,20 @@ describe("loadPresentationWindow", () => {
       values: [1, 2],
     });
 
-    await expect(loadPresentationWindow("22")).resolves.toMatchObject({ status: "ready" });
+    await expect(loadPresentationWindow(resultReferenceFixture("22"))).resolves.toMatchObject({
+      status: "ready",
+    });
     expect(ResultService.getValue).not.toHaveBeenCalled();
     expect(ResultService.getPage).not.toHaveBeenCalled();
   });
 
   it("returns explicit missing states", async () => {
-    await expect(loadPresentationWindow("")).resolves.toEqual({ status: "missing_result_id" });
+    await expect(loadPresentationWindow(resultReferenceFixture(""))).resolves.toEqual({
+      status: "missing_result_id",
+    });
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(null);
-    await expect(loadPresentationWindow("999")).resolves.toEqual({ status: "not_found" });
+    await expect(loadPresentationWindow(resultReferenceFixture("999"))).resolves.toEqual({
+      status: "not_found",
+    });
   });
 });

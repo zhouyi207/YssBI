@@ -1,3 +1,4 @@
+import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -27,6 +28,7 @@ const provenance = {
 const readyDescriptor = {
   resultId: "17",
 
+  executionSessionId: resultSessionFixture,
   provenance,
   presentation: { kind: "report" as const, report: "olsSummary" as const },
   valueKind: "scalar" as const,
@@ -96,21 +98,45 @@ describe("ResultService", () => {
     vi.mocked(invoke).mockResolvedValue(null);
   });
 
+  it("uses session-bound references for report tables and typed statistical analysis", async () => {
+    const reference = {
+      executionSessionId: "00000000-0000-0000-0000-000000000001",
+      resultId: "17",
+    };
+    await ResultService.getPage(resultReferenceFixture("17"), 200, 200, "observations");
+    const response = { kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } };
+    vi.mocked(invoke).mockResolvedValueOnce(response);
+    await expect(ResultService.analyze(reference, { kind: "acfPacf", maxLag: 1 })).resolves.toEqual(
+      response,
+    );
+    expect(vi.mocked(invoke).mock.calls).toEqual([
+      ["get_result_table_page", { reference, part: "observations", offset: 200, limit: 200 }],
+      ["analyze_result", { reference, analysis: { kind: "acfPacf", maxLag: 1 } }],
+    ]);
+    vi.mocked(invoke).mockResolvedValueOnce({
+      ...response,
+      value: { ...response.value, acf: ["invalid"] },
+    });
+    await expect(ResultService.analyze(reference, { kind: "acfPacf", maxLag: 1 })).rejects.toThrow(
+      "Invalid result analysis",
+    );
+  });
+
   it("invokes the exact result commands with decimal IDs and PortAddressDto output", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    await ResultService.getDescriptor("17");
-    await ResultService.getValue("18");
-    await ResultService.getPage("19", 10, 20);
+    await ResultService.getDescriptor(resultReferenceFixture("17"));
+    await ResultService.getValue(resultReferenceFixture("18"));
+    await ResultService.getPage(resultReferenceFixture("19"), 10, 20);
     await ResultService.getPinResult("events/contract.yssbi-event", output);
 
     expect(vi.mocked(invoke).mock.calls).toEqual([
-      ["get_result_descriptor", { resultId: "17" }],
-      ["get_result_value", { resultId: "18" }],
-      ["get_result_page", { resultId: "19", offset: 10, limit: 20 }],
+      ["get_result_descriptor", { reference: resultReferenceFixture("17") }],
+      ["get_result_value", { reference: resultReferenceFixture("18") }],
+      ["get_result_page", { reference: resultReferenceFixture("19"), offset: 10, limit: 20 }],
       ["get_pin_result", { graphPath: "events/contract.yssbi-event", output }],
     ]);
     expect(invoke).not.toHaveBeenCalledWith(expect.stringContaining("release"), expect.anything());
@@ -123,9 +149,14 @@ describe("ResultService", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(readyDescriptor);
 
-    await expect(ResultService.getDescriptor("17")).resolves.toEqual(readyDescriptor);
-    await expect(ResultService.getValue("17")).resolves.toEqual({ kind: "value", value: 4 });
-    await expect(ResultService.getPage("17", 0, 10)).resolves.toBeNull();
+    await expect(ResultService.getDescriptor(resultReferenceFixture("17"))).resolves.toEqual(
+      readyDescriptor,
+    );
+    await expect(ResultService.getValue(resultReferenceFixture("17"))).resolves.toEqual({
+      kind: "value",
+      value: 4,
+    });
+    await expect(ResultService.getPage(resultReferenceFixture("17"), 0, 10)).resolves.toBeNull();
     await expect(
       ResultService.getPinResult("events/contract.yssbi-event", output),
     ).resolves.toEqual(readyDescriptor);

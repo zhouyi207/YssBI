@@ -1,3 +1,5 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
+let nextResultFixtureId = 0;
 import type { SerializedDockview } from "dockview-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -222,11 +224,10 @@ function resultPanel(
     groupId,
     {
       role: "result",
-      resultKey,
-      resultId: `${resultKey}-payload`,
+      reference: resultReferenceFixture(String(++nextResultFixtureId)),
+      leaseId: resultLeaseIdFixture(nextResultFixtureId),
       title: resultKey,
       presentation: { kind: "inspector" },
-      source: null,
     },
     location,
     active,

@@ -237,7 +237,12 @@ pub mod test_support {
         );
         let pin = ReadyPinResult::new(
             output,
-            ResultProvenance::produced(result_id, RunId::from_existing(1), 0),
+            ResultProvenance::produced(
+                crate::identity::ExecutionSessionId::new(uuid::Uuid::nil()),
+                result_id,
+                RunId::from_existing(1),
+                0,
+            ),
         );
         SuccessfulExecutionCandidate::from_scheduler(
             vec![ReadyResult::from_scheduler(

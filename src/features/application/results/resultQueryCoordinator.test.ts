@@ -1,3 +1,5 @@
+import type { ResultReference } from "@/shared/types/domain/result";
+import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { describe, expect, it } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import type { ResultDescriptor, ResultPage, ResultValue } from "@/shared/types/domain/result";
@@ -32,6 +34,7 @@ const output: PortAddressDto = {
 const descriptor = {
   resultId: "17",
 
+  executionSessionId: resultSessionFixture,
   provenance: {
     runId: "1",
     graphPath: "events/contract.yssbi-event",
@@ -61,12 +64,11 @@ function page(resultId: string, offset: number, value: number): ResultPage {
   };
 }
 
-interface TestService {
-  getDescriptor: (resultId: string) => Promise<ResultDescriptor | null>;
-  getValue: (resultId: string) => Promise<ResultValue | null>;
-  getPage: (resultId: string, offset: number, limit: number) => Promise<ResultPage | null>;
-  getPinResult: (graphPath: string, output: PortAddressDto) => Promise<ResultDescriptor | null>;
-}
+type TestService = {
+  -readonly [
+    Key in keyof ResultQueryDependencies["service"]
+  ]: ResultQueryDependencies["service"][Key];
+};
 
 function setup(): {
   readonly dependencies: ResultQueryDependencies;
@@ -100,6 +102,7 @@ function setup(): {
     pinResults,
     failures,
     releasePayload: () => undefined,
+    publishAnalysis: () => undefined,
     publishDescriptor: (_projectId, _resultId, value) => {
       if (value) descriptors.push(value as ResultDescriptor);
     },
@@ -117,9 +120,12 @@ function setup(): {
     },
   };
   const service: TestService = {
+    analyze: async () => {
+      throw new Error("unexpected analysis");
+    },
     getDescriptor: async () => descriptor,
     getValue: async () => ({ kind: "value", value: 4 }) as ResultValue,
-    getPage: async (_resultId: string, offset: number) => page("17", offset, offset),
+    getPage: async (_reference: ResultReference, offset: number) => page("17", offset, offset),
     getPinResult: async () => descriptor,
   };
   const dependencies: ResultQueryDependencies = {
@@ -137,6 +143,47 @@ function setup(): {
 }
 
 describe("ResultQueryCoordinator", () => {
+  it("isolates report tables and discards analysis results after their result is invalidated", async () => {
+    const fixture = setup();
+    const reference = {
+      executionSessionId: "00000000-0000-0000-0000-000000000001",
+      resultId: "17",
+    };
+    const coefficients = deferred<ResultPage | null>();
+    const observations = deferred<ResultPage | null>();
+    fixture.service.getPage = (_id, _offset, _limit, part) =>
+      part === "coefficients" ? coefficients.promise : observations.promise;
+    const first = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 0,
+      limit: 2,
+      part: "coefficients",
+    });
+    const second = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 0,
+      limit: 2,
+      part: "observations",
+    });
+    observations.resolve(page("17", 0, 3));
+    coefficients.resolve(page("17", 0, 7));
+    expect(await first).toEqual({ status: "published" });
+    expect(await second).toEqual({ status: "published" });
+    expect(fixture.publication.pages).toHaveLength(2);
+
+    const analysis = deferred<Awaited<ReturnType<TestService["analyze"]>>>();
+    fixture.service.analyze = () => analysis.promise;
+    const pending = fixture.coordinator.loadAnalysis({
+      reference,
+      analysis: { kind: "acfPacf", maxLag: 1 },
+    });
+    fixture.coordinator.resetResult(resultReferenceFixture("17"));
+    analysis.resolve({ kind: "acfPacf", value: { acf: [1, 0.5], pacf: [0.5], n: 53940 } });
+    expect(await pending).toEqual({ status: "stale" });
+  });
+
   it("drops stale success and failure after project replacement", async () => {
     const fixture = setup();
     const staleSuccess = deferred<ResultPage | null>();
@@ -144,8 +191,16 @@ describe("ResultQueryCoordinator", () => {
     fixture.service.getPage = () => staleSuccess.promise;
     fixture.service.getValue = () => staleFailure.promise;
 
-    const success = fixture.coordinator.loadPage({ resultId: "17", offset: 0, limit: 2 });
-    const failure = fixture.coordinator.loadValue({ resultId: "17" });
+    const success = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 0,
+      limit: 2,
+    });
+    const failure = fixture.coordinator.loadValue({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+    });
     fixture.currentProject.id = "project-b";
     fixture.coordinator.resetProject();
 
@@ -170,9 +225,24 @@ describe("ResultQueryCoordinator", () => {
     fixture.service.getPage = async (_resultId, offset) =>
       requests.get(offset)?.shift()?.promise ?? null;
 
-    const first = fixture.coordinator.loadPage({ resultId: "17", offset: 0, limit: 2 });
-    const second = fixture.coordinator.loadPage({ resultId: "17", offset: 0, limit: 2 });
-    const independent = fixture.coordinator.loadPage({ resultId: "17", offset: 2, limit: 2 });
+    const first = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 0,
+      limit: 2,
+    });
+    const second = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 0,
+      limit: 2,
+    });
+    const independent = fixture.coordinator.loadPage({
+      executionSessionId: resultSessionFixture,
+      resultId: "17",
+      offset: 2,
+      limit: 2,
+    });
 
     newPage.resolve(page("17", 0, 2));
     otherPage.resolve(page("17", 2, 3));
@@ -186,10 +256,17 @@ describe("ResultQueryCoordinator", () => {
 
   it("publishes every typed query through the matching publication and safely maps failures", async () => {
     const fixture = setup();
-    await expect(fixture.coordinator.loadDescriptor({ resultId: "17" })).resolves.toEqual({
+    await expect(
+      fixture.coordinator.loadDescriptor({
+        executionSessionId: resultSessionFixture,
+        resultId: "17",
+      }),
+    ).resolves.toEqual({
       status: "published",
     });
-    await expect(fixture.coordinator.loadValue({ resultId: "17" })).resolves.toEqual({
+    await expect(
+      fixture.coordinator.loadValue({ executionSessionId: resultSessionFixture, resultId: "17" }),
+    ).resolves.toEqual({
       status: "published",
     });
     await expect(
@@ -202,7 +279,9 @@ describe("ResultQueryCoordinator", () => {
     fixture.service.getValue = async () => {
       throw new Error("secret transport text");
     };
-    await expect(fixture.coordinator.loadValue({ resultId: "17" })).resolves.toEqual({
+    await expect(
+      fixture.coordinator.loadValue({ executionSessionId: resultSessionFixture, resultId: "17" }),
+    ).resolves.toEqual({
       status: "failed",
     });
     expect(fixture.publication.descriptors).toHaveLength(1);

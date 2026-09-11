@@ -21,6 +21,7 @@ import type {
   WorkbenchPanelCommitToken,
 } from "./workbenchTypes";
 import { WorkbenchLayoutError } from "./workbenchTypes";
+import { resultReferenceKey } from "@/shared/types/domain/result";
 
 import {
   type Disposable,
@@ -465,31 +466,34 @@ export function createWorkbenchDockviewRuntime(): {
       ),
     upsertResult: (request) =>
       enqueue((boundApi) =>
-        throwAsLayoutError("panel_open_failed", { resultKey: request.resultKey }, () => {
-          const metadata = requireValidMetadata({ role: "result", ...request });
-          const existing = boundApi.panels.find((candidate) => {
-            const candidateMetadata = readMetadata(candidate);
-            return (
-              candidateMetadata?.role === "result" &&
-              candidateMetadata.resultKey === request.resultKey
-            );
-          });
-          if (existing) {
-            updatePanelMetadata(existing, metadata);
-            if (existing.title !== request.title) existing.api.setTitle(request.title);
-            revealPanel(boundApi, existing);
-            const info = panelInfo(existing);
-            if (info) return info;
-          }
-          const position = WORKBENCH_HOME_EDGE.result;
-          const group = ensureHomeEdgeLive(boundApi, position);
-          const panel = createPanelLive(boundApi, metadata, request.title, group.id);
-          revealPanel(boundApi, panel);
-          rebindEdgeListeners();
-          const info = panelInfo(panel);
-          if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
-          return info;
-        }),
+        throwAsLayoutError(
+          "panel_open_failed",
+          { reference: resultReferenceKey(request.reference) },
+          () => {
+            const metadata = requireValidMetadata({ role: "result", ...request });
+            const existing = boundApi.panels.find((candidate) => {
+              const candidateMetadata = readMetadata(candidate);
+              return (
+                candidateMetadata?.role === "result" &&
+                resultReferenceKey(candidateMetadata.reference) ===
+                  resultReferenceKey(request.reference)
+              );
+            });
+            if (existing) {
+              revealPanel(boundApi, existing);
+              const info = panelInfo(existing);
+              if (info) return info;
+            }
+            const position = WORKBENCH_HOME_EDGE.result;
+            const group = ensureHomeEdgeLive(boundApi, position);
+            const panel = createPanelLive(boundApi, metadata, request.title, group.id);
+            revealPanel(boundApi, panel);
+            rebindEdgeListeners();
+            const info = panelInfo(panel);
+            if (!info) throw new WorkbenchLayoutError("invalid_panel_metadata");
+            return info;
+          },
+        ),
       ),
     activate: (panelInstanceId) =>
       enqueue((boundApi) =>

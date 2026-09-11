@@ -1,4 +1,9 @@
 // @vitest-environment happy-dom
+import {
+  resultSessionFixture,
+  resultReferenceFixture,
+  resultLeaseIdFixture,
+} from "@/tests/helpers/resultFixture";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,13 +12,17 @@ import type { PresentationWindowState } from "./loadPresentationWindow";
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   resetResult: vi.fn(),
-  resetQueries: vi.fn(),
-  invalidate: null as ((ids: readonly string[] | null) => void) | null,
-  actions: { setTitle: vi.fn(), show: vi.fn() },
+  endSession: null as ((session: string | null) => void) | null,
+  claim: vi.fn(),
+  actions: { setTitle: vi.fn(), show: vi.fn(), close: vi.fn() },
 }));
 vi.mock("./loadPresentationWindow", () => ({ loadPresentationWindow: mocks.load }));
 vi.mock("./parsePresentationWindowQuery", () => ({
-  parsePresentationWindowQuery: () => ({ resultId: "17", plotType: "scatter" }),
+  parsePresentationWindowQuery: () => ({
+    reference: resultReferenceFixture("17"),
+    leaseId: resultLeaseIdFixture(100),
+    plotType: "scatter",
+  }),
 }));
 vi.mock("@/features/application/window/usePersistedWindow", () => ({
   usePersistedWindow: () => {},
@@ -21,18 +30,18 @@ vi.mock("@/features/application/window/usePersistedWindow", () => ({
 vi.mock("@/features/application/window/useCurrentWindowActions", () => ({
   useCurrentWindowActions: () => mocks.actions,
 }));
-vi.mock("@/services/result/resultInvalidationChannel", () => ({
-  subscribeResultInvalidation: (listener: (ids: readonly string[] | null) => void) => {
-    mocks.invalidate = listener;
+vi.mock("@/services/result/resultSessionChannel", () => ({
+  subscribeResultSessionEnd: (listener: (session: string | null) => void) => {
+    mocks.endSession = listener;
     return () => {
-      mocks.invalidate = null;
+      mocks.endSession = null;
     };
   },
 }));
 vi.mock("@/features/application/results/runtime", () => ({
   resetResultQuery: mocks.resetResult,
-  resultQueryCoordinator: { resetProject: mocks.resetQueries },
 }));
+vi.mock("@/services/result/resultService", () => ({ ResultService: { claim: mocks.claim } }));
 import { usePresentationWindow } from "./usePresentationWindow";
 
 const ready: PresentationWindowState = {
@@ -40,6 +49,7 @@ const ready: PresentationWindowState = {
   descriptor: {
     resultId: "17",
 
+    executionSessionId: resultSessionFixture,
     provenance: {
       runId: "1",
       graphPath: "events/Main.yssbi-event",
@@ -67,6 +77,11 @@ beforeEach(() => {
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  if (ready.status === "ready")
+    mocks.claim.mockResolvedValue({
+      leaseId: resultLeaseIdFixture(100),
+      descriptor: ready.descriptor,
+    });
   container = document.createElement("div");
   root = createRoot(container);
 });
@@ -79,18 +94,18 @@ afterEach(() => {
 });
 
 describe("detached result lifetime", () => {
-  it("drops displayed payload and query caches when its output is invalidated", async () => {
+  it("closes a held window only when its owning execution session ends", async () => {
     mocks.load.mockResolvedValueOnce(ready);
     await act(async () => {
       root.render(<WindowProbe />);
     });
     expect(state.status).toBe("ready");
-    act(() => mocks.invalidate?.(["18"]));
+    act(() => mocks.endSession?.("00000000-0000-0000-0000-000000000002"));
     expect(state.status).toBe("ready");
-    act(() => mocks.invalidate?.(["17"]));
+    act(() => mocks.endSession?.(resultSessionFixture));
     expect(state).toEqual({ status: "not_found" });
-    expect(mocks.resetResult).toHaveBeenCalledWith("17");
-    expect(mocks.resetQueries).toHaveBeenCalledOnce();
+    expect(mocks.resetResult).toHaveBeenCalledWith(resultReferenceFixture("17"));
+    expect(mocks.actions.close).toHaveBeenCalledOnce();
   });
 
   it("ignores a load that finishes after the project replaces its results", async () => {
@@ -104,7 +119,7 @@ describe("detached result lifetime", () => {
     await act(async () => {
       root.render(<WindowProbe />);
     });
-    act(() => mocks.invalidate?.(null));
+    act(() => mocks.endSession?.(null));
     await act(async () => {
       settle(ready);
     });

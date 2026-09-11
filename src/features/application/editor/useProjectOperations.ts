@@ -306,7 +306,13 @@ export function useProjectOperations() {
             if (!isCurrentProjectIdentity(project)) return;
             observeGraphRunEvent(graphPath, event, runState);
             if (event.kind.type === "resultInspectionRequested") {
-              void openInspectableResult(resultRef(event.kind.resultId), t);
+              void openInspectableResult(
+                resultRef({
+                  resultId: event.kind.resultId,
+                  executionSessionId: event.run.executionSessionId,
+                }),
+                t,
+              );
             }
           },
           onOutput: (event) => {

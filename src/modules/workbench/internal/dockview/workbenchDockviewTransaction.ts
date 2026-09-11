@@ -8,6 +8,7 @@ import type {
 } from "dockview-react";
 
 import { canMoveWorkbenchPanel, canRemoveWorkbenchPanel } from "./workbenchActivityGroup";
+import { resultReferenceKey } from "@/shared/types/domain/result";
 import { WORKBENCH_HOME_EDGE } from "./workbenchDockviewDefaults";
 import {
   componentForWorkbenchMetadata,
@@ -283,8 +284,9 @@ export class PendingWorkbenchTransaction {
         viewIds.add(panel.metadata.viewId);
       }
       if (panel.metadata.role === "result") {
-        if (resultKeys.has(panel.metadata.resultKey)) this.fail("duplicate_result");
-        resultKeys.add(panel.metadata.resultKey);
+        const key = resultReferenceKey(panel.metadata.reference);
+        if (resultKeys.has(key)) this.fail("duplicate_result");
+        resultKeys.add(key);
       }
     }
 

@@ -172,7 +172,25 @@ Harness event types use snake_case while envelope and payload fields use camelCa
 
 Execution terminal failures carry `RunErrored { code, phase, source }`, where source is null or a safe graph/node/port identity. Numeric failures retain their specific cause. When a rejected execution command has already delivered a terminal event, its details include `terminalRunEventSent: true`; the frontend drains the channel before finalizing the command failure so the Output panel retains the typed cause. No error prose or input values cross this wire.
 
-`get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null. Descriptor/value/page commands resolve only current ResultIds. Descriptors represent available results and contain no result-state discriminator or redundant activation ID. There is no history query or result-retention setting. Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` carries the exact output addresses invalidated at admission; completion prompts clients to query current results again. Failed or cancelled runs never expose an older successful payload as current.
+`get_pin_result(graphPath, output)` returns the current `ResultDescriptorDto` or null.
+Descriptor/value/page commands take `{ executionSessionId, resultId }` references and read either current or leased results.
+Descriptors carry this identity and immutable provenance; reading a retained descriptor does not change the current output index.
+Run event identity uses `executionSessionId`, `graphPath`, and `runId`. `RunStarted { outputs }` invalidates current output bindings;
+it does not revoke report leases. Failed or cancelled runs never expose an older successful payload as current.
+
+`retain_result(reference, lease, handoff?)` atomically retains a snapshot and returns its descriptor.
+`release_result_lease(lease)` is idempotent and validates the caller window; `reconcile_result_leases(leases)` releases
+unlisted ordinary leases owned by that window. The client supplies a UUID token so an interrupted acquire can be cleaned up.
+An optional handoff names the intended detached window; only that window may `claim_result_lease(lease)`.
+Backend window destruction releases owned and pending handoff leases. Session replacement revokes all leases in that session.
+These ownership commands delegate to Application/Execution; they never retain payloads in a second transport-side registry.
+
+OLS report values contain an overview and typed table references, with no observation arrays or coefficient covariance matrix.
+`get_result_table_page(reference, part, offset, limit)` accepts an execution-session-bound result reference and a fixed table part.
+`analyze_result(reference, analysis)` accepts a tagged residual-plot, ACF/PACF, serial-test or hypothesis request;
+clients supply query parameters only. Both commands dispatch Application work on a blocking worker and preserve its
+session/result revalidation. Plot responses explicitly identify systematic sampling and population counts.
+The result reference wire and report projections are owned by `schema/result.rs`; the computational model remains Rust-owned.
 
 Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; committed revisions, file transactions and failure recovery stay with the Project owner. Automation graph edit receipts carry the committed revisions and operation identity, with no project undo capability.
 

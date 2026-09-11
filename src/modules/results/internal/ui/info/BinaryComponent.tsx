@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import { regressionHypothesisSource } from "@/features/application/stats/useHypothesisTestBlock";
 import { useRegressionReport } from "@/features/application/stats/useRegressionReport";
 import {
   ReportLayout,
@@ -63,7 +64,7 @@ export const BinaryComponent: FC<{ data: BinaryResultData }> = ({ data }) => {
       />
 
       <MarginsBlock data={data} />
-      <HypothesisTestBlock data={data} />
+      <HypothesisTestBlock source={regressionHypothesisSource(data)} />
 
       {diag.fitted_values && diag.residuals && diag.fitted_values.length > 0 ? (
         <ReportSection title="Residuals vs Fitted (Probabilities)" icon="anova">

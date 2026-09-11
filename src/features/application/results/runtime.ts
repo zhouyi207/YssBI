@@ -1,4 +1,5 @@
-import { publishResultInvalidation } from "@/services/result/resultInvalidationChannel";
+import { publishResultSessionEnd } from "@/services/result/resultSessionChannel";
+import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution";
 import { graphOutputKey } from "@/features/domain/editorProjection";
@@ -10,8 +11,13 @@ import { toErrorReference } from "@/features/application/errorReference";
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { ErrorReference } from "@/features/application/errorReference";
 import type { ResultDescriptor, ResultPage, ResultValue } from "./types";
+import type { ResultAnalysis } from "@/shared/types/domain/resultReport";
 import {
   createResultQueryCoordinator,
+  resultPageKey,
+  resultAnalysisKey,
+  resultAnalysisParameters,
+  type ResultAnalysisQuery,
   type ResultPageRequest,
   type ResultPinRequest,
   type ResultQueryReadCapability,
@@ -24,6 +30,10 @@ interface ResultProjectionState {
   readonly descriptors: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly values: Record<string, DeepReadonly<ResultValue | null>>;
   readonly pages: Record<string, DeepReadonly<ResultPage | null>>;
+  readonly analyses: Record<
+    string,
+    { readonly parameters: string; readonly value: DeepReadonly<ResultAnalysis | null> }
+  >;
   readonly pinResults: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly pinStatuses: Record<string, "running" | "unavailable" | "failed" | "cancelled">;
   readonly failures: Record<string, DeepReadonly<ErrorReference>>;
@@ -34,6 +44,7 @@ const emptyState: ResultProjectionState = {
   descriptors: {},
   values: {},
   pages: {},
+  analyses: {},
   pinResults: {},
   failures: {},
   pinStatuses: {},
@@ -41,8 +52,8 @@ const emptyState: ResultProjectionState = {
 
 const resultProjection = createBoundApplicationStore<ResultProjectionState>(() => emptyState);
 
-export function useResultDescriptors() {
-  return resultProjection((state) => state.descriptors);
+export function useCurrentResultDescriptors() {
+  return resultProjection((state) => state.pinResults);
 }
 
 function pinResultKey(request: ResultPinRequest): string {
@@ -53,61 +64,75 @@ function scopeKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
     case "descriptor":
     case "value":
-      return `${scope.kind}:${scope.resultId}`;
+      return `${scope.kind}:${resultReferenceKey(scope)}`;
     case "page":
-      return `page:${scope.resultId}`;
+      return `page:${resultPageKey(scope)}`;
+    case "analysis":
+      return `analysis:${resultAnalysisKey(scope)}`;
     case "pinResult":
       return `pinResult:${pinResultKey(scope)}`;
   }
 }
 
 const resultQueryPublication = {
-  releasePayload(resultId: string) {
+  releasePayload(reference: ResultReference) {
+    const key = resultReferenceKey(reference);
     resultProjection.setState((state) => {
-      const values = { ...state.values };
-      const pages = { ...state.pages };
-      const failures = { ...state.failures };
-      delete values[resultId];
-      delete pages[resultId];
-      delete failures[`value:${resultId}`];
-      delete failures[`page:${resultId}`];
-      return { ...state, values, pages, failures };
+      const descriptors = { ...state.descriptors };
+      if (
+        !Object.values(state.pinResults).some((value) => value && resultReferenceKey(value) === key)
+      )
+        delete descriptors[key];
+      return {
+        ...state,
+        descriptors,
+        values: Object.fromEntries(Object.entries(state.values).filter(([id]) => id !== key)),
+        pages: Object.fromEntries(
+          Object.entries(state.pages).filter(([id]) => !id.startsWith(`${key}:`)),
+        ),
+        analyses: Object.fromEntries(
+          Object.entries(state.analyses).filter(([id]) => !id.startsWith(`${key}:`)),
+        ),
+        failures: Object.fromEntries(
+          Object.entries(state.failures).filter(
+            ([id]) =>
+              id !== `value:${key}` &&
+              !id.startsWith(`page:${key}:`) &&
+              !id.startsWith(`analysis:${key}:`),
+          ),
+        ),
+      };
     });
   },
   publishDescriptor(
     projectInstanceId: string | null,
-    resultId: string,
+    reference: ResultReference,
     descriptor: DeepReadonly<ResultDescriptor | null>,
   ) {
     if (!descriptor) {
-      resetResultQuery(resultId);
+      resetResultQuery(reference);
       return;
     }
-    const output = descriptor.provenance.output;
-    if (output) {
-      const request = { graphPath: output.graphPath, output: output.port };
-      const pending = outputRuns.get(pinResultKey(request));
-      if (pending && BigInt(pending.runId) > BigInt(descriptor.provenance.runId)) return;
-      publishCurrentResult(projectInstanceId, request, descriptor);
-    } else {
-      resultProjection.setState((state) => ({
-        ...state,
-        projectInstanceId,
-        descriptors: { ...state.descriptors, [resultId]: descriptor },
-      }));
-    }
+    // Reading a retained snapshot must never replace the pin's current result.
+    resultProjection.setState((state) => ({
+      ...state,
+      projectInstanceId,
+      descriptors: { ...state.descriptors, [resultReferenceKey(reference)]: descriptor },
+    }));
   },
   publishValue(
     projectInstanceId: string | null,
-    resultId: string,
+    reference: ResultReference,
     value: DeepReadonly<ResultValue | null>,
   ) {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
-      values: { ...state.values, [resultId]: value },
+      values: { ...state.values, [resultReferenceKey(reference)]: value },
       failures: Object.fromEntries(
-        Object.entries(state.failures).filter(([key]) => key !== `value:${resultId}`),
+        Object.entries(state.failures).filter(
+          ([key]) => key !== `value:${resultReferenceKey(reference)}`,
+        ),
       ),
     }));
   },
@@ -119,9 +144,28 @@ const resultQueryPublication = {
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
-      pages: { ...state.pages, [request.resultId]: page },
+      pages: { ...state.pages, [resultPageKey(request)]: page },
       failures: Object.fromEntries(
-        Object.entries(state.failures).filter(([key]) => key !== `page:${request.resultId}`),
+        Object.entries(state.failures).filter(([key]) => key !== `page:${resultPageKey(request)}`),
+      ),
+    }));
+  },
+  publishAnalysis(
+    projectInstanceId: string | null,
+    request: ResultAnalysisQuery,
+    value: DeepReadonly<ResultAnalysis | null>,
+  ) {
+    resultProjection.setState((state) => ({
+      ...state,
+      projectInstanceId,
+      analyses: {
+        ...state.analyses,
+        [resultAnalysisKey(request)]: { parameters: resultAnalysisParameters(request), value },
+      },
+      failures: Object.fromEntries(
+        Object.entries(state.failures).filter(
+          ([key]) => key !== `analysis:${resultAnalysisKey(request)}`,
+        ),
       ),
     }));
   },
@@ -146,11 +190,17 @@ export const resultQueryRead: ResultQueryReadCapability = {
     const unsubscribe = resultProjection.subscribe(() => listener());
     return unsubscribe;
   },
-  getDescriptor: (resultId) => resultProjection.getState().descriptors[resultId] ?? null,
-  getValue: (resultId) => resultProjection.getState().values[resultId] ?? null,
+  getDescriptor: (reference) =>
+    resultProjection.getState().descriptors[resultReferenceKey(reference)] ?? null,
+  getValue: (reference) =>
+    resultProjection.getState().values[resultReferenceKey(reference)] ?? null,
   getPage: (request) => {
-    const page = resultProjection.getState().pages[request.resultId];
+    const page = resultProjection.getState().pages[resultPageKey(request)];
     return page?.offset === request.offset && page.requestedLimit === request.limit ? page : null;
+  },
+  getAnalysis: (request) => {
+    const entry = resultProjection.getState().analyses[resultAnalysisKey(request)];
+    return entry?.parameters === resultAnalysisParameters(request) ? entry.value : null;
   },
   getPinResult: (request) => resultProjection.getState().pinResults[pinResultKey(request)] ?? null,
   getFailure: (scope) => resultProjection.getState().failures[scopeKey(scope)] ?? null,
@@ -159,9 +209,11 @@ export const resultQueryRead: ResultQueryReadCapability = {
 export const resultQueryCoordinator = createResultQueryCoordinator({
   readCurrentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
   service: {
-    getDescriptor: (resultId) => ResultService.getDescriptor(resultId),
-    getValue: (resultId) => ResultService.getValue(resultId),
-    getPage: (resultId, offset, limit) => ResultService.getPage(resultId, offset, limit),
+    getDescriptor: (reference) => ResultService.getDescriptor(reference),
+    getValue: (reference) => ResultService.getValue(reference),
+    getPage: (reference, offset, limit, table) =>
+      ResultService.getPage(reference, offset, limit, table),
+    analyze: (reference, analysis) => ResultService.analyze(reference, analysis),
     getPinResult: (graphPath, output) => ResultService.getPinResult(graphPath, output),
   },
   publication: resultQueryPublication,
@@ -169,39 +221,42 @@ export const resultQueryCoordinator = createResultQueryCoordinator({
 });
 
 export function resetResultQueryProject(): void {
-  publishResultInvalidation(null);
+  publishResultSessionEnd(resultExecutionSessionId);
   resultQueryCoordinator.resetProject();
   outputRuns.clear();
   resultExecutionSessionId = null;
   resultProjection.setState(emptyState);
 }
 
-export function resetResultQuery(resultId: string): void {
-  resultQueryCoordinator.resetResult(resultId);
-  resultProjection.setState((state) => {
-    const descriptors = { ...state.descriptors };
-    const values = { ...state.values };
-    const pages = Object.fromEntries(
-      Object.entries(state.pages).filter(([key]) => key !== resultId),
-    );
-    const failures = Object.fromEntries(
+export function resetResultQuery(reference: ResultReference): void {
+  const key = resultReferenceKey(reference);
+  resultQueryCoordinator.resetResult(reference);
+  resultProjection.setState((state) => ({
+    ...state,
+    descriptors: Object.fromEntries(Object.entries(state.descriptors).filter(([id]) => id !== key)),
+    values: Object.fromEntries(Object.entries(state.values).filter(([id]) => id !== key)),
+    pages: Object.fromEntries(
+      Object.entries(state.pages).filter(([id]) => !id.startsWith(`${key}:`)),
+    ),
+    analyses: Object.fromEntries(
+      Object.entries(state.analyses).filter(([id]) => !id.startsWith(`${key}:`)),
+    ),
+    failures: Object.fromEntries(
       Object.entries(state.failures).filter(
-        ([key]) =>
-          key !== `descriptor:${resultId}` &&
-          key !== `value:${resultId}` &&
-          key !== `page:${resultId}`,
+        ([id]) =>
+          id !== `descriptor:${key}` &&
+          id !== `value:${key}` &&
+          !id.startsWith(`page:${key}:`) &&
+          !id.startsWith(`analysis:${key}:`),
       ),
-    );
-    delete descriptors[resultId];
-    delete values[resultId];
-    const pinResults = Object.fromEntries(
-      Object.entries(state.pinResults).map(([key, result]) => [
-        key,
-        result?.resultId === resultId ? null : result,
+    ),
+    pinResults: Object.fromEntries(
+      Object.entries(state.pinResults).map(([id, value]) => [
+        id,
+        value && resultReferenceKey(value) === key ? null : value,
       ]),
-    );
-    return { ...state, descriptors, values, pages, failures, pinResults };
-  });
+    ),
+  }));
 }
 
 let resultExecutionSessionId: string | null = null;
@@ -216,7 +271,16 @@ function publishCurrentResult(
 ): void {
   const key = pinResultKey(request);
   const previous = resultProjection.getState().pinResults[key];
-  if (previous && previous.resultId !== result?.resultId) resetResultQuery(previous.resultId);
+  if (result) {
+    const pending = outputRuns.get(key);
+    if (pending && BigInt(pending.runId) > BigInt(result.provenance.runId)) return;
+  }
+  if (
+    previous &&
+    (!result || resultReferenceKey(previous) !== resultReferenceKey(result)) &&
+    !resultQueryCoordinator.isPayloadRetained(previous)
+  )
+    resetResultQuery(previous);
   resultProjection.setState((state) => ({
     ...state,
     projectInstanceId,
@@ -225,20 +289,17 @@ function publishCurrentResult(
       : Object.fromEntries(
           Object.entries(state.pinResults).filter(([existing]) => existing !== key),
         ),
-    descriptors: result ? { ...state.descriptors, [result.resultId]: result } : state.descriptors,
+    descriptors: result
+      ? { ...state.descriptors, [resultReferenceKey(result)]: result }
+      : state.descriptors,
   }));
 }
 
 function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
-  resultQueryCoordinator.resetProject();
   const projectInstanceId = captureProjectLifecycleState().projectInstanceId;
   if (!projectInstanceId) return;
-  const previousIds = requests.flatMap((request) => {
-    const result = resultProjection.getState().pinResults[pinResultKey(request)];
-    return result ? [result.resultId] : [];
-  });
-  if (previousIds.length > 0) publishResultInvalidation(previousIds);
   for (const request of requests) {
+    resultQueryCoordinator.resetPinResult(request);
     publishCurrentResult(projectInstanceId, request, null);
     const execution = useExecutionStore.getState();
     const preview = execution.graphs[request.graphPath]?.pinPreviews.get(
@@ -257,7 +318,7 @@ export function invalidateGraphResults(graphPath: string): void {
       outputRuns.delete(key);
     }
   }
-  for (const result of Object.values(resultProjection.getState().descriptors)) {
+  for (const result of Object.values(resultProjection.getState().pinResults)) {
     const output = result?.provenance.output;
     if (output?.graphPath === graphPath) {
       const request = { graphPath, output: output.port };

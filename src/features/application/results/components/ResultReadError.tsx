@@ -1,8 +1,15 @@
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import type { ErrorReference } from "@/shared/types/domain/diagnostics";
 
-export function ResultReadError({ error }: { error: ErrorReference }) {
+export function ResultReadError({
+  error,
+  onRetry,
+}: {
+  error: ErrorReference;
+  onRetry?: () => void;
+}) {
   const { t } = useTranslation();
 
   return (
@@ -18,6 +25,11 @@ export function ResultReadError({ error }: { error: ErrorReference }) {
           </p>
         ) : null}
       </AlertDescription>
+      {onRetry && (
+        <Button className="mt-2" size="sm" variant="outline" onClick={onRetry}>
+          {t("common.retry")}
+        </Button>
+      )}
     </Alert>
   );
 }

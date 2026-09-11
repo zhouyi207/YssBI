@@ -1330,7 +1330,7 @@ impl ExecutionRuntimeState {
             result_ids_by_output.insert(scheduled.output.clone(), result_id);
             let pin = ReadyPinResult::new(
                 scheduled.output,
-                ResultProvenance::produced(result_id, run_id, created_at_ms),
+                ResultProvenance::produced(self.session_id, result_id, run_id, created_at_ms),
             );
             results.push(ReadyResult::from_scheduler(
                 result_id,
@@ -1434,6 +1434,44 @@ impl ExecutionRuntimeState {
 
     pub fn invalidate_graph_results(&self, graph: &str) {
         self.results.invalidate_graph(graph);
+    }
+
+    pub fn retain_result(
+        &self,
+        result_id: ResultId,
+        lease_id: uuid::Uuid,
+        owner: &str,
+        handoff: Option<&str>,
+    ) -> Result<StoredResultSnapshot, crate::result::ResultRetentionError> {
+        self.results.retain(result_id, lease_id, owner, handoff)
+    }
+
+    pub fn claim_result_lease(
+        &self,
+        lease_id: uuid::Uuid,
+        owner: &str,
+    ) -> Result<StoredResultSnapshot, crate::result::ResultRetentionError> {
+        self.results.claim(lease_id, owner)
+    }
+
+    pub fn release_result_lease(
+        &self,
+        lease_id: uuid::Uuid,
+        owner: &str,
+    ) -> Result<(), crate::result::ResultRetentionError> {
+        self.results.release(lease_id, owner)
+    }
+
+    pub fn reconcile_result_leases(
+        &self,
+        owner: &str,
+        active: &std::collections::BTreeSet<uuid::Uuid>,
+    ) {
+        self.results.reconcile(owner, active);
+    }
+
+    pub fn close_result_owner(&self, owner: &str) {
+        self.results.close_owner(owner);
     }
 
     pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) -> bool {

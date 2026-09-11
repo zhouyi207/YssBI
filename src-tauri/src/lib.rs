@@ -244,6 +244,14 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && let Some(application) =
+                    window.try_state::<yss_application::execution::ApplicationState>()
+            {
+                application.close_result_owner(window.label());
+            }
+        })
         .invoke_handler(yss_api::invoke_handler())
         .run(tauri::generate_context!())
     {

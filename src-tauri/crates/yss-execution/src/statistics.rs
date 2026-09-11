@@ -106,10 +106,7 @@ pub(crate) fn execute(
                     numeric_list(result.residuals)?,
                 ],
                 _ => {
-                    let report = json_value(
-                        serde_json::to_value(result.report)
-                            .map_err(|_| KernelExecutionError::Failed)?,
-                    )?;
+                    let report = RuntimeValue::Ols(std::sync::Arc::new(result));
                     vec![report.clone(), report]
                 }
             }
@@ -188,33 +185,4 @@ fn numeric_list(values: Vec<f64>) -> Result<RuntimeValue, KernelExecutionError> 
     Ok(RuntimeValue::List(
         values.into_iter().map(RuntimeValue::Decimal).collect(),
     ))
-}
-
-fn json_value(value: serde_json::Value) -> Result<RuntimeValue, KernelExecutionError> {
-    Ok(match value {
-        serde_json::Value::Null => RuntimeValue::Null,
-        serde_json::Value::Bool(value) => RuntimeValue::Bool(value),
-        serde_json::Value::String(value) => RuntimeValue::String(value.into()),
-        serde_json::Value::Number(value) => match value.as_i64() {
-            Some(value) => RuntimeValue::Integer(value),
-            None => RuntimeValue::Decimal(
-                value
-                    .as_f64()
-                    .filter(|value| value.is_finite())
-                    .ok_or(KernelExecutionError::NonFiniteResult)?,
-            ),
-        },
-        serde_json::Value::Array(values) => RuntimeValue::List(
-            values
-                .into_iter()
-                .map(json_value)
-                .collect::<Result<_, _>>()?,
-        ),
-        serde_json::Value::Object(values) => RuntimeValue::Record(
-            values
-                .into_iter()
-                .map(|(key, value)| Ok((key.into(), json_value(value)?)))
-                .collect::<Result<_, KernelExecutionError>>()?,
-        ),
-    })
 }

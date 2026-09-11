@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::identity::ExecutionSessionId;
 use crate::plan::{PlanOutputRef, ResultCategory};
 use crate::value::RuntimeValue;
 
@@ -17,6 +18,24 @@ impl ResultId {
     pub const fn get(self) -> u64 {
         self.0
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResultReference {
+    pub execution_session_id: ExecutionSessionId,
+    pub result_id: ResultId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ResultRetentionError {
+    #[error("result is no longer available")]
+    Unavailable,
+    #[error("lease is already bound to another result or owner")]
+    LeaseConflict,
+    #[error("lease belongs to another owner")]
+    WrongOwner,
+    #[error("lease owner has closed")]
+    OwnerClosed,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,14 +77,21 @@ impl StoredResult {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResultProvenance {
+    execution_session_id: ExecutionSessionId,
     result_id: ResultId,
     run_id: RunId,
     created_at_ms: u64,
 }
 
 impl ResultProvenance {
-    pub(crate) fn produced(result_id: ResultId, run_id: RunId, created_at_ms: u64) -> Self {
+    pub(crate) fn produced(
+        execution_session_id: ExecutionSessionId,
+        result_id: ResultId,
+        run_id: RunId,
+        created_at_ms: u64,
+    ) -> Self {
         Self {
+            execution_session_id,
             result_id,
             run_id,
             created_at_ms,
@@ -74,6 +100,13 @@ impl ResultProvenance {
 
     pub fn result_id(&self) -> ResultId {
         self.result_id
+    }
+
+    pub fn reference(&self) -> ResultReference {
+        ResultReference {
+            execution_session_id: self.execution_session_id,
+            result_id: self.result_id,
+        }
     }
 
     pub fn run_id(&self) -> RunId {

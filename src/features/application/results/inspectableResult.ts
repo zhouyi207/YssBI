@@ -7,6 +7,7 @@ import {
 export { outputPinRef, resultRef };
 export type { InspectableResultRef };
 import type { ResultDescriptor } from "./types";
+import { resultReference } from "@/shared/types/domain/result";
 import type {
   ResultQueryCoordinator,
   ResultQueryReadCapability,
@@ -39,7 +40,7 @@ export async function resolveInspectableResultRef(
 
   const result = dependencies.read.getPinResult(request);
   return {
-    ref: result ? { kind: "result", resultId: result.resultId } : null,
+    ref: result ? { kind: "result", ...resultReference(result) } : null,
     status: result ? "published" : "notReady",
   };
 }
@@ -51,9 +52,7 @@ export async function resolveInspectableResult(
   const resolved = await resolveInspectableResultRef(ref, dependencies);
   if (!resolved.ref) return null;
 
-  const status = await dependencies.coordinator.loadDescriptor({
-    resultId: resolved.ref.resultId,
-  });
+  const status = await dependencies.coordinator.loadDescriptor(resultReference(resolved.ref));
   if (status.status !== "published") return null;
-  return dependencies.read.getDescriptor(resolved.ref.resultId);
+  return dependencies.read.getDescriptor(resolved.ref);
 }

@@ -1,6 +1,6 @@
+import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { describe, expect, it } from "vitest";
 
-import type { GraphOutputRefDto } from "@/shared/types/domain/result";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
@@ -49,47 +49,27 @@ describe("workbench panel metadata", () => {
       expect(componentForWorkbenchMetadata(view)).toBe(component);
     }
 
-    const declaredSource: GraphOutputRefDto = {
-      graphPath: "events/Main.yssbi-event",
-      port: {
-        kind: "declared",
-        nodeId: "11111111-1111-4111-8111-111111111111",
-        portKey: "result",
-      },
-    };
-    const instanceSource: GraphOutputRefDto = {
-      graphPath: "functions/Model.yssbi-function",
-      port: {
-        kind: "instance",
-        nodeId: "22222222-2222-4222-8222-222222222222",
-        templateKey: "columns",
-        instanceId: "33333333-3333-4333-8333-333333333333",
-      },
-    };
     const results: readonly ResultPanelMetadata[] = [
       {
         role: "result",
-        resultKey: "inspector-result",
-        resultId: "41",
+        leaseId: resultLeaseIdFixture(1),
+        reference: resultReferenceFixture("41"),
         title: "Inspector result",
         presentation: { kind: "inspector" },
-        source: null,
       },
       {
         role: "result",
-        resultKey: "plot-result",
-        resultId: "42",
+        leaseId: resultLeaseIdFixture(2),
+        reference: resultReferenceFixture("42"),
         title: "Plot result",
         presentation: { kind: "plot", chart: "scatter" },
-        source: declaredSource,
       },
       {
         role: "result",
-        resultKey: "report-result",
-        resultId: "43",
+        leaseId: resultLeaseIdFixture(3),
+        reference: resultReferenceFixture("43"),
         title: "Report result",
         presentation: { kind: "report", report: "olsSummary" },
-        source: instanceSource,
       },
     ];
     for (const result of results) {
@@ -132,19 +112,17 @@ describe("workbench panel metadata", () => {
       { role: "unknown", viewId: "obsolete-view" },
       {
         role: "result",
-        resultKey: "",
-        resultId: "42",
+        leaseId: "",
+        reference: resultReferenceFixture("42"),
         title: "Result",
         presentation: { kind: "inspector" },
-        source: null,
       },
       {
         role: "result",
-        resultKey: "result-key",
-        resultId: "",
+        leaseId: resultLeaseIdFixture(5),
+        reference: resultReferenceFixture(""),
         title: "Result",
         presentation: { kind: "inspector" },
-        source: null,
       },
     ];
 

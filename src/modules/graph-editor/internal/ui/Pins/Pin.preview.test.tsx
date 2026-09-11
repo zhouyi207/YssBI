@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -202,6 +203,7 @@ describe("Pin preview production path", () => {
     const current = {
       resultId: "17",
 
+      executionSessionId: resultSessionFixture,
       provenance: {
         runId: "1",
         createdAtMs: "1000",

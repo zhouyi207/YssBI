@@ -1,12 +1,16 @@
+import {
+  resultSessionFixture,
+  resultReferenceFixture,
+  resultLeaseIdFixture,
+} from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { openPresentationWindow } from "@/features/application/window";
-import { resultPanelKey } from "@/features/domain/result";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import type { ResultDescriptor } from "@/shared/types/domain/result";
+import type { ResultDescriptor, ResultReference } from "@/shared/types/domain/result";
 
 const mocks = vi.hoisted(() => ({
   upsertResult: vi.fn(),
@@ -15,6 +19,12 @@ const mocks = vi.hoisted(() => ({
   loadDescriptor: vi.fn(),
   getPinResult: vi.fn(),
   getDescriptor: vi.fn(),
+  acquire: vi.fn(),
+  finish: vi.fn(),
+}));
+
+vi.mock("@/features/application/results/resultLeases", () => ({
+  resultLeases: { acquire: mocks.acquire, finish: mocks.finish },
 }));
 
 vi.mock("@/features/application/window", () => ({
@@ -46,6 +56,7 @@ import { openInspectableResult } from "./openInspectableResult";
 const descriptor: ResultDescriptor = {
   resultId: "17",
 
+  executionSessionId: resultSessionFixture,
   provenance: {
     runId: "run-1",
     graphPath: "events/Main.yssbi-event",
@@ -75,7 +86,16 @@ const t = ((key: string) => key) as never;
 beforeEach(() => {
   vi.restoreAllMocks();
   mocks.upsertResult.mockReset();
-  mocks.upsertResult.mockResolvedValue({ panelInstanceId: "result-panel" });
+  mocks.upsertResult.mockImplementation(async (metadata) => ({
+    panelInstanceId: "result-panel",
+    metadata: { role: "result", ...metadata },
+  }));
+  mocks.acquire.mockReset();
+  mocks.acquire.mockImplementation(async (descriptor) => ({
+    descriptor,
+    leaseId: resultLeaseIdFixture(100),
+  }));
+  mocks.finish.mockReset();
   mocks.showWorkbenchLayoutError.mockReset();
   mocks.loadPinResult.mockReset();
   mocks.loadPinResult.mockResolvedValue({ status: "published" });
@@ -84,8 +104,8 @@ beforeEach(() => {
   mocks.getPinResult.mockReset();
   mocks.getPinResult.mockReturnValue(null);
   mocks.getDescriptor.mockReset();
-  mocks.getDescriptor.mockImplementation((resultId: string) =>
-    resultId === plotDescriptor.resultId ? plotDescriptor : descriptor,
+  mocks.getDescriptor.mockImplementation((reference: ResultReference) =>
+    reference.resultId === plotDescriptor.resultId ? plotDescriptor : descriptor,
   );
   clearProjectLifecycle();
   startProjectLifecycle("project-1");
@@ -93,29 +113,37 @@ beforeEach(() => {
 
 describe("openInspectableResult", () => {
   it("atomically upserts the logical Result panel", async () => {
-    await expect(openInspectableResult({ kind: "result", resultId: "17" }, t)).resolves.toBe(true);
+    await expect(
+      openInspectableResult(
+        { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
+        t,
+      ),
+    ).resolves.toBe(true);
 
     expect(mocks.upsertResult).toHaveBeenCalledOnce();
     expect(mocks.upsertResult).toHaveBeenCalledWith({
-      resultKey: resultPanelKey(descriptor),
-      resultId: "17",
+      reference: resultReferenceFixture("17"),
+      leaseId: resultLeaseIdFixture(100),
       title: "Node result",
       presentation: { kind: "inspector" },
-      source: descriptor.provenance.output,
     });
   });
 
   it("routes plot descriptors through the same root Result upsert without opening a window", async () => {
     mocks.getDescriptor.mockReturnValueOnce(plotDescriptor);
 
-    await expect(openInspectableResult({ kind: "result", resultId: "18" }, t)).resolves.toBe(true);
+    await expect(
+      openInspectableResult(
+        { kind: "result", executionSessionId: resultSessionFixture, resultId: "18" },
+        t,
+      ),
+    ).resolves.toBe(true);
 
     expect(mocks.upsertResult).toHaveBeenCalledWith({
-      resultKey: resultPanelKey(plotDescriptor),
-      resultId: "18",
+      reference: resultReferenceFixture("18"),
+      leaseId: resultLeaseIdFixture(100),
       title: "Scatter result",
       presentation: { kind: "plot", chart: "scatter" },
-      source: plotDescriptor.provenance.output,
     });
     expect(openPresentationWindow).not.toHaveBeenCalled();
   });
@@ -167,7 +195,10 @@ describe("openInspectableResult", () => {
       });
     });
 
-    const pending = openInspectableResult({ kind: "result", resultId: "17" }, t);
+    const pending = openInspectableResult(
+      { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
+      t,
+    );
     await descriptorStarted;
     clearProjectLifecycle();
     startProjectLifecycle("project-2");
@@ -182,7 +213,12 @@ describe("openInspectableResult", () => {
     const failure = new Error("private Dockview failure");
     mocks.upsertResult.mockRejectedValueOnce(failure);
 
-    await expect(openInspectableResult({ kind: "result", resultId: "17" }, t)).resolves.toBe(false);
+    await expect(
+      openInspectableResult(
+        { kind: "result", executionSessionId: resultSessionFixture, resultId: "17" },
+        t,
+      ),
+    ).resolves.toBe(false);
 
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledOnce();
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledWith(failure);

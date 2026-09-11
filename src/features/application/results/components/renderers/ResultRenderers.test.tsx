@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -32,6 +33,7 @@ it("makes later DataSeries pages accessible through the existing paging actions"
     valueKind: "dataSeries",
     metadata: null,
     totalCount: 401,
+    executionSessionId: resultSessionFixture,
     provenance: {
       runId: "1",
       graphPath: "events/main.yssbi-event",

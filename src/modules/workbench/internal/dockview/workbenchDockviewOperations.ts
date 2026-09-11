@@ -59,32 +59,12 @@ export function cloneMetadata(metadata: WorkbenchPanelMetadata): WorkbenchPanelM
       : metadata.presentation.kind === "plot"
         ? { kind: "plot" as const, chart: metadata.presentation.chart }
         : { kind: "report" as const, report: metadata.presentation.report };
-  const source =
-    metadata.source === null
-      ? null
-      : {
-          graphPath: metadata.source.graphPath,
-          port:
-            metadata.source.port.kind === "declared"
-              ? {
-                  kind: "declared" as const,
-                  nodeId: metadata.source.port.nodeId,
-                  portKey: metadata.source.port.portKey,
-                }
-              : {
-                  kind: "instance" as const,
-                  nodeId: metadata.source.port.nodeId,
-                  templateKey: metadata.source.port.templateKey,
-                  instanceId: metadata.source.port.instanceId,
-                },
-        };
   return {
     role: "result",
-    resultKey: metadata.resultKey,
-    resultId: metadata.resultId,
+    reference: { ...metadata.reference },
+    leaseId: metadata.leaseId,
     title: metadata.title,
     presentation,
-    source,
   };
 }
 
@@ -387,12 +367,6 @@ export function remappedMetadata(
   if (from === to) return undefined;
   if (metadata.role === "editor" && metadata.resourceRef === from) {
     return requireValidMetadata({ ...metadata, resourceRef: to });
-  }
-  if (metadata.role === "result" && metadata.source?.graphPath === from) {
-    return requireValidMetadata({
-      ...metadata,
-      source: { ...metadata.source, graphPath: to },
-    });
   }
   return undefined;
 }

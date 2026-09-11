@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { regressionHypothesisSource } from "@/features/application/stats/useHypothesisTestBlock";
+import { computeAcfPacf, computeSerialTests } from "@/features/application/stats/statsActions";
 import type { XYPoint } from "@/shared/charts/ChartModel";
 
 import {
@@ -99,7 +101,7 @@ export function RegressionModelCoreSections({
 
       {showOmittedVariables ? <OmittedVariablesAlert diag={diag} /> : null}
 
-      <HypothesisTestBlock data={data} />
+      <HypothesisTestBlock source={regressionHypothesisSource(data)} />
     </>
   );
 }
@@ -303,10 +305,21 @@ export function ResidualDiagnosticsSection({
         </div>
       ) : null}
 
-      <ACFPACFBlock residuals={diag.residuals} residualLabel={acfResidualLabel} />
+      <ACFPACFBlock
+        observationCount={diag.residuals.length}
+        compute={(maxLag) => computeAcfPacf({ residuals: diag.residuals!, max_lag: maxLag })}
+        residualLabel={acfResidualLabel}
+      />
       <SerialTestsBlock
-        residuals={diag.residuals}
-        exog={diag.exog}
+        observationCount={diag.residuals.length}
+        compute={(lags, bgNomiss0) =>
+          computeSerialTests({
+            residuals: diag.residuals!,
+            exog: diag.exog,
+            lags,
+            bg_nomiss0: bgNomiss0,
+          })
+        }
         residualLabel={serialTestsResidualLabel}
       />
 
