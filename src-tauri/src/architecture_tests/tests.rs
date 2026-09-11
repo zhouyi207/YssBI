@@ -7435,6 +7435,55 @@ fn rust_production_architecture_matches_declared_policy() {
     );
 }
 
+#[test]
+fn sample_catalog_composition_capability_does_not_grant_business_queries() {
+    let source = "src-tauri/src/lib.rs";
+    let declaration = "src-tauri/crates/yss-application/src/database/samples.rs";
+    let target = "yss_application::database::samples::SampleCatalog::new";
+    let classification = BTreeMap::from([
+        (source.to_owned(), RustLayer::CompositionRoot),
+        (declaration.to_owned(), RustLayer::Application),
+    ]);
+    let mut dependency = CanonicalDependency {
+        owning_package: "yssbi".to_owned(),
+        source_file: source.to_owned(),
+        owner: "yssbi_lib".to_owned(),
+        kind: RustDependencyKind::Path,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: "yss-application".to_owned(),
+            repository_relative_declaration_file: declaration.to_owned(),
+            fully_qualified_target: target.to_owned(),
+            symbol: "new".to_owned(),
+        },
+        canonical_origin_target: target.to_owned(),
+        line: 1,
+        column: 1,
+    };
+    assert!(
+        rust_dependency_findings(&[dependency.clone()], &classification)
+            .unwrap()
+            .is_empty()
+    );
+    let query = "yss_application::database::samples::SampleCatalog::list";
+    dependency.canonical_origin_target = query.to_owned();
+    if let CanonicalOrigin::Repository {
+        fully_qualified_target,
+        symbol,
+        ..
+    } = &mut dependency.origin
+    {
+        *fully_qualified_target = query.to_owned();
+        *symbol = "list".to_owned();
+    }
+    assert_eq!(
+        rust_dependency_findings(&[dependency], &classification)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
 fn external_declaration(
     package_name: &str,
     scope: CargoDependencyScope,

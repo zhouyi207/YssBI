@@ -16,6 +16,7 @@ export type ImportDataSourceType =
 
 export interface ImportDialogOptions {
   onSelect: (type: ImportDataSourceType) => void;
+  onImportSample: (sampleId: string, version: number) => Promise<void>;
 }
 
 export interface SqliteTableSelectDialogOptions {

@@ -10,6 +10,22 @@ impl Drop for TemporarySource {
     }
 }
 
+pub(super) struct ImportReader {
+    name: String,
+    reader: Box<dyn RecordBatchReader>,
+    temporary: Option<TemporarySource>,
+}
+
+impl ImportReader {
+    pub(super) fn new(name: String, reader: Box<dyn RecordBatchReader>) -> Self {
+        Self {
+            name,
+            reader,
+            temporary: None,
+        }
+    }
+}
+
 fn import_error(error: impl std::fmt::Display) -> DatabaseUseCaseError {
     DatabaseUseCaseError::Database(DatabaseOperationError::internal_message(
         DatabaseApplicationOperation::Load,
@@ -22,38 +38,15 @@ pub(super) fn load_database_in_captured_session(
     operation_id: OperationId,
     source: DatabaseImportSource,
 ) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
-    let project_instance_id = captured.project_instance_id().clone();
-    let reservation = captured
-        .project()
-        .reserve_database_operation(&project_instance_id, operation_id)
-        .map_err(|error| {
-            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
-                error,
-                DatabaseApplicationOperation::Load,
-                &project_instance_id,
-                None,
-                None,
-                None,
-            ))
-        })?;
-    let session = captured
-        .project()
-        .capture_project_session()
-        .map_err(import_error)?;
-    let lease = captured
-        .project()
-        .acquire_filesystem_lease(session.root.clone())
-        .map_err(import_error)?;
-    captured
-        .project()
-        .validate_project_session(&session)
-        .map_err(import_error)?;
-    let store = DatasetStore::open(session.root.as_path()).map_err(import_error)?;
-    let control = RelationControl {
-        cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        deadline: std::time::Instant::now() + std::time::Duration::from_secs(300),
-        max_input_bytes: 16 * 1024 * 1024,
-    };
+    import_in_captured_session(captured, operation_id, |control| {
+        read_source(source, control)
+    })
+}
+
+fn read_source(
+    source: DatabaseImportSource,
+    control: RelationControl,
+) -> Result<ImportReader, DatabaseUseCaseError> {
     let mut temporary = None;
     let (source_name, reader): (String, Box<dyn RecordBatchReader>) = match source {
         DatabaseImportSource::Csv {
@@ -124,9 +117,58 @@ pub(super) fn load_database_in_captured_session(
             (table, Box::new(reader))
         }
     };
+    Ok(ImportReader {
+        name: name_from_path(&source_name),
+        reader,
+        temporary,
+    })
+}
+
+pub(super) fn import_in_captured_session(
+    captured: &Arc<ApplicationSession>,
+    operation_id: OperationId,
+    read_source: impl FnOnce(RelationControl) -> Result<ImportReader, DatabaseUseCaseError>,
+) -> Result<DatabaseMutationResult<LoadDatabaseResult>, DatabaseUseCaseError> {
+    let project_instance_id = captured.project_instance_id().clone();
+    let reservation = captured
+        .project()
+        .reserve_database_operation(&project_instance_id, operation_id)
+        .map_err(|error| {
+            DatabaseUseCaseError::Database(DatabaseOperationError::from_project_database(
+                error,
+                DatabaseApplicationOperation::Load,
+                &project_instance_id,
+                None,
+                None,
+                None,
+            ))
+        })?;
+    let session = captured
+        .project()
+        .capture_project_session()
+        .map_err(import_error)?;
+    let lease = captured
+        .project()
+        .acquire_filesystem_lease(session.root.clone())
+        .map_err(import_error)?;
+    captured
+        .project()
+        .validate_project_session(&session)
+        .map_err(import_error)?;
+    let store = DatasetStore::open(session.root.as_path()).map_err(import_error)?;
+    let control = RelationControl {
+        cancellation: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        deadline: std::time::Instant::now() + std::time::Duration::from_secs(300),
+        max_input_bytes: 16 * 1024 * 1024,
+    };
+    let ImportReader {
+        name: source_name,
+        reader,
+        temporary,
+    } = read_source(control.clone())?;
     let names = store.catalog_metadata().map_err(import_error)?;
     let name = allocate_unique_display_name(
-        &name_from_path(&source_name),
+        &source_name,
         names.iter().map(|metadata| metadata.name.as_ref()),
     );
     let id = DatabaseId::from_existing(Uuid::new_v4().to_string().into());

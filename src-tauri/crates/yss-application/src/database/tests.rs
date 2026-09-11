@@ -60,6 +60,214 @@ fn rows(app: &ApplicationState, id: &str) -> DatabaseRowsResult {
         .unwrap()
 }
 
+fn sample_resources() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../resources/samples")
+}
+
+#[test]
+fn bundled_samples_import_edit_and_reopen_as_independent_project_datasets() {
+    use super::samples::{SAMPLE_ORIGIN_METADATA_KEY, SampleCatalog};
+    let directory = Directory::new();
+    let project_root = directory.0.join("project");
+    let project = Arc::new(ProjectState::new());
+    let created = project
+        .create_project_transaction("Samples", &project_root, OperationId::new())
+        .unwrap();
+    project
+        .activate_project_from_path(&created.metadata_path)
+        .unwrap();
+    let app = application(project);
+    let instance = app.capture_session().unwrap().project_instance_id().clone();
+    let catalog = SampleCatalog::new(sample_resources());
+    let samples = catalog.list().unwrap();
+    assert_eq!(samples.len(), 5);
+    let store = yss_dataset_store::DatasetStore::open(&project_root).unwrap();
+    let mut iris_id = String::new();
+    let mut iris_operation = OperationId::new();
+    for sample in samples {
+        let operation = OperationId::new();
+        let imported = app
+            .import_sample_dataset_for_application(
+                &catalog,
+                instance.clone(),
+                operation,
+                &sample.id,
+                sample.version,
+            )
+            .unwrap();
+        assert_eq!(
+            (imported.data.row_count, imported.data.column_count),
+            (sample.row_count, sample.column_count)
+        );
+        let snapshot = store.snapshot(&database_id(&imported.data.id)).unwrap();
+        let origin: serde_json::Value = serde_json::from_str(
+            &snapshot.metadata().schema.metadata()[SAMPLE_ORIGIN_METADATA_KEY],
+        )
+        .unwrap();
+        assert_eq!(origin["sampleId"], sample.id);
+        assert_eq!(origin["version"], sample.version);
+        assert_eq!(rows(&app, &imported.data.id).rows.row_count(), 20);
+        if sample.id == "iris" {
+            iris_id = imported.data.id;
+            iris_operation = operation;
+        }
+    }
+    assert!(
+        app.import_sample_dataset_for_application(
+            &catalog,
+            instance.clone(),
+            iris_operation,
+            "iris",
+            1
+        )
+        .is_err()
+    );
+    assert_eq!(store.catalog_metadata().unwrap().len(), 5);
+    let second = app
+        .import_sample_dataset_for_application(
+            &catalog,
+            instance.clone(),
+            OperationId::new(),
+            "iris",
+            1,
+        )
+        .unwrap()
+        .data;
+    assert_ne!(second.id, iris_id);
+    assert_ne!(second.name, "Iris");
+    edit(
+        &app,
+        &iris_id,
+        DatabaseMutation::EditCell {
+            row: 0,
+            column: "sepal_length".into(),
+            value: serde_json::json!(99.0),
+            row_id: Some(0),
+        },
+    );
+    app.save_database_for_application(
+        instance,
+        iris_id.clone(),
+        revision(&app, &iris_id),
+        OperationId::new(),
+    )
+    .unwrap();
+    let reopened = Arc::new(ProjectState::new());
+    reopened
+        .activate_project_from_path(&created.metadata_path)
+        .unwrap();
+    let reopened = application(reopened);
+    assert_eq!(
+        serde_json::to_value(
+            rows(&reopened, &iris_id).rows.columns()[0].values()[0].display_value()
+        )
+        .unwrap(),
+        serde_json::json!(99.0)
+    );
+    assert_eq!(
+        serde_json::to_value(
+            rows(&reopened, &second.id).rows.columns()[0].values()[0].display_value()
+        )
+        .unwrap(),
+        serde_json::json!(5.1)
+    );
+    assert!(
+        store
+            .snapshot(&database_id(&iris_id))
+            .unwrap()
+            .metadata()
+            .schema
+            .metadata()
+            .contains_key(SAMPLE_ORIGIN_METADATA_KEY)
+    );
+}
+
+#[test]
+fn sample_admission_rejects_bad_identity_version_content_and_catalog_without_publication() {
+    use super::samples::{SampleCatalog, SampleError, SampleImportError};
+    let directory = Directory::new();
+    let sample_root = directory.0.join("samples");
+    std::fs::create_dir_all(sample_root.join("iris/v1")).unwrap();
+    std::fs::copy(
+        sample_resources().join("catalog.json"),
+        sample_root.join("catalog.json"),
+    )
+    .unwrap();
+    let parquet = sample_root.join("iris/v1/data.parquet");
+    std::fs::copy(sample_resources().join("iris/v1/data.parquet"), &parquet).unwrap();
+    let project_root = directory.0.join("project");
+    let project = Arc::new(ProjectState::new());
+    let created = project
+        .create_project_transaction("Admission", &project_root, OperationId::new())
+        .unwrap();
+    project
+        .activate_project_from_path(&created.metadata_path)
+        .unwrap();
+    let app = application(project);
+    let instance = app.capture_session().unwrap().project_instance_id().clone();
+    let catalog = SampleCatalog::new(sample_root.clone());
+    assert_eq!(catalog.list().unwrap().len(), 5); // Listing does not open unselected payloads.
+    assert!(matches!(
+        app.import_sample_dataset_for_application(
+            &catalog,
+            instance.clone(),
+            OperationId::new(),
+            "../iris",
+            1
+        ),
+        Err(SampleImportError::Sample(SampleError::NotFound))
+    ));
+    assert!(matches!(
+        app.import_sample_dataset_for_application(
+            &catalog,
+            instance.clone(),
+            OperationId::new(),
+            "iris",
+            2
+        ),
+        Err(SampleImportError::Sample(SampleError::VersionMismatch))
+    ));
+    let original = std::fs::read(&parquet).unwrap();
+    let mut corrupt = original.clone();
+    corrupt[10] ^= 1;
+    std::fs::write(&parquet, corrupt).unwrap();
+    assert!(matches!(
+        app.import_sample_dataset_for_application(
+            &catalog,
+            instance.clone(),
+            OperationId::new(),
+            "iris",
+            1
+        ),
+        Err(SampleImportError::Sample(SampleError::Integrity))
+    ));
+    std::fs::write(&parquet, original).unwrap();
+    let catalog_path = sample_root.join("catalog.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&catalog_path).unwrap()).unwrap();
+    manifest["datasets"][0]["rowCount"] = serde_json::json!(151);
+    std::fs::write(&catalog_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(
+        app.import_sample_dataset_for_application(
+            &SampleCatalog::new(sample_root.clone()),
+            instance,
+            OperationId::new(),
+            "iris",
+            1
+        )
+        .is_err()
+    );
+    manifest["datasets"][0]["id"] = serde_json::json!("../outside");
+    std::fs::write(catalog_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert!(matches!(
+        SampleCatalog::new(sample_root).list(),
+        Err(SampleError::InvalidCatalog)
+    ));
+    let store = yss_dataset_store::DatasetStore::open(&project_root).unwrap();
+    assert!(store.catalog_metadata().unwrap().is_empty());
+    assert!(store.pending_publications().unwrap().is_empty());
+}
+
 #[test]
 fn plugin_data_boundary_enforces_the_granted_snapshot_and_aggregate_result_budget() {
     use yss_plugin_protocol::{CallContext, HostServices, ResourceBudget};

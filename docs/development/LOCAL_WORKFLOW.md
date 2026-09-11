@@ -7,7 +7,7 @@
 
 所有命令从仓库根目录运行。`package.json#scripts` 是本地和自动化任务的唯一命令矩阵；本文不为 TypeScript、Rust 或 Tauri 另建平行手册。设计或实现 feature、fix、refactor 和行为变更前先使用[变更流程](CHANGE_PROCESS.md)。
 
-项目流程脚本随对应功能放置，根 `scripts/` 只保留目录树和代码统计的四个可选 Python 工具。
+项目流程脚本随对应功能放置。根 `scripts/` 保留目录树和代码统计的四个可选 Python 工具，以及 `samples/sources.json` 示例源定义；示例生成程序归属 Rust 应用层。
 
 | 脚本                 | 所属位置                                                                                 |
 | -------------------- | ---------------------------------------------------------------------------------------- |
@@ -15,6 +15,7 @@
 | 插件协议生成器       | `src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs`              |
 | 通用插件打包器及测试 | `plugins/scripts/package-plugin.mjs`、`plugins/scripts/package-plugin.test.mjs`          |
 | 模块索引生成器       | `docs/reference/generate-module-map.mjs`                                                 |
+| 示例资源生成器       | `src-tauri/crates/yss-application/examples/build_samples.rs`                             |
 
 通过下方根命令调用这些脚本；插件专属构建入口继续归属各插件目录。
 
@@ -49,7 +50,7 @@ Windows 上 Rust linking 与 production architecture audit 成本较高。增量
 | 生成 module map     | `pnpm docs:module-map` | check-only：`pnpm docs:module-map:check`                 |
 | 完整交付门禁        | `pnpm run ci`          | —                                                        |
 
-`dev` 和 `build` 是完整 Tauri 应用入口。`src-tauri/tauri.conf.json` 的 `beforeDevCommand` / `beforeBuildCommand` 直接运行 Vite，不能回调 root `dev` / `build` scripts，否则会递归。
+`dev` 和 `build` 是完整 Tauri 应用入口。`src-tauri/tauri.conf.json` 的 `beforeDevCommand` 运行 Vite，`beforeBuildCommand` 校验示例资源后运行 Vite；两者不能回调 root `dev` / `build` scripts，否则会递归。
 
 TypeScript check 使用 `tsc`，lint 使用 Oxlint，format 使用 Oxfmt，tests 使用 Vitest。Rust 的 `check:rs`、`lint:rs`、`test:rs` 是 workspace 级入口，`lint:rs` 还包含全部 targets/features；不用于小修改的固定收尾。按 crate 的入口如下，调用时必须显式传入 `-p`：
 
@@ -66,6 +67,12 @@ TypeScript check 使用 `tsc`，lint 使用 Oxlint，format 使用 Oxfmt，tests
 必须写 `pnpm run ci`：裸 `pnpm ci` 是 pnpm 的 frozen install 命令，不执行同名 package script。`pnpm run ci` 依次运行 format check、TypeScript/Rust checks、Oxlint/Clippy 和完整 TypeScript/Rust tests；它不启动应用或构建安装包。
 
 ## Focused validation
+
+示例数据的源定义位于 `scripts/samples/sources.json`，CSV 输入与发布资源位于
+`src-tauri/resources/samples/`。`pnpm samples:build` 使用现有 Rust tabular I/O
+离线生成 Parquet 和目录摘要；`pnpm samples:check` 只读验证源文件、发布文件和目录是否一致。
+修改数据或生成语义时递增示例版本并重新生成。桌面打包的 `beforeBuildCommand` 会先执行
+`samples:check`，再构建 Vite；原始 CSV 与生成工具不进入安装包。
 
 Rust 局部写入格式化使用 `pnpm format:rs:package -p <crate-name>`，可以重复 `-p`，不自动格式化其他包。
 

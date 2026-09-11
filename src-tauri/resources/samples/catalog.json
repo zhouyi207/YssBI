@@ -1,0 +1,60 @@
+{
+  "formatVersion": 1,
+  "datasets": [
+    {
+      "id": "iris",
+      "name": "Iris",
+      "version": 1,
+      "sourceFile": "iris.csv",
+      "sourceSha256": "c52742e50315a99f956a383faedf7575552675f6409ef0f9a47076dd08479930",
+      "rowCount": 150,
+      "columnCount": 5,
+      "byteSize": 2861,
+      "sha256": "c1b2737bdb97c9fdd9a2a7293db8ecf37a18700d98a397dee1325d019f645528"
+    },
+    {
+      "id": "diamonds",
+      "name": "Diamonds",
+      "version": 1,
+      "sourceFile": "diamonds.csv",
+      "sourceSha256": "974c2ce1c1ce245508bd357ca11a7fba2b37813ecf0f1158808a9249ebff67a1",
+      "rowCount": 53940,
+      "columnCount": 11,
+      "byteSize": 1308364,
+      "sha256": "56ee93e38a0603396d39121765a0525e2ae41127bdb9dfd21f950e871afa0112"
+    },
+    {
+      "id": "flights",
+      "name": "Flights",
+      "version": 2,
+      "sourceFile": "flights.csv",
+      "sourceSha256": "71ab92426789461642faf9d96f8be2b539e7c974098f669d64a250506a878086",
+      "rowCount": 336776,
+      "columnCount": 20,
+      "byteSize": 6323944,
+      "sha256": "a9529fd0dc5b844326064001bdec14cd823c1c7440afb466537e698842ca48e7"
+    },
+    {
+      "id": "data-car",
+      "name": "dataCar",
+      "version": 1,
+      "sourceFile": "dataCar.csv",
+      "sourceSha256": "62709d9e060c12bc8321a3afd9ae5e47a8a6dde6c52c3a245caa8186f3ae187b",
+      "rowCount": 67856,
+      "columnCount": 12,
+      "byteSize": 1188689,
+      "sha256": "aad8d3ac0ce6520722f94fa9a2d6dc1668f1dcb83ec0d47328601a6e387ce016"
+    },
+    {
+      "id": "vic-elec",
+      "name": "vic_elec",
+      "version": 2,
+      "sourceFile": "vic_elec.csv",
+      "sourceSha256": "b8341b24c5b758e6090e02d7dff46875aac40f24d202f2cde70ddb5ce2da85fb",
+      "rowCount": 52608,
+      "columnCount": 6,
+      "byteSize": 783320,
+      "sha256": "294ff17c58cfdf8a65d0556b42615d04e866746a47a035c63071c1868793dbee"
+    }
+  ]
+}

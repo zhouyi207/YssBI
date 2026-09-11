@@ -51,6 +51,15 @@ Node parameters with `editor: "configuration"` carry `configuration: { kind: "co
 
 ## Commands, events, and channels
 
+`list_sample_datasets` returns a bounded, project-independent list of
+`{ id, name, version, rowCount, columnCount, byteSize }`. Resource paths, source hashes
+and payload rows remain in Rust. `import_sample_dataset` accepts `projectInstanceId`,
+`operationId`, `sampleId` and `version`, invokes one Application use case on the blocking
+pool, and returns the existing database mutation aggregate. Its receipt/event uses
+the normal Project publication coordinator. Sample errors retain the common error
+wire, with stable categories for missing samples, changed versions, invalid catalogs,
+integrity failures and unavailable resources. The frontend localizes these categories.
+
 `get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
 The frontend keeps these stable row identities and rejects bare row arrays or incomplete pages;
 it does not substitute an empty identity array for an obsolete response shape.

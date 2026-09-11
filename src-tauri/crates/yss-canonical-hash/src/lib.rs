@@ -61,9 +61,38 @@ pub fn content_sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+/// Hash file-sized artifacts without retaining their contents in memory.
+pub fn content_sha256_reader(mut reader: impl std::io::Read) -> std::io::Result<String> {
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            return Ok(format!("{:x}", digest.finalize()));
+        }
+        digest.update(&buffer[..count]);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::hash_canonical;
+
+    #[test]
+    fn streaming_hash_covers_every_buffer_and_propagates_io_failures() {
+        let bytes = vec![0x5a; 150_001];
+        assert_eq!(
+            super::content_sha256_reader(bytes.as_slice()).unwrap(),
+            super::content_sha256(&bytes)
+        );
+        struct FailedRead;
+        impl std::io::Read for FailedRead {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("failed read"))
+            }
+        }
+        assert!(super::content_sha256_reader(FailedRead).is_err());
+    }
 
     #[test]
     fn canonical_hash_preserves_the_existing_encoding_contract() {

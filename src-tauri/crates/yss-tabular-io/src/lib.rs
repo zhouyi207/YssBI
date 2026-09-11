@@ -114,6 +114,19 @@ pub fn read_parquet_batches(
     batch_size: usize,
     projection: Option<&[usize]>,
 ) -> Result<impl RecordBatchReader + use<>, TabularIoError> {
+    read_parquet_file_batches(
+        open(path, TabularIoFormat::Parquet)?,
+        batch_size,
+        projection,
+    )
+}
+
+/// Retain a caller's opened file after resource validation and content hashing.
+pub fn read_parquet_file_batches(
+    file: File,
+    batch_size: usize,
+    projection: Option<&[usize]>,
+) -> Result<impl RecordBatchReader + use<>, TabularIoError> {
     let format = TabularIoFormat::Parquet;
     let error = |source| {
         failure(
@@ -123,8 +136,7 @@ pub fn read_parquet_batches(
             source,
         )
     };
-    let mut builder =
-        ParquetRecordBatchReaderBuilder::try_new(open(path, format)?).map_err(error)?;
+    let mut builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(error)?;
     let mut schema = builder.schema().clone();
     if let Some(projection) = projection {
         if projection

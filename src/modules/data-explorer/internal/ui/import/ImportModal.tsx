@@ -7,6 +7,7 @@ import {
   VscTable,
   VscCloudDownload,
   VscChevronRight,
+  VscBeaker,
 } from "react-icons/vsc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,9 @@ import type {
   ImportDialogOptions,
 } from "@/features/application/ui/applicationUi";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SampleDatasetList } from "./SampleDatasetList";
 
-type CategoryId = "file" | "sql" | "other";
+type CategoryId = "file" | "sql" | "samples" | "other";
 
 type ImportTypeConfig = {
   id: ImportDataSourceType;
@@ -34,6 +36,10 @@ const CATEGORIES: { id: CategoryId; icon: React.ReactNode }[] = [
   {
     id: "sql",
     icon: <VscDatabase aria-hidden="true" className="size-3.5" />,
+  },
+  {
+    id: "samples",
+    icon: <VscBeaker aria-hidden="true" className="size-3.5" />,
   },
   {
     id: "other",
@@ -85,7 +91,7 @@ const OTHER_TYPES: ImportTypeConfig[] = [
   },
 ];
 
-const CATEGORY_TYPES: Record<CategoryId, ImportTypeConfig[]> = {
+const CATEGORY_TYPES: Record<Exclude<CategoryId, "samples">, ImportTypeConfig[]> = {
   file: FILE_TYPES,
   sql: SQL_TYPES,
   other: OTHER_TYPES,
@@ -149,10 +155,11 @@ export const ImportModal = ({
   const { t } = useTranslation();
   const sectionHeadingId = useId();
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>("file");
-  const types = CATEGORY_TYPES[selectedCategory];
+  const [importingSample, setImportingSample] = useState(false);
+  const types = selectedCategory === "samples" ? [] : CATEGORY_TYPES[selectedCategory];
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !importingSample && onClose()}>
       <DialogContent className="flex h-[min(720px,88dvh)] max-w-[min(1000px,92vw)] flex-col gap-0 rounded-md bg-[var(--workbench-bg)] p-0 motion-reduce:animate-none max-[720px]:h-[92dvh] max-[720px]:max-w-[96vw]">
         <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-b border-border bg-[var(--sidebar-bg)] pl-3.5 pr-2.5">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-xs font-medium normal-case tracking-normal">
@@ -164,6 +171,7 @@ export const ImportModal = ({
             variant="ghost"
             size="icon-sm"
             onClick={onClose}
+            disabled={importingSample}
             aria-label={t("importModal.close")}
             className="h-[26px] w-7 shrink-0 rounded-sm text-muted-foreground"
           >
@@ -184,6 +192,7 @@ export const ImportModal = ({
                   type="button"
                   variant="ghost"
                   onClick={() => setSelectedCategory(cat.id)}
+                  disabled={importingSample}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "h-7 w-full justify-start gap-2.5 rounded-sm px-2.5 text-[13px] font-normal text-muted-foreground max-[720px]:w-auto",
@@ -208,15 +217,22 @@ export const ImportModal = ({
                   {t(`importModal.categories.${selectedCategory}`)}
                 </h2>
                 <DialogDescription className="mt-3 text-xs leading-[1.6]">
-                  {t("importModal.subtitle")}
+                  {t(
+                    selectedCategory === "samples"
+                      ? "importModal.samples.subtitle"
+                      : "importModal.subtitle",
+                  )}
                 </DialogDescription>
               </div>
-              {types.map((type) => (
-                <TypeOption
-                  key={type.id}
-                  type={type}
-                  onSelect={options.onSelect}
+              {selectedCategory === "samples" && (
+                <SampleDatasetList
+                  onImport={options.onImportSample}
+                  onImported={onClose}
+                  onBusyChange={setImportingSample}
                 />
+              )}
+              {types.map((type) => (
+                <TypeOption key={type.id} type={type} onSelect={options.onSelect} />
               ))}
             </section>
           </ScrollArea>

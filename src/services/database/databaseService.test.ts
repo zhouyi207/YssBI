@@ -23,6 +23,30 @@ beforeEach(() => {
 });
 
 describe("DatabaseService project lifecycle contract", () => {
+  it("validates the bounded sample projection before publishing the list", async () => {
+    const sample = {
+      id: "iris",
+      name: "Iris",
+      version: 1,
+      rowCount: 150,
+      columnCount: 5,
+      byteSize: 2861,
+    };
+    vi.mocked(invoke).mockResolvedValue([sample]);
+    await expect(DatabaseService.listSampleDatasets()).resolves.toEqual([sample]);
+    expect(invoke).toHaveBeenLastCalledWith("list_sample_datasets");
+    for (const payload of [
+      [sample, sample],
+      [{ ...sample, rowCount: -1 }],
+      [{ ...sample, path: "private-path" }],
+      [{ ...sample, version: 0 }],
+    ]) {
+      vi.mocked(invoke).mockResolvedValue(payload);
+      await expect(DatabaseService.listSampleDatasets()).rejects.toThrow(
+        "Invalid sample catalog response",
+      );
+    }
+  });
   it("keeps the backend row identities aligned with their page rows", async () => {
     const page = { rows: [[7], [9]], rowIds: [101, 3] };
     vi.mocked(invoke).mockResolvedValue(page);
@@ -90,6 +114,22 @@ describe("DatabaseService project lifecycle contract", () => {
 });
 
 describe("DatabaseService revisioned mutation contract", () => {
+  it("binds a sample import to the caller project, operation and exact sample version", async () => {
+    const aggregate = {
+      data: { id: "new-dataset", name: "Iris", rowCount: 150, columnCount: 5, columns: [] },
+      mutation,
+    };
+    vi.mocked(invoke).mockResolvedValue(aggregate);
+    await expect(
+      DatabaseService.importSampleDataset(projectInstanceId, operationId, "iris", 1),
+    ).resolves.toBe(aggregate);
+    expect(invoke).toHaveBeenCalledWith("import_sample_dataset", {
+      projectInstanceId,
+      operationId,
+      sampleId: "iris",
+      version: 1,
+    });
+  });
   it("passes caller project and operation identity for expected-absent imports and returns the aggregate", async () => {
     const engine = { csv: { path: "C:/sales.csv", delimiter: ",", hasHeader: true } } as const;
     const aggregate = {

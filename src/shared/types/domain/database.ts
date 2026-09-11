@@ -3,6 +3,16 @@ export interface ColumnInfo {
   type: string;
 }
 
+/** Read-only projection of an installed sample; resource paths stay in Rust. */
+export interface SampleDatasetSummary {
+  id: string;
+  name: string;
+  version: number;
+  rowCount: number;
+  columnCount: number;
+  byteSize: number;
+}
+
 export type DatabaseCellValue = string | number | boolean | null;
 export type DatabaseRow = DatabaseCellValue[];
 

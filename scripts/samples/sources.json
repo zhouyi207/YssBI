@@ -1,0 +1,7 @@
+[
+  { "id": "iris", "name": "Iris", "version": 1, "sourceFile": "iris.csv" },
+  { "id": "diamonds", "name": "Diamonds", "version": 1, "sourceFile": "diamonds.csv" },
+  { "id": "flights", "name": "Flights", "version": 2, "sourceFile": "flights.csv" },
+  { "id": "data-car", "name": "dataCar", "version": 1, "sourceFile": "dataCar.csv" },
+  { "id": "vic-elec", "name": "vic_elec", "version": 2, "sourceFile": "vic_elec.csv" }
+]

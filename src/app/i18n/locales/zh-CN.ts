@@ -1197,7 +1197,7 @@ export const zhCN = {
     adjustFilterHint: "尝试调整过滤条件",
   },
   importModal: {
-    title: "导入外部数据",
+    title: "导入数据",
     subtitle: "选择数据来源，导入为项目中的数据集",
     close: "关闭",
     comingSoon: "功能开发中",
@@ -1205,6 +1205,7 @@ export const zhCN = {
     categories: {
       file: "文件",
       sql: "SQL 数据库",
+      samples: "示例数据",
       other: "其他",
     },
     types: {
@@ -1217,6 +1218,49 @@ export const zhCN = {
       api: { label: "REST API", description: "从远程接口拉取数据" },
     },
     selectSheet: "选择 Sheet",
+    samples: {
+      subtitle: "选择内置示例，导入到当前项目后即可自由编辑和分析。所有示例均可离线使用。",
+      loading: "正在加载示例…",
+      empty: "暂无可用的示例数据。",
+      import: "导入到当前项目",
+      importing: "正在导入示例…",
+      retry: "重新加载",
+      failed: "暂时无法完成此操作，请稍后重试。",
+      dimensions: "{{rows}} 行 · {{columns}} 列",
+      defaultDescription: "用于浏览、编辑和分析的内置示例数据。",
+      errors: {
+        sample_not_found: "未找到该示例，请重新打开导入窗口。",
+        sample_version_mismatch: "示例版本已变化，请重新打开导入窗口。",
+        sample_integrity_failed: "示例文件校验失败，请修复应用资源后重试。",
+        sample_catalog_invalid: "示例目录无法读取，请修复应用资源后重试。",
+        sample_resource_unavailable: "示例文件不可用，请修复应用资源后重试。",
+        stale_project_lifecycle: "当前项目已变化，请重新打开导入窗口。",
+        project_lifecycle_admission_closed: "项目正在切换，请稍后重试。",
+        project_recovery_required: "项目需要恢复，请重新打开项目后继续。",
+      },
+      datasets: {
+        iris: {
+          name: "鸢尾花 · Iris",
+          description: "花萼、花瓣尺寸与品种，适合描述统计、分组比较和散点图。",
+        },
+        diamonds: {
+          name: "钻石 · Diamonds",
+          description: "钻石的重量、切工、颜色与价格，适合分布分析和回归建模。",
+        },
+        flights: {
+          name: "航班 · Flights",
+          description: "航班时刻、延误与航线，适合缺失值处理、分组汇总和时间分析。",
+        },
+        "data-car": {
+          name: "汽车保险 · dataCar",
+          description: "车辆、投保暴露与理赔记录，适合频数分析和理赔成本建模。",
+        },
+        "vic-elec": {
+          name: "用电需求 · vic_elec",
+          description: "半小时用电需求、气温与节假日，适合时间序列和季节性分析。",
+        },
+      },
+    },
     sheetHint: "选择要导入的 Sheet",
     selectTable: "选择表",
     tableHint: "选择要导入的表",

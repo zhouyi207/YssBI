@@ -6,6 +6,7 @@ use thiserror::Error;
 mod error;
 mod export;
 mod import;
+pub mod samples;
 #[cfg(test)]
 mod tests;
 use export::export_database_in_captured_session;

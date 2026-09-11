@@ -1276,7 +1276,7 @@ export const enUS = {
     adjustFilterHint: "Try adjusting filters",
   },
   importModal: {
-    title: "Import External Data",
+    title: "Import Data",
     subtitle: "Choose a source to import as a project dataset",
     close: "Close",
     comingSoon: "Coming soon",
@@ -1284,6 +1284,7 @@ export const enUS = {
     categories: {
       file: "File",
       sql: "SQL Database",
+      samples: "Sample Data",
       other: "Other",
     },
     types: {
@@ -1296,6 +1297,58 @@ export const enUS = {
       api: { label: "REST API", description: "Fetch data from a remote API" },
     },
     selectSheet: "Select Sheet",
+    samples: {
+      subtitle:
+        "Import a built-in sample into your project to edit and analyze it. All samples work offline.",
+      loading: "Loading samples…",
+      empty: "No sample datasets are available.",
+      import: "Import into project",
+      importing: "Importing sample…",
+      retry: "Reload",
+      failed: "This operation could not be completed. Please try again later.",
+      dimensions: "{{rows}} rows · {{columns}} columns",
+      defaultDescription: "A built-in dataset for browsing, editing and analysis.",
+      errors: {
+        sample_not_found: "This sample was not found. Reopen the import dialog.",
+        sample_version_mismatch: "The sample version changed. Reopen the import dialog.",
+        sample_integrity_failed:
+          "Sample verification failed. Repair the application resources and try again.",
+        sample_catalog_invalid:
+          "The sample catalog could not be read. Repair the application resources and try again.",
+        sample_resource_unavailable:
+          "The sample file is unavailable. Repair the application resources and try again.",
+        stale_project_lifecycle: "The current project changed. Reopen the import dialog.",
+        project_lifecycle_admission_closed: "The project is switching. Please try again shortly.",
+        project_recovery_required: "The project requires recovery. Reopen it before continuing.",
+      },
+      datasets: {
+        iris: {
+          name: "Iris",
+          description:
+            "Sepal and petal measurements with species, for descriptive statistics, group comparisons and scatter plots.",
+        },
+        diamonds: {
+          name: "Diamonds",
+          description:
+            "Diamond weight, cut, color and price, for distribution analysis and regression.",
+        },
+        flights: {
+          name: "Flights",
+          description:
+            "Flight times, delays and routes, for missing-value handling, grouped summaries and time analysis.",
+        },
+        "data-car": {
+          name: "Car insurance · dataCar",
+          description:
+            "Vehicles, exposure and claims, for frequency analysis and claim cost modeling.",
+        },
+        "vic-elec": {
+          name: "Electricity demand · vic_elec",
+          description:
+            "Half-hourly electricity demand, temperature and holidays, for time-series and seasonality analysis.",
+        },
+      },
+    },
     sheetHint: "Select the sheet to import",
     selectTable: "Select Table",
     tableHint: "Select the table to import",

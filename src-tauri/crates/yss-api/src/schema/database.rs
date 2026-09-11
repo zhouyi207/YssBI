@@ -2,6 +2,51 @@ use serde::{Deserialize, Serialize};
 
 use yss_database_schema::DatabaseColumnFact;
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SampleDatasetDto {
+    pub id: String,
+    pub name: String,
+    pub version: u32,
+    pub row_count: usize,
+    pub column_count: usize,
+    pub byte_size: u64,
+}
+
+impl From<yss_application::database::samples::SampleDataset> for SampleDatasetDto {
+    fn from(sample: yss_application::database::samples::SampleDataset) -> Self {
+        Self {
+            id: sample.id,
+            name: sample.name,
+            version: sample.version,
+            row_count: sample.row_count,
+            column_count: sample.column_count,
+            byte_size: sample.byte_size,
+        }
+    }
+}
+
+#[cfg(test)]
+mod sample_tests {
+    #[test]
+    fn sample_projection_exposes_only_display_metadata() {
+        let sample = serde_json::from_value::<yss_application::database::samples::SampleDataset>(
+            serde_json::json!({
+                "id": "iris", "name": "Iris", "version": 1, "rowCount": 150,
+                "columnCount": 5, "byteSize": 2861, "sha256": "a".repeat(64),
+                "sourceFile": "iris.csv", "sourceSha256": "b".repeat(64),
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(super::SampleDatasetDto::from(sample)).unwrap(),
+            serde_json::json!({
+                "id": "iris", "name": "Iris", "version": 1, "rowCount": 150, "columnCount": 5, "byteSize": 2861,
+            })
+        );
+    }
+}
+
 fn default_csv_delimiter() -> char {
     ','
 }
@@ -189,9 +234,9 @@ impl From<&yss_database_contract::DatabaseEngine> for DatabaseEngineDTO {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow::datatypes::{DataType, Field, Schema};
     use serde_json::json;
     use yss_database_contract::DatabaseId;
-    use arrow::datatypes::{DataType, Field, Schema};
 
     #[test]
     fn database_declaration_wire_exposes_only_machine_load_state() {
@@ -224,7 +269,10 @@ mod tests {
     #[test]
     fn database_schema_facts_map_to_column_info_dto_wire() {
         let database = DatabaseId::from_existing("database-id".into());
-        let schema = Schema::new(vec![Field::new("value", DataType::UInt64, true), Field::new("label", DataType::Utf8, true)]);
+        let schema = Schema::new(vec![
+            Field::new("value", DataType::UInt64, true),
+            Field::new("label", DataType::Utf8, true),
+        ]);
         let fact = yss_tabular_arrow::database_schema_fact(&database, &schema).unwrap();
 
         let wire = serde_json::to_value(column_info_from_schema(fact.columns()))

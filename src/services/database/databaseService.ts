@@ -9,6 +9,7 @@ import type {
   DatabaseImportSourceDTO,
   DatabaseRow,
   LoadDatabaseResult,
+  SampleDatasetSummary,
 } from "@/shared/types/dto/database";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 
@@ -30,6 +31,57 @@ export interface DatabaseMutationCommandResult<T> {
  * 数据库服务 - 封装 load_database、delete_database、get_database_rows
  */
 export class DatabaseService {
+  static async listSampleDatasets(): Promise<SampleDatasetSummary[]> {
+    const payload = await invokeCommand<unknown>("list_sample_datasets");
+    if (!Array.isArray(payload) || payload.length > 64) {
+      throw new TypeError("Invalid sample catalog response");
+    }
+    const ids = new Set<string>();
+    for (const sample of payload) {
+      if (
+        !sample ||
+        typeof sample !== "object" ||
+        typeof sample.id !== "string" ||
+        !/^[a-z0-9-]{1,64}$/.test(sample.id) ||
+        ids.has(sample.id) ||
+        typeof sample.name !== "string" ||
+        !sample.name.trim() ||
+        sample.name.length > 128 ||
+        !Number.isInteger(sample.version) ||
+        sample.version < 1 ||
+        sample.version > 0xffffffff ||
+        !Number.isSafeInteger(sample.rowCount) ||
+        sample.rowCount < 0 ||
+        sample.rowCount > 5_000_000 ||
+        !Number.isInteger(sample.columnCount) ||
+        sample.columnCount < 1 ||
+        sample.columnCount > 512 ||
+        !Number.isSafeInteger(sample.byteSize) ||
+        sample.byteSize < 1 ||
+        sample.byteSize > 64 * 1024 * 1024 ||
+        Object.keys(sample).length !== 6
+      ) {
+        throw new TypeError("Invalid sample catalog response");
+      }
+      ids.add(sample.id);
+    }
+    return payload as SampleDatasetSummary[];
+  }
+
+  static async importSampleDataset(
+    projectInstanceId: string,
+    operationId: string,
+    sampleId: string,
+    version: number,
+  ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
+    return await invokeCommand("import_sample_dataset", {
+      projectInstanceId,
+      operationId,
+      sampleId,
+      version,
+    });
+  }
+
   /**
    * 加载数据库（CSV、Parquet 等）
    */

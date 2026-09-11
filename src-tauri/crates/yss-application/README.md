@@ -8,3 +8,26 @@
 - `ApplicationState` 是运行期 authority 组合后的应用会话入口，不是全局 backend 容器；
 - 对外返回 Application-owned typed facts，由 `yss-api` transport adapter 投影为 wire DTO；
 - `test-support` 只开放跨 crate contract 测试所需的构造与 publication seam。
+
+## Bundled samples
+
+`database::samples::SampleCatalog` owns the installed sample catalog. The desktop
+composition root injects a Tauri-resolved resource path; the application layer does
+not depend on Tauri or the process working directory. Only a successfully parsed,
+bounded catalog is cached. Listing does not open any dataset payload.
+
+Sample imports accept a sample ID and exact version together with the ordinary
+project instance and operation identities. The catalog derives the versioned file
+path, rejects redirects, verifies size and SHA-256, then reads the same opened file
+in bounded Arrow batches. Counts and batch memory are checked before publication.
+The sample's canonical display name and provenance enter the common `database/import.rs`
+reader workflow. That workflow owns operation reservation, project revalidation,
+unique naming, DatasetStore preparation/commit and the durable publication handoff.
+An uncertain or committed publication is recovered using the existing catalog;
+delivery failure does not trigger an automatic import under a new operation ID.
+
+Each explicit import creates a new editable dataset. Sample origin and source hashes
+persist in `yssbi.sample.origin` schema metadata; no separate sample history store
+or project schema migration is needed. Reopening a project uses its managed datasets
+and has no dependency on the installed sample catalog. Source definitions, preparation
+and versioning are described in the [resource notes](../../resources/samples/README.md).

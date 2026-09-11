@@ -39,6 +39,8 @@
     "test:plugin:julia": "vitest run --config plugins/julia/web/vite.config.ts",
     "test:plugin:native": "node plugins/julia/scripts/test-native.mjs",
     "generate:diagnostics:check": "node src-tauri/crates/yss-graph-compiler-diagnostics/scripts/generate-graph-diagnostics.mjs --check",
+    "samples:build": "cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example build_samples",
+    "samples:check": "cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example build_samples -- --check",
     "test:rs:package": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:plugin:package": "node --test plugins/scripts/package-plugin.test.mjs"
   },

@@ -3,8 +3,10 @@ use crate::event::{Event, EventProject, emit_project_event_result};
 use crate::schema::application_event::ResourceMutationCommandResultDto;
 use crate::schema::{
     DatabaseImportSourceDTO, DatabaseMetaResultDto, DatabaseRowsResultDto, LoadDatabaseResultDto,
+    SampleDatasetDto,
 };
 use tauri::{AppHandle, State};
+use yss_application::database::samples::{SampleCatalog, SampleError, SampleImportError};
 use yss_application::database::{
     self, DatabaseMetaResult, DatabaseMutation, DatabaseMutationResult, DatabaseRowsResult,
     DatabaseUseCaseError, LoadDatabaseResult,
@@ -184,6 +186,90 @@ pub async fn load_database(
 pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
         database::list_sqlite_tables(&db_path).map_err(database_command_error)
+    })
+    .await
+}
+
+fn map_sample_error(error: SampleError) -> CommandError {
+    match error {
+        SampleError::NotFound => CommandError::expected("sample_not_found"),
+        SampleError::VersionMismatch => CommandError::expected("sample_version_mismatch"),
+        SampleError::Integrity => CommandError::expected("sample_integrity_failed"),
+        SampleError::InvalidCatalog | SampleError::InvalidPath | SampleError::CatalogDecode(_) => {
+            CommandError::diagnosed("sample_catalog_invalid", error)
+        }
+        SampleError::Unavailable(_) | SampleError::Decode(_) => {
+            CommandError::diagnosed("sample_resource_unavailable", error)
+        }
+    }
+}
+
+#[cfg(test)]
+mod sample_tests {
+    #[test]
+    fn sample_rejections_use_the_common_error_wire() {
+        for (error, code) in [
+            (super::SampleError::NotFound, "sample_not_found"),
+            (
+                super::SampleError::VersionMismatch,
+                "sample_version_mismatch",
+            ),
+            (super::SampleError::Integrity, "sample_integrity_failed"),
+        ] {
+            assert_eq!(
+                serde_json::to_value(super::map_sample_error(error)).unwrap(),
+                serde_json::json!({
+                    "code": code, "details": null, "incidentId": null,
+                })
+            );
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn list_sample_datasets(
+    catalog: State<'_, SampleCatalog>,
+) -> Result<Vec<SampleDatasetDto>, CommandError> {
+    let catalog = catalog.inner().clone();
+    run_on_blocking_pool(move || {
+        Ok(catalog
+            .list()
+            .map_err(map_sample_error)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn import_sample_dataset(
+    app: AppHandle,
+    application: State<'_, yss_application::execution::ApplicationState>,
+    catalog: State<'_, SampleCatalog>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    sample_id: String,
+    version: u32,
+) -> Result<ResourceMutationCommandResultDto<LoadDatabaseResultDto>, CommandError> {
+    let application = application.inner().clone();
+    let catalog = catalog.inner().clone();
+    run_on_blocking_pool(move || {
+        let result = application
+            .import_sample_dataset_for_application(
+                &catalog,
+                project_instance_id,
+                operation_id,
+                &sample_id,
+                version,
+            )
+            .map_err(|error| match error {
+                SampleImportError::Sample(error) => map_sample_error(error),
+                SampleImportError::Database(error) => map_application_database_error(error),
+            })?;
+        let result = load_database_result_to_transport(result);
+        emit_application_database_result(&app, &result)?;
+        Ok(result)
     })
     .await
 }

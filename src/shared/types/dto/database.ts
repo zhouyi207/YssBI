@@ -13,4 +13,5 @@ export type {
   ExcelEngineConfig,
   LoadDatabaseResult,
   ParquetEngineConfig,
+  SampleDatasetSummary,
 } from "@/shared/types/domain/database";

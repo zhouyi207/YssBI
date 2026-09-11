@@ -128,6 +128,12 @@ Project query 的精确 capability 还允许返回与同次 ProjectIndex 对应�
 前端资源与面板共用已有发布入口，不从 ResourceStore 再次生成或查询 Project 文档。
 文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 维护。
 
+示例目录沿用 database Application owner。Composition root 仅获 `SampleCatalog::new`
+的构造权限；DataFrame commands 只获目录、导入失败类型和示例 DTO 的明确映射权限；
+database transport mapper 仅获 `SampleDataset` 的读取权限。示例数据仍通过标准
+Database import、DatasetStore 和 Project publication 进入项目，不开放新的跨层通配边。
+Application 的 `serde` 直接依赖用于静态目录和离线源定义的反序列化，外部依赖声明清单与 Cargo 保持一致。
+
 `yss-tabular-arrow` 的 `chrono` 依赖用于将外部带时区的时间转换为保留钟面的无时区值；
 这属于 Database Core 的类型适配职责。Project 与 Logging 自己生成无时区的展示时间，
 不依赖 tabular adapter 作为时钟服务。

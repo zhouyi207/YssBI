@@ -139,6 +139,22 @@ async function loadCsv(path: string) {
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
 export function triggerImportData() {
   const importModalId = uiStore.showImportDialog({
+    onImportSample: async (sampleId, version) => {
+      try {
+        const result = await executeDatabaseCreate((authority) =>
+          DatabaseService.importSampleDataset(
+            authority.projectInstanceId,
+            authority.operationId,
+            sampleId,
+            version,
+          ),
+        );
+        commitLoadedDatabase(result);
+      } catch (error) {
+        logDataOperationFailure(error, "import_sample_dataset", "Sample import");
+        throw error;
+      }
+    },
     onSelect: async (type) => {
       if (type === "csv") {
         try {

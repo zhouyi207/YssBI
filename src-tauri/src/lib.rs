@@ -183,6 +183,10 @@ pub fn run() {
             let application_state = initialize_application_state(Arc::clone(&project_state))
                 .map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(application_state.clone());
+            app.manage(yss_application::database::samples::SampleCatalog::new(
+                app.path()
+                    .resolve("resources/samples", tauri::path::BaseDirectory::Resource)?,
+            ));
 
             let app_dir = app.path().app_data_dir()?;
             let harness_state =

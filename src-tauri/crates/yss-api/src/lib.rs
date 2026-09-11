@@ -65,6 +65,8 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_window_state,
         save_window_state,
         load_database,
+        list_sample_datasets,
+        import_sample_dataset,
         list_sqlite_tables,
         list_sql_tables,
         list_excel_sheets,
