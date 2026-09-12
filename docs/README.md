@@ -66,7 +66,6 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## History
 
-- [2026-09-12 测试清理审计](reviews/2026-09-12-test-cleanup.md)：全仓测试入口清单、删除/合并依据和聚焦验证结果。
 - [Version history](version/README.md)
 - [2026-09-10 数据引擎迁移验收](reviews/2026-09-10-data-engine-migration.md)：DuckDB/宿主 Polars 替换的逐项证据与验证边界。
 - [2026-09-07 深度清理审计](reviews/2026-09-07-deep-cleanup-audit.md)：该次源码检查、复现证据和清理建议的快照。
