@@ -29,6 +29,12 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yssbi",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri-plugin-window-state",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-automation-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
@@ -1361,36 +1367,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tauri",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-window-state",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-chart-document",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1554,6 +1530,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::CompositionRoot,
         mode: RustDependencyMode::Runtime,
         package_name: "tauri-plugin-clipboard-manager",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::CompositionRoot,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri-plugin-window-state",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Commands,

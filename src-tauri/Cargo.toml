@@ -87,7 +87,6 @@ members = [
   "crates/yss-tabular-arrow",
   "crates/yss-tabular-io",
   "crates/yss-tracing",
-  "crates/yss-window-state",
   "crates/yss-chart-document",
 ]
 
@@ -172,12 +171,12 @@ yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-statistical-harness = { path = "./crates/yss-statistical-harness" }
 yss-statistical-harness-sqlite = { path = "./crates/yss-statistical-harness-sqlite" }
 yss-tracing = { path = "./crates/yss-tracing" }
-yss-window-state = { path = "./crates/yss-window-state" }
 tauri.workspace = true
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-dialog = "2.7"
 tauri-plugin-fs = "2.5"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-window-state = "=2.4.1"
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true

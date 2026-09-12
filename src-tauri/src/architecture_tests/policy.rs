@@ -299,8 +299,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_api::invoke_handler",
             "yss_api::activity_panel_sync::ActivityPanelSyncState",
             "yss_api::activity_panel_sync::ActivityPanelSyncState::default",
-            "yss_window_state::WindowStateStore::load",
-            "yss_window_state::apply_main_window_state",
             "yss_agent_rig::ConfigurableAgentDriver::new",
             "yss_statistical_harness::host::HarnessError",
             "yss_statistical_harness::host::HarnessHost::new",
@@ -1072,17 +1070,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_window.rs",
-        fully_qualified_owner: "yss_api::commands::command_window",
-        canonical_origin_targets: &[
-            "yss_api::error::CommandError",
-            "yss_window_state::WindowStateStore",
-            "yss_window_state::kind::WindowKind",
-            "yss_window_state::kind::WindowState",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/command_chart.rs",
         fully_qualified_owner: "yss_api::commands::command_chart",
         canonical_origin_targets: &[
@@ -1699,10 +1686,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::Execution);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
-    } else if matches!(
-        package,
-        "yss-project-watcher-notify" | "yss-window-state" | "yss-file-replace"
-    ) {
+    } else if matches!(package, "yss-project-watcher-notify" | "yss-file-replace") {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,

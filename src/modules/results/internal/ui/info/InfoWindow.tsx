@@ -22,7 +22,7 @@ const INFO_ICON = (
 
 export const InfoWindow: FC = () => {
   const { t } = useTranslation();
-  const { state, windowActions } = usePresentationWindow("info");
+  const { state, windowActions } = usePresentationWindow();
 
   const title = state.status === "ready" ? state.descriptor.title : t("info.regressionResults");
 

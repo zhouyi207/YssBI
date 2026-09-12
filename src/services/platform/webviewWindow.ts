@@ -1,5 +1,5 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { PlatformFailure, PlatformOutcome } from "./platformTypes";
+import type { PlatformFailure, PlatformOutcome, PlatformUnsubscribe } from "./platformTypes";
 
 export interface CreateWebviewWindowRequest {
   readonly label: string;
@@ -7,11 +7,8 @@ export interface CreateWebviewWindowRequest {
   readonly title: string;
   readonly width: number;
   readonly height: number;
-  readonly x?: number;
-  readonly y?: number;
   readonly decorations?: boolean;
   readonly visible?: boolean;
-  readonly maximized?: boolean;
 }
 
 function invalidLabel(): PlatformFailure {
@@ -38,15 +35,35 @@ export async function createWebviewWindow(
       width: request.width,
       height: request.height,
     };
-    if (typeof request.x === "number" && typeof request.y === "number") {
-      config.x = request.x;
-      config.y = request.y;
-    }
     if (request.decorations !== undefined) config.decorations = request.decorations;
     if (request.visible !== undefined) config.visible = request.visible;
-    if (request.maximized) config.maximized = true;
-    new WebviewWindow(request.label, config);
-    return { ok: true, value: undefined };
+    const window = new WebviewWindow(request.label, config);
+    return await new Promise<PlatformOutcome<void>>((resolve) => {
+      let settled = false;
+      const unlisteners: PlatformUnsubscribe[] = [];
+      const finish = (outcome: PlatformOutcome<void>) => {
+        if (settled) return;
+        settled = true;
+        for (const unlisten of unlisteners) unlisten();
+        resolve(outcome);
+      };
+      const listen = (
+        event: "tauri://created" | "tauri://error",
+        outcome: PlatformOutcome<void>,
+      ) => {
+        void window
+          .once(event, () => finish(outcome))
+          .then(
+            (unlisten) => {
+              if (settled) unlisten();
+              else unlisteners.push(unlisten);
+            },
+            () => finish({ ok: false, failure: operationFailure() }),
+          );
+      };
+      listen("tauri://created", { ok: true, value: undefined });
+      listen("tauri://error", { ok: false, failure: operationFailure() });
+    });
   } catch {
     return { ok: false, failure: operationFailure() };
   }

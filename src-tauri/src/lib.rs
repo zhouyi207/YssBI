@@ -11,11 +11,20 @@ mod architecture_tests;
 
 use std::sync::Arc;
 use tauri::Manager;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
 use yss_automation_contract::{
     AutomationIdKind, ClockPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
 };
 
 // ==================== 应用入口 ====================
+
+const WINDOW_STATE_FLAGS: StateFlags = StateFlags::SIZE
+    .union(StateFlags::POSITION)
+    .union(StateFlags::MAXIMIZED);
+
+fn window_state_key(label: &str) -> &str {
+    label.split_once('-').map_or(label, |(kind, _)| kind)
+}
 
 fn initialize_project_state() -> yss_project::ProjectState {
     yss_project::ProjectState::new()
@@ -144,11 +153,25 @@ fn initialize_application_state(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    if let Err(error) = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(WINDOW_STATE_FLAGS)
+                .map_label(window_state_key)
+                .with_filter(|kind| {
+                    matches!(
+                        kind,
+                        "main" | "dataview" | "logs" | "plot" | "inspect" | "info"
+                    )
+                })
+                // Main is restored explicitly in setup before it is shown.
+                .skip_initial_state("main")
+                .build(),
+        )
         // 注册全局状态管理器
         .manage(yss_project_watcher::ProjectWatcherState::new(
             std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
@@ -207,37 +230,24 @@ pub fn run() {
             );
             app.manage(plugins);
 
-            // 加载并应用主窗口几何状态：先 set_size/set_position/maximize，
-            // 再 show()。tauri.conf.json 中主窗口需配置为 `visible: false`，
-            // 否则会先以默认尺寸闪现一帧再被这里调整。
-            let window_state_path = app
-                .path()
-                .app_config_dir()
-                .map(|p| p.join("window_state.json"))
-                .map_err(Box::<dyn std::error::Error>::from)?;
-            let window_state_store = yss_window_state::WindowStateStore::load(window_state_path);
-            if let Err(e) =
-                yss_window_state::apply_main_window_state(app.handle(), &window_state_store)
-            {
-                tracing::warn!(
-                    target: "yssbi::window_state",
-                    diagnostic_domain = "ui",
-                    error = %e,
-                    "Failed to apply main window state"
-                );
-                // 兜底：即便恢复失败也确保主窗口显示出来
-                if let Some(win) = app.get_webview_window("main")
-                    && let Err(show_error) = win.show()
-                {
+            if let Some(win) = app.get_webview_window("main") {
+                if let Err(error) = win.restore_state(WINDOW_STATE_FLAGS) {
                     tracing::warn!(
                         target: "yssbi::window_state",
                         diagnostic_domain = "ui",
-                        error = %show_error,
-                        "Failed to show main window after state restoration failure"
+                        error = %error,
+                        "Failed to restore main window geometry"
+                    );
+                }
+                if let Err(error) = win.show() {
+                    tracing::warn!(
+                        target: "yssbi::window_state",
+                        diagnostic_domain = "ui",
+                        error = %error,
+                        "Failed to show main window"
                     );
                 }
             }
-            app.manage(window_state_store);
 
             Ok(())
         })
@@ -250,14 +260,52 @@ pub fn run() {
             }
         })
         .invoke_handler(yss_api::invoke_handler())
-        .run(tauri::generate_context!())
-    {
-        tracing::error!(
+        .build(tauri::generate_context!());
+    match app {
+        Ok(app) => app.run(|app, event| {
+            // The manager has removed the destroyed window before this callback. Saving
+            // here cannot query a dead window or participate in frontend close decisions.
+            if matches!(
+                event,
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::Destroyed,
+                    ..
+                }
+            ) && let Err(error) = app.save_window_state(WINDOW_STATE_FLAGS)
+            {
+                tracing::warn!(
+                    target: "yssbi::window_state",
+                    diagnostic_domain = "ui",
+                    error = %error,
+                    "Failed to persist window geometry"
+                );
+            }
+        }),
+        Err(error) => tracing::error!(
             target: "yssbi::application",
             diagnostic_domain = "system",
             diagnostic_event = "applicationRuntimeFailed",
             error = %error,
             "Tauri application runtime failed"
+        ),
+    }
+}
+
+#[cfg(test)]
+mod window_state_tests {
+    use super::{WINDOW_STATE_FLAGS, window_state_key};
+    use tauri_plugin_window_state::StateFlags;
+
+    #[test]
+    fn window_instances_share_geometry_by_kind_without_restoring_visibility_or_decorations() {
+        for kind in ["main", "dataview", "logs", "plot", "inspect", "info"] {
+            assert_eq!(window_state_key(kind), kind);
+            assert_eq!(window_state_key(&format!("{kind}-first-instance")), kind);
+            assert_eq!(window_state_key(&format!("{kind}-second-instance")), kind);
+        }
+        assert!(
+            !WINDOW_STATE_FLAGS
+                .intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS | StateFlags::FULLSCREEN)
         );
     }
 }

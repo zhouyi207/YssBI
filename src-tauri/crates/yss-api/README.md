@@ -16,6 +16,11 @@ The crate keeps commands, schemas, transport errors, and event adapters private.
 
 The composition root constructs authorities and adapters, then injects them. It must not declare a second command registry, command schema module, or transport error type.
 
+Native window geometry uses the official Window State plugin registered by the composition root.
+There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
+windows through the platform adapter and the Rust plugin owns restoration and persistence;
+see [Workbench window geometry](../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭).
+
 ## Command responsibilities
 
 A command handler may:

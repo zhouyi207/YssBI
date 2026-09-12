@@ -1,4 +1,4 @@
-import type { WindowKind } from "@/shared/types/settings";
+import type { WindowKind } from "./createPersistedWindow";
 
 /** Map SPA hash route to persisted window kind. */
 export function windowKindForRoute(route: string): WindowKind {
@@ -6,7 +6,7 @@ export function windowKindForRoute(route: string): WindowKind {
     case "/plot":
       return "plot";
     case "/inspect":
-      return "sourceInspector";
+      return "inspect";
     case "/info":
       return "info";
     default:

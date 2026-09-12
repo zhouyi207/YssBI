@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import type { WindowKind } from "@/shared/types/settings";
-import { usePersistedWindow } from "@/features/application/window/usePersistedWindow";
 import { useResultSession } from "@/features/application/window/useResultSession";
 import { ResultService } from "@/services/result/resultService";
 import { resultReferenceKey } from "@/shared/types/domain/result";
@@ -11,7 +9,7 @@ import {
 import { loadPresentationWindow, type PresentationWindowState } from "./loadPresentationWindow";
 import { parsePresentationWindowQuery } from "./parsePresentationWindowQuery";
 
-export function usePresentationWindow(windowKind: WindowKind) {
+export function usePresentationWindow() {
   const query = useMemo(() => parsePresentationWindowQuery(), []);
   const reference = query.reference;
   const [state, setState] = useState<PresentationWindowState>(() =>
@@ -19,7 +17,6 @@ export function usePresentationWindow(windowKind: WindowKind) {
   );
 
   const sessionActive = useResultSession(reference);
-  usePersistedWindow(windowKind);
   const windowActions = useCurrentWindowActions();
 
   useEffect(() => {

@@ -3,8 +3,7 @@ import { AiSettings } from "./AiSettings";
 
 /**
  * 持久化的客户端设置：AI 提供方和外观偏好（含主题选择，不含独立颜色值）。
- * 窗口几何状态独立保存于后端 `window_state.json`，由 `WindowStateService` 读写，
- * 不再混入 AppSettings；详见 `src/services/window/windowStateService.ts`。
+ * 原生窗口几何状态由 Rust Window State 插件独立保存，不混入 AppSettings。
  */
 export interface AppSettings {
   ai: AiSettings;

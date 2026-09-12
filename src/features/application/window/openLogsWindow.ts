@@ -8,7 +8,7 @@ export async function openLogsWindow(): Promise<void> {
   try {
     const label = createEphemeralWindowLabel("logs");
     await createPersistedWindow({
-      geometry: { source: "backend", kind: "logs" },
+      kind: "logs",
       label,
       url: "index.html#/logs",
       title: i18n.t("log.title"),

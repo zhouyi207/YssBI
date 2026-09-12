@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WindowStateService } from "@/services/window/windowStateService";
 import { createWebviewWindow } from "@/services/platform/webviewWindow";
 import { createPersistedWindow } from "./createPersistedWindow";
 
@@ -7,50 +6,33 @@ vi.mock("@/services/platform/webviewWindow", () => ({
   createWebviewWindow: vi.fn(),
 }));
 
-vi.mock("@/services/window/windowStateService", () => ({
-  WindowStateService: {
-    get: vi.fn(),
-  },
+vi.mock("./windowDecorationPolicy", () => ({
+  readWindowDecorationsFromSettings: () => false,
 }));
 
 describe("createPersistedWindow", () => {
   beforeEach(() => {
     vi.mocked(createWebviewWindow).mockReset();
     vi.mocked(createWebviewWindow).mockResolvedValue({ ok: true, value: undefined });
-    vi.mocked(WindowStateService.get).mockReset();
   });
 
-  it("uses backend fallback coordinates only when persisted coordinates are absent", async () => {
-    vi.mocked(WindowStateService.get).mockResolvedValue({
-      width: 900,
-      height: 650,
-      x: null,
-      y: null,
-      isMaximized: false,
-    });
-
+  it("creates hidden with logical defaults and current decorations for native restoration", async () => {
     await createPersistedWindow({
-      geometry: {
-        source: "backend",
-        kind: "logs",
-        fallbackX: 140,
-        fallbackY: 110,
-      },
+      kind: "logs",
       label: "logs-2",
       url: "index.html#/logs",
       title: "Logs",
     });
 
-    expect(WindowStateService.get).toHaveBeenCalledWith("logs");
-    expect(createWebviewWindow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "logs-2",
-        url: "index.html#/logs",
-        title: "Logs",
-        x: 140,
-        y: 110,
-      }),
-    );
+    expect(createWebviewWindow).toHaveBeenCalledWith({
+      label: "logs-2",
+      url: "index.html#/logs",
+      title: "Logs",
+      width: 1000,
+      height: 600,
+      decorations: false,
+      visible: false,
+    });
   });
 
   it("exposes only the stable platform failure code to callers", async () => {
@@ -61,10 +43,7 @@ describe("createPersistedWindow", () => {
 
     await expect(
       createPersistedWindow({
-        geometry: {
-          source: "provided",
-          state: { width: 840, height: 620, x: null, y: null, isMaximized: false },
-        },
+        kind: "plot",
         label: "window-3",
         url: "index.html#/editor",
         title: "YssBI Node Editor",

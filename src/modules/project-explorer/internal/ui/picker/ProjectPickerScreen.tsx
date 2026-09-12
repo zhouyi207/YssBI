@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "reac
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
-import { usePersistedWindow } from "@/features/application/window";
 import { ActionMenu, usePositionedActionMenu } from "@/shared/ui/actionMenu";
 import { DeleteProjectConfirmDialog } from "./DeleteProjectConfirmDialog";
 import { NewProjectModal } from "./NewProjectModal";
@@ -18,7 +17,6 @@ import { sortAndFilterProjects, type ProjectSortMode } from "./projectPickerView
 export function ProjectPickerScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  usePersistedWindow("main");
   const {
     busy,
     currentProjectId,

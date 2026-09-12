@@ -24,9 +24,6 @@ vi.mock("./parsePresentationWindowQuery", () => ({
     plotType: "scatter",
   }),
 }));
-vi.mock("@/features/application/window/usePersistedWindow", () => ({
-  usePersistedWindow: () => {},
-}));
 vi.mock("@/features/application/window/useCurrentWindowActions", () => ({
   useCurrentWindowActions: () => mocks.actions,
 }));
@@ -67,7 +64,7 @@ const ready: PresentationWindowState = {
 };
 let state: PresentationWindowState;
 function WindowProbe() {
-  state = usePresentationWindow("plot").state;
+  state = usePresentationWindow().state;
   return null;
 }
 let root: Root;

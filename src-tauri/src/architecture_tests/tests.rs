@@ -509,8 +509,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-window-state"
-                && root.target == "yss_window_state"
+            .any(|root| root.package == "yss-file-replace"
+                && root.target == "yss_file_replace"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -915,12 +915,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
     };
-    let window_state_root = ProductionRoot {
-        package_id: "window-state-package".to_owned(),
-        package: "yss-window-state".to_owned(),
-        target: "yss_window_state".to_owned(),
+    let file_replace_root = ProductionRoot {
+        package_id: "file-replace-package".to_owned(),
+        package: "yss-file-replace".to_owned(),
+        target: "yss_file_replace".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-window-state/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-file-replace/src/lib.rs"),
     };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
@@ -955,7 +955,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         project_manifest_root.clone(),
         project_model_root.clone(),
         tabular_contract_root.clone(),
-        window_state_root.clone(),
+        file_replace_root.clone(),
         build_root.clone(),
     ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
@@ -1100,9 +1100,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_tabular_contract",
             ),
             module(
-                &window_state_root,
-                "src-tauri/crates/yss-window-state/src/lib.rs",
-                "yss_window_state",
+                &file_replace_root,
+                "src-tauri/crates/yss-file-replace/src/lib.rs",
+                "yss_file_replace",
             ),
             module(
                 &execution_root,
@@ -1223,7 +1223,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-window-state/src/lib.rs"],
+        classified["src-tauri/crates/yss-file-replace/src/lib.rs"],
         RustLayer::PlatformAdapter
     );
     assert_eq!(

@@ -1,14 +1,8 @@
-export { usePersistedWindow } from "./usePersistedWindow";
-export { useWorkbenchWindowGeometryPersistence } from "./useWorkbenchWindowGeometryPersistence";
-export {
-  readSecondaryWindowFallbackPosition,
-  readSecondaryWindowState,
-} from "./secondaryWindowGeometryStore";
 export { useWindowMaximized } from "./useWindowMaximized";
 export { useCurrentWindowActions } from "./useCurrentWindowActions";
 export type { CurrentWindowActions, WindowActionOutcome } from "./useCurrentWindowActions";
 export { createPersistedWindow } from "./createPersistedWindow";
-export type { PersistedWindowOptions, WindowGeometryPolicy } from "./createPersistedWindow";
+export type { PersistedWindowOptions } from "./createPersistedWindow";
 export {
   resolveWindowDecorations,
   usesCustomTitleBar,

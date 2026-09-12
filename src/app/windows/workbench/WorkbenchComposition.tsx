@@ -9,7 +9,6 @@ import { NodeDocumentationModal } from "@/modules/node-catalog/public";
 import { SettingsView } from "@/modules/settings/public";
 import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
-import { useWorkbenchWindowGeometryPersistence } from "@/features/application/window";
 import { LoadStatus } from "@/shared/types/ui";
 import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
 import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
@@ -61,7 +60,6 @@ export function WorkbenchComposition() {
   const { t } = useTranslation();
   const { status, error } = useAppInitialization();
 
-  useWorkbenchWindowGeometryPersistence();
   useWorkbenchWindowCloseGuard();
 
   if (status === LoadStatus.Ready) return <WorkbenchReadyComposition />;

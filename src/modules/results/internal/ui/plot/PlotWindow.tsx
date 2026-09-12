@@ -22,7 +22,7 @@ const PLOT_ICON = (
 
 export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
-  const { state, windowActions } = usePresentationWindow("plot");
+  const { state, windowActions } = usePresentationWindow();
 
   const plotPayload = useMemo(() => {
     if (state.status !== "ready" || state.payload.mode !== "plot") return null;

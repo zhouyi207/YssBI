@@ -7,7 +7,7 @@ import { ReportView } from "../info/ReportView";
 
 export const SourceInspectorWindow: React.FC = () => {
   const { t } = useTranslation();
-  const { state, windowActions } = usePresentationWindow("sourceInspector");
+  const { state, windowActions } = usePresentationWindow();
 
   const title = state.status === "ready" ? state.descriptor.title : t("sourceInspector.title");
 

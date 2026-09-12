@@ -5561,7 +5561,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6003,7 +6003,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7276,6 +7276,21 @@ dependencies = [
  "url",
  "windows 0.61.3",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-window-state"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73736611e14142408d15353e21e3cca2f12a3cfb523ad0ce85999b6d2ef1a704"
+dependencies = [
+ "bitflags 2.13.1",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -9231,7 +9246,6 @@ dependencies = [
  "yss-tabular-arrow",
  "yss-tabular-contract",
  "yss-tracing",
- "yss-window-state",
 ]
 
 [[package]]
@@ -10164,18 +10178,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-window-state"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tauri",
- "thiserror 2.0.20",
- "uuid",
- "yss-file-replace",
-]
-
-[[package]]
 name = "yssbi"
 version = "0.3.3"
 dependencies = [
@@ -10190,6 +10192,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-opener",
+ "tauri-plugin-window-state",
  "thiserror 2.0.20",
  "tracing",
  "uuid",
@@ -10219,7 +10222,6 @@ dependencies = [
  "yss-statistical-harness-sqlite",
  "yss-tabular-io",
  "yss-tracing",
- "yss-window-state",
 ]
 
 [[package]]

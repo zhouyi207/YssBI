@@ -15,8 +15,6 @@ export interface AppWindowHandle {
   isMaximized(): Promise<PlatformOutcome<boolean>>;
   close(): Promise<PlatformOutcome<void>>;
   setDecorations(enabled: boolean): Promise<PlatformOutcome<void>>;
-  outerPosition(): Promise<PlatformOutcome<Readonly<{ x: number; y: number }>>>;
-  innerSize(): Promise<PlatformOutcome<Readonly<{ width: number; height: number }>>>;
   scaleFactor(): Promise<PlatformOutcome<number>>;
   onCloseRequested(
     listener: () => CloseRequestDecision | Promise<CloseRequestDecision>,
@@ -55,16 +53,6 @@ export function currentAppWindow(): AppWindowHandle {
     isMaximized: () => call("readWindowMaximized", () => native.isMaximized()),
     close: () => call("closeWindow", () => native.close()),
     setDecorations: (enabled) => call("setWindowDecorations", () => native.setDecorations(enabled)),
-    outerPosition: async () => {
-      const result = await call("readWindowPosition", () => native.outerPosition());
-      return result.ok ? { ok: true, value: { x: result.value.x, y: result.value.y } } : result;
-    },
-    innerSize: async () => {
-      const result = await call("readWindowSize", () => native.innerSize());
-      return result.ok
-        ? { ok: true, value: { width: result.value.width, height: result.value.height } }
-        : result;
-    },
     scaleFactor: () => call("readWindowScaleFactor", () => native.scaleFactor()),
     onCloseRequested: (listener) =>
       call("subscribeWindowCloseRequested", () =>

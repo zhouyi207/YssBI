@@ -11,7 +11,7 @@ export async function openDatabaseEditorWindow(databaseId?: string): Promise<voi
       ? `index.html?database=${encodeURIComponent(databaseId)}#/database`
       : "index.html#/database";
     await createPersistedWindow({
-      geometry: { source: "backend", kind: "databaseEditor" },
+      kind: "dataview",
       label,
       url,
       title: i18n.t("databaseEditor.title"),

@@ -8,8 +8,6 @@ export type PlatformOperation =
   | "readWindowMaximized"
   | "closeWindow"
   | "setWindowDecorations"
-  | "readWindowPosition"
-  | "readWindowSize"
   | "readWindowScaleFactor"
   | "subscribeWindowCloseRequested"
   | "subscribeWindowResized"
@@ -34,11 +32,11 @@ export type PlatformFailure =
     })
   | (PlatformFailureBase & {
       readonly code: "invalidArgument";
-      readonly argument: "options" | "target" | "windowLabel" | "url" | "geometry" | "settings";
+      readonly argument: "options" | "target" | "windowLabel" | "url" | "settings";
     })
   | (PlatformFailureBase & {
       readonly code: "invalidResult";
-      readonly resultKind: "pathSelection" | "windowGeometry" | "windowState" | "eventPayload";
+      readonly resultKind: "pathSelection" | "eventPayload";
     })
   | (PlatformFailureBase & { readonly code: "operationFailed" });
 

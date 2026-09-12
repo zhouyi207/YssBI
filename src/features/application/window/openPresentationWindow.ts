@@ -38,9 +38,9 @@ export async function openPresentationWindow(
   reference: ResultReference,
   presentation: PresentationWindowPayload,
 ): Promise<void> {
-  const route = presentation.route || "/info";
-  const labelKind = route.replace(/^\//, "") || "source";
-  const label = `${labelKind}-${crypto.randomUUID()}`;
+  const kind = windowKindForRoute(presentation.route);
+  const route = `/${kind}`;
+  const label = `${kind}-${crypto.randomUUID()}`;
   const held = await resultLeases.acquire(reference, label);
   const params = new URLSearchParams({
     resultId: reference.resultId,
@@ -53,7 +53,7 @@ export async function openPresentationWindow(
   let created = false;
   try {
     await createPersistedWindow({
-      geometry: { source: "backend", kind: windowKindForRoute(route) },
+      kind,
       label,
       url,
       title: presentation.windowTitle.trim() || "Source Inspector",

@@ -13,7 +13,6 @@ pub(crate) mod execution_dto;
 pub mod command_chart;
 pub mod command_sci;
 pub mod command_serial_tests;
-pub mod command_window;
 pub(crate) mod project_failure;
 
 pub use command_activity_panel::*;
@@ -30,4 +29,3 @@ pub use command_project::*;
 pub use command_chart::*;
 pub use command_sci::*;
 pub use command_serial_tests::*;
-pub use command_window::*;

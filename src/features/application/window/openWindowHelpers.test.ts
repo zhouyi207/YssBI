@@ -1,4 +1,5 @@
 import { resultReferenceFixture } from "@/tests/helpers/resultFixture";
+import { resultLeases } from "@/features/application/results/resultLeases";
 vi.mock("@/features/application/results/resultLeases", () => ({
   resultLeases: {
     acquire: vi.fn(async () => ({ leaseId: "00000000-0000-0000-0000-000000000100" })),
@@ -41,22 +42,18 @@ describe("window opening helpers", () => {
     expect(JSON.stringify(appError.mock.calls)).not.toContain("sensitive native window failure");
   });
 
-  it("opens Logs with backend geometry and no fallback coordinates", async () => {
+  it("opens Logs with its shared native window kind", async () => {
     createPersistedWindow.mockResolvedValueOnce(undefined);
 
     await openLogsWindow();
 
     expect(createPersistedWindow).toHaveBeenCalledWith(
       expect.objectContaining({
-        geometry: { source: "backend", kind: "logs" },
+        kind: "logs",
         label: "logs-test",
         url: "index.html#/logs",
       }),
     );
-    const options = createPersistedWindow.mock.calls[0]?.[0] as {
-      geometry: Record<string, unknown>;
-    };
-    expect(Object.keys(options.geometry).sort()).toEqual(["kind", "source"]);
   });
 
   it("records and rethrows a presentation window failure", async () => {
@@ -77,6 +74,7 @@ describe("window opening helpers", () => {
     expect(JSON.stringify(execError.mock.calls)).not.toContain(
       "sensitive presentation window failure",
     );
+    expect(resultLeases.finish).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000100", false);
   });
 
   it("records a backend incident ID before rethrowing the original IPC error", async () => {

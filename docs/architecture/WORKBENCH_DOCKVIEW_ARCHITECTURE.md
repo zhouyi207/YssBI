@@ -377,7 +377,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 
 ## 8. Persistence contract
 
-每个窗口只使用以下 key：
+每个窗口的 Dockview 布局只使用以下 key：
 
 ```text
 yssbi-workbench-layout:<window-label>
@@ -406,6 +406,23 @@ Persistence invariant：
 非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
 
 `view:data` 已移除；包含该旧 panel identity 的 root snapshot 按现有验证规则回退默认布局，不影响项目资源或有效的 Logs nested snapshot。包含旧 `params.metadata.pinned` 的 editor snapshot 同样不再是 canonical 格式，会回退默认布局。项目不再在 editor metadata 中镜像 Dockview 的 pinned 状态；Root Dockview 启用原生 `pinnedTabs`，新打开的 editor 通过 `panel.api.setPinned(true)` 设置原生状态，布局序列化保留 Dockview 自己的 `panels[id].pinned` 字段。
+
+### 8.1 原生窗口几何与关闭
+
+原生窗口的位置、尺寸和最大化状态由桌面根包装配的 `tauri-plugin-window-state` 维护，
+持久化到应用配置目录的 `.window-state.json`。前端不再持有几何快照、保存命令或次级窗口几何 localStorage。
+主窗口默认尺寸来自 Tauri 配置，子窗口逻辑像素默认尺寸来自
+[createPersistedWindow](../../src/features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
+`main` 和 `dataview-*`、`logs-*`、`plot-*`、`inspect-*`、`info-*` 分别按种类共享状态，实例 label 仍用于窗口及结果租约身份。
+
+插件不管理可见性、装饰或全屏：主窗口在 Rust setup 中恢复后显示，子窗口隐藏创建，由内容准备流程显示；
+装饰继续采用当前应用设置。创建 Promise 等待原生 `tauri://created` 或 `tauri://error`，结果租约据此判断打开是否成功。
+
+工作台只有 `useWorkbenchWindowCloseGuard` 决定是否关闭，先处理未保存内容和布局 flush。
+原生几何监听不参与这个决策。窗口销毁并从 Tauri manager 移除后，根包调用插件落盘，失败记录诊断；
+应用退出也沿用插件保存。几何属于可恢复偏好，采用插件的缓存和直接文件写入语义，不具有业务事务提交保证。
+同种窗口并存时共享插件缓存；保存时仍打开的同组窗口可能刷新缓存，不保证最后关闭实例的状态获胜。
+旧 `window_state.json` 不再读取，没有兼容读写或自动迁移；首次使用新存储按默认尺寸打开。
 
 ## 9. 视觉尺寸层级
 

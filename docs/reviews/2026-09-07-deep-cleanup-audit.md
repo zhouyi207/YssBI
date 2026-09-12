@@ -125,7 +125,7 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 
 **F10：平台文件替换有三份重复实现。**
 
-[database.rs](../../src-tauri/crates/yss-application/src/database.rs#L1399)、[window-state/persistence.rs](../../src-tauri/crates/yss-window-state/src/persistence.rs#L79)、[julia-worker/assets.rs](../../plugins/julia/native/crates/yss-julia-worker/src/assets.rs#L159) 都重复编码 Windows 路径、调用 `MoveFileExW`、设置 replace/write-through 标志并读取系统错误。
+[database.rs](../../src-tauri/crates/yss-application/src/database.rs#L1399)、`window-state/persistence.rs`（历史实现，现已由官方窗口状态插件替换）、[julia-worker/assets.rs](../../plugins/julia/native/crates/yss-julia-worker/src/assets.rs#L159) 都重复编码 Windows 路径、调用 `MoveFileExW`、设置 replace/write-through 标志并读取系统错误。
 
 后续修正 Windows 行为需要维护三处。建议先区分共同的平台 primitive 与各自的临时文件/错误策略，再确定复用位置；不要让 Window/Julia adapter 为复用而依赖 Project 领域，也不要把业务事务抽成万能文件工具。
 

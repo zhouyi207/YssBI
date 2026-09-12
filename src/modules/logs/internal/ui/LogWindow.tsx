@@ -1,11 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { LogDomainDockviewHost } from "./LogDomainDockviewHost";
-import {
-  useCurrentWindowActions,
-  useCustomTitleBar,
-  usePersistedWindow,
-} from "@/features/application/window";
+import { useCurrentWindowActions, useCustomTitleBar } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowChrome } from "@/shared/ui/WindowChrome";
 
@@ -13,8 +9,6 @@ export const LogWindow = () => {
   const { t } = useTranslation();
   const windowActions = useCurrentWindowActions();
   const customChrome = useCustomTitleBar();
-
-  usePersistedWindow("logs");
 
   useEffect(() => {
     void windowActions.show();

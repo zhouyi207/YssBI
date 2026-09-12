@@ -37,6 +37,9 @@ flowchart LR
 
 `src-tauri/src/lib.rs` 是桌面 composition root：构造 Project、Application、Execution、Diagnostics、Harness 和 platform adapters，并把它们注入 Tauri。`yss-api` 是唯一 Tauri transport seam，只向 composition root 暴露 canonical invoke handler；业务 workflow 不属于 transport。
 
+原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
+窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
+
 ## 2. Authority model
 
 | 状态或事实                                                                   | 唯一 authority                                   | 非 authority 投影                           |

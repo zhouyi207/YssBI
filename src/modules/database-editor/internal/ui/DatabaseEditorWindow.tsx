@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useProjectSync } from "@/features/application/initialization";
 import { initializeProjectForCurrentWindow } from "@/features/application/project";
-import { useCurrentWindowActions, usePersistedWindow } from "@/features/application/window";
+import { useCurrentWindowActions } from "@/features/application/window";
 import { useDatabaseRead } from "@/features/core/database/read";
 import { TitleBar, type DataframeOption } from "./Layout";
 import { DatabaseEditorContent } from "./DatabaseEditorContent";
@@ -21,8 +21,6 @@ export const DatabaseEditorWindow: React.FC = () => {
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
   const hasInitializedDfRef = useRef(false);
-
-  usePersistedWindow("databaseEditor");
 
   useProjectSync();
 

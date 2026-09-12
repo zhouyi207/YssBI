@@ -90,7 +90,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-tabular-contract` | `src-tauri/crates/yss-tabular-contract` | [Cargo.toml](../../src-tauri/crates/yss-tabular-contract/Cargo.toml) | — |
 | `yss-tabular-io` | `src-tauri/crates/yss-tabular-io` | [Cargo.toml](../../src-tauri/crates/yss-tabular-io/Cargo.toml) | — |
 | `yss-tracing` | `src-tauri/crates/yss-tracing` | [Cargo.toml](../../src-tauri/crates/yss-tracing/Cargo.toml) | — |
-| `yss-window-state` | `src-tauri/crates/yss-window-state` | [Cargo.toml](../../src-tauri/crates/yss-window-state/Cargo.toml) | — |
 | `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | — |
 
 ## Frontend modules
