@@ -3,7 +3,6 @@ use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTran
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_chart_document::ChartDocument;
-use yss_project_discovery::normalize_project_name;
 use yss_project_filesystem::{
     NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemTransaction,
     ProjectRootBinding, ProjectRootLifecycleGuard, StagedFilesystemMutation, ensure_directory,
@@ -14,7 +13,7 @@ use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
 use yss_project_layout::{
     CHART_EXTENSION, CHARTS_DIR, PROJECT_CONTENT_DIRECTORIES, PROJECT_METADATA_FILE,
 };
-use yss_project_model::ProjectData;
+use yss_project_model::{ProjectData, normalize_project_name};
 
 pub struct PreparedProjectCopy {
     pub metadata_path: PathBuf,

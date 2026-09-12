@@ -8,11 +8,12 @@ publish = false
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+walkdir.workspace = true
 yss-path-display = { path = "../yss-path-display" }
-yss-project-discovery = { path = "../yss-project-discovery" }
 yss-project-filesystem = { path = "../yss-project-filesystem" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
+yss-project-model = { path = "../yss-project-model" }
 yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 

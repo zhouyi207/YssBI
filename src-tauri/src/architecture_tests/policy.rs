@@ -1657,7 +1657,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::Application);
     } else if matches!(
         package,
-        "yss-project" | "yss-project-discovery" | "yss-project-history" | "yss-project-model"
+        "yss-project" | "yss-project-history" | "yss-project-model"
     ) || package == "yss-function-editor-projection"
         || package == "yss-project-filesystem"
         || package == "yss-project-operation"

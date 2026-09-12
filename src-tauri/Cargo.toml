@@ -65,7 +65,6 @@ members = [
   "crates/yss-path-display",
   "crates/yss-project",
   "crates/yss-project-change",
-  "crates/yss-project-discovery",
   "crates/yss-project-filesystem",
   "crates/yss-project-history",
   "crates/yss-project-identity",

@@ -12,6 +12,7 @@
 边界约束：
 
 - `ProjectData` 是 resident project facts 的权威聚合；
+- 项目默认名称与名称规范化由 `yss-project-model` 统一拥有，创建、注册和空项目模型共用同一规则；
 - `yss-project-filesystem` 只拥有安全文件系统原语，`yss-project` 拥有 session/revision 校验与 publication；
 - 对外返回 Project-owned typed facts，由 Application 和 API 层投影为事件与 DTO；
 - `test-support` 只暴露跨 crate 测试所需的 fixture 与故障注入 seam。
@@ -24,7 +25,7 @@ Graph 撤销/重做由前端 Graph Draft 管理，数据库编辑历史由 Datab
 
 ## Graph resource revisions
 
-项目格式版本为 4。命名常量随 Event/Function 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。
+项目格式版本以 [`CURRENT_PROJECT_SCHEMA_VERSION`](src/manifest.rs) 为准。命名常量随 Event/Function 的 `GraphDocument.constants` 保存，属于 Graph 资源事务，不再维护全局变量、变量 revision、作用域迁移或 `variables.yssbi-vars` 的日常读写。
 
 项目尚未发布，只支持当前格式。打开其他格式版本的项目会在 manifest 校验时失败，不执行旧变量资源或节点的兼容转换，也不改写原文件。新建和保存项目继续写入当前 `schemaVersion`。
 

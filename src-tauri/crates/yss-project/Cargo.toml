@@ -26,7 +26,6 @@ yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-protocol = { path = "../yss-graph-protocol" }
 yss-project-change = { path = "../yss-project-change" }
-yss-project-discovery = { path = "../yss-project-discovery" }
 yss-project-filesystem = { path = "../yss-project-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }

@@ -140,7 +140,6 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yss-resource-naming",
         "yss-chart-document",
         "yss-project-filesystem",
-        "yss-project-discovery",
         "yss-project-progress",
         "yss-project-registry",
         "yss-project-registry-contract",

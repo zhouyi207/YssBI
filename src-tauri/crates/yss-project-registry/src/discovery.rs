@@ -2,13 +2,13 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use walkdir::WalkDir;
+use yss_project_filesystem::metadata_is_redirect;
 use yss_project_layout::PROJECT_METADATA_FILE;
+use yss_project_model::{DEFAULT_PROJECT_NAME, normalize_project_name};
 use yss_project_progress::ProjectTaskCancellation;
 
-pub const DEFAULT_PROJECT_NAME: &str = "\u{672a}\u{547d}\u{540d}\u{9879}\u{76ee}";
-
 #[derive(Debug, Error)]
-pub enum ProjectDiscoveryError {
+pub(super) enum ProjectDiscoveryError {
     #[error("project discovery was cancelled")]
     Cancelled,
     #[error("project discovery root must be a directory")]
@@ -25,16 +25,7 @@ const SKIP_DIR_NAMES: &[&str] = &[
     "system volume information",
 ];
 
-pub fn normalize_project_name(name: &str) -> String {
-    let name = name.trim();
-    if name.is_empty() {
-        DEFAULT_PROJECT_NAME.into()
-    } else {
-        name.into()
-    }
-}
-
-pub fn discover_project_metadata_files(
+pub(super) fn discover_project_metadata_files(
     root: &Path,
     cancellation: &ProjectTaskCancellation,
 ) -> Result<Vec<PathBuf>, ProjectDiscoveryError> {
@@ -48,7 +39,7 @@ pub fn discover_project_metadata_files(
         }
         Err(error) => return Err(ProjectDiscoveryError::Io(error)),
     };
-    if !root_metadata.is_dir() || is_redirect(root, &root_metadata.file_type())? {
+    if !root_metadata.is_dir() || metadata_is_redirect(&root_metadata) {
         return Err(ProjectDiscoveryError::InvalidRoot);
     }
     let mut found = Vec::new();
@@ -67,7 +58,7 @@ pub fn discover_project_metadata_files(
     Ok(found)
 }
 
-pub fn project_name_from_metadata_path(metadata_path: &Path) -> String {
+pub(super) fn project_name_from_metadata_path(metadata_path: &Path) -> String {
     metadata_path
         .parent()
         .and_then(Path::file_name)
@@ -88,15 +79,16 @@ fn next_metadata_file(
             return Ok(None);
         };
         let entry = entry.map_err(std::io::Error::from)?;
-        let depth = entry.depth();
-        let file_type = entry.file_type();
-        let path = entry.into_path();
-        if is_redirect(&path, &file_type)? || !file_type.is_dir() {
-            if file_type.is_dir() {
-                entries.skip_current_dir();
-            }
+        if !entry.file_type().is_dir() {
             continue;
         }
+        #[cfg(windows)]
+        if metadata_is_redirect(&entry.metadata().map_err(std::io::Error::from)?) {
+            entries.skip_current_dir();
+            continue;
+        }
+        let depth = entry.depth();
+        let path = entry.into_path();
         // A user-selected root is scanned even if its name is normally skipped.
         if depth > 0 && should_skip_dir(&path) {
             entries.skip_current_dir();
@@ -105,9 +97,7 @@ fn next_metadata_file(
         // Probe the canonical path so filename matching follows the filesystem.
         let metadata_path = path.join(PROJECT_METADATA_FILE);
         match std::fs::symlink_metadata(&metadata_path) {
-            Ok(metadata)
-                if metadata.is_file() && !is_redirect(&metadata_path, &metadata.file_type())? =>
-            {
+            Ok(metadata) if metadata.is_file() && !metadata_is_redirect(&metadata) => {
                 return Ok(Some(metadata_path));
             }
             Ok(_) => {}
@@ -115,22 +105,6 @@ fn next_metadata_file(
             Err(error) => return Err(ProjectDiscoveryError::Io(error)),
         }
     }
-}
-
-fn is_redirect(_path: &Path, file_type: &std::fs::FileType) -> Result<bool, std::io::Error> {
-    if file_type.is_symlink() {
-        return Ok(true);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        let metadata = std::fs::symlink_metadata(_path)?;
-        Ok(metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
-    }
-    #[cfg(not(windows))]
-    Ok(false)
 }
 
 fn should_skip_dir(path: &Path) -> bool {
@@ -177,9 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn project_names_are_trimmed_and_blank_names_use_the_canonical_default() {
-        assert_eq!(normalize_project_name("  Alpha  "), "Alpha");
-        assert_eq!(normalize_project_name("  \t  "), DEFAULT_PROJECT_NAME);
+    fn project_names_are_derived_from_the_metadata_parent() {
         assert_eq!(
             project_name_from_metadata_path(Path::new("alpha/metadata.yssbi")),
             "alpha"

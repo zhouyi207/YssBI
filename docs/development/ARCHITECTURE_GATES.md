@@ -114,7 +114,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 `faer` 的外部依赖声明限定于 `yss-linalg`、`yss-sci`、`yss-sci-runtime` 和当前构造假设检验输入的 `yss-application`；生产使用限定于 Pure Leaf、SCI Core 和 Application 分类。Graph、Execution、Transport 和其他适配层通过业务契约获取科学计算能力，不直接使用 faer。原生矩阵与向量可以在科学计算实现中共享；项目数值错误、分解检查和秩阈值由 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md) 维护。
 
-`walkdir` 的运行时直接依赖声明限定于 `yss-project-discovery`，生产使用归 Project 分类。它只承担项目发现内部的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由 discovery 拥有。根路径与子目录均不跟随符号链接，Windows 重解析点检查继续保留；这不开放其他层直接使用遍历实现的权限。
+`walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-project-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
 
 `yss-file-replace` 按 Platform Adapter 分类。Application 的数据库导出模块和 Julia worker 的 assets 模块仅获 `atomic_replace` 的精确调用权限；这不会开放 Application/Backend Adapter 对整个平台层的依赖。Window State 与文件替换同属平台层，内容生成和持久化事务仍归各自 owner。
 

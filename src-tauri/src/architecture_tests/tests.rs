@@ -880,12 +880,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-path-display/src/lib.rs"),
     };
-    let project_discovery_root = ProductionRoot {
-        package_id: "project-discovery-package".to_owned(),
-        package: "yss-project-discovery".to_owned(),
-        target: "yss_project_discovery".to_owned(),
+    let project_registry_root = ProductionRoot {
+        package_id: "project-registry-package".to_owned(),
+        package: "yss-project-registry".to_owned(),
+        target: "yss_project_registry".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-project-discovery/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-project-registry/src/lib.rs"),
     };
     let project_history_root = ProductionRoot {
         package_id: "project-history-package".to_owned(),
@@ -950,7 +950,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_registry_root.clone(),
         math_root.clone(),
         path_display_root.clone(),
-        project_discovery_root.clone(),
+        project_registry_root.clone(),
         project_history_root.clone(),
         project_manifest_root.clone(),
         project_model_root.clone(),
@@ -1075,9 +1075,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_path_display",
             ),
             module(
-                &project_discovery_root,
-                "src-tauri/crates/yss-project-discovery/src/lib.rs",
-                "yss_project_discovery",
+                &project_registry_root,
+                "src-tauri/crates/yss-project-registry/src/discovery.rs",
+                "yss_project_registry::discovery",
             ),
             module(
                 &project_history_root,
@@ -1203,7 +1203,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-project-discovery/src/lib.rs"],
+        classified["src-tauri/crates/yss-project-registry/src/discovery.rs"],
         RustLayer::Project
     );
     assert_eq!(

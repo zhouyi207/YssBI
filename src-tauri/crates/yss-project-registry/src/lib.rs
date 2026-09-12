@@ -3,19 +3,21 @@
 //! Persistence records and the storage port live in
 //! `yss-project-registry-contract`; concrete stores remain backend adapters.
 
+mod discovery;
+
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 
-use yss_path_display::{format_path_for_user, format_path_for_user_path};
-use yss_project_discovery::{
-    ProjectDiscoveryError, discover_project_metadata_files, normalize_project_name,
-    project_name_from_metadata_path,
+use discovery::{
+    ProjectDiscoveryError, discover_project_metadata_files, project_name_from_metadata_path,
 };
+use yss_path_display::{format_path_for_user, format_path_for_user_path};
 use yss_project_filesystem::{NormalizedProjectRoot, ProjectRootBinding};
 use yss_project_identity::ProjectRegistrationId;
 use yss_project_layout::PROJECT_METADATA_FILE;
+use yss_project_model::normalize_project_name;
 use yss_project_progress::{
     ProjectCleanupProgress, ProjectProgress, ProjectProgressSink, ProjectScanProgress,
     ProjectTaskCancellation,
@@ -104,7 +106,15 @@ impl ProjectRegistry {
             right
                 .is_favorite
                 .cmp(&left.is_favorite)
-                .then_with(|| right.last_opened_at.cmp(&left.last_opened_at))
+                .then_with(|| {
+                    let timestamp = |record: &ProjectRecord| {
+                        record
+                            .last_opened_at
+                            .as_deref()
+                            .and_then(|value| value.parse::<u64>().ok())
+                    };
+                    timestamp(right).cmp(&timestamp(left))
+                })
                 .then_with(|| {
                     left.name
                         .to_ascii_lowercase()
@@ -125,18 +135,28 @@ impl ProjectRegistry {
             .find(|record| record.id.as_str() == id))
     }
 
-    async fn fetch_by_path(
+    async fn fetch_by_root(
         &self,
-        path: &str,
+        binding: &ProjectRootBinding,
     ) -> Result<Option<ProjectRecord>, ProjectRegistryError> {
-        let normalized = normalize_existing_path(path).ok();
+        let identity = binding
+            .identity()
+            .ok_or(ProjectRegistryError::RootIdentityMissing)?;
         let records = self.list_projects().await?;
-        Ok(records.into_iter().find(|record| {
-            normalized.as_deref().is_some_and(|canonical| {
-                NormalizedProjectRoot::from_project_path(&record.path).ok()
-                    == NormalizedProjectRoot::from_project_path(canonical).ok()
-            }) || record.path == path
-        }))
+        binding
+            .revalidate()
+            .map_err(|_| ProjectRegistryError::IdentityChanged)?;
+        let record = records.into_iter().find(|record| {
+            NormalizedProjectRoot::from_project_path(&record.path)
+                .is_ok_and(|root| &root == binding.normalized())
+        });
+        if record
+            .as_ref()
+            .is_some_and(|record| record.deletion_identity() != Some(identity))
+        {
+            return Err(ProjectRegistryError::IdentityChanged);
+        }
+        Ok(record)
     }
 
     pub async fn register_project(
@@ -152,10 +172,7 @@ impl ProjectRegistry {
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
         let path = normalize_existing_path(path).map_err(|_| ProjectRegistryError::InvalidPath)?;
 
-        if let Some(existing) = self.fetch_by_path(&path).await? {
-            if existing.deletion_identity() != Some(&root_identity) {
-                return Err(ProjectRegistryError::IdentityChanged);
-            }
+        if let Some(existing) = self.fetch_by_root(&binding).await? {
             let updated = ProjectRecord {
                 last_opened_at: Some(now_string()),
                 ..existing
@@ -167,12 +184,13 @@ impl ProjectRegistry {
             return Ok(updated);
         }
 
+        let now = now_string();
         let record = ProjectRecord {
             id: ProjectRegistrationId::generate(),
             name: normalize_project_name(name),
             path,
-            created_at: now_string(),
-            last_opened_at: Some(now_string()),
+            created_at: now.clone(),
+            last_opened_at: Some(now),
             is_favorite: false,
             root_identity,
             root_identity_state: ProjectRootIdentityState::Valid,
@@ -250,6 +268,9 @@ impl ProjectRegistry {
                 }));
             }
         }
+        if cancellation.is_cancelled() {
+            return Err(ProjectRegistryError::Cancelled);
+        }
         Ok(CleanupInvalidProjectsResult { removed })
     }
 
@@ -293,14 +314,25 @@ impl ProjectRegistry {
             let path = metadata_path.to_string_lossy().into_owned();
             let normalized =
                 normalize_existing_path(&path).map_err(|_| ProjectRegistryError::ScanFailed)?;
-            let name = project_name_from_metadata_path(metadata_path);
-            let existing = self.fetch_by_path(&normalized).await?;
+            let binding = ProjectRootBinding::for_existing(metadata_path)
+                .map_err(|_| ProjectRegistryError::ScanFailed)?;
+            let existing = self.fetch_by_root(&binding).await?;
             let (record, is_new) = match existing {
                 Some(record) => (record, false),
-                None => (self.register_project(&name, &normalized).await?, true),
+                None => (
+                    self.register_project(
+                        &project_name_from_metadata_path(metadata_path),
+                        &normalized,
+                    )
+                    .await?,
+                    true,
+                ),
             };
             newly_registered += usize::from(is_new);
             projects.push(record);
+        }
+        if cancellation.is_cancelled() {
+            return Err(ProjectRegistryError::Cancelled);
         }
         Ok(ScanProjectsResult {
             discovered: metadata_files.len(),
@@ -537,8 +569,8 @@ mod tests {
     async fn list_orders_favorites_then_recent_projects_then_names() {
         let registry = registry(vec![
             record("plain", "Zulu", false, Some("99")),
-            record("old", "bravo", true, Some("10")),
-            record("new", "Alpha", true, Some("20")),
+            record("old", "bravo", true, Some("99")),
+            record("new", "Alpha", true, Some("100")),
         ]);
 
         let records = registry.list_projects().await.expect("list projects");
@@ -639,6 +671,73 @@ mod tests {
             ));
         }
         assert!(registry.list_projects().await.unwrap().is_empty());
+
+        struct CancelOnProgress(ProjectTaskCancellationRegistry);
+        impl yss_project_progress::ProjectProgressSink for CancelOnProgress {
+            fn publish(&self, progress: yss_project_progress::ProjectProgress) {
+                if matches!(
+                    progress,
+                    yss_project_progress::ProjectProgress::Scan(
+                        yss_project_progress::ProjectScanProgress::Discovered { .. }
+                    ) | yss_project_progress::ProjectProgress::Cleanup(
+                        yss_project_progress::ProjectCleanupProgress::Removing { .. }
+                    )
+                ) {
+                    self.0.cancel_active();
+                }
+            }
+        }
+        let progress = CancelOnProgress(ProjectTaskCancellationRegistry::new());
+        let empty = directory.child("empty");
+        std::fs::create_dir(&empty).unwrap();
+        assert!(matches!(
+            registry
+                .scan_directory(empty.to_str().unwrap(), Some(&progress), progress.0.begin())
+                .await,
+            Err(ProjectRegistryError::Cancelled)
+        ));
+
+        let registry = self::registry(vec![record("missing", "Missing", false, None)]);
+        assert!(matches!(
+            registry
+                .cleanup_invalid_projects(Some(&progress), progress.0.begin())
+                .await,
+            Err(ProjectRegistryError::Cancelled)
+        ));
+    }
+
+    #[tokio::test]
+    async fn scanning_and_registering_reject_a_replaced_root() {
+        let directory = TestDirectory::new("replaced-root");
+        let root = directory.child("project");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join(PROJECT_METADATA_FILE), "{}").unwrap();
+        let registry = registry(Vec::new());
+        let original = registry
+            .register_project("Original", root.to_str().unwrap())
+            .await
+            .unwrap();
+
+        std::fs::rename(&root, directory.child("original-root")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(root.join(PROJECT_METADATA_FILE), "{}").unwrap();
+        let binding = yss_project_filesystem::ProjectRootBinding::for_existing(&root).unwrap();
+        assert_ne!(binding.identity(), Some(&original.root_identity));
+
+        assert!(matches!(
+            registry
+                .register_project("Replacement", root.to_str().unwrap())
+                .await,
+            Err(ProjectRegistryError::IdentityChanged)
+        ));
+        let cancellations = ProjectTaskCancellationRegistry::new();
+        assert!(matches!(
+            registry
+                .scan_directory(root.to_str().unwrap(), None, cancellations.begin())
+                .await,
+            Err(ProjectRegistryError::IdentityChanged)
+        ));
+        assert_eq!(registry.list_projects().await.unwrap(), [original]);
     }
 
     #[test]

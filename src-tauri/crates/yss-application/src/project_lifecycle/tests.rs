@@ -1,5 +1,4 @@
 use super::*;
-use sqlx::Connection;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use yss_project::{ProjectState, fixtures};
@@ -133,21 +132,6 @@ async fn seed_stale_registration(registry: &ProjectRegistry, destination: &Path)
     record
 }
 
-async fn mark_registry_record_invalid(registry: &ProjectRegistry, id: &str) {
-    let url = format!(
-        "sqlite://{}",
-        registry.path().to_string_lossy().replace('\\', "/")
-    );
-    let mut connection = sqlx::SqliteConnection::connect(&url).await.unwrap();
-    sqlx::query(
-        "UPDATE projects SET root_identity = '', root_identity_state = 'invalid' WHERE id = ?",
-    )
-    .bind(id)
-    .execute(&mut connection)
-    .await
-    .unwrap();
-}
-
 #[test]
 fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
     block_on(async {
@@ -258,6 +242,42 @@ fn save_as_activation_failure_and_success_return_exact_direct_receipts() {
                 assert!(result.recovery.is_none());
                 assert_ne!(state.capture_project_session().unwrap(), source_session);
             }
+        }
+    });
+}
+
+#[test]
+fn created_project_name_agrees_with_manifest_and_registry() {
+    block_on(async {
+        let directory = TestDirectory::new("create-project-names");
+        let registry = initialize_registry(&directory).await;
+        let state = ProjectState::new();
+        for (folder, input, expected) in [
+            ("trimmed", "  Example  ", "Example"),
+            ("blank", " \t ", yss_project_model::DEFAULT_PROJECT_NAME),
+        ] {
+            let destination = directory.child(folder);
+            let result = create_project(&state, &registry, input, &destination, OperationId::new())
+                .await
+                .unwrap();
+            assert_eq!(result.outcome, ProjectLifecycleOutcome::Committed);
+            let record = result.record.unwrap();
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(destination.join(yss_project_layout::PROJECT_METADATA_FILE))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(manifest["projectName"], expected);
+            assert_eq!(record.name, expected);
+            assert_eq!(
+                registry
+                    .fetch_by_id(record.id.as_str())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .name,
+                expected
+            );
         }
     });
 }

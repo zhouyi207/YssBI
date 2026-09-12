@@ -15,6 +15,17 @@ use yss_database_contract::DatabaseDecl;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_project_history::{FunctionDocument, FunctionSignature};
 
+pub const DEFAULT_PROJECT_NAME: &str = "未命名项目";
+
+pub fn normalize_project_name(name: &str) -> String {
+    let name = name.trim();
+    if name.is_empty() {
+        DEFAULT_PROJECT_NAME.into()
+    } else {
+        name.into()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphResourceDocument {
@@ -46,7 +57,7 @@ pub struct ProjectMetadata {
 impl Default for ProjectMetadata {
     fn default() -> Self {
         Self {
-            project_name: "未命名项目".to_owned(),
+            project_name: DEFAULT_PROJECT_NAME.to_owned(),
             export_time: String::new(),
         }
     }
@@ -101,6 +112,12 @@ mod tests {
         assert!(project.graphs.is_empty());
         assert!(project.charts.is_empty());
         assert!(project.databases.is_empty());
+        assert_eq!(
+            normalize_project_name("  \t  "),
+            project.metadata.project_name
+        );
+        assert_eq!(normalize_project_name("  Alpha  "), "Alpha");
+        assert_eq!(normalize_project_name("  项目 A  "), "项目 A");
     }
 
     #[test]

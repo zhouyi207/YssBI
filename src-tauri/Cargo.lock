@@ -9856,7 +9856,6 @@ dependencies = [
  "yss-graph-document-edit",
  "yss-graph-protocol",
  "yss-project-change",
- "yss-project-discovery",
  "yss-project-filesystem",
  "yss-project-history",
  "yss-project-identity",
@@ -9873,16 +9872,6 @@ version = "0.1.0"
 dependencies = [
  "yss-project-identity",
  "yss-project-layout",
-]
-
-[[package]]
-name = "yss-project-discovery"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.20",
- "walkdir",
- "yss-project-layout",
- "yss-project-progress",
 ]
 
 [[package]]
@@ -9963,11 +9952,12 @@ dependencies = [
  "serde",
  "thiserror 2.0.20",
  "tokio",
+ "walkdir",
  "yss-path-display",
- "yss-project-discovery",
  "yss-project-filesystem",
  "yss-project-identity",
  "yss-project-layout",
+ "yss-project-model",
  "yss-project-progress",
  "yss-project-registry-contract",
 ]

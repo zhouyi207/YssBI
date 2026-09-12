@@ -65,7 +65,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-plugin-sdk` | `src-tauri/crates/yss-plugin-sdk` | [Cargo.toml](../../src-tauri/crates/yss-plugin-sdk/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-sdk/README.md) |
 | `yss-project` | `src-tauri/crates/yss-project` | [Cargo.toml](../../src-tauri/crates/yss-project/Cargo.toml) | [README](../../src-tauri/crates/yss-project/README.md) |
 | `yss-project-change` | `src-tauri/crates/yss-project-change` | [Cargo.toml](../../src-tauri/crates/yss-project-change/Cargo.toml) | — |
-| `yss-project-discovery` | `src-tauri/crates/yss-project-discovery` | [Cargo.toml](../../src-tauri/crates/yss-project-discovery/Cargo.toml) | — |
 | `yss-project-filesystem` | `src-tauri/crates/yss-project-filesystem` | [Cargo.toml](../../src-tauri/crates/yss-project-filesystem/Cargo.toml) | — |
 | `yss-project-history` | `src-tauri/crates/yss-project-history` | [Cargo.toml](../../src-tauri/crates/yss-project-history/Cargo.toml) | — |
 | `yss-project-identity` | `src-tauri/crates/yss-project-identity` | [Cargo.toml](../../src-tauri/crates/yss-project-identity/Cargo.toml) | — |
