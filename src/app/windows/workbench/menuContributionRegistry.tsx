@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import {
   useEditorHistoryAvailability,
@@ -19,6 +19,8 @@ import {
 } from "@/features/application/window";
 import {
   AboutModal,
+  ArchitectureModal,
+  architectureSearch,
   WorkbenchMenuBar,
   type WorkbenchMenuDefinition,
   type WorkbenchMenuItem,
@@ -160,6 +162,7 @@ export function WorkbenchMenuContribution({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [aboutOpen, setAboutOpen] = useState(false);
   const {
     importGraph,
@@ -253,6 +256,11 @@ export function WorkbenchMenuContribution({
   ];
   const helpItems: MenuItem[] = [
     {
+      label: t("menubar.architecture"),
+      onClick: () =>
+        navigate({ ...location, search: architectureSearch(location.search, "overview") }),
+    },
+    {
       label: t("menubar.documentation"),
       onClick: () => void openExternalUrlWithDialog(APP_LINKS.documentation, t),
     },
@@ -300,6 +308,7 @@ export function WorkbenchMenuContribution({
         onOpenRepository={() => void openExternalUrlWithDialog(APP_LINKS.repository, t)}
         onReportIssue={() => void openExternalUrlWithDialog(APP_LINKS.reportIssue, t)}
       />
+      <ArchitectureModal />
     </>
   );
 }

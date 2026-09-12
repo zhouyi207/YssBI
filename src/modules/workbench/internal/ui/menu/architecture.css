@@ -1,0 +1,238 @@
+.architecture-surface {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse at 14% 42%,
+      color-mix(in srgb, var(--chart-1) 14%, transparent),
+      transparent 45%
+    ),
+    radial-gradient(
+      ellipse at 50% 30%,
+      color-mix(in srgb, var(--chart-4) 10%, transparent),
+      transparent 42%
+    ),
+    radial-gradient(
+      ellipse at 88% 56%,
+      color-mix(in srgb, var(--chart-2) 13%, transparent),
+      transparent 45%
+    ),
+    var(--workbench-bg);
+}
+
+.architecture-flow {
+  --xy-background-color: transparent;
+}
+.architecture-card {
+  position: relative;
+  width: 320px;
+  border: 1px solid color-mix(in srgb, var(--architecture-color) 25%, var(--border));
+  border-radius: 16px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--card) 84%, transparent),
+    color-mix(in srgb, var(--card) 62%, transparent)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 4px 8px -4px rgb(0 0 0 / 8%),
+    0 18px 40px -16px color-mix(in srgb, var(--architecture-color) 24%, transparent);
+  backdrop-filter: blur(20px) saturate(145%);
+  transition:
+    border-color 160ms,
+    box-shadow 160ms;
+}
+
+.architecture-card:hover,
+.architecture-card:focus-within {
+  border-color: color-mix(in srgb, var(--architecture-color) 55%, var(--border));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 18px 44px -12px color-mix(in srgb, var(--architecture-color) 28%, transparent);
+}
+
+.architecture-icon {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--architecture-color) 24%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--architecture-color) 18%, transparent),
+    color-mix(in srgb, var(--architecture-color) 5%, transparent)
+  );
+  color: var(--architecture-color);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 25%);
+}
+
+.architecture-drilldown,
+.architecture-drilldown .architecture-capability,
+.architecture-drilldown .architecture-boundary {
+  cursor: pointer;
+}
+
+.backend-architecture-card,
+.frontend-architecture-card,
+.communication-architecture-card {
+  display: flex;
+  width: 300px;
+  min-height: 250px;
+  flex-direction: column;
+}
+
+.architecture-runtime {
+  border-color: color-mix(in srgb, var(--architecture-color) 20%, transparent);
+  background: color-mix(in srgb, var(--architecture-color) 7%, transparent);
+  color: var(--architecture-color);
+}
+
+.architecture-divider {
+  background: color-mix(in srgb, var(--architecture-color) 12%, var(--border));
+  opacity: 0.6;
+}
+
+.architecture-capability {
+  min-height: 88px;
+  padding: 12px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--card) 38%, transparent);
+  cursor: help;
+  outline: none;
+  transition:
+    background 160ms,
+    border-color 160ms;
+}
+
+.architecture-capability:hover,
+.architecture-capability:focus-visible {
+  border-color: color-mix(in srgb, var(--architecture-color) 35%, transparent);
+  background: color-mix(in srgb, var(--architecture-color) 7%, var(--card));
+}
+
+.architecture-transport {
+  min-height: 0;
+  padding: 10px 12px;
+}
+.architecture-transport > p {
+  margin-left: 22px;
+}
+
+.architecture-footer {
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 0 0 16px 16px;
+  background: color-mix(in srgb, var(--architecture-color) 4%, transparent);
+}
+
+.architecture-boundary {
+  border-radius: 4px;
+  cursor: help;
+  outline: none;
+}
+.architecture-boundary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+.architecture-subsystem {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--card) 45%, transparent);
+  font-size: 10px;
+}
+
+.architecture-flow .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--card);
+  background: var(--architecture-color);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--architecture-color) 40%, transparent);
+  pointer-events: none;
+}
+
+.architecture-flow .architecture-port-request {
+  top: 150px;
+}
+.architecture-flow .architecture-port-response {
+  top: 290px;
+}
+.architecture-flow .react-flow__edge-path {
+  opacity: 0.5;
+}
+.architecture-flow-arrow {
+  pointer-events: none;
+}
+
+.architecture-edge-label {
+  position: absolute;
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+}
+
+.architecture-flow .react-flow__controls,
+.architecture-flow .architecture-minimap {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 20%),
+    0 4px 16px rgb(0 0 0 / 5%);
+  backdrop-filter: blur(16px);
+}
+
+.architecture-flow .react-flow__controls {
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+.architecture-flow .react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  fill: currentColor;
+}
+.architecture-flow .react-flow__controls-button:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.architecture-flow .react-flow__controls-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.architecture-flow .react-flow__controls-button:disabled {
+  opacity: 0.35;
+}
+.architecture-zoom {
+  min-width: 54px;
+  margin-left: 2px;
+  border-left: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .architecture-flow-arrow {
+    display: none;
+  }
+  .architecture-card,
+  .architecture-capability {
+    transition: none;
+  }
+}
+@media (max-width: 720px) {
+  .architecture-flow .architecture-minimap {
+    display: none;
+  }
+}

@@ -59,6 +59,8 @@ export { showWorkbenchLayoutError } from "./internal/application/workbenchLayout
 export { ActivityPanelDocumentView } from "./internal/ui/activity/ActivityPanelDocumentView";
 export { SidebarDragOverlay } from "./internal/ui/dnd/SidebarDragOverlay";
 export { AboutModal } from "./internal/ui/menu/AboutModal";
+export { ArchitectureModal } from "./internal/ui/menu/ArchitectureModal";
+export { architectureSearch } from "./internal/ui/menu/architectureNavigation";
 export {
   WorkbenchMenuBar,
   WorkbenchSemanticMenu,

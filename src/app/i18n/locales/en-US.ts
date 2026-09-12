@@ -419,12 +419,559 @@ export const enUS = {
     profiler: "Profiler",
     settings: "Settings",
     documentation: "Documentation",
+    architecture: "Architecture",
     releaseNotes: "Release Notes",
     githubRepository: "GitHub Repository",
     reportIssue: "Report Issue",
     about: "About",
     switchToDark: "Switch to dark theme",
     switchToLight: "Switch to light theme",
+  },
+  architectureModal: {
+    frontendPage: "Frontend React",
+    openFrontend: "Explore frontend architecture",
+    frontendView: {
+      summary: "{{count}} frontend subsystems",
+      caption:
+        "Capabilities, state ownership and representative collaboration from frontend.md. Open card details for responsibilities and implementation locations. JSON page layout templates are planned; subsystem boundaries do not imply completed directory migrations.",
+      businessKind: "Business subsystem",
+      hostKind: "Application & UI host",
+      transportKind: "Transport adapter",
+      supportKind: "Shared support",
+      locations: "{{count}} locations",
+      inspect: "Inspect {{name}} responsibilities and implementation",
+      representativeLocations: "Representative implementation locations",
+      workbench: {
+        title: "Application & workbench",
+        description:
+          "Compose windows, menus and panels; coordinate layout, editor closing and project lifecycles.",
+        parts: {
+          composition: "App composition",
+          registry: "Panel registry",
+          layout: "Root Dockview",
+          templates: "JSON template · Planned",
+        },
+        boundary:
+          "App composition consumes module public.ts entries. Application orchestrates use cases with core projections, domain rules and services. Root Dockview alone owns panel topology, placement, order, sizes and collapse state. Shared hosts such as Details use the appropriate business data and actions without owning drafts, data or result lifecycles. Editor closing still follows Save, Discard or Cancel.",
+        json: {
+          template: {
+            title: "Page layout template · Not yet implemented",
+            description:
+              "The target design declares sections, component identifiers and defaults in JSON. The host validates registry references, composes components and installs panels through existing layout operations. Templates hold no business state or live layout mirror. Current defaults are still built by TypeScript commands.",
+          },
+          document: {
+            title: "Business presentation document · Existing reference",
+            description:
+              "Rust business owners produce ActivityPanelDocument. ActivityPanelDocumentView consumes the document, expansion state and limited callbacks in four built-in Activity panels. Presentation documents and page layout templates have distinct responsibilities.",
+          },
+          snapshot: {
+            title: "Runtime layout snapshot · Existing persistence",
+            description:
+              "Serialize user-adjusted layout from root Dockview; startup uses fromJSON only on an empty root. The target template design restores a valid snapshot first, creates defaults when none is valid, and resets only through an explicit action.",
+          },
+        },
+      },
+      project: {
+        title: "Project & resource interaction",
+        description:
+          "Open and switch projects, present and operate on resources, and validate publication adoption.",
+        parts: {
+          lifecycle: "Project lifecycle",
+          resources: "Resource projection",
+          operations: "Resource actions",
+          publication: "Publication adoption",
+        },
+        boundary:
+          "Rust owns committed projects, resource identities and versions. React holds display projections of resource indexes and Activity documents; paths are opaque identifiers. Check project identity and publication revision before adopting asynchronous results. Coordinate graph, data, chart and workbench lifecycles through their owners rather than clearing another subsystem's internal state from the resource tree.",
+      },
+      graph: {
+        title: "Graph editing & execution UI",
+        description:
+          "Manage graph drafts and canvas interaction; request compilation, saving and execution, and display projections and results.",
+        parts: {
+          draft: "Draft & history",
+          projection: "Semantic projection",
+          canvas: "Canvas interaction",
+          execution: "Compile / Save / Execute",
+        },
+        boundary:
+          "Drafts, save baselines and transient canvas state are separate. Application orders actions and checks project, draft and request identity. Canvas, Details and Problems consume the same Rust GraphSemanticSnapshot. Draft, Compile, Save and Execute are independent; failed saves retain drafts and execution uses a matching artifact. Rust owns Results lifecycles. Problems, Results and Run Output remain distinct streams; the production Run Output producer is not connected yet.",
+      },
+      data: {
+        title: "Data browsing & editing",
+        description:
+          "Present resources, pages and filter inputs; coordinate edits, import/export and query lifecycles.",
+        parts: {
+          browsing: "Resource browsing",
+          paging: "On-demand pages",
+          exchange: "Editing & exchange",
+          lifecycle: "Query lifecycle",
+        },
+        boundary:
+          "Rust performs queries, filtering, aggregation, editing and persistence. The frontend requests pages or summaries on demand. Current workbench data tabs are read-only and have no local document draft or graph-style dirty, Save and history model. Workbench tabs and standalone windows share database projections. Closing a panel releases its local viewing state without clearing projections still used elsewhere.",
+      },
+      chart: {
+        title: "Chart editing & presentation",
+        description:
+          "Manage chart documents, configuration and data binding; render backend data projections.",
+        parts: {
+          document: "Chart document",
+          binding: "Config & binding",
+          rendering: "Chart rendering",
+          lifecycle: "Resource lifecycle",
+        },
+        boundary:
+          "Rust manages committed chart documents; React separately holds unsaved edits, dirty state and display state. core/chart, application/chart and editor lifecycle coordination implement loading, editing, submission and closing. Queries and statistical facts come from the backend. Reusable plotting components own neither chart resources nor execution results and do not recompute domain results.",
+      },
+      assistant: {
+        title: "Assistant conversation & tools",
+        description:
+          "Present sessions, input and approvals; consume Harness snapshots and ordered events and connect business actions.",
+        parts: {
+          input: "Input & cancellation",
+          projection: "Session projection",
+          approval: "Tools & approvals",
+          coordination: "Business coordination",
+        },
+        boundary:
+          "Rust Harness owns sessions, turns, tool workflows, approvals and event ordering. React keeps UI projections and local input. Assistant graph operations enter the existing draft coordination flow without creating a separate AI draft or project model.",
+      },
+      plugins: {
+        title: "Plugin interaction & integration",
+        description:
+          "Provide management, state and task feedback; pass UI contributions to application and workbench composition.",
+        parts: {
+          management: "Install & enable",
+          projection: "Plugin projection",
+          contributions: "UI contributions",
+        },
+        boundary:
+          "Rust Plugin Manager owns installation state, processes and tasks; the frontend consumes projections. Workbench owns plugin panel placement while plugins own their business logic. Host templates and plugin-owned pages retain distinct rendering boundaries. Target capabilities and current integration scope are described separately.",
+      },
+      feedback: {
+        title: "Runtime diagnostics & feedback",
+        description:
+          "Inspect bounded logs, filters and subscriptions; localize stable error codes for operation feedback.",
+        parts: {
+          logs: "Logs viewer",
+          subscription: "Subscription lifecycle",
+          localization: "Error localization",
+        },
+        boundary:
+          "Logs are observations, not a source for reconstructing business state. Graph Problems, Results, Run Output, Assistant conversations and Logs keep separate data streams. Owners coordinate subscription pause, recovery and disposal. Each operation decides when to present its errors and feedback.",
+      },
+      communication: {
+        title: "Frontend transport adapter",
+        description:
+          "Access Rust through invokeCommand, parse DTOs and errors, and wrap Event / Channel subscriptions.",
+        parts: {
+          invoke: "Request adaptation",
+          parsing: "Response parsing",
+          streams: "Notifications & streams",
+        },
+        boundary:
+          "UI actions enter an Application use case, then a service and Tauri IPC. Services handle transport and parsing; Application checks project, draft or request identity before adoption and publication. Business owners decide subscription lifecycles while adapters provide creation and disposal. Errors retain { code, details, incidentId }; the frontend localizes user messages.",
+      },
+      support: {
+        title: "Client settings & shared support",
+        description:
+          "Provide local preferences, themes, localization, shared UI components and desktop platform adapters.",
+        parts: {
+          preferences: "Client preferences",
+          theme: "Theme",
+          i18n: "Localization",
+          components: "Shared UI",
+        },
+        boundary:
+          "Settings owners persist preferences by purpose and propagate them across windows, separately from project configuration and plugin state. Shared components serve business callers through inputs and callbacks without absorbing their rules. Framework-independent frontend rules belong to features/domain and cannot depend back on React, Tauri or services. Application and workbench own template selection and application.",
+      },
+      links: {
+        shared: "UI & preferences",
+        contributions: "UI contributions",
+        resourceHost: "Resource panel host",
+        assistantHost: "Assistant host",
+        chartResource: "Chart resource lifecycle",
+        openGraph: "Open & switch",
+        draftCoordination: "Draft coordination",
+        request: "Application → service",
+        adoption: "Validate & adopt",
+        dataRequest: "Page & edit requests",
+        diagnosticSubscription: "Diagnostic subscription",
+      },
+    },
+    breadcrumb: "Architecture navigation",
+    backendPage: "Rust backend",
+    openBackend: "Explore backend architecture",
+    communicationPage: "Tauri IPC",
+    openCommunication: "Explore IPC architecture",
+    communicationView: {
+      summary: "Command · Event · Channel · DTO",
+      caption:
+        "Request, notification and stream paths from communication.md. Follow the delivery arrows and open card details for contracts, deduplication and lifecycle rules.",
+      frontendKind: "Frontend",
+      commandKind: "Command · Request / response",
+      rustKind: "Rust · Business authority",
+      contractKind: "DTO · Error contract",
+      eventKind: "Event · Change notification",
+      channelKind: "Channel · Ordered stream",
+      details: "Contract details",
+      inspect: "Inspect {{name}} communication contract",
+      service: {
+        title: "Frontend service",
+        description:
+          "Build request parameters, parse responses and verify that the result identity is still current.",
+        parts: {
+          parameters: "Parameters",
+          parsing: "Response parsing",
+          identity: "Identity check",
+        },
+        boundary:
+          "src/services/ is the frontend communication entry, using invokeCommand to request backend work. After parsing, the business caller must still verify that the response belongs to the current project, task or session. React consumes Rust projections without owning a second committed business state.",
+      },
+      command: {
+        title: "invokeCommand",
+        description:
+          "Send one explicit request and receive its outcome; a Channel can be passed as an argument.",
+        parts: { request: "One request", result: "One result", channelArgument: "Channel binding" },
+        boundary:
+          "Commands query, save, compile or start tasks. The frontend creates a Channel and passes it as a Command argument to bind subsequent delivery. The command outcome and continuous messages each follow their own contract.",
+      },
+      transport: {
+        title: "yss-api transport adapter",
+        description:
+          "Register commands, validate input, convert types, invoke use cases and map outgoing results.",
+        parts: {
+          registry: "Command registry",
+          validation: "Input validation",
+          mapping: "DTO mapping",
+        },
+        boundary:
+          "yss-api is the only Tauri transport seam. Thin commands parse and validate wire input, convert types, invoke a use case and map its outcome to a DTO or CommandError. Event and Channel delivery follow the corresponding business contract. Filesystem transactions, scientific computation and complete workflows belong to business owners.",
+      },
+      business: {
+        title: "Rust business use case",
+        description:
+          "Run query, save, compile and task use cases; own business rules and committed state.",
+        parts: { useCase: "Use case", authority: "State authority", blocking: "Blocking boundary" },
+        boundary:
+          "Application and domain owners perform orchestration, filesystem transactions and computation, returning typed outcomes to the transport adapter. Expensive work enters the established blocking boundary. Large tables are queried, paged or summarized in Rust to bound transfer size.",
+      },
+      contract: {
+        title: "DTO & CommandError",
+        description:
+          "Rust maps wire structures; the frontend parses and checks identity, then localizes stable error codes.",
+        parts: {
+          wireTypes: "Explicit wire types",
+          identity: "Result identity",
+          paging: "Paging & summaries",
+        },
+        boundary:
+          "Rust maps internal business types to DTOs; the frontend parses their shape and checks response identity. Backend queries, paging and summaries bound large transfers. Command errors always contain these three fields. React localizes code; the backend does not return user-facing error prose.",
+        fields: {
+          code: "A stable error category used for frontend localization.",
+          details: "Safe structured information, or null when absent.",
+          incidentId: "Internal diagnostic correlation, or null when not needed.",
+        },
+      },
+      event: {
+        title: "Event change notification",
+        description:
+          "Low-rate notifications, such as resource commits, enter the existing frontend publication flow.",
+        parts: { commit: "After commit", subscription: "Subscription", cleanup: "Cleanup" },
+        boundary:
+          "Events indicate changes without constituting complete business state. Each subscription identifies production timing, consumers and cleanup ownership. Delivery is not assumed complete and committed state is not reconstructed from event history; query the backend snapshot through a Command when needed.",
+      },
+      publication: {
+        title: "Frontend publication & deduplication",
+        description:
+          "Command receipts and Events share the publication flow, updating projections after deduplication.",
+        parts: {
+          deduplication: "Commit identity",
+          revision: "Publication revision",
+          snapshot: "Snapshot recovery",
+        },
+        boundary:
+          "A resource mutation's Command receipt and Event may describe the same commit. Deduplicate both by commit identity and publication revision to avoid applying it twice. Query the Rust snapshot when needed, then update projections through the existing publication flow.",
+      },
+      channel: {
+        title: "Channel ordered stream",
+        description:
+          "The backend continuously delivers progress, execution events and diagnostics to the frontend.",
+        parts: { progress: "Progress", execution: "Execution events", diagnostics: "Diagnostics" },
+        boundary:
+          "The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
+        lifecycle: {
+          create: "Create",
+          bind: "Bind",
+          receive: "Receive",
+          end: "End",
+          cleanup: "Clean up",
+        },
+      },
+      links: {
+        invoke: "Build request",
+        dispatch: "Invoke command",
+        useCase: "Call use case",
+        outcome: "Typed outcome",
+        encode: "Map response",
+        response: "DTO / error response",
+        notify: "After commit",
+        publishEvent: "Subscription",
+        publishReceipt: "Resource receipt",
+        stream: "Continuous delivery",
+      },
+    },
+    backendView: {
+      inventory: "{{systems}} subsystems · {{count}} packages",
+      caption:
+        "Ownership and representative collaboration from backend.md. Open each card's details for boundaries and crates; this is not a complete Cargo dependency graph or a claim that migrations are finished.",
+      businessKind: "Business subsystem",
+      transportKind: "Transport adapter",
+      supportKind: "Infrastructure",
+      crates: "{{count}} crates",
+      inspect: "Inspect {{name}} boundaries and crates",
+      application: {
+        title: "Application & session",
+        description:
+          "Orchestrate use cases, coordinate subsystems and manage sessions and result adoption.",
+        parts: {
+          useCases: "Use case entry",
+          coordination: "Coordination",
+          sessions: "Sessions",
+          adoption: "Commit & adoption",
+        },
+        boundary:
+          "Application composes runtimes and revalidates identity and versions without duplicating business state. Statistical constraints and graph projection models are assigned to their domain owners in the document; hypothesis and editor_projection have not yet been migrated.",
+      },
+      project: {
+        title: "Project & resources",
+        description:
+          "Own committed projects, resource identity and versions, document transactions and file changes.",
+        parts: {
+          identity: "Model & identity",
+          resources: "Resources",
+          commits: "Document commits",
+          discovery: "Discovery & watching",
+        },
+        boundary:
+          "Project owns saved documents, resource versions and commit transactions. Graph provides document validation; Data owns tables. Frontend drafts are not a second committed state. Project-specific filesystem and watching belong here.",
+      },
+      graph: {
+        title: "Graph analysis & execution",
+        description:
+          "From graph documents and semantic analysis to compilation, execution and result queries.",
+        parts: {
+          documents: "Documents & editing",
+          semantics: "Semantics & projection",
+          compilation: "Compilation & artifacts",
+          execution: "Execution & results",
+        },
+        boundary:
+          "GraphSemanticSnapshot is the semantic authority. Compile, Save and Execute are independent; execution consumes matching artifacts and ResultStore owns graph results. Projection models remain in Application; the Run Output producer is not connected yet.",
+      },
+      data: {
+        title: "Data management & queries",
+        description: "Own data contracts, dataset catalogs, queries, editing and data exchange.",
+        parts: {
+          catalog: "Catalog & snapshots",
+          runtime: "Queries & editing",
+          engine: "DataFusion",
+          exchange: "Arrow & file exchange",
+        },
+        boundary:
+          "SQLite catalogs hold metadata, Parquet holds tables, DataFusion runs queries and Arrow exchanges batches; these are not mandatory sequential stages. Project owns resource declarations, Database runtime owns session access, and Application coordinates imports, exports and commits.",
+      },
+      science: {
+        title: "Scientific computing",
+        description:
+          "Provide statistical models, numerical algorithms, input preparation and computation backends.",
+        parts: {
+          contracts: "Neutral contracts",
+          runtime: "Scientific runtime",
+          algorithms: "Models & algorithms",
+          mathematics: "Algebra & expressions",
+        },
+        boundary:
+          "SCI runtime implements ScientificBackend through runtime composition. Data provides inputs; Execution or use cases assign result identity. React does not recompute statistics. Julia/Bayes is a separate plugin. Application's statistical constraints still await migration.",
+      },
+      assistant: {
+        title: "Assistant",
+        description:
+          "Manage model interaction, conversation turns, approvals and tool execution records.",
+        parts: {
+          turns: "Sessions & turns",
+          tools: "Tools & approval",
+          gateway: "Capability gateway",
+          adapters: "Model & storage",
+        },
+        boundary:
+          "Harness owns conversation and tool workflows and calls Application through a typed capability gateway, not an internal Tauri command bus. Graph tools use existing frontend drafts and Rust validation without creating a separate AI draft or project model.",
+      },
+      plugins: {
+        title: "Plugin system",
+        description:
+          "Manage installation, activation, process protocols, tasks and result integration.",
+        parts: {
+          installation: "Install & activate",
+          processes: "Processes & protocols",
+          tasks: "Task lifecycle",
+          results: "Data & results",
+        },
+        boundary:
+          "Plugin Manager owns runtime and tasks; Application supplies project-bound data and result capabilities. Julia/Bayes ships separately. Uninstalling preserves committed project results, and a separate process is not a complete OS sandbox. Only host plugin crates are counted here.",
+      },
+      transport: {
+        title: "Transport adaptation",
+        description:
+          "Accept Tauri requests, map DTOs and failures, and deliver notifications and streams.",
+        parts: {
+          commands: "Commands & use cases",
+          mapping: "DTO & error mapping",
+          delivery: "Event / Channel",
+        },
+        boundary:
+          "yss-api is the sole Tauri transport seam and owns no committed business state. Failures use { code, details, incidentId }. Notifications follow business commits; delivery failure does not undo a successful commit. Plugin process protocols belong to Plugins.",
+      },
+      support: {
+        title: "Infrastructure support",
+        description:
+          "Provide desktop composition, diagnostics, platform operations and independent technical tools.",
+        parts: {
+          composition: "Startup & composition",
+          diagnostics: "Logs & diagnostics",
+          platform: "Platform & windows",
+          utilities: "Hash, names & paths",
+        },
+        boundary:
+          "The yssbi root builds state, injects adapters and registers transport. Subsystems use these capabilities as needed; infrastructure is not a mandatory request stage. Project watching belongs to Project, while expressions and numerics belong to SCI. Infrastructure owns no business rules.",
+      },
+      links: {
+        assembly: "Composition",
+        useCase: "Use cases",
+        assistantEntry: "Conversations",
+        pluginEntry: "Plugins",
+        gateway: "Capability gateway",
+        hostCapabilities: "Host capabilities",
+        projectUseCase: "Project use cases",
+        graphUseCase: "Graph use cases",
+        dataUseCase: "Data use cases",
+        inputData: "Input data",
+        computation: "Computation",
+      },
+    },
+    overview: "System architecture",
+    navigationHint: "Scroll to zoom · Drag to pan · Hover for details",
+    controls: "Architecture view controls",
+    zoomIn: "Zoom in",
+    zoomOut: "Zoom out",
+    fitView: "Fit view",
+    minimap: "Architecture minimap",
+    request: "Requests",
+    dispatch: "Use cases",
+    result: "Results · Streams",
+    feedback: "Responses · Events",
+    description:
+      "YssBI desktop architecture: React UI ↔ Tauri IPC requests, responses and notifications ↔ Rust business logic, computation and persistence.",
+    frontend: {
+      title: "Frontend",
+      description: "Presentation and user interaction",
+      presentation: {
+        title: "Presentation",
+        summary: "Workbench, canvas, tables and results",
+        description: "Workbench, graph editor, data tables and computation results.",
+      },
+      interaction: {
+        title: "User interaction",
+        summary: "Open, edit, save and run",
+        description:
+          "Handle clicks, selection, dragging and input; request open, save and run operations.",
+      },
+      state: {
+        title: "Frontend state",
+        summary: "UI state and unsaved drafts",
+        description:
+          "Manage layout, selection, loading, unsaved drafts and display projections of backend data.",
+      },
+      feedback: {
+        title: "Feedback",
+        summary: "Response validation and localized messages",
+        description:
+          "Validate responses and request identity, update the UI and localize stable error codes.",
+      },
+      boundaryTitle: "Rust owns committed business data",
+      boundarySummary: "Refresh projections after saving; keep drafts on failure.",
+      boundary:
+        "Adopt backend state after a successful save; keep drafts on failure. Rust handles database queries and statistics.",
+    },
+    communication: {
+      title: "Communication",
+      description: "Requests, responses and ordered streams",
+      command: {
+        title: "Command",
+        summary: "Request / response · Query, save and run",
+        description: "Query, submit edits, save, compile, and start or cancel tasks.",
+      },
+      event: {
+        title: "Event System",
+        summary: "Notifications · Resource and project changes",
+        description:
+          "Notify resource commits or project changes; the frontend queries current state as needed.",
+      },
+      channel: {
+        title: "Channel",
+        summary: "Ordered streams · Progress and diagnostics",
+        description:
+          "Deliver progress, execution events and diagnostics; clean up subscriptions when finished.",
+      },
+      contract: {
+        title: "DTO · Data and error contracts",
+        description:
+          "Define parameters and results; command failures return { code, details, incidentId }.",
+      },
+      boundaryTitle: "DTO and shared error contract",
+      boundary:
+        "src/services → invokeCommand → yss-api. Commands adapt requests to Rust application or domain logic.",
+    },
+    backend: {
+      title: "Backend",
+      description: "Authority for business logic, computation and persistence",
+      orchestration: {
+        title: "Business orchestration",
+        summary: "Projects, sessions and coordination",
+        description:
+          "Coordinate projects, graphs, databases and execution; validate project and session identity.",
+      },
+      domain: {
+        title: "Domain logic",
+        summary: "Graph validation, compilation and science",
+        description:
+          "Validate rules, graph types and dependencies; compile, execute and run scientific computations.",
+      },
+      state: {
+        title: "State management",
+        summary: "Committed projects, versions and results",
+        description:
+          "Own committed projects, resource versions, compiled artifacts and results; expose queryable projections.",
+      },
+      persistence: {
+        title: "Persistence",
+        summary: "Queries, transactions and storage",
+        description:
+          "Read and write files and tables; query, filter, page, import, export and commit transactions.",
+      },
+      boundaryTitle: "Seven core subsystems",
+      subsystems: {
+        application: "App & session",
+        project: "Project & resources",
+        graph: "Graph & execution",
+        data: "Data",
+        science: "Science",
+        assistant: "Assistant",
+        plugins: "Plugins",
+      },
+      boundary:
+        "Application & session, project & resources, graph analysis & execution, data, scientific computing, Assistant and plugins. Supported by startup composition, diagnostics and platform adapters.",
+    },
   },
   bayes: {
     title: "Bayesian Parameter Estimation",

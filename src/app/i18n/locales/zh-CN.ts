@@ -390,12 +390,483 @@ export const zhCN = {
     profiler: "性能分析器",
     settings: "设置",
     documentation: "文档",
+    architecture: "架构",
     releaseNotes: "发行说明",
     githubRepository: "GitHub 仓库",
     reportIssue: "反馈问题",
     about: "关于",
     switchToDark: "切换为深色主题",
     switchToLight: "切换为浅色主题",
+  },
+  architectureModal: {
+    frontendPage: "前端 React",
+    openFrontend: "展开前端架构",
+    frontendView: {
+      summary: "{{count}} 个前端子系统",
+      caption:
+        "按 frontend.md 展示能力、状态归属与代表协作。点击节点底部查看职责和实现位置；JSON 页面布局模板尚处于规划阶段，子系统划分不表示目录迁移已完成。",
+      businessKind: "业务子系统",
+      hostKind: "应用与展示宿主",
+      transportKind: "通信适配",
+      supportKind: "通用支撑",
+      locations: "{{count}} 处实现",
+      inspect: "查看{{name}}的职责与代表实现",
+      representativeLocations: "代表实现位置",
+      workbench: {
+        title: "应用与工作台",
+        description: "组装窗口、菜单与面板，协调布局、编辑器关闭和项目切换生命周期。",
+        parts: {
+          composition: "应用组装",
+          registry: "面板注册",
+          layout: "根 Dockview",
+          templates: "JSON 模板 · 规划中",
+        },
+        boundary:
+          "app 通过模块 public.ts 组合能力，Application 编排用例并使用 core 投影、domain 规则和 service。根 Dockview 独占面板拓扑、位置、顺序、尺寸与折叠状态。Details 等共享宿主使用对应业务的数据和操作，不拥有图草稿、数据或结果生命周期。关闭编辑器继续经过保存、放弃或取消流程。",
+        json: {
+          template: {
+            title: "页面布局模板 · 尚未实现",
+            description:
+              "目标方案由 JSON 声明页面分区、组件标识和默认布局，宿主校验注册引用并组合组件，再通过既有布局操作安装面板。模板不保存业务状态，也不镜像实时布局；当前默认布局仍由 TypeScript 命令建立。",
+          },
+          document: {
+            title: "业务展示文档 · 已有参考实现",
+            description:
+              "ActivityPanelDocument 由 Rust 业务 owner 生成，ActivityPanelDocumentView 消费文档、展开状态与有限回调。四个内置 Activity 面板已接入，展示文档与页面布局模板职责不同。",
+          },
+          snapshot: {
+            title: "运行布局快照 · 已有持久化",
+            description:
+              "从根 Dockview 序列化用户调整后的布局；启动仅在空根实例上使用 fromJSON。目标模板方案优先恢复有效快照，无有效快照时建立默认布局，重置由明确操作触发。",
+          },
+        },
+      },
+      project: {
+        title: "项目与资源交互",
+        description: "组织项目打开与切换、资源展示和操作，协调发布结果的检查与采用。",
+        parts: {
+          lifecycle: "项目生命周期",
+          resources: "资源投影",
+          operations: "资源操作",
+          publication: "发布结果采用",
+        },
+        boundary:
+          "Rust 拥有已提交项目、资源身份与版本；React 保存资源索引和 Activity 文档的显示投影。资源路径是不透明标识。异步结果采用前检查项目身份与发布版本，按各 owner 协调图、数据、图表和工作台生命周期，资源树不直接清空其他子系统内部状态。",
+      },
+      graph: {
+        title: "图编辑与运行交互",
+        description: "管理图草稿与画布交互，组织编译、保存、执行并展示语义投影和结果。",
+        parts: {
+          draft: "草稿与历史",
+          projection: "语义投影",
+          canvas: "画布交互",
+          execution: "编译 / 保存 / 执行",
+        },
+        boundary:
+          "草稿、保存基线与画布临时状态分别管理。Application 协调操作顺序并校验项目、草稿和请求身份；Canvas、Details 与 Problems 消费同一份 Rust GraphSemanticSnapshot。Draft、Compile、Save、Execute 独立，保存失败保留草稿，执行使用匹配产物。Results 的生命周期由 Rust 管理；Problems、Results、Run Output 各有数据流，当前 Run Output 生产输出 producer 尚未接入。",
+      },
+      data: {
+        title: "数据浏览与编辑",
+        description: "呈现数据资源、分页和筛选输入，组织编辑、导入导出与查询生命周期。",
+        parts: {
+          browsing: "资源浏览",
+          paging: "按需分页",
+          exchange: "编辑与交换",
+          lifecycle: "查询生命周期",
+        },
+        boundary:
+          "查询、筛选、聚合、编辑和持久化由 Rust 完成，前端按需获取页面或摘要。当前工作台数据标签只读，没有本地文档草稿，不套用图编辑器的 dirty、Save 与历史模型。工作台和独立窗口复用数据库投影；关闭面板只释放局部查看状态，不清除其他消费者仍使用的投影。",
+      },
+      chart: {
+        title: "图表编辑与展示",
+        description: "管理图表文档、配置和数据绑定，将后端数据投影渲染为可视化。",
+        parts: {
+          document: "图表文档",
+          binding: "配置与绑定",
+          rendering: "图表渲染",
+          lifecycle: "资源生命周期",
+        },
+        boundary:
+          "Rust 管理已提交图表文档，React 分别维护未提交编辑内容、dirty 和显示状态。core/chart、application/chart 与编辑器生命周期协作完成加载、修改、提交和关闭。查询与统计事实来自后端，可复用绘图组件不拥有图表资源或执行结果，也不重新计算领域结果。",
+      },
+      assistant: {
+        title: "Assistant 对话与工具",
+        description: "展示会话、输入和审批，消费 Harness 快照与有序事件并衔接业务操作。",
+        parts: {
+          input: "输入与取消",
+          projection: "会话投影",
+          approval: "工具与审批",
+          coordination: "业务操作衔接",
+        },
+        boundary:
+          "Rust Harness 拥有 session、turn、工具流程、审批和事件顺序。React 保存界面投影与本地输入。Assistant 对图草稿的操作进入已有草稿协调流程，不建立独立 AI 草稿或项目模型。",
+      },
+      plugins: {
+        title: "插件交互与接入",
+        description: "提供插件管理入口、状态与任务反馈，将界面贡献交给应用和工作台接入。",
+        parts: { management: "安装与启停", projection: "插件状态投影", contributions: "界面贡献" },
+        boundary:
+          "Rust Plugin Manager 管理安装状态、进程与任务，前端消费相应投影。工作台管理插件面板位置，插件承担专属业务。宿主页面模板与插件自带页面遵守各自渲染边界，目标能力与当前接入范围分别说明。",
+      },
+      feedback: {
+        title: "运行诊断与反馈",
+        description: "查看有界日志、筛选定位与订阅状态，将稳定错误码转为本地化操作反馈。",
+        parts: { logs: "Logs 查看", subscription: "订阅生命周期", localization: "错误本地化" },
+        boundary:
+          "日志是观察信息，不用于重建业务状态。Graph Problems、Results、Run Output、Assistant 对话与 Logs 保留各自的数据流。订阅按 owner 协调暂停、恢复和释放；具体操作决定错误与反馈的呈现时机。",
+      },
+      communication: {
+        title: "前端通信适配",
+        description: "通过 invokeCommand 访问 Rust，解析 DTO 与错误并封装 Event / Channel 订阅。",
+        parts: { invoke: "请求适配", parsing: "响应解析", streams: "通知与消息流" },
+        boundary:
+          "界面操作进入对应 Application 用例，再经 service 调用 Tauri IPC。Service 负责传输与解析，Application 检查项目、草稿或请求身份后采用响应并发布状态。业务 owner 决定订阅生命周期，适配层提供创建与释放。错误保持 { code, details, incidentId }，用户提示由前端本地化。",
+      },
+      support: {
+        title: "客户端设置与通用支撑",
+        description: "提供本地偏好、主题、国际化、通用展示组件与桌面平台适配。",
+        parts: { preferences: "客户端偏好", theme: "主题", i18n: "国际化", components: "通用组件" },
+        boundary:
+          "偏好由设置 owner 按用途持久化并跨窗口传播，与项目配置和插件状态分开。通用组件通过输入和回调服务业务，不吸收调用方规则；不依赖 UI/framework 的前端规则归 features/domain，不能反向依赖 React、Tauri 或 service。模板选择和应用仍归应用与工作台。",
+      },
+      links: {
+        shared: "界面与偏好支撑",
+        contributions: "界面贡献",
+        resourceHost: "资源面板宿主",
+        assistantHost: "Assistant 宿主",
+        chartResource: "图表资源生命周期",
+        openGraph: "打开与切换",
+        draftCoordination: "草稿操作协调",
+        request: "Application → service",
+        adoption: "校验身份并采用",
+        dataRequest: "分页与编辑请求",
+        diagnosticSubscription: "诊断订阅",
+      },
+    },
+    breadcrumb: "架构导航",
+    backendPage: "后端 Rust",
+    openBackend: "展开后端架构",
+    communicationPage: "Tauri IPC",
+    openCommunication: "查看通信架构",
+    communicationView: {
+      summary: "Command · Event · Channel · DTO",
+      caption:
+        "按 communication.md 展示请求、通知与消息流。沿箭头查看交付方向，点击卡片底部查看契约、去重规则和生命周期。",
+      frontendKind: "前端",
+      commandKind: "Command · 请求响应",
+      rustKind: "Rust · 业务权威",
+      contractKind: "DTO · 错误契约",
+      eventKind: "Event · 变化通知",
+      channelKind: "Channel · 有序流",
+      details: "契约详情",
+      inspect: "查看{{name}}的通信契约",
+      service: {
+        title: "前端 Service",
+        description: "封装请求参数、解析响应，并检查结果所属身份是否仍然有效。",
+        parts: { parameters: "参数封装", parsing: "响应解析", identity: "身份校验" },
+        boundary:
+          "src/services/ 是前端通信入口，通过 invokeCommand 请求后端。结构解析成功后，业务调用方仍需检查响应身份是否匹配当前项目、任务或会话。React 消费 Rust 投影，不拥有第二份已提交业务状态。",
+      },
+      command: {
+        title: "invokeCommand",
+        description: "传递一次明确请求并接收处理结果；Channel 可作为请求参数传入。",
+        parts: { request: "一次请求", result: "一个结果", channelArgument: "绑定 Channel" },
+        boundary:
+          "Command 用于查询、保存、编译或启动任务。前端创建 Channel 后，将它作为 Command 参数传入，为后续消息建立交付通道。一次命令的处理结果与持续消息流分别遵守各自契约。",
+      },
+      transport: {
+        title: "yss-api 通信适配",
+        description: "注册命令、校验输入、转换类型，调用业务用例并映射交付结果。",
+        parts: { registry: "命令注册", validation: "输入校验", mapping: "DTO 映射" },
+        boundary:
+          "yss-api 是唯一 Tauri 传输边界。命令保持轻薄：解析和校验 wire 输入、转换类型、调用业务用例，再映射 DTO 或 CommandError；按对应业务契约交付 Event 或 Channel 消息。文件事务、科学计算和完整业务流程由业务层负责。",
+      },
+      business: {
+        title: "Rust 业务用例",
+        description: "执行查询、保存、编译与任务用例，拥有业务规则和已提交状态。",
+        parts: { useCase: "业务调用", authority: "状态权威", blocking: "耗时任务边界" },
+        boundary:
+          "应用层与领域层承担业务编排、文件事务及计算，向通信适配层返回类型化结果。耗时工作进入既有 blocking 边界；Tauri 命令不复制这些职责。大表在后端查询、分页或生成摘要，控制传输规模。",
+      },
+      contract: {
+        title: "DTO 与 CommandError",
+        description: "Rust 映射传输结构，前端解析并验证身份；稳定错误码由 React 本地化。",
+        parts: { wireTypes: "显式传输类型", identity: "结果身份", paging: "分页与摘要" },
+        boundary:
+          "内部业务类型由 Rust 映射为 DTO，前端解析结构并校验响应身份。大表通过后端查询、分页和摘要限制规模。Command 错误固定包含以下三个字段；React 根据 code 提供本地化提示，后端不返回用户错误文案。",
+        fields: {
+          code: "稳定的错误类别，用于前端本地化。",
+          details: "安全的结构化信息，无附加信息时为 null。",
+          incidentId: "关联内部诊断；无诊断关联时为 null。",
+        },
+      },
+      event: {
+        title: "Event 变化通知",
+        description: "资源提交等低频通知，通过前端订阅进入已有发布流程。",
+        parts: { commit: "提交后通知", subscription: "前端订阅", cleanup: "订阅清理" },
+        boundary:
+          "Event 表示发生了变化，不构成完整业务状态。订阅方明确通知产生时机、消费者与清理责任。不能假设所有事件必然送达，也不能据此重建已提交状态；需要时通过 Command 查询后端快照。",
+      },
+      publication: {
+        title: "前端发布与去重",
+        description: "Command 回执与 Event 统一进入发布流程，去重后更新前端投影。",
+        parts: { deduplication: "提交身份去重", revision: "发布版本", snapshot: "按需查快照" },
+        boundary:
+          "资源修改的 Command 回执和 Event 可能属于同一次提交。前端按提交身份与 publication revision 统一去重，避免重复应用；必要时查询 Rust 快照，再通过已有发布流程更新投影。",
+      },
+      channel: {
+        title: "Channel 有序消息流",
+        description: "后端通过绑定通道持续向前端交付进度、执行事件和诊断。",
+        parts: { progress: "进度", execution: "执行事件", diagnostics: "诊断" },
+        boundary:
+          "前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
+        lifecycle: { create: "创建", bind: "绑定", receive: "接收", end: "结束", cleanup: "清理" },
+      },
+      links: {
+        invoke: "封装请求",
+        dispatch: "调用命令",
+        useCase: "业务调用",
+        outcome: "类型化结果",
+        encode: "映射响应",
+        response: "DTO / 错误返回",
+        notify: "提交后通知",
+        publishEvent: "订阅通知",
+        publishReceipt: "资源修改回执",
+        stream: "持续交付",
+      },
+    },
+    backendView: {
+      inventory: "{{systems}} 个子系统 · {{count}} 个包",
+      caption:
+        "按 backend.md 展示职责归属与主要协作方向。点击节点底部可查看状态边界与 crate 清单；此图不代表完整 Cargo 依赖或职责迁移已完成。",
+      businessKind: "业务子系统",
+      transportKind: "通信适配",
+      supportKind: "基础支撑",
+      crates: "{{count}} 个 crate",
+      inspect: "查看{{name}}的边界与 crate",
+      application: {
+        title: "应用与会话管理",
+        description: "组织业务用例，协调跨模块操作、会话切换与结果采用。",
+        parts: {
+          useCases: "用例入口",
+          coordination: "跨模块编排",
+          sessions: "会话管理",
+          adoption: "提交与结果采用",
+        },
+        boundary:
+          "Application 组合各子系统运行时，重验身份和版本，不复制其业务状态。文档要求统计约束和图投影模型迁回对应领域；当前 hypothesis 与 editor_projection 的职责调整尚未完成。",
+      },
+      project: {
+        title: "项目与资源管理",
+        description: "拥有已提交项目、资源身份与版本，负责文档事务和文件变化。",
+        parts: {
+          identity: "模型与身份",
+          resources: "资源管理",
+          commits: "文档提交",
+          discovery: "发现、注册与监听",
+        },
+        boundary:
+          "Project 拥有保存后的文档、资源版本及提交事务。图子系统提供图文档校验，数据子系统拥有表数据；前端草稿不构成第二份已提交状态。项目专属文件系统和监听属于本子系统。",
+      },
+      graph: {
+        title: "图分析与执行",
+        description: "从图文档、语义分析到编译产物、执行运行与结果查询。",
+        parts: {
+          documents: "文档与编辑",
+          semantics: "语义与投影",
+          compilation: "编译与产物",
+          execution: "执行与结果",
+        },
+        boundary:
+          "GraphSemanticSnapshot 是解析后图语义的唯一事实源。Compile、Save、Execute 相互独立；执行消费匹配产物，ResultStore 管理图结果。图投影模型当前仍在 Application，Run Output 的生产输出 producer 尚未接入。",
+      },
+      data: {
+        title: "数据管理与查询",
+        description: "管理数据契约、数据集目录、查询编辑与数据交换。",
+        parts: {
+          catalog: "目录与快照",
+          runtime: "查询与编辑",
+          engine: "DataFusion",
+          exchange: "Arrow 与文件交换",
+        },
+        boundary:
+          "SQLite committed catalog 保存元数据，Parquet 保存表数据，DataFusion 查询，Arrow 交换批次；这些不是每次操作必经的固定链路。Project 管资源声明，Database runtime 管会话访问，应用层组织导入导出和提交。",
+      },
+      science: {
+        title: "科学计算",
+        description: "提供统计模型、数值算法、输入准备和计算后端。",
+        parts: {
+          contracts: "中性计算契约",
+          runtime: "计算运行时",
+          algorithms: "统计模型与算法",
+          mathematics: "线性代数与表达式",
+        },
+        boundary:
+          "ScientificBackend 由 SCI runtime 实现，经组装接入；数据系统提供输入，业务用例或 Execution 决定结果身份。React 不重算统计事实；Julia/Bayes 属于独立插件。Application 内统计约束仍待归位。",
+      },
+      assistant: {
+        title: "Assistant",
+        description: "管理模型交互、会话轮次、审批与工具执行记录。",
+        parts: {
+          turns: "会话与 turn",
+          tools: "工具与审批",
+          gateway: "能力 Gateway",
+          adapters: "模型与存储适配",
+        },
+        boundary:
+          "Harness 拥有对话与工具流程，经 typed capability gateway 调用 Application；Tauri Command 不是内部业务总线。图工具沿用前端草稿流程与 Rust 校验，不另建 AI 草稿或项目模型。",
+      },
+      plugins: {
+        title: "插件系统",
+        description: "管理宿主插件安装启用、进程协议、任务与结果接入。",
+        parts: {
+          installation: "安装与启用",
+          processes: "进程与协议",
+          tasks: "任务生命周期",
+          results: "数据与结果接入",
+        },
+        boundary:
+          "Plugin Manager 管理运行与任务，Application 提供项目绑定的数据和结果能力。Julia/Bayes 独立发布；卸载插件不删除已提交项目结果。独立进程不等同于完整 OS sandbox。这里只统计宿主通用插件 crate。",
+      },
+      transport: {
+        title: "通信适配",
+        description: "接收 Tauri 请求，映射 DTO 和错误，交付通知与消息流。",
+        parts: {
+          commands: "Command 注册与用例调用",
+          mapping: "DTO 与错误映射",
+          delivery: "Event / Channel",
+        },
+        boundary:
+          "yss-api 是唯一 Tauri 传输接缝，不拥有已提交业务状态。错误统一为 { code, details, incidentId }；业务提交后交付通知，交付失败不撤销已成功的提交。插件进程协议归插件系统。",
+      },
+      support: {
+        title: "基础支撑",
+        description: "提供桌面组装、日志诊断、平台操作和独立技术工具。",
+        parts: {
+          composition: "启动与组装",
+          diagnostics: "日志与运行诊断",
+          platform: "平台与窗口状态",
+          utilities: "哈希、命名与路径",
+        },
+        boundary:
+          "根包 yssbi 构造状态、注入适配器并注册通信入口。支撑能力由业务模块按需使用，不是所有请求必经的额外层；项目监听归 Project，表达式与数值计算归 SCI。基础支撑不接收业务领域规则。",
+      },
+      links: {
+        assembly: "组装接线",
+        useCase: "业务用例",
+        assistantEntry: "会话入口",
+        pluginEntry: "插件入口",
+        gateway: "能力 Gateway",
+        hostCapabilities: "宿主能力",
+        projectUseCase: "项目用例",
+        graphUseCase: "图用例",
+        dataUseCase: "数据用例",
+        inputData: "输入数据",
+        computation: "计算能力",
+      },
+    },
+    overview: "系统架构总览",
+    navigationHint: "滚轮缩放 · 拖动平移 · 悬停查看详情",
+    controls: "架构图视图控制",
+    zoomIn: "放大",
+    zoomOut: "缩小",
+    fitView: "适应视图",
+    minimap: "架构图缩略导航",
+    request: "业务请求",
+    dispatch: "调用用例",
+    result: "结果 · 数据流",
+    feedback: "响应 · 通知",
+    description:
+      "YssBI 桌面架构：React 展示与交互 ↔ Tauri IPC 请求、响应与通知 ↔ Rust 业务、计算与持久化。",
+    frontend: {
+      title: "前端",
+      description: "界面呈现与用户交互",
+      presentation: {
+        title: "界面展示",
+        summary: "工作台、画布、表格与结果",
+        description: "工作台、图编辑器、数据表格与计算结果。",
+      },
+      interaction: {
+        title: "用户交互",
+        summary: "打开、编辑、保存与执行",
+        description: "处理点击、选择、拖动与输入，发起打开、保存和执行请求。",
+      },
+      state: {
+        title: "前端状态",
+        summary: "界面状态与未保存草稿",
+        description: "管理布局、选择、加载状态、未保存草稿与后端数据的显示投影。",
+      },
+      feedback: {
+        title: "反馈呈现",
+        summary: "响应校验与本地化提示",
+        description: "校验响应及请求身份，更新对应界面，将稳定错误码转为本地化提示。",
+      },
+      boundaryTitle: "已提交业务数据以后端为准",
+      boundarySummary: "保存成功更新投影，失败保留草稿。",
+      boundary: "保存成功采用后端返回状态，失败保留草稿。数据库查询与统计计算由 Rust 处理。",
+    },
+    communication: {
+      title: "通信",
+      description: "请求、响应与有序消息流",
+      command: {
+        title: "Command",
+        summary: "请求 / 响应 · 查询、保存与执行",
+        description: "查询、提交编辑、保存、编译，以及启动或取消任务。",
+      },
+      event: {
+        title: "Event System",
+        summary: "低频通知 · 资源提交与项目变化",
+        description: "通知资源提交或项目变化；前端按需查询当前状态。",
+      },
+      channel: {
+        title: "Channel",
+        summary: "有序消息 · 进度、执行与诊断",
+        description: "持续交付任务进度、执行事件与诊断；结束时按契约清理订阅。",
+      },
+      contract: {
+        title: "DTO · 数据与错误契约",
+        description: "明确参数与返回结构；命令失败统一返回 { code, details, incidentId }。",
+      },
+      boundaryTitle: "DTO 与统一错误契约",
+      boundary:
+        "src/services → invokeCommand → yss-api。命令只做适配，业务交给 Rust 应用层或领域模块。",
+    },
+    backend: {
+      title: "后端",
+      description: "业务、计算与持久化的权威",
+      orchestration: {
+        title: "业务编排",
+        summary: "项目、会话与业务协调",
+        description: "协调项目、图、数据库与执行，检查项目及会话是否仍然有效。",
+      },
+      domain: {
+        title: "领域逻辑",
+        summary: "图校验、编译与科学计算",
+        description: "校验业务规则、解析图类型与依赖，处理编译、执行和科学计算。",
+      },
+      state: {
+        title: "状态管理",
+        summary: "已提交项目、版本与结果",
+        description: "管理已提交项目、资源版本、编译产物及结果，提供可查询投影。",
+      },
+      persistence: {
+        title: "数据持久化",
+        summary: "查询、事务与数据存储",
+        description: "读写项目文件与表数据，执行查询、筛选、分页、导入导出及事务提交。",
+      },
+      boundaryTitle: "七个核心子系统",
+      subsystems: {
+        application: "应用与会话",
+        project: "项目与资源",
+        graph: "图分析与执行",
+        data: "数据",
+        science: "科学计算",
+        assistant: "Assistant",
+        plugins: "插件",
+      },
+      boundary:
+        "应用与会话、项目与资源、图分析与执行、数据、科学计算、Assistant、插件；启动组装、日志诊断与平台适配提供支撑。",
+    },
   },
   bayes: {
     title: "贝叶斯参数估计",

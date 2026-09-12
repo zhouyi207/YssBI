@@ -49,6 +49,13 @@ Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSessi
 
 数据标签使用 `editor` role 与 `resourceKind: "database"`，随标签激活更新 Details 上下文。`DatabaseEditorContent` 在工作台与独立数据库窗口间复用数据表格、分页、选择及导出；嵌入模式不执行窗口初始化或窗口控制，键盘选择仅处理表格容器内的事件。独立窗口仍由菜单入口打开。数据标签没有本地文档草稿，不参与图/图表编辑与保存命令；关闭标签只释放面板状态，不卸载图文档或清除共享数据库投影。
 
+帮助菜单的架构弹窗由现有 HashRouter 的 `architecture` 查询参数控制：
+`/editor?architecture=overview` 展示总览，`/editor?architecture=frontend` 展示前端子系统、状态归属与代表实现，
+`/editor?architecture=backend` 展示后端子系统，
+`/editor?architecture=communication` 展示 Tauri IPC 的 Command、Event、Channel 与 DTO / 错误契约。
+React、Rust、Tauri IPC 节点和面包屑通过路由切换视图，浏览器前进、后退同步更新内容；关闭弹窗移除该参数并保留其他查询参数。
+架构导航保持工作台路由与 Dockview 挂载，不保存第二份弹窗打开状态或视图历史。
+
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。
 `UIHost` 按 `UIStore` 的弹窗栈保持各层挂载，后打开的弹窗及其遮罩位于前一层之上；
