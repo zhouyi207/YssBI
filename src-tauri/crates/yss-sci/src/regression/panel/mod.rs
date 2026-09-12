@@ -13,7 +13,7 @@ pub use re::{
     fit_panel_re_fgls_twoway, fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
 };
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 
 /// R² Within/Between/Overall. None for MLE (does not report these).
 #[derive(Debug, Clone)]
@@ -85,15 +85,15 @@ pub struct PanelOLSResult {
     pub r2_within: Option<f64>,
     pub fvalue: f64,
     pub f_p_value: f64,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
-    pub tvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
+    pub tvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     /// Nonrobust VCE: σ² (X'X)⁻¹ for Hausman test
-    pub cov_beta_nonrobust: Option<Array2<f64>>,
+    pub cov_beta_nonrobust: Option<Mat<f64>>,
     pub cond_no: f64,
     /// Column indices omitted due to collinearity (LSDV/LSDV-time full matrix). Used by caller to build omit_info.
     pub omitted_indices: Option<Vec<usize>>,

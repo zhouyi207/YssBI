@@ -1,23 +1,23 @@
 /// Two-way within: z̃_it = z_it - z̄_i - z̄_t + z̄
-fn within_transform_twoway(v: &[f64], entity_id: &[usize], time_id: &[usize]) -> Array1<f64> {
+fn within_transform_twoway(v: &[f64], entity_id: &[usize], time_id: &[usize]) -> Col<f64> {
     let n = v.len();
     let z_bar_i = between_transform(v, entity_id);
     let z_bar_t = between_transform(v, time_id);
     let z_bar: f64 = v.iter().sum::<f64>() / n as f64;
-    Array1::from_shape_fn(n, |i| v[i] - z_bar_i[i] - z_bar_t[i] + z_bar)
+    Col::from_fn(n, |i| v[i] - z_bar_i[i] - z_bar_t[i] + z_bar)
 }
 
 /// Panel RE FGLS (Two-Way): entity + time random effects (Fuller-Battese / plm-style)
 pub fn fit_panel_re_fgls_twoway(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way FGLS): lengths must match".to_string());
     }
@@ -45,21 +45,21 @@ pub fn fit_panel_re_fgls_twoway(
 
     // Step 1: Two-way within regression → σ²_e
     let y_w = within_transform_twoway(&y_vec, entity_id, time_id);
-    let mut x_w = Array2::zeros((n, k));
+    let mut x_w = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let tc = within_transform_twoway(&col, entity_id, time_id);
         for i in 0..n {
-            x_w[[i, c]] = tc[i];
+            x_w[(i, c)] = tc[i];
         }
     }
 
     let (x_w_use, _omitted_w) = {
         let (x_after_const, _) = if constant && k > 0 {
-            let first_col = x_w.column(0);
+            let first_col = x_w.col(0);
             let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
             if is_const {
-                (x_w.slice(ndarray::s![.., 1..]).to_owned(), false)
+                (x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(), false)
             } else {
                 (x_w.clone(), constant)
             }
@@ -109,9 +109,8 @@ pub fn fit_panel_re_fgls_twoway(
             x_b_e_data.push(x_b_e[i][c]);
         }
     }
-    let y_b_e_arr = Array1::from_vec(y_b_e);
-    let x_b_e_arr = Array2::from_shape_vec((n_b_e, k), x_b_e_data)
-        .map_err(|e| format!("Panel RE (Two-Way) between-entity: {:?}", e))?;
+    let y_b_e_arr = (y_b_e).into_iter().collect::<Col<f64>>();
+    let x_b_e_arr = faer::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -146,9 +145,8 @@ pub fn fit_panel_re_fgls_twoway(
             x_b_t_data.push(x_b_t[i][c]);
         }
     }
-    let y_b_t_arr = Array1::from_vec(y_b_t);
-    let x_b_t_arr = Array2::from_shape_vec((n_b_t, k), x_b_t_data)
-        .map_err(|e| format!("Panel RE (Two-Way) between-time: {:?}", e))?;
+    let y_b_t_arr = (y_b_t).into_iter().collect::<Col<f64>>();
+    let x_b_t_arr = faer::MatRef::from_row_major_slice(&(x_b_t_data), n_b_t, k).to_owned();
     let (x_b_t_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -189,18 +187,18 @@ pub fn fit_panel_re_fgls_twoway(
     let y_bar_t = between_transform(&y_vec, time_id);
     let y_bar: f64 = y_vec.iter().sum::<f64>() / n as f64;
 
-    let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| {
+    let y_star: Col<f64> = Col::from_fn(n, |i| {
         y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i] + theta_total * y_bar
     });
 
-    let mut x_star = Array2::zeros((n, k));
+    let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let x_bar_i = between_transform(&col, entity_id);
         let x_bar_t = between_transform(&col, time_id);
         let x_bar: f64 = col.iter().sum::<f64>() / n as f64;
         for i in 0..n {
-            x_star[[i, c]] =
+            x_star[(i, c)] =
                 col[i] - theta_id * x_bar_i[i] - theta_time * x_bar_t[i] + theta_total * x_bar;
         }
     }
@@ -259,7 +257,7 @@ pub fn fit_panel_re_fgls_twoway(
             .map(|i| {
                 kept.iter()
                     .enumerate()
-                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .map(|(idx, &c)| exog[(i, c)] * betas[idx])
                     .sum()
             })
             .collect();
@@ -325,7 +323,7 @@ pub fn fit_panel_re_fgls_twoway(
             .map(|i| {
                 kept.iter()
                     .enumerate()
-                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .map(|(idx, &c)| exog[(i, c)] * betas[idx])
                     .sum()
             })
             .collect();
@@ -377,37 +375,37 @@ pub fn fit_panel_re_fgls_twoway(
     let (wald_chi2, prob_wald_chi2) = {
         let cov_beta = &result.cov_beta;
         let betas_nd = &result.betas;
-        let k_b = betas_nd.len();
+        let k_b = betas_nd.nrows();
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
             (
-                betas_nd.slice(ndarray::s![1..]).to_owned(),
-                cov_beta.slice(ndarray::s![1.., 1..]).to_owned(),
+                betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned(),
+                cov_beta.submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1).to_owned(),
                 k_b - 1,
             )
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_matrix = v_s.view().to_owned();
-        let beta_s_vector = beta_s.view().to_owned();
+        let v_s_matrix = v_s.as_ref().to_owned();
+        let beta_s_vector = beta_s.as_ref().to_owned();
         let x = v_s_matrix
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "Panel RE (Two-Way) Wald".to_string())?
-            .solve(&beta_s_vector.view());
-        let x_nd = x.view();
-        let wald = beta_s.dot(&x_nd);
+            .solve(&beta_s_vector.as_ref());
+        let x_nd = x.as_ref();
+        let wald = beta_s.transpose() * x_nd.as_ref();
         let chi2_dist = ChiSquared::new(df_wald as f64)
             .map_err(|e| format!("Panel RE (Two-Way) Wald: {}", e))?;
         (wald, 1.0 - chi2_dist.cdf(wald))
     };
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way): {}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,
@@ -474,7 +472,7 @@ fn twoway_theta(
 /// Uses quasi-demeaned SSR for r'Ω^{-1}r = SSR_star/σ²_e; ln|Ω| from balanced approximation.
 fn re_mle_log_lik_twoway(
     endog: &[f64],
-    exog: &Array2<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     betas: &[f64],
@@ -498,7 +496,7 @@ fn re_mle_log_lik_twoway(
                 - kept
                     .iter()
                     .enumerate()
-                    .map(|(_j, &c)| exog[[i, c]] * betas[c])
+                    .map(|(_j, &c)| exog[(i, c)] * betas[c])
                     .sum::<f64>()
         })
         .collect();
@@ -522,13 +520,13 @@ fn re_mle_log_lik_twoway(
 
 /// Panel RE MLE (Two-Way): iterative GLS with variance component updates (MLE-style).
 pub fn fit_panel_re_mle_twoway(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (Two-Way MLE): lengths must match".to_string());
     }
@@ -566,19 +564,19 @@ pub fn fit_panel_re_mle_twoway(
 
     // Initial variance components from within/between (same as FGLS)
     let y_w = within_transform_twoway(&y_vec, entity_id, time_id);
-    let mut x_w = Array2::zeros((n, k));
+    let mut x_w = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let tc = within_transform_twoway(&col, entity_id, time_id);
         for i in 0..n {
-            x_w[[i, c]] = tc[i];
+            x_w[(i, c)] = tc[i];
         }
     }
     let (x_w_use, _) = {
         let x_ac = if constant && k > 0 {
-            let fc = x_w.column(0);
+            let fc = x_w.col(0);
             if fc.iter().all(|&v| v.abs() < 1e-10) {
-                x_w.slice(ndarray::s![.., 1..]).to_owned()
+                x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned()
             } else {
                 x_w.clone()
             }
@@ -613,8 +611,7 @@ pub fn fit_panel_re_mle_twoway(
             x_b_e_data.push(x_b_e[i][c]);
         }
     }
-    let x_b_e_arr = Array2::from_shape_vec((n_b_e, k), x_b_e_data)
-        .map_err(|_| "Panel RE (Two-Way MLE) between-entity")?;
+    let x_b_e_arr = faer::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = drop_collinear_columns(
         &x_b_e_arr,
         &vec![false; k],
@@ -622,7 +619,7 @@ pub fn fit_panel_re_mle_twoway(
     )
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-entity: {}", e))?;
     let res_b_e = OLS {
-        endog: Array1::from_vec(y_b_e.clone()),
+        endog: (y_b_e.clone()).into_iter().collect::<Col<f64>>(),
         exog: x_b_e_use,
         config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
@@ -638,7 +635,7 @@ pub fn fit_panel_re_mle_twoway(
 
     let (_, y_b_t, x_b_t) = group_means(&y_vec, exog, time_id);
     let n_b_t = y_b_t.len();
-    let x_b_t_arr = Array2::from_shape_vec((n_b_t, k), {
+    let x_b_t_arr = faer::MatRef::from_row_major_slice(&({
         let mut v = Vec::with_capacity(n_b_t * k);
         for i in 0..n_b_t {
             for c in 0..k {
@@ -646,8 +643,7 @@ pub fn fit_panel_re_mle_twoway(
             }
         }
         v
-    })
-    .map_err(|_| "Panel RE (Two-Way MLE) between-time")?;
+    }), n_b_t, k).to_owned();
     let (x_b_t_use, _) = drop_collinear_columns(
         &x_b_t_arr,
         &vec![false; k],
@@ -655,7 +651,7 @@ pub fn fit_panel_re_mle_twoway(
     )
     .map_err(|e| format!("Panel RE (Two-Way MLE) between-time: {}", e))?;
     let res_b_t = OLS {
-        endog: Array1::from_vec(y_b_t.clone()),
+        endog: (y_b_t.clone()).into_iter().collect::<Col<f64>>(),
         exog: x_b_t_use,
         config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             constant,
@@ -683,14 +679,13 @@ pub fn fit_panel_re_mle_twoway(
             twoway_theta(sigma2_alpha, sigma2_lambda, sigma2_e, t_bar, n_bar);
         let y_bar_i = between_transform(&y_vec, entity_id);
         let y_bar_t = between_transform(&y_vec, time_id);
-        let y_star_const: Array1<f64> = Array1::from_shape_fn(n, |i| {
+        let y_star_const: Col<f64> = Col::from_fn(n, |i| {
             y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i] + theta_total * y_global_mean
         });
         let x_const_star: Vec<f64> = (0..n)
             .map(|_| 1.0 - theta_id - theta_time + theta_total)
             .collect();
-        let x_const = Array2::from_shape_vec((n, 1), x_const_star)
-            .map_err(|_| "Panel RE (Two-Way MLE) const")?;
+        let x_const = faer::MatRef::from_row_major_slice(&(x_const_star), n, 1).to_owned();
         let res_const = OLS {
             endog: y_star_const,
             exog: x_const,
@@ -725,14 +720,14 @@ pub fn fit_panel_re_mle_twoway(
                 twoway_theta(sigma2_alpha, sigma2_lambda, sigma2_e, t_bar, n_bar);
             let y_bar_i = between_transform(&y_vec, entity_id);
             let y_bar_t = between_transform(&y_vec, time_id);
-            let y_star_c: Array1<f64> = Array1::from_shape_fn(n, |i| {
+            let y_star_c: Col<f64> = Col::from_fn(n, |i| {
                 y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i]
                     + theta_total * y_global_mean
             });
             let x_c: Vec<f64> = (0..n)
                 .map(|_| 1.0 - theta_id - theta_time + theta_total)
                 .collect();
-            let x_c_arr = Array2::from_shape_vec((n, 1), x_c).unwrap();
+            let x_c_arr = faer::MatRef::from_row_major_slice(&(x_c), n, 1).to_owned();
             let res_c = OLS {
                 endog: y_star_c,
                 exog: x_c_arr,
@@ -788,19 +783,19 @@ pub fn fit_panel_re_mle_twoway(
 
     // Re-init for full model from FGLS logic (variance components may have changed from const-only)
     let y_w2 = within_transform_twoway(&y_vec, entity_id, time_id);
-    let mut x_w2 = Array2::zeros((n, k));
+    let mut x_w2 = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let tc = within_transform_twoway(&col, entity_id, time_id);
         for i in 0..n {
-            x_w2[[i, c]] = tc[i];
+            x_w2[(i, c)] = tc[i];
         }
     }
     let (x_w2_use, _) = {
         let x_ac = if constant && k > 0 {
-            let fc = x_w2.column(0);
+            let fc = x_w2.col(0);
             if fc.iter().all(|&v| v.abs() < 1e-10) {
-                x_w2.slice(ndarray::s![.., 1..]).to_owned()
+                x_w2.submatrix(0, 1, x_w2.nrows(), x_w2.ncols() - 1).to_owned()
             } else {
                 x_w2.clone()
             }
@@ -837,17 +832,17 @@ pub fn fit_panel_re_mle_twoway(
         let y_bar_i = between_transform(&y_vec, entity_id);
         let y_bar_t = between_transform(&y_vec, time_id);
         let y_bar: f64 = y_vec.iter().sum::<f64>() / n as f64;
-        let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| {
+        let y_star: Col<f64> = Col::from_fn(n, |i| {
             y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i] + theta_total * y_bar
         });
-        let mut x_star = Array2::zeros((n, k));
+        let mut x_star = Mat::zeros(n, k);
         for c in 0..k {
-            let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+            let col: Vec<f64> = exog.col(c).iter().cloned().collect();
             let x_bar_i = between_transform(&col, entity_id);
             let x_bar_t = between_transform(&col, time_id);
             let x_bar: f64 = col.iter().sum::<f64>() / n as f64;
             for i in 0..n {
-                x_star[[i, c]] =
+                x_star[(i, c)] =
                     col[i] - theta_id * x_bar_i[i] - theta_time * x_bar_t[i] + theta_total * x_bar;
             }
         }
@@ -897,7 +892,7 @@ pub fn fit_panel_re_mle_twoway(
                     - kept
                         .iter()
                         .enumerate()
-                        .map(|(_j, &c)| exog[[i, c]] * betas[c])
+                        .map(|(_j, &c)| exog[(i, c)] * betas[c])
                         .sum::<f64>()
             })
             .collect();
@@ -944,17 +939,17 @@ pub fn fit_panel_re_mle_twoway(
     let y_bar_i = between_transform(&y_vec, entity_id);
     let y_bar_t = between_transform(&y_vec, time_id);
     let y_bar: f64 = y_vec.iter().sum::<f64>() / n as f64;
-    let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| {
+    let y_star: Col<f64> = Col::from_fn(n, |i| {
         y_vec[i] - theta_id * y_bar_i[i] - theta_time * y_bar_t[i] + theta_total * y_bar
     });
-    let mut x_star = Array2::zeros((n, k));
+    let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let x_bar_i = between_transform(&col, entity_id);
         let x_bar_t = between_transform(&col, time_id);
         let x_bar: f64 = col.iter().sum::<f64>() / n as f64;
         for i in 0..n {
-            x_star[[i, c]] =
+            x_star[(i, c)] =
                 col[i] - theta_id * x_bar_i[i] - theta_time * x_bar_t[i] + theta_total * x_bar;
         }
     }
@@ -1004,8 +999,8 @@ pub fn fit_panel_re_mle_twoway(
     if result.ms_residual > 1e-300 {
         let scale = sigma2_e / result.ms_residual;
         result.cov_beta = &result.cov_beta * scale;
-        result.stds = result.cov_beta.diag().mapv(f64::sqrt);
-        result.tvalues = &result.betas / &result.stds;
+        result.stds = result.cov_beta.diagonal().column_vector().map(|v| v.sqrt());
+        result.tvalues = Col::from_fn(result.betas.nrows(), |i| result.betas[i] / result.stds[i]);
     }
 
     let obs_per_grp: Vec<usize> = obs_per_entity.values().copied().collect();
@@ -1084,12 +1079,12 @@ pub fn fit_panel_re_mle_twoway(
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE (Two-Way) MLE: {}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

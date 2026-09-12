@@ -2,15 +2,15 @@
 
 /// Panel RE FGLS (Time): same as entity RE but group by time period
 pub fn fit_panel_re_fgls_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (FGLS Time): lengths must match".to_string());
     }
@@ -28,21 +28,21 @@ pub fn fit_panel_re_fgls_time(
     let y_vec: Vec<f64> = endog.iter().cloned().collect();
     let y_w = within_transform(&y_vec, time_id);
     let k = exog.ncols();
-    let mut x_w = Array2::zeros((n, k));
+    let mut x_w = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let tc = within_transform(&col, time_id);
         for i in 0..n {
-            x_w[[i, c]] = tc[i];
+            x_w[(i, c)] = tc[i];
         }
     }
 
     let (x_w_use, _omitted_w) = {
         let (x_after_const, _) = if constant && k > 0 {
-            let first_col = x_w.column(0);
+            let first_col = x_w.col(0);
             let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
             if is_const {
-                (x_w.slice(ndarray::s![.., 1..]).to_owned(), false)
+                (x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(), false)
             } else {
                 (x_w.clone(), constant)
             }
@@ -80,9 +80,8 @@ pub fn fit_panel_re_fgls_time(
             x_b_data.push(x_b_vec[i][c]);
         }
     }
-    let y_b = Array1::from_vec(y_b_vec);
-    let x_b = Array2::from_shape_vec((n_b, k), x_b_data)
-        .map_err(|e| format!("Panel RE (Time) between: {:?}", e))?;
+    let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
+    let x_b = faer::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, _) = {
         let col_is_dummy = vec![false; k];
@@ -130,14 +129,14 @@ pub fn fit_panel_re_fgls_time(
         })
         .collect();
 
-    let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| y_vec[i] - theta_arr[i] * y_bar[i]);
+    let y_star: Col<f64> = Col::from_fn(n, |i| y_vec[i] - theta_arr[i] * y_bar[i]);
 
-    let mut x_star = Array2::zeros((n, k));
+    let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let x_bar = between_transform(&col, time_id);
         for i in 0..n {
-            x_star[[i, c]] = col[i] - theta_arr[i] * x_bar[i];
+            x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
         }
     }
 
@@ -200,7 +199,7 @@ pub fn fit_panel_re_fgls_time(
             .map(|i| {
                 kept.iter()
                     .enumerate()
-                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .map(|(idx, &c)| exog[(i, c)] * betas[idx])
                     .sum()
             })
             .collect();
@@ -262,7 +261,7 @@ pub fn fit_panel_re_fgls_time(
             .map(|i| {
                 kept.iter()
                     .enumerate()
-                    .map(|(idx, &c)| exog[[i, c]] * betas[idx])
+                    .map(|(idx, &c)| exog[(i, c)] * betas[idx])
                     .sum()
             })
             .collect();
@@ -314,36 +313,36 @@ pub fn fit_panel_re_fgls_time(
     let (wald_chi2, prob_wald_chi2) = {
         let cov_beta = &result.cov_beta;
         let betas_nd = &result.betas;
-        let k_b = betas_nd.len();
+        let k_b = betas_nd.nrows();
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
             (
-                betas_nd.slice(ndarray::s![1..]).to_owned(),
-                cov_beta.slice(ndarray::s![1.., 1..]).to_owned(),
+                betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned(),
+                cov_beta.submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1).to_owned(),
                 k_b - 1,
             )
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_matrix = v_s.view().to_owned();
-        let beta_s_vector = beta_s.view().to_owned();
+        let v_s_matrix = v_s.as_ref().to_owned();
+        let beta_s_vector = beta_s.as_ref().to_owned();
         let x = v_s_matrix
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "RE Time Wald".to_string())?
-            .solve(&beta_s_vector.view());
-        let x_nd = x.view();
-        let wald = beta_s.dot(&x_nd);
+            .solve(&beta_s_vector.as_ref());
+        let x_nd = x.as_ref();
+        let wald = beta_s.transpose() * x_nd.as_ref();
         let chi2_dist = ChiSquared::new(df_wald as f64).map_err(|e| format!("{}", e))?;
         (wald, 1.0 - chi2_dist.cdf(wald))
     };
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,
@@ -391,15 +390,15 @@ pub fn fit_panel_re_fgls_time(
 
 /// Panel RE Between (Time): regress time-period means ȳ_t on x̄_t
 pub fn fit_panel_re_be_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     _cov_type: &str,
     _cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (BE Time): lengths must match".to_string());
     }
@@ -422,9 +421,8 @@ pub fn fit_panel_re_be_time(
             x_b_data.push(x_b_vec[i][c]);
         }
     }
-    let y_b = Array1::from_vec(y_b_vec);
-    let x_b = Array2::from_shape_vec((n_b, k), x_b_data)
-        .map_err(|e| format!("Panel RE (BE Time): {:?}", e))?;
+    let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
+    let x_b = faer::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, omitted_b) = {
         let col_is_dummy = vec![false; k];
@@ -478,7 +476,7 @@ pub fn fit_panel_re_be_time(
             .map(|i| {
                 let mut s = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    s += exog[[i, c]] * betas[idx];
+                    s += exog[(i, c)] * betas[idx];
                 }
                 s
             })
@@ -511,7 +509,7 @@ pub fn fit_panel_re_be_time(
             .map(|i| {
                 let mut xb = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    xb += exog[[i, c]] * betas[idx];
+                    xb += exog[(i, c)] * betas[idx];
                 }
                 xb
             })
@@ -560,12 +558,12 @@ pub fn fit_panel_re_be_time(
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("{}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,
@@ -613,13 +611,13 @@ pub fn fit_panel_re_be_time(
 
 /// Panel RE MLE (Time): same as entity MLE but group by time period
 pub fn fit_panel_re_mle_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel RE (MLE Time): lengths must match".to_string());
     }
@@ -675,7 +673,7 @@ pub fn fit_panel_re_mle_time(
 
         fn gls_alpha_and_ll_time(
             endog_vec: &[f64],
-            exog: &Array2<f64>,
+            exog: &Mat<f64>,
             time_id: &[usize],
             obs_per_time: &HashMap<usize, usize>,
             su: f64,
@@ -695,11 +693,11 @@ pub fn fit_panel_re_mle_time(
                 .map(|i| endog_vec[i] - theta_arr[i] * y_bar[i])
                 .collect();
             let x_star_const: Vec<f64> = (0..n).map(|i| 1.0 - theta_arr[i]).collect();
-            let x_const = Array2::from_shape_vec((n, 1), x_star_const).unwrap();
+            let x_const = faer::MatRef::from_row_major_slice(&(x_star_const), n, 1).to_owned();
             let (x_use, _) = drop_collinear_columns(&x_const, &[false], Some(0))
                 .map_err(|e| format!("const-only init: {}", e))?;
             let res = OLS {
-                endog: Array1::from_vec(y_star),
+                endog: (y_star).into_iter().collect::<Col<f64>>(),
                 exog: x_use,
                 config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
                     true,
@@ -841,14 +839,14 @@ pub fn fit_panel_re_mle_time(
             })
             .collect();
         let y_bar = between_transform(&endog_vec, time_id);
-        let y_star: Array1<f64> =
-            Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
-        let mut x_star = Array2::zeros((n, k));
+        let y_star: Col<f64> =
+            Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
+        let mut x_star = Mat::zeros(n, k);
         for c in 0..k {
-            let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+            let col: Vec<f64> = exog.col(c).iter().cloned().collect();
             let x_bar = between_transform(&col, time_id);
             for i in 0..n {
-                x_star[[i, c]] = col[i] - theta_arr[i] * x_bar[i];
+                x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
             }
         }
         let (x_star_use, omitted_star) = {
@@ -871,7 +869,7 @@ pub fn fit_panel_re_mle_time(
         let res0 = ols_re
             .fit()
             .map_err(|e| format!("Panel RE (MLE Time) iter 0: {}", e))?;
-        betas = res0.betas.to_vec();
+        betas = res0.betas.iter().copied().collect();
         let ll0_full = re_mle_log_lik(
             &endog_vec,
             exog,
@@ -885,7 +883,7 @@ pub fn fit_panel_re_mle_time(
         mle_iter_log_lik.push(ll0_full);
     }
 
-    let mut params: Vec<f64> = betas.iter().cloned().collect();
+    let mut params = betas.clone();
     params.push(sigma2_u.ln());
     params.push(sigma2_e.ln());
     let h_num = 1e-6;
@@ -931,14 +929,14 @@ pub fn fit_panel_re_mle_time(
         .collect();
 
     let y_bar = between_transform(&endog_vec, time_id);
-    let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
+    let y_star: Col<f64> = Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
 
-    let mut x_star = Array2::zeros((n, k));
+    let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let x_bar = between_transform(&col, time_id);
         for i in 0..n {
-            x_star[[i, c]] = col[i] - theta_arr[i] * x_bar[i];
+            x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
         }
     }
 
@@ -964,8 +962,8 @@ pub fn fit_panel_re_mle_time(
     if result.ms_residual > 1e-300 {
         let scale = sigma2_e / result.ms_residual;
         result.cov_beta = &result.cov_beta * scale;
-        result.stds = result.cov_beta.diag().mapv(f64::sqrt);
-        result.tvalues = &result.betas / &result.stds;
+        result.stds = result.cov_beta.diagonal().column_vector().map(|v| v.sqrt());
+        result.tvalues = Col::from_fn(result.betas.nrows(), |i| result.betas[i] / result.stds[i]);
     }
 
     let kept: Vec<usize> = (0..k).filter(|j| !omitted_mle.contains(j)).collect();
@@ -1078,12 +1076,12 @@ pub fn fit_panel_re_mle_time(
     });
 
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE MLE Time: {}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

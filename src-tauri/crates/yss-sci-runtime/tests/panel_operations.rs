@@ -4,7 +4,7 @@
 //! Stata equivalence: reg D.y D.x, nocons (after xtset id time).
 //! D. = first difference = current - L. (previous period within panel).
 
-use ndarray::{Array1, Array2};
+use faer::{Col, MatRef};
 use yss_sci::regression::panel::{fit_panel_fd, fit_panel_fe, fit_panel_lsdv};
 use yss_sci_runtime::data::panel::{align_panel, panel_diff};
 
@@ -14,14 +14,13 @@ fn test_fd_fe_identical_for_t2() {
     // Entity 0: (t0,y0,x0), (t1,y1,x1)
     // Entity 1: (t0,y0,x0), (t1,y1,x1)
     // Entity 2: (t0,y0,x0), (t1,y1,x1)
-    let endog = Array1::from_vec(vec![
+    let endog = Col::from_iter(vec![
         3.0, 7.0, // entity 0: y0=1+2*1=3, y1=1+2*3=7
         5.0, 9.0, // entity 1: y0=1+2*2=5, y1=1+2*4=9
         7.0, 11.0, // entity 2: y0=1+2*3=7, y1=1+2*5=11
     ]);
-    let exog = Array2::from_shape_vec(
-        (6, 2),
-        vec![
+    let exog = MatRef::from_row_major_slice(
+        &[
             1.0, 1.0, // entity 0 t0: const, x
             1.0, 3.0, // entity 0 t1
             1.0, 2.0, // entity 1 t0
@@ -29,8 +28,10 @@ fn test_fd_fe_identical_for_t2() {
             1.0, 3.0, // entity 2 t0
             1.0, 5.0, // entity 2 t1
         ],
+        6,
+        2,
     )
-    .unwrap();
+    .to_owned();
     let entity_id: Vec<usize> = vec![0, 0, 1, 1, 2, 2];
     let time_id: Vec<usize> = vec![0, 1, 0, 1, 0, 1];
 
@@ -93,18 +94,19 @@ fn test_fd_slope_t3() {
     // 2 entities, 3 periods each. y = 1 + 2*x
     // Entity 0: x=(1,2,3) -> y=(3,5,7); Entity 1: x=(2,4,6) -> y=(5,9,13)
     // Δy = 2*Δx exactly
-    let endog = Array1::from_vec(vec![
+    let endog = Col::from_iter(vec![
         3.0, 5.0, 7.0, // entity 0
         5.0, 9.0, 13.0, // entity 1
     ]);
-    let exog = Array2::from_shape_vec(
-        (6, 2),
-        vec![
+    let exog = MatRef::from_row_major_slice(
+        &[
             1.0, 1.0, 1.0, 1.0, 1.0, 1.0, // const (all 1s)
             1.0, 2.0, 3.0, 2.0, 4.0, 6.0, // x
         ],
+        6,
+        2,
     )
-    .unwrap();
+    .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1, 1];
     let time_id = vec![0, 1, 2, 0, 1, 2];
 
@@ -135,19 +137,20 @@ fn test_fd_slope_t3() {
 fn test_fd_with_time_gap() {
     // Entity 0: t=0,1,2 (full); Entity 1: t=0,2 (gap at t=1)
     // y = 2*x: Entity 0: (0,1,2)->(0,2,4); Entity 1: (0,2)->(0,4)
-    let endog = Array1::from_vec(vec![0.0, 2.0, 4.0, 0.0, 4.0]);
+    let endog = Col::from_iter(vec![0.0, 2.0, 4.0, 0.0, 4.0]);
     // Row-major (5,2): row i = (exog[[i,0]], exog[[i,1]])
-    let exog = Array2::from_shape_vec(
-        (5, 2),
-        vec![
+    let exog = MatRef::from_row_major_slice(
+        &[
             1.0, 0.0, // row 0: e0,t0
             1.0, 1.0, // row 1: e0,t1
             1.0, 2.0, // row 2: e0,t2
             1.0, 0.0, // row 3: e1,t0
             1.0, 2.0, // row 4: e1,t2
         ],
+        5,
+        2,
     )
-    .unwrap();
+    .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1];
     let time_id = vec![0, 1, 2, 0, 2]; // entity 1 has gap at t=1
 
@@ -179,19 +182,20 @@ fn test_fd_with_time_gap() {
 
 #[test]
 fn test_lsdv_matches_fe_slope() {
-    let endog = Array1::from_vec(vec![
+    let endog = Col::from_iter(vec![
         3.0, 5.0, 7.0, // entity 0: effect 0, y = 1 + 2x
         7.0, 11.0, 15.0, // entity 1: effect 2, y = 3 + 2x
         11.0, 17.0, 23.0, // entity 2: effect 4, y = 5 + 2x
     ]);
-    let exog = Array2::from_shape_vec(
-        (9, 2),
-        vec![
+    let exog = MatRef::from_row_major_slice(
+        &[
             1.0, 1.0, 1.0, 2.0, 1.0, 3.0, 1.0, 2.0, 1.0, 4.0, 1.0, 6.0, 1.0, 3.0, 1.0, 6.0, 1.0,
             9.0,
         ],
+        9,
+        2,
     )
-    .unwrap();
+    .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1, 1, 2, 2, 2];
 
     let fe = fit_panel_fe(&endog, &exog, &entity_id, true, "nonrobust", None).unwrap();
@@ -206,17 +210,18 @@ fn test_lsdv_matches_fe_slope() {
 
 #[test]
 fn test_fe_cluster_reports_stata_style_stats() {
-    let endog = Array1::from_vec(vec![
+    let endog = Col::from_iter(vec![
         3.0, 5.1, 6.9, 7.0, 11.2, 14.8, 11.0, 16.9, 23.1, 13.0, 21.1, 29.0,
     ]);
-    let exog = Array2::from_shape_vec(
-        (12, 2),
-        vec![
+    let exog = MatRef::from_row_major_slice(
+        &[
             1.0, 1.0, 1.0, 2.0, 1.0, 3.0, 1.0, 2.0, 1.0, 4.0, 1.0, 6.0, 1.0, 3.0, 1.0, 6.0, 1.0,
             9.0, 1.0, 4.0, 1.0, 8.0, 1.0, 12.0,
         ],
+        12,
+        2,
     )
-    .unwrap();
+    .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3];
 
     let fe = fit_panel_fe(&endog, &exog, &entity_id, true, "cluster", None).unwrap();

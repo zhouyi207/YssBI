@@ -6,9 +6,9 @@
 // - `estat hettest, iid`：z = 拟合值，Koenker 形式 (LM = n×R²)
 // - `estat hettest, rhs iid`：z = RHS 变量，Koenker 形式
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// Breusch-Pagan 异方差检验结果
 #[derive(Debug, Clone)]
@@ -22,26 +22,26 @@ pub struct BreuschPaganResult {
 }
 
 /// 辅助函数：给定 z 矩阵，计算原始 BP 统计量 LM = (1/2)·ESS
-fn bp_stat_stata(g: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64, usize), String> {
+fn bp_stat_stata(g: &Col<f64>, z_matrix: &faer::Mat<f64>) -> Result<(f64, usize), String> {
     let m = z_matrix.ncols();
-    let g_col = g.view().to_owned();
+    let g_col = g.as_ref().to_owned();
 
-    let ztz = z_matrix.t().matmul(&z_matrix.view());
-    let ztg = z_matrix.t().matmul(&g_col.view());
+    let ztz = z_matrix.transpose() * z_matrix.as_ref();
+    let ztg = z_matrix.transpose() * g_col.as_ref();
 
     let ztz_inv = ztz
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "BP: Z'Z singular in auxiliary regression".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
-    let gamma = ztz_inv.view().matmul(&ztg);
-    let g_hat = z_matrix.view().matmul(&gamma.view());
+        .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
+    let gamma = ztz_inv.as_ref() * ztg.as_ref();
+    let g_hat = z_matrix.as_ref() * gamma.as_ref();
 
     let g_mean = 1.0;
-    let tss: f64 = g_col.view().iter().map(|v| (v - g_mean).powi(2)).sum();
+    let tss: f64 = g_col.as_ref().iter().map(|v| (v - g_mean).powi(2)).sum();
     let rss: f64 = g_col
-        .view()
+        .as_ref()
         .iter()
-        .zip(g_hat.view().iter())
+        .zip(g_hat.as_ref().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     let ess = tss - rss;
@@ -53,29 +53,29 @@ fn bp_stat_stata(g: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f6
 
 /// 辅助函数：给定 z 矩阵，计算 Koenker 统计量 LM = n×R²（假定 g 均值为 1）
 fn bp_stat_koenker(
-    g: &Array1<f64>,
-    z_matrix: &ndarray::Array2<f64>,
+    g: &Col<f64>,
+    z_matrix: &faer::Mat<f64>,
 ) -> Result<(f64, usize), String> {
-    let n = g.len();
+    let n = g.nrows();
     let m = z_matrix.ncols();
-    let g_col = g.view().to_owned();
+    let g_col = g.as_ref().to_owned();
 
-    let ztz = z_matrix.t().matmul(&z_matrix.view());
-    let ztg = z_matrix.t().matmul(&g_col.view());
+    let ztz = z_matrix.transpose() * z_matrix.as_ref();
+    let ztg = z_matrix.transpose() * g_col.as_ref();
 
     let ztz_inv = ztz
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "BP: Z'Z singular in auxiliary regression".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
-    let gamma = ztz_inv.view().matmul(&ztg);
-    let g_hat = z_matrix.view().matmul(&gamma.view());
+        .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
+    let gamma = ztz_inv.as_ref() * ztg.as_ref();
+    let g_hat = z_matrix.as_ref() * gamma.as_ref();
 
     let g_mean = 1.0;
-    let tss: f64 = g_col.view().iter().map(|v| (v - g_mean).powi(2)).sum();
+    let tss: f64 = g_col.as_ref().iter().map(|v| (v - g_mean).powi(2)).sum();
     let rss: f64 = g_col
-        .view()
+        .as_ref()
         .iter()
-        .zip(g_hat.view().iter())
+        .zip(g_hat.as_ref().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
 
@@ -89,15 +89,15 @@ fn bp_stat_koenker(
 /// 对应 Stata: `estat hettest, rhs`
 /// 辅助回归：g_i = u²_i/σ̂² 对 X；LM = (1/2)·ESS，LM ~ χ²(k-1)
 pub fn breusch_pagan_stata_rhs(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
     let n = x.nrows();
     let k = x.ncols();
-    if residuals.len() != n {
+    if residuals.nrows() != n {
         return Err(format!(
             "breusch_pagan_stata_rhs: residuals length {} != n {}",
-            residuals.len(),
+            residuals.nrows(),
             n
         ));
     }
@@ -105,14 +105,14 @@ pub fn breusch_pagan_stata_rhs(
         return Err("breusch_pagan_stata_rhs: insufficient observations".to_string());
     }
 
-    let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
+    let u_sq: Col<f64> = residuals.map(|&u| u * u);
     let sigma2 = u_sq.iter().sum::<f64>() / n as f64;
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_stata_rhs: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
+    let g: Col<f64> = u_sq.map(|&v| v / sigma2);
 
-    let z_matrix = x.view().to_owned();
+    let z_matrix = x.as_ref().to_owned();
     let (lm_stat, df) = bp_stat_stata(&g, &z_matrix)?;
 
     if df == 0 {
@@ -138,15 +138,15 @@ pub fn breusch_pagan_stata_rhs(
 /// 对应 Stata: `estat hettest, rhs iid`
 /// 辅助回归：g_i = u²_i/σ̂² 对 X；LM = n×R²，LM ~ χ²(k-1)，不假定正态性
 pub fn breusch_pagan_koenker_rhs(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
     let n = x.nrows();
     let k = x.ncols();
-    if residuals.len() != n {
+    if residuals.nrows() != n {
         return Err(format!(
             "breusch_pagan_koenker_rhs: residuals length {} != n {}",
-            residuals.len(),
+            residuals.nrows(),
             n
         ));
     }
@@ -154,14 +154,14 @@ pub fn breusch_pagan_koenker_rhs(
         return Err("breusch_pagan_koenker_rhs: insufficient observations".to_string());
     }
 
-    let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
+    let u_sq: Col<f64> = residuals.map(|&u| u * u);
     let sigma2 = u_sq.iter().sum::<f64>() / n as f64;
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_koenker_rhs: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
+    let g: Col<f64> = u_sq.map(|&v| v / sigma2);
 
-    let z_matrix = x.view().to_owned();
+    let z_matrix = x.as_ref().to_owned();
     let (lm_stat, df) = bp_stat_koenker(&g, &z_matrix)?;
 
     if df == 0 {
@@ -184,8 +184,8 @@ pub fn breusch_pagan_koenker_rhs(
 }
 
 /// 构建 z = [1, fitted_values] 矩阵
-fn build_z_fitted(n: usize, fitted: &Array1<f64>) -> ndarray::Array2<f64> {
-    let mut z = ndarray::Array2::<f64>::zeros((n, 2));
+fn build_z_fitted(n: usize, fitted: &Col<f64>) -> faer::Mat<f64> {
+    let mut z = Mat::zeros(n, 2);
     for i in 0..n {
         z[(i, 0)] = 1.0;
         z[(i, 1)] = fitted[i];
@@ -197,14 +197,14 @@ fn build_z_fitted(n: usize, fitted: &Array1<f64>) -> ndarray::Array2<f64> {
 /// 对应 Stata: `estat hettest`
 /// 辅助回归：g_i = u²_i/σ̂² 对 [1, ŷ]；LM = (1/2)·ESS，LM ~ χ²(1)
 pub fn breusch_pagan_stata(
-    residuals: &Array1<f64>,
-    fitted_values: &Array1<f64>,
+    residuals: &Col<f64>,
+    fitted_values: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
-    let n = residuals.len();
-    if fitted_values.len() != n {
+    let n = residuals.nrows();
+    if fitted_values.nrows() != n {
         return Err(format!(
             "breusch_pagan_stata: fitted_values length {} != n {}",
-            fitted_values.len(),
+            fitted_values.nrows(),
             n
         ));
     }
@@ -212,12 +212,12 @@ pub fn breusch_pagan_stata(
         return Err("breusch_pagan_stata: insufficient observations".to_string());
     }
 
-    let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
+    let u_sq: Col<f64> = residuals.map(|&u| u * u);
     let sigma2 = u_sq.iter().sum::<f64>() / n as f64;
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_stata: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
+    let g: Col<f64> = u_sq.map(|&v| v / sigma2);
 
     let z_matrix = build_z_fitted(n, fitted_values);
     let (lm_stat, df) = bp_stat_stata(&g, &z_matrix)?;
@@ -245,14 +245,14 @@ pub fn breusch_pagan_stata(
 /// 对应 Stata: `estat hettest, iid`
 /// 辅助回归：g_i = u²_i/σ̂² 对 [1, ŷ]；LM = n×R²，LM ~ χ²(1)，不假定正态性
 pub fn breusch_pagan_koenker(
-    residuals: &Array1<f64>,
-    fitted_values: &Array1<f64>,
+    residuals: &Col<f64>,
+    fitted_values: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
-    let n = residuals.len();
-    if fitted_values.len() != n {
+    let n = residuals.nrows();
+    if fitted_values.nrows() != n {
         return Err(format!(
             "breusch_pagan_koenker: fitted_values length {} != n {}",
-            fitted_values.len(),
+            fitted_values.nrows(),
             n
         ));
     }
@@ -260,12 +260,12 @@ pub fn breusch_pagan_koenker(
         return Err("breusch_pagan_koenker: insufficient observations".to_string());
     }
 
-    let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
+    let u_sq: Col<f64> = residuals.map(|&u| u * u);
     let sigma2 = u_sq.iter().sum::<f64>() / n as f64;
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_koenker: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = u_sq.mapv(|v| v / sigma2);
+    let g: Col<f64> = u_sq.map(|&v| v / sigma2);
 
     let z_matrix = build_z_fitted(n, fitted_values);
     let (lm_stat, df) = bp_stat_koenker(&g, &z_matrix)?;

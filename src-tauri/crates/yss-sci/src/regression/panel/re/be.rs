@@ -1,13 +1,13 @@
 /// Panel Between estimator: regress ȳ_i on x̄_i (entity means)
 pub fn fit_panel_re_be(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
     _cov_type: &str,
     _cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n {
         return Err("Panel RE (BE): lengths must match".to_string());
     }
@@ -30,9 +30,8 @@ pub fn fit_panel_re_be(
             x_b_data.push(x_b_vec[i][c]);
         }
     }
-    let y_b = Array1::from_vec(y_b_vec);
-    let x_b = Array2::from_shape_vec((n_b, k), x_b_data)
-        .map_err(|e| format!("Panel RE (BE): {:?}", e))?;
+    let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
+    let x_b = faer::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, omitted_be) = {
         let col_is_dummy = vec![false; k];
@@ -90,7 +89,7 @@ pub fn fit_panel_re_be(
             .map(|i| {
                 let mut s = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    s += exog[[i, c]] * betas[idx];
+                    s += exog[(i, c)] * betas[idx];
                 }
                 s
             })
@@ -123,7 +122,7 @@ pub fn fit_panel_re_be(
             .map(|i| {
                 let mut xb = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    xb += exog[[i, c]] * betas[idx];
+                    xb += exog[(i, c)] * betas[idx];
                 }
                 xb
             })

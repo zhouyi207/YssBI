@@ -8,7 +8,7 @@
 //! Stage 1: Regress each endogenous on Z = [exog, instruments] → endog_hat
 //! Stage 2: Regress Y on X = [exog, endog_hat] → β. VCE uses structural residuals u = y - X_struct*β.
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use yss_sci_contract::regression::CovParams;
 
 /// 2SLS 配置，与 OLS 一致（constant, cov_type, cov_params）
@@ -28,10 +28,10 @@ pub struct IV2SLSConfig {
 ///
 /// 识别条件: k_iv >= k_endog
 pub struct IV2SLS {
-    pub endog: Array1<f64>,
-    pub exog: Array2<f64>,
-    pub endog_reg: Array2<f64>,
-    pub instruments: Array2<f64>,
+    pub endog: Col<f64>,
+    pub exog: Mat<f64>,
+    pub endog_reg: Mat<f64>,
+    pub instruments: Mat<f64>,
     pub config: IV2SLSConfig,
     /// 内生变量名称，用于 first_stage 输出
     pub endog_names: Option<Vec<String>>,
@@ -41,7 +41,7 @@ pub struct IV2SLS {
 
 #[derive(Debug)]
 pub struct IV2SLSModel {
-    pub params: Array1<f64>,
+    pub params: Col<f64>,
 }
 
 /// estat firststage 汇总（Stata estat firststage）
@@ -135,14 +135,14 @@ pub struct IV2SLSResult {
     pub wald_chi2_p_value: f64,
 
     pub model: IV2SLSModel,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
     /// z-statistics (2SLS uses asymptotic normal inference, not t)
-    pub zvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub zvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     pub cond_no: f64,
 
     /// 第一阶段回归结果（每个内生变量）

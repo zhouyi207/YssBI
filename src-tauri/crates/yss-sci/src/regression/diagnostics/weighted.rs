@@ -4,12 +4,12 @@
 
 /// 加权辅助回归的 R²（用于 Koenker：LM = n×R²）
 fn weighted_aux_r2(
-    z: &ndarray::Array2<f64>,
-    y: &Array1<f64>,
-    w: &Array1<f64>,
+    z: &faer::Mat<f64>,
+    y: &Col<f64>,
+    w: &Col<f64>,
 ) -> Result<f64, String> {
     let fitted = weighted_aux_regression(z, y, w)?;
-    let n = y.len();
+    let n = y.nrows();
     let sum_w: f64 = w.iter().sum();
     let y_mean_w = if sum_w > 0.0 {
         (0..n).map(|i| w[i] * y[i]).sum::<f64>() / sum_w
@@ -23,16 +23,16 @@ fn weighted_aux_r2(
 
 /// 加权辅助回归：min Σ w_i*(y_i - Z_i*γ)²，返回 fitted
 fn weighted_aux_regression(
-    z: &ndarray::Array2<f64>,
-    y: &Array1<f64>,
-    w: &Array1<f64>,
-) -> Result<Array1<f64>, String> {
-    let n = y.len();
+    z: &faer::Mat<f64>,
+    y: &Col<f64>,
+    w: &Col<f64>,
+) -> Result<Col<f64>, String> {
+    let n = y.nrows();
     let m = z.ncols();
 
     // Z'WZ, Z'Wy (ztwy as m×1 matrix for solve)
-    let mut ztwz: ndarray::Array2<f64> = ndarray::Array2::<f64>::zeros((m, m));
-    let mut ztwy: ndarray::Array2<f64> = ndarray::Array2::<f64>::zeros((m, 1));
+    let mut ztwz: faer::Mat<f64> = Mat::zeros(m, m);
+    let mut ztwy: faer::Mat<f64> = Mat::zeros(m, 1);
     for i in 0..n {
         let wi = w[i];
         for c in 0..m {
@@ -44,12 +44,12 @@ fn weighted_aux_regression(
     }
 
     let ztwz_inv = ztwz
-        .view()
-        .cholesky()
+        .as_ref()
+        .checked_cholesky()
         .map_err(|_| "BP weighted: Z'WZ singular".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(m));
-    let gamma = ztwz_inv.view().matmul(&ztwy.view());
-    let mut fitted = Array1::zeros(n);
+        .solve(&Mat::identity(m, m));
+    let gamma = ztwz_inv.as_ref() * ztwy.as_ref();
+    let mut fitted = Col::zeros(n);
     for i in 0..n {
         fitted[i] = (0..m).map(|c| z[(i, c)] * gamma[(c, 0)]).sum();
     }
@@ -59,13 +59,13 @@ fn weighted_aux_regression(
 /// Breusch-Pagan 加权版（原始公式，z = RHS）
 /// 对应 R bptest(, studentize=FALSE), Stata regress [aweight] 后 estat hettest, rhs
 pub fn breusch_pagan_stata_rhs_weighted(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
-    weights: &Array1<f64>,
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
+    weights: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
     let n = x.nrows();
     let k = x.ncols();
-    if residuals.len() != n || weights.len() != n {
+    if residuals.nrows() != n || weights.nrows() != n {
         return Err("breusch_pagan_stata_rhs_weighted: length mismatch".to_string());
     }
     if n < k + 2 {
@@ -79,9 +79,9 @@ pub fn breusch_pagan_stata_rhs_weighted(
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_stata_rhs_weighted: residual variance is zero".to_string());
     }
-    let f: Array1<f64> = Array1::from_shape_fn(n, |i| residuals[i] * residuals[i] / sigma2 - 1.0);
+    let f: Col<f64> = Col::from_fn(n, |i| residuals[i] * residuals[i] / sigma2 - 1.0);
 
-    let z_matrix = x.view().to_owned();
+    let z_matrix = x.as_ref().to_owned();
     let f_hat = weighted_aux_regression(&z_matrix, &f, weights)?;
 
     let lm_stat = 0.5
@@ -112,13 +112,13 @@ pub fn breusch_pagan_stata_rhs_weighted(
 /// Breusch-Pagan 加权版（Koenker 形式，z = RHS）
 /// Stata estat hettest, rhs iid：g = e²/σ̂²，加权回归 g 对 Z，LM = n×R²
 pub fn breusch_pagan_koenker_rhs_weighted(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
-    weights: &Array1<f64>,
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
+    weights: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
     let n = x.nrows();
     let k = x.ncols();
-    if residuals.len() != n || weights.len() != n {
+    if residuals.nrows() != n || weights.nrows() != n {
         return Err("breusch_pagan_koenker_rhs_weighted: length mismatch".to_string());
     }
     if n < k + 2 {
@@ -132,9 +132,9 @@ pub fn breusch_pagan_koenker_rhs_weighted(
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_koenker_rhs_weighted: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = Array1::from_shape_fn(n, |i| residuals[i] * residuals[i] / sigma2);
+    let g: Col<f64> = Col::from_fn(n, |i| residuals[i] * residuals[i] / sigma2);
 
-    let z_matrix = x.view().to_owned();
+    let z_matrix = x.as_ref().to_owned();
     let r2 = weighted_aux_r2(&z_matrix, &g, weights)?;
     let lm_stat = n as f64 * r2;
     let df = k.saturating_sub(1);
@@ -160,12 +160,12 @@ pub fn breusch_pagan_koenker_rhs_weighted(
 
 /// Breusch-Pagan 加权版（原始公式，z = 拟合值）
 pub fn breusch_pagan_stata_weighted(
-    residuals: &Array1<f64>,
-    fitted_values: &Array1<f64>,
-    weights: &Array1<f64>,
+    residuals: &Col<f64>,
+    fitted_values: &Col<f64>,
+    weights: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
-    let n = residuals.len();
-    if fitted_values.len() != n || weights.len() != n {
+    let n = residuals.nrows();
+    if fitted_values.nrows() != n || weights.nrows() != n {
         return Err("breusch_pagan_stata_weighted: length mismatch".to_string());
     }
     if n < 4 {
@@ -179,7 +179,7 @@ pub fn breusch_pagan_stata_weighted(
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_stata_weighted: residual variance is zero".to_string());
     }
-    let f: Array1<f64> = Array1::from_shape_fn(n, |i| residuals[i] * residuals[i] / sigma2 - 1.0);
+    let f: Col<f64> = Col::from_fn(n, |i| residuals[i] * residuals[i] / sigma2 - 1.0);
 
     let z_matrix = build_z_fitted(n, fitted_values);
     let f_hat = weighted_aux_regression(&z_matrix, &f, weights)?;
@@ -204,12 +204,12 @@ pub fn breusch_pagan_stata_weighted(
 /// Breusch-Pagan 加权版（Koenker 形式，z = 拟合值）
 /// Stata estat hettest, iid：g = e²/σ̂²，加权回归 g 对 [1, ŷ]，LM = n×R²
 pub fn breusch_pagan_koenker_weighted(
-    residuals: &Array1<f64>,
-    fitted_values: &Array1<f64>,
-    weights: &Array1<f64>,
+    residuals: &Col<f64>,
+    fitted_values: &Col<f64>,
+    weights: &Col<f64>,
 ) -> Result<BreuschPaganResult, String> {
-    let n = residuals.len();
-    if fitted_values.len() != n || weights.len() != n {
+    let n = residuals.nrows();
+    if fitted_values.nrows() != n || weights.nrows() != n {
         return Err("breusch_pagan_koenker_weighted: length mismatch".to_string());
     }
     if n < 4 {
@@ -223,7 +223,7 @@ pub fn breusch_pagan_koenker_weighted(
     if sigma2 <= 0.0 {
         return Err("breusch_pagan_koenker_weighted: residual variance is zero".to_string());
     }
-    let g: Array1<f64> = Array1::from_shape_fn(n, |i| residuals[i] * residuals[i] / sigma2);
+    let g: Col<f64> = Col::from_fn(n, |i| residuals[i] * residuals[i] / sigma2);
 
     let z_matrix = build_z_fitted(n, fitted_values);
     let r2 = weighted_aux_r2(&z_matrix, &g, weights)?;

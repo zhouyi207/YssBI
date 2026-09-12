@@ -6,7 +6,7 @@ use super::types::FirstStageSummary;
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use ndarray::Array2;
+use faer::Mat;
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
     statistics::Statistics,
@@ -15,11 +15,11 @@ use yss_linalg::{MatrixExt, Solve};
 
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
 pub(crate) fn compute_first_stage_summary(
-    z: &Array2<f64>,
-    endog_hat: &Array2<f64>,
-    endog_reg: &Array2<f64>,
-    exog: &Array2<f64>,
-    instruments: &Array2<f64>,
+    z: &Mat<f64>,
+    endog_hat: &Mat<f64>,
+    endog_reg: &Mat<f64>,
+    exog: &Mat<f64>,
+    instruments: &Mat<f64>,
     n: usize,
     k_z: usize,
     k_exog: usize,
@@ -41,112 +41,108 @@ pub(crate) fn compute_first_stage_summary(
             x1_raw.push(1.0);
         }
         for j in 0..k_exog {
-            x1_raw.push(exog[[i, j]]);
+            x1_raw.push(exog[(i, j)]);
         }
     }
-    let x1 =
-        Array2::from_shape_vec((n, k1), x1_raw).map_err(|e| format!("IV2SLS firststage: {}", e))?;
+    let x1 = faer::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
 
-    let x1tx1 = x1.t().dot(&x1);
+    let x1tx1 = x1.transpose() * x1.as_ref();
     let x1tx1_inv = x1tx1
-        .view()
+        .as_ref()
         .to_owned()
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "IV2SLS firststage: X1'X1 not pd".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(x1tx1.nrows()));
-    let x1tx1_inv_nd = x1tx1_inv.view().to_owned();
+        .solve(&Mat::identity(x1tx1.nrows(), x1tx1.nrows()));
+    let x1tx1_inv_nd = x1tx1_inv.as_ref().to_owned();
 
     // M_X1 = I - X1(X1'X1)^{-1}X1'
-    let px1 = x1.dot(&x1tx1_inv_nd).dot(&x1.t());
+    let px1 = (x1.as_ref() * x1tx1_inv_nd.as_ref()).as_ref() * x1.transpose();
     let mut mx1_y_data = Vec::with_capacity(n * k_endog);
     for i in 0..n {
         for j in 0..k_endog {
-            let y_val = endog_reg[[i, j]];
-            let py_val: f64 = (0..n).map(|ii| px1[[i, ii]] * endog_reg[[ii, j]]).sum();
+            let y_val = endog_reg[(i, j)];
+            let py_val: f64 = (0..n).map(|ii| px1[(i, ii)] * endog_reg[(ii, j)]).sum();
             mx1_y_data.push(y_val - py_val);
         }
     }
-    let mx1_y = Array2::from_shape_vec((n, k_endog), mx1_y_data)
-        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+    let mx1_y = faer::MatRef::from_row_major_slice(&(mx1_y_data), n, k_endog).to_owned();
     let mut mx1_x2_data = Vec::with_capacity(n * k_iv);
     for i in 0..n {
         for j in 0..k_iv {
-            let x2_val = instruments[[i, j]];
-            let px_val: f64 = (0..n).map(|ii| px1[[i, ii]] * instruments[[ii, j]]).sum();
+            let x2_val = instruments[(i, j)];
+            let px_val: f64 = (0..n).map(|ii| px1[(i, ii)] * instruments[(ii, j)]).sum();
             mx1_x2_data.push(x2_val - px_val);
         }
     }
-    let mx1_x2 = Array2::from_shape_vec((n, k_iv), mx1_x2_data)
-        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+    let mx1_x2 = faer::MatRef::from_row_major_slice(&(mx1_x2_data), n, k_iv).to_owned();
 
     // M_Z for Cragg-Donald
-    let ztz = z.t().dot(z);
+    let ztz = z.transpose() * z.as_ref();
     let ztz_inv = ztz
-        .view()
+        .as_ref()
         .to_owned()
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "IV2SLS firststage: Z'Z not pd".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
-    let ztz_inv_nd = ztz_inv.view().to_owned();
-    let pz = z.dot(&ztz_inv_nd).dot(&z.t());
+        .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
+    let ztz_inv_nd = ztz_inv.as_ref().to_owned();
+    let pz = (z.as_ref() * ztz_inv_nd.as_ref()).as_ref() * z.transpose();
     let mut mz_y_data = Vec::with_capacity(n * k_endog);
     for i in 0..n {
         for j in 0..k_endog {
-            let y_val = endog_reg[[i, j]];
-            let py_val: f64 = (0..n).map(|ii| pz[[i, ii]] * endog_reg[[ii, j]]).sum();
+            let y_val = endog_reg[(i, j)];
+            let py_val: f64 = (0..n).map(|ii| pz[(i, ii)] * endog_reg[(ii, j)]).sum();
             mz_y_data.push(y_val - py_val);
         }
     }
-    let mz_y = Array2::from_shape_vec((n, k_endog), mz_y_data)
-        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+    let mz_y = faer::MatRef::from_row_major_slice(&(mz_y_data), n, k_endog).to_owned();
 
     // Σ_VV = (1/(N-k_z)) Y' M_Z Y
-    let sigma_vv = mz_y.t().dot(&mz_y) / df_z.max(1) as f64;
+    let sigma_vv = (mz_y.transpose() * mz_y.as_ref()) / faer::Scale(df_z.max(1) as f64);
 
     // Min eigenvalue: Cragg-Donald. G = (1/k_z) Σ_VV^{-1/2} Y' M_X1' X2 (X2' M_X1 X2)^{-1} X2' M_X1 Y Σ_VV^{-1/2}
     let x2_mx1 = mx1_x2.clone();
-    let x2_mx1_x2 = x2_mx1.t().dot(&x2_mx1);
+    let x2_mx1_x2 = x2_mx1.transpose() * x2_mx1.as_ref();
     let x2_mx1_x2_inv = x2_mx1_x2
-        .view()
+        .as_ref()
         .to_owned()
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "IV2SLS firststage: X2'M_X1 X2 not pd".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(x2_mx1_x2.nrows()));
-    let x2_mx1_x2_inv_nd = x2_mx1_x2_inv.view().to_owned();
+        .solve(&Mat::identity(x2_mx1_x2.nrows(), x2_mx1_x2.nrows()));
+    let x2_mx1_x2_inv_nd = x2_mx1_x2_inv.as_ref().to_owned();
 
     let mut y_mx1_data = Vec::with_capacity(n * k_endog);
     for i in 0..n {
         for j in 0..k_endog {
-            let y_val = endog_reg[[i, j]];
-            let py_val: f64 = (0..n).map(|ii| px1[[i, ii]] * endog_reg[[ii, j]]).sum();
+            let y_val = endog_reg[(i, j)];
+            let py_val: f64 = (0..n).map(|ii| px1[(i, ii)] * endog_reg[(ii, j)]).sum();
             y_mx1_data.push(y_val - py_val);
         }
     }
-    let y_mx1 = Array2::from_shape_vec((n, k_endog), y_mx1_data)
-        .map_err(|e| format!("IV2SLS firststage: {}", e))?;
-    let inner = (y_mx1.t().dot(&x2_mx1))
-        .dot(&x2_mx1_x2_inv_nd)
-        .dot(&x2_mx1.t().dot(&y_mx1));
+    let y_mx1 = faer::MatRef::from_row_major_slice(&(y_mx1_data), n, k_endog).to_owned();
+    let inner = y_mx1.transpose()
+        * x2_mx1.as_ref()
+        * x2_mx1_x2_inv_nd.as_ref()
+        * (x2_mx1.transpose() * y_mx1.as_ref());
     // Cragg-Donald uses k_iv (excluded instruments), not k_z. For k_endog=1, min_eig = F stat.
     // F = (inner/k_iv) / sigma_vv => min_eig = inner/(k_iv*sigma_vv). Wrong: inner/(k_z*sigma_vv) gave F/2 when k_z=1+k_iv.
-    let inner_scaled = inner / k_iv.max(1) as f64;
+    let inner_scaled = inner / faer::Scale(k_iv.max(1) as f64);
 
     // Min eigenvalue: Cragg-Donald = min eig of Σ_VV^{-1} * (1/k_iv) * inner. For k_endog=1, equals F stat.
     let min_eigenvalue_from_cd = if k_endog == 1 {
-        if sigma_vv[[0, 0]] > 1e-300 {
-            inner_scaled[[0, 0]] / sigma_vv[[0, 0]]
+        if sigma_vv[(0, 0)] > 1e-300 {
+            inner_scaled[(0, 0)] / sigma_vv[(0, 0)]
         } else {
             0.0
         }
     } else {
         let sigma_inv = sigma_vv
-            .view()
+            .as_ref()
             .to_owned()
-            .cholesky()
+            .checked_cholesky()
             .map_err(|_| "IV2SLS firststage: sigma_vv not pd".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(sigma_vv.nrows()));
-        let g_mat = sigma_inv.view().to_owned().dot(&inner_scaled);
-        let g_matrix = g_mat.view();
+            .solve(&Mat::identity(sigma_vv.nrows(), sigma_vv.nrows()));
+        let g_mat = sigma_inv.as_ref() * inner_scaled.as_ref();
+        let g_matrix = g_mat.as_ref();
         let evd = yss_linalg::SymmetricEigen::factor(g_matrix)
             .map_err(|_| "IV2SLS firststage: EVD failed".to_string())?;
         let s_col = evd.values();
@@ -196,8 +192,8 @@ pub(crate) fn compute_first_stage_summary(
         shea_adj_partial_r2,
     ) = if k_endog == 1 {
         // Single endog: R2, Adj R2, Partial R2, F
-        let y_col = endog_reg.column(0).into_owned();
-        let y_hat = endog_hat.column(0).into_owned();
+        let y_col = endog_reg.col(0).to_owned();
+        let y_hat = endog_hat.col(0).to_owned();
         let ss_tot = y_col
             .iter()
             .map(|v| (v - y_col.iter().mean()).powi(2))
@@ -219,18 +215,18 @@ pub(crate) fn compute_first_stage_summary(
         };
 
         // Partial R2: regress M_X1*Y on M_X1*X2
-        let my = mx1_y.column(0).into_owned();
+        let my = mx1_y.col(0).to_owned();
         let mx2 = mx1_x2;
-        let mx2t_mx2 = mx2.t().dot(&mx2);
-        let mx2t_my = mx2.t().dot(&my);
+        let mx2t_mx2 = mx2.transpose() * mx2.as_ref();
+        let mx2t_my = mx2.transpose() * my.as_ref();
         let mx2t_mx2_inv = mx2t_mx2
-            .view()
+            .as_ref()
             .to_owned()
-            .cholesky()
+            .checked_cholesky()
             .map_err(|_| "IV2SLS firststage: M_X2'M_X2 not pd".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(mx2t_mx2.nrows()));
-        let xi = mx2t_mx2_inv.view().to_owned().dot(&mx2t_my);
-        let fitted = mx2.dot(&xi);
+            .solve(&Mat::identity(mx2t_mx2.nrows(), mx2t_mx2.nrows()));
+        let xi = mx2t_mx2_inv.as_ref() * mx2t_my.as_ref();
+        let fitted = mx2.as_ref() * xi.as_ref();
         let ss_resid_partial: f64 = my
             .iter()
             .zip(fitted.iter())
@@ -246,11 +242,8 @@ pub(crate) fn compute_first_stage_summary(
         // F: H0: π2=0. Nonrobust: F = (R2_full - R2_r)/(1-R2_full) * (n-k_z)/k_iv
         // Robust: Wald/k_iv for F-like
         let (f_stat, f_p_value, f_df1, f_df2) = if is_robust {
-            let first_stage_resid = &y_col
-                - &z.dot(&{
-                    let zty = z.t().dot(&y_col);
-                    ztz_inv_nd.dot(&zty)
-                });
+            let zty = z.transpose() * y_col.as_ref();
+            let first_stage_resid = &y_col - z.as_ref() * (ztz_inv_nd.as_ref() * zty.as_ref());
             let sigma2_df = if small { df_z } else { n };
             let cov_gamma = compute_cov_beta(
                 z,
@@ -260,23 +253,30 @@ pub(crate) fn compute_first_stage_summary(
                 cov_type,
                 cov_params,
             )?;
-            let gamma = ztz_inv_nd.dot(&z.t().dot(&y_col));
-            let gamma2 = gamma.slice(ndarray::s![k1..]).into_owned();
-            let cov_gamma2 = cov_gamma.slice(ndarray::s![k1.., k1..]).into_owned();
+            let gamma = ztz_inv_nd.as_ref() * (z.transpose() * y_col.as_ref()).as_ref();
+            let gamma2 = gamma.subrows(k1, gamma.nrows() - k1).to_owned();
+            let cov_gamma2 = cov_gamma
+                .submatrix(k1, k1, cov_gamma.nrows() - k1, cov_gamma.ncols() - k1)
+                .to_owned();
             let cov_gamma2_inv = cov_gamma2
-                .view()
+                .as_ref()
                 .to_owned()
-                .cholesky()
+                .checked_cholesky()
                 .map_err(|_| "IV2SLS firststage: cov_gamma2 not pd".to_string())?
-                .solve(&ndarray::Array2::<f64>::eye(cov_gamma2.nrows()));
-            let wald = gamma2.dot(&cov_gamma2_inv.view().to_owned().dot(&gamma2));
+                .solve(&Mat::identity(cov_gamma2.nrows(), cov_gamma2.nrows()));
+            let wald = gamma2.transpose() * (cov_gamma2_inv.as_ref() * gamma2.as_ref()).as_ref();
             let chi2 = ChiSquared::new(k_iv as f64).map_err(|e| format!("{}", e))?;
             let f_p = 1.0 - chi2.cdf(wald);
             (wald / k_iv as f64, f_p, k_iv, df_z)
         } else {
             let ssr_r: f64 = y_col
                 .iter()
-                .zip(x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y_col))).iter())
+                .zip(
+                    (x1.as_ref()
+                        * (x1tx1_inv_nd.as_ref() * (x1.transpose() * y_col.as_ref()).as_ref())
+                            .as_ref())
+                    .iter(),
+                )
                 .map(|(a, b)| (a - b).powi(2))
                 .sum();
             let ssr_u = ss_resid;
@@ -307,78 +307,79 @@ pub(crate) fn compute_first_stage_summary(
         let mut shea_partial = Vec::with_capacity(k_endog);
         let mut shea_adj = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
-            let y1 = endog_reg.column(j).into_owned();
-            let y1_hat = endog_hat.column(j).into_owned();
+            let y1 = endog_reg.col(j).to_owned();
+            let y1_hat = endog_hat.col(j).to_owned();
             let (y0, y0_hat) = if k_endog > 1 {
                 let mut y0_data = Vec::with_capacity(n * (k_endog - 1));
                 let mut y0_hat_data = Vec::with_capacity(n * (k_endog - 1));
                 for jj in 0..k_endog {
                     if jj != j {
                         for i in 0..n {
-                            y0_data.push(endog_reg[[i, jj]]);
-                            y0_hat_data.push(endog_hat[[i, jj]]);
+                            y0_data.push(endog_reg[(i, jj)]);
+                            y0_hat_data.push(endog_hat[(i, jj)]);
                         }
                     }
                 }
-                let y0_mat = Array2::from_shape_vec((n, k_endog - 1), y0_data)
-                    .map_err(|e| format!("IV2SLS firststage: {}", e))?;
-                let y0_hat_mat = Array2::from_shape_vec((n, k_endog - 1), y0_hat_data)
-                    .map_err(|e| format!("IV2SLS firststage: {}", e))?;
+                let y0_mat =
+                    faer::MatRef::from_row_major_slice(&(y0_data), n, k_endog - 1).to_owned();
+                let y0_hat_mat =
+                    faer::MatRef::from_row_major_slice(&(y0_hat_data), n, k_endog - 1).to_owned();
                 (Some(y0_mat), Some(y0_hat_mat))
             } else {
                 (None, None)
             };
 
             let w = if let Some(ref y0) = y0 {
-                let mut w = Array2::zeros((n, k1 + y0.ncols()));
+                let mut w = Mat::zeros(n, k1 + y0.ncols());
                 for i in 0..n {
                     for c in 0..k1 {
-                        w[[i, c]] = x1[[i, c]];
+                        w[(i, c)] = x1[(i, c)];
                     }
                     for c in 0..y0.ncols() {
-                        w[[i, k1 + c]] = y0[[i, c]];
+                        w[(i, k1 + c)] = y0[(i, c)];
                     }
                 }
                 w
             } else {
                 x1.clone()
             };
-            let wtw = w.t().dot(&w);
+            let wtw = w.transpose() * w.as_ref();
             let wtw_inv = wtw
-                .view()
+                .as_ref()
                 .to_owned()
-                .cholesky()
+                .checked_cholesky()
                 .map_err(|_| "IV2SLS firststage: W'W not pd".to_string())?
-                .solve(&ndarray::Array2::<f64>::eye(wtw.nrows()));
-            let wtw_inv_nd = wtw_inv.view().to_owned();
+                .solve(&Mat::identity(wtw.nrows(), wtw.nrows()));
+            let wtw_inv_nd = wtw_inv.as_ref().to_owned();
 
-            let y1_tilde = &y1 - &w.dot(&wtw_inv_nd.dot(&w.t().dot(&y1)));
+            let y1_tilde = &y1
+                - &(w.as_ref()
+                    * (wtw_inv_nd.as_ref() * (w.transpose() * y1.as_ref()).as_ref()).as_ref());
             let y1_hat_tilde = if let Some(ref y0h) = y0_hat {
-                let mut w_hat = Array2::zeros((n, k1 + y0h.ncols()));
+                let mut w_hat = Mat::zeros(n, k1 + y0h.ncols());
                 for i in 0..n {
                     for c in 0..k1 {
-                        w_hat[[i, c]] = x1[[i, c]];
+                        w_hat[(i, c)] = x1[(i, c)];
                     }
                     for c in 0..y0h.ncols() {
-                        w_hat[[i, k1 + c]] = y0h[[i, c]];
+                        w_hat[(i, k1 + c)] = y0h[(i, c)];
                     }
                 }
-                let w_hat_t_w_hat = w_hat.t().dot(&w_hat);
+                let w_hat_t_w_hat = w_hat.transpose() * w_hat.as_ref();
                 let w_hat_t_w_hat_inv = w_hat_t_w_hat
-                    .view()
+                    .as_ref()
                     .to_owned()
-                    .cholesky()
+                    .checked_cholesky()
                     .map_err(|_| "IV2SLS firststage: W_hat'W_hat not pd".to_string())?
-                    .solve(&ndarray::Array2::<f64>::eye(w_hat_t_w_hat.nrows()));
-                let proj = w_hat.dot(
-                    &w_hat_t_w_hat_inv
-                        .view()
-                        .to_owned()
-                        .dot(&w_hat.t().dot(&y1_hat)),
-                );
+                    .solve(&Mat::identity(w_hat_t_w_hat.nrows(), w_hat_t_w_hat.nrows()));
+                let proj = w_hat.as_ref()
+                    * (w_hat_t_w_hat_inv.as_ref() * (w_hat.transpose() * y1_hat.as_ref()));
                 &y1_hat - &proj
             } else {
-                &y1_hat - &x1.dot(&x1tx1_inv_nd.dot(&x1.t().dot(&y1_hat)))
+                &y1_hat
+                    - &(x1.as_ref()
+                        * (x1tx1_inv_nd.as_ref() * (x1.transpose() * y1_hat.as_ref()).as_ref())
+                            .as_ref())
             };
 
             let ss_tot = y1_tilde.iter().map(|v| v.powi(2)).sum::<f64>();

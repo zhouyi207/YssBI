@@ -5,13 +5,13 @@
 //! - Cochrane-Orcutt (corc): drops first observation
 
 use crate::ts::serial_correlation::durbin_watson;
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
 use yss_linalg::matrix_rank;
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// Transform method: Prais-Winsten (keep t=1) or Cochrane-Orcutt (drop t=1)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -47,14 +47,14 @@ impl Default for PraisConfig {
 }
 
 pub struct Prais {
-    pub endog: Array1<f64>,
-    pub exog: Array2<f64>,
+    pub endog: Col<f64>,
+    pub exog: Mat<f64>,
     pub config: PraisConfig,
 }
 
 #[derive(Debug)]
 pub struct PraisModel {
-    pub params: Array1<f64>,
+    pub params: Col<f64>,
     pub rho: f64,
 }
 
@@ -76,13 +76,13 @@ pub struct PraisResult {
     pub fvalue: f64,
     pub f_p_value: f64,
     pub model: PraisModel,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
-    pub tvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
+    pub tvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     pub cond_no: f64,
     pub rho: f64,
     pub dw_original: f64,
@@ -109,7 +109,7 @@ fn estimate_rho_regress(residuals: &[f64]) -> f64 {
 
 impl Prais {
     pub fn fit(&self) -> Result<PraisResult, String> {
-        let n = self.endog.len();
+        let n = self.endog.nrows();
         let k = self.exog.ncols();
         if n < 3 {
             return Err("Prais: need at least 3 observations".to_string());
@@ -120,30 +120,30 @@ impl Prais {
 
         let y_nd = &self.endog;
         let x_nd = &self.exog;
-        let y = y_nd.view().to_owned();
-        let x = x_nd.view().to_owned();
+        let y = y_nd.as_ref().to_owned();
+        let x = x_nd.as_ref().to_owned();
 
         // Initial OLS
-        let xtx = x.t().matmul(&x.view());
-        let xty = x.t().matmul(&y.view());
+        let xtx = x.transpose() * x.as_ref();
+        let xty = x.transpose() * y.as_ref();
         let xtx_inv = xtx
-            .cholesky()
+            .checked_cholesky()
             .map_err(|_| {
                 "Prais: X'X is singular (rank-deficient). Check for multicollinearity.".to_string()
             })?
-            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
-        let betas_init = xtx_inv.view().matmul(&xty.view());
-        let y_hat_init = x.view().matmul(&betas_init.view());
+            .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
+        let betas_init = xtx_inv.as_ref() * xty.as_ref();
+        let y_hat_init = x.as_ref() * betas_init.as_ref();
         let u_init: Vec<f64> = y
             .iter()
-            .zip(y_hat_init.view().iter())
+            .zip(y_hat_init.as_ref().iter())
             .map(|(a, b)| a - b)
             .collect();
 
         let dw_original = durbin_watson(&u_init);
 
         let mut residuals: Vec<f64> = u_init;
-        let mut betas: Array1<f64>;
+        let mut betas: Col<f64>;
         let mut rho = 0.0;
         let mut iterations = 0;
         let mut xtx_inv_s;
@@ -167,54 +167,53 @@ impl Prais {
                 for t in 1..n {
                     y_star.push(y_nd[t] - rho * y_nd[t - 1]);
                     for j in 0..k {
-                        x_star.push(x_nd[[t, j]] - rho * x_nd[[t - 1, j]]);
+                        x_star.push(x_nd[(t, j)] - rho * x_nd[(t - 1, j)]);
                     }
                 }
                 (
-                    Array1::from_vec(y_star),
-                    Array2::from_shape_vec((n - 1, k), x_star)
-                        .map_err(|e| format!("Prais: {}", e))?,
+                    (y_star).into_iter().collect::<Col<f64>>(),
+                    faer::MatRef::from_row_major_slice(&(x_star), n - 1, k).to_owned(),
                 )
             } else {
                 let mut y_star = Vec::with_capacity(n);
                 let mut x_star = Vec::with_capacity(n * k);
                 y_star.push(scale * y_nd[0]);
                 for j in 0..k {
-                    x_star.push(scale * x_nd[[0, j]]);
+                    x_star.push(scale * x_nd[(0, j)]);
                 }
                 for t in 1..n {
                     y_star.push(y_nd[t] - rho * y_nd[t - 1]);
                     for j in 0..k {
-                        x_star.push(x_nd[[t, j]] - rho * x_nd[[t - 1, j]]);
+                        x_star.push(x_nd[(t, j)] - rho * x_nd[(t - 1, j)]);
                     }
                 }
                 (
-                    Array1::from_vec(y_star),
-                    Array2::from_shape_vec((n, k), x_star).map_err(|e| format!("Prais: {}", e))?,
+                    (y_star).into_iter().collect::<Col<f64>>(),
+                    faer::MatRef::from_row_major_slice(&(x_star), n, k).to_owned(),
                 )
             };
 
-            let n_star = y_star.len();
-            let x_star_matrix = x_star.view().to_owned();
-            let y_star_vector = y_star.view().to_owned();
+            let n_star = y_star.nrows();
+            let x_star_matrix = x_star.as_ref().to_owned();
+            let y_star_vector = y_star.as_ref().to_owned();
 
             let (rank, cond_no_val) =
-                matrix_rank(x_star_matrix.view()).unwrap_or((0, f64::INFINITY));
+                matrix_rank(x_star_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
             cond_no = cond_no_val;
 
-            let xtx_s = x_star_matrix.t().matmul(&x_star_matrix.view());
-            let xty_s = x_star_matrix.t().matmul(&y_star_vector.view());
+            let xtx_s = x_star_matrix.transpose() * x_star_matrix.as_ref();
+            let xty_s = x_star_matrix.transpose() * y_star_vector.as_ref();
 
             xtx_inv_s = xtx_s
-                .cholesky()
+                .checked_cholesky()
                 .map_err(|_| "Prais: transformed X'X is singular".to_string())?
-                .solve(&ndarray::Array2::<f64>::eye(xtx_s.nrows()));
-            betas = xtx_inv_s.view().matmul(&xty_s.view()).view().to_owned();
+                .solve(&Mat::identity(xtx_s.nrows(), xtx_s.nrows()));
+            betas = (xtx_inv_s.as_ref() * xty_s.as_ref()).as_ref().to_owned();
 
-            let y_hat_star = x_star_matrix.view().matmul(&betas.view());
+            let y_hat_star = x_star_matrix.as_ref() * betas.as_ref();
             let res_trans: Vec<f64> = y_star_vector
                 .iter()
-                .zip(y_hat_star.view().iter())
+                .zip(y_hat_star.as_ref().iter())
                 .map(|(a, b)| a - b)
                 .collect();
             let dw_transformed = durbin_watson(&res_trans);
@@ -257,9 +256,9 @@ impl Prais {
                 let f_p_value = 1.0 - dist_f.cdf(f);
 
                 // cov(β) = σ² (X*'X*)⁻¹, σ² = ms_residual
-                let xtx_inv_nd = xtx_inv_s.view().to_owned();
-                let cov_beta = ms_residual * &xtx_inv_nd;
-                let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
+                let xtx_inv_nd = xtx_inv_s.as_ref().to_owned();
+                let cov_beta = faer::Scale(ms_residual) * &xtx_inv_nd;
+                let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
                 let t_values: Vec<f64> = betas
                     .iter()
                     .zip(std_err.iter())
@@ -272,8 +271,8 @@ impl Prais {
                     .map(|&t| 2.0 * (1.0 - t_dist.cdf(t.abs())))
                     .collect();
                 let t_crit = t_dist.inverse_cdf(0.975);
-                let ci_lower = &betas - &std_err.mapv(|v| t_crit * v);
-                let ci_upper = &betas + &std_err.mapv(|v| t_crit * v);
+                let ci_lower = &betas - &std_err.map(|&v| t_crit * v);
+                let ci_upper = &betas + &std_err.map(|&v| t_crit * v);
 
                 let method = match self.config.transform {
                     PraisTransform::PraisWinsten => "Prais-Winsten",
@@ -302,8 +301,8 @@ impl Prais {
                     },
                     betas: betas.clone(),
                     stds: std_err,
-                    tvalues: Array1::from_vec(t_values),
-                    pvalues: Array1::from_vec(p_values),
+                    tvalues: (t_values).into_iter().collect::<Col<f64>>(),
+                    pvalues: (p_values).into_iter().collect::<Col<f64>>(),
                     conf_int_left: ci_lower,
                     conf_int_right: ci_upper,
                     cov_beta,
@@ -317,10 +316,10 @@ impl Prais {
             }
 
             // Update residuals for next iteration: ŷ = Xβ on original data
-            let y_hat = x.view().matmul(&betas.view());
+            let y_hat = x.as_ref() * betas.as_ref();
             residuals = y
                 .iter()
-                .zip(y_hat.view().iter())
+                .zip(y_hat.as_ref().iter())
                 .map(|(a, b)| a - b)
                 .collect();
         }
@@ -330,7 +329,7 @@ impl Prais {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{Array1, Array2};
+    use faer::Col;
 
     #[test]
     fn test_prais_basic() {
@@ -344,8 +343,8 @@ mod tests {
             exog.push(1.0);
             exog.push(x[i]);
         }
-        let endog = Array1::from_vec(y);
-        let exog = Array2::from_shape_vec((n, 2), exog).unwrap();
+        let endog = (y).into_iter().collect::<Col<f64>>();
+        let exog = faer::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
 
         let prais = Prais {
             endog: endog.clone(),
@@ -374,8 +373,8 @@ mod tests {
             exog.push(1.0);
             exog.push(i as f64);
         }
-        let endog = Array1::from_vec(y);
-        let exog = Array2::from_shape_vec((n, 2), exog).unwrap();
+        let endog = (y).into_iter().collect::<Col<f64>>();
+        let exog = faer::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
 
         let prais = Prais {
             endog,

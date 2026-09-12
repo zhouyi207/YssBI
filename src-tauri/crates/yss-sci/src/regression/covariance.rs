@@ -1,7 +1,7 @@
 //! OLS 协方差矩阵计算
 //! 支持 nonrobust, HC0, HC1, HC2, HC3, fixed scale, cluster, HAC 等
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 
 use yss_sci_contract::regression::CovParams;
 
@@ -11,13 +11,13 @@ use yss_sci_contract::regression::CovParams;
 /// - u: (n,) 残差向量
 /// - df_residual: n - k
 pub fn compute_cov_beta(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     df_residual: usize,
     cov_type: &str,
     cov_params: Option<&CovParams>,
-) -> Result<Array2<f64>, String> {
+) -> Result<Mat<f64>, String> {
     let n = x.nrows();
     let k = x.ncols();
 
@@ -36,20 +36,13 @@ pub fn compute_cov_beta(
     }
 }
 
-fn cov_nonrobust(
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
-    df_residual: usize,
-) -> Result<Array2<f64>, String> {
-    let sigma2 = u.dot(u) / df_residual as f64;
-    Ok(sigma2 * xtx_inv)
+fn cov_nonrobust(xtx_inv: &Mat<f64>, u: &Col<f64>, df_residual: usize) -> Result<Mat<f64>, String> {
+    let sigma2 = (u.transpose() * u.as_ref()) / df_residual as f64;
+    Ok(faer::Scale(sigma2) * xtx_inv)
 }
 
 /// Fixed scale: scale * (X'X)⁻¹，scale 由用户通过 Config 指定
-fn cov_fixed_scale(
-    xtx_inv: &Array2<f64>,
-    cov_params: Option<&CovParams>,
-) -> Result<Array2<f64>, String> {
+fn cov_fixed_scale(xtx_inv: &Mat<f64>, cov_params: Option<&CovParams>) -> Result<Mat<f64>, String> {
     let scale = match cov_params {
         Some(CovParams::FixedScale { scale }) => *scale,
         _ => {
@@ -61,55 +54,55 @@ fn cov_fixed_scale(
     if scale <= 0.0 {
         return Err("fixed scale: scale must be positive".to_string());
     }
-    Ok(scale * xtx_inv)
+    Ok(faer::Scale(scale) * xtx_inv)
 }
 
 /// HC0: (X'X)⁻¹ X' diag(u²) X (X'X)⁻¹
 fn cov_hc0(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
-) -> Result<Array2<f64>, String> {
-    let mut meat = Array2::zeros((k, k));
+) -> Result<Mat<f64>, String> {
+    let mut meat = Mat::<f64>::zeros(k, k);
     for i in 0..n {
         let u2 = u[i] * u[i];
         let xi = x.row(i);
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += u2 * xi[r] * xi[c];
+                meat[(r, c)] += u2 * xi[r] * xi[c];
             }
         }
     }
-    let sandwich = xtx_inv.dot(&meat).dot(xtx_inv);
+    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
 
 /// HC1: HC0 × n / (n - k)
 fn cov_hc1(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     df_residual: usize,
-) -> Result<Array2<f64>, String> {
+) -> Result<Mat<f64>, String> {
     let hc0 = cov_hc0(x, xtx_inv, u, n, k)?;
     let scale = n as f64 / df_residual as f64;
-    Ok(scale * hc0)
+    Ok(faer::Scale(scale) * hc0)
 }
 
 /// HC2: 权重 w_i = 1 / (1 - h_ii)
 fn cov_hc2(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     _df_residual: usize,
-) -> Result<Array2<f64>, String> {
-    let mut meat = Array2::zeros((k, k));
+) -> Result<Mat<f64>, String> {
+    let mut meat = Mat::<f64>::zeros(k, k);
     for i in 0..n {
         let h_ii = hat_diag_i(x, xtx_inv, i);
         let wi = 1.0 / (1.0 - h_ii).max(1e-10);
@@ -117,24 +110,24 @@ fn cov_hc2(
         let xi = x.row(i);
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += u2w * xi[r] * xi[c];
+                meat[(r, c)] += u2w * xi[r] * xi[c];
             }
         }
     }
-    let sandwich = xtx_inv.dot(&meat).dot(xtx_inv);
+    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
 
 /// HC3: 权重 w_i = 1 / (1 - h_ii)²
 fn cov_hc3(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     _df_residual: usize,
-) -> Result<Array2<f64>, String> {
-    let mut meat = Array2::zeros((k, k));
+) -> Result<Mat<f64>, String> {
+    let mut meat = Mat::<f64>::zeros(k, k);
     for i in 0..n {
         let h_ii = hat_diag_i(x, xtx_inv, i);
         let wi = 1.0 / ((1.0 - h_ii) * (1.0 - h_ii)).max(1e-10);
@@ -142,17 +135,17 @@ fn cov_hc3(
         let xi = x.row(i);
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += u2w * xi[r] * xi[c];
+                meat[(r, c)] += u2w * xi[r] * xi[c];
             }
         }
     }
-    let sandwich = xtx_inv.dot(&meat).dot(xtx_inv);
+    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
 
-fn hat_diag_i(x: &Array2<f64>, xtx_inv: &Array2<f64>, i: usize) -> f64 {
+fn hat_diag_i(x: &Mat<f64>, xtx_inv: &Mat<f64>, i: usize) -> f64 {
     let xi = x.row(i);
-    xi.dot(xtx_inv).dot(&xi.to_owned())
+    xi * xtx_inv * xi.transpose()
 }
 
 /// HAC kernel weight at lag j (ivreg2 / Andrews 1991 style).
@@ -200,8 +193,8 @@ fn hac_kernel_weight(j: usize, bandwidth: usize, kernel: &str) -> f64 {
 /// Returns bandwidth = optlag + 1. Per NW(1994) p.639, mstar = trunc(20*(T/100)^expo).
 /// f = (u .* X) * h with h=1 for exog cols, h=0 for constant (last col).
 fn newey_west_1994_bandwidth(
-    x: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     kernel: &str,
@@ -226,7 +219,7 @@ fn newey_west_1994_bandwidth(
         .map(|i| {
             let mut s = 0.0;
             for c in 0..k {
-                s += u[i] * x[[i, c]] * h[c];
+                s += u[i] * x[(i, c)] * h[c];
             }
             s
         })
@@ -260,13 +253,13 @@ fn newey_west_1994_bandwidth(
 /// S = Σ_t e_t² x_t x_t' + Σ_{j=1}^{L} w_j Σ_{t=j+1}^{n} e_t e_{t-j} (x_t x_{t-j}' + x_{t-j} x_t')
 /// ivreg2 bw(b): max lag = b-1, weight = 1 - j/b
 fn cov_hac(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     cov_params: Option<&CovParams>,
-) -> Result<Array2<f64>, String> {
+) -> Result<Mat<f64>, String> {
     let (kernel, bandwidth) = match cov_params {
         Some(CovParams::HAC { kernel, bandwidth }) => (kernel.as_str(), *bandwidth),
         _ => {
@@ -286,7 +279,7 @@ fn cov_hac(
     };
     let max_lag = bw.saturating_sub(1);
 
-    let mut meat: Array2<f64> = Array2::zeros((k, k));
+    let mut meat: Mat<f64> = Mat::zeros(k, k);
 
     // j=0: Σ_t e_t² x_t x_t'
     for t in 0..n {
@@ -294,7 +287,7 @@ fn cov_hac(
         let xt = x.row(t);
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += e2 * xt[r] * xt[c];
+                meat[(r, c)] += e2 * xt[r] * xt[c];
             }
         }
     }
@@ -308,27 +301,27 @@ fn cov_hac(
             let xtj = x.row(t - j);
             for r in 0..k {
                 for c in 0..k {
-                    meat[[r, c]] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
+                    meat[(r, c)] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
                 }
             }
         }
     }
 
-    let sandwich = xtx_inv.dot(&meat).dot(xtx_inv);
+    let sandwich = (xtx_inv.as_ref() * meat.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
 
 /// Newey: Stata newey 风格 — Bartlett kernel + n/(n-k) 有限样本调整
 /// lag(0) = regress vce(robust) = HC1
 fn cov_newey(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     n: usize,
     k: usize,
     df_residual: usize,
     cov_params: Option<&CovParams>,
-) -> Result<Array2<f64>, String> {
+) -> Result<Mat<f64>, String> {
     let lag = match cov_params {
         Some(CovParams::Newey { lag }) => *lag,
         _ => return Err("newey cov_type requires CovParams::Newey with lag".to_string()),
@@ -340,13 +333,13 @@ fn cov_newey(
         None => (4.0 * (n as f64 / 100.0).powf(2.0 / 9.0)).floor() as usize,
     };
 
-    let mut meat = Array2::zeros((k, k));
+    let mut meat = Mat::<f64>::zeros(k, k);
     for t in 0..n {
         let e2 = u[t] * u[t];
         let xt = x.row(t);
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += e2 * xt[r] * xt[c];
+                meat[(r, c)] += e2 * xt[r] * xt[c];
             }
         }
     }
@@ -359,7 +352,7 @@ fn cov_newey(
             let xtj = x.row(t - j);
             for r in 0..k {
                 for c in 0..k {
-                    meat[[r, c]] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
+                    meat[(r, c)] += e_e * (xt[r] * xtj[c] + xtj[r] * xt[c]);
                 }
             }
         }
@@ -370,8 +363,8 @@ fn cov_newey(
     } else {
         1.0
     };
-    let meat_scaled = scale * meat;
-    let sandwich = xtx_inv.dot(&meat_scaled).dot(xtx_inv);
+    let meat_scaled = faer::Scale(scale) * meat;
+    let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
 
@@ -391,8 +384,8 @@ mod tests {
             exog_data.push((i as f64 * 0.1).sin());
             exog_data.push((i as f64 * 0.2).cos());
         }
-        let exog = Array2::from_shape_vec((n, k), exog_data).unwrap();
-        let endog = Array1::from_shape_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
+        let exog = faer::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
 
         let ols_hc0 = OLS {
             endog: endog.clone(),
@@ -425,12 +418,12 @@ mod tests {
         for i in 0..k {
             for j in 0..k {
                 assert!(
-                    (r_hac.cov_beta[[i, j]] - r_hc0.cov_beta[[i, j]]).abs() < 1e-9,
+                    (r_hac.cov_beta[(i, j)] - r_hc0.cov_beta[(i, j)]).abs() < 1e-9,
                     "HAC Bartlett bw(1) should equal HC0 at ({},{}): {} vs {}",
                     i,
                     j,
-                    r_hac.cov_beta[[i, j]],
-                    r_hc0.cov_beta[[i, j]]
+                    r_hac.cov_beta[(i, j)],
+                    r_hc0.cov_beta[(i, j)]
                 );
             }
         }
@@ -447,8 +440,8 @@ mod tests {
             exog_data.push((i as f64 * 0.1).sin());
             exog_data.push((i as f64 * 0.2).cos());
         }
-        let exog = Array2::from_shape_vec((n, k), exog_data).unwrap();
-        let endog = Array1::from_shape_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
+        let exog = faer::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
 
         let ols_hc1 = OLS {
             endog: endog.clone(),
@@ -477,12 +470,12 @@ mod tests {
         for i in 0..k {
             for j in 0..k {
                 assert!(
-                    (r_newey.cov_beta[[i, j]] - r_hc1.cov_beta[[i, j]]).abs() < 1e-9,
+                    (r_newey.cov_beta[(i, j)] - r_hc1.cov_beta[(i, j)]).abs() < 1e-9,
                     "Newey lag=0 should equal HC1 (Stata newey lag(0)) at ({},{}): {} vs {}",
                     i,
                     j,
-                    r_newey.cov_beta[[i, j]],
-                    r_hc1.cov_beta[[i, j]]
+                    r_newey.cov_beta[(i, j)],
+                    r_hc1.cov_beta[(i, j)]
                 );
             }
         }
@@ -497,8 +490,8 @@ mod tests {
             exog_data.push(1.0);
             exog_data.push(i as f64 / n as f64);
         }
-        let exog = Array2::from_shape_vec((n, k), exog_data).unwrap();
-        let endog = Array1::from_shape_fn(n, |i| {
+        let exog = faer::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| {
             (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos()
         });
 
@@ -519,10 +512,10 @@ mod tests {
 
         let r = ols.fit().unwrap();
         for i in 0..k {
-            assert!(r.cov_beta[[i, i]] > 0.0, "variance should be positive");
+            assert!(r.cov_beta[(i, i)] > 0.0, "variance should be positive");
             for j in 0..k {
                 assert!(
-                    (r.cov_beta[[i, j]] - r.cov_beta[[j, i]]).abs() < 1e-10,
+                    (r.cov_beta[(i, j)] - r.cov_beta[(j, i)]).abs() < 1e-10,
                     "covariance should be symmetric"
                 );
             }
@@ -532,11 +525,11 @@ mod tests {
 
 /// Cluster: (X'X)⁻¹ [Σ_g (X_g' u_g)(X_g' u_g)'] (X'X)⁻¹
 fn cov_cluster(
-    x: &Array2<f64>,
-    xtx_inv: &Array2<f64>,
-    u: &Array1<f64>,
+    x: &Mat<f64>,
+    xtx_inv: &Mat<f64>,
+    u: &Col<f64>,
     cov_params: Option<&CovParams>,
-) -> Result<Array2<f64>, String> {
+) -> Result<Mat<f64>, String> {
     let (cluster_id, xtreg_fe_style) = match cov_params {
         Some(CovParams::Cluster {
             cluster_id,
@@ -554,7 +547,7 @@ fn cov_cluster(
     }
 
     let k = x.ncols();
-    let mut meat = Array2::zeros((k, k));
+    let mut meat = Mat::<f64>::zeros(k, k);
 
     let mut groups: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
     for (i, &g) in cluster_id.iter().enumerate() {
@@ -562,7 +555,7 @@ fn cov_cluster(
     }
 
     for (_g, indices) in groups.iter() {
-        let mut s_g = Array1::<f64>::zeros(k);
+        let mut s_g = Col::<f64>::zeros(k);
         for &i in indices {
             let ui = u[i];
             let xi = x.row(i);
@@ -572,7 +565,7 @@ fn cov_cluster(
         }
         for r in 0..k {
             for c in 0..k {
-                meat[[r, c]] += s_g[r] * s_g[c];
+                meat[(r, c)] += s_g[r] * s_g[c];
             }
         }
     }
@@ -590,7 +583,7 @@ fn cov_cluster(
     } else {
         1.0
     };
-    let meat_scaled = scale * meat;
-    let sandwich = xtx_inv.dot(&meat_scaled).dot(xtx_inv);
+    let meat_scaled = faer::Scale(scale) * meat;
+    let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }

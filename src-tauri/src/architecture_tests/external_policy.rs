@@ -499,7 +499,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
+        package_name: "faer",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1187,15 +1187,9 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-linalg",
-        mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
+        package_name: "faer",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1237,7 +1231,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
+        package_name: "faer",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1692,24 +1686,9 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "faer",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::PureLeaf,
-        mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Execution,
-        mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
-    },
-    ExternalDependencyUseAllowance {
         source_layer: RustLayer::SciCore,
         mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BackendAdapter,
-        mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
+        package_name: "faer",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Execution,
@@ -2164,7 +2143,7 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Application,
         mode: RustDependencyMode::Runtime,
-        package_name: "ndarray",
+        package_name: "faer",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Application,

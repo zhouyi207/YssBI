@@ -2,7 +2,7 @@
 //!
 //! 统一处理单/多约束，F = W/q ~ F(q, df_residual)。
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
 use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
@@ -14,15 +14,15 @@ use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
 /// - betas: (k) 参数估计
 /// - cov_beta: (k × k) 参数协方差矩阵
 pub fn wald_test(
-    betas: &Array1<f64>,
-    cov_beta: &Array2<f64>,
-    r: &Array2<f64>,
-    r_vec: &Array1<f64>,
+    betas: &Col<f64>,
+    cov_beta: &Mat<f64>,
+    r: &Mat<f64>,
+    r_vec: &Col<f64>,
     df_residual: usize,
     alternative: Alternative,
     constraint_desc: impl Into<String>,
 ) -> Result<WaldTestResult, String> {
-    use yss_linalg::{MatMul, MatrixExt, Solve};
+    use yss_linalg::{MatrixExt, Solve};
 
     let q = r.nrows();
     let k = r.ncols();
@@ -30,32 +30,34 @@ pub fn wald_test(
     if q == 0 {
         return Err("约束个数不能为 0".to_string());
     }
-    if betas.len() != k {
-        return Err(format!("betas 长度 {} 与 R 列数 {} 不一致", betas.len(), k));
+    if betas.nrows() != k {
+        return Err(format!(
+            "betas 长度 {} 与 R 列数 {} 不一致",
+            betas.nrows(),
+            k
+        ));
     }
-    if r_vec.len() != q {
-        return Err(format!("r_vec 长度 {} 与 R 行数 {} 不一致", r_vec.len(), q));
+    if r_vec.nrows() != q {
+        return Err(format!(
+            "r_vec 长度 {} 与 R 行数 {} 不一致",
+            r_vec.nrows(),
+            q
+        ));
     }
-
-    let r_matrix = r.view();
-    let cov_matrix = cov_beta.view();
 
     // contrast = R @ betas - r_vec
-    let contrast = r.dot(betas) - r_vec;
-    let contrast_vector = contrast.view().to_owned();
+    let contrast = r * betas - r_vec;
 
     // r_cov_r = R @ cov_beta @ R'
-    let r_cov = r_matrix.matmul(&cov_matrix);
-    let r_cov_r = r_cov.view().matmul(&r_matrix.t());
+    let r_cov_r = (r * cov_beta) * r.transpose();
 
     // 解 r_cov_r @ x = contrast，则 W = contrast' @ x
     let x = r_cov_r
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "R Σ R' 矩阵奇异，约束可能冗余".to_string())?
-        .solve(&contrast_vector.view());
+        .solve(&contrast);
 
-    let x_nd = x.view().to_owned();
-    let w: f64 = contrast.iter().zip(x_nd.iter()).map(|(c, xi)| c * xi).sum();
+    let w: f64 = contrast.iter().zip(x.iter()).map(|(c, xi)| c * xi).sum();
 
     let f_stat = w / q as f64;
     let dist = FisherSnedecor::new(q as f64, df_residual as f64)
@@ -106,15 +108,15 @@ pub fn wald_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{arr1, arr2};
+    use faer::{col, mat};
 
     #[test]
     fn test_wald_single_constraint() {
         // 简单 OLS: y = 1 + 2*x, 假设 x 系数 = 0
-        let betas = arr1(&[1.0, 2.0]);
-        let cov_beta = arr2(&[[0.1, 0.0], [0.0, 0.05]]);
-        let r = arr2(&[[0.0, 1.0]]); // 约束: beta_1 = 0
-        let r_vec = arr1(&[0.0]);
+        let betas = col![1.0, 2.0];
+        let cov_beta = mat![[0.1, 0.0], [0.0, 0.05]];
+        let r = mat![[0.0, 1.0]]; // 约束: beta_1 = 0
+        let r_vec = col![0.0];
         let df_residual = 10;
 
         let result = wald_test(

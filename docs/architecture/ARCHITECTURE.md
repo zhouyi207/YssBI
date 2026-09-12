@@ -179,14 +179,15 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 ```text
 Application / Execution → yss-sci-contract
 yss-sci-runtime implements ScientificBackend
-  → yss-sci algorithms → yss-linalg → private faer backend
+  → yss-sci algorithms → faer matrices / vectors
+                       → yss-linalg checked factors / rank conventions
 yss-sci algorithms → shared model options/results in yss-sci-contract
 Plugin Manager → framed IPC → Julia extension → Bayes worker port → Julia adapter
 ```
 
 Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 随独立插件编译；`yss-bayes-runtime` 是插件内部的科学编排，不是宿主 bridge。宿主 Application 只实现通用数据快照和结果提交端口，不包含 Julia/Bayes 专用 command。已提交插件结果位于项目 `extension-results/`，包含内容哈希、包摘要、操作身份、输入快照来源和通用文件；卸载插件不删除它们。
 
-[`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 隔离线性代数后端，对 SCI 和 runtime 的条件数诊断暴露 `ndarray` 数据、分解对象和稳定错误类型。`faer` 只在该 crate 的私有 backend 中使用；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。
+科学计算实现统一使用 `faer` 的原生矩阵、向量和借用视图，已移除 `ndarray` 依赖及两套数组表示之间的转换。[`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 保留项目数值语义，包括分解检查、稳定错误类型和秩阈值；统计算法、秩判定失败时的既有回退和报告仍由 SCI 层负责。中性契约继续使用业务结构和普通向量，Arrow 负责表格交换；输入与报告按逻辑行列转换，不依赖 faer 的物理存储顺序。
 
 [`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。共享端口与实现之间不再保留额外的 Execution→SCI 适配 crate。
 

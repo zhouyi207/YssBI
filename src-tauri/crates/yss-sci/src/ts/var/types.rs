@@ -6,7 +6,7 @@
 use super::distributions::{chi_squared_sf, normal_two_sided_p};
 
 /// Cholesky 分解 L 使得 A = L L'，L 为下三角，原地覆盖 A 的下三角部分
-fn cholesky_lower_in_place(a: &mut Array2<f64>) -> Result<(), ()> {
+fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     let n = a.nrows();
     if a.ncols() != n {
         return Err(());
@@ -14,31 +14,31 @@ fn cholesky_lower_in_place(a: &mut Array2<f64>) -> Result<(), ()> {
     for j in 0..n {
         let mut s = 0.0;
         for k in 0..j {
-            s += a[[j, k]].powi(2);
+            s += a[(j, k)].powi(2);
         }
-        let d = a[[j, j]] - s;
+        let d = a[(j, j)] - s;
         if d <= 0.0 {
             return Err(());
         }
         let ljj = d.sqrt();
-        a[[j, j]] = ljj;
+        a[(j, j)] = ljj;
         for i in (j + 1)..n {
             let mut s = 0.0;
             for k in 0..j {
-                s += a[[i, k]] * a[[j, k]];
+                s += a[(i, k)] * a[(j, k)];
             }
-            a[[i, j]] = (a[[i, j]] - s) / ljj;
+            a[(i, j)] = (a[(i, j)] - s) / ljj;
         }
         for i in 0..j {
-            a[[i, j]] = 0.0;
+            a[(i, j)] = 0.0;
         }
     }
     Ok(())
 }
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use serde::{Deserialize, Serialize};
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// VAR 配置
 #[derive(Debug, Clone)]
@@ -77,9 +77,9 @@ impl Default for VARConfig {
 /// VAR 模型
 pub struct VAR {
     /// 内生变量 Y (T × K)，每列一个变量
-    pub y: Array2<f64>,
+    pub y: Mat<f64>,
     /// 外生变量 X (T × M)，可选；缺失处可为 NaN（仅非回归行）
-    pub exog: Option<Array2<f64>>,
+    pub exog: Option<Mat<f64>>,
     pub config: VARConfig,
     /// 变量名，用于系数标签
     pub var_names: Option<Vec<String>>,

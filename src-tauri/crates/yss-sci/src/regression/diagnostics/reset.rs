@@ -29,12 +29,12 @@ fn normalize_min_max(v: &[f64]) -> Vec<f64> {
 /// y = [X | Z] * [β; γ]，检验 γ = 0
 /// weights: None = OLS，Some(w) = WLS
 fn f_test_restricted_unrestricted(
-    y: &Array1<f64>,
-    x_restricted: &Array2<f64>,
-    z_augment: &Array2<f64>,
-    weights: Option<&Array1<f64>>,
+    y: &Col<f64>,
+    x_restricted: &Mat<f64>,
+    z_augment: &Mat<f64>,
+    weights: Option<&Col<f64>>,
 ) -> Result<ResetTestResult, String> {
-    let n = y.len();
+    let n = y.nrows();
     let k = x_restricted.ncols();
     let q = z_augment.ncols();
     if n < k + q + 1 {
@@ -42,14 +42,14 @@ fn f_test_restricted_unrestricted(
     }
 
     let (rss_r, rss_u, df_resid_u) = if let Some(w) = weights {
-        let sqrt_w: Array1<f64> = w.mapv(|v| v.sqrt());
-        let y_w: Array1<f64> = y.iter().zip(sqrt_w.iter()).map(|(a, b)| a * b).collect();
-        let x_r_w: Array2<f64> =
-            Array2::from_shape_fn((n, k), |(i, j)| x_restricted[[i, j]] * sqrt_w[i]);
+        let sqrt_w: Col<f64> = w.map(|&v| v.sqrt());
+        let y_w: Col<f64> = y.iter().zip(sqrt_w.iter()).map(|(a, b)| a * b).collect();
+        let x_r_w: Mat<f64> =
+            Mat::from_fn(n, k, |i, j| x_restricted[(i, j)] * sqrt_w[i]);
         let mut x_u_w = x_r_w.clone();
         for i in 0..n {
             for j in 0..q {
-                x_u_w[[i, k + j]] = z_augment[[i, j]] * sqrt_w[i];
+                x_u_w[(i, k + j)] = z_augment[(i, j)] * sqrt_w[i];
             }
         }
         let rss_r = ols_rss(&y_w, &x_r_w)?;
@@ -58,9 +58,9 @@ fn f_test_restricted_unrestricted(
         (rss_r, rss_u, df_resid_u)
     } else {
         let rss_r = ols_rss(y, x_restricted)?;
-        let mut x_u = Array2::zeros((n, k + q));
-        x_u.slice_mut(ndarray::s![.., ..k]).assign(x_restricted);
-        x_u.slice_mut(ndarray::s![.., k..]).assign(z_augment);
+        let mut x_u = Mat::zeros(n, k + q);
+        x_u.submatrix_mut(0, 0, x_u.nrows(), k).copy_from(x_restricted);
+        x_u.submatrix_mut(0, k, x_u.nrows(), x_u.ncols() - k).copy_from(z_augment);
         let rss_u = ols_rss(y, &x_u)?;
         let df_resid_u = n - k - q;
         (rss_r, rss_u, df_resid_u)
@@ -84,21 +84,21 @@ fn f_test_restricted_unrestricted(
     })
 }
 
-fn ols_rss(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
-    let y_col = y.view().to_owned();
-    let x_matrix = x.view().to_owned();
-    let xtx = x_matrix.t().matmul(&x_matrix.view());
-    let xty = x_matrix.t().matmul(&y_col.view());
+fn ols_rss(y: &Col<f64>, x: &Mat<f64>) -> Result<f64, String> {
+    let y_col = y.as_ref().to_owned();
+    let x_matrix = x.as_ref().to_owned();
+    let xtx = x_matrix.transpose() * x_matrix.as_ref();
+    let xty = x_matrix.transpose() * y_col.as_ref();
     let xtx_inv = xtx
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "RESET: X'X singular in auxiliary regression".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
-    let beta = xtx_inv.view().matmul(&xty.view());
-    let y_hat = x_matrix.view().matmul(&beta.view());
+        .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
+    let beta = xtx_inv.as_ref() * xty.as_ref();
+    let y_hat = x_matrix.as_ref() * beta.as_ref();
     let rss: f64 = y_col
-        .view()
+        .as_ref()
         .iter()
-        .zip(y_hat.view().iter())
+        .zip(y_hat.as_ref().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     Ok(rss)
@@ -109,20 +109,20 @@ fn ols_rss(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
 /// 辅助回归：y = Xβ + γ₂ŷ² + γ₃ŷ³ + γ₄ŷ⁴，检验 γ=0
 /// ŷ 归一化到 [0,1] 后计算幂
 pub fn reset_test(
-    y: &Array1<f64>,
-    x: &Array2<f64>,
-    fitted: &Array1<f64>,
-    weights: Option<&Array1<f64>>,
+    y: &Col<f64>,
+    x: &Mat<f64>,
+    fitted: &Col<f64>,
+    weights: Option<&Col<f64>>,
 ) -> Result<ResetTestResult, String> {
-    let n = y.len();
+    let n = y.nrows();
     let fitted_vec: Vec<f64> = fitted.iter().cloned().collect();
     let fitted_norm = normalize_min_max(&fitted_vec);
-    let mut z = Array2::zeros((n, 3));
+    let mut z = Mat::zeros(n, 3);
     for i in 0..n {
         let f = fitted_norm[i];
-        z[[i, 0]] = f * f;
-        z[[i, 1]] = f * f * f;
-        z[[i, 2]] = f * f * f * f;
+        z[(i, 0)] = f * f;
+        z[(i, 1)] = f * f * f;
+        z[(i, 2)] = f * f * f * f;
     }
     f_test_restricted_unrestricted(y, x, &z, weights)
 }
@@ -132,14 +132,14 @@ pub fn reset_test(
 /// 辅助回归：y = Xβ + powers(2..4) of RHS vars，检验新增系数=0
 /// 排除二值变量（min=0, max=1 的列）
 pub fn reset_test_rhs(
-    y: &Array1<f64>,
-    x: &Array2<f64>,
-    weights: Option<&Array1<f64>>,
+    y: &Col<f64>,
+    x: &Mat<f64>,
+    weights: Option<&Col<f64>>,
 ) -> Result<ResetTestResult, String> {
     let n = x.nrows();
     let mut z_cols: Vec<Vec<f64>> = Vec::new();
     for j in 0..x.ncols() {
-        let col: Vec<f64> = (0..n).map(|i| x[[i, j]]).collect();
+        let col: Vec<f64> = (0..n).map(|i| x[(i, j)]).collect();
         let (min, max) = col
             .iter()
             .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &v| {
@@ -164,10 +164,10 @@ pub fn reset_test_rhs(
         return Err("RESET rhs: no non-dummy RHS variables for powers".to_string());
     }
     let q = z_cols.len();
-    let mut z = Array2::zeros((n, q));
+    let mut z = Mat::zeros(n, q);
     for (j, col) in z_cols.iter().enumerate() {
         for i in 0..n {
-            z[[i, j]] = col[i];
+            z[(i, j)] = col[i];
         }
     }
     f_test_restricted_unrestricted(y, x, &z, weights)

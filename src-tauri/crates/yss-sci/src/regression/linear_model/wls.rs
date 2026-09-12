@@ -1,13 +1,13 @@
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
 use yss_linalg::matrix_rank;
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 pub struct WLSConfig {
     pub constant: bool,
@@ -16,15 +16,15 @@ pub struct WLSConfig {
 }
 
 pub struct WLS {
-    pub endog: Array1<f64>,
-    pub exog: Array2<f64>,
-    pub weights: Array1<f64>,
+    pub endog: Col<f64>,
+    pub exog: Mat<f64>,
+    pub weights: Col<f64>,
     pub config: WLSConfig,
 }
 
 #[derive(Debug)]
 pub struct WLSModel {
-    pub params: Array1<f64>,
+    pub params: Col<f64>,
 }
 
 #[derive(Debug)]
@@ -45,32 +45,32 @@ pub struct WLSResult {
     pub fvalue: f64,
     pub f_p_value: f64,
     pub model: WLSModel,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
-    pub tvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
+    pub tvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     pub cond_no: f64,
 }
 
 impl WLS {
     pub fn fit(&self) -> Result<WLSResult, String> {
-        let sqrt_weights = self.weights.mapv(|w| w.sqrt());
+        let sqrt_weights = self.weights.map(|&w| w.sqrt());
 
-        let mut z = self.endog.view().to_owned();
-        let mut zz = self.exog.view().to_owned();
+        let mut z = self.endog.as_ref().to_owned();
+        let mut zz = self.exog.as_ref().to_owned();
 
         for (i, &sw) in sqrt_weights.iter().enumerate() {
             z[i] *= sw;
         }
-        for (i, mut row) in zz.rows_mut().into_iter().enumerate() {
+        for (i, mut row) in zz.row_iter_mut().enumerate() {
             let sw = sqrt_weights[i];
-            row *= sw;
+            row *= faer::Scale(sw);
         }
 
-        let (rank, cond_no) = matrix_rank(zz.view()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(zz.as_ref()).unwrap_or((0, f64::INFINITY));
         let n = zz.nrows();
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
@@ -82,14 +82,14 @@ impl WLS {
             self.config.cov_type.clone()
         };
 
-        let xtx = zz.t().matmul(&zz.view());
-        let xtz = zz.t().matmul(&z.view());
+        let xtx = zz.transpose() * zz.as_ref();
+        let xtz = zz.transpose() * z.as_ref();
         let xtx_inv = xtx
-            .cholesky()
+            .checked_cholesky()
             .map_err(|_| "WLS: X'WX matrix is not positive definite".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
-        let betas = xtx_inv.view().matmul(&xtz);
-        let z_hat = zz.view().matmul(&betas.view());
+            .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
+        let betas = xtx_inv.as_ref() * xtz.as_ref();
+        let z_hat = zz.as_ref() * betas.as_ref();
 
         let z_mean = z.iter().mean();
         let ss_total = if self.config.constant {
@@ -97,7 +97,7 @@ impl WLS {
         } else {
             z.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (&z.view() - &z_hat.view())
+        let ss_residual = (z.as_ref() - z_hat.as_ref())
             .iter()
             .map(|v| v.powi(2))
             .sum::<f64>();
@@ -117,10 +117,10 @@ impl WLS {
             FisherSnedecor::new(df1, df2).map_err(|e| format!("WLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
-        let u = &z - &z_hat.view();
-        let x_nd = zz.view().to_owned();
-        let xtx_inv_nd = xtx_inv.view().to_owned();
-        let u_nd: Array1<f64> = u.view().to_owned();
+        let u = &z - z_hat.as_ref();
+        let x_nd = zz.as_ref().to_owned();
+        let xtx_inv_nd = xtx_inv.as_ref().to_owned();
+        let u_nd: Col<f64> = u.as_ref().to_owned();
 
         let cov_beta = compute_cov_beta(
             &x_nd,
@@ -131,8 +131,8 @@ impl WLS {
             self.config.cov_params.as_ref(),
         )?;
 
-        let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
-        let betas_nd = betas.view().to_owned();
+        let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
+        let betas_nd = betas.as_ref().to_owned();
         let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())
@@ -147,8 +147,8 @@ impl WLS {
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas_nd.clone() - t_crit * std_err.clone();
-        let ci_upper = betas_nd.clone() + t_crit * std_err.clone();
+        let ci_lower = betas_nd.clone() - faer::Scale(t_crit) * std_err.clone();
+        let ci_upper = betas_nd.clone() + faer::Scale(t_crit) * std_err.clone();
 
         Ok(WLSResult {
             num_observation: n,
@@ -171,8 +171,8 @@ impl WLS {
             },
             betas: betas_nd,
             stds: std_err,
-            tvalues: Array1::from_vec(t_values),
-            pvalues: Array1::from_vec(p_values),
+            tvalues: (t_values).into_iter().collect::<Col<f64>>(),
+            pvalues: (p_values).into_iter().collect::<Col<f64>>(),
             conf_int_left: ci_lower,
             conf_int_right: ci_upper,
             cov_beta,

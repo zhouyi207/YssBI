@@ -13,7 +13,7 @@ pub struct VifEntry {
 /// x: (n × k) 设计矩阵，列顺序与变量对应
 /// has_constant: 若 true，第 0 列为常数项，不计算其 VIF
 /// 完美共线时用 1e99 代替 INFINITY，避免 serde_json 序列化失败
-pub fn vif_centered(x: &Array2<f64>, has_constant: bool) -> Result<Vec<VifEntry>, String> {
+pub fn vif_centered(x: &Mat<f64>, has_constant: bool) -> Result<Vec<VifEntry>, String> {
     let n = x.nrows();
     let k = x.ncols();
     if n < k + 2 {
@@ -34,14 +34,13 @@ pub fn vif_centered(x: &Array2<f64>, has_constant: bool) -> Result<Vec<VifEntry>
         for i in 0..n {
             for jj in 0..k {
                 if jj != j {
-                    x_other.push(x[[i, jj]]);
+                    x_other.push(x[(i, jj)]);
                 }
             }
         }
-        let x_other = Array2::from_shape_vec((n, k - 1), x_other)
-            .map_err(|e| format!("VIF: x_other shape: {}", e))?;
+        let x_other = faer::MatRef::from_row_major_slice(&(x_other), n, k - 1).to_owned();
 
-        let y_j: Array1<f64> = (0..n).map(|i| x[[i, j]]).collect();
+        let y_j: Col<f64> = (0..n).map(|i| x[(i, j)]).collect();
 
         let r2 = r2_centered_aux(&y_j, &x_other)?;
         let (vif, tol) = if r2 >= 1.0 - 1e-10 {
@@ -60,7 +59,7 @@ pub fn vif_centered(x: &Array2<f64>, has_constant: bool) -> Result<Vec<VifEntry>
 
 /// 辅助回归 R²（Stata centered）：y 对 X 的 OLS，R² = 1 - RSS/TSS
 /// X 含常数项时不做中心化，否则常数列会变为 0 导致 X'X 奇异
-fn r2_centered_aux(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
+fn r2_centered_aux(y: &Col<f64>, x: &Mat<f64>) -> Result<f64, String> {
     let n = x.nrows();
     let y_mean = y.iter().sum::<f64>() / n as f64;
     let tss: f64 = y.iter().map(|v| (v - y_mean).powi(2)).sum();
@@ -68,21 +67,21 @@ fn r2_centered_aux(y: &Array1<f64>, x: &Array2<f64>) -> Result<f64, String> {
         return Ok(0.0);
     }
 
-    let y_col = y.view().to_owned();
-    let x_matrix = x.view().to_owned();
-    let xtx = x_matrix.t().matmul(&x_matrix.view());
-    let xty = x_matrix.t().matmul(&y_col.view());
+    let y_col = y.as_ref().to_owned();
+    let x_matrix = x.as_ref().to_owned();
+    let xtx = x_matrix.transpose() * x_matrix.as_ref();
+    let xty = x_matrix.transpose() * y_col.as_ref();
     let xtx_inv = xtx
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "VIF: X'X singular in auxiliary regression".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
-    let beta = xtx_inv.view().matmul(&xty.view());
-    let y_hat = x_matrix.view().matmul(&beta.view());
+        .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
+    let beta = xtx_inv.as_ref() * xty.as_ref();
+    let y_hat = x_matrix.as_ref() * beta.as_ref();
 
     let rss: f64 = y_col
-        .view()
+        .as_ref()
         .iter()
-        .zip(y_hat.view().iter())
+        .zip(y_hat.as_ref().iter())
         .map(|(a, b)| (a - b).powi(2))
         .sum();
     let r2 = 1.0 - rss / tss;

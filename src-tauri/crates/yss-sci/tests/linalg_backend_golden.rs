@@ -1,14 +1,14 @@
-use ndarray::Array2;
+use faer::Mat;
 use yss_sci::ts::var::{VAR, VARConfig};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
 
-fn cointegrated_sample() -> Array2<f64> {
+fn cointegrated_sample() -> Mat<f64> {
     let mut state = 17_u64;
     let mut noise = || {
         state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
         ((state >> 32) as f64 / u32::MAX as f64) - 0.5
     };
-    let mut sample = Array2::zeros((160, 2));
+    let mut sample = Mat::zeros(160, 2);
     let mut level = 0.0;
     let mut spread = 0.0;
     for row in 0..160 {

@@ -1,27 +1,25 @@
-use yss_linalg::SolveLowerTriangular;
-
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
 use yss_linalg::matrix_rank;
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 pub struct GLSConfig {
     pub constant: bool,
 }
 
 pub struct GLS {
-    pub endog: Array1<f64>,
-    pub exog: Array2<f64>,
-    pub sigma: Array2<f64>,
+    pub endog: Col<f64>,
+    pub exog: Mat<f64>,
+    pub sigma: Mat<f64>,
     pub config: GLSConfig,
 }
 
 #[derive(Debug)]
 pub struct GLSModel {
-    pub params: Array1<f64>,
+    pub params: Col<f64>,
 }
 
 #[derive(Debug)]
@@ -42,13 +40,13 @@ pub struct GLSResult {
     pub fvalue: f64,
     pub f_p_value: f64,
     pub model: GLSModel,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
-    pub tvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
+    pub tvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     pub cond_no: f64,
 }
 
@@ -56,35 +54,33 @@ impl GLS {
     pub fn fit(&self) -> Result<GLSResult, String> {
         let l = self
             .sigma
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "GLS: Sigma is not positive definite".to_string())?
             .lower()
             .to_owned();
 
-        let mut endog = self.endog.view().to_owned();
-        let mut exog = self.exog.view().to_owned();
+        let mut endog = self.endog.as_ref().to_owned();
+        let mut exog = self.exog.as_ref().to_owned();
 
-        l.view()
-            .solve_lower_triangular_in_place(&mut endog.view_mut());
-        l.view()
-            .solve_lower_triangular_in_place(&mut exog.view_mut());
+        l.as_ref().solve_lower_triangular_in_place(endog.as_mut());
+        l.as_ref().solve_lower_triangular_in_place(exog.as_mut());
 
-        let (rank, cond_no) = matrix_rank(exog.view()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(exog.as_ref()).unwrap_or((0, f64::INFINITY));
         let n = exog.nrows();
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
 
-        let xtx = exog.t().matmul(&exog.view());
-        let xty = exog.t().matmul(&endog.view());
+        let xtx = exog.transpose() * exog.as_ref();
+        let xty = exog.transpose() * endog.as_ref();
 
         let xtx_inv = xtx
-            .cholesky()
+            .checked_cholesky()
             .map_err(|_| "GLS: X'Sigma^{-1}X is not positive definite".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
-        let betas = xtx_inv.view().matmul(&xty);
-        let y_hat = exog.view().matmul(&betas.view());
+            .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
+        let betas = xtx_inv.as_ref() * xty.as_ref();
+        let y_hat = exog.as_ref() * betas.as_ref();
 
         let y_mean = endog.iter().mean();
         let ss_total = if self.config.constant {
@@ -92,7 +88,7 @@ impl GLS {
         } else {
             endog.iter().map(|v| v.powi(2)).sum::<f64>()
         };
-        let ss_residual = (&endog.view() - &y_hat.view())
+        let ss_residual = (endog.as_ref() - y_hat.as_ref())
             .iter()
             .map(|v| v.powi(2))
             .sum::<f64>();
@@ -112,9 +108,9 @@ impl GLS {
             FisherSnedecor::new(df1, df2).map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
         let f_p_value = 1.0 - dist.cdf(f_safe);
 
-        let cov_beta = xtx_inv.view().to_owned();
-        let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
-        let betas_nd = betas.view().to_owned();
+        let cov_beta = xtx_inv.as_ref().to_owned();
+        let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
+        let betas_nd = betas.as_ref().to_owned();
         let t_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())
@@ -129,8 +125,8 @@ impl GLS {
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas_nd.clone() - t_crit * std_err.clone();
-        let ci_upper = betas_nd.clone() + t_crit * std_err.clone();
+        let ci_lower = betas_nd.clone() - faer::Scale(t_crit) * std_err.clone();
+        let ci_upper = betas_nd.clone() + faer::Scale(t_crit) * std_err.clone();
 
         Ok(GLSResult {
             num_observation: n,
@@ -153,8 +149,8 @@ impl GLS {
             },
             betas: betas_nd,
             stds: std_err,
-            tvalues: Array1::from_vec(t_values),
-            pvalues: Array1::from_vec(p_values),
+            tvalues: (t_values).into_iter().collect::<Col<f64>>(),
+            pvalues: (p_values).into_iter().collect::<Col<f64>>(),
             conf_int_left: ci_lower,
             conf_int_right: ci_upper,
             cov_beta,

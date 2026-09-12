@@ -1,9 +1,9 @@
-﻿/// Johansen 协整秩检验（LR_trace、LR_max、LL(r) 与 Stata [TS] vecrank 公式一致；临界值为 Osterwald–Lenum，与 Stata 打印一致）
+/// Johansen 协整秩检验（LR_trace、LR_max、LL(r) 与 Stata [TS] vecrank 公式一致；临界值为 Osterwald–Lenum，与 Stata 打印一致）
 pub fn vec_vecrank_stats(
-    y: &Array2<f64>,
+    y: &Mat<f64>,
     lags: usize,
     trend_spec: VecTrendSpec,
-    sindicators: Option<&Array2<f64>>,
+    sindicators: Option<&Mat<f64>>,
     show_max_eigen: bool,
     var_names: Option<Vec<String>>,
 ) -> Result<VecRankResult, String> {
@@ -33,8 +33,9 @@ pub fn vec_vecrank_stats(
     };
 
     let mut s00_chol = s1.s00.clone();
-    cholesky_lower_in_place(&mut s00_chol).map_err(|_| "vecrank: S00 not positive definite".to_string())?;
-    let ln_det_s00: f64 = 2.0 * (0..k).map(|i| s00_chol[[i, i]].ln()).sum::<f64>();
+    cholesky_lower_in_place(&mut s00_chol)
+        .map_err(|_| "vecrank: S00 not positive definite".to_string())?;
+    let ln_det_s00: f64 = 2.0 * (0..k).map(|i| s00_chol[(i, i)].ln()).sum::<f64>();
     let k_bracket = k as f64 * ((2.0 * std::f64::consts::PI).ln() + 1.0);
 
     let log_1m = |lam: f64| -> f64 {
@@ -115,17 +116,9 @@ pub fn vec_vecrank_stats(
             None
         };
 
-        let trace_stat = if rank < k {
-            Some(trace[rank])
-        } else {
-            None
-        };
+        let trace_stat = if rank < k { Some(trace[rank]) } else { None };
 
-        let max_stat = if rank < k {
-            Some(maxe[rank])
-        } else {
-            None
-        };
+        let max_stat = if rank < k { Some(maxe[rank]) } else { None };
 
         let (t10, t5, t1) = if rank < k {
             let dim = k - rank;

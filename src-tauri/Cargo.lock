@@ -4499,21 +4499,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndarray"
-version = "0.17.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "520080814a7a6b4a6e9070823bb24b4531daac8c4627e08ba5de8c5ef2f2752d"
-dependencies = [
- "matrixmultiply",
- "num-complex",
- "num-integer",
- "num-traits",
- "portable-atomic",
- "portable-atomic-util",
- "rawpointer",
-]
-
-[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9254,7 +9239,7 @@ name = "yss-application"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "ndarray",
+ "faer",
  "serde",
  "serde_json",
  "sqlx",
@@ -9794,7 +9779,6 @@ name = "yss-linalg"
 version = "0.1.0"
 dependencies = [
  "faer",
- "ndarray",
 ]
 
 [[package]]
@@ -10066,7 +10050,7 @@ name = "yss-sci"
 version = "0.1.0"
 dependencies = [
  "csv",
- "ndarray",
+ "faer",
  "num-traits",
  "serde",
  "statrs",
@@ -10089,7 +10073,7 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "chrono",
- "ndarray",
+ "faer",
  "rand 0.10.2",
  "serde",
  "serde_json",

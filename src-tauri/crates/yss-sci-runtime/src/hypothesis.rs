@@ -1,13 +1,13 @@
 //! Linear hypothesis-test application API and Rust backend orchestration.
 use yss_sci_contract::hypothesis::{Alternative, TTestResult, WaldTestResult};
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 
 pub struct LinearHypothesisTestInput<'a> {
-    pub betas: &'a Array1<f64>,
-    pub cov_beta: &'a Array2<f64>,
-    pub r: &'a Array2<f64>,
-    pub r_vec: &'a Array1<f64>,
+    pub betas: &'a Col<f64>,
+    pub cov_beta: &'a Mat<f64>,
+    pub r: &'a Mat<f64>,
+    pub r_vec: &'a Col<f64>,
     pub df_residual: usize,
     pub alternative: Alternative,
     pub constraint_desc: String,
@@ -65,18 +65,18 @@ fn validate_input(
             SciInputViolation::ParameterOutOfRange,
         ));
     }
-    if input.betas.len() != coefficient_count
+    if input.betas.nrows() != coefficient_count
         || input.cov_beta.nrows() != coefficient_count
         || input.cov_beta.ncols() != coefficient_count
-        || input.r_vec.len() != constraint_count
+        || input.r_vec.nrows() != constraint_count
     {
         return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
     }
     if input
         .betas
         .iter()
-        .chain(input.cov_beta.iter())
-        .chain(input.r.iter())
+        .chain(input.cov_beta.col_iter().flat_map(|column| column.iter()))
+        .chain(input.r.col_iter().flat_map(|column| column.iter()))
         .chain(input.r_vec.iter())
         .any(|value| !value.is_finite())
     {
@@ -95,13 +95,13 @@ fn invalid_input(operation: SciOperationCode, violation: SciInputViolation) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{Array1, Array2, arr1, arr2};
+    use faer::{Col, Mat, col, mat};
 
     fn input<'a>(
-        betas: &'a Array1<f64>,
-        cov_beta: &'a Array2<f64>,
-        r: &'a Array2<f64>,
-        r_vec: &'a Array1<f64>,
+        betas: &'a Col<f64>,
+        cov_beta: &'a Mat<f64>,
+        r: &'a Mat<f64>,
+        r_vec: &'a Col<f64>,
         df_residual: usize,
     ) -> LinearHypothesisTestInput<'a> {
         LinearHypothesisTestInput {
@@ -117,10 +117,10 @@ mod tests {
 
     #[test]
     fn hypothesis_input_validation_returns_specific_typed_violations() {
-        let betas = arr1(&[1.0, 2.0]);
-        let covariance = arr2(&[[0.1, 0.0], [0.0, 0.1]]);
-        let constraint = arr2(&[[0.0, 1.0]]);
-        let target = arr1(&[0.0]);
+        let betas = col![1.0, 2.0];
+        let covariance = mat![[0.1, 0.0], [0.0, 0.1]];
+        let constraint = mat![[0.0, 1.0]];
+        let target = col![0.0];
 
         assert_eq!(
             t_test(input(&betas, &covariance, &constraint, &target, 0)).unwrap_err(),
@@ -130,8 +130,8 @@ mod tests {
             }
         );
 
-        let empty_constraints = Array2::zeros((0, 2));
-        let empty_target = Array1::zeros(0);
+        let empty_constraints = Mat::zeros(0, 2);
+        let empty_target = Col::zeros(0);
         assert_eq!(
             wald_test(input(
                 &betas,
@@ -147,7 +147,7 @@ mod tests {
             }
         );
 
-        let short_betas = arr1(&[1.0]);
+        let short_betas = col![1.0];
         assert_eq!(
             t_test(input(&short_betas, &covariance, &constraint, &target, 10,)).unwrap_err(),
             SciError::InvalidInput {
@@ -156,7 +156,7 @@ mod tests {
             }
         );
 
-        let short_covariance = arr2(&[[0.1]]);
+        let short_covariance = mat![[0.1]];
         assert_eq!(
             t_test(input(&betas, &short_covariance, &constraint, &target, 10,)).unwrap_err(),
             SciError::InvalidInput {
@@ -165,7 +165,7 @@ mod tests {
             }
         );
 
-        let long_target = arr1(&[0.0, 0.0]);
+        let long_target = col![0.0, 0.0];
         assert_eq!(
             wald_test(input(&betas, &covariance, &constraint, &long_target, 10,)).unwrap_err(),
             SciError::InvalidInput {
@@ -174,7 +174,7 @@ mod tests {
             }
         );
 
-        let non_finite_betas = arr1(&[f64::NAN, 2.0]);
+        let non_finite_betas = col![f64::NAN, 2.0];
         assert_eq!(
             t_test(input(
                 &non_finite_betas,
@@ -193,10 +193,10 @@ mod tests {
 
     #[test]
     fn hypothesis_numerical_failures_map_to_computation_failed() {
-        let betas = arr1(&[1.0, 2.0]);
-        let target = arr1(&[0.0]);
-        let constraint = arr2(&[[0.0, 1.0]]);
-        let zero_covariance = Array2::zeros((2, 2));
+        let betas = col![1.0, 2.0];
+        let target = col![0.0];
+        let constraint = mat![[0.0, 1.0]];
+        let zero_covariance = Mat::zeros(2, 2);
         assert_eq!(
             t_test(input(&betas, &zero_covariance, &constraint, &target, 10,)).unwrap_err(),
             SciError::ComputationFailed {
@@ -204,9 +204,9 @@ mod tests {
             }
         );
 
-        let constraints = arr2(&[[1.0, 0.0], [0.0, 1.0]]);
-        let targets = arr1(&[0.0, 0.0]);
-        let singular_covariance = arr2(&[[1.0, 1.0], [1.0, 1.0]]);
+        let constraints = mat![[1.0, 0.0], [0.0, 1.0]];
+        let targets = col![0.0, 0.0];
+        let singular_covariance = mat![[1.0, 1.0], [1.0, 1.0]];
         assert_eq!(
             wald_test(input(
                 &betas,

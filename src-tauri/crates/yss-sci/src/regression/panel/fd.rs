@@ -4,7 +4,7 @@
 //! 与 Stata D. 算子一致：仅在原始数据中相邻时间点之间差分（delta=1），不跨 gap。
 
 use crate::regression::linear_model::OLS;
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use yss_sci_contract::regression::CovParams;
 
 /// Panel First Difference estimator
@@ -12,8 +12,8 @@ use yss_sci_contract::regression::CovParams;
 /// 与 Stata `reg D.y D.x, nocons` 一致：仅当 time_values[i+1] - time_values[i] == 1 时差分，
 /// 即仅在相邻时间点（delta=1）之间差分，不跨 gap。
 pub fn fit_panel_fd(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     time_values: &[i64],
@@ -21,7 +21,7 @@ pub fn fit_panel_fd(
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
             "Panel FD: exog rows {} != endog len {}",
@@ -45,7 +45,7 @@ pub fn fit_panel_fd(
             diff_entity.push(entity_id[i]);
             dy.push(endog[i + 1] - endog[i]);
             for c in 0..k {
-                dx_cols[c].push(exog[[i + 1, c]] - exog[[i, c]]);
+                dx_cols[c].push(exog[(i + 1, c)] - exog[(i, c)]);
             }
         }
         i += 1;
@@ -57,7 +57,7 @@ pub fn fit_panel_fd(
         return Err("Panel FD: no valid first-differenced observations. Ensure (entity, time) has consecutive periods (delta=1).".to_string());
     }
 
-    let dy_arr = Array1::from_vec(dy);
+    let dy_arr = (dy).into_iter().collect::<Col<f64>>();
 
     let mut dx_data = Vec::with_capacity(n_fd * k);
     for i in 0..n_fd {
@@ -65,15 +65,19 @@ pub fn fit_panel_fd(
             dx_data.push(dx_cols[c][i]);
         }
     }
-    let dx_arr = Array2::from_shape_vec((n_fd, k), dx_data)
-        .map_err(|e| format!("Panel FD: shape error {:?}", e))?;
+    let dx_arr = faer::MatRef::from_row_major_slice(&(dx_data), n_fd, k).to_owned();
 
     // 若存在常数列，差分后全为 0，需剔除
     let (dx_use, has_const) = if constant && k > 0 {
-        let first_col = dx_arr.column(0);
+        let first_col = dx_arr.col(0);
         let all_zero = first_col.iter().all(|&v| v.abs() < 1e-12);
         if all_zero {
-            (dx_arr.slice(ndarray::s![.., 1..]).to_owned(), false)
+            (
+                dx_arr
+                    .submatrix(0, 1, dx_arr.nrows(), dx_arr.ncols() - 1)
+                    .to_owned(),
+                false,
+            )
         } else {
             (dx_arr, constant)
         }

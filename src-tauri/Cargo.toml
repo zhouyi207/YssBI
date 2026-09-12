@@ -107,7 +107,7 @@ parquet = { version = "=59.3.0", default-features = false, features = ["arrow", 
 datafusion = { version = "=55.0.0", default-features = false, features = ["parquet", "sql", "datetime_expressions", "string_expressions", "unicode_expressions"] }
 chrono = "0.4.41"
 mathlex = "=0.4.2"
-ndarray = "0.17.2"
+faer = "0.24.0"
 notify = "8.2.0"
 walkdir = "2.5.0"
 num-traits = "0.2.19"

@@ -7,11 +7,11 @@
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::statistics::Statistics;
 use yss_linalg::matrix_rank;
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// LIML 配置（与 2SLS 一致）
 pub struct IVLIMLConfig {
@@ -23,10 +23,10 @@ pub struct IVLIMLConfig {
 
 /// IV:LIML 输入（与 IV2SLS 相同结构）
 pub struct IVLIML {
-    pub endog: Array1<f64>,
-    pub exog: Array2<f64>,
-    pub endog_reg: Array2<f64>,
-    pub instruments: Array2<f64>,
+    pub endog: Col<f64>,
+    pub exog: Mat<f64>,
+    pub endog_reg: Mat<f64>,
+    pub instruments: Mat<f64>,
     pub config: IVLIMLConfig,
     pub endog_names: Option<Vec<String>>,
     pub z_var_names: Option<Vec<String>>,
@@ -34,7 +34,7 @@ pub struct IVLIML {
 
 #[derive(Debug)]
 pub struct IVLIMLModel {
-    pub params: Array1<f64>,
+    pub params: Col<f64>,
 }
 
 /// LIML 结果（与 IV2SLS 类似，复用 FirstStageResult/FirstStageSummary 等）
@@ -57,13 +57,13 @@ pub struct IVLIMLResult {
     pub wald_chi2_p_value: f64,
 
     pub model: IVLIMLModel,
-    pub betas: Array1<f64>,
-    pub stds: Array1<f64>,
-    pub zvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,
-    pub conf_int_right: Array1<f64>,
-    pub cov_beta: Array2<f64>,
+    pub betas: Col<f64>,
+    pub stds: Col<f64>,
+    pub zvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,
+    pub conf_int_right: Col<f64>,
+    pub cov_beta: Mat<f64>,
     pub cond_no: f64,
 
     /// κ used in LIML
@@ -101,7 +101,7 @@ fn is_robust_cov_type(cov_type: &str) -> bool {
 
 impl IVLIML {
     pub fn fit(&self) -> Result<IVLIMLResult, String> {
-        let n = self.endog.len();
+        let n = self.endog.nrows();
         let k_exog = self.exog.ncols();
         let k_endog = self.endog_reg.ncols();
         let k_iv = self.instruments.ncols();
@@ -131,14 +131,13 @@ impl IVLIML {
                 z_raw.push(1.0);
             }
             for j in 0..k_exog {
-                z_raw.push(self.exog[[i, j]]);
+                z_raw.push(self.exog[(i, j)]);
             }
             for j in 0..k_iv {
-                z_raw.push(self.instruments[[i, j]]);
+                z_raw.push(self.instruments[(i, j)]);
             }
         }
-        let z = Array2::from_shape_vec((n, k_z), z_raw)
-            .map_err(|e| format!("IVLIML: failed to build Z: {}", e))?;
+        let z = faer::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
 
         // X1 = [const?, exog]
         let mut x1_raw = Vec::with_capacity(n * k1);
@@ -147,11 +146,10 @@ impl IVLIML {
                 x1_raw.push(1.0);
             }
             for j in 0..k_exog {
-                x1_raw.push(self.exog[[i, j]]);
+                x1_raw.push(self.exog[(i, j)]);
             }
         }
-        let x1 = Array2::from_shape_vec((n, k1), x1_raw)
-            .map_err(|e| format!("IVLIML: failed to build X1: {}", e))?;
+        let x1 = faer::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
 
         // X = [const?, exog, endog_reg] (structural)
         let k_x = if self.config.constant {
@@ -165,83 +163,81 @@ impl IVLIML {
                 x_raw.push(1.0);
             }
             for j in 0..k_exog {
-                x_raw.push(self.exog[[i, j]]);
+                x_raw.push(self.exog[(i, j)]);
             }
             for j in 0..k_endog {
-                x_raw.push(self.endog_reg[[i, j]]);
+                x_raw.push(self.endog_reg[(i, j)]);
             }
         }
-        let x = Array2::from_shape_vec((n, k_x), x_raw)
-            .map_err(|e| format!("IVLIML: failed to build X: {}", e))?;
+        let x = faer::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
 
         // Ỹ = [y Y] (n × (p+1))
         let mut y_tilde_raw = Vec::with_capacity(n * (k_endog + 1));
         for i in 0..n {
             y_tilde_raw.push(self.endog[i]);
             for j in 0..k_endog {
-                y_tilde_raw.push(self.endog_reg[[i, j]]);
+                y_tilde_raw.push(self.endog_reg[(i, j)]);
             }
         }
-        let y_tilde = Array2::from_shape_vec((n, k_endog + 1), y_tilde_raw)
-            .map_err(|e| format!("IVLIML: failed to build Ỹ: {}", e))?;
+        let y_tilde = faer::MatRef::from_row_major_slice(&(y_tilde_raw), n, k_endog + 1).to_owned();
 
-        let z_matrix = z.view().to_owned();
-        let x1_matrix = x1.view().to_owned();
-        let y_tilde_matrix = y_tilde.view().to_owned();
-        let x_matrix = x.view().to_owned();
-        let y_vector = self.endog.view().to_owned();
+        let z_matrix = z.as_ref().to_owned();
+        let x1_matrix = x1.as_ref().to_owned();
+        let y_tilde_matrix = y_tilde.as_ref().to_owned();
+        let x_matrix = x.as_ref().to_owned();
+        let y_vector = self.endog.as_ref().to_owned();
 
         // Z'Z, (Z'Z)^{-1}
-        let ztz = z_matrix.t().matmul(&z_matrix.view());
+        let ztz = z_matrix.transpose() * z_matrix.as_ref();
         let ztz_inv = ztz
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "IVLIML: Z'Z not pd".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(ztz.nrows()));
-        let ztz_inv_nd = ztz_inv.view().to_owned();
+            .solve(&Mat::identity(ztz.nrows(), ztz.nrows()));
+        let ztz_inv_nd = ztz_inv.as_ref().to_owned();
 
         // X1'X1, (X1'X1)^{-1}
-        let x1tx1 = x1_matrix.t().matmul(&x1_matrix.view());
+        let x1tx1 = x1_matrix.transpose() * x1_matrix.as_ref();
         let x1tx1_inv = x1tx1
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "IVLIML: X1'X1 not pd".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(x1tx1.nrows()));
-        let x1tx1_inv_nd = x1tx1_inv.view().to_owned();
+            .solve(&Mat::identity(x1tx1.nrows(), x1tx1.nrows()));
+        let x1tx1_inv_nd = x1tx1_inv.as_ref().to_owned();
 
         // Ỹ'MZ Ỹ = Ỹ'Ỹ - Ỹ'Z(Z'Z)^{-1}Z'Ỹ
-        let yty = y_tilde_matrix.t().matmul(&y_tilde_matrix.view());
-        let zty = z_matrix.t().matmul(&y_tilde_matrix.view());
-        let ytmz = yty.view().to_owned();
-        let zty_nd = zty.view().to_owned();
-        let ytmz_nd: Array2<f64> = &ytmz - &zty_nd.t().dot(&ztz_inv_nd).dot(&zty_nd);
+        let yty = y_tilde_matrix.transpose() * y_tilde_matrix.as_ref();
+        let zty = z_matrix.transpose() * y_tilde_matrix.as_ref();
+        let ytmz = yty.as_ref().to_owned();
+        let zty_nd = zty.as_ref().to_owned();
+        let ytmz_nd: Mat<f64> =
+            &ytmz - &((zty_nd.transpose() * ztz_inv_nd.as_ref()).as_ref() * zty_nd.as_ref());
 
         // Ỹ'MX1 Ỹ = Ỹ'Ỹ - Ỹ'X1(X1'X1)^{-1}X1'Ỹ
-        let x1ty = x1_matrix.t().matmul(&y_tilde_matrix.view());
-        let x1ty_nd = x1ty.view().to_owned();
-        let ytmx1_nd: Array2<f64> = &ytmz - &x1ty_nd.t().dot(&x1tx1_inv_nd).dot(&x1ty_nd);
+        let x1ty = x1_matrix.transpose() * y_tilde_matrix.as_ref();
+        let x1ty_nd = x1ty.as_ref().to_owned();
+        let ytmx1_nd: Mat<f64> =
+            &ytmz - &((x1ty_nd.transpose() * x1tx1_inv_nd.as_ref()).as_ref() * x1ty_nd.as_ref());
 
         // G = (Ỹ'MZ Ỹ)^{-1/2} Ỹ'MX1 Ỹ (Ỹ'MZ Ỹ)^{-1/2}
-        let evd = yss_linalg::SymmetricEigen::factor(ytmz_nd.view())
+        let evd = yss_linalg::SymmetricEigen::factor(ytmz_nd.as_ref())
             .map_err(|_| "IVLIML: EVD of Ỹ'MZ Ỹ failed".to_string())?;
         let s_col = evd.values();
         let u = evd.vectors();
         let size = k_endog + 1;
-        let mut lambda_inv_sqrt = ndarray::Array2::<f64>::zeros((size, size));
+        let mut lambda_inv_sqrt = Mat::zeros(size, size);
         for i in 0..size {
             let si = s_col[i];
             if si > 1e-12 {
-                lambda_inv_sqrt.view_mut()[(i, i)] = 1.0 / si.sqrt();
+                lambda_inv_sqrt.as_mut()[(i, i)] = 1.0 / si.sqrt();
             }
         }
-        let ytmz_inv_sqrt = u.view().matmul(&lambda_inv_sqrt.view()).matmul(&u.t());
-        let g = ytmz_inv_sqrt
-            .view()
-            .matmul(&(ytmx1_nd.view().to_owned().matmul(&ytmz_inv_sqrt.view())));
+        let ytmz_inv_sqrt = (u.as_ref() * lambda_inv_sqrt.as_ref()).as_ref() * u.transpose();
+        let g = ytmz_inv_sqrt.as_ref() * ytmx1_nd.as_ref() * ytmz_inv_sqrt.as_ref();
 
         // κ = minimum eigenvalue of G
-        let g_nd = g.view().to_owned();
-        let evd_g = yss_linalg::SymmetricEigen::factor(g_nd.view())
+        let g_nd = g.as_ref().to_owned();
+        let evd_g = yss_linalg::SymmetricEigen::factor(g_nd.as_ref())
             .map_err(|_| "IVLIML: EVD of G failed".to_string())?;
         let s_g = evd_g.values();
         let kappa = s_g.iter().cloned().fold(f64::INFINITY, f64::min).max(0.0);
@@ -249,40 +245,42 @@ impl IVLIML {
         // β̂ = {X'(I − κMZ)X}^{-1} X'(I − κMZ)y
         // X'(I−κMZ)X = (1-κ)X'X + κ X'Z(Z'Z)^{-1}Z'X
         // X'(I−κMZ)y = (1-κ)X'y + κ X'Z(Z'Z)^{-1}Z'y
-        let xtx = x_matrix.t().matmul(&x_matrix.view());
-        let xty = x_matrix.t().matmul(&y_vector.view());
-        let xtz = x_matrix.t().matmul(&z_matrix.view());
-        let ztx = z_matrix.t().matmul(&x_matrix.view());
-        let zty_y = z_matrix.t().matmul(&y_vector.view());
+        let xtx = x_matrix.transpose() * x_matrix.as_ref();
+        let xty = x_matrix.transpose() * y_vector.as_ref();
+        let xtz = x_matrix.transpose() * z_matrix.as_ref();
+        let ztx = z_matrix.transpose() * x_matrix.as_ref();
+        let zty_y = z_matrix.transpose() * y_vector.as_ref();
 
-        let xtx_nd = xtx.view().to_owned();
-        let xty_nd = xty.view().to_owned();
-        let xtz_nd = xtz.view().to_owned();
-        let ztx_nd = ztx.view().to_owned();
-        let zty_y_nd = zty_y.view().to_owned();
+        let xtx_nd = xtx.as_ref().to_owned();
+        let xty_nd = xty.as_ref().to_owned();
+        let xtz_nd = xtz.as_ref().to_owned();
+        let ztx_nd = ztx.as_ref().to_owned();
+        let zty_y_nd = zty_y.as_ref().to_owned();
 
-        let xt_ikmz_x_nd: Array2<f64> =
-            (1.0 - kappa) * &xtx_nd + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&ztx_nd);
-        let xt_ikmz_y_nd: Array1<f64> =
-            (1.0 - kappa) * &xty_nd + kappa * xtz_nd.dot(&ztz_inv_nd).dot(&zty_y_nd);
+        let xt_ikmz_x_nd: Mat<f64> = faer::Scale(1.0 - kappa) * &xtx_nd
+            + faer::Scale(kappa)
+                * ((xtz_nd.as_ref() * ztz_inv_nd.as_ref()).as_ref() * ztx_nd.as_ref());
+        let xt_ikmz_y_nd: Col<f64> = faer::Scale(1.0 - kappa) * &xty_nd
+            + faer::Scale(kappa)
+                * ((xtz_nd.as_ref() * ztz_inv_nd.as_ref()).as_ref() * zty_y_nd.as_ref());
 
-        let xt_ikmz_x_matrix = xt_ikmz_x_nd.view().to_owned();
-        let xt_ikmz_y_vector = xt_ikmz_y_nd.view().to_owned();
+        let xt_ikmz_x_matrix = xt_ikmz_x_nd.as_ref().to_owned();
+        let xt_ikmz_y_vector = xt_ikmz_y_nd.as_ref().to_owned();
         let xt_ikmz_x_inv = xt_ikmz_x_matrix
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "IVLIML: X'(I−κMZ)X not pd".to_string())?
-            .solve(&ndarray::Array2::<f64>::eye(xt_ikmz_x_nd.nrows()));
-        let betas_vector = xt_ikmz_x_inv.view().matmul(&xt_ikmz_y_vector.view());
-        let betas_nd = betas_vector.view().to_owned();
+            .solve(&Mat::identity(xt_ikmz_x_nd.nrows(), xt_ikmz_x_nd.nrows()));
+        let betas_vector = xt_ikmz_x_inv.as_ref() * xt_ikmz_y_vector.as_ref();
+        let betas_nd = betas_vector.as_ref().to_owned();
 
-        let (rank, cond_no) = matrix_rank(x.view()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(x.as_ref()).unwrap_or((0, f64::INFINITY));
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
 
-        let u_structural: Array1<f64> = &self.endog - &x.dot(&betas_nd);
-        let ss_residual = u_structural.dot(&u_structural);
+        let u_structural: Col<f64> = &self.endog - &(x.as_ref() * betas_nd.as_ref());
+        let ss_residual = u_structural.transpose() * u_structural.as_ref();
         let y_mean = self.endog.iter().mean();
         let ss_total = if self.config.constant {
             self.endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
@@ -305,8 +303,8 @@ impl IVLIML {
         };
 
         let sigma2_df = if self.config.small { df_residual } else { n };
-        let xt_ikmz_x_inv_nd = xt_ikmz_x_inv.view().to_owned();
-        let x_nd = x_matrix.view().to_owned();
+        let xt_ikmz_x_inv_nd = xt_ikmz_x_inv.as_ref().to_owned();
+        let x_nd = x_matrix.as_ref().to_owned();
 
         let cov_beta = compute_cov_beta(
             &x_nd,
@@ -317,7 +315,7 @@ impl IVLIML {
             self.config.cov_params.as_ref(),
         )?;
 
-        let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
+        let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
         let z_values: Vec<f64> = betas_nd
             .iter()
             .zip(std_err.iter())
@@ -329,8 +327,8 @@ impl IVLIML {
             .map(|&z| 2.0 * (1.0 - std_normal.cdf(z.abs())))
             .collect();
         let z_crit = std_normal.inverse_cdf(0.975);
-        let ci_lower = &betas_nd - z_crit * &std_err;
-        let ci_upper = &betas_nd + z_crit * &std_err;
+        let ci_lower = &betas_nd - faer::Scale(z_crit) * &std_err;
+        let ci_upper = &betas_nd + faer::Scale(z_crit) * &std_err;
 
         let covariance_type = if self.config.cov_type.is_empty() {
             "nonrobust".to_string()
@@ -338,41 +336,43 @@ impl IVLIML {
             self.config.cov_type.clone()
         };
 
-        let k = betas_nd.len();
+        let k = betas_nd.nrows();
         let (wald_chi2, wald_p) = {
             let (beta_s, v_s, df_wald) = if self.config.constant && k > 1 {
-                let beta_s = betas_nd.slice(ndarray::s![1..]).to_owned();
-                let v_s = cov_beta.slice(ndarray::s![1.., 1..]).to_owned();
+                let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
+                let v_s = cov_beta
+                    .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
+                    .to_owned();
                 (beta_s, v_s, k - 1)
             } else {
                 (betas_nd.clone(), cov_beta.clone(), k)
             };
-            let v_s_matrix = v_s.view().to_owned();
-            let beta_s_vector = beta_s.view().to_owned();
+            let v_s_matrix = v_s.as_ref().to_owned();
+            let beta_s_vector = beta_s.as_ref().to_owned();
             let x_sol = v_s_matrix
-                .view()
-                .cholesky()
+                .as_ref()
+                .checked_cholesky()
                 .map_err(|_| "IVLIML: V_s not pd for Wald".to_string())?
-                .solve(&beta_s_vector.view());
-            let wald = beta_s.dot(&x_sol.view());
+                .solve(&beta_s_vector.as_ref());
+            let wald = beta_s.transpose() * x_sol.as_ref();
             let chi2_dist =
                 ChiSquared::new(df_wald as f64).map_err(|e| format!("IVLIML Wald: {}", e))?;
             (wald, 1.0 - chi2_dist.cdf(wald))
         };
 
-        let ztz_inv_nd = ztz_inv.view().to_owned();
+        let ztz_inv_nd = ztz_inv.as_ref().to_owned();
         let df_z = n.saturating_sub(k_z);
-        let mut endog_hat = Array2::zeros((n, k_endog));
+        let mut endog_hat = Mat::zeros(n, k_endog);
         let mut first_stage: Vec<super::iv2sls::FirstStageResult> = Vec::with_capacity(k_endog);
         for j in 0..k_endog {
-            let endog_col = self.endog_reg.column(j).into_owned();
-            let endog_vector = endog_col.view().to_owned();
-            let zty = z_matrix.t().matmul(&endog_vector.view());
-            let gamma = ztz_inv.view().matmul(&zty);
-            let hat = z_matrix.view().matmul(&gamma.view());
-            let hat_arr = hat.view().to_owned();
+            let endog_col = self.endog_reg.col(j).to_owned();
+            let endog_vector = endog_col.as_ref().to_owned();
+            let zty = z_matrix.transpose() * endog_vector.as_ref();
+            let gamma = ztz_inv.as_ref() * zty.as_ref();
+            let hat = z_matrix.as_ref() * gamma.as_ref();
+            let hat_arr = hat.as_ref().to_owned();
             for i in 0..n {
-                endog_hat[[i, j]] = hat_arr[i];
+                endog_hat[(i, j)] = hat_arr[i];
             }
             let resid = &endog_col - &hat_arr;
             let ss_resid = resid.iter().map(|v| v.powi(2)).sum::<f64>();
@@ -391,9 +391,9 @@ impl IVLIML {
             } else {
                 1e-300
             };
-            let cov_gamma = sigma2_j * &ztz_inv_nd;
-            let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[[i, i]].sqrt()).collect();
-            let gamma_nd = gamma.view().to_owned();
+            let cov_gamma = faer::Scale(sigma2_j) * &ztz_inv_nd;
+            let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
+            let gamma_nd = gamma.as_ref().to_owned();
             let t_dist = statrs::distribution::StudentsT::new(0.0, 1.0, df_z as f64)
                 .unwrap_or(statrs::distribution::StudentsT::new(0.0, 1.0, 1.0).unwrap());
             let t_values: Vec<f64> = (0..k_z).map(|i| gamma_nd[i] / stds[i]).collect();
@@ -431,7 +431,7 @@ impl IVLIML {
             first_stage.push(super::iv2sls::FirstStageResult {
                 endog_name: name,
                 var_names,
-                betas: gamma_nd.to_vec(),
+                betas: gamma_nd.iter().copied().collect(),
                 stds,
                 tvalues: t_values,
                 pvalues: p_values,
@@ -465,11 +465,11 @@ impl IVLIML {
         let overid = if k_iv > k_endog && !is_robust_cov_type(&covariance_type) {
             let df_overid = k_iv - k_endog;
             let df_denom = n.saturating_sub(k_z);
-            let uu = u_structural.dot(&u_structural);
+            let uu = u_structural.transpose() * u_structural.as_ref();
             if df_denom > 0 && uu > 1e-300 {
-                let ztu = z.t().dot(&u_structural);
-                let ztz_inv_ztu = ztz_inv_nd.dot(&ztu);
-                let u_pz_u = ztu.dot(&ztz_inv_ztu);
+                let ztu = z.transpose() * u_structural.as_ref();
+                let ztz_inv_ztu = ztz_inv_nd.as_ref() * ztu.as_ref();
+                let u_pz_u = ztu.transpose() * ztz_inv_ztu.as_ref();
                 let sargan_stat = n as f64 * u_pz_u / uu;
                 let basmann_chi2 = if (n as f64 - sargan_stat).abs() > 1e-10 {
                     sargan_stat * (n as f64 - k_z as f64) / (n as f64 - sargan_stat)
@@ -520,8 +520,8 @@ impl IVLIML {
             },
             betas: betas_nd,
             stds: std_err,
-            zvalues: Array1::from_vec(z_values),
-            pvalues: Array1::from_vec(p_values),
+            zvalues: (z_values).into_iter().collect::<Col<f64>>(),
+            pvalues: (p_values).into_iter().collect::<Col<f64>>(),
             conf_int_left: ci_lower,
             conf_int_right: ci_upper,
             cov_beta,

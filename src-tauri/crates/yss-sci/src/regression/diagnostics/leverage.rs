@@ -3,25 +3,25 @@
 
 /// 计算 leverage（Stata `predict lev, leverage`）
 /// x: (n × k) 设计矩阵
-pub fn leverage(x: &Array2<f64>) -> Result<Vec<f64>, String> {
+pub fn leverage(x: &Mat<f64>) -> Result<Vec<f64>, String> {
     let n = x.nrows();
     let k = x.ncols();
     if n == 0 || k == 0 {
         return Err("leverage: empty design matrix".to_string());
     }
 
-    let x_matrix = x.view().to_owned();
-    let xtx = x_matrix.t().matmul(&x_matrix.view());
+    let x_matrix = x.as_ref().to_owned();
+    let xtx = x_matrix.transpose() * x_matrix.as_ref();
     let xtx_inv = xtx
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "leverage: X'X singular".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        .solve(&Mat::identity(xtx.nrows(), xtx.nrows()));
 
     // H = X (X'X)^{-1} X'，取对角元
     // H_ii = row_i(X) @ (X'X)^{-1} @ row_i(X)'
-    let x_xtx_inv_nd = x_matrix.view().matmul(&xtx_inv.view()).view().to_owned(); // (n × k)
+    let x_xtx_inv_nd = x_matrix.as_ref() * xtx_inv.as_ref(); // (n × k)
     let h_diag: Vec<f64> = (0..n)
-        .map(|i| (0..k).map(|j| x_xtx_inv_nd[[i, j]] * x[[i, j]]).sum())
+        .map(|i| (0..k).map(|j| x_xtx_inv_nd[(i, j)] * x[(i, j)]).sum())
         .collect();
     Ok(h_diag)
 }

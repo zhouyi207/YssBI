@@ -6730,7 +6730,7 @@ fn sci_runtime_has_one_crate_owner_without_root_facade_or_duplicate_validation()
     }
 
     for required_dependency in [
-        "ndarray.workspace = true",
+        "faer.workspace = true",
         "rand.workspace = true",
         "serde.workspace = true",
         "serde_json.workspace = true",

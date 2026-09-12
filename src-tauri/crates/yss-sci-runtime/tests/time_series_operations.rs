@@ -2,7 +2,7 @@
 use arrow::array::{Array, Date32Array, Float64Array, Int64Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
-use ndarray::Array2;
+use faer::Mat;
 use std::sync::Arc;
 use yss_sci::ts::unit_root::{AdfRegression, adf_test};
 use yss_sci::ts::var::var_varsoc;
@@ -212,7 +212,7 @@ fn panel_arrow_adapter_preserves_identity_metadata_and_existing_gap_difference()
 fn test_var_varsoc_shape_and_lr() {
     // T、K 足够大，两列独立非周期模式，避免任意阶 Z'Z 接近奇异
     let t = 80usize;
-    let y = Array2::from_shape_fn((t, 2), |(i, j)| {
+    let y = Mat::from_fn(t, 2, |i, j| {
         let i = i as f64;
         if j == 0 {
             0.02 * i + (0.11 * i + 0.3).sin() * 3.0
@@ -251,7 +251,7 @@ fn test_adf_drift_returns_regression_stats() {
 #[test]
 fn test_vec_estimate_rejects_invalid_config() {
     let n = 80usize;
-    let y = Array2::from_shape_fn((n, 2), |(i, j)| {
+    let y = Mat::from_fn(n, 2, |i, j| {
         let t = i as f64;
         let base = 0.05 * t + (0.1 * t).sin();
         if j == 0 {

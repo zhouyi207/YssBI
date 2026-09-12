@@ -2,7 +2,7 @@
 //!
 //! 仅支持 q=1，t = (Rβ - r) / se(Rβ - r) ~ t(df_residual)，支持单侧。
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, StudentsT};
 
 use yss_sci_contract::hypothesis::{Alternative, TTestResult};
@@ -11,10 +11,10 @@ use yss_sci_contract::hypothesis::{Alternative, TTestResult};
 ///
 /// t = (Rβ - r) / se(Rβ - r)，se = sqrt(R Σ R')
 pub fn t_test(
-    betas: &Array1<f64>,
-    cov_beta: &Array2<f64>,
-    r: &Array2<f64>,
-    r_vec: &Array1<f64>,
+    betas: &Col<f64>,
+    cov_beta: &Mat<f64>,
+    r: &Mat<f64>,
+    r_vec: &Col<f64>,
     df_residual: usize,
     alternative: Alternative,
     constraint_desc: impl Into<String>,
@@ -25,15 +25,19 @@ pub fn t_test(
     if q != 1 {
         return Err("t 检验仅支持单约束 (q=1)".to_string());
     }
-    if betas.len() != k {
-        return Err(format!("betas 长度 {} 与 R 列数 {} 不一致", betas.len(), k));
+    if betas.nrows() != k {
+        return Err(format!(
+            "betas 长度 {} 与 R 列数 {} 不一致",
+            betas.nrows(),
+            k
+        ));
     }
 
-    let contrast = r.dot(betas) - r_vec;
+    let contrast = r * betas - r_vec;
     let c = contrast[0];
 
-    let r_cov_r = (r.dot(cov_beta)).dot(&r.t());
-    let se = r_cov_r[[0, 0]].sqrt();
+    let r_cov_r = (r * cov_beta) * r.transpose();
+    let se = r_cov_r[(0, 0)].sqrt();
     if se <= 0.0 {
         return Err("R Σ R' 非正，无法计算标准误".to_string());
     }
@@ -67,14 +71,14 @@ pub fn t_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{arr1, arr2};
+    use faer::{col, mat};
 
     #[test]
     fn test_t_single_constraint() {
-        let betas = arr1(&[1.0, 2.0]);
-        let cov_beta = arr2(&[[0.1, 0.0], [0.0, 0.05]]);
-        let r = arr2(&[[0.0, 1.0]]);
-        let r_vec = arr1(&[0.0]);
+        let betas = col![1.0, 2.0];
+        let cov_beta = mat![[0.1, 0.0], [0.0, 0.05]];
+        let r = mat![[0.0, 1.0]];
+        let r_vec = col![0.0];
         let df_residual = 10;
 
         let result = t_test(

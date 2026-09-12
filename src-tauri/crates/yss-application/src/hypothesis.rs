@@ -1,7 +1,7 @@
 //! Hypothesis testing orchestration: parse → linearize → format → dispatch.
 use yss_sci_contract::hypothesis::Alternative as SciAlternative;
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use std::collections::HashMap;
 
 use yss_math_expr::{
@@ -65,8 +65,8 @@ enum LinearConstraintKind {
 #[derive(Debug)]
 struct ResolvedLinearHypothesis {
     constraints: Vec<MathRelation>,
-    r_ols: Array2<f64>,
-    r_vec: Array1<f64>,
+    r_ols: Mat<f64>,
+    r_vec: Col<f64>,
     alternative: Alternative,
     test_method: TestMethod,
     kind: LinearConstraintKind,
@@ -88,8 +88,8 @@ fn resolve_linear_hypothesis(
         ));
     }
 
-    let mut r_ols = Array2::zeros((constraints.len(), param_names.len()));
-    let mut r_vec = Array1::zeros(constraints.len());
+    let mut r_ols = Mat::zeros(constraints.len(), param_names.len());
+    let mut r_vec = Col::zeros(constraints.len());
     let columns: HashMap<&str, usize> = param_names
         .iter()
         .enumerate()
@@ -112,7 +112,7 @@ fn resolve_linear_hypothesis(
         };
         form.scale(sign);
         for (column, coefficient) in form.coefficients {
-            r_ols[[row, column]] = coefficient;
+            r_ols[(row, column)] = coefficient;
         }
         r_vec[row] = -form.constant;
     }
@@ -160,14 +160,14 @@ pub fn run_hypothesis_test(
         Alternative::TwoSided => SciAlternative::TwoSided,
         Alternative::Greater => SciAlternative::Greater,
     };
-    let betas = Array1::from_vec(input.betas);
-    let cov_beta = Array2::from_shape_vec(
-        (k, k),
-        input.cov_beta.into_iter().flatten().collect::<Vec<_>>(),
-    )
-    .map_err(|error| {
-        HypothesisApplicationError::InvalidInput(format!("cov_beta 形状错误: {error}"))
-    })?;
+    let betas = Col::from_iter(input.betas);
+    let covariance_values = input.cov_beta.into_iter().flatten().collect::<Vec<_>>();
+    if k.checked_mul(k) != Some(covariance_values.len()) {
+        return Err(HypothesisApplicationError::InvalidInput(
+            "cov_beta 形状错误: 协方差矩阵维度必须与参数数量一致".to_owned(),
+        ));
+    }
+    let cov_beta = Mat::from_fn(k, k, |row, column| covariance_values[row * k + column]);
 
     let test_input = LinearHypothesisTestInput {
         betas: &betas,
@@ -415,8 +415,8 @@ fn h1_display_op(relation: &MathRelation) -> &'static str {
 }
 
 fn format_linear_forms(
-    r: &Array2<f64>,
-    r_vec: &Array1<f64>,
+    r: &Mat<f64>,
+    r_vec: &Col<f64>,
     param_names: &[String],
     constraints: &[MathRelation],
 ) -> (String, String) {
@@ -431,7 +431,7 @@ fn format_linear_forms(
         };
         let mut terms = Vec::new();
         for column in 0..r.ncols() {
-            let coefficient = sign * r[[row, column]];
+            let coefficient = sign * r[(row, column)];
             if coefficient.abs() < 1e-14 {
                 continue;
             }
@@ -482,7 +482,10 @@ mod tests {
     fn resolves_single_equality_directly_in_param_order() {
         let resolved = resolve_linear_hypothesis("x2 - 2*x1 = 3", &names()).unwrap();
         assert_eq!(resolved.test_method, TestMethod::TTest);
-        assert_eq!(resolved.r_ols.row(0).to_vec(), vec![-2.0, 1.0]);
+        assert_eq!(
+            resolved.r_ols.row(0).iter().copied().collect::<Vec<_>>(),
+            vec![-2.0, 1.0]
+        );
         assert_eq!(resolved.r_vec[0], 3.0);
     }
 
@@ -490,14 +493,14 @@ mod tests {
     fn supports_equality_alias_chains_and_wald() {
         let resolved = resolve_linear_hypothesis("x1 == 0, x2 = 1", &names()).unwrap();
         assert_eq!(resolved.test_method, TestMethod::Wald);
-        assert_eq!(resolved.r_ols, Array2::<f64>::eye(2));
+        assert_eq!(resolved.r_ols, Mat::<f64>::identity(2, 2));
     }
 
     #[test]
     fn flips_less_direction_and_preserves_display() {
         let resolved = resolve_linear_hypothesis("x1 < 2", &names()).unwrap();
         assert_eq!(resolved.alternative, Alternative::Greater);
-        assert_eq!(resolved.r_ols[[0, 0]], -1.0);
+        assert_eq!(resolved.r_ols[(0, 0)], -1.0);
         assert_eq!(resolved.r_vec[0], -2.0);
         let (_, h1) = format_linear_forms(
             &resolved.r_ols,

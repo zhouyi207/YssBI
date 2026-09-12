@@ -7,7 +7,7 @@
 
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use std::collections::HashMap;
 use yss_linalg::{MatrixExt, Solve};
 use yss_sci_contract::regression::CovParams;
@@ -15,14 +15,14 @@ use yss_sci_contract::regression::CovParams;
 /// Panel LSDV estimator (Stata areg style)
 /// exog: [1, x1, x2, ...] with constant in column 0
 pub fn fit_panel_lsdv(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
             "Panel LSDV: exog rows {} != endog len {}",
@@ -58,7 +58,7 @@ pub fn fit_panel_lsdv(
     let mut x_data = Vec::with_capacity(n * (k + n_dummies));
     for i in 0..n {
         for c in 0..k {
-            x_data.push(exog[[i, c]]);
+            x_data.push(exog[(i, c)]);
         }
         let eid = entity_id[i];
         let idx = *eid_to_idx.get(&eid).unwrap_or(&0);
@@ -67,8 +67,7 @@ pub fn fit_panel_lsdv(
         }
     }
 
-    let x_lsdv = Array2::from_shape_vec((n, k + n_dummies), x_data)
-        .map_err(|e| format!("Panel LSDV: shape {:?}", e))?;
+    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     // col_is_dummy: exog cols = false, entity dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
@@ -119,8 +118,8 @@ pub fn fit_panel_lsdv(
     };
 
     let k_slope = if constant && k > 0 { k - 1 } else { k };
-    let n_report = (1 + k_slope).min(result.betas.len());
-    let n_full = result.betas.len();
+    let n_report = (1 + k_slope).min(result.betas.nrows());
+    let n_full = result.betas.nrows();
     let df_model_slope = k_slope;
     let df_residual = if cov_type == "cluster" {
         n_entities.saturating_sub(1).max(1)
@@ -136,9 +135,9 @@ pub fn fit_panel_lsdv(
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
-        let mut pv = Array1::zeros(n_full);
-        let mut cl = Array1::zeros(n_full);
-        let mut cr = Array1::zeros(n_full);
+        let mut pv = Col::zeros(n_full);
+        let mut cl = Col::zeros(n_full);
+        let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
             pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
@@ -155,22 +154,22 @@ pub fn fit_panel_lsdv(
     };
     let cov_slope = result
         .cov_beta
-        .slice(ndarray::s![..n_report, ..n_report])
+        .submatrix(0, 0, n_report, n_report)
         .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
-        let beta_s = result.betas.slice(ndarray::s![1..n_report]);
-        let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
-        let wald = if beta_s.len() > 0 {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
-            match v_matrix.view().cholesky() {
+        let beta_s = result.betas.subrows(1, n_report - 1);
+        let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
+        let wald = if beta_s.nrows() > 0 {
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
+            match v_matrix.as_ref().checked_cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(&beta_vector.view());
-                    beta_s.dot(&x.view())
+                    let x = llt.solve(&beta_vector.as_ref());
+                    beta_s.transpose() * x.as_ref()
                 }
                 Err(_) => {
                     // Cov not PD (e.g. cluster-robust with few clusters); fallback
@@ -239,15 +238,15 @@ pub fn fit_panel_lsdv(
 /// Panel LSDV with time dummies (Time Fixed Effects)
 /// y_it = α + X_it'β + Σ_{t=2}^T γ_t D_t + u_it
 pub fn fit_panel_lsdv_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel LSDV (Time): lengths must match".to_string());
     }
@@ -277,7 +276,7 @@ pub fn fit_panel_lsdv_time(
     let mut x_data = Vec::with_capacity(n * (k + n_dummies));
     for i in 0..n {
         for c in 0..k {
-            x_data.push(exog[[i, c]]);
+            x_data.push(exog[(i, c)]);
         }
         let tid = time_id[i];
         let idx = *tid_to_idx.get(&tid).unwrap_or(&0);
@@ -286,8 +285,7 @@ pub fn fit_panel_lsdv_time(
         }
     }
 
-    let x_lsdv = Array2::from_shape_vec((n, k + n_dummies), x_data)
-        .map_err(|e| format!("Panel LSDV (Time): shape {:?}", e))?;
+    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     // col_is_dummy: exog cols = false, time dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
@@ -338,8 +336,8 @@ pub fn fit_panel_lsdv_time(
     };
 
     let k_slope = if constant && k > 0 { k - 1 } else { k };
-    let n_report = (1 + k_slope).min(result.betas.len());
-    let n_full = result.betas.len();
+    let n_report = (1 + k_slope).min(result.betas.nrows());
+    let n_full = result.betas.nrows();
     let df_model_slope = k_slope;
     let df_residual = if cov_type == "cluster" {
         n_times.saturating_sub(1).max(1)
@@ -355,9 +353,9 @@ pub fn fit_panel_lsdv_time(
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
-        let mut pv = Array1::zeros(n_full);
-        let mut cl = Array1::zeros(n_full);
-        let mut cr = Array1::zeros(n_full);
+        let mut pv = Col::zeros(n_full);
+        let mut cl = Col::zeros(n_full);
+        let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
             pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
@@ -374,22 +372,22 @@ pub fn fit_panel_lsdv_time(
     };
     let cov_slope = result
         .cov_beta
-        .slice(ndarray::s![..n_report, ..n_report])
+        .submatrix(0, 0, n_report, n_report)
         .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
-        let beta_s = result.betas.slice(ndarray::s![1..n_report]);
-        let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
-        let wald = if beta_s.len() > 0 {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
-            match v_matrix.view().cholesky() {
+        let beta_s = result.betas.subrows(1, n_report - 1);
+        let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
+        let wald = if beta_s.nrows() > 0 {
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
+            match v_matrix.as_ref().checked_cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(&beta_vector.view());
-                    beta_s.dot(&x.view())
+                    let x = llt.solve(&beta_vector.as_ref());
+                    beta_s.transpose() * x.as_ref()
                 }
                 Err(_) => {
                     // Cov not PD (e.g. cluster-robust with few clusters); fallback
@@ -458,15 +456,15 @@ pub fn fit_panel_lsdv_time(
 /// Panel LSDV with entity + time dummies (Two-Way Fixed Effects)
 /// y_it = α + X_it'β + Σ_{i=2}^n γ_i D_i + Σ_{t=2}^T λ_t D_t + u_it
 pub fn fit_panel_lsdv_twoway(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel LSDV (Two-Way): lengths must match".to_string());
     }
@@ -504,7 +502,7 @@ pub fn fit_panel_lsdv_twoway(
     let mut x_data = Vec::with_capacity(n * (k + n_dummies));
     for i in 0..n {
         for c in 0..k {
-            x_data.push(exog[[i, c]]);
+            x_data.push(exog[(i, c)]);
         }
         let eid = entity_id[i];
         let eidx = *eid_to_idx.get(&eid).unwrap_or(&0);
@@ -518,8 +516,7 @@ pub fn fit_panel_lsdv_twoway(
         }
     }
 
-    let x_lsdv = Array2::from_shape_vec((n, k + n_dummies), x_data)
-        .map_err(|e| format!("Panel LSDV (Two-Way): shape {:?}", e))?;
+    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
     let (x_reduced, omitted_indices) = drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;
@@ -569,8 +566,8 @@ pub fn fit_panel_lsdv_twoway(
     };
 
     let k_slope = if constant && k > 0 { k - 1 } else { k };
-    let n_report = (1 + k_slope).min(result.betas.len());
-    let n_full = result.betas.len();
+    let n_report = (1 + k_slope).min(result.betas.nrows());
+    let n_full = result.betas.nrows();
     let df_model_slope = k_slope;
     let df_residual = if cov_type == "cluster" {
         n_entities.saturating_sub(1).max(1)
@@ -586,9 +583,9 @@ pub fn fit_panel_lsdv_twoway(
     let t_crit = t_dist.inverse_cdf(0.975);
 
     let (pvalues_full, conf_left_full, conf_right_full) = if use_cluster_df {
-        let mut pv = Array1::zeros(n_full);
-        let mut cl = Array1::zeros(n_full);
-        let mut cr = Array1::zeros(n_full);
+        let mut pv = Col::zeros(n_full);
+        let mut cl = Col::zeros(n_full);
+        let mut cr = Col::zeros(n_full);
         for i in 0..n_full {
             let t = result.tvalues[i];
             pv[i] = 2.0 * (1.0 - t_dist.cdf(t.abs()));
@@ -605,22 +602,22 @@ pub fn fit_panel_lsdv_twoway(
     };
     let cov_slope = result
         .cov_beta
-        .slice(ndarray::s![..n_report, ..n_report])
+        .submatrix(0, 0, n_report, n_report)
         .to_owned();
     let df_total = df_model_slope + df_residual;
 
     let (fvalue, f_p_value) = if df_model_slope > 0 {
         use statrs::distribution::{ContinuousCDF, FisherSnedecor};
 
-        let beta_s = result.betas.slice(ndarray::s![1..n_report]);
-        let v_s = cov_slope.slice(ndarray::s![1..n_report, 1..n_report]);
-        let wald = if beta_s.len() > 0 {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
-            match v_matrix.view().cholesky() {
+        let beta_s = result.betas.subrows(1, n_report - 1);
+        let v_s = cov_slope.submatrix(1, 1, n_report - 1, n_report - 1);
+        let wald = if beta_s.nrows() > 0 {
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
+            match v_matrix.as_ref().checked_cholesky() {
                 Ok(llt) => {
-                    let x = llt.solve(&beta_vector.view());
-                    beta_s.dot(&x.view())
+                    let x = llt.solve(&beta_vector.as_ref());
+                    beta_s.transpose() * x.as_ref()
                 }
                 Err(_) => 0.0,
             }

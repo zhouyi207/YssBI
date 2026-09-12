@@ -2,10 +2,10 @@
 //! 覆盖 ols_summary / wls_summary 窗口展示的所有内容
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use std::f64::consts::PI;
 use yss_sci::regression::diagnostics;
-use yss_sci::regression::linear_model::{OLS, WLS, WLSConfig};
+use yss_sci::regression::linear_model::{IV2SLS, IV2SLSConfig, OLS, WLS, WLSConfig};
 
 const TOL: f64 = 1e-10;
 const TOL_REL: f64 = 1e-8;
@@ -26,7 +26,7 @@ fn compute_aic_bic(n: usize, k: usize, ss_residual: f64) -> (f64, f64) {
     (aic, bic)
 }
 
-fn load_iris() -> (Array2<f64>, Array1<f64>, Array1<f64>) {
+fn load_iris() -> (Mat<f64>, Col<f64>, Col<f64>) {
     let mut rdr = csv::Reader::from_path("tests/data/iris.csv").unwrap();
     let mut sepal_length = Vec::new();
     let mut sepal_width = Vec::new();
@@ -47,9 +47,9 @@ fn load_iris() -> (Array2<f64>, Array1<f64>, Array1<f64>) {
         exog_data.push(petal_length[i]);
         exog_data.push(petal_width[i]);
     }
-    let exog = Array2::from_shape_vec((n, 4), exog_data).unwrap();
-    let endog = Array1::from_vec(sepal_length);
-    let weights = Array1::from_vec(sepal_width);
+    let exog = faer::MatRef::from_row_major_slice(&(exog_data), n, 4).to_owned();
+    let endog = (sepal_length).into_iter().collect::<Col<f64>>();
+    let weights = (sepal_width).into_iter().collect::<Col<f64>>();
     (exog, endog, weights)
 }
 
@@ -61,6 +61,75 @@ fn approx_eq(a: f64, b: f64, tol_abs: f64, tol_rel: f64) -> bool {
         return true;
     }
     (a - b).abs() <= tol_abs || (a - b).abs() <= a.abs().max(b.abs()) * tol_rel
+}
+
+#[test]
+fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regressors() {
+    // Balanced binary signals are mutually orthogonal. The structural error
+    // correlates with endogenous residuals but is orthogonal to all instruments.
+    let signal = |row: usize, bit: usize| if row & (1 << bit) == 0 { -1.0 } else { 1.0 };
+    let observations = 64;
+    for endogenous_count in [1, 2] {
+        let exog = Mat::from_fn(observations, 1, |row, _| signal(row, 0));
+        let instruments = Mat::from_fn(observations, 3, |row, column| match column {
+            0 => signal(row, 1),
+            1 => signal(row, 2),
+            _ => signal(row, 0) * signal(row, 1),
+        });
+        let endogenous = Mat::from_fn(observations, endogenous_count, |row, column| {
+            if column == 0 {
+                2.0 * signal(row, 1) + 0.5 * signal(row, 2) + 0.3 * signal(row, 0) + signal(row, 3)
+            } else {
+                0.2 * signal(row, 1) + 1.5 * signal(row, 2) + 0.4 * signal(row, 0) + signal(row, 4)
+            }
+        });
+        let response = Col::from_fn(observations, |row| {
+            1.0 + 0.7 * exog[(row, 0)] + 2.0 * endogenous[(row, 0)]
+                - if endogenous_count == 2 {
+                    0.5 * endogenous[(row, 1)]
+                } else {
+                    0.0
+                }
+                + 0.8 * signal(row, 3)
+                + 0.5 * signal(row, 4)
+                + signal(row, 5)
+        });
+        for covariance_type in ["nonrobust", "robust"] {
+            let result = IV2SLS {
+                endog: response.clone(),
+                exog: exog.clone(),
+                endog_reg: endogenous.clone(),
+                instruments: instruments.clone(),
+                config: IV2SLSConfig {
+                    constant: true,
+                    cov_type: covariance_type.to_owned(),
+                    cov_params: None,
+                    small: false,
+                },
+                endog_names: None,
+                z_var_names: None,
+            }
+            .fit()
+            .unwrap();
+            let expected = &[1.0, 0.7, 2.0, -0.5][..2 + endogenous_count];
+            assert_eq!(result.betas.nrows(), expected.len());
+            for (&actual, &expected) in result.betas.iter().zip(expected) {
+                assert!(
+                    approx_eq(actual, expected, 1e-10, 1e-10),
+                    "{actual} != {expected}"
+                );
+            }
+            assert_eq!(result.first_stage.len(), endogenous_count);
+            assert!(result.first_stage_summary.min_eigenvalue.is_finite());
+            assert!(result.first_stage_summary.min_eigenvalue > 0.0);
+            assert!(
+                result
+                    .stds
+                    .iter()
+                    .all(|value| value.is_finite() && *value > 0.0)
+            );
+        }
+    }
 }
 
 #[test]
@@ -136,7 +205,7 @@ fn test_ols_golden() {
     );
 
     // AIC / BIC（与 info_nodes::compute_aic_bic 一致）
-    let (aic, bic) = compute_aic_bic(o.num_observation, o.betas.len(), o.ss_residual);
+    let (aic, bic) = compute_aic_bic(o.num_observation, o.betas.nrows(), o.ss_residual);
     assert!(
         approx_eq(aic, 81.99955266474048, TOL, TOL_REL),
         "AIC: got {}",
@@ -149,9 +218,8 @@ fn test_ols_golden() {
     );
 
     // Breusch-Pagan 四种变体
-    let fitted: Array1<f64> = exog
-        .rows()
-        .into_iter()
+    let fitted: Col<f64> = exog
+        .row_iter()
         .map(|row| row.iter().zip(o.betas.iter()).map(|(x, b)| x * b).sum())
         .collect();
     let resid = &endog - &fitted;
@@ -448,7 +516,7 @@ fn test_wls_golden() {
     // AIC / BIC（WLS 使用 ss_residual_for_ic = ss_residual * (n/sum_w)）
     let sum_w: f64 = weights.iter().sum();
     let ss_residual_for_ic = w.ss_residual * (n as f64 / sum_w);
-    let (aic_w, bic_w) = compute_aic_bic(n, w.betas.len(), ss_residual_for_ic);
+    let (aic_w, bic_w) = compute_aic_bic(n, w.betas.nrows(), ss_residual_for_ic);
     assert!(
         approx_eq(aic_w, 78.75022376256308, TOL, TOL_REL),
         "AIC: got {}",
@@ -461,13 +529,12 @@ fn test_wls_golden() {
     );
 
     // Breusch-Pagan 加权四种变体
-    let fitted_w: Array1<f64> = exog
-        .rows()
-        .into_iter()
+    let fitted_w: Col<f64> = exog
+        .row_iter()
         .map(|row| row.iter().zip(w.betas.iter()).map(|(x, b)| x * b).sum())
         .collect();
     let resid_w = &endog - &fitted_w;
-    let w_norm: Array1<f64> = Array1::from_shape_fn(n, |i| weights[i] * n as f64 / sum_w);
+    let w_norm: Col<f64> = Col::from_fn(n, |i| weights[i] * n as f64 / sum_w);
     let bp_ws = diagnostics::breusch_pagan_stata_weighted(&resid_w, &fitted_w, &w_norm).unwrap();
     let bp_wk = diagnostics::breusch_pagan_koenker_weighted(&resid_w, &fitted_w, &w_norm).unwrap();
     let bp_wsr = diagnostics::breusch_pagan_stata_rhs_weighted(&exog, &resid_w, &w_norm).unwrap();
@@ -657,7 +724,7 @@ fn test_wls_golden() {
     );
 
     // 正态性检验（加权残差 wresid = sqrt(w)*resid）
-    let wresid: Array1<f64> = resid_w
+    let wresid: Col<f64> = resid_w
         .iter()
         .zip(weights.iter())
         .map(|(r, w)| r * w.sqrt())
@@ -709,9 +776,8 @@ fn test_diagnostics_direct_helpers() {
         .expect("valid OLS covariance options"),
     };
     let o = ols.fit().unwrap();
-    let fitted: Array1<f64> = exog
-        .rows()
-        .into_iter()
+    let fitted: Col<f64> = exog
+        .row_iter()
         .map(|row| row.iter().zip(o.betas.iter()).map(|(x, b)| x * b).sum())
         .collect();
     let resid = &endog - &fitted;

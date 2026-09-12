@@ -4,11 +4,11 @@
 //! Stata: xtreg ltvfo ltlan ltwlab ltpow ltfer hrs mipric1 giprice mci ngca, re mle
 //! Expected: Log likelihood = 334.64947, sigma_e = 0.1056, sigma_u = 0.2166
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use std::io::Write;
 use yss_sci::regression::panel::fit_panel_re_mle;
 
-fn load_lin_csv() -> Result<(Array1<f64>, Array2<f64>, Vec<usize>), Box<dyn std::error::Error>> {
+fn load_lin_csv() -> Result<(Col<f64>, Mat<f64>, Vec<usize>), Box<dyn std::error::Error>> {
     let mut rdr = csv::Reader::from_path("tests/data/lin.csv")?;
     let headers = rdr.headers()?.clone();
     let mut records: Vec<csv::StringRecord> = rdr.records().filter_map(|r| r.ok()).collect();
@@ -127,10 +127,10 @@ fn load_lin_csv() -> Result<(Array1<f64>, Array2<f64>, Vec<usize>), Box<dyn std:
     let k = 10;
     let mut exog_flat = Vec::with_capacity(n_clean * k);
     for row in &exog_clean {
-        exog_flat.extend(row);
+        exog_flat.extend_from_slice(row);
     }
-    let exog = Array2::from_shape_vec((n_clean, k), exog_flat)?;
-    let endog = Array1::from_vec(endog_clean);
+    let exog = faer::MatRef::from_row_major_slice(&(exog_flat), n_clean, k).to_owned();
+    let endog = (endog_clean).into_iter().collect::<Col<f64>>();
 
     Ok((endog, exog, entity_clean))
 }
@@ -138,7 +138,7 @@ fn load_lin_csv() -> Result<(Array1<f64>, Array2<f64>, Vec<usize>), Box<dyn std:
 #[test]
 fn panel_re_mle_lin() {
     let (endog, exog, entity_id) = load_lin_csv().expect("load lin.csv");
-    let n = endog.len();
+    let n = endog.nrows();
     let n_entities = entity_id
         .iter()
         .copied()
@@ -189,7 +189,11 @@ fn panel_re_mle_lin() {
     ];
     for (i, &b) in result.betas.iter().enumerate() {
         let name = names.get(i).unwrap_or(&"");
-        let se = result.stds.get(i).copied().unwrap_or(0.0);
+        let se = if i < result.stds.nrows() {
+            result.stds[i]
+        } else {
+            0.0
+        };
         writeln!(out, "  {}: {:.6} (se={:.6})", name, b, se).ok();
     }
 
@@ -200,5 +204,5 @@ fn panel_re_mle_lin() {
     assert!((fe_stats.sigma.sigma_e - 0.1056).abs() < 1e-3);
     assert_eq!(result.num_observation, n);
     assert_eq!(result.num_entities, n_entities);
-    assert_eq!(result.betas.len(), 10);
+    assert_eq!(result.betas.nrows(), 10);
 }

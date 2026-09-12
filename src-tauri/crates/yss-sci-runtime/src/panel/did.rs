@@ -1,6 +1,6 @@
 //! Identity-neutral Panel DID fake-treatment-group randomization inference.
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -84,8 +84,8 @@ fn labels_after_fe_omit(
 }
 
 struct FakeGroupRiRequest<'a> {
-    endog: &'a Array1<f64>,
-    exog: &'a Array2<f64>,
+    endog: &'a Col<f64>,
+    exog: &'a Mat<f64>,
     labels: &'a [(String, Option<String>)],
     entity_id: &'a [usize],
     time_id: &'a [usize],
@@ -117,7 +117,7 @@ fn run_placebo_fake_treatment_ri(
         n_perm,
         rng_seed,
     } = input;
-    let n = endog.len();
+    let n = endog.nrows();
     let last_column = exog.ncols() - 1;
     let entities = entity_id
         .iter()
@@ -167,7 +167,7 @@ fn run_placebo_fake_treatment_ri(
             } else {
                 0.0
             };
-            permuted_exog[[index, last_column]] = treatment * post[index];
+            permuted_exog[(index, last_column)] = treatment * post[index];
         }
 
         let result = fit_panel_fe_twoway(
@@ -182,14 +182,14 @@ fn run_placebo_fake_treatment_ri(
         .map_err(|diagnostic| DidFakeGroupError::FitFailed { diagnostic })?;
         let kept_labels = labels_after_fe_omit(labels, result.omitted_indices.as_deref());
         if let Some(index) = kept_labels.iter().position(|(name, _)| name == did_label) {
-            let coefficient = result
-                .betas
-                .get(index)
-                .ok_or(DidFakeGroupError::CoefficientIndex)?;
+            if index >= result.betas.nrows() {
+                return Err(DidFakeGroupError::CoefficientIndex);
+            }
+            let coefficient = result.betas[index];
             if !coefficient.is_finite() {
                 return Err(DidFakeGroupError::NonFiniteCoefficient);
             }
-            coefficients.push(*coefficient);
+            coefficients.push(coefficient);
         }
     }
 
@@ -334,13 +334,10 @@ pub fn compute_fake_group_ri(
     if payload.entity_id.is_empty() {
         return Err(DidFakeGroupError::EmptyEntities);
     }
-    let exog = Array2::from_shape_vec((n, payload.ncols), payload.exog_row_major.clone()).map_err(
-        |_| DidFakeGroupError::ExogShape {
-            actual: payload.exog_row_major.len(),
-            expected: expected_values,
-        },
-    )?;
-    let endog = Array1::from_vec(payload.endog.clone());
+    let exog = Mat::from_fn(n, payload.ncols, |row, column| {
+        payload.exog_row_major[row * payload.ncols + column]
+    });
+    let endog = Col::from_iter(payload.endog.iter().copied());
     let labels: Vec<(String, Option<String>)> = payload
         .all_labels
         .iter()

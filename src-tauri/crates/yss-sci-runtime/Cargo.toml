@@ -9,7 +9,7 @@ publish = false
 chrono.workspace = true
 arrow.workspace = true
 yss-linalg = { path = "../yss-linalg" }
-ndarray.workspace = true
+faer.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true

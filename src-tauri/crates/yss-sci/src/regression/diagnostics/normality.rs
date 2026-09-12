@@ -13,8 +13,8 @@ pub struct NormalityTestResult {
 }
 
 /// 计算样本偏度 g1 和峰度（raw K，正态时 K=3）
-fn sample_skewness_kurtosis(x: &Array1<f64>) -> (f64, f64) {
-    let n = x.len() as f64;
+fn sample_skewness_kurtosis(x: &Col<f64>) -> (f64, f64) {
+    let n = x.nrows() as f64;
     if n < 4.0 {
         return (0.0, 3.0);
     }
@@ -86,8 +86,8 @@ fn scipy_kurtosistest_z(b2: f64, n: f64) -> f64 {
 
 /// 残差正态性检验：Omnibus (D'Agostino-Pearson) + Jarque-Bera
 /// 与 statsmodels OLS summary 的 Omnibus / JB 一致
-pub fn normality_tests(residuals: &Array1<f64>) -> Result<NormalityTestResult, String> {
-    let n = residuals.len();
+pub fn normality_tests(residuals: &Col<f64>) -> Result<NormalityTestResult, String> {
+    let n = residuals.nrows();
     if n < 8 {
         return Err("normality_tests: need at least 8 observations".to_string());
     }

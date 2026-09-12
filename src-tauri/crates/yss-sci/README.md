@@ -1,8 +1,8 @@
 # yss-sci
 
-Statistical models and numerical algorithms over ndarray arrays and numeric
-slices. Matrix operations use `yss-linalg`; public computation contracts use
-`yss-sci-contract`. The crate has no Polars or chrono dependency. Tabular input
+Statistical models and numerical algorithms over native faer matrices/vectors
+and numeric slices. Matrix arithmetic uses faer; checked factorizations and rank
+conventions use `yss-linalg`. Public computation contracts use `yss-sci-contract`. The crate has no Polars or chrono dependency. Tabular input
 alignment and transformations belong to `yss-sci-runtime::data`.
 
 ## OLS model boundary
@@ -27,6 +27,6 @@ and Cholesky of the cross product. Model-level rank handling, rank-failure
 propagation and iteration-stop semantics remain separate numerical follow-up
 work, tracked in the repository's tolerance analysis and TODO.
 
-Other models retain their existing APIs while their call sites use the shared
-OLS configuration. Structural migration does not imply that every model has
+Model APIs use `faer::Mat` and `Col`; serialized results retain their existing
+field and row/column meanings. Call sites use the shared OLS configuration. Structural migration does not imply that every model has
 already adopted a new solver or convergence policy.

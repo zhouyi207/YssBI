@@ -1,7 +1,7 @@
 //! Ordinary least squares: one configuration and one fitted result.
 mod fit;
 mod inference;
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use yss_sci_contract::regression::OlsOptions;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,8 +29,8 @@ impl From<OlsFitError> for String {
 }
 
 pub struct OLS {
-    pub endog: Array1<f64>, // 因变量 y
-    pub exog: Array2<f64>,  // 自变量 X (n × k)
+    pub endog: Col<f64>, // 因变量 y
+    pub exog: Mat<f64>,  // 自变量 X (n × k)
     pub config: OlsOptions,
 }
 
@@ -52,21 +52,21 @@ pub struct OlsFit {
     pub fvalue: f64,
     pub f_p_value: f64,
 
-    pub betas: Array1<f64>,
-    pub fitted: Array1<f64>,
-    pub residuals: Array1<f64>,
+    pub betas: Col<f64>,
+    pub fitted: Col<f64>,
+    pub residuals: Col<f64>,
     pub rank: usize,
-    pub stds: Array1<f64>,
-    pub tvalues: Array1<f64>,
-    pub pvalues: Array1<f64>,
-    pub conf_int_left: Array1<f64>,  // 置信区间左侧
-    pub conf_int_right: Array1<f64>, // 置信区间右侧
+    pub stds: Col<f64>,
+    pub tvalues: Col<f64>,
+    pub pvalues: Col<f64>,
+    pub conf_int_left: Col<f64>,  // 置信区间左侧
+    pub conf_int_right: Col<f64>, // 置信区间右侧
 
     /// 参数协方差矩阵 (k×k)，用于 Wald 假设检验
-    pub cov_beta: Array2<f64>,
+    pub cov_beta: Mat<f64>,
 
     /// Nonrobust VCE: σ² (X'X)⁻¹, always available for Hausman test
-    pub cov_beta_nonrobust: Array2<f64>,
+    pub cov_beta_nonrobust: Mat<f64>,
 
     // 矩阵是否病态（多重共线性）
     pub cond_no: f64,

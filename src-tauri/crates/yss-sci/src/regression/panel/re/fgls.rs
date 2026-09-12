@@ -1,13 +1,13 @@
 /// Panel Random Effects FGLS (Swamy-Arora variance components)
 pub fn fit_panel_re_fgls(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<yss_sci_contract::regression::CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
             "Panel RE (FGLS): exog rows {} != endog len {}",
@@ -37,22 +37,22 @@ pub fn fit_panel_re_fgls(
     // Step 1: Within regression to get sigma_e^2 (variance of idiosyncratic error)
     let y_w = within_transform(&endog.iter().cloned().collect::<Vec<_>>(), entity_id);
     let k = exog.ncols();
-    let mut x_w = Array2::zeros((n, k));
+    let mut x_w = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let tc = within_transform(&col, entity_id);
         for i in 0..n {
-            x_w[[i, c]] = tc[i];
+            x_w[(i, c)] = tc[i];
         }
     }
 
     // After within transform, constant column becomes zero - drop it and any collinear cols
     let (x_w_use, _omitted_w) = {
         let (x_after_const, _) = if constant && k > 0 {
-            let first_col = x_w.column(0);
+            let first_col = x_w.col(0);
             let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
             if is_const {
-                (x_w.slice(ndarray::s![.., 1..]).to_owned(), false)
+                (x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(), false)
             } else {
                 (x_w.clone(), constant)
             }
@@ -94,9 +94,8 @@ pub fn fit_panel_re_fgls(
             x_b_data.push(x_b_vec[i][c]);
         }
     }
-    let y_b = Array1::from_vec(y_b_vec);
-    let x_b = Array2::from_shape_vec((n_b, k), x_b_data)
-        .map_err(|e| format!("Panel RE between: {:?}", e))?;
+    let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
+    let x_b = faer::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, _) = {
         let col_is_dummy = vec![false; k];
@@ -148,14 +147,14 @@ pub fn fit_panel_re_fgls(
         .collect();
 
     // Quasi-demean: y*_it = y_it - θ_i * ȳ_i
-    let y_star: Array1<f64> = Array1::from_shape_fn(n, |i| y_vec[i] - theta_arr[i] * y_bar[i]);
+    let y_star: Col<f64> = Col::from_fn(n, |i| y_vec[i] - theta_arr[i] * y_bar[i]);
 
-    let mut x_star = Array2::zeros((n, k));
+    let mut x_star = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let x_bar = between_transform(&col, entity_id);
         for i in 0..n {
-            x_star[[i, c]] = col[i] - theta_arr[i] * x_bar[i];
+            x_star[(i, c)] = col[i] - theta_arr[i] * x_bar[i];
         }
     }
 
@@ -223,7 +222,7 @@ pub fn fit_panel_re_fgls(
             .map(|i| {
                 let mut s = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    s += exog[[i, c]] * betas[idx];
+                    s += exog[(i, c)] * betas[idx];
                 }
                 s
             })
@@ -290,7 +289,7 @@ pub fn fit_panel_re_fgls(
             .map(|i| {
                 let mut xb = 0.0;
                 for (idx, &c) in kept.iter().enumerate() {
-                    xb += exog[[i, c]] * betas[idx];
+                    xb += exog[(i, c)] * betas[idx];
                 }
                 xb
             })
@@ -362,23 +361,23 @@ pub fn fit_panel_re_fgls(
     let (wald_chi2, prob_wald_chi2) = {
         let cov_beta = &result.cov_beta;
         let betas_nd = &result.betas;
-        let k_b = betas_nd.len();
+        let k_b = betas_nd.nrows();
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
-            let beta_s = betas_nd.slice(ndarray::s![1..]).to_owned();
-            let v_s = cov_beta.slice(ndarray::s![1.., 1..]).to_owned();
+            let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
+            let v_s = cov_beta.submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1).to_owned();
             (beta_s, v_s, k_b - 1)
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)
         };
-        let v_s_matrix = v_s.view().to_owned();
-        let beta_s_vector = beta_s.view().to_owned();
+        let v_s_matrix = v_s.as_ref().to_owned();
+        let beta_s_vector = beta_s.as_ref().to_owned();
         let x = v_s_matrix
-            .view()
-            .cholesky()
+            .as_ref()
+            .checked_cholesky()
             .map_err(|_| "Panel RE FGLS: V not pd for Wald".to_string())?
-            .solve(&beta_s_vector.view());
-        let x_nd = x.view();
-        let wald = beta_s.dot(&x_nd);
+            .solve(&beta_s_vector.as_ref());
+        let x_nd = x.as_ref();
+        let wald = beta_s.transpose() * x_nd.as_ref();
         let chi2_dist =
             ChiSquared::new(df_wald as f64).map_err(|e| format!("Panel RE FGLS Wald: {}", e))?;
         let wald_p = 1.0 - chi2_dist.cdf(wald);
@@ -387,12 +386,12 @@ pub fn fit_panel_re_fgls(
 
     // Stata xtreg, re uses z (asymptotic normal), not t
     let std_normal = Normal::new(0.0, 1.0).map_err(|e| format!("Panel RE FGLS: {}", e))?;
-    let pvalues_z: Array1<f64> = Array1::from_shape_fn(result.tvalues.len(), |i| {
+    let pvalues_z: Col<f64> = Col::from_fn(result.tvalues.nrows(), |i| {
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - z_crit * &result.stds;
-    let conf_int_right_z = &result.betas + z_crit * &result.stds;
+    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

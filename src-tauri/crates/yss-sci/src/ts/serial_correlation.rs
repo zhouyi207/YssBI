@@ -2,9 +2,9 @@
 //!
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
-use ndarray::Array1;
+use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF};
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// Durbin-Watson 统计量（Stata estat dwatson）
 /// d = Σ(e_t - e_{t-1})² / Σ(e_t)²
@@ -108,19 +108,19 @@ pub fn breusch_godfrey(
         (n_aux, z_data, y_data)
     };
 
-    let z_arr = ndarray::Array2::from_shape_vec((n_aux, p + k), z_data).ok()?;
-    let y_arr = Array1::from_vec(y_data);
+    let z_arr = Mat::from_fn(n_aux, p + k, |row, col| z_data[row * (p + k) + col]);
+    let y_arr = Col::from_iter(y_data);
 
-    let z_matrix = z_arr.view().to_owned();
-    let y_col = y_arr.view().to_owned();
+    let z_matrix = z_arr.as_ref().to_owned();
+    let y_col = y_arr.as_ref().to_owned();
 
-    let ztz = z_matrix.t().matmul(&z_matrix.view());
-    let zty = z_matrix.t().matmul(&y_col.view());
+    let ztz = z_matrix.transpose() * z_matrix.as_ref();
+    let zty = z_matrix.transpose() * y_col.as_ref();
 
-    let ztz_llt = ztz.cholesky().ok()?;
-    let gamma = ztz_llt.solve(&zty.view());
-    let y_hat = z_matrix.view().matmul(&gamma.view());
-    let y_hat_nd = y_hat.view().to_owned();
+    let ztz_llt = ztz.checked_cholesky().ok()?;
+    let gamma = ztz_llt.solve(&zty.as_ref());
+    let y_hat = z_matrix.as_ref() * gamma.as_ref();
+    let y_hat_nd = y_hat.as_ref().to_owned();
     let y_hat_vec: Vec<f64> = y_hat_nd.iter().copied().collect();
 
     let rss: f64 = y_arr

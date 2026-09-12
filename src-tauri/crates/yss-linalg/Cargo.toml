@@ -5,5 +5,4 @@ edition = "2024"
 rust-version.workspace = true
 
 [dependencies]
-faer = "0.24.0"
-ndarray.workspace = true
+faer.workspace = true

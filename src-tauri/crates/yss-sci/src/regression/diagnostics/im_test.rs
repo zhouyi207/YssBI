@@ -17,14 +17,14 @@ pub struct ImTestResult {
 }
 
 /// 辅助回归 y 对 Z，LM = n×(1 - RSS/USS)，df = rank(Z) - 1
-fn lm_chi2_aux(y: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64, usize), String> {
-    let n = y.len();
+fn lm_chi2_aux(y: &Col<f64>, z_matrix: &faer::Mat<f64>) -> Result<(f64, usize), String> {
+    let n = y.nrows();
     let uss: f64 = y.iter().map(|v| v * v).sum();
     if uss <= 0.0 {
         return Ok((0.0, 0));
     }
     let s_sv = z_matrix
-        .view()
+        .as_ref()
         .singular_values()
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
     let max_sv = s_sv.first().copied().unwrap_or(0.0);
@@ -34,26 +34,25 @@ fn lm_chi2_aux(y: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64,
     if df == 0 {
         return Ok((0.0, 0));
     }
-    let svd = z_matrix
-        .view()
-        .svd()
+    let svd = yss_linalg::Svd::factor(z_matrix
+        .as_ref())
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
     let u = svd.left_vectors();
     let v = svd.right_vectors();
     let size = Ord::min(z_matrix.nrows(), z_matrix.ncols());
-    let b_col = y.view().to_owned();
-    let tmp = u.slice(ndarray::s![.., ..size]).t().matmul(&b_col.view());
-    let mut tmp2 = ndarray::Array2::<f64>::zeros((size, 1));
-    let tmp_nd = tmp.view().to_owned();
+    let b_col = y.as_ref().to_owned();
+    let tmp = u.submatrix(0, 0, u.nrows(), size).transpose() * b_col.as_ref();
+    let mut tmp2 = Mat::zeros(size, 1);
+    let tmp_nd = tmp.as_ref().to_owned();
     for i in 0..size {
         let si = s_sv[i];
         let ti = tmp_nd[i];
-        tmp2.view_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
+        tmp2.as_mut()[(i, 0)] = if si > tol { ti / si } else { 0.0 };
     }
-    let gamma = v.slice(ndarray::s![.., ..size]).matmul(&tmp2.view());
-    let y_hat = z_matrix.view().matmul(&gamma);
-    let y_hat_mat = y_hat.view().to_owned();
-    let y_hat_nd: Array1<f64> = y_hat_mat.column(0).into_owned();
+    let gamma = v.submatrix(0, 0, v.nrows(), size).as_ref() * tmp2.as_ref();
+    let y_hat = z_matrix.as_ref() * gamma.as_ref();
+    let y_hat_mat = y_hat.as_ref().to_owned();
+    let y_hat_nd: Col<f64> = y_hat_mat.col(0).to_owned();
     let rss: f64 = y
         .iter()
         .zip(y_hat_nd.iter())
@@ -65,13 +64,13 @@ fn lm_chi2_aux(y: &Array1<f64>, z_matrix: &ndarray::Array2<f64>) -> Result<(f64,
 
 /// Cameron & Trivedi (1990) 信息矩阵检验分解
 /// 对应 Stata: `estat imtest`
-pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult, String> {
+pub fn im_test(x: &Mat<f64>, residuals: &Col<f64>) -> Result<ImTestResult, String> {
     let n = x.nrows();
     let k = x.ncols();
-    if residuals.len() != n {
+    if residuals.nrows() != n {
         return Err(format!(
             "im_test: residuals length {} != n {}",
-            residuals.len(),
+            residuals.nrows(),
             n
         ));
     }
@@ -85,11 +84,11 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
     let hetero = white_test(x, residuals)?;
 
     // Skewness: y_s = u³ - 3·σ²·u，对 X 回归
-    let y_s: Array1<f64> = Array1::from_shape_fn(n, |i| {
+    let y_s: Col<f64> = Col::from_fn(n, |i| {
         let u = residuals[i];
         u * u * u - 3.0 * s2 * u
     });
-    let x_matrix = x.view().to_owned();
+    let x_matrix = x.as_ref().to_owned();
     let (chi2_s, df_s) = lm_chi2_aux(&y_s, &x_matrix)?;
     let chi2_skew =
         ChiSquared::new(df_s as f64).map_err(|e| format!("im_test skewness: ChiSquared: {}", e))?;
@@ -100,7 +99,7 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
     };
 
     // Kurtosis: y_k = u⁴ - 6·σ²·u² + 3·σ⁴，对常数回归，df=1（Cameron-Trivedi 固定）
-    let y_k: Array1<f64> = Array1::from_shape_fn(n, |i| {
+    let y_k: Col<f64> = Col::from_fn(n, |i| {
         let u = residuals[i];
         let u2 = u * u;
         u2 * u2 - 6.0 * s2 * u2 + 3.0 * s2 * s2
@@ -151,9 +150,9 @@ pub fn im_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<ImTestResult,
 /// Cameron & Trivedi (1990) IM-test 分解（WLS 加权版）
 /// 异方差用 white_test_weighted，偏度与峰度同 OLS（无标准加权形式）
 pub fn im_test_weighted(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
-    weights: &Array1<f64>,
+    x: &Mat<f64>,
+    residuals: &Col<f64>,
+    weights: &Col<f64>,
 ) -> Result<ImTestResult, String> {
     let hetero = white_test_weighted(x, residuals, weights)?;
     let mut base = im_test(x, residuals)?;

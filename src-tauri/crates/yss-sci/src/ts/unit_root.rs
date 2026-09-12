@@ -7,9 +7,9 @@
 
 use super::distributions::normal_cdf;
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, StudentsT};
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
 /// 回归类型（对应 Stata dfuller 选项）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,37 +216,36 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     }
     let lagged_col = (if constant { 1 } else { 0 }) + (if trend { 1 } else { 0 });
 
-    let exog = Array2::from_shape_vec((n_obs, ncols), exog_data)
-        .map_err(|e| format!("ADF: 构建设计矩阵失败: {}", e))?;
-    let endog = Array1::from_vec(y_endog);
+    let exog = Mat::from_fn(n_obs, ncols, |row, col| exog_data[row * ncols + col]);
+    let endog = Col::from_iter(y_endog);
 
     // OLS: β = (X'X)^{-1} X'y
-    let x = exog.view().to_owned();
-    let y_col = endog.view().to_owned();
+    let x = exog.as_ref().to_owned();
+    let y_col = endog.as_ref().to_owned();
 
-    let xtx = x.t().matmul(&x.view());
-    let xty = x.t().matmul(&y_col.view());
+    let xtx = x.transpose() * x.as_ref();
+    let xty = x.transpose() * y_col.as_ref();
 
     let xtx_inv = xtx
-        .cholesky()
+        .checked_cholesky()
         .map_err(|_| "ADF: 设计矩阵秩不足".to_string())?
-        .solve(&ndarray::Array2::<f64>::eye(xtx.nrows()));
+        .solve(&Mat::<f64>::identity(xtx.nrows(), xtx.nrows()));
 
-    let betas = xtx_inv.view().matmul(&xty.view());
-    let y_hat = x.view().matmul(&betas.view());
-    let u = &y_col.view() - &y_hat.view();
+    let betas = xtx_inv.as_ref() * xty.as_ref();
+    let y_hat = x.as_ref() * betas.as_ref();
+    let u = y_col.as_ref() - y_hat.as_ref();
 
     let rss: f64 = u.iter().map(|v| v * v).sum();
     let df_resid = (n_obs - ncols).max(1);
     let sigma2 = rss / df_resid as f64;
 
-    let xtx_inv_nd = xtx_inv.view().to_owned();
-    let cov_beta = sigma2 * &xtx_inv_nd;
+    let xtx_inv_nd = xtx_inv.as_ref().to_owned();
+    let cov_beta = faer::Scale(sigma2) * &xtx_inv_nd;
 
     // y_{t-1} 的系数在列 lagged_col
-    let betas_nd = betas.view().to_owned();
+    let betas_nd = betas.as_ref().to_owned();
     let coef_lagged = betas_nd[lagged_col];
-    let var_lagged = cov_beta[[lagged_col, lagged_col]];
+    let var_lagged = cov_beta[(lagged_col, lagged_col)];
     let std_err_lagged = if var_lagged > 0.0 {
         var_lagged.sqrt()
     } else {
@@ -291,11 +290,11 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         col_names.push(format!("L{}D.", j));
     }
     for (c, name) in col_names.iter().enumerate() {
-        if c >= betas_nd.len() {
+        if c >= betas_nd.nrows() {
             break;
         }
         let coef = betas_nd[c];
-        let se = cov_beta[[c, c]].sqrt().max(1e-15);
+        let se = cov_beta[(c, c)].sqrt().max(1e-15);
         let t_val = coef / se;
         let dist = StudentsT::new(0.0, 1.0, df_resid as f64)
             .unwrap_or_else(|_| StudentsT::new(0.0, 1.0, 1.0).unwrap());

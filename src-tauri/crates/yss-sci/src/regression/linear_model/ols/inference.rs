@@ -1,7 +1,7 @@
 use super::fit::OlsSolution;
 use super::{OLS, OlsFit, OlsFitError};
 use crate::regression::covariance::compute_cov_beta;
-use ndarray::Array1;
+use faer::Col;
 use num_traits::{One, Pow, Zero};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
@@ -45,7 +45,7 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     } else {
         y.iter().map(|v| v.pow(2)).sum::<f64>()
     };
-    let ss_residual = (&y.view() - &y_hat.view())
+    let ss_residual = (y.as_ref() - y_hat.as_ref())
         .iter()
         .map(|v| v.pow(2))
         .sum::<f64>();
@@ -59,11 +59,11 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     let r2_adjusted = 1.0 - ms_residual / ms_total;
 
     // 残差（需在 cov_beta 之前计算）
-    let u = &y - &y_hat.view();
+    let u = &y - y_hat.as_ref();
 
-    let x_nd = x.view().to_owned();
-    let xtx_inv_nd = xtx_inv.view().to_owned();
-    let u_nd: Array1<f64> = u.view().to_owned();
+    let x_nd = x.as_ref().to_owned();
+    let xtx_inv_nd = xtx_inv.as_ref().to_owned();
+    let u_nd: Col<f64> = u.as_ref().to_owned();
 
     // 参数协方差矩阵（根据 cov_type）
     let cov_beta = compute_cov_beta(
@@ -76,28 +76,30 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     )
     .map_err(OlsFitError::Covariance)?;
 
-    let cov_beta_nonrobust = ms_residual * &xtx_inv_nd;
+    let cov_beta_nonrobust = faer::Scale(ms_residual) * &xtx_inv_nd;
 
     // F 统计量：robust VCE 时用 Wald，否则用经典 F
     let (f, f_p_value) = if df_model > 0 {
         if is_robust_cov_type(&covariance_type) {
-            let betas_nd = betas.view().to_owned();
+            let betas_nd = betas.as_ref().to_owned();
             // Wald = β_s' V_s^{-1} β_s，F = Wald / df_model
             let (beta_s, v_s) = if model.config.constant && rank > 1 {
                 (
-                    betas_nd.slice(ndarray::s![1..]).into_owned(),
-                    cov_beta.slice(ndarray::s![1.., 1..]).into_owned(),
+                    betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned(),
+                    cov_beta
+                        .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
+                        .to_owned(),
                 )
             } else {
                 (betas_nd.clone(), cov_beta.clone())
             };
-            let wald = if beta_s.len() > 0 {
-                let v_matrix = v_s.view().to_owned();
-                let beta_vector = beta_s.view().to_owned();
-                match v_matrix.view().cholesky() {
+            let wald = if beta_s.nrows() > 0 {
+                let v_matrix = v_s.as_ref().to_owned();
+                let beta_vector = beta_s.as_ref().to_owned();
+                match v_matrix.as_ref().checked_cholesky() {
                     Ok(llt) => {
-                        let x_sol = llt.solve(&beta_vector.view());
-                        beta_s.dot(&x_sol.view())
+                        let x_sol = llt.solve(&beta_vector.as_ref());
+                        beta_s.transpose() * x_sol.as_ref()
                     }
                     Err(_) => 0.0, // cov 非正定（如 cluster 聚类少）时回退
                 }
@@ -135,10 +137,10 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     };
 
     // std err
-    let std_err: Array1<f64> = cov_beta.diag().mapv(f64::sqrt);
+    let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
 
     // t value
-    let betas_nd = betas.view().to_owned();
+    let betas_nd = betas.as_ref().to_owned();
     let t_values: Vec<f64> = betas_nd
         .iter()
         .zip(std_err.iter())
@@ -158,8 +160,8 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         .collect();
 
     let t_critical = t_dist.inverse_cdf(0.975);
-    let ci_lower = betas_nd.clone() - t_critical * std_err.clone();
-    let ci_upper = betas_nd.clone() + t_critical * std_err.clone();
+    let ci_lower = betas_nd.clone() - faer::Scale(t_critical) * std_err.clone();
+    let ci_upper = betas_nd.clone() + faer::Scale(t_critical) * std_err.clone();
 
     Ok(OlsFit {
         num_observation: num_observations,
@@ -182,8 +184,8 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         residuals: u,
         rank,
         stds: std_err,
-        tvalues: Array1::from_vec(t_values),
-        pvalues: Array1::from_vec(p_values),
+        tvalues: (t_values).into_iter().collect::<Col<f64>>(),
+        pvalues: (p_values).into_iter().collect::<Col<f64>>(),
         conf_int_left: ci_lower,
         conf_int_right: ci_upper,
         cov_beta,

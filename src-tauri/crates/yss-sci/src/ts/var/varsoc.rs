@@ -1,7 +1,7 @@
-﻿/// Stata `varsoc varlist, maxlag(P)`：Lag 行 **0…P**（0 = 仅截距的 VAR(0)）；各阶共用 `T−P` 个观测。
+/// Stata `varsoc varlist, maxlag(P)`：Lag 行 **0…P**（0 = 仅截距的 VAR(0)）；各阶共用 `T−P` 个观测。
 /// `LR(j)=2(LL(j)−LL(j−1))`（`j≥1`），`df=K²`；Lag 0 无 LR（与 Stata 表一致）。
 pub fn var_varsoc(
-    y: Array2<f64>,
+    y: Mat<f64>,
     maxlag: usize,
     var_names: Option<Vec<String>>,
 ) -> Result<VARSocResult, String> {
@@ -13,10 +13,7 @@ pub fn var_varsoc(
         return Err("varsoc: need at least one endogenous variable".to_string());
     }
     if t <= maxlag {
-        return Err(format!(
-            "varsoc: need T > maxlag ({}), got T={}",
-            maxlag, t
-        ));
+        return Err(format!("varsoc: need T > maxlag ({}), got T={}", maxlag, t));
     }
 
     let n_obs = t - maxlag;
@@ -53,8 +50,7 @@ pub fn var_varsoc(
             let ll_prev = prev_ll.ok_or("varsoc: internal prev_ll")?;
             let lr_stat = 2.0 * (r.log_likelihood - ll_prev);
             let df = k * k;
-            let pval =
-                chi_squared_sf(df as f64, lr_stat);
+            let pval = chi_squared_sf(df as f64, lr_stat);
             (Some(lr_stat), Some(df), Some(pval))
         };
         prev_ll = Some(r.log_likelihood);

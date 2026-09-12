@@ -1,8 +1,9 @@
-use ndarray::Array1;
+use faer::Col;
 
-pub fn skewness_kurtosis(x: &Array1<f64>) -> (f64, f64) {
-    let n = x.len() as f64;
-    let mean = x.mean().unwrap();
+pub fn skewness_kurtosis(x: &Col<f64>) -> (f64, f64) {
+    assert!(x.nrows() > 0, "cannot compute moments of an empty sample");
+    let n = x.nrows() as f64;
+    let mean = x.iter().sum::<f64>() / n;
 
     let mut m2 = 0.0;
     let mut m3 = 0.0;

@@ -2,6 +2,11 @@
 
 Application-facing scientific computation entry points over `yss-sci`.
 
+Numerical preparation uses native faer matrices and vectors. External contracts
+retain ordinary vectors, slices and report records; Arrow remains the tabular
+exchange representation. Row-major inputs and serialized rows are converted
+explicitly, independently of faer storage order or padding.
+
 The composition root constructs `SciRuntimeBackend`, which directly implements
 `yss_sci_contract::scientific::ScientificBackend`. Application and Execution share
 the neutral OLS/ACF contracts; the implementation has no Execution dependency.

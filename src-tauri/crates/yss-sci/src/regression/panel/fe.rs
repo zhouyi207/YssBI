@@ -8,24 +8,24 @@ use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
 use yss_sci_contract::regression::CovParams;
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use std::collections::HashMap;
 use yss_linalg::{MatrixExt, Solve};
 
 /// Compute FE-specific stats (Stata xtreg, fe style)
 fn compute_fe_stats(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     n_entities: usize,
-    betas: &Array1<f64>,
+    betas: &Col<f64>,
     const_coef: f64,
     r2_within: f64,
     ss_residual: f64,
 ) -> Result<super::PanelFEStats, String> {
-    let _n = endog.len();
+    let _n = endog.nrows();
     let k = exog.ncols();
-    let k_vars = betas.len(); // exog cols 1..k (non-const)
+    let k_vars = betas.nrows(); // exog cols 1..k (non-const)
     if k_vars + 1 != k {
         return Err(format!(
             "FE stats: betas len {} + 1 != exog cols {}",
@@ -45,7 +45,7 @@ fn compute_fe_stats(
         }
         let entry = sums_x.entry(eid).or_insert_with(|| (vec![0.0; k], 0));
         for c in 0..k {
-            entry.0[c] += exog[[i, c]];
+            entry.0[c] += exog[(i, c)];
         }
         entry.1 += 1;
     }
@@ -111,12 +111,12 @@ fn compute_fe_stats(
     };
 
     // R2 Overall = corr(x_it β̂, y_it)² (Stata: correlation squared)
-    let n_total = endog.len();
+    let n_total = endog.nrows();
     let xb_obs: Vec<f64> = (0..n_total)
         .map(|i| {
             const_coef
                 + (0..k_vars)
-                    .map(|c| exog[[i, c + 1]] * betas[c])
+                    .map(|c| exog[(i, c + 1)] * betas[c])
                     .sum::<f64>()
         })
         .collect();
@@ -217,18 +217,18 @@ fn compute_fe_stats(
 
 /// Compute FE-specific stats for time FE (group by time period)
 fn compute_fe_stats_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     time_id: &[usize],
     n_times: usize,
-    betas: &Array1<f64>,
+    betas: &Col<f64>,
     const_coef: f64,
     r2_within: f64,
     ss_residual: f64,
 ) -> Result<super::PanelFEStats, String> {
-    let n_total = endog.len();
+    let n_total = endog.nrows();
     let k = exog.ncols();
-    let k_vars = betas.len();
+    let k_vars = betas.nrows();
     if k_vars + 1 != k {
         return Err(format!(
             "FE stats (time): betas len {} + 1 != exog cols {}",
@@ -248,7 +248,7 @@ fn compute_fe_stats_time(
         }
         let entry = sums_x.entry(tid).or_insert_with(|| (vec![0.0; k], 0));
         for c in 0..k {
-            entry.0[c] += exog[[i, c]];
+            entry.0[c] += exog[(i, c)];
         }
         entry.1 += 1;
     }
@@ -315,7 +315,7 @@ fn compute_fe_stats_time(
         .map(|i| {
             const_coef
                 + (0..k_vars)
-                    .map(|c| exog[[i, c + 1]] * betas[c])
+                    .map(|c| exog[(i, c + 1)] * betas[c])
                     .sum::<f64>()
         })
         .collect();
@@ -421,7 +421,7 @@ fn compute_fe_stats_time(
 }
 
 /// Within transformation by group: subtract group-specific mean
-fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Result<Array1<f64>, String> {
+fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Result<Col<f64>, String> {
     let n = v.len();
     if group_id.len() != n {
         return Err(format!(
@@ -445,11 +445,11 @@ fn within_transform_by_group(v: &[f64], group_id: &[usize]) -> Result<Array1<f64
         let mean = if cnt > 0 { s / cnt as f64 } else { 0.0 };
         out.push(v[i] - mean);
     }
-    Ok(Array1::from_vec(out))
+    Ok((out).into_iter().collect::<Col<f64>>())
 }
 
 /// Within transformation: subtract entity-specific mean (alias for entity FE)
-fn within_transform(v: &[f64], entity_id: &[usize]) -> Result<Array1<f64>, String> {
+fn within_transform(v: &[f64], entity_id: &[usize]) -> Result<Col<f64>, String> {
     within_transform_by_group(v, entity_id)
 }
 
@@ -458,7 +458,7 @@ fn within_transform_twoway(
     v: &[f64],
     entity_id: &[usize],
     time_id: &[usize],
-) -> Result<Array1<f64>, String> {
+) -> Result<Col<f64>, String> {
     let n = v.len();
     if entity_id.len() != n || time_id.len() != n {
         return Err("within_transform_twoway: lengths must match".to_string());
@@ -492,19 +492,19 @@ fn within_transform_twoway(
         let t_bar = if tc > 0 { ts / tc as f64 } else { 0.0 };
         out.push(v[i] - e_bar - t_bar + z_bar);
     }
-    Ok(Array1::from_vec(out))
+    Ok((out).into_iter().collect::<Col<f64>>())
 }
 
 /// Panel Fixed Effects estimator
 pub fn fit_panel_fe(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n {
         return Err(format!(
             "Panel FE: exog rows {} != endog len {}",
@@ -534,21 +534,26 @@ pub fn fit_panel_fe(
     let y_tilde = within_transform(&y_vec, entity_id)?;
 
     let k = exog.ncols();
-    let mut x_tilde = Array2::zeros((n, k));
+    let mut x_tilde = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let transformed = within_transform(&col, entity_id)?;
         for (i, &v) in transformed.iter().enumerate() {
-            x_tilde[[i, c]] = v;
+            x_tilde[(i, c)] = v;
         }
     }
 
     // After within transform, constant column (all 1s) becomes zero - drop it if present
     let (x_after_const, has_const) = if constant && k > 0 {
-        let first_col = x_tilde.column(0);
+        let first_col = x_tilde.col(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
-            (x_tilde.slice(ndarray::s![.., 1..]).to_owned(), false)
+            (
+                x_tilde
+                    .submatrix(0, 1, x_tilde.nrows(), x_tilde.ncols() - 1)
+                    .to_owned(),
+                false,
+            )
         } else {
             (x_tilde, constant)
         }
@@ -616,17 +621,17 @@ pub fn fit_panel_fe(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
             let x = v_matrix
-                .view()
-                .cholesky()
+                .as_ref()
+                .checked_cholesky()
                 .map_err(|_| {
                     "Panel FE: cluster cov_beta not positive definite for Wald F".to_string()
                 })?
-                .solve(&beta_vector.view());
-            let x_nd = x.view();
-            beta_s.dot(&x_nd)
+                .solve(&beta_vector.as_ref());
+            let x_nd = x.as_ref();
+            beta_s.transpose() * x_nd.as_ref()
         };
         let f = if df_model > 0 {
             (wald / df_model as f64).max(0.0)
@@ -644,15 +649,16 @@ pub fn fit_panel_fe(
 
     // Recovered constant _cons = ȳ - β'x̄ (Stata xtreg, fe style)
     let y_mean = endog.iter().sum::<f64>() / n as f64;
-    let k_vars = result.betas.len();
+    let k_vars = result.betas.nrows();
     let kept_slope: Vec<usize> = (0..k_after_const)
         .filter(|&j| !omitted_x.contains(&j))
         .collect();
-    let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
+    let x_mean: Col<f64> = (0..k_vars)
+        .map(|c| exog.col(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
-    let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
+    let const_coef = y_mean - (result.betas.transpose() * x_mean.as_ref());
+    let var_const = (x_mean.transpose() * result.cov_beta.as_ref() * x_mean.as_ref())
+        + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
@@ -664,26 +670,26 @@ pub fn fit_panel_fe(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = ndarray::Array1::zeros(k_vars + 1);
+    let mut betas = faer::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = ndarray::Array1::zeros(k_vars + 1);
+    let mut stds = faer::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut tvalues = faer::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut pvalues = faer::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
@@ -695,20 +701,20 @@ pub fn fit_panel_fe(
         conf_int_right[i + 1] = result.betas[i] + t_crit * result.stds[i];
     }
 
-    let mut cov_beta = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
-    cov_beta[[0, 0]] = var_const;
+    let mut cov_beta = Mat::zeros(k_vars + 1, k_vars + 1);
+    cov_beta[(0, 0)] = var_const;
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_beta[[i + 1, j + 1]] = result.cov_beta[[i, j]];
+            cov_beta[(i + 1, j + 1)] = result.cov_beta[(i, j)];
         }
-        let cov_const_beta_i = -x_mean.dot(&result.cov_beta.column(i));
-        cov_beta[[0, i + 1]] = cov_const_beta_i;
-        cov_beta[[i + 1, 0]] = cov_const_beta_i;
+        let cov_const_beta_i = -(x_mean.transpose() * result.cov_beta.col(i).as_ref());
+        cov_beta[(0, i + 1)] = cov_const_beta_i;
+        cov_beta[(i + 1, 0)] = cov_const_beta_i;
     }
-    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    let mut cov_nr = Mat::zeros(k_vars + 1, k_vars + 1);
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+            cov_nr[(i + 1, j + 1)] = result.cov_beta_nonrobust[(i, j)];
         }
     }
 
@@ -716,7 +722,9 @@ pub fn fit_panel_fe(
     let kept_cols: Vec<usize> = std::iter::once(0)
         .chain(kept_slope.iter().map(|&j| j + 1))
         .collect();
-    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
+    let exog_kept = Mat::from_fn(exog.nrows(), kept_cols.len(), |i, j| {
+        exog[(i, kept_cols[j])]
+    });
     let fe_stats = compute_fe_stats(
         endog,
         &exog_kept,
@@ -777,15 +785,15 @@ pub fn fit_panel_fe(
 /// Analogous to entity FE but demeans by time: (y_it - ȳ_t) = (X_it - X̄_t)'β + (u_it - ū_t).
 /// Cluster by time when vce(cluster): residuals correlated within time period.
 pub fn fit_panel_fe_time(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Time): lengths must match".to_string());
     }
@@ -808,21 +816,26 @@ pub fn fit_panel_fe_time(
     let y_tilde = within_transform_by_group(&y_vec, time_id)?;
 
     let k = exog.ncols();
-    let mut x_tilde = Array2::zeros((n, k));
+    let mut x_tilde = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let transformed = within_transform_by_group(&col, time_id)?;
         for (i, &v) in transformed.iter().enumerate() {
-            x_tilde[[i, c]] = v;
+            x_tilde[(i, c)] = v;
         }
     }
 
     // After within transform, constant column becomes zero - drop if present
     let (x_after_const, has_const) = if constant && k > 0 {
-        let first_col = x_tilde.column(0);
+        let first_col = x_tilde.col(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
-            (x_tilde.slice(ndarray::s![.., 1..]).to_owned(), false)
+            (
+                x_tilde
+                    .submatrix(0, 1, x_tilde.nrows(), x_tilde.ncols() - 1)
+                    .to_owned(),
+                false,
+            )
         } else {
             (x_tilde, constant)
         }
@@ -892,15 +905,15 @@ pub fn fit_panel_fe_time(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
             let x = v_matrix
-                .view()
-                .cholesky()
+                .as_ref()
+                .checked_cholesky()
                 .map_err(|_| "Panel FE (Time): cluster cov_beta not pd for Wald F".to_string())?
-                .solve(&beta_vector.view());
-            let x_nd = x.view();
-            beta_s.dot(&x_nd)
+                .solve(&beta_vector.as_ref());
+            let x_nd = x.as_ref();
+            beta_s.transpose() * x_nd.as_ref()
         };
         let f = if df_model > 0 {
             (wald / df_model as f64).max(0.0)
@@ -917,12 +930,13 @@ pub fn fit_panel_fe_time(
     };
 
     let y_mean = endog.iter().sum::<f64>() / n as f64;
-    let k_vars = result.betas.len();
-    let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
+    let k_vars = result.betas.nrows();
+    let x_mean: Col<f64> = (0..k_vars)
+        .map(|c| exog.col(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
-    let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
+    let const_coef = y_mean - (result.betas.transpose() * x_mean.as_ref());
+    let var_const = (x_mean.transpose() * result.cov_beta.as_ref() * x_mean.as_ref())
+        + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
@@ -934,26 +948,26 @@ pub fn fit_panel_fe_time(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = ndarray::Array1::zeros(k_vars + 1);
+    let mut betas = faer::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = ndarray::Array1::zeros(k_vars + 1);
+    let mut stds = faer::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut tvalues = faer::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut pvalues = faer::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
@@ -965,27 +979,29 @@ pub fn fit_panel_fe_time(
         conf_int_right[i + 1] = result.betas[i] + t_crit * result.stds[i];
     }
 
-    let mut cov_beta = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
-    cov_beta[[0, 0]] = var_const;
+    let mut cov_beta = Mat::zeros(k_vars + 1, k_vars + 1);
+    cov_beta[(0, 0)] = var_const;
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_beta[[i + 1, j + 1]] = result.cov_beta[[i, j]];
+            cov_beta[(i + 1, j + 1)] = result.cov_beta[(i, j)];
         }
-        let cov_const_beta_i = -x_mean.dot(&result.cov_beta.column(i));
-        cov_beta[[0, i + 1]] = cov_const_beta_i;
-        cov_beta[[i + 1, 0]] = cov_const_beta_i;
+        let cov_const_beta_i = -(x_mean.transpose() * result.cov_beta.col(i).as_ref());
+        cov_beta[(0, i + 1)] = cov_const_beta_i;
+        cov_beta[(i + 1, 0)] = cov_const_beta_i;
     }
-    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    let mut cov_nr = Mat::zeros(k_vars + 1, k_vars + 1);
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+            cov_nr[(i + 1, j + 1)] = result.cov_beta_nonrobust[(i, j)];
         }
     }
 
     let kept_cols: Vec<usize> = std::iter::once(0)
         .chain(kept_slope.iter().map(|&j| j + 1))
         .collect();
-    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
+    let exog_kept = Mat::from_fn(exog.nrows(), kept_cols.len(), |i, j| {
+        exog[(i, kept_cols[j])]
+    });
     let fe_stats = compute_fe_stats_time(
         endog,
         &exog_kept,
@@ -1043,15 +1059,15 @@ pub fn fit_panel_fe_time(
 
 /// Panel Two-Way Fixed Effects: z̃_it = z_it - z̄_i - z̄_t + z̄
 pub fn fit_panel_fe_twoway(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
+    endog: &Col<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
     time_id: &[usize],
     constant: bool,
     cov_type: &str,
     cov_params: Option<CovParams>,
 ) -> Result<super::PanelOLSResult, String> {
-    let n = endog.len();
+    let n = endog.nrows();
     if exog.nrows() != n || entity_id.len() != n || time_id.len() != n {
         return Err("Panel FE (Two-Way): lengths must match".to_string());
     }
@@ -1073,20 +1089,25 @@ pub fn fit_panel_fe_twoway(
     let y_tilde = within_transform_twoway(&y_vec, entity_id, time_id)?;
 
     let k = exog.ncols();
-    let mut x_tilde = Array2::zeros((n, k));
+    let mut x_tilde = Mat::zeros(n, k);
     for c in 0..k {
-        let col: Vec<f64> = exog.column(c).iter().cloned().collect();
+        let col: Vec<f64> = exog.col(c).iter().cloned().collect();
         let transformed = within_transform_twoway(&col, entity_id, time_id)?;
         for (i, &v) in transformed.iter().enumerate() {
-            x_tilde[[i, c]] = v;
+            x_tilde[(i, c)] = v;
         }
     }
 
     let (x_after_const, has_const) = if constant && k > 0 {
-        let first_col = x_tilde.column(0);
+        let first_col = x_tilde.col(0);
         let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
         if is_const {
-            (x_tilde.slice(ndarray::s![.., 1..]).to_owned(), false)
+            (
+                x_tilde
+                    .submatrix(0, 1, x_tilde.nrows(), x_tilde.ncols() - 1)
+                    .to_owned(),
+                false,
+            )
         } else {
             (x_tilde, constant)
         }
@@ -1155,15 +1176,15 @@ pub fn fit_panel_fe_twoway(
         let wald = if df_model == 0 {
             0.0
         } else {
-            let v_matrix = v_s.view().to_owned();
-            let beta_vector = beta_s.view().to_owned();
+            let v_matrix = v_s.as_ref().to_owned();
+            let beta_vector = beta_s.as_ref().to_owned();
             let x = v_matrix
-                .view()
-                .cholesky()
+                .as_ref()
+                .checked_cholesky()
                 .map_err(|_| "Panel FE (Two-Way): cluster cov_beta not pd for Wald F".to_string())?
-                .solve(&beta_vector.view());
-            let x_nd = x.view();
-            beta_s.dot(&x_nd)
+                .solve(&beta_vector.as_ref());
+            let x_nd = x.as_ref();
+            beta_s.transpose() * x_nd.as_ref()
         };
         let f = if df_model > 0 {
             (wald / df_model as f64).max(0.0)
@@ -1180,12 +1201,13 @@ pub fn fit_panel_fe_twoway(
     };
 
     let y_mean = endog.iter().sum::<f64>() / n as f64;
-    let k_vars = result.betas.len();
-    let x_mean: Array1<f64> = (0..k_vars)
-        .map(|c| exog.column(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
+    let k_vars = result.betas.nrows();
+    let x_mean: Col<f64> = (0..k_vars)
+        .map(|c| exog.col(kept_slope[c] + 1).iter().sum::<f64>() / n as f64)
         .collect();
-    let const_coef = y_mean - result.betas.dot(&x_mean);
-    let var_const = x_mean.dot(&result.cov_beta).dot(&x_mean) + result.ms_residual / n as f64;
+    let const_coef = y_mean - (result.betas.transpose() * x_mean.as_ref());
+    let var_const = (x_mean.transpose() * result.cov_beta.as_ref() * x_mean.as_ref())
+        + result.ms_residual / n as f64;
     let const_std_err = var_const.max(0.0).sqrt();
 
     let t_df = (df_residual as f64).max(1.0);
@@ -1197,26 +1219,26 @@ pub fn fit_panel_fe_twoway(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = ndarray::Array1::zeros(k_vars + 1);
+    let mut betas = faer::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = ndarray::Array1::zeros(k_vars + 1);
+    let mut stds = faer::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut tvalues = faer::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = ndarray::Array1::zeros(k_vars + 1);
+    let mut pvalues = faer::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = ndarray::Array1::zeros(k_vars + 1);
+    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
@@ -1228,20 +1250,20 @@ pub fn fit_panel_fe_twoway(
         conf_int_right[i + 1] = result.betas[i] + t_crit * result.stds[i];
     }
 
-    let mut cov_beta = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
-    cov_beta[[0, 0]] = var_const;
+    let mut cov_beta = Mat::zeros(k_vars + 1, k_vars + 1);
+    cov_beta[(0, 0)] = var_const;
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_beta[[i + 1, j + 1]] = result.cov_beta[[i, j]];
+            cov_beta[(i + 1, j + 1)] = result.cov_beta[(i, j)];
         }
-        let cov_const_beta_i = -x_mean.dot(&result.cov_beta.column(i));
-        cov_beta[[0, i + 1]] = cov_const_beta_i;
-        cov_beta[[i + 1, 0]] = cov_const_beta_i;
+        let cov_const_beta_i = -(x_mean.transpose() * result.cov_beta.col(i).as_ref());
+        cov_beta[(0, i + 1)] = cov_const_beta_i;
+        cov_beta[(i + 1, 0)] = cov_const_beta_i;
     }
-    let mut cov_nr = ndarray::Array2::zeros((k_vars + 1, k_vars + 1));
+    let mut cov_nr = Mat::zeros(k_vars + 1, k_vars + 1);
     for i in 0..k_vars {
         for j in 0..k_vars {
-            cov_nr[[i + 1, j + 1]] = result.cov_beta_nonrobust[[i, j]];
+            cov_nr[(i + 1, j + 1)] = result.cov_beta_nonrobust[(i, j)];
         }
     }
 
@@ -1249,7 +1271,9 @@ pub fn fit_panel_fe_twoway(
     let kept_cols: Vec<usize> = std::iter::once(0)
         .chain(kept_slope.iter().map(|&j| j + 1))
         .collect();
-    let exog_kept = exog.select(ndarray::Axis(1), &kept_cols);
+    let exog_kept = Mat::from_fn(exog.nrows(), kept_cols.len(), |i, j| {
+        exog[(i, kept_cols[j])]
+    });
     let fe_stats = compute_fe_stats(
         endog,
         &exog_kept,

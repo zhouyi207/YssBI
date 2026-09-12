@@ -1,5 +1,5 @@
 use crate::error::{computation_failed, invalid_input};
-use ndarray::Array2;
+use faer::Mat;
 use yss_sci::ts::unit_root::adf_test;
 use yss_sci::ts::var::{VAR, VARConfig, var_varsoc};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate, vec_vecrank_stats};
@@ -40,7 +40,7 @@ pub fn augmented_dickey_fuller(
 fn multivariate_series(
     series: Vec<Vec<f64>>,
     operation: SciOperationCode,
-) -> Result<Array2<f64>, SciError> {
+) -> Result<Mat<f64>, SciError> {
     let observations = series.first().map(Vec::len).unwrap_or(0);
     if series.len() < 2 || observations == 0 {
         return Err(invalid_input(operation, SciInputViolation::EmptyInput));
@@ -48,14 +48,9 @@ fn multivariate_series(
     if series.iter().any(|item| item.len() != observations) {
         return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
     }
-    let mut values = Vec::with_capacity(observations * series.len());
-    for row in 0..observations {
-        for column in &series {
-            values.push(column[row]);
-        }
-    }
-    Array2::from_shape_vec((observations, series.len()), values)
-        .map_err(|_| computation_failed(operation))
+    Ok(Mat::from_fn(observations, series.len(), |row, col| {
+        series[col][row]
+    }))
 }
 
 pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, SciError> {

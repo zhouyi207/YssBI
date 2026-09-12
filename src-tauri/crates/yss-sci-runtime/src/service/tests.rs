@@ -116,15 +116,24 @@ fn shared_ols_options_reach_the_model_and_typed_report() {
         )
         .unwrap();
     let numerical = yss_sci::regression::linear_model::OLS {
-        endog: ndarray::Array1::from_vec(response.clone()),
-        exog: ndarray::Array2::from_shape_vec((response.len(), 1), predictors[0].clone()).unwrap(),
+        endog: faer::Col::from_iter(response.iter().copied()),
+        exog: faer::Mat::from_fn(response.len(), 1, |row, _| predictors[0][row]),
         config: options,
     }
     .fit()
     .unwrap();
-    assert_eq!(result.coefficients, numerical.betas.to_vec());
-    assert_eq!(result.fitted, numerical.fitted.to_vec());
-    assert_eq!(result.residuals, numerical.residuals.to_vec());
+    assert_eq!(
+        result.coefficients,
+        numerical.betas.iter().copied().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        result.fitted,
+        numerical.fitted.iter().copied().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        result.residuals,
+        numerical.residuals.iter().copied().collect::<Vec<_>>()
+    );
     assert_eq!(result.design, predictors);
     assert_eq!(result.report.model_basic_info.covariance_type, "HC3");
     assert_eq!(

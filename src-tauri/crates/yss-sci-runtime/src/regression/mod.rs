@@ -7,7 +7,7 @@ use crate::regression::types::{
     BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics,
     PraisRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
 };
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, Normal};
 use yss_linalg::matrix_rank;
 use yss_sci::regression::discrete::{Logit, LogitConfig, Probit, ProbitConfig};
@@ -49,15 +49,15 @@ pub fn fit_regression(
     weights: Option<Vec<f64>>,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
-    let y = Array1::from_vec(response);
-    let x = design_matrix(&predictors, y.len(), true, SciOperationCode::Regression)?;
+    let y = Col::from_iter(response);
+    let x = design_matrix(&predictors, y.nrows(), true, SciOperationCode::Regression)?;
     match kind {
         RegressionKind::Ols => fit_ols_design(&y, &x, &OlsOptions::default(), metadata),
         RegressionKind::Gls => {
             let result = GLS {
                 endog: y.clone(),
                 exog: x.clone(),
-                sigma: Array2::eye(y.len()),
+                sigma: Mat::identity(y.nrows(), y.nrows()),
                 config: GLSConfig { constant: true },
             }
             .fit()
@@ -66,15 +66,23 @@ pub fn fit_regression(
                 "gls",
                 &y,
                 &x,
-                result.betas.to_vec(),
+                result.betas.iter().copied().collect::<Vec<_>>(),
                 RegressionStatistics::Linear {
                     coefficients: RegressionCoefficientStatistics {
                         covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.tvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
+                        standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                        statistic_values: result.tvalues.iter().copied().collect::<Vec<_>>(),
+                        p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                        confidence_interval_lower: result
+                            .conf_int_left
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        confidence_interval_upper: result
+                            .conf_int_right
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
                     },
                     model: LinearRegressionStatistics {
                         r2: result.r2,
@@ -101,7 +109,7 @@ pub fn fit_regression(
             let weights = weights.ok_or_else(|| {
                 invalid_input(SciOperationCode::Regression, SciInputViolation::EmptyInput)
             })?;
-            if weights.len() != y.len() {
+            if weights.len() != y.nrows() {
                 return Err(invalid_input(
                     SciOperationCode::Regression,
                     SciInputViolation::ShapeMismatch,
@@ -110,7 +118,7 @@ pub fn fit_regression(
             let result = WLS {
                 endog: y.clone(),
                 exog: x.clone(),
-                weights: Array1::from_vec(weights),
+                weights: Col::from_iter(weights),
                 config: WLSConfig {
                     constant: true,
                     cov_type: "nonrobust".into(),
@@ -123,15 +131,23 @@ pub fn fit_regression(
                 "wls",
                 &y,
                 &x,
-                result.betas.to_vec(),
+                result.betas.iter().copied().collect::<Vec<_>>(),
                 RegressionStatistics::Linear {
                     coefficients: RegressionCoefficientStatistics {
                         covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.tvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
+                        standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                        statistic_values: result.tvalues.iter().copied().collect::<Vec<_>>(),
+                        p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                        confidence_interval_lower: result
+                            .conf_int_left
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        confidence_interval_upper: result
+                            .conf_int_right
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
                     },
                     model: LinearRegressionStatistics {
                         r2: result.r2,
@@ -166,15 +182,23 @@ pub fn fit_regression(
                 "prais",
                 &y,
                 &x,
-                result.betas.to_vec(),
+                result.betas.iter().copied().collect::<Vec<_>>(),
                 RegressionStatistics::Prais {
                     coefficients: RegressionCoefficientStatistics {
                         covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.tvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
+                        standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                        statistic_values: result.tvalues.iter().copied().collect::<Vec<_>>(),
+                        p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                        confidence_interval_lower: result
+                            .conf_int_left
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        confidence_interval_upper: result
+                            .conf_int_right
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
                     },
                     model: PraisRegressionStatistics {
                         linear: LinearRegressionStatistics {
@@ -211,11 +235,11 @@ pub fn fit_regression(
             }
             .fit()
             .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-            let coefficients = result.betas.to_vec();
-            let fitted = x
-                .dot(&Array1::from_vec(coefficients.clone()))
-                .mapv(|value| 1.0 / (1.0 + (-value).exp()))
-                .to_vec();
+            let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
+            let fitted = (&x * &result.betas)
+                .iter()
+                .map(|&value| 1.0 / (1.0 + (-value).exp()))
+                .collect::<Vec<_>>();
             let adjusted_pseudo_r2 =
                 1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
             Ok(RegressionFit {
@@ -228,11 +252,19 @@ pub fn fit_regression(
                     link: BinaryRegressionLink::Logit,
                     coefficients: RegressionCoefficientStatistics {
                         covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.zvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
+                        standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                        statistic_values: result.zvalues.iter().copied().collect::<Vec<_>>(),
+                        p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                        confidence_interval_lower: result
+                            .conf_int_left
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        confidence_interval_upper: result
+                            .conf_int_right
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
                     },
                     model: BinaryRegressionStatistics {
                         log_likelihood: result.log_likelihood,
@@ -259,13 +291,13 @@ pub fn fit_regression(
             }
             .fit()
             .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-            let coefficients = result.betas.to_vec();
+            let coefficients = result.betas.iter().copied().collect::<Vec<_>>();
             let normal = Normal::new(0.0, 1.0)
                 .map_err(|_| computation_failed(SciOperationCode::Regression))?;
-            let fitted = x
-                .dot(&Array1::from_vec(coefficients.clone()))
-                .mapv(|value| normal.cdf(value))
-                .to_vec();
+            let fitted = (&x * &result.betas)
+                .iter()
+                .map(|&value| normal.cdf(value))
+                .collect::<Vec<_>>();
             let adjusted_pseudo_r2 =
                 1.0 - (result.log_likelihood - coefficients.len() as f64) / result.ll_null;
             Ok(RegressionFit {
@@ -278,11 +310,19 @@ pub fn fit_regression(
                     link: BinaryRegressionLink::Probit,
                     coefficients: RegressionCoefficientStatistics {
                         covariance: covariance_rows(&result.cov_beta),
-                        standard_errors: result.stds.to_vec(),
-                        statistic_values: result.zvalues.to_vec(),
-                        p_values: result.pvalues.to_vec(),
-                        confidence_interval_lower: result.conf_int_left.to_vec(),
-                        confidence_interval_upper: result.conf_int_right.to_vec(),
+                        standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                        statistic_values: result.zvalues.iter().copied().collect::<Vec<_>>(),
+                        p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                        confidence_interval_lower: result
+                            .conf_int_left
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        confidence_interval_upper: result
+                            .conf_int_right
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
                     },
                     model: BinaryRegressionStatistics {
                         log_likelihood: result.log_likelihood,
@@ -321,10 +361,10 @@ pub fn fit_ols(
             SciInputViolation::ParameterOutOfRange,
         ));
     }
-    let y = Array1::from_vec(response);
+    let y = Col::from_iter(response);
     let x = design_matrix(
         predictors,
-        y.len(),
+        y.nrows(),
         config.constant,
         SciOperationCode::Regression,
     )?;
@@ -332,8 +372,8 @@ pub fn fit_ols(
 }
 
 fn fit_ols_design(
-    y: &Array1<f64>,
-    x: &Array2<f64>,
+    y: &Col<f64>,
+    x: &Mat<f64>,
     config: &OlsOptions,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
@@ -347,17 +387,21 @@ fn fit_ols_design(
     Ok(RegressionFit {
         constant: config.constant,
         family: "ols",
-        coefficients: result.betas.to_vec(),
-        fitted: result.fitted.to_vec(),
-        residuals: result.residuals.to_vec(),
+        coefficients: result.betas.iter().copied().collect::<Vec<_>>(),
+        fitted: result.fitted.iter().copied().collect::<Vec<_>>(),
+        residuals: result.residuals.iter().copied().collect::<Vec<_>>(),
         statistics: RegressionStatistics::Linear {
             coefficients: RegressionCoefficientStatistics {
                 covariance: covariance_rows(&result.cov_beta),
-                standard_errors: result.stds.to_vec(),
-                statistic_values: result.tvalues.to_vec(),
-                p_values: result.pvalues.to_vec(),
-                confidence_interval_lower: result.conf_int_left.to_vec(),
-                confidence_interval_upper: result.conf_int_right.to_vec(),
+                standard_errors: result.stds.iter().copied().collect::<Vec<_>>(),
+                statistic_values: result.tvalues.iter().copied().collect::<Vec<_>>(),
+                p_values: result.pvalues.iter().copied().collect::<Vec<_>>(),
+                confidence_interval_lower: result.conf_int_left.iter().copied().collect::<Vec<_>>(),
+                confidence_interval_upper: result
+                    .conf_int_right
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
             },
             model: LinearRegressionStatistics {
                 r2: result.r2,
@@ -383,13 +427,16 @@ fn fit_ols_design(
 
 fn linear_fit(
     family: &'static str,
-    y: &Array1<f64>,
-    x: &Array2<f64>,
+    y: &Col<f64>,
+    x: &Mat<f64>,
     coefficients: Vec<f64>,
     statistics: RegressionStatistics,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
-    let fitted = x.dot(&Array1::from_vec(coefficients.clone())).to_vec();
+    let fitted = (x * faer::ColRef::from_slice(&coefficients))
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
     Ok(RegressionFit {
         constant: true,
         family,
@@ -401,8 +448,8 @@ fn linear_fit(
     })
 }
 
-fn design_condition_number(design: &Array2<f64>) -> f64 {
-    matrix_rank(design.view()).map_or(f64::INFINITY, |(_, condition)| condition)
+fn design_condition_number(design: &Mat<f64>) -> f64 {
+    matrix_rank(design.as_ref()).map_or(f64::INFINITY, |(_, condition)| condition)
 }
 
 fn design_matrix(
@@ -410,7 +457,7 @@ fn design_matrix(
     observations: usize,
     constant: bool,
     operation: SciOperationCode,
-) -> Result<Array2<f64>, SciError> {
+) -> Result<Mat<f64>, SciError> {
     if predictors.is_empty() {
         return Err(invalid_input(operation, SciInputViolation::EmptyInput));
     }
@@ -418,17 +465,13 @@ fn design_matrix(
         return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
     }
     let columns = predictors.len() + usize::from(constant);
-    let mut values = Vec::with_capacity(observations * columns);
-    for row in 0..observations {
-        if constant {
-            values.push(1.0);
+    Ok(Mat::from_fn(observations, columns, |row, column| {
+        if constant && column == 0 {
+            1.0
+        } else {
+            predictors[column - usize::from(constant)][row]
         }
-        for predictor in predictors {
-            values.push(predictor[row]);
-        }
-    }
-    Array2::from_shape_vec((observations, columns), values)
-        .map_err(|_| computation_failed(operation))
+    }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -454,17 +497,14 @@ pub fn fit_instrumental_variables(
             SciInputViolation::ShapeMismatch,
         ));
     }
-    let column = |values: Vec<f64>| {
-        Array2::from_shape_vec((observations, 1), values)
-            .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
-    };
+    let column = |values: Vec<f64>| Mat::from_fn(observations, 1, |row, _| values[row]);
     match kind {
         InstrumentalVariableKind::TwoStageLeastSquares => {
             let result = IV2SLS {
-                endog: Array1::from_vec(response),
-                exog: column(exogenous)?,
-                endog_reg: column(endogenous)?,
-                instruments: column(instruments)?,
+                endog: Col::from_iter(response),
+                exog: column(exogenous),
+                endog_reg: column(endogenous),
+                instruments: column(instruments),
                 config: IV2SLSConfig {
                     constant: true,
                     cov_type: "nonrobust".into(),
@@ -478,9 +518,9 @@ pub fn fit_instrumental_variables(
             .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))?;
             Ok(serde_json::json!({
                 "family": "iv_2sls",
-                "coefficients": result.betas.to_vec(),
-                "standardErrors": result.stds.to_vec(),
-                "pValues": result.pvalues.to_vec(),
+                "coefficients": result.betas.iter().copied().collect::<Vec<_>>(),
+                "standardErrors": result.stds.iter().copied().collect::<Vec<_>>(),
+                "pValues": result.pvalues.iter().copied().collect::<Vec<_>>(),
                 "r2": result.r2,
                 "adjustedR2": result.r2_adjusted,
                 "firstStageMinEigenvalue": result.first_stage_summary.min_eigenvalue,
@@ -488,10 +528,10 @@ pub fn fit_instrumental_variables(
         }
         InstrumentalVariableKind::LimitedInformationMaximumLikelihood => {
             let result = IVLIML {
-                endog: Array1::from_vec(response),
-                exog: column(exogenous)?,
-                endog_reg: column(endogenous)?,
-                instruments: column(instruments)?,
+                endog: Col::from_iter(response),
+                exog: column(exogenous),
+                endog_reg: column(endogenous),
+                instruments: column(instruments),
                 config: IVLIMLConfig {
                     constant: true,
                     cov_type: "nonrobust".into(),
@@ -505,9 +545,9 @@ pub fn fit_instrumental_variables(
             .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))?;
             Ok(serde_json::json!({
                 "family": "iv_liml",
-                "coefficients": result.betas.to_vec(),
-                "standardErrors": result.stds.to_vec(),
-                "pValues": result.pvalues.to_vec(),
+                "coefficients": result.betas.iter().copied().collect::<Vec<_>>(),
+                "standardErrors": result.stds.iter().copied().collect::<Vec<_>>(),
+                "pValues": result.pvalues.iter().copied().collect::<Vec<_>>(),
                 "r2": result.r2,
                 "adjustedR2": result.r2_adjusted,
                 "kappa": result.kappa,
@@ -559,7 +599,7 @@ pub fn fit_panel(
             .collect()
     };
     let result = fit_panel_fe_twoway(
-        &Array1::from_vec(response),
+        &Col::from_iter(response),
         &exog,
         &ids(entity),
         &ids(time),
@@ -570,9 +610,9 @@ pub fn fit_panel(
     .map_err(|_| computation_failed(SciOperationCode::Panel))?;
     Ok(serde_json::json!({
         "family": if is_did { "panel_did_twfe" } else { "panel_fe_twoway" },
-        "coefficients": result.betas.to_vec(),
-        "standardErrors": result.stds.to_vec(),
-        "pValues": result.pvalues.to_vec(),
+        "coefficients": result.betas.iter().copied().collect::<Vec<_>>(),
+        "standardErrors": result.stds.iter().copied().collect::<Vec<_>>(),
+        "pValues": result.pvalues.iter().copied().collect::<Vec<_>>(),
         "r2": result.r2,
         "adjustedR2": result.r2_adjusted,
         "observations": result.num_observation,
@@ -581,11 +621,10 @@ pub fn fit_panel(
     }))
 }
 
-fn covariance_rows(covariance: &Array2<f64>) -> Vec<Vec<f64>> {
+fn covariance_rows(covariance: &Mat<f64>) -> Vec<Vec<f64>> {
     covariance
-        .rows()
-        .into_iter()
-        .map(|row| row.to_vec())
+        .row_iter()
+        .map(|row| row.iter().copied().collect())
         .collect()
 }
 
@@ -605,6 +644,23 @@ mod tests {
             dropped_nan_count: 0,
             missing_value_policy: MissingValuePolicy::Listwise,
         }
+    }
+
+    #[test]
+    fn design_and_covariance_keep_axis_order_at_report_boundary() {
+        let design = design_matrix(
+            &[vec![2.0, 3.0], vec![5.0, 7.0]],
+            2,
+            true,
+            SciOperationCode::Regression,
+        )
+        .unwrap();
+        assert_eq!(design, faer::mat![[1.0, 2.0, 5.0], [1.0, 3.0, 7.0]]);
+        let values = Mat::from_fn(2, 3, |row, column| (row * 3 + column) as f64);
+        assert_eq!(
+            covariance_rows(&values),
+            vec![vec![0.0, 1.0, 2.0], vec![3.0, 4.0, 5.0]],
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! When X has rank deficiency (strict multicollinearity), iteratively drop columns
 //! until full rank. Removal priority: continuous > dummy > intercept.
 
-use ndarray::Array2;
+use faer::Mat;
 use std::collections::BTreeSet;
 use yss_linalg::matrix_rank;
 
@@ -29,10 +29,10 @@ fn removal_priority(j: usize, col_is_dummy: &[bool], intercept_col: Option<usize
 /// Returns `(reduced_exog, omitted_indices)` where omitted_indices are the original
 /// column indices that were dropped. If no collinearity, omitted_indices is empty.
 pub fn drop_collinear_columns(
-    exog: &Array2<f64>,
+    exog: &Mat<f64>,
     col_is_dummy: &[bool],
     intercept_col: Option<usize>,
-) -> Result<(Array2<f64>, Vec<usize>), String> {
+) -> Result<(Mat<f64>, Vec<usize>), String> {
     let _n = exog.nrows();
     let k = exog.ncols();
     if k == 0 {
@@ -59,9 +59,9 @@ pub fn drop_collinear_columns(
 
     loop {
         let keep_vec: Vec<usize> = keep.iter().copied().collect();
-        let x_sub = exog.select(ndarray::Axis(1), &keep_vec);
-        let x_matrix = x_sub.view().to_owned();
-        let (rank, _) = matrix_rank(x_matrix.view()).unwrap_or((0, f64::INFINITY));
+        let x_sub = Mat::from_fn(exog.nrows(), keep_vec.len(), |i, j| exog[(i, keep_vec[j])]);
+        let x_matrix = x_sub.as_ref().to_owned();
+        let (rank, _) = matrix_rank(x_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
 
         if rank == keep.len() {
             break;
@@ -81,9 +81,9 @@ pub fn drop_collinear_columns(
             if keep_new.is_empty() {
                 return Err("drop_collinear_columns: cannot drop all columns".to_string());
             }
-            let x_new = exog.select(ndarray::Axis(1), &keep_new);
-            let x_new_matrix = x_new.view().to_owned();
-            let (rank_new, _) = matrix_rank(x_new_matrix.view()).unwrap_or((0, f64::INFINITY));
+            let x_new = Mat::from_fn(exog.nrows(), keep_new.len(), |i, j| exog[(i, keep_new[j])]);
+            let x_new_matrix = x_new.as_ref().to_owned();
+            let (rank_new, _) = matrix_rank(x_new_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
 
             if rank_new == keep_new.len() {
                 // Full rank achieved with this removal
@@ -108,18 +108,19 @@ pub fn drop_collinear_columns(
     }
 
     let keep_vec: Vec<usize> = keep.iter().copied().collect();
-    let reduced = exog.select(ndarray::Axis(1), &keep_vec).to_owned();
+    let reduced =
+        Mat::from_fn(exog.nrows(), keep_vec.len(), |i, j| exog[(i, keep_vec[j])]).to_owned();
     Ok((reduced, omitted))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::array;
+    use faer::mat;
 
     #[test]
     fn test_full_rank_no_drop() {
-        let x = array![
+        let x = mat![
             [1.0, 0.0, 0.0],
             [1.0, 1.0, 0.0],
             [1.0, 0.0, 1.0],
@@ -128,13 +129,13 @@ mod tests {
         let is_dummy = vec![false, true, true];
         let (reduced, omitted) = drop_collinear_columns(&x, &is_dummy, Some(0)).unwrap();
         assert!(omitted.is_empty());
-        assert_eq!(reduced.shape(), x.shape());
+        assert_eq!((reduced.nrows(), reduced.ncols()), (x.nrows(), x.ncols()));
     }
 
     #[test]
     fn test_collinear_drop_non_dummy_first() {
         // col2 = col1, so rank 2. Prefer to drop col1 (continuous) over col2 (dummy)
-        let x = array![[1.0, 1.0, 1.0], [1.0, 2.0, 2.0], [1.0, 3.0, 3.0],];
+        let x = mat![[1.0, 1.0, 1.0], [1.0, 2.0, 2.0], [1.0, 3.0, 3.0],];
         let is_dummy = vec![false, false, true]; // const, x1, x2; x2=x1
         let (reduced, omitted) = drop_collinear_columns(&x, &is_dummy, Some(0)).unwrap();
         assert_eq!(omitted.len(), 1);
@@ -145,7 +146,7 @@ mod tests {
     #[test]
     fn test_multi_deficiency_drop_iteratively() {
         // const + 3 cols where col1=col2=col3 (all same), rank 2. Deficiency = 2.
-        let x = array![
+        let x = mat![
             [1.0, 1.0, 1.0, 1.0],
             [1.0, 2.0, 2.0, 2.0],
             [1.0, 3.0, 3.0, 3.0],

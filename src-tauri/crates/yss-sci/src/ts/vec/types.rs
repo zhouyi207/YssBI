@@ -6,9 +6,9 @@
 use super::distributions::{chi_squared_sf, normal_cdf, normal_two_sided_p};
 use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
 
-use yss_linalg::{MatMul, MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve};
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use serde::{Deserialize, Serialize};
 
 /// 趋势设定：与 Stata trend() 对应

@@ -8,12 +8,12 @@ use crate::regression::linear_model::OLS;
 
 use yss_linalg::{MatrixExt, Solve};
 
-use ndarray::{Array1, Array2};
+use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use std::collections::HashMap;
 
 /// Within transformation (same as FE)
-fn within_transform(v: &[f64], entity_id: &[usize]) -> Array1<f64> {
+fn within_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
     let n = v.len();
     let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
     for (i, &eid) in entity_id.iter().enumerate() {
@@ -32,11 +32,11 @@ fn within_transform(v: &[f64], entity_id: &[usize]) -> Array1<f64> {
             v[i] - mean
         })
         .collect();
-    Array1::from_vec(out)
+    (out).into_iter().collect::<Col<f64>>()
 }
 
 /// Between transformation: replace each obs with entity mean (for quasi-demeaning)
-fn between_transform(v: &[f64], entity_id: &[usize]) -> Array1<f64> {
+fn between_transform(v: &[f64], entity_id: &[usize]) -> Col<f64> {
     let n = v.len();
     let mut sums: HashMap<usize, (f64, usize)> = HashMap::new();
     for (i, &eid) in entity_id.iter().enumerate() {
@@ -54,7 +54,7 @@ fn between_transform(v: &[f64], entity_id: &[usize]) -> Array1<f64> {
             if cnt > 0 { s / cnt as f64 } else { v[i] }
         })
         .collect();
-    Array1::from_vec(out)
+    (out).into_iter().collect::<Col<f64>>()
 }
 
 /// Obs per entity T_i and harmonic mean T̄ = n / Σ(1/T_i) (Stata xtreg, re)
@@ -81,7 +81,7 @@ fn obs_per_group_and_harmonic_mean(group_id: &[usize]) -> (HashMap<usize, usize>
 /// Compute entity-level means. Returns (entity_ids, y_means, x_means) for between regression.
 fn entity_means(
     endog: &[f64],
-    exog: &Array2<f64>,
+    exog: &Mat<f64>,
     entity_id: &[usize],
 ) -> (Vec<usize>, Vec<f64>, Vec<Vec<f64>>) {
     group_means(endog, exog, entity_id)
@@ -90,7 +90,7 @@ fn entity_means(
 /// Compute group-level means (generic for entity or time). Returns (group_ids, y_means, x_means).
 fn group_means(
     endog: &[f64],
-    exog: &Array2<f64>,
+    exog: &Mat<f64>,
     group_id: &[usize],
 ) -> (Vec<usize>, Vec<f64>, Vec<Vec<f64>>) {
     let mut sums_y: HashMap<usize, (f64, usize)> = HashMap::new();
@@ -106,7 +106,7 @@ fn group_means(
         }
         let entry = sums_x.entry(gid).or_insert_with(|| (vec![0.0; k], 0));
         for c in 0..k {
-            entry.0[c] += exog[[i, c]];
+            entry.0[c] += exog[(i, c)];
         }
         entry.1 += 1;
     }
