@@ -3876,6 +3876,7 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
     for dependency in [
         "yss-project-layout = { path = \"../yss-project-layout\" }",
         "yss-project-progress = { path = \"../yss-project-progress\" }",
+        "walkdir.workspace = true",
     ] {
         assert!(
             declares_dependency("yss-project-discovery", dependency),
@@ -3899,6 +3900,8 @@ fn project_discovery_has_one_project_crate_owner_without_root_facade_or_redirect
         );
     }
     for redirect_guard in [
+        ".follow_links(false)",
+        ".follow_root_links(false)",
         "file_type.is_symlink()",
         "FILE_ATTRIBUTE_REPARSE_POINT",
         "is_redirect(root, &root_metadata.file_type())?",

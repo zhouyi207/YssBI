@@ -114,6 +114,8 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 `yss-linalg` 按 Pure Leaf 分类，外部依赖声明仅允许它使用 `faer`。SCI 层通过项目定义的线性代数接口调用，直接或经 re-export 引入 `faer` 都不能通过 SCI 的外部依赖使用策略。数值与视图契约由 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md) 维护。
 
+`walkdir` 的运行时直接依赖声明限定于 `yss-project-discovery`，生产使用归 Project 分类。它只承担项目发现内部的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由 discovery 拥有。根路径与子目录均不跟随符号链接，Windows 重解析点检查继续保留；这不开放其他层直接使用遍历实现的权限。
+
 `yss-file-replace` 按 Platform Adapter 分类。Application 的数据库导出模块和 Julia worker 的 assets 模块仅获 `atomic_replace` 的精确调用权限；这不会开放 Application/Backend Adapter 对整个平台层的依赖。Window State 与文件替换同属平台层，内容生成和持久化事务仍归各自 owner。
 
 执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-api` README](../../src-tauri/crates/yss-api/README.md#error-contract) 维护。

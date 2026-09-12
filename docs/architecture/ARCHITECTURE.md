@@ -103,6 +103,8 @@ app composition / routing
 
 ## 4. Project lifecycle
 
+项目发现由 `yss-project-discovery` 使用 `walkdir` 遍历候选目录，保留元数据识别、目录排除、取消、链接与重解析点检查。`yss-project-registry` 采用发现结果并通过注册存储端口持久化；扫描取消与失败分别保留类型化结果，不返回成功的部分扫描结果。共享进度与任务取消归 `yss-project-progress`，通信适配负责向前端投递进度。
+
 活动项目以一个 application session 为边界：
 
 ```text

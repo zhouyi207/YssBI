@@ -9896,6 +9896,7 @@ name = "yss-project-discovery"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
+ "walkdir",
  "yss-project-layout",
  "yss-project-progress",
 ]

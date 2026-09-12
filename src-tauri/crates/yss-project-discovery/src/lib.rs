@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
+use walkdir::WalkDir;
 use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_progress::ProjectTaskCancellation;
 
@@ -51,7 +52,13 @@ pub fn discover_project_metadata_files(
         return Err(ProjectDiscoveryError::InvalidRoot);
     }
     let mut found = Vec::new();
-    walk_for_metadata(root, &mut found, cancellation)?;
+    let mut entries = WalkDir::new(root)
+        .follow_links(false)
+        .follow_root_links(false)
+        .into_iter();
+    while let Some(path) = next_metadata_file(&mut entries, cancellation)? {
+        found.push(path);
+    }
     if cancellation.is_cancelled() {
         return Err(ProjectDiscoveryError::Cancelled);
     }
@@ -69,43 +76,45 @@ pub fn project_name_from_metadata_path(metadata_path: &Path) -> String {
         .unwrap_or_else(|| DEFAULT_PROJECT_NAME.into())
 }
 
-fn walk_for_metadata(
-    directory: &Path,
-    found: &mut Vec<PathBuf>,
+fn next_metadata_file(
+    entries: &mut walkdir::IntoIter,
     cancellation: &ProjectTaskCancellation,
-) -> Result<(), ProjectDiscoveryError> {
-    if cancellation.is_cancelled() {
-        return Err(ProjectDiscoveryError::Cancelled);
-    }
-
-    let metadata_path = directory.join(PROJECT_METADATA_FILE);
-    match std::fs::symlink_metadata(&metadata_path) {
-        Ok(metadata)
-            if metadata.is_file() && !is_redirect(&metadata_path, &metadata.file_type())? =>
-        {
-            found.push(metadata_path);
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(ProjectDiscoveryError::Io(error)),
-    }
-
-    for entry in std::fs::read_dir(directory)? {
+) -> Result<Option<PathBuf>, ProjectDiscoveryError> {
+    loop {
         if cancellation.is_cancelled() {
             return Err(ProjectDiscoveryError::Cancelled);
         }
-        let entry = entry?;
-        let path = entry.path();
-        let file_type = entry.file_type()?;
+        let Some(entry) = entries.next() else {
+            return Ok(None);
+        };
+        let entry = entry.map_err(std::io::Error::from)?;
+        let depth = entry.depth();
+        let file_type = entry.file_type();
+        let path = entry.into_path();
         if is_redirect(&path, &file_type)? || !file_type.is_dir() {
+            if file_type.is_dir() {
+                entries.skip_current_dir();
+            }
             continue;
         }
-        if should_skip_dir(&path) {
+        // A user-selected root is scanned even if its name is normally skipped.
+        if depth > 0 && should_skip_dir(&path) {
+            entries.skip_current_dir();
             continue;
         }
-        walk_for_metadata(&path, found, cancellation)?;
+        // Probe the canonical path so filename matching follows the filesystem.
+        let metadata_path = path.join(PROJECT_METADATA_FILE);
+        match std::fs::symlink_metadata(&metadata_path) {
+            Ok(metadata)
+                if metadata.is_file() && !is_redirect(&metadata_path, &metadata.file_type())? =>
+            {
+                return Ok(Some(metadata_path));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ProjectDiscoveryError::Io(error)),
+        }
     }
-    Ok(())
 }
 
 fn is_redirect(_path: &Path, file_type: &std::fs::FileType) -> Result<bool, std::io::Error> {
@@ -183,33 +192,42 @@ mod tests {
 
     #[test]
     fn discover_nested_metadata_files_without_build_or_dependency_trees() {
-        let root = TestDirectory::new("nested");
-        std::fs::create_dir_all(root.path().join("alpha")).unwrap();
-        std::fs::create_dir_all(root.path().join("nested/beta")).unwrap();
-        std::fs::create_dir_all(root.path().join("target/ignored")).unwrap();
-        std::fs::create_dir_all(root.path().join("node_modules/ignored")).unwrap();
-        std::fs::write(root.path().join("alpha/metadata.yssbi"), "{}").unwrap();
-        std::fs::write(root.path().join("nested/beta/metadata.yssbi"), "{}").unwrap();
-        std::fs::write(root.path().join("target/ignored/metadata.yssbi"), "{}").unwrap();
-        std::fs::write(
-            root.path().join("node_modules/ignored/metadata.yssbi"),
-            "{}",
-        )
-        .unwrap();
+        let temporary = TestDirectory::new("nested");
+        let root = temporary.path().join("target");
+        for directory in ["", "alpha", "nested/beta", "mixed-case"] {
+            std::fs::create_dir_all(root.join(directory)).unwrap();
+        }
+        for directory in ["", "alpha", "nested/beta"] {
+            std::fs::write(root.join(directory).join(PROJECT_METADATA_FILE), "{}").unwrap();
+        }
+        for skip in SKIP_DIR_NAMES {
+            let ignored = root.join(skip.to_ascii_uppercase()).join("ignored");
+            std::fs::create_dir_all(&ignored).unwrap();
+            std::fs::write(ignored.join(PROJECT_METADATA_FILE), "{}").unwrap();
+        }
+        std::fs::write(root.join("mixed-case/MeTaDaTa.YsSbI"), "{}").unwrap();
 
         let registry = ProjectTaskCancellationRegistry::new();
         let cancellation = registry.begin();
-        let found = discover_project_metadata_files(root.path(), &cancellation).unwrap();
-        assert_eq!(found.len(), 2);
-        assert!(found.iter().all(|path| {
-            !path.to_string_lossy().contains("target")
-                && !path.to_string_lossy().contains("node_modules")
-        }));
+        let found = discover_project_metadata_files(&root, &cancellation).unwrap();
+        let mut expected = vec![
+            root.join(PROJECT_METADATA_FILE),
+            root.join("alpha").join(PROJECT_METADATA_FILE),
+            root.join("nested/beta").join(PROJECT_METADATA_FILE),
+        ];
+        // Match the host filesystem's case sensitivity, including macOS volumes.
+        let mixed_case = root.join("mixed-case").join(PROJECT_METADATA_FILE);
+        if mixed_case.exists() {
+            expected.push(mixed_case);
+        }
+        expected.sort();
+        assert_eq!(found, expected);
     }
 
     #[test]
     fn discover_stops_when_cancelled() {
         let root = TestDirectory::new("cancel");
+        std::fs::write(root.path().join(PROJECT_METADATA_FILE), "{}").unwrap();
         std::fs::create_dir_all(root.path().join("alpha")).unwrap();
         std::fs::write(root.path().join("alpha/metadata.yssbi"), "{}").unwrap();
 
@@ -218,20 +236,73 @@ mod tests {
         registry.cancel_active();
         let error = discover_project_metadata_files(root.path(), &cancellation).unwrap_err();
         assert!(matches!(error, ProjectDiscoveryError::Cancelled));
+
+        let cancellation = registry.begin();
+        let mut entries = WalkDir::new(root.path()).into_iter();
+        assert_eq!(
+            next_metadata_file(&mut entries, &cancellation).unwrap(),
+            Some(root.path().join(PROJECT_METADATA_FILE))
+        );
+        registry.cancel_active();
+        assert!(matches!(
+            next_metadata_file(&mut entries, &cancellation),
+            Err(ProjectDiscoveryError::Cancelled)
+        ));
     }
 
-    #[cfg(unix)]
+    #[test]
+    fn invalid_roots_and_walk_errors_do_not_become_successful_scans() {
+        let temporary = TestDirectory::new("errors");
+        let ordinary_file = temporary.path().join("file");
+        std::fs::write(&ordinary_file, "{}").unwrap();
+        let registry = ProjectTaskCancellationRegistry::new();
+        let cancellation = registry.begin();
+        for root in [temporary.path().join("missing"), ordinary_file] {
+            assert!(matches!(
+                discover_project_metadata_files(&root, &cancellation),
+                Err(ProjectDiscoveryError::InvalidRoot)
+            ));
+        }
+        assert!(matches!(
+            discover_project_metadata_files(Path::new("invalid\0root"), &cancellation),
+            Err(ProjectDiscoveryError::Io(_))
+        ));
+
+        // A root removed after admission must surface the traversal I/O error.
+        let removed = temporary.path().join("removed");
+        std::fs::create_dir(&removed).unwrap();
+        let mut entries = WalkDir::new(&removed).into_iter();
+        std::fs::remove_dir(&removed).unwrap();
+        let error = next_metadata_file(&mut entries, &cancellation).unwrap_err();
+        assert!(matches!(error, ProjectDiscoveryError::Io(error)
+            if error.kind() == std::io::ErrorKind::NotFound));
+    }
+
+    #[cfg(any(unix, windows))]
     #[test]
     fn discovery_does_not_follow_directory_or_metadata_symlinks() {
         let root = TestDirectory::new("symlink-root");
         let outside = TestDirectory::new("symlink-outside");
         std::fs::write(outside.path().join(PROJECT_METADATA_FILE), "{}").unwrap();
-        std::os::unix::fs::symlink(outside.path(), root.path().join("redirect")).unwrap();
-        std::os::unix::fs::symlink(
-            outside.path().join(PROJECT_METADATA_FILE),
-            root.path().join(PROJECT_METADATA_FILE),
-        )
-        .unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside.path(), root.path().join("redirect")).unwrap();
+            std::os::unix::fs::symlink(
+                outside.path().join(PROJECT_METADATA_FILE),
+                root.path().join(PROJECT_METADATA_FILE),
+            )
+            .unwrap();
+        }
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_dir(outside.path(), root.path().join("redirect"))
+                .unwrap();
+            std::os::windows::fs::symlink_file(
+                outside.path().join(PROJECT_METADATA_FILE),
+                root.path().join(PROJECT_METADATA_FILE),
+            )
+            .unwrap();
+        }
 
         let registry = ProjectTaskCancellationRegistry::new();
         let cancellation = registry.begin();
@@ -241,5 +312,41 @@ mod tests {
         let redirected_root = root.path().join("redirect");
         let error = discover_project_metadata_files(&redirected_root, &cancellation).unwrap_err();
         assert!(matches!(error, ProjectDiscoveryError::InvalidRoot));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn discovery_rejects_junction_roots_and_skips_junction_subtrees() {
+        use std::os::windows::process::CommandExt;
+
+        let root = TestDirectory::new("junction-root");
+        let outside = TestDirectory::new("junction-outside");
+        std::fs::write(outside.path().join(PROJECT_METADATA_FILE), "{}").unwrap();
+        let redirect = root.path().join("redirect");
+        let output = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&redirect)
+            .arg(outside.path())
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "junction creation failed: {output:?}"
+        );
+
+        let registry = ProjectTaskCancellationRegistry::new();
+        let cancellation = registry.begin();
+        assert!(
+            discover_project_metadata_files(root.path(), &cancellation)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(matches!(
+            discover_project_metadata_files(&redirect, &cancellation),
+            Err(ProjectDiscoveryError::InvalidRoot)
+        ));
+        std::fs::remove_dir(&redirect).unwrap();
+        assert!(outside.path().join(PROJECT_METADATA_FILE).is_file());
     }
 }

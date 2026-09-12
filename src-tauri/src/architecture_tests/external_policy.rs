@@ -1013,6 +1013,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-discovery",
+        mode: RustDependencyMode::Runtime,
+        package_name: "walkdir",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-function-editor-projection",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1405,6 +1411,11 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Project,
+        mode: RustDependencyMode::Runtime,
+        package_name: "walkdir",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Commands,
         mode: RustDependencyMode::Runtime,

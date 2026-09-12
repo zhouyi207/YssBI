@@ -7,5 +7,6 @@ publish = false
 
 [dependencies]
 thiserror.workspace = true
+walkdir.workspace = true
 yss-project-layout = { path = "../yss-project-layout" }
 yss-project-progress = { path = "../yss-project-progress" }

@@ -595,10 +595,24 @@ mod tests {
             normalize_existing_path(root.to_string_lossy().as_ref()).expect("normalized path")
         );
         assert_eq!(registry.list_projects().await.expect("list").len(), 1);
+
+        let cancellations = ProjectTaskCancellationRegistry::new();
+        let scan = registry
+            .scan_directory(
+                directory.path().to_str().unwrap(),
+                None,
+                cancellations.begin(),
+            )
+            .await
+            .expect("scan registered project");
+        assert_eq!(scan.discovered, 1);
+        assert_eq!(scan.newly_registered, 0);
+        assert_eq!(scan.projects[0].id, created.id);
+        assert_eq!(scan.projects[0].name, "Example");
     }
 
     #[tokio::test]
-    async fn cancelled_scan_preserves_the_typed_cancelled_outcome() {
+    async fn scan_preserves_cancelled_and_failed_outcomes() {
         let registry = registry(Vec::new());
         let cancellations = ProjectTaskCancellationRegistry::new();
         let cancellation = cancellations.begin();
@@ -608,6 +622,23 @@ mod tests {
             registry.scan_directory("ignored", None, cancellation).await,
             Err(ProjectRegistryError::Cancelled)
         ));
+
+        let directory = TestDirectory::new("scan-failure");
+        for path in [
+            directory.child("missing"),
+            directory.child("not-a-directory"),
+        ] {
+            if path.file_name().unwrap() == "not-a-directory" {
+                std::fs::write(&path, "{}").unwrap();
+            }
+            assert!(matches!(
+                registry
+                    .scan_directory(path.to_str().unwrap(), None, cancellations.begin())
+                    .await,
+                Err(ProjectRegistryError::ScanFailed)
+            ));
+        }
+        assert!(registry.list_projects().await.unwrap().is_empty());
     }
 
     #[test]
