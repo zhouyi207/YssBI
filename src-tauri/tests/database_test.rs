@@ -1,8 +1,5 @@
 //! Production database workflows over the committed catalog and Arrow file boundary.
-use arrow::array::{
-    Int8Array, Int32Array, Int64Array, StringArray,
-    UInt8Array,
-};
+use arrow::array::{Int8Array, Int32Array, Int64Array, StringArray, UInt8Array};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::{RecordBatch, RecordBatchReader};
 use std::path::PathBuf;
