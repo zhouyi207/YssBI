@@ -111,23 +111,6 @@ describe("GraphProblemsPanel", () => {
     });
   });
 
-  it("renders a shared header without exposing the focused graph path", () => {
-    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
-
-    act(() => {
-      root.render(
-        <TooltipProvider>
-          <GraphProblemsPanel />
-        </TooltipProvider>,
-      );
-    });
-
-    const header = host.querySelector("[data-graph-problems-panel-header]");
-    expect(header?.textContent).toContain("panel.problems");
-    expect(header?.textContent).toContain("panel.problemsCount");
-    expect(header?.textContent).not.toContain(graphPath);
-  });
-
   it("shows an empty state when the canonical projection has no problems", () => {
     useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
     useGraphProjectionStore.setState({

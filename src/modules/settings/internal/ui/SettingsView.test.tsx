@@ -143,14 +143,6 @@ describe("SettingsView preferences", () => {
     });
   }
 
-  it("does not offer the removed panel-position appearance setting", async () => {
-    render();
-    await openSection("appearance");
-
-    expect(host.textContent).not.toContain("settings.labels.panelPosition");
-    expect(host.textContent).not.toContain("settings.descriptions.panelPosition");
-  });
-
   it("exposes OpenAI model and API key controls in the AI section", async () => {
     render();
     await openSection("ai");

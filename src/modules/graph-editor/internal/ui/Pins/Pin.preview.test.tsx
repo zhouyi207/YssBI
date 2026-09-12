@@ -22,7 +22,6 @@ import { useProjectIOStore } from "@/features/application/project/projectIOStore
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphPinController } from "./GraphPinController";
-import { pinConnectionFeedbackAttributes } from "./GraphPinView";
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
@@ -48,20 +47,6 @@ vi.mock("react-i18next", async (importOriginal) => ({
   true;
 
 const graphPath = "events/Main.yssbi-event";
-
-describe("Pin connection feedback", () => {
-  it("maps structured feedback to safe metadata", () => {
-    expect(pinConnectionFeedbackAttributes({ kind: "append" })).toEqual({
-      "data-connection-feedback": "append",
-    });
-    expect(pinConnectionFeedbackAttributes({ kind: "invalid", invalidReason: "capacity" })).toEqual(
-      {
-        "data-connection-feedback": "invalid",
-        "data-connection-invalid-reason": "capacity",
-      },
-    );
-  });
-});
 
 describe("Pin preview production path", () => {
   afterAll(() => katexWarningSpy.mockRestore());

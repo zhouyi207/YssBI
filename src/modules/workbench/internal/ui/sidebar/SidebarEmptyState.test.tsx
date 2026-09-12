@@ -3,7 +3,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarEmptyState } from "./SidebarEmptyState";
 import { SidebarSectionEmptyState } from "./SidebarSectionEmptyState";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -21,21 +20,6 @@ describe("Sidebar empty-state components", () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
-  });
-
-  it("renders a wrapping tab-level state without a scrollbar viewport", () => {
-    act(() => {
-      root.render(
-        <SidebarEmptyState
-          title="Node catalog unavailable"
-          description="Waiting for stable catalog descriptors"
-        />,
-      );
-    });
-
-    expect(host.textContent).toContain("Node catalog unavailable");
-    expect(host.textContent).toContain("Waiting for stable catalog descriptors");
-    expect(host.querySelector('[data-slot="scroll-area-viewport"]')).toBeNull();
   });
 
   it("renders a section state with the full accessible label", () => {

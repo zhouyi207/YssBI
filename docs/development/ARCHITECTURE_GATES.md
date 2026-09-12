@@ -19,6 +19,8 @@ YssBI 的 architecture gate 是 test-owned fitness function，不是 production 
 
 Production modules 不导入 classifier、policy、debt 或 test fixtures。门禁从 repository snapshot 读取事实并 fail closed。
 
+图表包的依赖与 SVG 生命周期检查位于 `src/shared/charts/chartArchitecture.test.ts`，复用共享 TypeScript project、production source discovery 和 AST/依赖解析工具。图表专属边界与 ResizeObserver 归属仍由该测试验证。
+
 ## 2. Production discovery
 
 ### Rust

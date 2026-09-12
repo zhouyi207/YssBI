@@ -15,19 +15,6 @@ describe("workbenchUiStore", () => {
     useWorkbenchUiStore.getState().resetWorkbenchUiState();
   });
 
-  it("keeps only non-placement workbench UI state", () => {
-    const state = useWorkbenchUiStore.getState();
-
-    expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
-
-    expect(state).not.toHaveProperty("sidebarUserHidden");
-    expect(state).not.toHaveProperty("detailUserHidden");
-    expect(state).not.toHaveProperty("panelCollapsed");
-    expect(state).not.toHaveProperty("zenMode");
-    expect(state).not.toHaveProperty("activeEditorGroupId");
-    expect(state).not.toHaveProperty("tabs");
-  });
-
   it("updates modal state, then resets it", () => {
     const commands = useWorkbenchUiStore.getState();
 

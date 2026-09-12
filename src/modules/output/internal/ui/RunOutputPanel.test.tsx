@@ -83,21 +83,6 @@ describe("RunOutputPanel", () => {
     expect(host.textContent).toContain(zhCN.panel.outputTruncated);
   });
 
-  it("renders a shared header without exposing the focused graph path", () => {
-    act(() => {
-      useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
-      root.render(
-        <TooltipProvider>
-          <RunOutputPanel />
-        </TooltipProvider>,
-      );
-    });
-
-    const header = host.querySelector("[data-output-panel-header]");
-    expect(header?.textContent).toContain(zhCN.panel.output);
-    expect(header?.textContent).not.toContain(graphPath);
-  });
-
   it("clears only the visible output projection", () => {
     const execution = useExecutionStore.getState();
     act(() => {

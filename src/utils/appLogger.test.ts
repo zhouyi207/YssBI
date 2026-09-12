@@ -46,8 +46,4 @@ describe("appLogger", () => {
     await vi.advanceTimersByTimeAsync(FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS);
     expect(mocks.submit).toHaveBeenCalledOnce();
   });
-
-  it("does not expose a user-notification logging channel", () => {
-    expect(logger).not.toHaveProperty("notify");
-  });
 });

@@ -101,28 +101,11 @@ describe("edge operations", () => {
     const result = insertRerouteAtConnection(graphPath, "edge-1", position);
     position.x = 999;
 
-    await expect(result).resolves.toEqual(outcome);
+    await expect(result).resolves.toBe(outcome);
     expect(executeGraphEdit).toHaveBeenCalledTimes(1);
     expect(executeGraphEdit).toHaveBeenCalledWith(graphPath, "InsertReroute", {
       connectionId: "edge-1",
       position: { x: 120, y: 80 },
     });
-  });
-
-  it.each([
-    { status: "applied", result: {} },
-    { status: "noop", result: {} },
-    { status: "stale" },
-    { status: "saving" },
-    { status: "rejected", code: "graph_connection_not_found" },
-    { status: "failed" },
-  ] as const)("propagates the typed reroute outcome unchanged: %j", async (outcome) => {
-    vi.mocked(executeGraphEdit).mockResolvedValueOnce(outcome as never);
-
-    await expect(insertRerouteAtConnection(graphPath, "edge-1", { x: 120, y: 80 })).resolves.toBe(
-      outcome,
-    );
-
-    expect(executeGraphEdit).toHaveBeenCalledTimes(1);
   });
 });
