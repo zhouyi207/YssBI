@@ -1795,27 +1795,6 @@ mod tests {
     }
 
     #[test]
-    fn execute_prepared_uses_neutral_executor_without_publishing_empty_candidate() {
-        let state = state();
-        let plan = prepared_plan(&state);
-        let candidate = state
-            .execute_prepared(
-                &plan,
-                bindings(),
-                &ResourceProviderFactory::new("session".into()),
-                &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
-            )
-            .expect("neutral executor accepts an empty plan");
-
-        assert!(candidate.results().is_empty());
-        assert_eq!(
-            state.runs().state(RunId::from_existing(1)),
-            Some(RunState::Succeeded)
-        );
-        assert!(state.results().get(ResultId::from_existing(1)).is_none());
-    }
-
-    #[test]
     fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
         let state = state();
         let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());

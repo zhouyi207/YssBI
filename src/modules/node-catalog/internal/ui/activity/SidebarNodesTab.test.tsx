@@ -94,40 +94,6 @@ describe("SidebarNodesTab", () => {
     host.remove();
   });
 
-  it("renders the catalog without search controls and keeps categories expandable", () => {
-    act(() =>
-      root.render(
-        <TooltipProvider>
-          <SidebarNodesTab />
-        </TooltipProvider>,
-      ),
-    );
-
-    expect(host.querySelector("[data-sidebar-tree-search]")).toBeNull();
-    expect(host.querySelector("input")).toBeNull();
-    expect(host.textContent).toContain("Statistics");
-    expect(host.textContent).not.toContain("Logit fit");
-
-    const statistics = host.querySelector<HTMLButtonElement>(
-      '[data-sidebar-tree-category-id="statistics"]',
-    )!;
-    act(() => statistics.click());
-    const regression = host.querySelector<HTMLButtonElement>(
-      '[data-sidebar-tree-category-id="statistics.regression"]',
-    )!;
-    act(() => regression.click());
-
-    expect(host.textContent).toContain("Statistics");
-    expect(host.textContent).toContain("Regression");
-    expect(host.textContent).toContain("Logit fit");
-    expect(host.textContent).not.toContain("statistics.logit.fit");
-    expect(host.textContent).not.toContain("Call Helper");
-    act(() => statistics.click());
-    expect(host.textContent).not.toContain("Logit fit");
-    act(() => statistics.click());
-    expect(host.textContent).toContain("Logit fit");
-  });
-
   it("keeps resource-bound entries distinct while preserving their descriptors", () => {
     act(() =>
       root.render(

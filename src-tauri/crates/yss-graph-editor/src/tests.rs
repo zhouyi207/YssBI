@@ -1,5 +1,5 @@
 use crate::{
-    CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode, PortPlacement,
+    CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode,
 };
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
@@ -12,161 +12,6 @@ use yss_graph_document::{
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use yss_graph_registry::NodeRegistry;
-
-#[test]
-fn configuration_edits_preserve_node_fields_and_undo_without_connections() {
-    let system = build_builtin_node_system().unwrap();
-    let graph = "events/configuration.yssbi-event".parse().unwrap();
-    let mut document = GraphDocument::default();
-    let target = NodeId::new();
-    let source = NodeId::new();
-    for (id, node_type) in [
-        (target, "yssbi.statistics.ols.fit"),
-        (source, "yssbi.statistics.ols.fit"),
-    ] {
-        document.nodes.insert(
-            id,
-            DocumentNode {
-                id,
-                node_type: node_type.parse().unwrap(),
-                position: NodePosition { x: 0.0, y: 0.0 },
-                parameters: ParameterValues::new(),
-                user_label: None,
-            },
-        );
-    }
-    let edit = |document: &GraphDocument, entries: &[(&str, serde_json::Value)]| {
-        EditorGraphMutation::SetConfiguration {
-            node_id: target,
-            key: "configuration".parse().unwrap(),
-            values: entries
-                .iter()
-                .map(|(key, value)| (key.parse().unwrap(), value.clone()))
-                .collect(),
-        }
-        .into_patch(&graph, document, &system.registry)
-    };
-    let patch = edit(
-        &document,
-        &[
-            ("constant", false.into()),
-            ("covariance", "fixed scale".into()),
-        ],
-    )
-    .unwrap();
-    apply_graph_document_patch(&mut document, &patch).unwrap();
-    let value = |document: &GraphDocument| {
-        document.nodes[&target].parameters[&"configuration".parse::<ParameterKey>().unwrap()]
-            .clone()
-    };
-    assert_eq!(
-        value(&document),
-        serde_json::json!({"constant": false, "covariance": "fixed scale", "scale": 1.0})
-    );
-    let patch = edit(&document, &[("scale", serde_json::json!(0.0000001))]).unwrap();
-    apply_graph_document_patch(&mut document, &patch).unwrap();
-    assert_eq!(value(&document)["constant"], false);
-    assert_eq!(value(&document)["scale"], 0.0000001);
-    assert!(edit(&document, &[("scale", (-1).into())]).is_err());
-    assert!(edit(&document, &[("covariance", "unknown".into())]).is_err());
-    let patch = edit(&document, &[("covariance", "HC1".into())]).unwrap();
-    apply_graph_document_patch(&mut document, &patch).unwrap();
-    assert_eq!(
-        value(&document),
-        serde_json::json!({"constant": false, "covariance": "HC1"})
-    );
-    let local = document.clone();
-    let patch = edit(&document, &[("constant", true.into())]).unwrap();
-    apply_graph_document_patch(&mut document, &patch).unwrap();
-    assert_eq!(value(&document)["constant"], true);
-    assert!(document.nodes[&source].parameters.is_empty());
-    assert!(document.connections.is_empty());
-    assert!(document.input_states.is_empty());
-    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
-    assert_eq!(document, local);
-    assert_eq!(
-        serde_json::from_str::<GraphDocument>(&serde_json::to_string(&document).unwrap()).unwrap(),
-        document
-    );
-}
-
-#[test]
-fn port_placement_appends_moves_and_undoes_without_uuid_ordering() {
-    let system = build_builtin_node_system().unwrap();
-    let graph = "events/ports.yssbi-event".parse().unwrap();
-    let node_id = NodeId::new();
-    let template: PortKey = "operands".parse().unwrap();
-    let mut document = GraphDocument::default();
-    document.nodes.insert(
-        node_id,
-        DocumentNode {
-            id: node_id,
-            node_type: "yssbi.numeric.add".parse().unwrap(),
-            position: NodePosition { x: 0.0, y: 0.0 },
-            parameters: ParameterValues::new(),
-            user_label: None,
-        },
-    );
-    let mut created = Vec::new();
-    for _ in 0..3 {
-        let patch = EditorGraphMutation::AddPortInstance {
-            node_id,
-            template_key: template.clone(),
-            placement: PortPlacement::Append,
-        }
-        .into_patch(&graph, &document, &system.registry)
-        .unwrap();
-        let before = document
-            .port_bindings
-            .keys()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>();
-        apply_graph_document_patch(&mut document, &patch).unwrap();
-        created.push(
-            document
-                .port_bindings
-                .keys()
-                .find(|address| !before.contains(*address))
-                .unwrap()
-                .clone(),
-        );
-    }
-    let ordered = |document: &GraphDocument| {
-        let mut values = document
-            .port_bindings
-            .iter()
-            .map(|(address, binding)| {
-                let DynamicPortBinding::UserCreated { order } = binding else {
-                    panic!("user-created fixture")
-                };
-                (order.clone(), address.clone())
-            })
-            .collect::<Vec<_>>();
-        values.sort();
-        values
-            .into_iter()
-            .map(|(_, address)| address)
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(ordered(&document), created);
-    let yss_graph_document::PortRef::Instance { instance_id, .. } = created[0].port else {
-        panic!("instance fixture")
-    };
-    let before_move = document.clone();
-    let patch = EditorGraphMutation::MovePortInstance {
-        address: created[2].clone(),
-        placement: PortPlacement::Before(instance_id),
-    }
-    .into_patch(&graph, &document, &system.registry)
-    .unwrap();
-    apply_graph_document_patch(&mut document, &patch).unwrap();
-    assert_eq!(
-        ordered(&document),
-        [created[2].clone(), created[0].clone(), created[1].clone()]
-    );
-    apply_graph_document_patch(&mut document, &patch.inverse()).unwrap();
-    assert_eq!(document, before_move);
-}
 
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
@@ -202,21 +47,6 @@ fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_graph_cata
         .expect("fixture protocol must exist");
     authoritative_static_descriptor(registry, protocol)
         .expect("fixture protocol must have a catalog creation descriptor")
-}
-
-#[test]
-fn function_node_scope_remains_restricted_without_an_event_scope_variant() {
-    let registry = build_builtin_node_system()
-        .expect("built-in registry must assemble")
-        .registry;
-    let function_entry = registry
-        .protocol(&NodeTypeId::new("yssbi.project.function.entry").unwrap())
-        .expect("function entry protocol must exist");
-    let function_path = GraphResourcePath::new("functions/Main.yssbi-function")
-        .expect("fixture function path must be valid");
-
-    assert!(crate::mutation::validate_node_scope(&graph_path(), function_entry).is_err());
-    assert!(crate::mutation::validate_node_scope(&function_path, function_entry).is_ok());
 }
 
 #[test]

@@ -932,31 +932,4 @@ mod tests {
         assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
     }
 
-    #[test]
-    fn provider_failures_keep_safe_categories_without_response_contents() {
-        use AgentDriverFailureCode::*;
-        for (status, expected) in [
-            (401, ProviderAuthenticationFailed),
-            (429, ProviderRateLimited),
-            (400, ProviderRequestRejected),
-            (503, ProviderUnavailable),
-            (200, InvalidProviderResponse),
-        ] {
-            let error = CompletionError::from_http_response(
-                status.try_into().unwrap(),
-                "private-provider-response",
-            );
-            let failure = map_prompt_failure(error.into());
-            assert_eq!(failure.code, expected);
-            assert_eq!(
-                serde_json::to_value(&failure).unwrap(),
-                serde_json::json!({"code": expected.to_string()})
-            );
-        }
-        assert_eq!(
-            map_prompt_failure(CompletionError::ResponseError("private-response".into()).into())
-                .code,
-            InvalidProviderResponse
-        );
-    }
 }

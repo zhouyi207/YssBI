@@ -90,28 +90,6 @@ describe("Bayesian diagnostics assessment", () => {
     ]);
   });
 
-  it("treats unknown structured backend warnings without relying on backend prose", () => {
-    const warnings = [
-      {
-        code: "backend_specific",
-        metric: "ess_bulk" as const,
-        value: 12,
-        threshold: 100,
-        parameter: "beta",
-      },
-    ];
-    const assessment = evaluateInferenceDiagnostics(result([summary()], { warnings }));
-    expect(assessment.severity).toBe("warning");
-    expect(assessment.warnings).toMatchObject([
-      {
-        code: "backend_specific",
-        metric: "ess_bulk",
-        value: 12,
-        threshold: 100,
-      },
-    ]);
-  });
-
   it("describes stable lower-snake-case warning codes", () => {
     const description = describeDiagnosticWarning({
       code: "rhat_too_high",

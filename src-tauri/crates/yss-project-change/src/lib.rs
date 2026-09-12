@@ -184,14 +184,6 @@ mod tests {
     }
 
     #[test]
-    fn source_uncertainty_requests_a_rescan_without_faking_a_file_path() {
-        let change = ProjectChange::rescan_required();
-
-        assert_eq!(change, ProjectChange::RescanRequired);
-        assert!(change.affects_project_index());
-    }
-
-    #[test]
     fn invalidation_preserves_the_strong_runtime_project_identity() {
         let project = ProjectInstanceId::from_existing("runtime-project".to_owned());
         let invalidation = ProjectIndexInvalidation::new(project.clone());

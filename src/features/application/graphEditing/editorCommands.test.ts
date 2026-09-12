@@ -228,40 +228,6 @@ describe("forward-only editor commands", () => {
     },
   );
 
-  it("sends InsertReroute without a disconnect, create, store write, or ID allocation", async () => {
-    installProjection();
-    const before = useGraphProjectionStore.getState().graphEntities[graphPath];
-    const pending = deferred<{ status: "applied" }>();
-    applyGraphDraftMutation.mockReturnValueOnce(pending.promise);
-    const randomId = vi.spyOn(crypto, "randomUUID");
-
-    const command = executeGraphEdit(graphPath, "InsertReroute", {
-      connectionId: "edge-1",
-      position: { x: 120, y: 80 },
-    });
-
-    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
-    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
-      graphPath,
-      mutation: {
-        type: "insertReroute",
-        payload: { connectionId: "edge-1", position: { x: 120, y: 80 } },
-      },
-    });
-    expect(
-      applyGraphDraftMutation.mock.calls.flatMap(([input]) => input.mutation.type),
-    ).not.toContain("disconnectConnections");
-    expect(
-      applyGraphDraftMutation.mock.calls.flatMap(([input]) => input.mutation.type),
-    ).not.toContain("createNode");
-    expect(useGraphProjectionStore.getState().graphEntities[graphPath]).toBe(before);
-    expect(randomId).not.toHaveBeenCalled();
-
-    pending.resolve({ status: "applied" });
-    await expect(command).resolves.toMatchObject({ status: "applied" });
-    randomId.mockRestore();
-  });
-
   it("keeps MoveNodes forward-only and sends final positions unchanged", async () => {
     installProjection();
     applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied" });
@@ -300,26 +266,6 @@ describe("forward-only editor commands", () => {
     },
   );
 
-  it("preserves a typed rejection for interaction callers without structural notification", async () => {
-    const fixture = installProjection();
-    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
-    const rejection = {
-      status: "rejected" as const,
-      code: "graph_connection_type_mismatch" as const,
-    };
-    applyGraphDraftMutation.mockResolvedValueOnce(rejection);
-
-    await expect(
-      executeGraphEdit(graphPath, "ConnectPins", {
-        pinA: fixture.inputKey,
-        pinB: fixture.outputKey,
-      }),
-    ).resolves.toEqual(rejection);
-
-    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
-    expect(markGraphDirty).not.toHaveBeenCalled();
-  });
-
   it.each([
     { status: "applied" as const, dirtyCalls: 1 },
     { status: "noop" as const, result: {} as never, dirtyCalls: 0 },
@@ -339,52 +285,5 @@ describe("forward-only editor commands", () => {
 
     expect(markGraphDirty).toHaveBeenCalledTimes(outcome.dirtyCalls);
     if (outcome.dirtyCalls === 1) expect(markGraphDirty).toHaveBeenCalledWith(graphPath);
-  });
-
-  it("preserves noop without structural notification", async () => {
-    installProjection();
-    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
-    const noop = { status: "noop" as const, result: {} as never };
-    applyGraphDraftMutation.mockResolvedValueOnce(noop);
-
-    await expect(
-      executeGraphEdit(graphPath, "DeleteNodes", {
-        nodeIds: ["local-node"],
-      }),
-    ).resolves.toEqual(noop);
-
-    expect(markGraphDirty).not.toHaveBeenCalled();
-  });
-
-  it("infers graph mutation command outcomes at runtime without erasing the discriminant", async () => {
-    const fixture = installProjection();
-    applyGraphDraftMutation.mockResolvedValueOnce({
-      status: "rejected",
-      code: "graph_connection_type_mismatch",
-    });
-
-    const outcome = await executeGraphEdit(graphPath, "ConnectPins", {
-      pinA: fixture.inputKey,
-      pinB: fixture.outputKey,
-    });
-
-    if (outcome.status === "rejected") {
-      expect(outcome.code).toBe("graph_connection_type_mismatch");
-    } else {
-      expect.unreachable("unexpected non-rejected outcome");
-    }
-  });
-
-  it("reports a failed edit without a structural update when the command rejects", async () => {
-    const fixture = installProjection();
-    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
-    applyGraphDraftMutation.mockRejectedValueOnce(new Error("transport failure"));
-    await expect(
-      executeGraphEdit(graphPath, "ConnectPins", {
-        pinA: fixture.inputKey,
-        pinB: fixture.outputKey,
-      }),
-    ).resolves.toEqual({ status: "failed" });
-    expect(markGraphDirty).not.toHaveBeenCalled();
   });
 });

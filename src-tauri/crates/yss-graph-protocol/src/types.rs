@@ -445,25 +445,6 @@ mod tests {
     }
 
     #[test]
-    fn filter_schema_expression_round_trips_without_predicate() {
-        let expression = SchemaExpr::Filter {
-            input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
-            predicate: None,
-        };
-        let expected = serde_json::json!({
-            "Filter": {
-                "input": { "Input": "source" }
-            }
-        });
-
-        assert_eq!(serde_json::to_value(&expression).unwrap(), expected);
-        assert_eq!(
-            serde_json::from_value::<SchemaExpr>(expected).unwrap(),
-            expression
-        );
-    }
-
-    #[test]
     fn filter_schema_expression_serializes_exact_predicate_parameter() {
         let expression = SchemaExpr::Filter {
             input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),

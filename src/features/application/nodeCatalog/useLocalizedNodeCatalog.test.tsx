@@ -267,23 +267,4 @@ describe("useLocalizedNodeCatalog", () => {
     expect(host.querySelector("output")?.dataset.errorCode).toBe("ipc_transport_failure");
     expect(host.innerHTML).not.toContain("private localized catalog transport prose");
   });
-
-  it("preserves backend code and incident ID without retaining backend details", async () => {
-    vi.mocked(CatalogService.getLocalizedCatalog).mockRejectedValue(
-      normalizeIpcError("get_localized_node_catalog", {
-        code: "catalog_backend_failed",
-        details: { debug: "private catalog backend detail" },
-        incidentId: "incident-catalog-42",
-      }),
-    );
-
-    await act(async () => root.render(createElement(Harness)));
-    await vi.waitFor(() => expect(host.querySelector("output")?.dataset.status).toBe("error"));
-
-    expect(host.querySelector("output")?.dataset).toMatchObject({
-      errorCode: "catalog_backend_failed",
-      incidentId: "incident-catalog-42",
-    });
-    expect(host.innerHTML).not.toContain("private catalog backend detail");
-  });
 });

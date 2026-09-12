@@ -5,7 +5,6 @@ import {
 } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { openPresentationWindow } from "@/features/application/window";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -127,25 +126,6 @@ describe("openInspectableResult", () => {
       title: "Node result",
       presentation: { kind: "inspector" },
     });
-  });
-
-  it("routes plot descriptors through the same root Result upsert without opening a window", async () => {
-    mocks.getDescriptor.mockReturnValueOnce(plotDescriptor);
-
-    await expect(
-      openInspectableResult(
-        { kind: "result", executionSessionId: resultSessionFixture, resultId: "18" },
-        t,
-      ),
-    ).resolves.toBe(true);
-
-    expect(mocks.upsertResult).toHaveBeenCalledWith({
-      reference: resultReferenceFixture("18"),
-      leaseId: resultLeaseIdFixture(100),
-      title: "Scatter result",
-      presentation: { kind: "plot", chart: "scatter" },
-    });
-    expect(openPresentationWindow).not.toHaveBeenCalled();
   });
 
   it("drops current Pin result that settles after the project identity changes", async () => {

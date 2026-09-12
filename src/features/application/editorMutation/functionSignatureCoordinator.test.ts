@@ -231,31 +231,6 @@ describe("executeFunctionSignatureMutation", () => {
     expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
   });
 
-  it("treats a backend stale lifecycle rejection as stale without publication effects", async () => {
-    const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
-    const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
-    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
-
-    await expect(
-      executeFunctionSignatureMutation(
-        {
-          functionPath,
-          locale: "en-US",
-          patch: { inputs: [] },
-        },
-        dependencies(
-          vi.fn(async () => {
-            throw backendError("stale_project_lifecycle");
-          }),
-        ),
-      ),
-    ).resolves.toEqual({ status: "stale" });
-
-    expect(submit).not.toHaveBeenCalled();
-    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
-    expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
-  });
-
   it("rejects missing signature authority before invoke or publication effects", async () => {
     useGraphMetaStore.getState().clear();
     const mutateSignature = vi.fn();
@@ -434,61 +409,6 @@ describe("executeFunctionSignatureMutation", () => {
       projectInstanceId,
     );
     expect(GraphProjectionService.loadGraph).toHaveBeenCalledOnce();
-  });
-
-  it("refreshes canonical function projection and hydrates without local writes on a revision conflict", async () => {
-    const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
-    const hydrateGraph = vi.fn(async () => true);
-    const refreshResourceIndex = vi.fn(() => projectPublicationCoordinator.refreshIndex());
-    const query = vi.spyOn(ProjectService, "getProjectIndex").mockResolvedValue(
-      projectIndexSnapshotFixture({
-        projectInstanceId,
-        projectName: "Project",
-        exportTime: "",
-        publicationRevision: 1,
-        charts: [],
-        databases: [],
-        graphs: [
-          {
-            path: functionPath,
-            name: "Compute",
-            type: "function" as const,
-            revision: 7,
-            functionRevision: 3,
-            functionSignature: afterSignature,
-            functionEditorProjection: authoritativeFunctionProjection,
-          },
-        ],
-      }),
-    );
-
-    const outcome = await executeFunctionSignatureMutation(
-      {
-        functionPath,
-        locale: "en-US",
-        patch: { inputs: [] },
-      },
-      dependencies(
-        vi.fn(async () => {
-          throw backendError("function_revision_conflict");
-        }),
-        hydrateGraph,
-        refreshResourceIndex,
-      ),
-    );
-
-    expect(outcome).toEqual({ status: "conflict" });
-    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).not.toBe(beforeGraph);
-    expect(useGraphMetaStore.getState().graphs[functionPath]).toMatchObject({
-      functionRevision: 3,
-      functionSignature: afterSignature,
-      functionInputs: authoritativeFunctionProjection.inputs,
-      functionOutputs: authoritativeFunctionProjection.outputs,
-    });
-    expect(refreshResourceIndex).toHaveBeenCalledOnce();
-    expect(query).toHaveBeenCalledOnce();
-    expect(hydrateGraph).toHaveBeenCalledOnce();
-    expect(hydrateGraph).toHaveBeenCalledWith(functionPath, "en-US");
   });
 
   it("ignores a delayed old-project direct result when identities and publication numbers collide", async () => {

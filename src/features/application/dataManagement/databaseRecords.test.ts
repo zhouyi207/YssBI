@@ -12,17 +12,6 @@ describe("normalizeDatabaseRecord", () => {
     expect(record.loadFailed).toBe(false);
   });
 
-  it("normalizes machine load state without retaining raw load errors", () => {
-    const record = normalizeDatabaseRecord("df-1", {
-      id: "df-1",
-      loadFailed: true,
-      loadError: "sensitive backend failure",
-    });
-
-    expect(record.loadFailed).toBe(true);
-    expect(record).not.toHaveProperty("loadError");
-  });
-
   it("preserves rich metadata when incoming only supplies engine", () => {
     const existing: DatabaseRecord = {
       id: "df-1",

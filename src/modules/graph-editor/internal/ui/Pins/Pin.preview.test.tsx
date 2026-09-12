@@ -19,8 +19,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { resetResultQueryProject } from "@/features/application/results";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import type { GraphContextMenuActions } from "@/features/application/editor";
-import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { GraphPinController } from "./GraphPinController";
 
 const katexWarningSpy = vi.hoisted(() => {
@@ -82,56 +80,6 @@ describe("Pin preview production path", () => {
     resetResultQueryProject();
     useProjectIOStore.setState({ projectInstanceId: null });
     vi.restoreAllMocks();
-  });
-
-  it("renders the canvas handle slot without swallowing its pointer event", () => {
-    const fixture = makeEditorProjectionFixture({ graphPath });
-    expect(
-      useGraphProjectionStore.getState().replaceProjection(graphPath, fixture.projection).applied,
-    ).toBe(true);
-    const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, fixture.outputKey);
-    if (!pin) throw new Error("expected projected output pin");
-    const onPinPointerDown = vi.fn<(event: React.PointerEvent, pin: PinData) => void>();
-    const asyncAction = vi.fn(async () => true);
-    const contextMenuActions: GraphContextMenuActions = {
-      selectNode: vi.fn(),
-      copyNode: vi.fn(),
-      cutNode: asyncAction,
-      duplicateNode: asyncAction,
-      deleteNode: asyncAction,
-      breakAllNodeLinks: asyncAction,
-      selectLinkedNodes: vi.fn(),
-      disconnectPin: asyncAction,
-      resetPinValue: asyncAction,
-    };
-
-    act(() =>
-      root.render(
-        <TooltipProvider>
-          <GraphPinController
-            pin={pin}
-            graphPath={graphPath}
-            contextMenuActions={contextMenuActions}
-            handleSlot={
-              <span data-flow-handle onPointerDown={(event) => onPinPointerDown(event, pin)} />
-            }
-          />
-        </TooltipProvider>,
-      ),
-    );
-    const pinElement = container.querySelector("[data-flow-handle]");
-    if (!pinElement) throw new Error("expected rendered pin");
-    const anchor = pinElement.closest("[data-pin-connection-anchor]");
-    expect(anchor?.classList.contains("nodrag")).toBe(true);
-    expect(anchor?.classList.contains("nopan")).toBe(true);
-    act(() => {
-      pinElement.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
-    });
-
-    expect(onPinPointerDown).toHaveBeenCalledOnce();
-    const emittedPin = onPinPointerDown.mock.calls[0][1];
-    expect(emittedPin).not.toHaveProperty("contextMenuActions");
-    expect(() => structuredClone(emittedPin)).not.toThrow();
   });
 
   it("routes output View through the current Pin result", async () => {

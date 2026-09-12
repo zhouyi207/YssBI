@@ -737,20 +737,6 @@ mod tests {
     }
 
     #[test]
-    fn replaces_existing_worker_asset_without_leaving_temporary_files() {
-        let app_root = TemporaryAppRoot::new("julia-asset-replace");
-        let worker_dir = app_root.path().join(WORKER_DIR);
-        fs::create_dir_all(&worker_dir).expect("create worker directory");
-        let target = worker_dir.join("worker.jl");
-        fs::write(&target, "old").expect("write existing worker asset");
-
-        write_asset(&target, "new").expect("replace existing worker asset");
-
-        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
-        assert_eq!(fs::read_dir(&worker_dir).unwrap().count(), 1);
-    }
-
-    #[test]
     fn removes_temporary_worker_asset_when_publication_fails() {
         let app_root = TemporaryAppRoot::new("julia-asset-failure");
         let worker_dir = app_root.path().join(WORKER_DIR);

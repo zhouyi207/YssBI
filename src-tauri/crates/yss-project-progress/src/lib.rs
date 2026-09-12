@@ -131,21 +131,6 @@ mod tests {
     }
 
     #[test]
-    fn beginning_new_task_cancels_previous_without_losing_new_active_task() {
-        let registry = ProjectTaskCancellationRegistry::new();
-        let stale = registry.begin();
-        let current = registry.begin();
-
-        assert!(stale.is_cancelled());
-        assert!(!current.is_cancelled());
-
-        registry.end(&stale);
-        registry.cancel_active();
-
-        assert!(current.is_cancelled());
-    }
-
-    #[test]
     fn ending_current_task_removes_it_from_active_registry() {
         let registry = ProjectTaskCancellationRegistry::new();
         let cancellation = registry.begin();

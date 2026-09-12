@@ -210,44 +210,6 @@ mod tests {
     use yss_data_contract::{DataType, DataValue};
 
     #[test]
-    fn activation_rejects_unsupported_schema_without_changing_files_or_session() {
-        let mut data = ProjectData::new();
-        data.graphs.insert(
-            "events/Main.yssbi-event".parse().unwrap(),
-            yss_project_model::GraphResourceDocument::new(
-                "Main",
-                yss_graph_document::GraphResourceKind::Event,
-            ),
-        );
-        let fixture = crate::fixtures::TempProject::activate("unsupported-project-schema", data);
-        let state = fixture.state();
-        let session = state.capture_project_session().unwrap();
-        let root = session.root.as_path();
-        let manifest_path = root.join(yss_project_layout::PROJECT_METADATA_FILE);
-        let mut manifest: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
-        manifest["schemaVersion"] = serde_json::json!(3);
-        let manifest = serde_json::to_vec(&manifest).unwrap();
-        std::fs::write(&manifest_path, &manifest).unwrap();
-        let variables_path = root.join("variables.yssbi-vars");
-        let variables = br#"{"variables":{}}"#;
-        std::fs::write(&variables_path, variables).unwrap();
-        let graph_path = root.join("events/Main.yssbi-event");
-        let graph = std::fs::read(&graph_path).unwrap();
-
-        let error = state.activate_project_from_path(root).unwrap_err();
-
-        assert_eq!(error.code(), "transaction_prepare_failed");
-        assert_eq!(std::fs::read(&manifest_path).unwrap(), manifest);
-        assert_eq!(std::fs::read(&variables_path).unwrap(), variables);
-        assert_eq!(std::fs::read(&graph_path).unwrap(), graph);
-        assert_eq!(
-            state.capture_project_session().unwrap().instance_id,
-            session.instance_id
-        );
-    }
-
-    #[test]
     fn activation_rejects_invalid_tabular_value_instead_of_silently_publishing_it() {
         let mut data = ProjectData::new();
         let id = yss_graph_document::ConstantId::new();

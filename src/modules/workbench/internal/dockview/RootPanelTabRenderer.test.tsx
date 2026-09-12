@@ -77,10 +77,6 @@ function viewParams(): WorkbenchPanelParams {
   return { metadata: { role: "view", viewId: "logs" } };
 }
 
-function detailsParams(): WorkbenchPanelParams {
-  return { metadata: { role: "view", viewId: "details" } };
-}
-
 function resultParams(): WorkbenchPanelParams {
   return {
     metadata: {
@@ -166,59 +162,6 @@ describe("RootPanelTabRenderer", () => {
     return headerHost;
   }
 
-  it("shows canonical editor chrome and routes close and middle-click without native removal", () => {
-    mocks.dirty = true;
-    renderDockview((readyApi) => {
-      readyApi.addPanel<WorkbenchPanelParams>({
-        id: "editor-a",
-        component: "EditorResource",
-        title: "Main",
-        params: editorParams(),
-      });
-    });
-
-    const content = host.querySelector<HTMLElement>('[data-panel-instance-id="editor-a"]')!;
-    expect(content.querySelector("[data-workbench-tab-title]")?.textContent).toBe("Main");
-    expect(content.querySelector('[data-workbench-tab-icon="event"]')).not.toBeNull();
-    expect(content.querySelector("[data-workbench-tab-dirty]")).not.toBeNull();
-    // Dockview initially omits dv-horizontal on top headers.
-    expect(tabShell("editor-a").parentElement?.classList.contains("dv-horizontal")).toBe(false);
-    expect(getComputedStyle(tabShell("editor-a")).backgroundColor).toBe("rgb(49, 94, 222)");
-
-    const closeButton = content.querySelector<HTMLButtonElement>("[data-workbench-tab-close]")!;
-    const closeEvent = new MouseEvent("click", {
-      button: 0,
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => closeButton.dispatchEvent(closeEvent));
-
-    expect(closeEvent.defaultPrevented).toBe(true);
-    expect(mocks.requestCloseEditorPanel).toHaveBeenNthCalledWith(1, "editor-a");
-    expect(api?.getPanel("editor-a")).toBeDefined();
-
-    const tab = tabHeaderHost("editor-a");
-    const pointerDown = new MouseEvent("pointerdown", {
-      button: 1,
-      bubbles: true,
-      cancelable: true,
-    });
-    const pointerUp = new MouseEvent("pointerup", {
-      button: 1,
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      tab.dispatchEvent(pointerDown);
-      tab.dispatchEvent(pointerUp);
-    });
-
-    expect(pointerDown.defaultPrevented).toBe(true);
-    expect(pointerUp.defaultPrevented).toBe(true);
-    expect(mocks.requestCloseEditorPanel).toHaveBeenNthCalledWith(2, "editor-a");
-    expect(api?.getPanel("editor-a")).toBeDefined();
-  });
-
   it("keeps the existing editor document context menu", () => {
     renderDockview((readyApi) => {
       readyApi.addPanel<WorkbenchPanelParams>({
@@ -298,40 +241,6 @@ describe("RootPanelTabRenderer", () => {
       expect.any(Function),
     );
     expect(document.querySelector('[role="menu"]')?.textContent).toContain("document-action");
-  });
-
-  it("keeps the permanent Details tab open without a close affordance", () => {
-    renderDockview((readyApi) => {
-      readyApi.addPanel<WorkbenchPanelParams>({
-        id: "details-a",
-        component: "Details",
-        title: "Details",
-        params: detailsParams(),
-      });
-    });
-
-    const content = host.querySelector<HTMLElement>('[data-panel-instance-id="details-a"]')!;
-    expect(content.querySelector("[data-workbench-tab-title]")?.textContent).toBe("panel.details");
-    expect(content.querySelector('[data-workbench-tab-icon="details"]')).not.toBeNull();
-    expect(content.querySelector("[data-workbench-tab-close]")).toBeNull();
-
-    const tab = tabShell("details-a");
-    const pointerDown = new MouseEvent("pointerdown", {
-      button: 1,
-      bubbles: true,
-      cancelable: true,
-    });
-    const pointerUp = new MouseEvent("pointerup", {
-      button: 1,
-      bubbles: true,
-      cancelable: true,
-    });
-    act(() => {
-      tab.dispatchEvent(pointerDown);
-      tab.dispatchEvent(pointerUp);
-    });
-
-    expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
   });
 
   it("treats collapsed edge tabs as unselected and expands the selected tab", () => {

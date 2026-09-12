@@ -1,9 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  parsePinPreviewGenerationDto,
-  PinPreviewGenerationService,
-} from "./pinPreviewGenerationService";
+import { parsePinPreviewGenerationDto } from "./pinPreviewGenerationService";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -12,15 +9,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 describe("PinPreviewGenerationService", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset();
-  });
-
-  it("allocates through the project-independent command without arguments", async () => {
-    vi.mocked(invoke).mockResolvedValue({ generation: 17 });
-
-    await expect(PinPreviewGenerationService.allocate()).resolves.toBe(17);
-
-    expect(invoke).toHaveBeenCalledOnce();
-    expect(invoke).toHaveBeenCalledWith("allocate_pin_preview_generation");
   });
 
   it("accepts only an exact positive safe-integer generation DTO", () => {

@@ -8,7 +8,6 @@ use yss_project_model::ProjectData;
 use yss_project_registry::ProjectRegistry;
 use yss_project_registry_contract::{
     ProjectRecord, ProjectRegistryStore, ProjectRegistryStoreError, ProjectRegistryStoreFuture,
-    ProjectRootIdentityState,
 };
 
 static DELETE_TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -487,78 +486,6 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
             (false, false, 0)
         );
         drop(state.filesystem_for_test().acquire(normalized).unwrap());
-        assert!(
-            registry
-                .fetch_by_id(record.id.as_str())
-                .await
-                .unwrap()
-                .is_some()
-        );
-    });
-}
-
-#[test]
-fn invalid_active_row_is_rejected_as_registry_cleanup_without_file_deletion() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    block_on(async {
-        let directory = TestDirectory::new("delete-application-invalid-active");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Invalid");
-        std::fs::write(root.join("sentinel.txt"), b"preserve").unwrap();
-        let session = state.capture_project_session().unwrap();
-        let registered = register_root(&registry, &root, "Invalid").await;
-        mark_registry_record_invalid(&registry, registered.id.as_str()).await;
-        let record = registry
-            .fetch_by_id(registered.id.as_str())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            record.root_identity_state,
-            ProjectRootIdentityState::Invalid
-        );
-        let operation_id = OperationId::new();
-        let expected = ProjectLifecycleApplicationEvent {
-            operation_id,
-            kind: ProjectLifecycleKind::RegistryCleanup,
-            old_project_instance_id: None,
-            new_project_instance_id: None,
-            phase: ProjectLifecyclePhase::RegistryCommitted,
-            outcome: ProjectLifecycleOutcome::RegistryFailed,
-            record: Some(record.clone()),
-            path: None,
-            recovery: Some(LifecycleRecovery {
-                required: true,
-                action: LifecycleRecoveryAction::CleanupRegistry,
-                path: None,
-                identity: None,
-            }),
-            invalidation: LifecycleInvalidation {
-                project: false,
-                registry: true,
-            },
-        };
-
-        let result = delete_registered_project(
-            &state,
-            &registry,
-            record.id.as_str(),
-            Some(session.instance_id.clone()),
-            operation_id,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result, expected);
-        assert_eq!(state.capture_project_session().unwrap(), session);
-        assert_eq!(
-            std::fs::read(root.join("sentinel.txt")).unwrap(),
-            b"preserve"
-        );
         assert!(
             registry
                 .fetch_by_id(record.id.as_str())

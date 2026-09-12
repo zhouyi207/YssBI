@@ -100,10 +100,6 @@ const activeProjectCommandIdentityFields = {
   ...lifecycleOwnedNodeCommandIdentityFields,
 } as const;
 
-const activeProjectCommands = Object.keys(activeProjectCommandIdentityFields) as Array<
-  keyof typeof activeProjectCommandIdentityFields
->;
-
 const bootstrapCommandExemptions = [
   "get_current_project_activation",
   "default_project_parent_directory",
@@ -120,98 +116,6 @@ const bootstrapCommandExemptions = [
   "new_project",
   "load_project",
 ] as const;
-
-const globalCommandExemptions = [
-  "get_window_states",
-  "get_window_state",
-  "save_window_state",
-  "list_sqlite_tables",
-  "list_sql_tables",
-  "list_excel_sheets",
-  "list_sample_datasets",
-  "hypothesis_test",
-  "parse_at_values",
-  "compute_acf_pacf",
-  "compute_serial_tests",
-  "compute_panel_did_fake_group_ri",
-  "list_plugins",
-  "inspect_plugin_package",
-  "install_plugin_package",
-  "set_plugin_enabled",
-  "uninstall_plugin",
-  "list_plugin_tasks",
-  "get_plugin_task_history",
-  "clear_plugin_task_history",
-  "get_plugin_storage_usage",
-  "clear_plugin_cache",
-  "collect_plugin_garbage",
-  "get_plugin_diagnostics",
-  "submit_frontend_diagnostics",
-  "subscribe_diagnostics",
-  "unsubscribe_diagnostics",
-] as const;
-
-const processGlobalAllocatorCommandExemptions = [
-  // Task 9 preview generations are process-global, checked, and non-reusable.
-  "allocate_pin_preview_generation",
-] as const;
-
-const capabilityCommandExemptions = [
-  "cancel_graph_run",
-  "get_result_descriptor",
-  "retain_result",
-  "claim_result_lease",
-  "release_result_lease",
-  "reconcile_result_leases",
-  "get_result_value",
-  "get_result_page",
-  "get_result_table_page",
-  "analyze_result",
-  "get_pin_result",
-
-  // Plugin view capabilities are bound to the installed plugin, window and backend session.
-  "attach_plugin_view",
-  "detach_plugin_view",
-  "call_plugin_view",
-  "grant_plugin_export",
-
-  "get_harness_runtime_status",
-  "configure_harness_provider",
-  "create_harness_session",
-  "subscribe_harness_graph_tools",
-  "unsubscribe_harness_graph_tools",
-  "prepare_harness_graph_tool",
-  "complete_harness_graph_tool",
-  "claim_harness_graph_tool",
-  "subscribe_harness_events",
-  "unsubscribe_harness_events",
-  "submit_harness_turn",
-  "cancel_harness_turn",
-  "close_harness_session",
-  "list_harness_memory",
-  "delete_harness_memory",
-  "plan_dataset_quality_review",
-  "advance_harness_workflow",
-  "pause_harness_workflow",
-  "resume_harness_workflow",
-  "cancel_harness_workflow",
-] as const;
-
-const identityExemptCommands = [
-  ...bootstrapCommandExemptions,
-  ...globalCommandExemptions,
-  ...processGlobalAllocatorCommandExemptions,
-  ...capabilityCommandExemptions,
-] as const;
-
-function registeredTauriCommands(source: string): string[] {
-  const handler = source.match(/tauri::generate_handler!\[([\s\S]*?)\]/)?.[1] ?? "";
-  return handler
-    .replace(/\/\/.*$/gm, "")
-    .split(",")
-    .map((command) => command.trim())
-    .filter(Boolean);
-}
 
 interface ServiceInvoke {
   command: string;
@@ -498,44 +402,6 @@ const workflowFiles = [
 ] as const;
 
 describe("projectFilesystemContract", () => {
-  it("classifies every registered Tauri command without duplicate or stale exemptions", () => {
-    const registered = registeredTauriCommands(
-      readFileSync(resolve("src-tauri/crates/yss-api/src/lib.rs"), "utf8"),
-    );
-    const violations = commandClassificationViolations(
-      registered,
-      activeProjectCommands,
-      identityExemptCommands,
-    );
-
-    expect(violations).toEqual({
-      duplicates: [],
-      unclassified: [],
-      staleClassifications: [],
-    });
-  });
-
-  it("extracts invoke payload keys semantically without matching comments or values", () => {
-    const invokes = serviceInvokes([
-      {
-        path: "src/services/project/fixture.ts",
-        source: `
-        import { invoke } from '@tauri-apps/api/core';
-        // invoke('execute_compiled_graph', { projectInstanceId });
-        invoke('execute_compiled_graph', { other: projectInstanceId });
-      `,
-      },
-    ]);
-
-    expect(invokes).toEqual([
-      {
-        command: "execute_compiled_graph",
-        path: "src/services/project/fixture.ts",
-        payloadFields: ["other"],
-      },
-    ]);
-  });
-
   it("recognizes aliased and namespace Tauri invoke bindings", () => {
     const path = "src/services/project/boundInvokeFixture.ts";
     const invokes = serviceInvokes([

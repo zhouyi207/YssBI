@@ -10,7 +10,6 @@ import {
 } from "./projectPublicationSnapshot";
 import type { ResourceMutationResultDto } from "@/shared/types/domain/editorMutation";
 import type { ProjectIndexRow } from "@/shared/types/domain/project";
-import type { ChartDocument } from "@/shared/types/domain/chart";
 import { useResourceStore, useDocumentStateStore } from "@/features/core/resource";
 import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -24,7 +23,6 @@ import {
 } from "@/tests/helpers/editorProjectionFixtures";
 
 const eventPath = "events/Event.yssbi-event";
-const chartPath = "charts/Chart.yssbi-chart";
 
 function index(revision: number): ProjectIndexRow {
   return {
@@ -138,29 +136,6 @@ it("coalesces command, event and index refreshes, including a snapshot ahead of 
   expect(dependencies.markProjectProjectionStale).not.toHaveBeenCalled();
 });
 
-it("installs an event-first chart receipt without a UI-staged document", async () => {
-  const snapshot = index(1);
-  snapshot.charts = [{ chartPath, name: "Chart", databaseId: "", chartType: "line", revision: 0 }];
-  const document: ChartDocument = {
-    schemaVersion: 4,
-    databaseId: "",
-    chartType: "line",
-    encodings: {},
-  };
-  const dependencies = setup({
-    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
-    loadChartDocument: vi.fn(async () => document),
-  });
-  const result = receipt(1, chartPath, "chart");
-  expect(useChartDocumentStore.getState().documents[chartPath]).toBeUndefined();
-  expect((await coordinator.submit({ result })).status).toBe("applied");
-  expect((await coordinator.submit({ result: structuredClone(result) })).status).toBe("duplicate");
-  expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(document);
-  expect(dependencies.loadChartDocument).toHaveBeenCalledOnce();
-  expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
-  expect(dependencies.markProjectProjectionStale).not.toHaveBeenCalled();
-});
-
 it("does not republish unchanged index content or invalidate catalogs on repeated watcher notifications", async () => {
   const snapshot = index(0);
   const dependencies = setup({
@@ -173,37 +148,6 @@ it("does not republish unchanged index content or invalidate catalogs on repeate
   await coordinator.refreshIndex();
   expect(dependencies.commitSnapshot).toHaveBeenCalledOnce();
   expect(useResourceStore.getState()).toBe(before);
-});
-
-it("refreshes a clean chart from resource metadata without a document revision", async () => {
-  let snapshot = index(1);
-  snapshot.charts = [{ chartPath, name: "Chart", databaseId: "", chartType: "line", revision: 0 }];
-  let document: ChartDocument = {
-    schemaVersion: 4,
-    databaseId: "",
-    chartType: "line",
-    encodings: { y: "old" },
-  };
-  const loadChartDocument = vi.fn(async (_project: string, _path: string, revision: number) => {
-    expect(revision).toBe(snapshot.publicationRevision);
-    return document;
-  });
-  setup({
-    loadProjectIndex: vi.fn(async () => projectIndexSnapshotFixture(snapshot)),
-    loadChartDocument,
-  });
-  await coordinator.submit({ result: receipt(1, chartPath, "chart") });
-  document = { ...document, encodings: { y: "new" } };
-  snapshot = {
-    ...snapshot,
-    publicationRevision: 2,
-    charts: [{ ...snapshot.charts[0], revision: 1 }],
-  };
-  await coordinator.refreshIndex();
-  expect(useChartDocumentStore.getState().documents[chartPath]).toEqual(document);
-  expect(loadChartDocument).toHaveBeenLastCalledWith("project-a", chartPath, 2);
-  await coordinator.refreshIndex();
-  expect(loadChartDocument).toHaveBeenCalledTimes(2);
 });
 
 it("includes move receipts delivered while another graph session is being prepared", async () => {

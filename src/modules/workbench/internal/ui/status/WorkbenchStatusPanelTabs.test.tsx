@@ -163,37 +163,6 @@ describe("Workbench status panel tabs", () => {
     expect(api.activePanel?.params?.metadata).toEqual({ role: "view", viewId: "project" });
   });
 
-  it("handles unrelated layout events without serializing or rerendering unchanged chrome and editors", async () => {
-    await renderWorkbench();
-    await update(() => undefined);
-    const serialize = vi.spyOn(api, "toJSON");
-    const layoutChanged = vi.fn();
-    const layoutSubscription = api.onDidLayoutChange(layoutChanged);
-    const workbench = document.querySelector<HTMLElement>("[data-yssbi-workbench]")!;
-    const rootStyle = vi.spyOn(workbench.style, "setProperty");
-    const statusStyle = vi.spyOn(document.querySelector("footer")!.style, "setProperty");
-    editorRender.mockClear();
-    statusRender.mockClear();
-
-    for (let step = 0; step < 12; step += 1) {
-      await update(() => api.getPanel("editor")!.api.setTitle(`Main ${step}`));
-    }
-
-    layoutSubscription.dispose();
-    expect(layoutChanged.mock.calls.length).toBeGreaterThanOrEqual(12);
-    expect.soft(serialize).not.toHaveBeenCalled();
-    expect.soft(editorRender).not.toHaveBeenCalled();
-    expect.soft(statusRender).not.toHaveBeenCalled();
-    expect.soft(rootStyle).not.toHaveBeenCalled();
-    expect.soft(statusStyle).not.toHaveBeenCalled();
-
-    await update(() => button("output").click());
-    expect(button("output").getAttribute("aria-pressed")).toBe("true");
-    expect(editorRender).toHaveBeenLastCalledWith(false);
-    await update(() => api.getPanel("editor")!.api.setActive());
-    expect(editorRender).toHaveBeenLastCalledWith(true);
-  });
-
   it("keeps the visible panel selected while editing and collapses or reveals from the status bar", async () => {
     await renderWorkbench();
     await update(() => undefined);

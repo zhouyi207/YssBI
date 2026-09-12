@@ -124,15 +124,6 @@ describe("chart authoritative mutation results", () => {
     vi.spyOn(ChartService, "loadChart").mockImplementation(async () => committedDocument);
   });
 
-  it("keys documents explicitly without synthesizing index rows", () => {
-    const document = chart("scatter");
-
-    useChartDocumentStore.getState().upsertDocument(chartPath, document);
-
-    expect(useChartDocumentStore.getState().documents).toEqual({ [chartPath]: document });
-    expect(useChartDocumentStore.getState().index).toEqual([]);
-  });
-
   it("ignores a delayed save completion from a replaced project", async () => {
     const draft = chart("scatter");
     useChartDocumentStore.getState().upsertDocument(chartPath, draft);

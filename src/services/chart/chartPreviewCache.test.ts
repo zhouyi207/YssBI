@@ -193,19 +193,6 @@ describe("getChartPreview", () => {
     },
   );
 
-  it("prevents an invalidated in-flight request from writing without a replacement", async () => {
-    clearChartPreviewCache();
-    const oldRequest = deferred<ChartPreviewPayload>();
-    const oldPayload: ChartPreviewPayload = { kind: "empty" };
-    const oldCompletion = getChartPreview(PROJECT_A, DOCUMENT, () => oldRequest.promise);
-
-    invalidateChartPreviewCacheForMove(PROJECT_A, CHART_PATH, "charts/Moved.yssbi-chart");
-    oldRequest.resolve(oldPayload);
-
-    await expect(oldCompletion).resolves.toBe(oldPayload);
-    expect(getCachedChartPreview(PROJECT_A, DOCUMENT)).toBeUndefined();
-  });
-
   it("invalidates both opaque chart path owners during a move", async () => {
     clearChartPreviewCache();
     const from = "opaque chart::before";

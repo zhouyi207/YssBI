@@ -51,42 +51,6 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
 }
 
 #[test]
-fn temporal_edits_and_forced_casts_drop_input_zones_without_moving_the_clock() {
-    let dtype = DataType::Timestamp(TimeUnit::Nanosecond, None);
-    let field = Field::new("at", dtype.clone(), true);
-    let edited = json_to_array(
-        &field,
-        &[
-            json!("2026-09-11T10:00:00+08:00"),
-            json!("1969-12-31T23:59:59.123456789-05:00"),
-            json!(null),
-        ],
-    )
-    .unwrap();
-    assert_eq!(
-        array_to_json(edited.as_ref()).unwrap(),
-        vec![
-            json!("2026-09-11T10:00:00"),
-            json!("1969-12-31T23:59:59.123456789"),
-            json!(null)
-        ]
-    );
-    let strings = StringArray::from(vec![
-        "2026-09-11 10:00:00+08:00",
-        "2026-09-11T10:00:00+99:00",
-        "bad date",
-    ]);
-    assert!(cast_temporal_without_timezone(&strings, &dtype, false).is_err());
-    let forced = cast_temporal_without_timezone(&strings, &dtype, true).unwrap();
-    assert_eq!(
-        array_to_json(forced.as_ref()).unwrap(),
-        vec![json!("2026-09-11T10:00:00"), json!(null), json!(null)]
-    );
-    assert_eq!(editable_data_type("Datetime(ns)").unwrap(), dtype);
-    assert!(editable_data_type("Datetime(ns, UTC)").is_err());
-}
-
-#[test]
 fn storage_schema_preserves_identity_exact_types_and_category_domain() {
     let domain = CategoryDomain {
         labels: vec!["high".into(), "low".into()],

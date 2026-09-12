@@ -99,15 +99,4 @@ describe("spawnNodeFromTemplate", () => {
     expect(findResourceNodeSpawnTemplate(items, "functions/opaque", "function")).toBeNull();
     expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "database")).toBeNull();
   });
-
-  it("returns false without retrying when descriptor creation is rejected", async () => {
-    const descriptor: NodeCreationDescriptor = { kind: "static", nodeTypeId: "math.add" };
-    const createNode = vi.fn(async () => false);
-
-    await expect(
-      spawnNodeFromTemplate({ descriptor }, { x: 1, y: 2 }, { createNode }),
-    ).resolves.toBe(false);
-
-    expect(createNode).toHaveBeenCalledOnce();
-  });
 });

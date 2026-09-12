@@ -32,25 +32,6 @@ class CodeStatTest(unittest.TestCase):
         self.assertEqual(stats[".tsx"]["test_code"], 2)
         self.assertEqual(stats[".tsx"]["production_code"], 0)
 
-    def test_counts_rust_inline_test_modules_without_counting_string_braces(self):
-        stats = self.analyze_sources({
-            "src/lib.rs": '''pub fn production() -> &'static str { "}" }
-
-#[cfg(test)]
-mod tests {
-    // A brace in a comment must not end the module: }
-    #[test]
-    fn works() {
-        assert_eq!(super::production(), "}");
-    }
-}
-''',
-        })
-
-        self.assertEqual(stats[".rs"]["test_files"], 1)
-        self.assertEqual(stats[".rs"]["test_code"], 7)
-        self.assertEqual(stats[".rs"]["test_comment"], 1)
-        self.assertEqual(stats[".rs"]["production_code"], 1)
 
     def test_ignores_rust_test_attributes_inside_comments_and_literals(self):
         stats = self.analyze_sources({

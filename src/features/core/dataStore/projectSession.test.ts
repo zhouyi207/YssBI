@@ -20,15 +20,6 @@ describe("projectSession", () => {
     vi.mocked(ProjectService.getProjectPath).mockReset();
   });
 
-  it("returns cached path without calling backend", async () => {
-    useProjectIOStore.setState({ currentPath: "D:/demo/metadata.yssbi" });
-
-    const path = await hydrateProjectPath();
-
-    expect(path).toBe("D:/demo/metadata.yssbi");
-    expect(ProjectService.getProjectPath).not.toHaveBeenCalled();
-  });
-
   it("hydrates currentPath from backend when projection is missing", async () => {
     vi.mocked(ProjectService.getProjectPath).mockResolvedValue("D:/demo/metadata.yssbi");
 

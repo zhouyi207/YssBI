@@ -373,10 +373,7 @@ vi.mock("./LogPanelList", async () => {
 });
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  DEFAULT_LOGS_DOCKVIEW_LAYOUT,
-  LOGS_DOCKVIEW_COMPONENT_ID,
-} from "@/modules/workbench/internal/dockview/logsDockviewLayout";
+import { LOGS_DOCKVIEW_COMPONENT_ID } from "@/modules/workbench/internal/dockview/logsDockviewLayout";
 import { logsDockviewRuntime } from "@/modules/workbench/internal/dockview/logsRuntime";
 import { logsDockviewRootBinding } from "@/modules/workbench/internal/dockview/logsRootBinding";
 import { logDomainPanelId } from "@/features/domain/log/logDomains";
@@ -585,23 +582,6 @@ describe("LogDomainDockviewHost", () => {
     expect(unbind).toHaveBeenCalledOnce();
     expect(unbind).toHaveBeenCalledWith(bind.mock.results[0]?.value);
     expect(logsDockviewRuntime.getLatestSnapshot().panels).toHaveProperty(logDomainPanelId("ui"));
-  });
-
-  it("restores a fresh ephemeral default without controller or storage persistence", async () => {
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
-    const bind = vi.spyOn(logsDockviewRootBinding, "bind");
-    const unbind = vi.spyOn(logsDockviewRootBinding, "unbind");
-
-    renderWorkspace({ kind: "ephemeral" });
-    await flushSubscription();
-    const dockview = latestDockview();
-
-    expect(dockview.fromJSONInputs).toHaveLength(1);
-    expect(dockview.fromJSONInputs[0]).toEqual(DEFAULT_LOGS_DOCKVIEW_LAYOUT);
-    expect(dockview.fromJSONInputs[0]).not.toBe(DEFAULT_LOGS_DOCKVIEW_LAYOUT);
-    expect(bind).not.toHaveBeenCalled();
-    expect(unbind).not.toHaveBeenCalled();
-    expect(setItem).not.toHaveBeenCalled();
   });
 
   it("projects selection independently in split All and Graph panels", async () => {

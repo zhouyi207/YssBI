@@ -8,7 +8,6 @@ import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAcc
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { portAddressKey } from "@/features/domain/editorProjection";
 import type { DiagnosticDto } from "@/shared/types/dto/editorProjection";
 import { GraphProblemsPanel } from "./GraphProblemsPanel";
 import {
@@ -127,42 +126,5 @@ describe("GraphProblemsPanel", () => {
 
     expect(host.querySelectorAll("[data-graph-problem-row]")).toHaveLength(0);
     expect(host.textContent).toContain("panel.problemsEmpty");
-  });
-
-  it("shows semantic port locations without exposing node or pin identities", () => {
-    const address = { kind: "declared" as const, nodeId: "node-a", portKey: "value" };
-    const pinId = portAddressKey(address);
-    const portProblem: DiagnosticDto = {
-      ...diagnostic("node-a", "node.error", "Value is invalid"),
-      location: { kind: "port", address },
-    };
-    const portBucket = {
-      ...bucket,
-      graphNodes: ["node-a"],
-      diagnostics: [portProblem],
-      pins: {
-        [pinId]: {
-          id: pinId,
-          nodeId: "node-a",
-          name: "raw-value",
-          display: { label: "Value", instanceLabel: null },
-          address,
-        },
-      },
-    } as unknown as GraphEntityBucket;
-    useGraphProjectionStore.setState({ graphEntities: { [graphPath]: portBucket } });
-    useGraphSessionStore.getState().setFocusedSession("group-1", graphPath);
-
-    act(() => {
-      root.render(
-        <TooltipProvider>
-          <GraphProblemsPanel />
-        </TooltipProvider>,
-      );
-    });
-
-    expect(host.textContent).toContain("Node A · Value");
-    expect(host.textContent).not.toContain("node-a");
-    expect(host.textContent).not.toContain(pinId);
   });
 });

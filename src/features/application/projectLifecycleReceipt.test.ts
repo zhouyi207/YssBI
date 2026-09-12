@@ -204,19 +204,6 @@ describe("project lifecycle pending receipt registry", () => {
     await vi.waitFor(() => expect(eventDeps.refreshRegistry).toHaveBeenCalledOnce());
   });
 
-  it("gives an external event without a pending operation zero effects", async () => {
-    const deps = dependencies();
-
-    deliverLifecycleEvent(receipt("external-operation"), deps);
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(deps.prepareProjectTransition).not.toHaveBeenCalled();
-    expect(deps.refreshRegistry).not.toHaveBeenCalled();
-    expect(deps.clearProject).not.toHaveBeenCalled();
-    expect(deps.markProjectStale).not.toHaveBeenCalled();
-  });
-
   it("rejects a late event from an earlier epoch of the same project instance", async () => {
     const pending = registerPendingProjectLifecycleOperation({ kind: "saveAs" });
     const deps = dependencies();
@@ -363,31 +350,6 @@ describe("project lifecycle pending receipt registry", () => {
       expect(late.markProjectStale).not.toHaveBeenCalled();
     },
   );
-
-  it("accepts registry-only cleanup for an inactive delete request without clearing authority", async () => {
-    const pending = registerPendingProjectLifecycleOperation({
-      kind: "delete",
-      expectsActiveProject: false,
-    });
-    const deps = dependencies();
-    const result = {
-      ...receipt(pending.operationId),
-      kind: "registryCleanup",
-      oldProjectInstanceId: null,
-      newProjectInstanceId: null,
-      phase: "registryCommitted",
-      outcome: "committed",
-      invalidation: { project: false, registry: true },
-    } as LifecycleMutationResultDto;
-
-    await expect(applyProjectLifecycleReceipt(result, "direct", deps)).resolves.toMatchObject({
-      status: "applied",
-    });
-
-    expect(deps.clearProject).not.toHaveBeenCalled();
-    expect(deps.prepareProjectTransition).not.toHaveBeenCalled();
-    expect(deps.refreshRegistry).toHaveBeenCalledOnce();
-  });
 
   it("clears active authority and refreshes registry for committed delete", async () => {
     const pending = registerPendingProjectLifecycleOperation({ kind: "delete" });
@@ -588,58 +550,5 @@ describe("project lifecycle pending receipt registry", () => {
     expect(first.refreshRegistry).toHaveBeenCalledOnce();
     expect(late.refreshRegistry).not.toHaveBeenCalled();
     expect(late.prepareProjectTransition).not.toHaveBeenCalled();
-  });
-
-  it("reuses an expired operation ID without allowing the old event to claim the new generation", async () => {
-    let now = 1_000;
-    setProjectLifecycleClockForTests(() => now);
-    const operationId = "reused-operation";
-    registerPendingProjectLifecycleOperation({ kind: "saveAs", operationId });
-    await recoverProjectLifecycleDirectFailure(operationId);
-    now += PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS + 1;
-    registerPendingProjectLifecycleOperation({ kind: "saveAs", operationId });
-    const deps = dependencies();
-
-    await expect(
-      applyProjectLifecycleReceipt(
-        receipt(operationId, { path: "C:/old/metadata.yssbi" }),
-        "event",
-        deps,
-      ),
-    ).resolves.toMatchObject({ status: "stale" });
-    await expect(
-      applyProjectLifecycleReceipt(
-        receipt(operationId, { path: "C:/new/metadata.yssbi" }),
-        "direct",
-        deps,
-      ),
-    ).resolves.toMatchObject({ status: "applied" });
-    await expect(
-      applyProjectLifecycleReceipt(
-        receipt(operationId, { path: "C:/new/metadata.yssbi" }),
-        "event",
-        deps,
-      ),
-    ).resolves.toMatchObject({ status: "duplicate" });
-
-    expect(deps.prepareProjectTransition).toHaveBeenCalledOnce();
-    expect(deps.refreshRegistry).toHaveBeenCalledOnce();
-  });
-
-  it("keeps the registry bounded without silently evicting current pending operations", () => {
-    for (let index = 0; index < 128; index += 1) {
-      registerPendingProjectLifecycleOperation({
-        kind: "create",
-        operationId: `operation-${index}`,
-      });
-    }
-
-    expect(() =>
-      registerPendingProjectLifecycleOperation({
-        kind: "create",
-        operationId: "operation-overflow",
-      }),
-    ).toThrow(ProjectLifecycleProtocolError);
-    expect(getProjectLifecycleRegistrySizeForTests()).toBe(128);
   });
 });

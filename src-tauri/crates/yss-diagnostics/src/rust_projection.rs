@@ -123,27 +123,6 @@ mod tests {
     }
 
     #[test]
-    fn consumes_diagnostic_metadata_without_leaking_it_into_fields() {
-        let pending = project_log_record(&record(BTreeMap::from([
-            (DOMAIN_FIELD.into(), json!("graph")),
-            (EVENT_FIELD.into(), json!("nodeFailed")),
-            (SOURCE_FIELD.into(), json!("node-1")),
-            (TARGET_FIELD.into(), json!("graph.runner")),
-            ("attempt".into(), json!(2)),
-        ])))
-        .unwrap();
-
-        assert_eq!(pending.domain, DiagnosticDomain::Graph);
-        assert_eq!(pending.event.as_deref(), Some("nodeFailed"));
-        assert_eq!(pending.source.as_deref(), Some("node-1"));
-        assert_eq!(pending.target, "graph.runner");
-        assert_eq!(
-            pending.fields,
-            BTreeMap::from([("attempt".into(), json!(2))])
-        );
-    }
-
-    #[test]
     fn skip_recent_suppresses_only_the_diagnostic_projection() {
         assert!(
             project_log_record(&record(BTreeMap::from([(

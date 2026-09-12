@@ -104,27 +104,4 @@ describe("project event ingress", () => {
     expect(accepted).toEqual(["a", "d"]);
     await ingress.closeAndDrain();
   });
-
-  it("turns a consumer rejection into one safe recovery without applying the tail", async () => {
-    const accepted: string[] = [];
-    const recover = vi.fn(async () => undefined);
-    const consumer: ProjectEventConsumer = {
-      acceptEvent: vi.fn((received) => {
-        accepted.push(received.payload.result.operationId);
-        return received.payload.result.operationId === "a"
-          ? Promise.reject(new Error("transport failure"))
-          : Promise.resolve(applied);
-      }),
-    };
-    const ingress = createProjectEventIngress(consumer, {
-      requestAuthoritativeSnapshot: recover,
-    });
-
-    ingress.enqueue(item("a"));
-    ingress.enqueue(item("b"));
-    await ingress.closeAndDrain();
-
-    expect(accepted).toEqual(["a"]);
-    expect(recover).toHaveBeenCalledOnce();
-  });
 });

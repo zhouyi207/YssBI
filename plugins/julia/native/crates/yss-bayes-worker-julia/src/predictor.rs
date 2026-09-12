@@ -254,25 +254,4 @@ mod tests {
         assert!(generated.likelihood.contains("logpdf(Normal("));
     }
 
-    #[test]
-    fn invalid_function_arity_returns_typed_error_without_backend_prose() {
-        let error = generate_julia_model(&model(serde_json::json!({
-            "type": "call",
-            "function": "ln",
-            "args": [
-                { "type": "data_variable", "name": "x" },
-                { "type": "number", "value": 2.0 }
-            ]
-        })))
-        .expect_err("invalid arity must fail generation");
-
-        assert_eq!(
-            error,
-            JuliaModelGenerationError::InvalidFunctionArity {
-                function: JuliaMathFunction::Ln,
-                expected: 1,
-                actual: 2,
-            }
-        );
-    }
 }

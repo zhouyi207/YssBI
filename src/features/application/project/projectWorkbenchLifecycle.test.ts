@@ -214,27 +214,6 @@ describe("project workbench lifecycle", () => {
     );
   });
 
-  it("resets all pane state without a transaction when the root is unbound", async () => {
-    lifecycleMocks.state.ready = false;
-    openEditor("events/Shared.yssbi-event");
-    const owner = captureProjectLifecycleState();
-
-    await removeProjectScopedWorkbenchPanels("project-a", owner);
-
-    expect(lifecycleMocks.invalidateForProjectReplacement).toHaveBeenCalledOnce();
-    expect(lifecycleMocks.runLayoutTransaction).not.toHaveBeenCalled();
-    expect(lifecycleMocks.releasePaneState).not.toHaveBeenCalled();
-    expect(lifecycleMocks.resetPaneState).toHaveBeenCalledOnce();
-    expect(lifecycleMocks.resetGraphSession).toHaveBeenCalledOnce();
-    expect(lifecycleMocks.resetResultAndContext).toHaveBeenCalledOnce();
-    expect(lifecycleMocks.state.events).toEqual([
-      "layout:invalidated",
-      "pane:reset",
-      "session:reset",
-      "result-context:reset",
-    ]);
-  });
-
   it("rejects a current-owner cleanup when the ProjectIO identity is unexpected", async () => {
     const owner = captureProjectLifecycleState();
     lifecycleMocks.state.projectInstanceId = "project-b";

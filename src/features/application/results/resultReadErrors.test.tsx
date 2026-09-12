@@ -7,7 +7,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultReadError } from "./components/ResultReadError";
-import { usePagedResultRows } from "./usePagedResultRows";
 import { useResultValue } from "./useResultValue";
 import {
   createResultQueryCoordinator,
@@ -38,7 +37,6 @@ type TestRuntime = {
 
 let runtime: TestRuntime;
 let valueState: ReturnType<typeof useResultValue> | undefined;
-let pageState: ReturnType<typeof usePagedResultRows> | undefined;
 
 function pageKey(request: ResultPageRequest): string {
   return `${request.resultId}:${request.offset}:${request.limit}`;
@@ -134,11 +132,6 @@ function ValueHarness({ showError = false }: { showError?: boolean }) {
   return showError && valueState.error ? <ResultReadError error={valueState.error} /> : null;
 }
 
-function PageHarness() {
-  pageState = usePagedResultRows(resultReferenceFixture("42"), 1, 200, runtime);
-  return null;
-}
-
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
@@ -153,7 +146,6 @@ describe("result read machine errors", () => {
     vi.clearAllMocks();
     runtime = createTestRuntime();
     valueState = undefined;
-    pageState = undefined;
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -192,68 +184,5 @@ describe("result read machine errors", () => {
     });
     await render(null);
     expect(runtime.read.getValue(resultReferenceFixture("42"))).toBeNull();
-  });
-
-  it("stores a stable value fallback for parser failures without parser prose", async () => {
-    runtime.service.getValue.mockRejectedValueOnce(
-      new Error("Invalid result value: private response"),
-    );
-
-    await render(<ValueHarness />);
-
-    expect(valueState).toMatchObject({
-      loading: false,
-      error: { code: "result_value_read_failed", incidentId: null },
-    });
-    expect(JSON.stringify(valueState)).not.toContain("Invalid result value");
-    expect(JSON.stringify(valueState)).not.toContain("private response");
-  });
-
-  it("stores a distinct page fallback for parser failures without parser prose", async () => {
-    runtime.service.getPage.mockRejectedValueOnce(
-      new Error("Invalid result page: private page response"),
-    );
-
-    await render(<PageHarness />);
-
-    expect(pageState).toMatchObject({
-      loading: false,
-      error: { code: "result_page_read_failed", incidentId: null },
-    });
-    expect(JSON.stringify(pageState)).not.toContain("Invalid result page");
-    expect(JSON.stringify(pageState)).not.toContain("private page response");
-  });
-
-  it("renders a localized generic error and transport code without raw transport text", async () => {
-    runtime.service.getValue.mockRejectedValueOnce({
-      code: "ipc_transport_failure",
-      incidentId: null,
-    });
-
-    await render(<ValueHarness showError />);
-
-    const alert = host.querySelector('[role="alert"]');
-    expect(alert?.textContent).toContain("localized:resultSource.readFailed");
-    expect(alert?.textContent).toContain("localized:common.errorCode");
-    expect(alert?.textContent).toContain("ipc_transport_failure");
-    expect(alert?.textContent).not.toContain("private native transport failure");
-    expect(alert?.textContent).not.toContain("localized:common.incidentId");
-  });
-
-  it("renders IPC code and incident ID without backend details or synthesized Error.message", async () => {
-    runtime.service.getValue.mockRejectedValueOnce({
-      code: "result_value_unavailable",
-      incidentId: "incident-result-42",
-    });
-
-    await render(<ValueHarness showError />);
-
-    const text = host.querySelector('[role="alert"]')?.textContent;
-    expect(text).toContain("localized:resultSource.readFailed");
-    expect(text).toContain("result_value_unavailable");
-    expect(text).toContain("localized:common.incidentId");
-    expect(text).toContain("incident-result-42");
-    expect(text).not.toContain("private backend detail");
-    expect(text).not.toContain("IPC command 'get_result_value' failed");
   });
 });

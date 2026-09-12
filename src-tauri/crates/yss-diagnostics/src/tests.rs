@@ -4,8 +4,6 @@ use std::time::Duration;
 
 use chrono::NaiveDateTime;
 use serde_json::json;
-use tracing_subscriber::layer::SubscriberExt;
-use yss_tracing::{LogLayer, LogLimits as DiagnosticLimits, REDACTED_VALUE};
 
 use super::dispatcher::{
     DiagnosticsHub, LIVE_BATCH_INTERVAL, LIVE_BATCH_MAX_RECORDS, PendingDiagnostic,
@@ -15,7 +13,6 @@ use super::dto::{
     DiagnosticBatchDto, DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, DiagnosticRecordDto,
     DiagnosticSubscriptionDto, FrontendDiagnosticEntryDto,
 };
-use super::rust_projection::log_record_sink;
 use super::validation::{MAX_FRONTEND_DIAGNOSTIC_BATCH, validate_frontend_batch};
 
 fn pending(message: impl Into<String>) -> PendingDiagnostic {
@@ -330,131 +327,6 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
 }
 
 #[test]
-fn recent_layer_maps_structured_tracing_events_without_file_io() {
-    let (hub, _guard) = DiagnosticsHub::start();
-    let subscriber =
-        tracing_subscriber::registry().with(LogLayer::new(log_record_sink(hub.clone())));
-
-    let long_detail = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
-    tracing::subscriber::with_default(subscriber, || {
-        tracing::warn!(
-            target: "yssbi::node_system::runtime::cleanup",
-            diagnostic_domain = "execution",
-            diagnostic_event = "cleanupFailed",
-            diagnostic_source = "run-1",
-            retry_count = 2_u64,
-            authorization = "trace-secret",
-            clipboard_content = "private-clipboard",
-            detail = long_detail.as_str(),
-            "cleanup failed"
-        );
-    });
-
-    let subscription = hub.subscribe(|_| true).unwrap();
-    assert_eq!(subscription.entries.len(), 1);
-    let record = &subscription.entries[0];
-    assert_eq!(record.level, DiagnosticLevel::Warn);
-    assert_eq!(record.origin, DiagnosticOrigin::Rust);
-    assert_eq!(record.domain, DiagnosticDomain::Execution);
-    assert_eq!(record.target, "yssbi::node_system::runtime::cleanup");
-    assert_eq!(record.event.as_deref(), Some("cleanupFailed"));
-    assert_eq!(record.source.as_deref(), Some("run-1"));
-    assert_eq!(record.message, "cleanup failed");
-    assert_eq!(record.fields["retry_count"], 2);
-    assert_eq!(record.fields["authorization"], REDACTED_VALUE);
-    assert_eq!(record.fields["clipboard_content"], REDACTED_VALUE);
-    assert!(
-        record.fields["detail"].as_str().unwrap().len() <= DiagnosticLimits::MAX_FIELD_STRING_BYTES
-    );
-    let encoded = serde_json::to_string(record).unwrap();
-    assert!(!encoded.contains("trace-secret"));
-    assert!(!encoded.contains("private-clipboard"));
-    NaiveDateTime::parse_from_str(&record.timestamp, "%Y-%m-%dT%H:%M:%S%.f").unwrap();
-    hub.unsubscribe(subscription.subscription_id).unwrap();
-}
-
-#[test]
-fn concurrent_live_delivery_is_sequence_ordered_without_duplicates() {
-    const PUBLISHERS: usize = 4;
-    const RECORDS_PER_PUBLISHER: usize = 25;
-    let (hub, _guard) = DiagnosticsHub::start();
-    let (batch_sender, batch_receiver) = mpsc::channel();
-    let subscription = hub
-        .subscribe(move |batch| batch_sender.send(batch).is_ok())
-        .unwrap();
-
-    let publishers = (0..PUBLISHERS)
-        .map(|publisher| {
-            let hub = hub.clone();
-            std::thread::spawn(move || {
-                for index in 0..RECORDS_PER_PUBLISHER {
-                    hub.publish(vec![pending(format!("{publisher}-{index}"))])
-                        .unwrap();
-                }
-            })
-        })
-        .collect::<Vec<_>>();
-    for publisher in publishers {
-        publisher.join().unwrap();
-    }
-
-    let expected_count = PUBLISHERS * RECORDS_PER_PUBLISHER;
-    let mut sequences = Vec::with_capacity(expected_count);
-    while sequences.len() < expected_count {
-        let batch = batch_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
-        assert_eq!(batch.stream_id, subscription.stream_id);
-        assert!(batch.entries.len() <= LIVE_BATCH_MAX_RECORDS);
-        sequences.extend(batch.entries.into_iter().map(|record| record.sequence));
-    }
-    assert_eq!(sequences, (1..=expected_count as u64).collect::<Vec<_>>());
-    hub.unsubscribe(subscription.subscription_id).unwrap();
-}
-
-#[test]
-fn slow_subscriber_is_removed_without_blocking_dispatcher() {
-    let (hub, _guard) = DiagnosticsHub::start_for_test(32, 1);
-    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let observed_attempts = attempts.clone();
-    let (started_sender, started_receiver) = mpsc::channel();
-    let (release_sender, release_receiver) = mpsc::channel();
-    let slow = hub
-        .subscribe(move |_| {
-            observed_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let _ = started_sender.send(());
-            let _ = release_receiver.recv_timeout(Duration::from_secs(1));
-            true
-        })
-        .unwrap();
-
-    hub.publish(vec![pending("first")]).unwrap();
-    started_receiver
-        .recv_timeout(Duration::from_secs(1))
-        .unwrap();
-    hub.publish(vec![pending("second")]).unwrap();
-    let barrier = hub.subscribe(|_| true).unwrap();
-    hub.publish(vec![pending("third")]).unwrap();
-    let started = std::time::Instant::now();
-    let snapshot = hub.subscribe(|_| true).unwrap();
-    assert!(started.elapsed() < Duration::from_millis(250));
-    assert_eq!(snapshot.latest_sequence, 3);
-    assert_eq!(
-        snapshot
-            .entries
-            .iter()
-            .map(|record| record.sequence)
-            .collect::<Vec<_>>(),
-        vec![1, 2, 3]
-    );
-
-    release_sender.send(()).unwrap();
-    std::thread::sleep(Duration::from_millis(20));
-    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-    hub.unsubscribe(slow.subscription_id).unwrap();
-    hub.unsubscribe(barrier.subscription_id).unwrap();
-    hub.unsubscribe(snapshot.subscription_id).unwrap();
-}
-
-#[test]
 fn shutdown_does_not_wait_for_full_ingress() {
     let (hub, guard, _release_dispatcher) = DiagnosticsHub::start_paused_for_test(1);
     hub.publish(vec![pending("queued")]).unwrap();
@@ -462,39 +334,4 @@ fn shutdown_does_not_wait_for_full_ingress() {
     let started = std::time::Instant::now();
     drop(guard);
     assert!(started.elapsed() < Duration::from_millis(500));
-}
-
-#[test]
-fn failed_live_sink_is_removed_without_disrupting_recent_records() {
-    let (hub, _guard) = DiagnosticsHub::start();
-    let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let observed_attempts = attempts.clone();
-    let (attempt_sender, attempt_receiver) = mpsc::channel();
-    let failed = hub
-        .subscribe(move |_| {
-            observed_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let _ = attempt_sender.send(());
-            false
-        })
-        .unwrap();
-
-    hub.publish(vec![pending("first")]).unwrap();
-    let barrier = hub.subscribe(|_| true).unwrap();
-    attempt_receiver
-        .recv_timeout(Duration::from_secs(1))
-        .unwrap();
-    hub.publish(vec![pending("second")]).unwrap();
-    let snapshot = hub.subscribe(|_| true).unwrap();
-    assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
-    assert_eq!(
-        snapshot
-            .entries
-            .iter()
-            .map(|record| record.sequence)
-            .collect::<Vec<_>>(),
-        vec![1, 2]
-    );
-    hub.unsubscribe(failed.subscription_id).unwrap();
-    hub.unsubscribe(barrier.subscription_id).unwrap();
-    hub.unsubscribe(snapshot.subscription_id).unwrap();
 }

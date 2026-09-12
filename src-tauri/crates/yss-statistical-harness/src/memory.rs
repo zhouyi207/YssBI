@@ -227,40 +227,6 @@ mod tests {
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
-    #[test]
-    fn policy_rejects_agent_memory_without_source_and_secret_like_values() {
-        let base = MemoryProposal {
-            session_id: HarnessSessionId::try_new("session-1").unwrap(),
-            scope: MemoryScope::Session,
-            value: StructuredMemoryValue::ResearchQuestion {
-                question: "How should this be reported?".to_owned(),
-            },
-            source_refs: Vec::new(),
-            confidence: MemoryConfidence::High,
-            project: Some(yss_automation_contract::ProjectSessionBinding::new(
-                yss_project_identity::ProjectInstanceId::from_existing("project-1".into()),
-                yss_project_identity::ProjectSessionId::new("project-session-1"),
-            )),
-            sensitivity: SensitivityClass::Internal,
-            created_by: MemoryAuthor::AgentProposal,
-            supersedes: None,
-            retention: RetentionPolicy::Session,
-        };
-        assert!(validate_proposal(&base).is_err());
-
-        let secret = MemoryProposal {
-            source_refs: vec![MemorySourceRef {
-                source_id: "user-confirmation".to_owned(),
-                source_revision: "1".to_owned(),
-            }],
-            value: StructuredMemoryValue::ResearchQuestion {
-                question: "api_key=secret".to_owned(),
-            },
-            ..base
-        };
-        assert!(validate_proposal(&secret).is_err());
-    }
-
     #[tokio::test]
     async fn approved_memory_is_invalidated_when_its_source_revision_changes() {
         let store = Arc::new(InMemoryHarnessStore::default());

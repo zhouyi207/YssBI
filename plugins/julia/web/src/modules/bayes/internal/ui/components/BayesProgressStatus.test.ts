@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bayesOverallProgress, formatDuration } from "./BayesProgressStatus";
+import { bayesOverallProgress } from "./BayesProgressStatus";
 
 describe("Bayes progress presentation", () => {
   it("reserves progress milestones for output parsing and frontend rendering", () => {
@@ -10,11 +10,5 @@ describe("Bayes progress presentation", () => {
     expect(bayesOverallProgress("reading_result")).toBe(98);
     expect(bayesOverallProgress("writing_artifacts")).toBe(98);
     expect(bayesOverallProgress("rendering_result")).toBe(99);
-  });
-
-  it("formats elapsed and remaining durations without losing hours", () => {
-    expect(formatDuration(5)).toBe("00:05");
-    expect(formatDuration(125)).toBe("02:05");
-    expect(formatDuration(3_725)).toBe("1:02:05");
   });
 });

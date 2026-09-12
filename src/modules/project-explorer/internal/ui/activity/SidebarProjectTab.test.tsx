@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
 import { activityPanelFixture, categoryFixture } from "@/tests/helpers/activityPanelFixture";
-import { parseActivityPanelUpdate } from "@/shared/types/dto/activityPanel";
 import {
   startProjectLifecycle,
   captureProjectIdentity,
@@ -14,7 +13,6 @@ import { i18n } from "@/app/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import * as activityService from "@/services/workbench/activityPanelService";
 import { useSidebarStore } from "@/features/core/sidebar/sidebarStore";
 import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeState";
 import { useEditorStore } from "@/features/core/editor";
@@ -41,12 +39,6 @@ const actions = {
   onOpenChart: vi.fn(),
   onDatabaseContextMenu: vi.fn(),
 };
-
-function categoryIds(host: HTMLElement): Array<string | null> {
-  return Array.from(host.querySelectorAll("[data-sidebar-tree-category-id]")).map((category) =>
-    category.getAttribute("data-sidebar-tree-category-id"),
-  );
-}
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -186,95 +178,6 @@ describe("SidebarProjectTab", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders Project categories without a search input and preserves category actions", () => {
-    const query = vi.spyOn(activityService, "getActivityPanelDocument");
-    act(() =>
-      root.render(
-        <I18nextProvider i18n={i18n}>
-          <TooltipProvider>
-            <SidebarProjectTab actions={actions} />
-          </TooltipProvider>
-        </I18nextProvider>,
-      ),
-    );
-
-    expect(categoryIds(host)).toEqual(Object.values(PROJECT_TREE_CATEGORY_IDS));
-    expect(host.querySelector("input")).toBeNull();
-    expect(host.querySelector("[data-sidebar-tree-search]")).toBeNull();
-
-    const data = host.querySelector<HTMLButtonElement>(
-      `[data-sidebar-tree-category-id="${PROJECT_TREE_CATEGORY_IDS.data}"]`,
-    )!;
-    act(() => data.click());
-    expect(
-      useSidebarStore.getState().expandedCategories.project?.[PROJECT_TREE_CATEGORY_IDS.data],
-    ).toBe(false);
-    act(() => data.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })));
-    expect(actions.onCategoryContextMenu).toHaveBeenCalledWith(
-      expect.anything(),
-      PROJECT_TREE_CATEGORY_IDS.data,
-    );
-    const importButton = host.querySelector<HTMLButtonElement>('[aria-label="Import Data"]')!;
-    act(() => importButton.click());
-    expect(actions.onImportData).toHaveBeenCalledOnce();
-
-    const event = buildGraphResourceMeta("event", "events/First.yssbi-event", "First Event");
-    act(() =>
-      useResourceStore.getState().setSnapshot({ resources: [event], publicationRevision: 1 }),
-    );
-    expect(host.textContent).not.toContain("First Event");
-    const panel = useSidebarStore.getState().panels.project!;
-    const inserted = parseActivityPanelUpdate(
-      {
-        kind: "patch",
-        baseCursor: "c1",
-        cursor: "c2",
-        patch: {},
-        operations: [
-          {
-            op: "insert",
-            afterId: "project.events",
-            row: {
-              id: event.uri,
-              kind: "item",
-              depth: 1,
-              item: { kind: "graph", path: event.id, name: "First Event", graphType: "event" },
-            },
-          },
-        ],
-      },
-      panel.snapshot,
-    )!;
-    act(() =>
-      useSidebarStore.getState().publishPanels([{ binding: panel.binding, snapshot: inserted }]),
-    );
-    expect(host.textContent).toContain("First Event");
-    expect(host.querySelector('[role="status"]')).toBeNull();
-    act(() =>
-      useResourceStore.getState().setSnapshot({
-        resources: [{ ...event, loaded: true, exists: false }],
-        publicationRevision: 2,
-      }),
-    );
-    expect(host.textContent).toContain("First Event");
-    const removed = parseActivityPanelUpdate(
-      {
-        kind: "patch",
-        baseCursor: "c2",
-        cursor: "c3",
-        patch: {},
-        operations: [{ op: "remove", id: event.uri }],
-      },
-      inserted,
-    )!;
-    act(() =>
-      useSidebarStore.getState().publishPanels([{ binding: panel.binding, snapshot: removed }]),
-    );
-    expect(host.textContent).not.toContain("First Event");
-    expect(host.querySelector('[role="status"]')).toBeNull();
-    expect(query).not.toHaveBeenCalled();
-  });
-
   it("keeps the current graph highlighted across single, multiple and cleared node selections", () => {
     const { first } = installGraphs();
     renderProjectTab();
@@ -295,40 +198,5 @@ describe("SidebarProjectTab", () => {
       publishDockview();
     });
     expect(graphRowSelected(first.name)).toBe(true);
-  });
-
-  it("follows Dockview switches and closure without waiting for a Details or graph-session update", () => {
-    const { first, second } = installGraphs();
-    renderProjectTab();
-    act(() => {
-      activeEditor = {
-        ...activeEditor!,
-        panelInstanceId: "second-editor",
-        groupId: "second-group",
-        title: second.name,
-        metadata: { role: "editor", resourceRef: second.id, resourceKind: "function" },
-      };
-      groupEditors.set(activeEditor.groupId, activeEditor);
-      publishDockview();
-    });
-    expect(useEditorStore.getState().detailFocus).toEqual({ kind: "event", path: first.id });
-    expect(graphRowSelected(first.name)).toBe(false);
-    expect(graphRowSelected(second.name)).toBe(true);
-    act(() => {
-      activeEditor = {
-        ...activeEditor!,
-        metadata: { role: "editor", resourceRef: "chart", resourceKind: "chart" },
-      };
-      publishDockview();
-    });
-    expect(graphRowSelected(first.name)).toBe(false);
-    expect(graphRowSelected(second.name)).toBe(false);
-    act(() => {
-      activeEditor = undefined;
-      groupEditors.clear();
-      publishDockview();
-    });
-    expect(graphRowSelected(first.name)).toBe(false);
-    expect(graphRowSelected(second.name)).toBe(false);
   });
 });

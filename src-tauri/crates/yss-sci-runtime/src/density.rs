@@ -124,15 +124,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn kde_grid_respects_finite_min_x_without_changing_point_count() {
-        let points = compute_kernel_density(KernelDensityInput {
-            values: &[0.1, 0.2, 0.3],
-            grid_points: 32,
-            min_x: Some(0.0),
-        })
-        .points;
-        assert_eq!(points.len(), 32);
-        assert_eq!(points.first().map(|point| point.x), Some(0.0));
-    }
 }

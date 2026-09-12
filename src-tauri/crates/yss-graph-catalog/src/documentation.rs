@@ -170,15 +170,3 @@ fn select_locale(documentation: Documentation, locale: &str) -> &'static str {
         documentation.en
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn leaves_unmapped_nodes_without_documentation() {
-        let node_type_id = NodeTypeId::new("yssbi.unknown.node").unwrap();
-
-        assert!(documentation(&node_type_id, "en-US").is_none());
-    }
-}

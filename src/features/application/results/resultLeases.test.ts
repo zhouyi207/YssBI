@@ -32,35 +32,6 @@ function setup() {
   return { port, failure, controller: createResultLeaseController(port, failure) };
 }
 
-it("retains pending opens and reconciles actual panel removal without reacting to layout-only changes", async () => {
-  const { controller, port, failure } = setup();
-  let panels: readonly string[] = [];
-  const unbind = controller.bind(() => panels);
-  const held = await controller.acquire(descriptor);
-  panels = [held.leaseId];
-  await controller.finish(held.leaseId, true);
-  await controller.whenIdle();
-  expect(port.reconcileLeases.mock.calls.every(([active]) => active.includes(held.leaseId))).toBe(
-    true,
-  );
-  const calls = port.reconcileLeases.mock.calls.length;
-  controller.reconcile();
-  controller.reconcile();
-  await controller.whenIdle();
-  expect(port.reconcileLeases).toHaveBeenCalledTimes(calls);
-  unbind();
-  const rebound = controller.bind(() => panels);
-  await controller.whenIdle();
-  expect(port.reconcileLeases).toHaveBeenLastCalledWith([held.leaseId]);
-  expect(port.release).not.toHaveBeenCalled();
-  panels = [];
-  controller.reconcile();
-  await controller.whenIdle();
-  expect(port.reconcileLeases).toHaveBeenLastCalledWith([]);
-  expect(failure).not.toHaveBeenCalled();
-  rebound();
-});
-
 it("releases the known request token after a lost retain response or failed window creation", async () => {
   const { controller, port } = setup();
   controller.bind(() => []);

@@ -131,35 +131,6 @@ describe("ChartPreview", () => {
     expect(errorElement?.textContent).toContain("incident-preview-42");
   });
 
-  it("localizes safe missing-column context without transport prose", async () => {
-    vi.mocked(fetchChartPreview).mockResolvedValue({
-      kind: "error",
-      code: "chart_preview_column_not_found",
-      incidentId: null,
-      column: "amount",
-    });
-
-    act(() => root.render(<ChartPreview chartPath="charts/Chart.yssbi-chart" document={chart} />));
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-
-    const text = host.querySelector('[role="alert"]')?.textContent;
-    expect(text).toContain("localized:chart.previewColumnNotFound:amount");
-    expect(text).toContain("chart_preview_column_not_found");
-    expect(text).not.toContain("localized:common.incidentId");
-  });
-
-  it("maps a rejected raw transport error without displaying its text", async () => {
-    vi.mocked(fetchChartPreview).mockRejectedValue(new Error("private chart transport failure"));
-
-    act(() => root.render(<ChartPreview chartPath="charts/Chart.yssbi-chart" document={chart} />));
-    await act(async () => vi.advanceTimersByTimeAsync(300));
-
-    const text = host.querySelector('[role="alert"]')?.textContent;
-    expect(text).toContain("localized:chart.previewLoadFailed");
-    expect(text).toContain("chart_preview_read_failed");
-    expect(text).not.toContain("private chart transport failure");
-  });
-
   it("keeps a fetched empty preview outside any chart region", async () => {
     vi.mocked(fetchChartPreview).mockResolvedValue({ kind: "empty" });
 

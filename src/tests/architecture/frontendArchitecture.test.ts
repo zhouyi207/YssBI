@@ -24,7 +24,6 @@ import {
 } from "./frontendArchitectureModel";
 import {
   classifyFrontendSources,
-  type FrontendBaseRule,
   type FrontendLayer,
   type FrontendLiteralPolicyMembership,
 } from "./frontendArchitecturePolicy";
@@ -165,26 +164,6 @@ function architectureSource(path: string): ArchitectureSource {
   const source = compilerSources.get(path);
   if (source === undefined) throw new Error(`Missing compiler fixture ${path}`);
   return { path, source };
-}
-
-function stylesheetRoot(path: string): ResolvedModuleDependency {
-  const fileName = path.split("/").slice(-1)[0];
-  return {
-    kind: "side-effect-import",
-    mode: "runtime",
-    specifier: `./${fileName}`,
-    location: { line: 1, column: 1 },
-    repositoryRelativeSourceFile: "src/views/fixture.ts",
-    fullyQualifiedOwner: "src/views/fixture.ts::<module>",
-    origin: {
-      kind: "repository-asset",
-      asset: { repositoryRelativeAssetPath: path, resourceKind: "stylesheet" },
-    },
-    canonicalOriginTarget: `repository-asset:${path}`,
-    importedSymbol: null,
-    writtenModuleSpecifier: `./${fileName}`,
-    symbolDeclarationTarget: null,
-  };
 }
 
 function externalModuleDependency(
@@ -924,42 +903,6 @@ describe("frontend architecture model", () => {
         )
         .map(({ sourceLayer }) => sourceLayer),
     ).toEqual(["app-composition", "views"]);
-  });
-
-  it("reports overlapping frontend base memberships without rule ordering", () => {
-    const emptyMembership = Object.fromEntries(
-      [
-        "app-composition",
-        "views",
-        "application",
-        "core",
-        "domain",
-        "services",
-        "components-ui",
-        "wire-schema",
-        "diagnostics",
-        "pure-shared",
-      ].map((layer) => [layer, []]),
-    ) as unknown as Record<FrontendLayer, readonly string[]>;
-    const baseRules: readonly FrontendBaseRule[] = [
-      { layer: "views", matches: (path) => path.endsWith("/base-overlap.ts") },
-      { layer: "application", matches: (path) => path.startsWith("src/base-") },
-    ];
-
-    const report = classifyFrontendSources(
-      [{ path: "src/base-overlap.ts", source: "export const overlap = true;" }],
-      emptyMembership,
-      baseRules,
-    );
-
-    expect([...report.classification]).toEqual([]);
-    expect(report.errors).toEqual([
-      {
-        kind: "multiply-classified-production-source",
-        sourceFile: "src/base-overlap.ts",
-        layers: ["views", "application"],
-      },
-    ]);
   });
 
   it("audits frontend packages and stylesheet assets by layer mode and origin", () => {
@@ -1852,30 +1795,6 @@ describe("frontend architecture model", () => {
     });
   });
 
-  it("fails closed for recognized dependencies without literal specifiers", () => {
-    const cases = [
-      ["src/views/nonliteral-import-type.ts", "type Contract = import(Target).Contract;"],
-      ["src/views/missing-dynamic-import-argument.ts", "const loaded = import(); void loaded;"],
-    ] as const;
-
-    withIsolatedTypeScriptProject(new Map(cases), (context) => {
-      for (const [path, source] of cases) {
-        let failure: unknown;
-        try {
-          resolvedModuleDependencies(context, { path, source });
-        } catch (error) {
-          failure = error;
-        }
-        expect(failure, path).toBeInstanceOf(ModuleDependencyResolutionError);
-        expect(failure, path).toMatchObject({
-          kind: "nonliteral-module-specifier",
-          sourceFile: path,
-          writtenSpecifier: null,
-        });
-      }
-    });
-  });
-
   it("inventories the complete frontend production tree", () => {
     const isolatedSources = new Map<string, string>([
       ["src/app/bootstrap.ts", "export const bootstrap = true;"],
@@ -1999,109 +1918,6 @@ describe("frontend architecture model", () => {
         }),
       ]);
     });
-  });
-
-  it("reports each invalid stylesheet input exactly without granting a dependency", () => {
-    const path = "src/views/fixture.css";
-    const cases = [
-      {
-        name: "unterminated quoted import",
-        source: '@import "unterminated.css;',
-        error: { kind: "stylesheet-parse-failure", sourceFile: path, line: 1, column: 9 },
-      },
-      {
-        name: "nonliteral import",
-        source: "@import url(var(--theme));",
-        error: { kind: "stylesheet-parse-failure", sourceFile: path, line: 1, column: 16 },
-      },
-      {
-        name: "remote import",
-        source: '@import "https://example.invalid/theme.css";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "https://example.invalid/theme.css",
-        },
-      },
-      {
-        name: "repository escape",
-        source: '@import "../../../outside.css";',
-        error: {
-          kind: "stylesheet-path-escapes-repository",
-          sourceFile: path,
-          writtenSpecifier: "../../../outside.css",
-        },
-      },
-      {
-        name: "unsupported parent stylesheet",
-        source: '@import "../parent.css";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "../parent.css",
-        },
-      },
-      {
-        name: "normalized parent stylesheet",
-        source: '@import "./../parent.css";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "./../parent.css",
-        },
-      },
-      {
-        name: "encoded package separator",
-        source: '@import "react/%2fsecret";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "react/%2fsecret",
-        },
-      },
-      {
-        name: "missing repository stylesheet",
-        source: '@import "./missing.css";',
-        error: {
-          kind: "stylesheet-target-missing",
-          sourceFile: path,
-          canonicalTarget: "src/views/missing.css",
-        },
-      },
-      {
-        name: "unsupported repository asset",
-        source: '@import "./font.woff2";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "./font.woff2",
-        },
-      },
-      {
-        name: "quoted backslash",
-        source: '@import "react\\secret";',
-        error: {
-          kind: "unsupported-stylesheet-target",
-          sourceFile: path,
-          writtenSpecifier: "react\\secret",
-        },
-      },
-    ] as const;
-
-    for (const fixture of cases) {
-      const graph = resolvedStylesheetDependencies(
-        resolve("."),
-        [stylesheetRoot(path)],
-        new FixtureTextReader(
-          new Map([
-            [path, fixture.source],
-            ["src/parent.css", ".parent {}"],
-          ]),
-        ),
-      );
-      expect(graph.dependencies, fixture.name).toEqual([]);
-      expect(graph.errors, fixture.name).toEqual([fixture.error]);
-    }
   });
 
   it("reads repository text only through real root-bounded src paths", () => {

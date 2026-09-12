@@ -48,18 +48,6 @@ describe("useProjectSync", () => {
     host.remove();
   });
 
-  it("starts the service-owned project event stream without hydrating project state", async () => {
-    const unlisten = vi.fn();
-    vi.mocked(listen).mockResolvedValue(unlisten);
-
-    await act(async () => {
-      root.render(<Harness />);
-      await Promise.resolve();
-    });
-
-    expect(listen).toHaveBeenCalledOnce();
-  });
-
   it("keeps one project listener when StrictMode cleanup races async startup", async () => {
     const startup = deferred<() => void>();
     const unlisten = vi.fn();

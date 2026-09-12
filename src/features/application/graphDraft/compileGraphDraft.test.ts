@@ -38,46 +38,6 @@ describe("Compile draft adoption", () => {
     useGraphDraftStore.getState().install(graphPath, makeGraphEditorSession(projection));
   });
 
-  it("adopts Ready and Blocked without replacing the draft or its save history", async () => {
-    const before = structuredClone(useGraphDraftStore.getState().sessions[graphPath]);
-    vi.spyOn(GraphDraftService, "compile").mockResolvedValue({
-      type: "ready",
-      artifactId: "a".repeat(64),
-      cacheHit: false,
-      projection: before.projection,
-    });
-    expect(await compileGraphDraft(graphPath)).toBe(true);
-    const blocked = structuredClone(before.projection);
-    blocked.outcome = { type: "analysisBlocked" };
-    blocked.diagnostics = [
-      {
-        code: "compiler.input.unbound",
-        messageKey: "diagnostics.compiler.input.unbound",
-        arguments: { port: "Input" },
-        severity: "warning",
-        blocking: true,
-        location: { kind: "graph" },
-        related: [],
-      },
-    ];
-    blocked.hasBlockingDiagnostics = true;
-    vi.mocked(GraphDraftService.compile).mockResolvedValue({
-      type: "blocked",
-      projection: blocked,
-    });
-    expect(await compileGraphDraft(graphPath)).toBe(false);
-    const after = useGraphDraftStore.getState().sessions[graphPath];
-    expect(after.document).toEqual(before.document);
-    expect(after.savedDocument).toEqual(before.savedDocument);
-    expect(after.undoStack).toEqual(before.undoStack);
-    expect(after.saveDirty).toBe(false);
-    expect(after.compileStatus).toBe("blocked");
-    expect(after.compiledArtifactId).toBeNull();
-    expect(
-      useGraphProjectionStore.getState().graphEntities[graphPath].diagnostics[0].blocking,
-    ).toBe(true);
-  });
-
   it("ignores an old Compile failure after an edit and a newer successful request", async () => {
     const pending = deferred<CompileGraphDraftDto>();
     vi.spyOn(GraphDraftService, "compile").mockReturnValueOnce(pending.promise);

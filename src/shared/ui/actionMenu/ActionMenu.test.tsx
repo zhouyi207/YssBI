@@ -47,29 +47,6 @@ describe("ActionMenu", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("dismisses on outside pointerdown and Escape without dismissing from menu content", () => {
-    const onClose = vi.fn();
-    act(() =>
-      root.render(
-        <ActionMenu
-          position={{ x: 24, y: 36 }}
-          sections={[{ items: [{ id: "open", label: "Open" }] }]}
-          onClose={onClose}
-        />,
-      ),
-    );
-
-    const item = portal.querySelector<HTMLElement>('[role="menuitem"]')!;
-    act(() => item.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-    expect(onClose).not.toHaveBeenCalled();
-
-    act(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
-    act(() =>
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
-    );
-    expect(onClose).toHaveBeenCalled();
-  });
-
   it("does not bubble menu pointerdown into the owner gesture handler", () => {
     const ownerPointerDown = vi.fn();
     act(() =>

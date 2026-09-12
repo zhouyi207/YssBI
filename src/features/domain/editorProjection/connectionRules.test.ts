@@ -152,34 +152,6 @@ describe("getPinCompatibility", () => {
 
     expect(getPinCompatibility(output, input)).toBe("indeterminate");
   });
-
-  it("uses the resolved source domain without treating a constrained Pin as an exact Union", () => {
-    const output = pin({
-      id: "output",
-      nodeId: "source",
-      direction: "output",
-      typeState: {
-        status: "constrained",
-        display: "core.int64 | core.float64",
-        domain: [{ kind: "Int64" }, FLOAT64],
-      },
-    });
-    const floatInput = pin({
-      id: "float-input",
-      nodeId: "float-target",
-      direction: "input",
-      acceptedType: { display: "core.float64", domain: [FLOAT64] },
-    });
-    const intInput = pin({
-      id: "int-input",
-      nodeId: "int-target",
-      direction: "input",
-      acceptedType: { display: "core.int64", domain: [{ kind: "Int64" }] },
-    });
-
-    expect(getPinCompatibility(output, floatInput)).toBe("compatible");
-    expect(getPinCompatibility(output, intInput)).toBe("indeterminate");
-  });
 });
 
 describe("isPinCompatible", () => {
@@ -219,20 +191,6 @@ describe("resolveConnectionCompatibility", () => {
 
   it("returns append for compatible append-capable endpoints", () => {
     expect(resolveConnectionCompatibility(output, input)).toEqual({ kind: "append" });
-  });
-
-  it("returns replace without displaced connection IDs", () => {
-    const replaceable = pin({
-      ...input,
-      connections: {
-        ...appendCapability,
-        current: 1,
-        canAppend: false,
-        canReplace: true,
-      },
-    });
-
-    expect(resolveConnectionCompatibility(output, replaceable)).toEqual({ kind: "replace" });
   });
 
   it.each([

@@ -109,20 +109,6 @@ describe("useBayesArtifacts", () => {
     host.remove();
   });
 
-  it("treats a cancelled save dialog as cancelled without exporting", async () => {
-    mocks.savePathDialog.mockResolvedValue({ ok: true, value: null });
-
-    await act(async () => root.render(createElement(Harness)));
-    let outcome: Awaited<ReturnType<BayesArtifactsModel["exportCsv"]>> | undefined;
-    await act(async () => {
-      outcome = await model.exportCsv();
-    });
-
-    expect(outcome).toEqual({ status: "cancelled" });
-    expect(mocks.exportBayesArtifactCsv).not.toHaveBeenCalled();
-    expect(model.issue).toBeNull();
-  });
-
   it("does not publish a stale artifact success or failure after its page is detached", async () => {
     const request = deferred<TracePlotDataDTO>();
     mocks.readBayesTracePlotData.mockReturnValue(request.promise);

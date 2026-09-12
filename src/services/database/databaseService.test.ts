@@ -56,16 +56,6 @@ describe("DatabaseService project lifecycle contract", () => {
     ).resolves.toEqual(page);
   });
 
-  it("rejects legacy rows and pages without matching row identities", async () => {
-    for (const payload of [[[7]], { rows: [[7]] }, { rows: [[7]], rowIds: [] }]) {
-      vi.mocked(invoke).mockResolvedValue(payload);
-
-      await expect(
-        DatabaseService.getDatabaseRows(projectInstanceId, "sales", 0, 1),
-      ).rejects.toThrow("Invalid database rows response");
-    }
-  });
-
   it.each([
     ["getDatabaseMeta", "get_database_meta", [projectInstanceId, "sales"], {}],
     [

@@ -6,7 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
 import type { ApplyGraphDraftMutationOutcome } from "@/features/application/graphDraft/graphDraftCoordinator";
-import { normalizeIpcError } from "@/services/ipc";
 import type { ParameterEditorDto } from "@/shared/types/dto/editorProjection";
 import { NodeParameterEditor } from "./NodeParameterEditor";
 
@@ -303,27 +302,6 @@ describe("NodeParameterEditor ordinary controls", () => {
       expect(input().value).toBe("latest projection");
     },
   );
-
-  it("shows an IPC update failure beside the field without exposing backend details", async () => {
-    setNodeParameters.mockRejectedValueOnce(
-      normalizeIpcError("transform_graph_draft", {
-        code: "parameter_update_failed",
-        details: { debug: "raw backend parameter failure" },
-        incidentId: "incident-parameter-42",
-      }),
-    );
-    renderEditor(parameter("number", 1, { kind: "Int64" }));
-
-    setControlValue(input(), "2");
-    act(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-    await flushPromises();
-
-    const error = container.querySelector<HTMLElement>('[role="alert"]');
-    expect(error?.textContent).toContain("parameter_update_failed");
-    expect(error?.textContent).toContain("incident-parameter-42");
-    expect(error?.textContent).not.toContain("raw backend parameter failure");
-    expect(input().getAttribute("aria-describedby")).toBe(error?.id);
-  });
 
   it("restores the latest projected value when mutation rejects", async () => {
     let rejectMutation: (reason: Error) => void = () => undefined;

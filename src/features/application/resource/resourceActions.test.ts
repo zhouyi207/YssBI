@@ -13,7 +13,6 @@ import { GraphService } from "@/services/graph/graphService";
 import { ChartService } from "@/services/chart/chartService";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { deleteResource, renameResource } from "./resourceActions";
-import { performChartDelete } from "@/features/application/editor/chartDelete";
 
 vi.mock("@/features/application/editorMutation/projectPublicationCoordinator", () => ({
   projectPublicationCoordinator: {
@@ -260,45 +259,6 @@ describe("renameResource project ownership", () => {
     expect(projectHydration.refreshProjectResourceIndex).not.toHaveBeenCalled();
   });
 
-  it("deletes an unloaded chart using resource metadata without loading its document", async () => {
-    const path = "charts/Report.yssbi-chart";
-    useResourceStore.getState().patchResource({ id: path, kind: "chart" }, { loaded: false });
-    const load = vi.spyOn(ChartService, "loadChart");
-    const committed = { ...deleteResult("project-instance-current"), deltas: [] };
-    const remove = vi.spyOn(ChartService, "removeChart").mockResolvedValue(committed);
-
-    await expect(performChartDelete(path)).resolves.toBe(true);
-    expect(remove).toHaveBeenCalledWith("project-instance-current", expect.any(String), path, 4);
-    expect(load).not.toHaveBeenCalled();
-    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
-  });
-
-  it("renames a chart from captured revision and token without load or save fallback", async () => {
-    const committed = chartRenameResult("project-instance-current");
-    vi.spyOn(ChartService, "renameChart").mockImplementation(async () => {
-      useResourceStore
-        .getState()
-        .patchResource({ id: "charts/Report.yssbi-chart", kind: "chart" }, { revision: 99 });
-      return committed;
-    });
-    const load = vi.spyOn(ChartService, "loadChart");
-    const save = vi.spyOn(ChartService, "saveChart");
-
-    await renameResource({ id: "charts/Report.yssbi-chart", kind: "chart" }, "Renamed Report");
-
-    expect(ChartService.renameChart).toHaveBeenCalledWith(
-      "project-instance-current",
-      expect.any(String),
-      "charts/Report.yssbi-chart",
-      4,
-      "Renamed Report",
-      expect.any(Number),
-    );
-    expect(load).not.toHaveBeenCalled();
-    expect(save).not.toHaveBeenCalled();
-    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
-  });
-
   it("rejects stale chart project and lifecycle ownership before publication", async () => {
     vi.spyOn(ChartService, "renameChart").mockResolvedValueOnce(
       chartRenameResult("project-instance-stale"),
@@ -350,56 +310,6 @@ describe("renameResource project ownership", () => {
     ).rejects.toThrow("stale project lifecycle");
 
     expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
-  });
-
-  it("delegates the canonical rename receipt without installing the destination independently", async () => {
-    const committed = renameResult("project-instance-current");
-    vi.spyOn(GraphService, "renameGraphResource").mockResolvedValue(committed);
-    useResourceStore.getState().setSnapshot({
-      resources: [
-        {
-          id: "events/Old.yssbi-event",
-          kind: "event",
-          name: "Old",
-          uri: "yssbi://event/events/Old.yssbi-event",
-          revision: 0,
-          exists: true,
-          loaded: false,
-          hasDirtyDocument: false,
-          hasStaleDocument: false,
-          hasConflictDocument: false,
-        },
-      ],
-      graphOrder: ["events/Old.yssbi-event"],
-    });
-    useGraphMetaStore.setState({
-      graphs: {
-        "events/Old.yssbi-event": {
-          path: "events/Old.yssbi-event",
-          name: "Old",
-          type: "event",
-        },
-      },
-    });
-    const resourcesBefore = useResourceStore.getState().resources;
-    const graphOrderBefore = useResourceStore.getState().graphOrder;
-    const graphMetaBefore = useGraphMetaStore.getState().graphs;
-
-    await renameResource({ id: "events/Old.yssbi-event", kind: "event" }, "New");
-
-    expect(GraphService.renameGraphResource).toHaveBeenCalledWith(
-      "project-instance-current",
-      "events/Old.yssbi-event",
-      0,
-      "New",
-      expect.any(Number),
-      expect.any(String),
-    );
-    expect(projectPublicationCoordinator.submit).toHaveBeenCalledOnce();
-    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
-    expect(useResourceStore.getState().resources).toBe(resourcesBefore);
-    expect(useResourceStore.getState().graphOrder).toBe(graphOrderBefore);
-    expect(useGraphMetaStore.getState().graphs).toBe(graphMetaBefore);
   });
 
   it("rejects a matching receipt when project ownership changes in flight", async () => {

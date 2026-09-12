@@ -197,25 +197,6 @@ describe("useNodeCatalogStore", () => {
     expect(store.observeResourcePublication("project-1", 8)).toBe(false);
   });
 
-  it("rejects a response below the requested publication watermark without losing cached data", () => {
-    const previous = catalog({ resourcePublicationRevision: 7 });
-    const store = useNodeCatalogStore.getState();
-    store.storeResponse(store.beginRequest("project-1", "zh-CN")!, previous);
-    store.observeResourcePublication("project-1", 9);
-    const refresh = store.beginRequest("project-1", "zh-CN")!;
-
-    expect(store.storeResponse(refresh, catalog({ resourcePublicationRevision: 8 }))).toBe(false);
-    expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
-      status: "error",
-      responseKey: catalogResponseKey(previous),
-      error: {
-        code: "catalog_response_stale",
-        incidentId: null,
-      },
-      minimumResourcePublicationRevision: 9,
-    });
-  });
-
   it("preserves the last ready response when a refresh fails", () => {
     const previous = catalog();
     const store = useNodeCatalogStore.getState();

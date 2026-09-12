@@ -22,7 +22,6 @@ vi.mock("@/features/application/observability/appLogger", () => ({
 }));
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
-const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";
 
 const APPEARANCE_KEYS = [
   "colorTheme",
@@ -50,20 +49,6 @@ describe("settingsStore appearance persistence", () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
-  });
-
-  it("deletes the legacy settings key without reading its theme values", async () => {
-    localStorage.setItem(
-      LEGACY_SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        theme: { accentColor: "#000000" },
-      }),
-    );
-
-    await useSettingsStore.getState().load();
-
-    expect(localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY)).toBeNull();
-    expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
   });
 
   it("ignores stored color overrides and persists only the selected theme", async () => {

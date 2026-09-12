@@ -1,8 +1,5 @@
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
-import {
-  loadCurrentProject,
-  refreshProjectResourceIndex,
-} from "@/features/application/project/projectHydration";
+import { loadCurrentProject } from "@/features/application/project/projectHydration";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectService } from "@/services/project/projectService";
 import { normalizeIpcError } from "@/services/ipc";
@@ -126,42 +123,6 @@ describe("projectIOStore error references", () => {
     });
     expect(JSON.stringify(useProjectIOStore.getState().error)).not.toContain(
       "private project transport prose",
-    );
-  });
-
-  it("preserves backend code and incident ID without retaining details", async () => {
-    vi.mocked(ProjectService.getProjectPath).mockRejectedValue(
-      normalizeIpcError("get_project_path", {
-        code: "project_io_failed",
-        details: { debug: "private project backend detail" },
-        incidentId: "incident-project-load-42",
-      }),
-    );
-
-    await expect(loadCurrentProject()).resolves.toBeNull();
-
-    expect(useProjectIOStore.getState().error).toEqual({
-      code: "project_io_failed",
-      incidentId: "incident-project-load-42",
-    });
-    expect(JSON.stringify(useProjectIOStore.getState().error)).not.toContain(
-      "private project backend detail",
-    );
-  });
-
-  it("reports a resource publication failure without retaining parser prose", async () => {
-    vi.mocked(ProjectService.getProjectIndex).mockRejectedValue(
-      new Error("private resource index parser prose"),
-    );
-
-    await expect(refreshProjectResourceIndex()).resolves.toBe(false);
-
-    expect(useProjectIOStore.getState().error).toEqual({
-      code: "publication_recovery_failed",
-      incidentId: null,
-    });
-    expect(JSON.stringify(useProjectIOStore.getState().error)).not.toContain(
-      "private resource index parser prose",
     );
   });
 

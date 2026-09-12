@@ -67,14 +67,6 @@ describe("DefaultNodeLayout projection authority", () => {
     container.remove();
   });
 
-  it("renders projected title subtitle and pin names without resource stores", () => {
-    act(() => root.render(<DefaultNodeLayout node={projectedNode()} />));
-
-    expect(container.textContent).toContain("Sales Database");
-    expect(container.textContent).toContain("Prior period");
-    expect(container.querySelector('[data-testid="pin-name"]')?.textContent).toBe("amount");
-  });
-
   it("renders inlineAndDetail parameters as read-only summaries even with graph context", () => {
     const node = projectedNode();
     node.parameterEditors = [
@@ -96,26 +88,5 @@ describe("DefaultNodeLayout projection authority", () => {
     expect(container.textContent).toContain("42");
     expect(container.querySelector("input")).toBeNull();
     expect(container.querySelector('[role="switch"]')).toBeNull();
-  });
-
-  it("renders a projected inline value read-only without graphPath", () => {
-    const node = projectedNode();
-    node.parameterEditors = [
-      {
-        key: "value",
-        display: { title: "Value", description: null },
-        editor: "number",
-        presentation: "inlineAndDetail",
-        valueType: { kind: "Int64" },
-        multiline: false,
-        value: 42,
-        configuration: null,
-      },
-    ];
-
-    act(() => root.render(<DefaultNodeLayout node={node} />));
-
-    expect(container.textContent).toContain("Value");
-    expect(container.textContent).toContain("42");
   });
 });

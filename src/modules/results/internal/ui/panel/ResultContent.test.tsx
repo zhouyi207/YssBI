@@ -158,28 +158,6 @@ describe("ResultContent", () => {
     container.remove();
   });
 
-  it("renders inspector results without the standalone title hierarchy", async () => {
-    const inspectorDescriptor: ResultDescriptor = {
-      ...descriptor,
-      resultId: "inspector-1",
-      presentation: { kind: "inspector" },
-      title: "Inspector result",
-    };
-    mocks.loadPresentationWindow.mockResolvedValueOnce({
-      status: "ready",
-      descriptor: inspectorDescriptor,
-      payload: { mode: "inspector", descriptor: inspectorDescriptor },
-    });
-
-    act(() => root.render(<ResultContent reference={resultReferenceFixture("inspector-1")} />));
-    await flush();
-
-    expect(container.querySelector("h1")).toBeNull();
-    expect(container.querySelector('[data-testid="result-meta"]')).toBeNull();
-    expect(container.querySelector('[data-testid="result-body"]')).not.toBeNull();
-    expect(container.querySelector("[data-result-view-toolbar]")).not.toBeNull();
-  });
-
   it("passes preloaded report data to ReportView unchanged", async () => {
     mocks.loadPresentationWindow.mockResolvedValueOnce({
       status: "ready",

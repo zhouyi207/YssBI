@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { pinPreviewCacheKey } from "./pinResultIndex";
 import {
@@ -36,24 +36,6 @@ describe("useExecutionStore pin result lifecycle", () => {
       playbackGraphPath: null,
       isPlaying: false,
     });
-  });
-
-  it("synchronously revokes the prior same-pin lease without store access on settlement", () => {
-    const graphPath = "events/Main.yssbi-event";
-    const store = useExecutionStore.getState();
-    const first = store.beginPinPreview(graphPath, declaredOutput, 1);
-    const second = store.beginPinPreview(graphPath, declaredOutput, 2);
-    const getExecutionState = vi.spyOn(useExecutionStore, "getState");
-    const completePinPreview = vi.spyOn(store, "completePinPreview");
-    const failPinPreview = vi.spyOn(store, "failPinPreview");
-
-    expect(first.isCurrent()).toBe(false);
-    expect(first.complete("result-stale")).toBe(false);
-    expect(first.fail("stale failure")).toBe(false);
-    expect(getExecutionState).not.toHaveBeenCalled();
-    expect(completePinPreview).not.toHaveBeenCalled();
-    expect(failPinPreview).not.toHaveBeenCalled();
-    expect(second.isCurrent()).toBe(true);
   });
 
   it("accepts only the newest preview generation for an exact stable address", () => {

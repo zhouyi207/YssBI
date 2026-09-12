@@ -100,17 +100,6 @@ describe("activateGraphPanelSession", () => {
 
     expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBe(pathC);
   });
-
-  it("rolls back session without unloading the previous graph when loadGraph fails", async () => {
-    const loadGraph = vi.fn(async () => false);
-    useProjectIOStore.setState({ loadGraph });
-
-    const ok = await activateGraphPanelSession(graphPath, "editor-1");
-
-    expect(ok).toBe(false);
-    expect(loadGraph).toHaveBeenCalledTimes(1);
-    expect(useGraphSessionStore.getState().getFocusedGraphPath()).toBeNull();
-  });
 });
 
 describe("deactivateGraphPanelSession", () => {

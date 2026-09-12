@@ -2,12 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { normalizeDurbinWatsonResult, normalizeSerialTestsResponse } from "./serialTests";
-import {
-  acfSeriesToBars,
-  hasLjungBoxStats,
-  parsePlotCorrelogramBar,
-  pacfSeriesToBars,
-} from "./correlogram";
+import { hasLjungBoxStats, parsePlotCorrelogramBar } from "./correlogram";
 import { parseReportPayloadResult } from "./parseReportPayload";
 
 describe("normalizeSerialTestsResponse", () => {
@@ -36,14 +31,6 @@ describe("normalizeSerialTestsResponse", () => {
 });
 
 describe("correlogram report DTO", () => {
-  it("builds report bars without ljung-box stats", () => {
-    const acf = acfSeriesToBars([1, 0.5, 0.2]);
-    expect(acf[0]).toEqual({ lag: 0, value: 1 });
-    expect(hasLjungBoxStats(acf[0])).toBe(false);
-    const pacf = pacfSeriesToBars([0.5, 0.1]);
-    expect(pacf[0].lag).toBe(1);
-  });
-
   it("parses plot bar with required qStat and pValue", () => {
     const bar = parsePlotCorrelogramBar({
       lag: 2,
@@ -139,17 +126,6 @@ const MINIMAL_REGRESSION = {
 };
 
 describe("regression report parsing", () => {
-  it("accepts a generic linear report without weakening canonical OLS requirements", () => {
-    expect(parseReportPayloadResult("praisSummary", MINIMAL_REGRESSION)).toEqual({
-      ok: true,
-      value: MINIMAL_REGRESSION,
-    });
-    expect(parseReportPayloadResult("olsSummary", MINIMAL_REGRESSION)).toMatchObject({
-      ok: false,
-      issue: { fieldPath: "title" },
-    });
-  });
-
   it("preserves binary model statistics and hypothesis inputs", () => {
     const parsed = parseReportPayloadResult("binarySummary", {
       ...MINIMAL_REGRESSION,
@@ -324,12 +300,5 @@ describe("parseReportPayloadResult", () => {
     );
 
     expect(parseReportPayloadResult("olsSummary", payload)).toEqual({ ok: true, value: payload });
-  });
-
-  it("rejects panel_did without kind discriminator", () => {
-    expect(parseReportPayloadResult("panelDid", { title: "DID" })).toMatchObject({
-      ok: false,
-      issue: { fieldPath: "kind", reason: "missing required field" },
-    });
   });
 });

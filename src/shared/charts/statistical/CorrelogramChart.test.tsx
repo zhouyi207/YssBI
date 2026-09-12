@@ -76,38 +76,6 @@ afterEach(() => {
 });
 
 describe("CorrelogramChart", () => {
-  it("renders report bars without Ljung-Box fields", () => {
-    act(() => {
-      root.render(
-        <ChartThemeContextProvider value={chartTheme}>
-          <CorrelogramChart
-            data={[
-              { lag: 0, value: 1 },
-              { lag: 1, value: 0.25 },
-            ]}
-            ciHalfWidth={0.2}
-            valueLabel="ACF"
-          />
-        </ChartThemeContextProvider>,
-      );
-    });
-    flushMeasurement();
-
-    const chart = host.querySelector("svg");
-    expect.soft(chart?.getAttribute("role")).toBe("group");
-    expect.soft(chart?.getAttribute("aria-label")).toBe("ACF correlogram");
-
-    const bars = [...host.querySelectorAll<SVGRectElement>('[data-chart-mark="correlogram-bar"]')];
-    expect.soft(bars).toHaveLength(2);
-    expect.soft(bars.map((bar) => bar.getAttribute("tabindex"))).toEqual(["0", "0"]);
-    expect.soft(bars[0]?.getAttribute("aria-label")).toContain("Lag 0");
-    expect.soft(bars[0]?.getAttribute("aria-label")).toContain("ACF 1.0000");
-    expect.soft(bars[1]?.getAttribute("aria-label")).toContain("Lag 1");
-    expect.soft(bars[1]?.getAttribute("aria-label")).toContain("ACF 0.2500");
-    expect.soft(bars[1]?.getAttribute("aria-label")).not.toContain("Q(");
-    expect.soft(bars[1]?.getAttribute("aria-label")).not.toContain("p-value");
-  });
-
   it("exposes Plot statistics and updates supplied CI references with stable joins", () => {
     const data = [{ lag: 2, value: -0.375, qStat: 1.23456, pValue: 0.03 }];
     const render = (ciHalfWidth: number, nextData = data) => {

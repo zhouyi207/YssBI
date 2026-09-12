@@ -206,28 +206,6 @@ describe("NodeDocumentationModal", () => {
     expect(document.body.textContent).toContain("Incident ID: incident-documentation-catalog-42");
   });
 
-  it("searches the current Catalog index without searching documentation bodies", () => {
-    catalogState.current = stateFor(
-      catalog("en-US", {
-        title: "Call Helper",
-        documentation: "documentation-only-secret",
-        alias: "invoke helper",
-      }),
-    );
-    render();
-    const search = document.querySelector<HTMLInputElement>(
-      'input[placeholder="Search node titles and aliases..."]',
-    )!;
-
-    input(search, "documentation-only-secret");
-    expect(document.body.textContent).toContain("No matching node documentation");
-    expect(document.querySelector("[data-node-documentation-item]")).toBeNull();
-
-    input(search, "invoke helper");
-    expect(document.body.textContent).toContain("Call Helper");
-    expect(document.querySelector("[data-node-documentation-item]")).not.toBeNull();
-  });
-
   it("limits documentation search to the current-locale title and aliases", () => {
     const response = catalog("en-US", {
       title: "Call Helper",

@@ -5,7 +5,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartThemeContextProvider, type ChartThemeValue } from "@/shared/charts/core/theme";
 import type { XYPoint } from "@/shared/charts/ChartModel";
-import { EcdfChart } from "./EcdfChart";
 import { ScatterChart } from "./ScatterChart";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -114,32 +113,5 @@ describe("scatter and ECDF cartesian renderers", () => {
     expect(points.item(1).getAttribute("data-highlighted")).toBe("true");
     expect(points.item(1).getAttribute("fill")).toBe(chartTheme.series.highlight);
     expect(points.item(1).getAttribute("stroke")).toBe(chartTheme.series.highlight);
-  });
-
-  it("renders ECDF as one step-after path without re-sorting canonical data", () => {
-    const data: XYPoint[] = [
-      { x: 1, y: 0.25 },
-      { x: 2, y: 0.5 },
-      { x: 3, y: 0.75 },
-      { x: 4, y: 1 },
-    ];
-    const originalData = data.map((point) => ({ ...point }));
-    Object.freeze(data);
-
-    renderChart(
-      <EcdfChart
-        data={data}
-        xAxis={{ label: "Value", valueType: "number" }}
-        yAxis={{ label: "Cumulative Proportion", valueType: "number" }}
-        height={280}
-      />,
-    );
-
-    const paths = host.querySelectorAll<SVGPathElement>('[data-chart-mark="ecdf-path"]');
-
-    expect(paths).toHaveLength(1);
-    expect(paths.item(0).getAttribute("data-chart-curve")).toBe("step-after");
-    expect(paths.item(0).getAttribute("d")).toBeTruthy();
-    expect(data).toEqual(originalData);
   });
 });

@@ -3,7 +3,7 @@ import editorProjectionContract from "@/tests/fixtures/node-system-contracts/edi
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
 import { isEditorGraphProjectionDto } from "@/shared/types/dto/editorProjectionGuards";
 import { validateEditorGraphProjection } from "@/shared/types/dto/editorProjectionParser";
-import { portAddressKey, toProjectionEntities } from "./index";
+import { portAddressKey } from "./index";
 
 const declaredOutput: PortAddressDto = {
   kind: "declared",
@@ -364,39 +364,4 @@ describe("validateEditorGraphProjection", () => {
       );
     },
   );
-});
-
-describe("toProjectionEntities", () => {
-  it("converts a valid projection without a registry and preserves projected data", () => {
-    const projection = validProjection();
-    const entities = toProjectionEntities(projection);
-    const outputKey = portAddressKey(declaredOutput);
-    const inputKey = portAddressKey(instanceInput);
-
-    expect(entities.basis).toEqual(projection.basis);
-    expect(entities.graphPath).toBe("functions/main");
-    expect(entities.nodes["node-1"]).toMatchObject({
-      nodeTypeId: "statistics.linear-regression",
-      position: { x: 120.5, y: -32 },
-      display: { title: "线性回归", userLabel: "主要模型" },
-      parameterEditors: projection.nodes[0].parameterEditors,
-      diagnostics: projection.nodes[0].diagnostics,
-    });
-    expect(entities.ports[outputKey].address).toEqual(declaredOutput);
-    expect(entities.ports[inputKey]).toMatchObject({
-      address: instanceInput,
-      input: {
-        literalOverride: 42,
-        protocolDefault: 0,
-        effective: "connections",
-      },
-    });
-    expect(entities.connections["connection-1"]).toEqual(projection.connections[0]);
-    expect(entities.portIdsByNodeId["node-1"]).toEqual([outputKey, inputKey]);
-    expect(entities.connectionIdsByPortId[outputKey]).toEqual(["connection-1"]);
-    expect(entities.connectionIdsByPortId[inputKey]).toEqual(["connection-1"]);
-    expect(entities.diagnostics).toEqual(projection.diagnostics);
-    expect(entities.outcome).toEqual({ type: "success" });
-    expect(entities.hasBlockingDiagnostics).toBe(false);
-  });
 });

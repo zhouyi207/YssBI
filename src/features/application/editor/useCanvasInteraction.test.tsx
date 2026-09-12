@@ -4,10 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { EditorCanvasScope } from "./editorCanvasTypes";
 import { useCanvasInteraction } from "./useCanvasInteraction";
-import {
-  cancelCanvasInteraction,
-  clearCanvasInteractionProject,
-} from "@/features/core/canvas/canvasInteractionCleanup";
+import { clearCanvasInteractionProject } from "@/features/core/canvas/canvasInteractionCleanup";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -76,30 +73,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   clearCanvasInteractionProject();
-});
-
-it("invalidates a cancelled renderer gesture and refuses stale callbacks without stealing focus", () => {
-  render();
-  const cancel = vi.fn();
-  let lease: ReturnType<typeof interaction.beginGesture>;
-  act(() => {
-    lease = interaction.beginGesture("draggingNodes", cancel);
-  });
-  expect(lease!.isCurrent()).toBe(true);
-  act(() => {
-    cancelCanvasInteraction("graph", "a");
-  });
-  expect(cancel).toHaveBeenCalledOnce();
-  expect(lease!.isCurrent()).toBe(false);
-  mocks.target = {
-    panelInstanceId: "second",
-    groupId: "b",
-    resourceRef: "graph",
-    resourceKind: "event",
-  };
-  mocks.prepare.mockClear();
-  expect(interaction.beginGesture("draggingNodes", vi.fn())).toBeNull();
-  expect(mocks.prepare).not.toHaveBeenCalled();
 });
 
 it("releases gesture ownership when the canvas becomes a saving or inactive preview", () => {

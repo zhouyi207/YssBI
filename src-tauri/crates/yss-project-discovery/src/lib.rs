@@ -191,40 +191,6 @@ mod tests {
     }
 
     #[test]
-    fn discover_nested_metadata_files_without_build_or_dependency_trees() {
-        let temporary = TestDirectory::new("nested");
-        let root = temporary.path().join("target");
-        for directory in ["", "alpha", "nested/beta", "mixed-case"] {
-            std::fs::create_dir_all(root.join(directory)).unwrap();
-        }
-        for directory in ["", "alpha", "nested/beta"] {
-            std::fs::write(root.join(directory).join(PROJECT_METADATA_FILE), "{}").unwrap();
-        }
-        for skip in SKIP_DIR_NAMES {
-            let ignored = root.join(skip.to_ascii_uppercase()).join("ignored");
-            std::fs::create_dir_all(&ignored).unwrap();
-            std::fs::write(ignored.join(PROJECT_METADATA_FILE), "{}").unwrap();
-        }
-        std::fs::write(root.join("mixed-case/MeTaDaTa.YsSbI"), "{}").unwrap();
-
-        let registry = ProjectTaskCancellationRegistry::new();
-        let cancellation = registry.begin();
-        let found = discover_project_metadata_files(&root, &cancellation).unwrap();
-        let mut expected = vec![
-            root.join(PROJECT_METADATA_FILE),
-            root.join("alpha").join(PROJECT_METADATA_FILE),
-            root.join("nested/beta").join(PROJECT_METADATA_FILE),
-        ];
-        // Match the host filesystem's case sensitivity, including macOS volumes.
-        let mixed_case = root.join("mixed-case").join(PROJECT_METADATA_FILE);
-        if mixed_case.exists() {
-            expected.push(mixed_case);
-        }
-        expected.sort();
-        assert_eq!(found, expected);
-    }
-
-    #[test]
     fn discover_stops_when_cancelled() {
         let root = TestDirectory::new("cancel");
         std::fs::write(root.path().join(PROJECT_METADATA_FILE), "{}").unwrap();

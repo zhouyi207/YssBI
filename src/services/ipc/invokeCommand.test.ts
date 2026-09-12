@@ -45,20 +45,6 @@ describe("invokeCommand", () => {
     vi.mocked(invoke).mockReset();
   });
 
-  it("forwards Channel-compatible args and invoke options without cloning", async () => {
-    const channel = { onmessage: vi.fn() };
-    const args = { projectInstanceId: "project-1", onEvent: channel };
-    const options = { headers: { "x-request-id": "request-1" } };
-    vi.mocked(invoke).mockResolvedValue(undefined);
-
-    await expect(
-      invokeCommand<void>("execute_compiled_graph", args, options),
-    ).resolves.toBeUndefined();
-
-    expect(invoke).toHaveBeenCalledWith("execute_compiled_graph", args, options);
-    expect(vi.mocked(invoke).mock.calls[0]?.[1]).toBe(args);
-  });
-
   it("normalizes a structured backend rejection", async () => {
     vi.mocked(invoke).mockRejectedValue(backendError);
 

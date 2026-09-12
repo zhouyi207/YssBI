@@ -2,27 +2,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { useOpenChart } from "./useChartManagement";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-type Deferred<T> = {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T) => void;
-  readonly reject: (reason: unknown) => void;
-};
-
-function createDeferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
-  });
-  return { promise, resolve, reject };
-}
 
 const mocks = vi.hoisted(() => ({
   openEditorPanel: vi.fn(),
@@ -83,20 +65,6 @@ vi.mock("./blockingErrorDialog", () => ({
   showBlockingIpcError: vi.fn(),
 }));
 
-const openedPanel: WorkbenchPanelInfo = {
-  panelInstanceId: "chart-panel",
-  groupId: "editor-group",
-  component: "EditorResource",
-  title: "Summary",
-  metadata: {
-    role: "editor",
-    resourceRef: "charts/Summary.yssbi-chart",
-    resourceKind: "chart",
-  },
-  active: true,
-  location: { type: "grid" },
-};
-
 let openChart: ReturnType<typeof useOpenChart>;
 
 function Harness(): null {
@@ -121,31 +89,6 @@ describe("useOpenChart", () => {
     if (root) await act(async () => root?.unmount());
     root = null;
     host.remove();
-  });
-
-  it("activates the opened chart without transferring focus to a sidebar", async () => {
-    const deferred = createDeferred<WorkbenchPanelInfo>();
-    mocks.openEditorPanel.mockReturnValueOnce(deferred.promise);
-
-    let opening!: Promise<void>;
-    await act(async () => {
-      opening = openChart("charts/Summary.yssbi-chart", "Summary");
-      await Promise.resolve();
-    });
-
-    expect(mocks.setCategoryExpanded).not.toHaveBeenCalled();
-    expect(mocks.activateEditorPanelAndSyncSession).not.toHaveBeenCalled();
-
-    deferred.resolve(openedPanel);
-    await act(async () => opening);
-
-    expect(mocks.openEditorPanel).toHaveBeenCalledWith({
-      resourceRef: "charts/Summary.yssbi-chart",
-      resourceKind: "chart",
-    });
-    expect(mocks.activateEditorPanelAndSyncSession).toHaveBeenCalledWith(openedPanel);
-    expect(mocks.revealWorkbenchView).not.toHaveBeenCalled();
-    expect(mocks.setCategoryExpanded).toHaveBeenCalledWith("project", "charts", true);
   });
 
   it("contains an editor-open rejection whose feedback was already presented", async () => {

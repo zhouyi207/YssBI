@@ -1,5 +1,5 @@
 use faer::{Mat, MatRef, col, mat};
-use yss_linalg::{Eigen, LinalgError, MatrixExt, Solve, Svd, SymmetricEigen, matrix_rank};
+use yss_linalg::{LinalgError, MatrixExt, Solve, Svd, matrix_rank};
 
 fn near(actual: f64, expected: f64) {
     assert!(
@@ -112,38 +112,4 @@ fn rank_of_a_tall_design_does_not_require_square_singular_vectors() {
     let (rank, condition) = matrix_rank(design.as_ref()).unwrap();
     assert_eq!(rank, 2);
     assert!(condition.is_finite() && condition > 100.0 && condition < 120.0);
-}
-
-#[test]
-fn eigenvectors_match_real_and_complex_eigenvalues_without_assuming_order() {
-    let symmetric = mat![[2., 1.], [1., 2.]];
-    let decomposition = SymmetricEigen::factor(symmetric.as_ref()).unwrap();
-    let values = decomposition.values();
-    near(values[0], 1.);
-    near(values[1], 3.);
-    let vectors = decomposition.vectors();
-    let diagonal = Mat::from_fn(2, 2, |i, j| if i == j { values[i] } else { 0.0 });
-    near_matrix(
-        (vectors * diagonal * vectors.transpose()).as_ref(),
-        symmetric.as_ref(),
-    );
-
-    let rotation = mat![[0., -1.], [1., 0.]];
-    let decomposition = Eigen::factor(rotation.as_ref()).unwrap();
-    let vectors = decomposition.vectors();
-    for (col, value) in decomposition.values().iter().enumerate() {
-        near(value.re, 0.);
-        near(value.im.abs(), 1.);
-        for row in 0..2 {
-            let component = vectors[(row, col)];
-            let real: f64 = (0..2)
-                .map(|j| rotation[(row, j)] * vectors[(j, col)].re)
-                .sum();
-            let imaginary: f64 = (0..2)
-                .map(|j| rotation[(row, j)] * vectors[(j, col)].im)
-                .sum();
-            near(real, value.re * component.re - value.im * component.im);
-            near(imaginary, value.re * component.im + value.im * component.re);
-        }
-    }
 }

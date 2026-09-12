@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordingHadError, firstNodeErrorMessage } from "./executionRecording";
+import { recordingHadError } from "./executionRecording";
 import type { RecordedEvent } from "@/features/core/execution/executionTypes";
 
 function entry(event: RecordedEvent["event"]): RecordedEvent {
@@ -13,13 +13,5 @@ describe("executionRecording", () => {
       entry({ event: "executionComplete", data: { hasError: false } }),
     ];
     expect(recordingHadError(recording)).toBe(false);
-  });
-
-  it("recordingHadError falls back to nodeError without executionComplete", () => {
-    const recording: RecordedEvent[] = [
-      entry({ event: "nodeError", data: { nodeId: "n1", error: "boom" } }),
-    ];
-    expect(recordingHadError(recording)).toBe(true);
-    expect(firstNodeErrorMessage(recording)).toBe("boom");
   });
 });

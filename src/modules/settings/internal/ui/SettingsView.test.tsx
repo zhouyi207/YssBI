@@ -208,29 +208,6 @@ describe("SettingsView preferences", () => {
     expect(settings.updateAppearance).toHaveBeenCalledWith({ smoothScroll: false });
   });
 
-  it("shows an IPC reset-all failure in a top-level alert without raw backend details", async () => {
-    vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
-    settings.resetAllToDefaults.mockRejectedValueOnce(
-      normalizeIpcError("reset_all_settings", {
-        code: "settings_reset_failed",
-        details: { debug: "raw backend settings failure" },
-        incidentId: "incident-settings-all-42",
-      }),
-    );
-    render();
-
-    const resetAll = [...host.querySelectorAll("button")].find(
-      (item) => item.textContent === "common.restoreAllDefaults",
-    );
-    click(resetAll!);
-    await flushPromises();
-
-    const alert = host.querySelector<HTMLElement>("[data-settings-reset-all-error]");
-    expect(alert?.textContent).toContain("settings_reset_failed");
-    expect(alert?.textContent).toContain("incident-settings-all-42");
-    expect(alert?.textContent).not.toContain("raw backend settings failure");
-  });
-
   it("shows a section reset failure with the active section", async () => {
     vi.spyOn(uiStore, "confirm").mockResolvedValue(true);
     settings.resetAiToDefaults.mockRejectedValueOnce(

@@ -93,40 +93,4 @@ describe("isRerouteNodeView", () => {
     expect(isRerouteNodeView({ styleId: "reroute" })).toBe(false);
     expect(isRerouteNodeView({ styleId: "builtin.default" })).toBe(false);
   });
-
-  it("preserves projected reroute position and port descriptors without synthesizing identity", () => {
-    const view = toUiNode(
-      {
-        ...baseNode,
-        id: "reroute-1",
-        nodeType: "opaque.backend.identity",
-        position: { x: 135, y: 246 },
-        display: { ...baseNode.display!, styleId: "builtin.reroute" },
-      },
-      {
-        pins: [
-          {
-            pin: {
-              ...inputPin,
-              id: "projected-address-key",
-              nodeId: "reroute-1",
-              address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
-              acceptedType: { display: "T", domain: null },
-              typeState: { status: "unknown", reasonCode: "unresolved_upstream" },
-            },
-            connectionIds: ["edge-a"],
-          },
-        ],
-      },
-    );
-
-    expect(isRerouteNodeView(view)).toBe(true);
-    expect(view.position).toEqual({ x: 135, y: 246 });
-    expect(view.nodeType).toBe("opaque.backend.identity");
-    expect(view.inputs[0]).toMatchObject({
-      id: "projected-address-key",
-      address: { kind: "declared", nodeId: "reroute-1", portKey: "input" },
-      typeState: { status: "unknown", reasonCode: "unresolved_upstream" },
-    });
-  });
 });

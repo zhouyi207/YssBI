@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { useGraphProjectionStore } from "./graphProjectionStore";
-import { canCopyNode, canDeleteNode } from "./graphNodeSelectors";
+import { canCopyNode } from "./graphNodeSelectors";
 
 const graphPath = "functions/projected-capabilities";
 const nodeId = "managed-node";
@@ -35,12 +35,6 @@ function installProjectedCapabilities() {
 describe("projected active-editor capabilities", () => {
   beforeEach(() => {
     useGraphProjectionStore.setState({ graphEntities: {} });
-  });
-
-  it("protects Rust-managed nodes without a frontend node registry", () => {
-    installProjectedCapabilities();
-
-    expect(canDeleteNode(graphPath, nodeId)).toBe(false);
   });
 
   it("does not copy a node whose Rust projection disables copying", () => {

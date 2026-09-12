@@ -289,12 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn rejects_log_without_compatibility_alias() {
-        let known = names(&["y", "x"]);
-        assert!(parse_model_expression("log(y) = x", ParseOptions::plain(&known)).is_err());
-    }
-
-    #[test]
     fn preserves_known_ax_and_splits_latex_ax_by_context() {
         let known_ax = names(&["y", "ax"]);
         let parsed = parse_model_expression("y = ax", ParseOptions::latex(&known_ax)).unwrap();

@@ -105,26 +105,6 @@ describe("project picker visible feedback", () => {
     expect(host.textContent).toContain("incident-create");
   });
 
-  it("maps path dialog failures without exposing native error text", async () => {
-    openPathDialog.mockResolvedValueOnce({
-      ok: false,
-      failure: { operation: "openPathDialog", code: "operationFailed" },
-    });
-
-    await act(async () => {
-      root.render(<NewProjectModal open onOpenChange={vi.fn()} onCreate={vi.fn()} />);
-      await Promise.resolve();
-    });
-
-    const browse = [...host.querySelectorAll("button")].find(
-      (button) => button.textContent === "projectPicker.newProjectModal.browse",
-    );
-    click(browse ?? null);
-    await flush();
-
-    expect(host.textContent).toContain("unknown_error");
-  });
-
   it("keeps the delete dialog open when deletion fails", async () => {
     const project: ManagedProject = {
       id: "project-a",

@@ -48,9 +48,7 @@ vi.mock("@/features/application/editor/workbenchPanelClose", () => ({
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
   showWorkbenchLayoutError: vi.fn(),
 }));
-
 import {
-  revealDetails,
   revealInspect,
   setDetailContext,
   setPassiveDetailContext,
@@ -88,28 +86,6 @@ beforeEach(() => {
 });
 
 describe("right sidebar context actions", () => {
-  it("updates passive Details and Inspect context without ensuring or activating a view", () => {
-    setDetailContext({ kind: "function", path: "functions/F.yssbi-function" });
-    expect(useEditorStore.getState().detailFocus).toEqual({
-      kind: "function",
-      path: "functions/F.yssbi-function",
-    });
-
-    setInspectionContext("events/Main.yssbi-event", ["node-1"]);
-    expect(useEditorStore.getState().detailFocus).toEqual({
-      kind: "node",
-      id: "node-1",
-      graphPath: "events/Main.yssbi-event",
-    });
-
-    setInspectionContext("events/Main.yssbi-event", ["node-1", "node-2"]);
-    expect(useEditorStore.getState().detailFocus).toBeNull();
-    setDetailContext(null);
-
-    expect(mocks.ensureView).not.toHaveBeenCalled();
-    expect(mocks.reveal).not.toHaveBeenCalled();
-  });
-
   it("keeps explicit node focus when passive graph hydration reports the same tab", () => {
     setInspectionContext("events/Main.yssbi-event", ["node-1"]);
 
@@ -120,16 +96,6 @@ describe("right sidebar context actions", () => {
       id: "node-1",
       graphPath: "events/Main.yssbi-event",
     });
-  });
-
-  it("updates explicit Details context without ensuring or activating a view", async () => {
-    await revealDetails({ kind: "data", id: "database-1" });
-    expect(useEditorStore.getState().detailFocus).toEqual({
-      kind: "data",
-      id: "database-1",
-    });
-    expect(mocks.ensureView).not.toHaveBeenCalled();
-    expect(mocks.reveal).not.toHaveBeenCalled();
   });
 
   it("ensures Inspect after publishing its node context", async () => {

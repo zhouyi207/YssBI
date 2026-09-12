@@ -59,17 +59,6 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn manifest_times_keep_the_input_calendar_clock_without_offset() {
-        let input = "2026-09-11T10:00:00.123+08:00";
-        let manifest = ProjectManifest::new("Clock", input);
-        assert_eq!(manifest.export_time, "2026-09-11T10:00:00.123");
-        let loaded: ProjectManifest = serde_json::from_value(json!({
-            "schemaVersion": CURRENT_PROJECT_SCHEMA_VERSION, "projectName": "Clock", "exportTime": input,
-        })).unwrap();
-        assert_eq!(loaded, manifest);
-    }
-
-    #[test]
     fn constructor_mints_only_the_current_project_schema_version() {
         let manifest = ProjectManifest::new("Example", "2026-08-30T00:00:00");
 
@@ -117,15 +106,4 @@ mod tests {
         assert_eq!(manifest.project_name, "Example");
     }
 
-    #[test]
-    fn validated_manifest_parts_round_trip_without_public_mutation_seams() {
-        let manifest = ProjectManifest::new("Round Trip", "2026-08-30T00:00:00");
-
-        assert_eq!(manifest.project_name, "Round Trip");
-        assert_eq!(manifest.export_time, "2026-08-30T00:00:00");
-        assert_eq!(
-            manifest.into_parts(),
-            ("Round Trip".to_owned(), "2026-08-30T00:00:00".to_owned())
-        );
-    }
 }

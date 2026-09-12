@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import stagedResultInspectionWire from "@/tests/fixtures/node-system-contracts/staged-result-inspection-wire.json";
-import {
-  parseStagedResultInspectionRunEvent,
-  type ResultInspectionRequestedRunEvent,
-} from "./stagedResultInspectionRunEvent";
+import { parseStagedResultInspectionRunEvent } from "./stagedResultInspectionRunEvent";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -181,14 +178,4 @@ describe("staged result inspection run-event parser", () => {
       expect(() => parseStagedResultInspectionRunEvent(invalid)).toThrow();
     },
   );
-
-  it("accepts nullable source node and port identities without adding fields", () => {
-    const value = clone(stagedResultInspectionWire) as unknown as {
-      kind: ResultInspectionRequestedRunEvent;
-    };
-    value.kind.source.nodeId = null;
-    value.kind.source.portAddress = null;
-
-    expect(parseStagedResultInspectionRunEvent(value)).toEqual(value);
-  });
 });

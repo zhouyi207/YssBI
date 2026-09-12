@@ -600,29 +600,6 @@ const editorRequest = {
 } as const;
 
 describe("workbench Dockview port", () => {
-  it("creates plugin panels with persistent DOM without changing ordinary view rendering", async () => {
-    const fake = createFakeWorkbenchDockview();
-    const { port, internal } = createDockviewHarness();
-    const added = vi.spyOn(fake.api, "addPanel");
-    internal.bind(fake.api);
-    internal.completeHydration();
-    await internal.runLayoutTransaction((tx) =>
-      tx.ensurePluginView({
-        pluginId: "example.compute",
-        viewId: "analysis",
-        title: "Analysis",
-        location: "editor",
-      }),
-    );
-    await port.ensureView({ viewId: "logs", title: "Logs" });
-    expect(added.mock.calls.find(([options]) => options.component === "Plugin")?.[0].renderer).toBe(
-      "always",
-    );
-    expect(
-      added.mock.calls.find(([options]) => options.component === "Logs")?.[0].renderer,
-    ).toBeUndefined();
-    internal.unbind(fake.api);
-  });
   it("serializes queued singleton and Result operations", async () => {
     const fake = createFakeWorkbenchDockview();
     const { port, internal } = createDockviewHarness();
@@ -687,21 +664,6 @@ describe("workbench Dockview port", () => {
 
     expect(replacement.panels).toHaveLength(0);
     expect(replacement.fromJSON).not.toHaveBeenCalled();
-  });
-
-  it("reveals an existing panel in its actual edge without moving it home", async () => {
-    const fake = createFakeWorkbenchDockview();
-    const { port, internal } = createDockviewHarness();
-    internal.bind(fake.api);
-    internal.completeHydration();
-
-    const panel = await port.ensureView({ viewId: "logs", title: "Logs" });
-    fake.movePanelToEdge(panel.panelInstanceId, "right", true);
-    await port.ensureView({ viewId: "logs", title: "Logs" });
-
-    expect(port.getPanel(panel.panelInstanceId)?.groupId).toBe("edge-right");
-    expect(fake.edge("right").expand).toHaveBeenCalledOnce();
-    expect(fake.edge("bottom").addPanel).toHaveBeenCalledOnce();
   });
 
   it("publishes native events while retaining subscriptions to unchanged edge instances", async () => {

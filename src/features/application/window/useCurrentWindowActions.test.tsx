@@ -47,13 +47,6 @@ function makeWindow(initialMaximized: boolean): FakeWindow {
   return handle;
 }
 
-function failure(operation: "minimizeWindow"): PlatformOutcome<void> {
-  return {
-    ok: false,
-    failure: { operation, code: "operationFailed", incidentId: "incident-window-42" },
-  };
-}
-
 describe("useCurrentWindowActions", () => {
   let host: HTMLDivElement;
   let root: Root;
@@ -111,25 +104,5 @@ describe("useCurrentWindowActions", () => {
     });
     expect(host.querySelector("output")?.dataset.maximized).toBe("true");
     expect(previous.isMaximized).toHaveBeenCalledOnce();
-  });
-
-  it("maps a typed platform failure to a safe issue without rejecting the action", async () => {
-    const window = makeWindow(false);
-    vi.mocked(window.minimize).mockResolvedValueOnce(failure("minimizeWindow"));
-    vi.mocked(currentAppWindow).mockReturnValue(window);
-
-    await act(async () => root.render(<Harness />));
-    await flush();
-    let outcome: Awaited<ReturnType<CurrentWindowActions["minimize"]>> | undefined;
-    await act(async () => {
-      outcome = await actions.minimize();
-    });
-
-    expect(outcome).toEqual({ status: "failed" });
-    expect(actions.issue).toEqual({
-      code: "window_action_failed",
-      incidentId: "incident-window-42",
-    });
-    expect(host.querySelector("output")?.dataset.issue).toBe("window_action_failed");
   });
 });

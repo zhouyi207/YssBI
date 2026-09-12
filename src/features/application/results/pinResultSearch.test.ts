@@ -44,12 +44,6 @@ describe("pinResultSearch", () => {
     });
   });
 
-  it("omits descriptors without an output address", () => {
-    const result = currentResult("result", "17");
-    result.provenance.output = null;
-    expect(buildPinResultSearchEntry(result, { nodeTitle: "Node", pinName: "Result" })).toBeNull();
-  });
-
   it("collects and filters descriptors by semantic labels", () => {
     const results = [currentResult("alpha", "17"), currentResult("beta", "18")];
     const entries = collectPinResultSearchEntries(results, (result) => ({

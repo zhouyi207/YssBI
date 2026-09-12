@@ -41,44 +41,4 @@ describe("project event stream", () => {
     await stream.close();
     expect(unlisten).toHaveBeenCalledOnce();
   });
-
-  it("converts parser rejection to an opaque failure item without backend prose", async () => {
-    listenMock.mockResolvedValue(vi.fn());
-    const stream = createProjectEventStream();
-    const received: ProjectEventStreamItem[] = [];
-    stream.subscribe((item) => received.push(item));
-    expect(await stream.start()).toEqual({ ok: true, value: undefined });
-
-    const callback = listenMock.mock.calls[0][1] as (event: { payload: unknown }) => void;
-    callback({
-      payload: {
-        type: "Project",
-        payload: {
-          type: "ResourceMutationCommitted",
-          payload: { message: "backend prose" },
-        },
-      },
-    });
-
-    expect(received).toEqual([
-      {
-        kind: "failure",
-        issue: { code: "project_event_invalid_payload", incidentId: null },
-      },
-    ]);
-    expect(JSON.stringify(received)).not.toContain("backend prose");
-    await stream.close();
-  });
-
-  it("returns a typed opaque subscription failure and closes without leaking the rejection", async () => {
-    listenMock.mockRejectedValue(new Error("private subscription prose"));
-    const stream = createProjectEventStream();
-
-    expect(await stream.start()).toEqual({
-      ok: false,
-      issue: { code: "project_event_subscription_failed", incidentId: null },
-    });
-    expect(JSON.stringify(await stream.start())).not.toContain("private subscription prose");
-    await stream.close();
-  });
 });

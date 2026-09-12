@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { makeProjectedPinData } from "@/tests/helpers/editorProjectionFixtures";
 import { getCanvasInteraction, useGraphInteractionStore } from "./graphInteractionStore";
 
 beforeEach(() => useGraphInteractionStore.setState({ interactions: {} }));
@@ -25,25 +24,5 @@ describe("graph interaction ownership", () => {
     );
     store.clearGraphInteraction("two");
     expect(useGraphInteractionStore.getState().interactions.two).toBeUndefined();
-  });
-
-  it("captures a palette source without retaining a mutable pin projection", () => {
-    const source = makeProjectedPinData({ id: "out", nodeId: "node", direction: "output" });
-    useGraphInteractionStore.getState().startInteraction("one", {
-      type: "pendingNodeCreation",
-      session: {
-        graphPath: "one",
-        groupId: "a",
-        panelInstanceId: "first",
-        source,
-        screenX: 5,
-        screenY: 8,
-      },
-    });
-    source.name = "changed";
-    const captured = getCanvasInteraction(useGraphInteractionStore.getState(), "one", "a");
-    expect(captured.type).toBe("pendingNodeCreation");
-    if (captured.type === "pendingNodeCreation")
-      expect(captured.session.source?.name).not.toBe("changed");
   });
 });

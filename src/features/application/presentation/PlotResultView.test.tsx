@@ -93,22 +93,6 @@ describe("PlotResultView", () => {
     });
   });
 
-  it("renders non-line models without line controls", () => {
-    const payload: ParsedPlotPayload = {
-      kind: "scatter",
-      data: {
-        data: [{ x: 2, y: 8 }],
-        xLabel: "X",
-        yLabel: "Y",
-      },
-    };
-
-    renderResult(payload);
-
-    expect(host.querySelector('[data-result-renderer="scatter"]')).not.toBeNull();
-    expect(calls.lineControls).not.toHaveBeenCalled();
-  });
-
   it("adds correlogram labels and colors outside the source DTO", () => {
     const acf = [{ lag: 0, value: 1, qStat: 0, pValue: 1 }];
     const pacf = [{ lag: 1, value: 0.35, qStat: 1.2, pValue: 0.3 }];

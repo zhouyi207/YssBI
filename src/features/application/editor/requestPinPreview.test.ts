@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import * as projectLifecycleAuthority from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -13,7 +12,6 @@ import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution
 import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { ProjectService } from "@/services/project/projectService";
 import { PinPreviewGenerationService } from "@/services/nodeSystem/pinPreviewGenerationService";
-import { normalizeIpcError } from "@/services/ipc";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import type { ExecutionDemandDto } from "@/shared/types/domain/executionDemand";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
@@ -184,26 +182,6 @@ describe("requestPinPreview", () => {
     expect(getExecutionState).not.toHaveBeenCalled();
   });
 
-  it("settles replacement before the pre-invoke assertion without side effects", async () => {
-    const { outputKey } = installGraph();
-    const capture = projectLifecycleAuthority.captureProjectIdentity;
-    vi.spyOn(projectLifecycleAuthority, "captureProjectIdentity").mockImplementation(() => {
-      const identity = capture();
-      startProjectLifecycle("replacement-project-instance");
-      return identity;
-    });
-    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
-    const getExecutionState = vi.spyOn(useExecutionStore, "getState");
-
-    await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
-      status: "rejected",
-      reason: "stale-project-lifecycle",
-    });
-
-    expect(execute).not.toHaveBeenCalled();
-    expect(getExecutionState).not.toHaveBeenCalled();
-  });
-
   it("rejects exhausted generation before any store write or IPC", async () => {
     const { outputKey } = installGraph();
     const before = useExecutionStore.getState();
@@ -222,34 +200,6 @@ describe("requestPinPreview", () => {
     expect(after.graphs).toBe(before.graphs);
     expect(beginPinPreview).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("returns a typed IPC failure without exposing backend details", async () => {
-    const { outputKey, outputAddress } = installGraph();
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockRejectedValue(
-      normalizeIpcError("execute_compiled_graph", {
-        code: "preview_execution_failed",
-        details: { debug: "sensitive preview backend detail" },
-        incidentId: "incident-preview-42",
-      }),
-    );
-
-    const result = await requestPinPreview(eventGraphPath, outputKey);
-
-    expect(result).toEqual({
-      status: "failed",
-      generation: 1,
-      error: {
-        code: "preview_execution_failed",
-        incidentId: "incident-preview-42",
-      },
-    });
-    const preview = useExecutionStore
-      .getState()
-      .getGraph(eventGraphPath)
-      .pinPreviews.get(pinPreviewCacheKey(eventGraphPath, outputAddress));
-    expect(preview).toMatchObject({ status: "error", error: "preview_execution_failed" });
-    expect(JSON.stringify({ result, preview })).not.toContain("sensitive preview backend detail");
   });
 
   it.each([

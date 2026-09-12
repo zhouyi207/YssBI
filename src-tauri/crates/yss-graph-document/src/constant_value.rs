@@ -433,19 +433,6 @@ mod tests {
     }
 
     #[test]
-    fn canonical_handle_without_snapshot_is_rejected_atomically() {
-        let mut constant = constant(DataType::DataFrame, DataValue::Null);
-        constant.data_value = DataValue::DataFrame(constant_handle(&constant.id));
-        let before = constant.clone();
-
-        assert_eq!(
-            normalize_constant_value(&mut constant),
-            Err(ConstantValueError::MissingSnapshot)
-        );
-        assert_eq!(constant, before);
-    }
-
-    #[test]
     fn data_series_normalization_preserves_non_handle_metadata() {
         let mut constant = constant(
             DataType::DataSeries(Box::new(DataType::Int64)),

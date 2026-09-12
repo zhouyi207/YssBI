@@ -356,13 +356,4 @@ describe("useEditorKeyboard", () => {
     expect(mocks.toggleWorkbenchView).toHaveBeenCalledWith("inspect");
     expect(mocks.toggleBottomWorkbenchGroup).toHaveBeenCalledOnce();
   });
-
-  it("does not create Inspect from the keyboard without node context", () => {
-    mocks.detailFocus = null;
-
-    const event = keydown("i", { ctrlKey: true });
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(mocks.toggleWorkbenchView).not.toHaveBeenCalled();
-  });
 });

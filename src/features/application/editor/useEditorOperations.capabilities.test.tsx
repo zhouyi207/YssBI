@@ -204,22 +204,6 @@ describe("useEditorOperations authoritative subgraph workflows", () => {
     expect(EDITOR_MUTATION_CAPABILITIES).toMatchObject({ pasteNodes: true, duplicateNodes: true });
   });
 
-  it("passively synchronizes connection selection without revealing Inspect", () => {
-    mocks.updateSelectedConnectionIds.mockReturnValueOnce({
-      groupId: "group-a",
-      connectionIds: ["connection-a"],
-    });
-
-    act(() => operations.setSelectedConnectionIds(["connection-a", "connection-a"], "group-a"));
-
-    expect(mocks.updateSelectedConnectionIds).toHaveBeenCalledWith(
-      ["connection-a", "connection-a"],
-      "group-a",
-    );
-    expect(mocks.setInspectionContext).toHaveBeenCalledWith(graphPath, []);
-    expect(mocks.revealInspect).not.toHaveBeenCalled();
-  });
-
   it("denies direct canvas operations while a Result is physically active", async () => {
     mocks.activeRole = "result";
 

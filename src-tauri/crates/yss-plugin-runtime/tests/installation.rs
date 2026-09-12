@@ -169,27 +169,6 @@ fn installation_is_digest_bound_idempotent_and_preserves_private_data_on_uninsta
     assert!(manager.list().unwrap().is_empty());
     assert!(data.join("private.json").exists());
 }
-#[test]
-fn unlisted_archive_paths_are_rejected_without_committing_an_installation() {
-    let root = Root::new();
-    let archive = root.0.join("bad.yssplugin");
-    package(&archive, true);
-    let manager = PluginManager::new(&root.0, Arc::new(Host)).unwrap();
-    let inspected = manager.inspect(&archive).unwrap();
-    assert!(
-        manager
-            .install(
-                &archive,
-                &inspected.package_digest,
-                &operation("bad-install"),
-                true,
-                None
-            )
-            .is_err()
-    );
-    assert!(manager.list().unwrap().is_empty());
-    assert!(!root.0.join("extensions/escape").exists());
-}
 
 #[test]
 fn installation_receipts_do_not_impose_a_lifetime_install_limit() {

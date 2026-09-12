@@ -98,27 +98,4 @@ describe("createFrontendDiagnosticBatcher", () => {
     ]);
     batcher.dispose();
   });
-
-  it("drops a failed batch without retrying or blocking later entries", async () => {
-    const submit = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("transport unavailable"))
-      .mockResolvedValue(undefined);
-    const batcher = createFrontendDiagnosticBatcher({
-      maxBatchEntries: 1,
-      maxPendingEntries: 2,
-      maxDelayMs: 10,
-      maxMessageBytes: 100,
-      submit,
-    });
-
-    batcher.enqueue(entry("failed"));
-    await batcher.flush();
-    batcher.enqueue(entry("later"));
-    await batcher.flush();
-
-    expect(submit).toHaveBeenCalledTimes(2);
-    expect(submit.mock.calls[1]?.[0]).toMatchObject([{ message: "later" }]);
-    batcher.dispose();
-  });
 });

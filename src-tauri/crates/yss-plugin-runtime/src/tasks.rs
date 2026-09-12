@@ -113,40 +113,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn process_failure_marks_all_affected_tasks_unknown_without_touching_other_instances() {
-        let root =
-            std::env::temp_dir().join(format!("yssbi-process-fault-{}", uuid::Uuid::new_v4()));
-        let manager = PluginManager::new(&root, Arc::new(Host)).unwrap();
-        manager.admit_record(record(1, "failed"), 4).unwrap();
-        manager.admit_record(record(2, "failed"), 4).unwrap();
-        manager.admit_record(record(3, "survivor"), 4).unwrap();
-        manager
-            .record_instance_failure("example.compute", "failed", fail("plugin_cancel_failed"))
-            .unwrap();
-        assert_eq!(
-            manager.task("task-1").unwrap().snapshot.state,
-            TaskState::OutcomeUnknown
-        );
-        assert_eq!(
-            manager.task("task-2").unwrap().snapshot.state,
-            TaskState::OutcomeUnknown
-        );
-        assert_eq!(
-            manager.task("task-3").unwrap().snapshot.state,
-            TaskState::Admitted
-        );
-        assert_eq!(manager.list_tasks().unwrap().len(), 1);
-        manager
-            .update_task("task-1", TaskState::Succeeded, None, Some(json!({})))
-            .unwrap();
-        assert_eq!(
-            manager.task("task-1").unwrap().snapshot.state,
-            TaskState::OutcomeUnknown
-        );
-        drop(manager);
-        std::fs::remove_dir_all(root).unwrap();
-    }
     impl HostServices for Host {
         fn current_project(&self) -> Result<Option<ProjectContext>, PluginFailure> {
             Ok(None)

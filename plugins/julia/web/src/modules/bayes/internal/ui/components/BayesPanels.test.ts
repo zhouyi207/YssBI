@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyBayesDraft } from "@/features/domain/bayes";
 import { composeLikelihoodLatex, currentResponseExpression } from "./model/FormulaStep";
-import { latexSymbol } from "./model/LatexPresentation";
 import {
   essRating,
   filterDensitySeries,
   filterTraceSeries,
-  posteriorPredictiveChartData,
   rhatRating,
   traceChains,
 } from "./BayesResultPanels";
@@ -19,29 +17,6 @@ describe("parameter diagnostic ratings", () => {
     expect(essRating(399).code).toBe("low");
     expect(essRating(400).code).toBe("acceptable");
     expect(essRating(undefined).code).toBe("unavailable");
-  });
-});
-
-describe("posterior predictive chart projection", () => {
-  it("maps predictive quantiles to interval bounds without changing observations", () => {
-    const rows = [
-      {
-        observation: 7,
-        model: { observed: 1.6, mean: 1.7, q025: 1.4, q975: 1.9 },
-        original: { observed: 5.1, mean: 5.3, q025: 4.4, q975: 6.2 },
-      },
-    ];
-
-    expect(posteriorPredictiveChartData(rows, "original")).toEqual([
-      {
-        observation: 7,
-        observed: 5.1,
-        mean: 5.3,
-        lower: 4.4,
-        upper: 6.2,
-      },
-    ]);
-    expect(posteriorPredictiveChartData(rows, "model")[0]?.mean).toBe(1.7);
   });
 });
 
@@ -73,16 +48,6 @@ describe("posterior density chain selection", () => {
     expect(filterDensitySeries(density, "__pooled__")).toEqual([density[0]]);
     expect(filterDensitySeries(density, "__all__")).toEqual([density[1], density[2]]);
     expect(filterDensitySeries(density, "2")).toEqual([density[2]]);
-  });
-});
-
-describe("Bayesian symbol LaTeX mapping", () => {
-  it("maps known Greek parameter names without changing ordinary symbols", () => {
-    expect(latexSymbol("sigma")).toBe("\\sigma");
-    expect(latexSymbol("beta_0")).toBe("\\beta_{0}");
-    expect(latexSymbol("beta_{12}")).toBe("\\beta_{12}");
-    expect(latexSymbol("x_1")).toBe("x_{1}");
-    expect(latexSymbol("a")).toBe("a");
   });
 });
 

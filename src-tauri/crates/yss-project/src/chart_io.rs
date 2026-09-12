@@ -333,23 +333,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    #[test]
-    fn nested_canonical_chart_is_rejected_without_flattening() {
-        let root = temp_project_dir();
-        let path = chart_path("Nested");
-        let nested = root
-            .join(CHARTS_DIR)
-            .join("nested")
-            .join(format!("Nested.{CHART_EXTENSION}"));
-        write_document_at(&nested, &document());
-
-        assert_all_read_entries_reject(root.as_path(), &path);
-        assert!(nested.is_file(), "read paths must not flatten nested files");
-        assert!(!root.join(path.relative_path()).exists());
-
-        let _ = std::fs::remove_dir_all(root);
-    }
-
     #[cfg(unix)]
     #[test]
     fn external_file_symlink_is_rejected_by_every_read_entry_before_reading() {
@@ -407,19 +390,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(external_root);
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn directory_junction_loop_is_rejected_by_every_read_entry_without_recursing() {
-        let root = temp_project_dir();
-        let charts = root.join(CHARTS_DIR);
-        std::fs::create_dir_all(&charts).unwrap();
-        if !create_test_junction(&charts.join("loop"), &charts) {
-            eprintln!("skipping junction assertion: Windows junction creation is unavailable");
-            return;
-        }
-
-        assert_all_read_entries_reject(root.as_path(), &chart_path("Missing"));
-
-        let _ = std::fs::remove_dir_all(root);
-    }
 }

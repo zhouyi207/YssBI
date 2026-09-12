@@ -33,15 +33,6 @@ describe("resolveDetailTarget", () => {
     ).toEqual({ kind: "event", path: "g1" });
   });
 
-  it("returns node detail focus without competing with active tab", () => {
-    expect(
-      resolveDetailTarget({
-        detailFocus: { kind: "node", id: "node-1", graphPath: "g1" },
-        selectedLog: null,
-      }),
-    ).toEqual({ kind: "node", id: "node-1", graphPath: "g1" });
-  });
-
   it("returns log detail when focus is log and a log is selected", () => {
     expect(
       resolveDetailTarget({

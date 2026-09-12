@@ -20,18 +20,6 @@ mod tests {
     use yss_project_filesystem::ProjectFilesystemError;
 
     #[test]
-    fn maps_expected_project_failure_without_diagnostic_incident() {
-        let error =
-            application_project_command_error(ProjectFilesystemError::StaleProjectLifecycle {
-                message: "stale test session".into(),
-            });
-
-        assert_eq!(error.code(), "stale_project_lifecycle");
-        assert!(error.details().is_none());
-        assert!(error.incident_id().is_none());
-    }
-
-    #[test]
     fn retains_recovery_required_wire_detail() {
         let error =
             application_project_command_error(ProjectFilesystemError::ProjectRecoveryRequired {

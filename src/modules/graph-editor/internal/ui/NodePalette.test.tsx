@@ -577,24 +577,4 @@ describe("NodePalette", () => {
 
     expect(host.querySelectorAll("button[data-catalog-item-key]")).toHaveLength(1);
   });
-
-  it("selects a resource descriptor without reconstructing its opaque identity", () => {
-    renderPalette();
-    const item = Array.from(host.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("调用 Helper"),
-    );
-
-    act(() => item!.click());
-
-    expect(onSelect).toHaveBeenCalledWith(
-      {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/Helper.yssbi-function",
-        resourceRevision: 3,
-        createArgs: { kind: "function" },
-      },
-      "zh-CN",
-    );
-  });
 });

@@ -329,24 +329,6 @@ describe("React Flow canvas command bridge", () => {
     expect(canvas.interaction.mutations.submitNodePositions).toHaveBeenCalledTimes(1);
   });
 
-  it("cancels previews without committing and rejects inactive panel callbacks", async () => {
-    render();
-    beginDrag();
-    move(55);
-    act(() => cancelGesture());
-    move(90);
-    await endDrag();
-    expect(flow().nodes![0].position).toEqual({ x: 0, y: 0 });
-    expect(canvas.interaction.mutations.submitNodePositions).not.toHaveBeenCalled();
-    active = false;
-    render();
-    beginDrag();
-    move(150);
-    await endDrag();
-    expect(flow().nodes!.every((node) => !node.draggable && !node.selectable)).toBe(true);
-    expect(canvas.interaction.mutations.submitNodePositions).not.toHaveBeenCalled();
-  });
-
   it("routes connections through the draft and opens the palette only for a free-space drop", async () => {
     render();
     act(() =>

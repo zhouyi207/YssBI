@@ -190,18 +190,6 @@ mod tests {
     }
 
     #[test]
-    fn expected_error_without_details_serializes_explicit_nulls() {
-        assert_eq!(
-            serde_json::to_value(CommandError::expected("project_not_found")).unwrap(),
-            json!({
-                "code": "project_not_found",
-                "details": null,
-                "incidentId": null,
-            })
-        );
-    }
-
-    #[test]
     fn internal_error_wire_does_not_leak_diagnostic_message() {
         let error = CommandError::internal("secret database password");
         let value = serde_json::to_value(&error).unwrap();

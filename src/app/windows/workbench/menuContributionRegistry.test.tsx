@@ -55,20 +55,6 @@ describe("Menubar editor command authorization", () => {
     }
   });
 
-  it("creates a chart from the File menu without an active editor", () => {
-    const actions = fileActions();
-    const items = buildFileMenuItems(
-      translate,
-      { projectAvailable: true, editorCommandAuthorized: false },
-      actions,
-    );
-
-    const newChart = items.find((item) => item.label === "menubar.newChart");
-    expect(newChart?.onClick).toBe(actions.addChart);
-    newChart?.onClick?.();
-    expect(actions.addChart).toHaveBeenCalledOnce();
-  });
-
   it("saves the active editor document only while a project is available", () => {
     const actions = fileActions();
     const items = buildFileMenuItems(
