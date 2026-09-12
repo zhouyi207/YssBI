@@ -1,0 +1,138 @@
+# YssBI Repository Agent Policy
+
+> Status: Current
+> Scope: Repository-wide coding-agent behavior and cross-system guardrails
+> Canonical owners: This file owns agent policy; the root `.rules` owns instruction loading and scope
+> Update when: Repository-wide agent policy or cross-system guardrails change
+
+This policy applies throughout the repository, regardless of its location
+under `docs/`.
+
+Unless stated otherwise, repository paths in this policy are relative to
+the repository root.
+
+## Scope and precedence
+
+Use repository knowledge in this order:
+
+1. Code, tests, and manifests own executable facts such as versions, paths,
+   dependencies, constants, and command registration.
+2. `docs/architecture/` owns the current architecture model and stable contracts.
+3. `.rules` owns coding-agent behavior and cross-system guardrails.
+4. `docs/development/` owns change, validation, and delivery workflows.
+5. `docs/decisions/` explains accepted design choices.
+6. `docs/roadmap/` contains work that is not yet current behavior.
+7. `docs/version/` is historical context only.
+
+When maintained documentation and code disagree, inspect the implementation and
+tests, then update the stale canonical document in the same change. Never infer
+current behavior from a roadmap or version note.
+
+Files under `docs/superpowers/` are temporary agent-local planning output. Do not
+add or commit them unless explicitly requested.
+
+## Change discipline
+
+* Keep work scoped to the requested outcome and preserve unrelated user changes.
+* Prefer changing the existing owner of a responsibility. Add a module only for
+  a distinct responsibility or a real boundary.
+* When reusing an existing implementation can simplify code without adding an
+  abstraction layer, proactively notify the user and briefly explain what can
+  be reused and how it simplifies the code.
+* Preserve observable behavior during refactors unless the request changes it.
+* This is a 0.x project: remove obsolete internal paths directly unless
+  compatibility is an explicit requirement.
+* Do not add parallel models, compatibility facades, speculative abstractions,
+  dependencies, or features merely to make a local edit easier.
+* Comments should explain non-obvious reasoning, invariants, or trade-offs, not
+  restate the code.
+* `TODO.md` contains open work only. Do not append completed change summaries;
+  Git and `docs/version/` retain implementation history.
+* When a change alters current architecture, a public contract, or the
+  development workflow, update its canonical document in the same change.
+
+## Architecture invariants
+
+* Rust is the authority for committed project state, persistence, graph
+  compilation/execution, databases, results, and scientific orchestration.
+* Project calendar values and user-facing timestamps are timezone-free. Removing
+  an input timezone must preserve its original calendar and wall-clock fields.
+* React stores only Rust projections, explicit unsaved drafts, and UI/runtime
+  state. Do not create a second frontend authority for backend-owned state.
+* Do not merge or reconcile parallel committed Rust and React models. Replace
+  projections in one direction and keep drafts separate until Save succeeds.
+* Dependencies flow toward domain and application logic, never from domain code
+  toward UI, Tauri, services, or concrete infrastructure adapters.
+* `yss-api` is the only Tauri transport seam. Commands remain thin adapters;
+  business workflows belong to application or domain owners.
+* Command failures use the exact Rust-owned `{ code, details, incidentId }`
+  wire. Rust does not send user-facing error prose; React localizes stable codes.
+* `GraphSemanticSnapshot` is the only authority for resolved graph types,
+  schemas, lineage, diagnostics, coercions, and kernel specialization.
+* Analysis Graphs model data ports and data dependencies only. Control flow,
+  effects, sequencing, and user-program side effects belong to Workflow owners.
+* Graph Draft, Compile, Save, and Execute are independent operations. Compile
+  does not commit, Save does not compile, and Execute requires the matching
+  compiled artifact.
+* The root Dockview instance is the sole authority for workbench topology,
+  placement, ordering, active panels/groups, edge sizes, and collapse state.
+* Graph Problems, operational Logs, Results, and Run Output are distinct data
+  flows. None may be used to reconstruct or substitute for another.
+
+## Testing and validation
+
+* Do not add speculative matrices, duplicate coverage, tests for unchanged
+  framework behavior, or tests that only prove a historical refactor occurred.
+* Before adding more than two tests, identify the distinct regression each
+  additional test catches and omit cases without one.
+* Use repository-root `pnpm` scripts as stable task entry points. The canonical
+  command matrix is `docs/development/LOCAL_WORKFLOW.md`.
+* Default to L1 focused validation during iteration and L2 affected-scope
+  validation for a completed change, as defined in that workflow. Small changes
+  must not default to workspace-wide check/lint/test or complete CI as a routine
+  finishing step.
+* Before validation, briefly identify affected modules, selected checks, and
+  their rationale. Rust focused commands must explicitly select packages and
+  appropriate test targets; frontend focused tests should select test files.
+* Escalate to L3 complete validation only for an explicit user request, an
+  established merge/release gate, or a high-risk change whose impact cannot be
+  reliably bounded. State the trigger before running it. Touching both frontend
+  and backend is not by itself a reason to run complete CI.
+* Changes to public APIs, shared types, serialization, or cross-module behavior
+  require assessing affected consumers; passing only the edited crate's tests
+  is not sufficient evidence for those changes.
+* Confirm focused tests actually ran the relevant cases. Zero matched tests,
+  compilation-only checks, and failed environment initialization are not passing
+  tests.
+* Reuse fresh results within the same task while the relevant code, dependencies,
+  configuration, and test inputs are unchanged. Repeat or broaden checks only
+  for new changes, failures, or unresolved risks; diagnose failures before
+  expanding the suite. If validation becomes unexpectedly expensive, report its
+  stage and reassess scope before starting additional checks.
+* Run `git diff --check` before delivery. Report actual commands, scope, and
+  relevant checks not run or not completed. Do not claim a check passed without
+  fresh output or describe focused validation as complete validation.
+* Do not perform unrelated repository-wide formatting or hardcode global Cargo
+  build-job/test-thread limits.
+
+## Documentation routing
+
+Before changing a subsystem, read its canonical owner:
+
+* Graph, projection, compile, execution, Results, and Run Output:
+  `docs/architecture/GRAPH_AND_EXECUTION.md`
+* Workbench layout and panel lifecycle:
+  `docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md`
+* Logging, operational diagnostics, feedback, and signal boundaries:
+  `docs/architecture/RUNTIME_SIGNALS.md`
+* Statistical Harness current implementation:
+  `docs/architecture/STATISTICAL_HARNESS.md`
+* Tauri/IPC transport contracts: `src-tauri/crates/yss-api/README.md`
+* Architecture enforcement: `docs/development/ARCHITECTURE_GATES.md`
+* Commands and validation: `docs/development/LOCAL_WORKFLOW.md`
+* Feature, fix, refactor, and behavior changes:
+  `docs/development/CHANGE_PROCESS.md`
+
+Do not create generic language/framework manuals such as `ts.md`, `rust.md`, or
+`tauri.md`. Add a focused document only when one stable responsibility lacks a
+canonical owner; otherwise link to the existing owner.
