@@ -468,7 +468,6 @@ fn transform_graph_edit(
             .base_revision
             .checked_add(1)
             .ok_or_else(|| invalid_edit_identity("baseRevision"))?,
-        operation_id: OperationId::new().to_string(),
         client_key: request.client_key,
         graph_hash,
         created_nodes,

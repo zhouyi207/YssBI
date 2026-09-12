@@ -108,10 +108,6 @@ pub enum ProjectGraphCommitError {
     },
     #[error("graph lifecycle changed during the operation")]
     LifecycleChanged { graph_path: GraphResourcePath },
-    #[error("graph operation ownership changed")]
-    OperationOwnershipChanged {
-        operation_id: yss_project_identity::OperationId,
-    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -266,7 +262,6 @@ impl ProjectState {
     pub fn commit_graph_candidate(
         &self,
         authority: GraphOperationAuthority,
-        operation_id: yss_project_identity::OperationId,
         candidate_document: Arc<GraphDocument>,
     ) -> Result<GraphCommitReceipt, ProjectGraphCommitError> {
         let GraphOperationAuthority {
@@ -274,12 +269,9 @@ impl ProjectState {
             graph_path,
             revision,
             authority_generation,
-            operation_id: admitted_operation,
+            operation_id,
             reservation,
         } = authority;
-        if admitted_operation != operation_id {
-            return Err(ProjectGraphCommitError::OperationOwnershipChanged { operation_id });
-        }
         self.ensure_project_operational().map_err(|_| {
             ProjectGraphCommitError::LifecycleChanged {
                 graph_path: graph_path.clone(),
@@ -426,11 +418,11 @@ impl ProjectState {
     pub fn save_graph_candidate(
         &self,
         capture: GraphOperationCapture,
-        operation_id: yss_project_identity::OperationId,
         candidate_document: Arc<GraphDocument>,
     ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
         let graph_path = capture.graph_path.clone();
         let session = capture.authority.session.clone();
+        let operation_id = capture.operation_id();
 
         let data = self.get_data()?;
         let mut resource = data.graphs.get(&graph_path).cloned().ok_or_else(|| {
@@ -461,11 +453,7 @@ impl ProjectState {
         )?;
         let committed = prepared.commit()?;
 
-        match self.commit_graph_candidate(
-            capture.into_authority(),
-            operation_id,
-            candidate_document,
-        ) {
+        match self.commit_graph_candidate(capture.into_authority(), candidate_document) {
             Ok(receipt) => {
                 committed.finalize();
                 Ok(receipt)
@@ -532,7 +520,7 @@ mod tests {
 
         fixture
             .state()
-            .save_graph_candidate(capture, operation_id, Arc::new(candidate))
+            .save_graph_candidate(capture, Arc::new(candidate))
             .unwrap();
         assert_eq!(
             fixture.state().get_data().unwrap().graphs[&graph_path]

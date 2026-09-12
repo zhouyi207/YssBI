@@ -198,7 +198,7 @@ clients supply query parameters only. Both commands dispatch Application work on
 session/result revalidation. Plot responses explicitly identify systematic sampling and population counts.
 The result reference wire and report projections are owned by `schema/result.rs`; the computational model remains Rust-owned.
 
-Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; committed revisions, file transactions and failure recovery stay with the Project owner. Automation graph edit receipts carry the committed revisions and operation identity, with no project undo capability.
+Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; committed revisions, file transactions and failure recovery stay with the Project owner. Automation graph edit receipts carry draft revisions, graph hash, client correlation and created element identities, with no project undo capability or generated operation ID. These receipts describe unsaved draft edits. Graph Save returns the project instance, committed resource revision, document and projection replacement; its request operation ID stays within the commit path and is not echoed in the response.
 
 ## Frontend adapter
 

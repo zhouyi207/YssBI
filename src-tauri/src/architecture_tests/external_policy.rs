@@ -587,6 +587,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yssbi",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-bayes-artifact-datafusion",
         mode: RustDependencyMode::Runtime,
         package_name: "arrow",
@@ -2203,6 +2209,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::CompositionRoot,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::CompositionRoot,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Project,

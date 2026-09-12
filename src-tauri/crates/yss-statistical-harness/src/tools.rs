@@ -575,7 +575,6 @@ mod tests {
                             graph_path: "events/Main.yssbi-event".into(),
                             from_revision: 0,
                             to_revision: 1,
-                            operation_id: "operation-1".into(),
                             client_key: "batch-1".into(),
                             graph_hash: "1".repeat(64),
                             created_nodes: BTreeMap::new(),

@@ -409,13 +409,11 @@ export function parseGraphDraftSaveDto(
     !isRecord(value) ||
     !hasExactKeys(value, [
       "projectInstanceId",
-      "operationId",
       "resourceRevision",
       "document",
       "projectionReplacement",
     ]) ||
     value.projectInstanceId !== expectedProjectInstanceId ||
-    !isUuid(value.operationId) ||
     !Number.isSafeInteger(value.resourceRevision) ||
     (value.resourceRevision as number) < 0
   ) {
@@ -423,7 +421,6 @@ export function parseGraphDraftSaveDto(
   }
   return {
     projectInstanceId: expectedProjectInstanceId,
-    operationId: value.operationId,
     resourceRevision: value.resourceRevision as number,
     document: parseGraphDocumentDto(value.document),
     projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),

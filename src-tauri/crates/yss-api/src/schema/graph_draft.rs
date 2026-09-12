@@ -23,7 +23,6 @@ pub struct GraphDraftTransformDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphDraftSaveDto {
     pub project_instance_id: String,
-    pub operation_id: yss_project_identity::OperationId,
     pub resource_revision: yss_project_identity::ResourceRevision,
     pub document: yss_graph_document::GraphDocument,
     pub projection_replacement: GraphProjectionReplacementDto,
@@ -98,7 +97,6 @@ pub(crate) fn graph_draft_save_to_transport(
 ) -> GraphDraftSaveDto {
     GraphDraftSaveDto {
         project_instance_id: saved.project_instance_id.to_string(),
-        operation_id: saved.operation_id,
         resource_revision: saved.resource_revision,
         document: saved.document.clone(),
         projection_replacement: graph_projection_replacement_to_transport(

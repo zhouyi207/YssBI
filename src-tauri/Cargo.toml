@@ -180,6 +180,7 @@ tauri-plugin-fs = "2.5"
 tauri-plugin-clipboard-manager = "2"
 thiserror.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 yss-dataset-store = { path = "./crates/yss-dataset-store" }
@@ -190,7 +191,6 @@ proc-macro2 = "1"
 serde.workspace = true
 serde_json.workspace = true
 syn = { version = "3", features = ["full", "visit"] }
-uuid.workspace = true
 yss-database-contract = { path = "./crates/yss-database-contract" }
 yss-database-edit = { path = "./crates/yss-database-edit" }
 yss-database-runtime = { path = "./crates/yss-database-runtime", features = ["test-support"] }

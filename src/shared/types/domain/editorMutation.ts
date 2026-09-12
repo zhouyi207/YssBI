@@ -287,7 +287,6 @@ export interface GraphDraftTransformDto {
 
 export interface GraphDraftSaveDto {
   projectInstanceId: string;
-  operationId: string;
   resourceRevision: number;
   document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;

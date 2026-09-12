@@ -31,7 +31,6 @@ export interface ExecuteFunctionSignatureMutationInput {
 }
 
 export interface FunctionSignatureCoordinatorDependencies {
-  createOperationId(): string;
   mutateSignature(
     projectInstanceId: string,
     functionPath: string,
@@ -48,10 +47,8 @@ export type ExecuteFunctionSignatureMutationOutcome =
   | { status: "conflict" };
 
 let coordinatorEpoch = 0;
-const pendingSignatureOperations = new Set<string>();
 
 const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
-  createOperationId: () => crypto.randomUUID(),
   mutateSignature: (projectInstanceId, functionPath, locale, request) =>
     FunctionMutationService.updateSignature(projectInstanceId, functionPath, locale, request),
   hydrateGraph: hydrateGraphProjection,
@@ -137,7 +134,6 @@ export async function executeFunctionSignatureMutation(
     throw new Error(`function signature resource '${input.functionPath}' is not hydrated`);
   }
 
-  const operationId = dependencies.createOperationId();
   const requestPatch: FunctionDocumentPatchDto = {
     before: meta.functionSignature,
     after: buildSignature(meta.functionSignature, input.patch),
@@ -145,7 +141,7 @@ export async function executeFunctionSignatureMutation(
   const request: MutationRequestDto<FunctionDocumentPatchDto> = {
     resource: { kind: "function", key: input.functionPath },
     baseRevision: meta.functionRevision,
-    operationId,
+    operationId: context.operationId,
     payload: requestPatch,
   };
   const epoch = coordinatorEpoch;
@@ -153,54 +149,45 @@ export async function executeFunctionSignatureMutation(
     projectInstanceId: context.projectInstanceId,
     epoch: context.projectEpoch,
   };
-  if (pendingSignatureOperations.has(operationId)) {
-    throw new Error(`backend mutation operation '${operationId}' is already pending`);
-  }
-  pendingSignatureOperations.add(operationId);
-
+  let result: ResourceMutationResultDto;
   try {
-    let result: ResourceMutationResultDto;
-    try {
-      result = await dependencies.mutateSignature(
-        identity.projectInstanceId,
-        input.functionPath,
-        input.locale,
-        request,
-      );
-      if (!isCurrentProjectIdentity(identity)) return { status: "stale", result };
-    } catch (error) {
-      if (
-        !isCurrentProjectIdentity(identity) ||
-        isApplicationIpcErrorCode(error, "stale_project_lifecycle")
-      )
-        return { status: "stale" };
-      if (epoch !== coordinatorEpoch) return { status: "stale" };
-      if (!isFunctionRevisionConflict(error)) throw error;
-      await hydrateAuthoritativeState([input.functionPath], input.locale, dependencies, identity);
-      if (!isCurrentProjectIdentity(identity) || epoch !== coordinatorEpoch) {
-        return { status: "stale" };
-      }
-      return { status: "conflict" };
+    result = await dependencies.mutateSignature(
+      identity.projectInstanceId,
+      input.functionPath,
+      input.locale,
+      request,
+    );
+    if (!isCurrentProjectIdentity(identity)) return { status: "stale", result };
+  } catch (error) {
+    if (
+      !isCurrentProjectIdentity(identity) ||
+      isApplicationIpcErrorCode(error, "stale_project_lifecycle")
+    )
+      return { status: "stale" };
+    if (epoch !== coordinatorEpoch) return { status: "stale" };
+    if (!isFunctionRevisionConflict(error)) throw error;
+    await hydrateAuthoritativeState([input.functionPath], input.locale, dependencies, identity);
+    if (!isCurrentProjectIdentity(identity) || epoch !== coordinatorEpoch) {
+      return { status: "stale" };
     }
-
-    if (epoch !== coordinatorEpoch) return { status: "stale", result };
-    try {
-      await projectPublicationCoordinator.submit({
-        result,
-        fallbackPaths: [input.functionPath],
-        validate: (candidate) => validateDirectSignatureResult(request, candidate),
-      });
-    } catch (error) {
-      if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle") {
-        return { status: "stale", result };
-      }
-      throw error;
-    }
-    if (epoch !== coordinatorEpoch) return { status: "stale", result };
-    return { status: "applied", result };
-  } finally {
-    if (epoch === coordinatorEpoch) pendingSignatureOperations.delete(operationId);
+    return { status: "conflict" };
   }
+
+  if (epoch !== coordinatorEpoch) return { status: "stale", result };
+  try {
+    await projectPublicationCoordinator.submit({
+      result,
+      fallbackPaths: [input.functionPath],
+      validate: (candidate) => validateDirectSignatureResult(request, candidate),
+    });
+  } catch (error) {
+    if (error instanceof ProjectPublicationError && error.code === "stale_project_lifecycle") {
+      return { status: "stale", result };
+    }
+    throw error;
+  }
+  if (epoch !== coordinatorEpoch) return { status: "stale", result };
+  return { status: "applied", result };
 }
 
 export function commitFunctionSignature(
@@ -216,5 +203,4 @@ export function commitFunctionSignature(
 
 export function resetFunctionSignatureCoordinator(): void {
   coordinatorEpoch += 1;
-  pendingSignatureOperations.clear();
 }

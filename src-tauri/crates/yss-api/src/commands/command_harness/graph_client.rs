@@ -524,7 +524,7 @@ mod tests {
         GraphEditOperation, GraphEditPosition, GraphEditReceipt, GraphSaved, PrincipalId,
         ProjectSessionBinding, SaveGraphRequest,
     };
-    use yss_project_identity::{OperationId, ProjectSessionId, ResourceRevision};
+    use yss_project_identity::{ProjectSessionId, ResourceRevision};
     const PATH: &str = "events/Main.yssbi-event";
     fn context() -> CapabilityInvocationContext {
         CapabilityInvocationContext::new(
@@ -580,7 +580,6 @@ mod tests {
                 graph_path: PATH.into(),
                 from_revision: 0,
                 to_revision: 1,
-                operation_id: "operation-1".into(),
                 client_key: "edit-1".into(),
                 graph_hash: "1".repeat(64),
                 created_nodes: BTreeMap::new(),
@@ -675,7 +674,6 @@ mod tests {
                     }),
                     update: AutomationGraphUpdate::Saved(GraphDraftSave {
                         project_instance_id: context().project().project_instance_id().clone(),
-                        operation_id: OperationId::new(),
                         resource_revision: ResourceRevision::new(7),
                         document: GraphDocument::default(),
                         projection_replacement: projection(),

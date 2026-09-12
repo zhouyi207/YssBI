@@ -10,7 +10,6 @@ export interface ProjectCommandContext {
   projectEpoch: number;
   publicationRevision: number;
   operationId: string;
-  operationPendingKey: string;
   isCurrent(): boolean;
   assertCurrent(): void;
 }
@@ -33,7 +32,6 @@ export function captureProjectCommandContext(
     projectEpoch: identity.epoch,
     publicationRevision,
     operationId,
-    operationPendingKey: `${identity.projectInstanceId}:${operationId}`,
     isCurrent,
     assertCurrent: () => assertCurrentProjectIdentity(identity),
   };

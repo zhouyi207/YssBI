@@ -2,7 +2,7 @@ use crate::{ProjectError, ProjectState};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs, io::Write, path::PathBuf};
 use yss_project_filesystem::{metadata_is_redirect, read_secure_project_file};
-use yss_project_identity::{OperationId, ProjectInstanceId, ProjectSessionId};
+use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 pub struct ExternalArtifact {
     pub name: String,
@@ -67,88 +67,6 @@ fn valid_name(value: &str) -> bool {
             && matches!(stem.as_bytes()[3], b'1'..=b'9'))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn committed_plugin_results_are_idempotent_portable_and_current_project_bound() {
-        let fixture = crate::fixtures::TempProject::activate(
-            "external-result",
-            yss_project_model::ProjectData::new(),
-        );
-        let state = fixture.state();
-        let session = state.capture_project_session().unwrap();
-        let project_session = state.project_session_id();
-        let provenance = ExternalResourceProvenance {
-            provider_id: "example.compute".into(),
-            package_digest: "package-hash".into(),
-            task_id: "task-1".into(),
-            operation_id: "operation-1".into(),
-            parameters_hash: "parameters-hash".into(),
-            sources: vec![],
-        };
-        let artifacts = || {
-            vec![ExternalArtifact {
-                name: "summary.csv".into(),
-                media_type: "text/csv".into(),
-                contents: b"name,mean\na,2\n".to_vec(),
-            }]
-        };
-        let receipt = state
-            .commit_external_artifacts(
-                &session.instance_id,
-                &project_session,
-                provenance.clone(),
-                artifacts(),
-            )
-            .unwrap();
-        assert_eq!(
-            state
-                .commit_external_artifacts(
-                    &session.instance_id,
-                    &project_session,
-                    provenance.clone(),
-                    artifacts()
-                )
-                .unwrap(),
-            receipt
-        );
-        let mut changed = artifacts();
-        changed[0].contents.push(b'3');
-        assert!(
-            state
-                .commit_external_artifacts(
-                    &session.instance_id,
-                    &project_session,
-                    provenance.clone(),
-                    changed
-                )
-                .is_err()
-        );
-        let tree =
-            yss_project_filesystem::read_project_source_tree(session.root.as_path()).unwrap();
-        assert!(
-            tree.files
-                .contains_key(&PathBuf::from(&receipt.resource_ref).join("summary.csv"))
-        );
-        assert!(
-            tree.files
-                .keys()
-                .all(|path| !path.starts_with(".yssbi-transaction"))
-        );
-        assert!(
-            state
-                .commit_external_artifacts(
-                    &ProjectInstanceId::new(),
-                    &project_session,
-                    provenance,
-                    artifacts()
-                )
-                .is_err()
-        );
-    }
-}
-
 impl ProjectState {
     pub fn commit_external_artifacts(
         &self,
@@ -164,19 +82,21 @@ impl ProjectState {
             || !valid_name(&provenance.operation_id)
             || artifacts.is_empty()
             || artifacts.len() > 16
-            || self.project_session_id() != *session
         {
             return Err(invalid());
         }
-        let _reservation = self
-            .reserve_resource_operation(instance, OperationId::new())
-            .map_err(|_| invalid())?;
         let captured = self.capture_project_session().map_err(|_| invalid())?;
+        if captured.instance_id != *instance {
+            return Err(invalid());
+        }
         let _filesystem = self
             .acquire_filesystem_lease(captured.root.clone())
             .map_err(|_| invalid())?;
         self.validate_project_session(&captured)
             .map_err(|_| invalid())?;
+        if self.project_session_id() != *session {
+            return Err(invalid());
+        }
         let root = captured.root.as_path().to_path_buf();
         let relative = format!(
             "extension-results/{}/{}",
@@ -290,5 +210,111 @@ impl ProjectState {
             let _ = fs::remove_dir_all(stage);
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn committed_plugin_results_are_idempotent_portable_and_current_project_bound() {
+        let fixture = crate::fixtures::TempProject::activate(
+            "external-result",
+            yss_project_model::ProjectData::new(),
+        );
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let project_session = state.project_session_id();
+        let provenance = ExternalResourceProvenance {
+            provider_id: "example.compute".into(),
+            package_digest: "package-hash".into(),
+            task_id: "task-1".into(),
+            operation_id: "operation-1".into(),
+            parameters_hash: "parameters-hash".into(),
+            sources: vec![],
+        };
+        let artifacts = || {
+            vec![ExternalArtifact {
+                name: "summary.csv".into(),
+                media_type: "text/csv".into(),
+                contents: b"name,mean\na,2\n".to_vec(),
+            }]
+        };
+        let receipt = state
+            .commit_external_artifacts(
+                &session.instance_id,
+                &project_session,
+                provenance.clone(),
+                artifacts(),
+            )
+            .unwrap();
+        assert_eq!(
+            state
+                .commit_external_artifacts(
+                    &session.instance_id,
+                    &project_session,
+                    provenance.clone(),
+                    artifacts()
+                )
+                .unwrap(),
+            receipt
+        );
+        let mut changed = artifacts();
+        changed[0].contents.push(b'3');
+        assert!(
+            state
+                .commit_external_artifacts(
+                    &session.instance_id,
+                    &project_session,
+                    provenance.clone(),
+                    changed
+                )
+                .is_err()
+        );
+        let tree =
+            yss_project_filesystem::read_project_source_tree(session.root.as_path()).unwrap();
+        assert!(
+            tree.files
+                .contains_key(&PathBuf::from(&receipt.resource_ref).join("summary.csv"))
+        );
+        assert!(
+            tree.files
+                .keys()
+                .all(|path| !path.starts_with(".yssbi-transaction"))
+        );
+        assert!(
+            state
+                .commit_external_artifacts(
+                    &ProjectInstanceId::new(),
+                    &project_session,
+                    provenance.clone(),
+                    artifacts()
+                )
+                .is_err()
+        );
+        assert!(
+            state
+                .commit_external_artifacts(
+                    &session.instance_id,
+                    &ProjectSessionId::new("another-session"),
+                    provenance.clone(),
+                    artifacts()
+                )
+                .is_err()
+        );
+        let _lifecycle = state
+            .filesystem_for_test()
+            .begin_root_lifecycle(session.root.clone())
+            .unwrap();
+        assert!(
+            state
+                .commit_external_artifacts(
+                    &session.instance_id,
+                    &project_session,
+                    provenance,
+                    artifacts()
+                )
+                .is_err()
+        );
     }
 }

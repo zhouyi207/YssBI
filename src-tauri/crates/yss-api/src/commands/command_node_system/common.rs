@@ -167,9 +167,6 @@ pub(super) fn resource_mutation_to_command_error(
             yss_project::ProjectGraphCommitError::LifecycleChanged { .. } => {
                 CommandError::expected("stale_resource_lifecycle")
             }
-            yss_project::ProjectGraphCommitError::OperationOwnershipChanged { .. } => {
-                CommandError::expected("duplicate_operation")
-            }
         },
         ResourceMutationApplicationError::GraphUnavailable { .. } => {
             CommandError::expected("graph_not_loaded")

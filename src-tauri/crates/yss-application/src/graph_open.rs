@@ -8,7 +8,7 @@ use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_runtime::GraphMaterializationError;
 use yss_project_filesystem::ProjectFilesystemError;
-use yss_project_identity::{OperationId, ProjectInstanceId};
+use yss_project_identity::ProjectInstanceId;
 
 use super::catalog_query::revalidate_project_catalog_facts;
 use super::catalog_query::{ProjectCatalogReadError, capture_localized_project_facts};
@@ -27,7 +27,6 @@ pub struct OpenGraphRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
     lifecycle_token: u64,
-    operation_id: OperationId,
     locale: Box<str>,
 }
 
@@ -42,7 +41,6 @@ impl OpenGraphRequest {
             project_instance_id,
             graph_path,
             lifecycle_token,
-            operation_id: OperationId::new(),
             locale: locale.into(),
         }
     }
@@ -61,10 +59,6 @@ impl OpenGraphRequest {
 
     pub fn locale(&self) -> &str {
         &self.locale
-    }
-
-    pub const fn operation_id(&self) -> OperationId {
-        self.operation_id
     }
 }
 
@@ -124,8 +118,6 @@ pub enum OpenGraphProjectError {
         graph: GraphResourcePath,
         revision: yss_project_identity::ResourceRevision,
     },
-    #[error("graph-open operation is duplicated")]
-    DuplicateOperation { operation_id: OperationId },
     #[error("project filesystem transaction is busy")]
     FilesystemBusy,
     #[error("graph-open transaction preparation failed")]
@@ -231,9 +223,7 @@ pub(crate) fn open_graph_in_session(
     let already_resident = captured
         .project()
         .get_data()
-        .map_err(|error| {
-            map_project_open_error(request.graph_path(), request.operation_id(), error)
-        })?
+        .map_err(|error| map_project_open_error(request.graph_path(), error))?
         .graphs
         .contains_key(request.graph_path());
     if !already_resident {
@@ -244,14 +234,13 @@ pub(crate) fn open_graph_in_session(
                 request.graph_path(),
                 request.lifecycle_token(),
             )
-            .map_err(|error| {
-                map_project_open_error(request.graph_path(), request.operation_id(), error)
-            })?;
+            .map_err(|error| map_project_open_error(request.graph_path(), error))?;
     }
 
-    let data = captured.project().get_data().map_err(|error| {
-        map_project_open_error(request.graph_path(), request.operation_id(), error)
-    })?;
+    let data = captured
+        .project()
+        .get_data()
+        .map_err(|error| map_project_open_error(request.graph_path(), error))?;
     let resource = data.graphs.get(request.graph_path()).ok_or_else(|| {
         OpenGraphApplicationError::Project(OpenGraphProjectError::PrepareFailed(
             OpenGraphProjectSource::invariant(),
@@ -356,7 +345,6 @@ fn map_project_facts_open_error(
 
 fn map_project_open_error(
     graph: &GraphResourcePath,
-    operation_id: OperationId,
     error: ProjectFilesystemError,
 ) -> OpenGraphApplicationError {
     match &error {
@@ -390,9 +378,6 @@ fn map_project_open_error(
                 revision: yss_project_identity::ResourceRevision::new(*retained),
             }
             .into()
-        }
-        ProjectFilesystemError::DuplicateOperation { .. } => {
-            OpenGraphProjectError::DuplicateOperation { operation_id }.into()
         }
         ProjectFilesystemError::FilesystemTransactionBusy { .. } => {
             OpenGraphProjectError::FilesystemBusy.into()

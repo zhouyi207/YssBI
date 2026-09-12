@@ -1,5 +1,5 @@
 import { projectIndexSnapshotFixture } from "@/tests/helpers/activityPanelFixture";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { buildGraphResourceMeta, useResourceStore } from "@/features/core/resource";
@@ -13,7 +13,6 @@ import {
 } from "@/tests/helpers/editorProjectionFixtures";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { ProjectService } from "@/services/project/projectService";
-import { normalizeIpcError } from "@/services/ipc";
 import {
   executeFunctionSignatureMutation,
   resetFunctionSignatureCoordinator,
@@ -24,10 +23,6 @@ import { projectPublicationCoordinator } from "./projectPublicationCoordinator";
 const functionPath = "functions/Compute.yssbi-function";
 const operationId = "00000000-0000-0000-0000-000000000501";
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
-
-function backendError(code: string) {
-  return normalizeIpcError("update_function_signature", { code, details: null, incidentId: null });
-}
 
 const beforeSignature: FunctionSignatureDto = {
   parameters: [{ id: "value", name: "Value", type_name: "Int64" }],
@@ -128,7 +123,6 @@ function dependencies(
     projectPublicationCoordinator.refreshIndex(),
 ): Partial<FunctionSignatureCoordinatorDependencies> {
   return {
-    createOperationId: () => operationId,
     mutateSignature,
     hydrateGraph,
     refreshResourceIndex,
@@ -136,9 +130,12 @@ function dependencies(
 }
 
 describe("executeFunctionSignatureMutation", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(operationId);
     vi.mocked(GraphProjectionService.loadGraph).mockImplementation(async (graphPath) =>
       makeGraphEditorSession(makeEditorProjectionFixture({ graphPath }).projection),
     );
@@ -147,58 +144,26 @@ describe("executeFunctionSignatureMutation", () => {
     installState();
   });
 
-  it("rejects duplicate pending IDs and releases the ID after a failed request", async () => {
-    let rejectPending!: (error: Error) => void;
-    const pending = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
-      rejectPending = reject;
+  it("discards a successful response from before a coordinator reset", async () => {
+    let resolveOld!: (value: ResourceMutationResultDto) => void;
+    const old = new Promise<ResourceMutationResultDto>((resolve) => {
+      resolveOld = resolve;
     });
-    const mutateSignature = vi
-      .fn()
-      .mockReturnValueOnce(pending)
-      .mockRejectedValue(backendError("stale_project_lifecycle"));
+    const mutateSignature = vi.fn().mockReturnValueOnce(old);
     const overrides = dependencies(mutateSignature);
     const input = { functionPath, locale: "en-US", patch: { inputs: [] } };
-    const first = executeFunctionSignatureMutation(input, overrides);
-    const failure = expect(first).rejects.toThrow("request failed");
-
-    await expect(executeFunctionSignatureMutation(input, overrides)).rejects.toThrow(
-      "already pending",
-    );
-    expect(mutateSignature).toHaveBeenCalledOnce();
-
-    rejectPending(new Error("request failed"));
-    await failure;
-    await expect(executeFunctionSignatureMutation(input, overrides)).resolves.toEqual({
-      status: "stale",
-    });
-    expect(mutateSignature).toHaveBeenCalledTimes(2);
-  });
-
-  it("keeps a reused ID pending when a request from an earlier coordinator epoch settles", async () => {
-    let rejectOld!: (error: Error) => void;
-    let rejectCurrent!: (error: Error) => void;
-    const old = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
-      rejectOld = reject;
-    });
-    const current = new Promise<ResourceMutationResultDto>((_resolve, reject) => {
-      rejectCurrent = reject;
-    });
-    const mutateSignature = vi.fn().mockReturnValueOnce(old).mockReturnValueOnce(current);
-    const overrides = dependencies(mutateSignature);
-    const input = { functionPath, locale: "en-US", patch: { inputs: [] } };
+    const submit = vi.spyOn(projectPublicationCoordinator, "submit");
+    const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
+    const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const oldRequest = executeFunctionSignatureMutation(input, overrides);
     resetFunctionSignatureCoordinator();
-    const currentRequest = executeFunctionSignatureMutation(input, overrides);
+    const committed = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
+    resolveOld(committed);
 
-    rejectOld(backendError("stale_project_lifecycle"));
-    await expect(oldRequest).resolves.toEqual({ status: "stale" });
-    await expect(executeFunctionSignatureMutation(input, overrides)).rejects.toThrow(
-      "already pending",
-    );
-    expect(mutateSignature).toHaveBeenCalledTimes(2);
-
-    rejectCurrent(backendError("stale_project_lifecycle"));
-    await expect(currentRequest).resolves.toEqual({ status: "stale" });
+    await expect(oldRequest).resolves.toEqual({ status: "stale", result: committed });
+    expect(submit).not.toHaveBeenCalled();
+    expect(useGraphMetaStore.getState().graphs[functionPath]).toBe(beforeMeta);
+    expect(useGraphProjectionStore.getState().graphEntities[functionPath]).toBe(beforeGraph);
   });
 
   it("does not invoke, publish, or mutate when project replacement occurs inside authority read", async () => {
@@ -476,7 +441,10 @@ describe("executeFunctionSignatureMutation", () => {
 
   it("rejects malformed correlated results before installing any state", async () => {
     const malformed = result({ status: "complete", expectedGraphPaths: [functionPath] }, true);
-    malformed.deltas[0] = { ...malformed.deltas[0], causedBy: crypto.randomUUID() };
+    malformed.deltas[0] = {
+      ...malformed.deltas[0],
+      causedBy: "00000000-0000-0000-0000-000000000502",
+    };
     const beforeGraph = useGraphProjectionStore.getState().graphEntities[functionPath];
     const beforeMeta = useGraphMetaStore.getState().graphs[functionPath];
     const hydrateGraph = vi.fn(async () => true);

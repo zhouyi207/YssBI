@@ -70,7 +70,6 @@ pub struct GraphDraftTransform {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GraphDraftSave {
     pub project_instance_id: ProjectInstanceId,
-    pub operation_id: OperationId,
     pub resource_revision: ResourceRevision,
     pub document: GraphDocument,
     pub projection_replacement: GraphProjectionReplacement,
@@ -474,11 +473,10 @@ impl ApplicationState {
                     &locale,
                 )?;
                 context.revalidate(&captured)?;
-                match captured.project().save_graph_candidate(
-                    operation,
-                    operation_id,
-                    Arc::new(candidate.clone()),
-                ) {
+                match captured
+                    .project()
+                    .save_graph_candidate(operation, Arc::new(candidate.clone()))
+                {
                     Ok(receipt) => {
                         saved = Some((candidate, receipt, projection));
                         break;
@@ -495,7 +493,6 @@ impl ApplicationState {
         };
         Ok(GraphDraftSave {
             project_instance_id,
-            operation_id,
             resource_revision: receipt.to_revision,
             document,
             projection_replacement: projection,

@@ -1578,7 +1578,6 @@ mod tests {
                         graph_path: "events/Main.yssbi-event".to_owned(),
                         from_revision: 1,
                         to_revision: 2,
-                        operation_id: "operation-1".to_owned(),
                         client_key: "assistant-edit-1".to_owned(),
                     },
                 ))

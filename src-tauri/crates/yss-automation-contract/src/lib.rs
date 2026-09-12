@@ -973,7 +973,6 @@ pub struct GraphEditReceipt {
     pub graph_path: String,
     pub from_revision: u64,
     pub to_revision: u64,
-    pub operation_id: String,
     pub client_key: String,
     #[serde(default)]
     pub graph_hash: String,

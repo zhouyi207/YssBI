@@ -90,6 +90,8 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-api`
 
 `apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（草稿 generation）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向既有草稿 history 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
+`GraphEditReceipt` 保存草稿修订、graph hash、`clientKey` 和创建元素的身份映射，不另行生成项目 `OperationId`。SQLite adapter 在启动事务中将 `user_version = 0` 升至 1，仅移除既有 `tool_invocation` 图编辑结果中的 `operationId`；调用记录、幂等键和其余回执内容保留，读取仍使用严格类型校验。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
+
 编辑、编译和执行不会隐式保存。显式 `save_graph` 复用正常 Save，包括保存成功后的草稿历史清理。没有独立的 AI committed graph 或 AI 撤销栈。图工具需要当前桌面的草稿 channel；external/headless graph mutation 不自动获得这条能力。
 
 节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的技术编译/运行不要求重新设计统计方案。

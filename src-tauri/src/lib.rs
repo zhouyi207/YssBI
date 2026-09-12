@@ -67,10 +67,7 @@ impl IdGeneratorPort for HarnessIdGenerator {
             AutomationIdKind::MemoryRecord => "memory",
             AutomationIdKind::ApprovalGrant => "approval",
         };
-        Ok(format!(
-            "{prefix}-{}",
-            yss_project_identity::OperationId::new()
-        ))
+        Ok(format!("{prefix}-{}", uuid::Uuid::new_v4()))
     }
 }
 

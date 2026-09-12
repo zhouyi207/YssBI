@@ -67,13 +67,35 @@ impl SqliteHarnessStore {
     }
 
     async fn ensure_schema(&self) -> Result<(), PersistenceFailure> {
+        let mut transaction = self.pool.begin().await.map_err(|_| unavailable())?;
         for statement in SCHEMA {
             sqlx::query(*statement)
-                .execute(&self.pool)
+                .execute(&mut *transaction)
                 .await
                 .map_err(|_| unavailable())?;
         }
-        Ok(())
+        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(|_| unavailable())?;
+        if version < 1 {
+            // Graph edit receipts correlate through clientKey and the invocation ledger.
+            // Remove the former unused response ID before strict typed decoding.
+            sqlx::query(
+                "UPDATE tool_invocation
+                 SET payload_json = json_remove(payload_json, '$.result.payload.operationId')
+                 WHERE json_extract(payload_json, '$.result.type') = 'graph_edit_receipt'
+                   AND json_type(payload_json, '$.result.payload.operationId') IS NOT NULL",
+            )
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| unavailable())?;
+            sqlx::query("PRAGMA user_version = 1")
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| unavailable())?;
+        }
+        transaction.commit().await.map_err(|_| unavailable())
     }
 }
 
@@ -1040,6 +1062,97 @@ mod tests {
         ProjectSessionBinding, SourceHash, ToolInvocationId, ToolInvocationState, UnixMillis,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
+
+    #[tokio::test]
+    async fn migrates_persisted_graph_edit_receipts_without_losing_idempotency() {
+        let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+        let session = HarnessSessionRecord {
+            id: HarnessSessionId::try_new("session-1").unwrap(),
+            principal_id: PrincipalId::try_new("user-1").unwrap(),
+            project: ProjectSessionBinding::new(
+                ProjectInstanceId::from_existing("project-1".into()),
+                ProjectSessionId::new("project-session-1"),
+            ),
+            state: HarnessSessionState::Active,
+            created_at: UnixMillis::from_existing(10),
+            updated_at: UnixMillis::from_existing(10),
+        };
+        store.create_session(&session).await.unwrap();
+        let legacy = serde_json::json!({
+            "id": "tool-1",
+            "idempotencyKey": "idem-1",
+            "sessionId": session.id,
+            "turnId": "turn-1",
+            "workflowRunId": null,
+            "workflowStepId": null,
+            "project": session.project,
+            "capabilityId": "apply_graph_edit",
+            "request": {
+                "type": "apply_graph_edit",
+                "payload": {
+                    "graphPath": "events/Main.yssbi-event",
+                    "baseRevision": 0,
+                    "graphHash": "0".repeat(64),
+                    "clientKey": "edit-1",
+                    "locale": "en-US",
+                    "operations": [{
+                        "type": "delete_nodes",
+                        "payload": {"nodeIds": ["00000000-0000-0000-0000-000000000001"]}
+                    }]
+                }
+            },
+            "state": "succeeded",
+            "result": {
+                "type": "graph_edit_receipt",
+                "payload": {
+                    "graphPath": "events/Main.yssbi-event",
+                    "fromRevision": 0,
+                    "toRevision": 1,
+                    "operationId": "00000000-0000-0000-0000-000000000501",
+                    "clientKey": "edit-1",
+                    "graphHash": "1".repeat(64),
+                    "createdNodes": {},
+                    "createdPorts": {}
+                }
+            },
+            "failure": null,
+            "startedAt": 12,
+            "deadline": 42,
+            "finishedAt": 15
+        });
+        sqlx::query(
+            "INSERT INTO tool_invocation (id, idempotency_key, session_id, state, payload_json)
+             VALUES ('tool-1', 'idem-1', 'session-1', 'succeeded', ?)",
+        )
+        .bind(legacy.to_string())
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        sqlx::query("PRAGMA user_version = 0")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let mut expected = legacy.clone();
+        expected["result"]["payload"]
+            .as_object_mut()
+            .unwrap()
+            .remove("operationId");
+        let expected: ToolInvocationRecord = serde_json::from_value(expected).unwrap();
+        assert!(serde_json::from_value::<ToolInvocationRecord>(legacy).is_err());
+
+        for _ in 0..2 {
+            store.ensure_schema().await.unwrap();
+            assert!(matches!(
+                store.begin(&expected).await.unwrap(),
+                ToolInvocationBegin::Existing(record) if *record == expected
+            ));
+        }
+        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(version, 1);
+    }
 
     #[tokio::test]
     async fn sqlite_enforces_event_sequence_and_tool_idempotency() {
