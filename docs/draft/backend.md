@@ -19,22 +19,22 @@
 
 ## 子系统总览
 
-本表只统计宿主侧源码包，共 **68 个包**：`src-tauri/crates/` 下 67 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
+本表只统计宿主侧源码包，共 **66 个包**：`src-tauri/crates/` 下 65 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
 
 表中每个包只列在一个所属子系统下。后端包含七个业务子系统、通信适配子系统和基础支撑子系统，合计九个子系统；基础支撑只承担明确的技术能力，不接收其他业务子系统的领域规则。
 
-| 所属子系统     | 核心职责                                               | Crates                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |   数量 |
-| -------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----: |
-| 应用与会话管理 | 组织业务用例，协调跨模块操作与项目会话生命周期         | `yss-application`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |      1 |
-| 项目与资源管理 | 管理已提交项目、资源身份、版本、文档事务及外部文件变化 | **主体、模型与身份**：`yss-project`、`yss-project-model`、`yss-project-layout`、`yss-project-identity`<br>**资源与提交**：`yss-project-operation`、`yss-project-change`、`yss-project-history`、`yss-resource-lifecycle`、`yss-resource-naming`、`yss-chart-document`<br>**文件与发现**：`yss-project-filesystem`、`yss-project-discovery`、`yss-project-progress`<br>**项目注册**：`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`<br>**项目监听**：`yss-project-watcher`、`yss-project-watcher-notify` |     18 |
-| 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-protocol`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**目录与注册**：`yss-graph-catalog`、`yss-graph-registry`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-execution`                                            |     15 |
-| 数据管理与查询 | 数据契约、数据集目录、存储、查询、编辑与导入导出       | **数据与查询契约**：`yss-data-contract`、`yss-tabular-contract`、`yss-relational-contract`、`yss-database-contract`<br>**数据库运行与编辑**：`yss-database-runtime`、`yss-database-edit`、`yss-database-schema`<br>**数据集与分析**：`yss-dataset-store`、`yss-dataset-profile`<br>**引擎与外部数据源**：`yss-datafusion`、`yss-sql-source`<br>**批次与文件交换**：`yss-tabular-arrow`、`yss-tabular-io`                                                                                                                                        |     13 |
-| 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                                                                                                                       |      5 |
-| Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                                                                                                                   |      4 |
-| 插件系统       | 宿主插件安装启用、进程管理、任务与结果接入             | `yss-plugin-runtime`、`yss-plugin-protocol`、`yss-plugin-sdk`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |      3 |
-| 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-api`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |      1 |
-| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**平台操作与窗口状态**：`yss-file-replace`、`yss-window-state`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`、`yss-path-display`                                                                                                                                                                                                                                                                                                       |      8 |
-| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | **68** |
+| 所属子系统     | 核心职责                                               | Crates                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |   数量 |
+| -------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -----: |
+| 应用与会话管理 | 组织业务用例，协调跨模块操作与项目会话生命周期         | `yss-application`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |      1 |
+| 项目与资源管理 | 管理已提交项目、资源身份、版本、文档事务及外部文件变化 | **主体、模型与身份**：`yss-project`、`yss-project-model`、`yss-project-layout`、`yss-project-identity`<br>**资源与提交**：`yss-project-operation`、`yss-project-change`、`yss-project-history`、`yss-resource-lifecycle`、`yss-resource-naming`、`yss-chart-document`<br>**文件与进度**：`yss-project-filesystem`、`yss-project-progress`<br>**发现与注册**：`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`<br>**项目监听**：`yss-project-watcher`、`yss-project-watcher-notify` |     17 |
+| 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-protocol`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**目录与注册**：`yss-graph-catalog`、`yss-graph-registry`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-execution`                     |     15 |
+| 数据管理与查询 | 数据契约、数据集目录、存储、查询、编辑与导入导出       | **数据与查询契约**：`yss-data-contract`、`yss-tabular-contract`、`yss-relational-contract`、`yss-database-contract`<br>**数据库运行与编辑**：`yss-database-runtime`、`yss-database-edit`、`yss-database-schema`<br>**数据集与分析**：`yss-dataset-store`、`yss-dataset-profile`<br>**引擎与外部数据源**：`yss-datafusion`、`yss-sql-source`<br>**批次与文件交换**：`yss-tabular-arrow`、`yss-tabular-io`                                                                                                                 |     13 |
+| 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                                                                                                |      5 |
+| Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                                                                                            |      4 |
+| 插件系统       | 宿主插件安装启用、进程管理、任务与结果接入             | `yss-plugin-runtime`、`yss-plugin-protocol`、`yss-plugin-sdk`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |      3 |
+| 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-api`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |      1 |
+| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**平台文件操作**：`yss-file-replace`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`、`yss-path-display`                                                                                                                                                                                                                                                                                                          |      7 |
+| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **66** |
 
 插件系统一行保留宿主的通用插件管理、协议与 SDK，均位于 `src-tauri/crates/`。
 
@@ -312,7 +312,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 ## 12. 小型 crate 与开源库复用评估
 
-初次评估筛选了 `src-tauri/crates/` 下 67 个宿主 crate，其中 **30 个 crate 的 `src/**/*.rs` 总行数不超过 500 行**。行数包含空行、注释和 `src` 内的测试，不包含 crate 外测试与生成产物，仅用于定位候选，不能视为生产代码量或维护成本。根包 `yssbi` 和插件内部 crate 不参与这次小包筛选；宿主侧插件 SDK 仍在范围内。下表保留评估时的行数快照；已调整的 `yss-linalg` 更新为 288 行，`yss-project-discovery` 更新为接入 `walkdir` 并补充测试后的 352 行。
+初次评估筛选了 `src-tauri/crates/` 下 67 个宿主 crate，其中 **30 个 crate 的 `src/**/*.rs` 总行数不超过 500 行**。行数包含空行、注释和 `src` 内的测试，不包含 crate 外测试与生成产物，仅用于定位候选，不能视为生产代码量或维护成本。根包 `yssbi` 和插件内部 crate 不参与这次小包筛选；宿主侧插件 SDK 仍在范围内。下表保留当时的评估快照。当前 discovery 已合并进 registry，自有窗口状态 crate 已由官方插件替换；宿主 crate 减为 65 个，包含根包时共 66 个。窗口替换见 12.5 节，发现与注册的合并清理见 12.7、12.8 节。
 
 以下依据当前源码，以及 2026-09-12 查阅的上游文档和发布源码进行判断。列出的版本是本次比较对象，不表示已经加入依赖或完成三平台运行验证。
 
@@ -342,7 +342,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 | `yss-database-edit`          |      126 | 数据库编辑历史的撤销、重做栈与状态     | [undo 0.52.0](https://docs.rs/undo/0.52.0/undo/) 提供通用编辑命令、历史、合并和保存点                                                                                                 | **暂不替换**：当前只管理历史容器，数据库操作仍需遵循准备与提交流程                      |
 | `yss-project-progress`       |      158 | 项目扫描、清理进度与当前任务取消登记   | [tokio-util 0.7.19 的 CancellationToken](https://docs.rs/tokio-util/0.7.19/tokio_util/sync/struct.CancellationToken.html) 支持取消标记、异步等待与子令牌                              | **暂不替换**：当前同步轮询已由标准库实现，任务登记和进度契约仍须保留                    |
 | `yss-resource-naming`        |      214 | 资源名称校验、Unicode 规范化与重名规则 | 已复用 Unicode 库；[sanitize-filename 0.6.0](https://docs.rs/sanitize-filename/0.6.0/sanitize_filename/) 提供文件名清理，默认 Windows 规则随宿主平台变化                              | **保留**：三平台项目资源必须采用一致规则，不能直接采用按宿主变化的默认行为              |
-| `yss-project-discovery`      |      352 | 遍历目录并发现项目元数据文件           | 已接入跨平台 [walkdir 2.5.0](https://docs.rs/walkdir/2.5.0/walkdir/)，复用目录遍历、剪枝和文件描述符数量控制                                                                          | **已完成内部替换**：项目规则仍保留；与 registry 的合并条件见 12.7 节                    |
+| 原 `yss-project-discovery`   |      352 | 遍历目录并发现项目元数据文件           | 已接入跨平台 [walkdir 2.5.0](https://docs.rs/walkdir/2.5.0/walkdir/)，复用目录遍历、剪枝和文件描述符数量控制                                                                          | **已合并进 registry**：此行保留原候选快照，现有实现见 12.7 节                           |
 | `yss-project-watcher-notify` |      399 | 将系统文件事件转换为项目重扫请求       | 已复用跨平台 [notify 8.2.0](https://docs.rs/notify/8.2.0/notify/)；[notify-debouncer-mini 0.7.0](https://docs.rs/notify-debouncer-mini/0.7.0/notify_debouncer_mini/) 可提供按文件去抖 | **保留现有适配**：当前是全局重扫信号合并，与按文件去抖不同                              |
 | `yss-linalg`                 |      288 | 分解检查、数值错误与秩阈值约定         | 已使用 [faer](https://docs.rs/faer/0.24.0/faer/) 原生矩阵与向量；工作区统一声明 `0.24.0`，锁定版本为 `0.24.4`，已移除 `ndarray`                                                       | **保留项目数值约定**：通用矩阵运算直接复用 faer，不再维护数组表示转换；归属仍为科学计算 |
 
@@ -362,11 +362,11 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 #### 项目发现：复用遍历工具，保留项目策略
 
-[现有发现逻辑](../../src-tauri/crates/yss-project-discovery/src/lib.rs)已使用 `walkdir` 遍历目录，继续负责识别项目元数据文件、跳过构建和依赖目录、检查取消状态、拒绝符号链接与 Windows 重解析点，并对结果排序去重。
+[现有发现逻辑](../../src-tauri/crates/yss-project-registry/src/discovery.rs)已收敛为 registry 的私有模块，使用 `walkdir` 遍历目录，继续负责识别项目元数据文件、跳过构建和依赖目录、检查取消状态、拒绝符号链接与 Windows 重解析点，并对结果排序去重。重解析点判断复用 filesystem 的 `metadata_is_redirect`，不再维护另一份 Windows 标志规则。
 
 通用遍历和资源管理交由 `walkdir`，根目录校验、链接与重解析点规则、取消检查和错误传播保留在项目层。实现显式设置 `follow_links(false)` 与 `follow_root_links(false)`，并继续检查 Windows 重解析点；遍历错误转换为原有 `ProjectDiscoveryError::Io`，不会变成“没有项目”。默认不跟随遍历中的符号链接，并不意味着默认拒绝根路径链接或所有 Windows 重解析点。[walkdir 文档](https://docs.rs/walkdir/2.5.0/walkdir/)、[根路径链接选项](https://docs.rs/walkdir/2.5.0/walkdir/struct.WalkDir.html#method.follow_root_links)
 
-**当前状态：内部替换已完成，Windows 聚焦测试通过；macOS、Linux 运行验证待补齐。**`yss-project-discovery` 继续归项目与资源管理。是否继续独立成 crate，按调用关系和职责边界判断，见 12.7 节。
+**当前状态：遍历替换及 crate 合并已完成，发现能力仍归项目与资源管理。**旧 discovery 包和公开转发入口已移除；macOS、Linux 运行验证仍待补齐。
 
 #### 路径与资源命名：跨平台应采用一致的项目规则
 
@@ -407,31 +407,95 @@ macOS、Windows、Linux 的底层监听事件并不保证完全一致，网络�
 | 项目注册存储适配         | `yss-project-registry-sqlite`（334）                                                                                                                                                                                    | 保留。已经复用 `sqlx`，本 crate 将项目注册接口映射到 SQLite，并非自行实现数据库引擎                |
 | 宿主插件 SDK             | `yss-plugin-sdk`（370）                                                                                                                                                                                                 | 保留。承载 YssBI 插件协议接入；通用进程或序列化库不能替代宿主协议。此处不分析插件内部实现 crate    |
 
-“保留”在本表中表示不能直接用通用开源库替代项目契约，不代表必须永久独立成 crate。包的合并需要另外检查依赖隔离、公开接口和变更原因；本轮对项目发现相关包的检查见 12.7 节。
+“保留”在本表中表示不能直接用通用开源库替代项目契约，不代表必须永久独立成 crate。包的合并需要另外检查依赖隔离、公开接口和变更原因；项目发现相关包的检查见 12.7 节，操作登记包的检查见 12.9 节。
 
-### 12.5 延伸评估：窗口状态
+### 12.5 窗口状态：已替换为官方插件
 
-`yss-window-state` 为 **568 行**，略高于筛选阈值，但涉及三平台窗口能力，因此一并比较。[Tauri 官方 Window State 插件](https://v2.tauri.app/plugin/window-state/)支持 macOS、Windows、Linux，能够保存和恢复窗口位置与尺寸。其 `Builder::map_label` 可以让不同窗口标签共享状态，具备对接现有窗口种类分组的基础。[Builder API](https://docs.rs/tauri-plugin-window-state/latest/tauri_plugin_window_state/struct.Builder.html)
+**2026-09-13 已接入 `tauri-plugin-window-state 2.4.1`，删除 `yss-window-state`。**窗口几何的唯一维护入口是 Rust 官方插件；前端不再读写几何快照，工作台关闭只由既有关闭保护决定。依赖只加入桌面根包，没有增加新的宿主 crate、JavaScript 插件依赖或插件命令权限。
 
-| 比较项     | 当前 `yss-window-state`                | `tauri-plugin-window-state 2.4.1` 与迁移判断                                     |
-| ---------- | -------------------------------------- | -------------------------------------------------------------------------------- |
-| 状态身份   | 按 `WindowKind` 管理六类窗口及默认尺寸 | 可通过标签映射分组，但默认值、窗口标签和对外状态结构仍需对齐                     |
-| 持久化时机 | `set` 成功落盘后才更新内存状态         | 插件跟踪窗口状态，并在退出或显式调用时保存；不能直接视为相同提交语义             |
-| 文件写入   | 临时文件、同步、替换，失败返回给调用方 | 该版本更新缓存后使用 `std::fs::write` 保存；没有提供现有的同等写入与内存提交流程 |
-| 窗口恢复   | 当前主窗口先恢复几何状态，再显示       | 插件支持隐藏创建后恢复显示，但仍需验证多窗口、缩放和各平台窗口管理行为           |
-| 影响范围   | 基础支撑中的窗口状态能力               | 替换会涉及桌面组装、状态读写接口与前端窗口流程，超出单个 crate 内部改动          |
+#### 12.5.1 当前职责与调用链
 
-持久化差异依据[当前实现](../../src-tauri/crates/yss-window-state/src/lib.rs)、[写入实现](../../src-tauri/crates/yss-window-state/src/persistence.rs)与[插件 2.4.1 对应源码](https://github.com/tauri-apps/plugins-workspace/blob/e7a68fa63755603b9fa12d28e077eea645551d24/plugins/window-state/src/lib.rs)核对。
+| 位置                                                                                                                                                        | 当前职责                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [桌面组装](../../src-tauri/src/lib.rs)                                                                                                                      | 注册插件、按种类映射动态标签，仅启用位置、尺寸、最大化；主窗口显式恢复后显示；窗口销毁并从 manager 移除后调用插件保存，失败记录诊断 |
+| [Tauri 配置](../../src-tauri/tauri.conf.json)                                                                                                               | 主窗口隐藏创建，提供首次启动的逻辑像素默认尺寸                                                                                      |
+| [createPersistedWindow](../../src/features/application/window/createPersistedWindow.ts)                                                                     | 集中定义子窗口的逻辑像素默认尺寸，读取当前装饰设置并隐藏创建；不查询、换算或覆盖已保存的物理几何                                    |
+| [平台创建入口](../../src/services/platform/webviewWindow.ts)                                                                                                | 等待原生创建成功或失败事件，完成后解绑创建监听，向调用方返回稳定结果                                                                |
+| [工作台组合](../../src/app/windows/workbench/WorkbenchComposition.tsx) 与 [关闭保护](../../src/features/application/editor/useWorkbenchWindowCloseGuard.ts) | 唯一的前端关闭决策入口；未保存内容确认及布局 flush 完成后才允许关闭                                                                 |
+| [结果窗口流程](../../src/features/application/window/openPresentationWindow.ts)                                                                             | 使用独立实例标签交接结果租约；原生创建失败走释放流程，内容准备好后由窗口自身显示                                                    |
 
-**当前建议：保留，将官方插件作为后续窗口子能力梳理时的候选。**三平台支持符合方向，但只有在明确接受其状态和持久化模型，且接入成本低于继续维护现有实现时才推荐替换；采用后归属仍为基础支撑。
+六种状态分组为 `main`、`dataview`、`logs`、`plot`、`inspect`、`info`。插件将动态标签的首段作为状态键，例如 `logs-<instance>` 共用 `logs`，不同种类互不混用。只有这六组纳入插件跟踪；窗口和结果租约仍使用完整实例标签。
+
+主窗口默认 1600 × 900；数据库、日志、数据检查窗口默认 1000 × 600；绘图和信息窗口默认 960 × 800。这些是首次创建的逻辑尺寸；插件恢复保存的物理尺寸与坐标，消除了前端把物理值直接作为逻辑创建参数的错误。
+
+#### 12.5.2 已删除和修复的逻辑
+
+| 原问题                       | 本次处理                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 自有 crate 与插件职责重叠    | 删除 crate 的种类模型、内存缓存、序列化、文件写入、恢复实现及专属测试；同时移除 workspace 成员和两个消费者的依赖 |
+| 三个窗口状态命令与前端 DTO   | 删除全部读取、单类读取和保存命令，以及 service、状态类型、导出和对应架构 capability                              |
+| 几何保存绕过工作台关闭确认   | 删除两个前端几何关闭 hook 及挂载点；插件观察原生事件，不参与前端关闭决定                                         |
+| 普通子窗口读取状态却不保存   | 全部受管理窗口直接由插件跟踪，删除仅允许 `main` 的前端标签判断                                                   |
+| 多套默认值、存储和无效分支   | 删除次级几何 localStorage、`provided`、`fallbackX/Y`、前端采集函数及无消费者的尺寸/位置平台读取接口              |
+| 原生创建尚未成功便报告完成   | 平台 Promise 等待 `tauri://created` / `tauri://error`；晚返回的监听也会解绑，结果窗口失败进入租约收尾            |
+| 最大化只读上次落盘的普通几何 | 删除关闭时拼接旧快照的逻辑，改用插件维护的事件缓存；平台上的最大化行为仍需实机验证                               |
+| 状态说明与实现漂移           | 更新设置注释、通信契约、窗口关闭与布局契约、架构依赖门禁、前端架构展示和模块清单                                 |
+
+Dockview 布局持久化、结果租约和应用装饰设置继续由各自现有 owner 维护。没有增加一个转发 crate 来保留旧包名称。
+
+#### 12.5.3 采用的持久化语义
+
+[Tauri 官方 Window State 插件](https://v2.tauri.app/plugin/window-state/)提供 Windows、macOS、Linux 的窗口状态能力；本次版本固定为 2.4.1。这里只在 Rust 使用插件，不开放前端直接调用插件保存或恢复的另一条入口。
+
+新状态文件为应用配置目录下的 `.window-state.json`。旧 `window_state.json` 不再读取，不做兼容迁移或双写；首次使用插件按默认尺寸创建。旧的次级几何 localStorage 也不再参与恢复。
+
+插件先更新缓存，在窗口销毁后由根包显式保存，应用退出时也沿用插件保存。**这次明确采用插件的直接文件写入语义，移除“自有临时文件替换成功后才提交内存”的接口保证。**窗口几何是可恢复偏好；保存失败不否定用户已完成的业务关闭决定。根包的显式保存失败和主窗口恢复失败会记录诊断，上游自动加载及退出保存仍有静默降级行为。[插件 2.4.1 源码](https://github.com/tauri-apps/plugins-workspace/blob/e7a68fa63755603b9fa12d28e077eea645551d24/plugins/window-state/src/lib.rs)
+
+同类窗口并存时共享插件缓存。原生几何事件会更新共享状态；显式保存时，若同组仍有打开的窗口，插件还会选取其中一个刷新缓存。因此当前不承诺“最后关闭实例的状态获胜”，也不保存每个临时实例的独立几何历史。种类共享由 [Builder 的标签映射](https://docs.rs/tauri-plugin-window-state/latest/tauri_plugin_window_state/struct.Builder.html#method.map_label)完成。
+
+插件未启用 `VISIBLE`、`DECORATIONS`、`FULLSCREEN`：主窗口由 Rust 恢复后显示；子窗口由内容准备流程显示；装饰使用当前设置。这样不会把历史隐藏状态或历史装饰样式覆盖到本次打开的窗口。
+
+#### 12.5.4 crate 归属与合并结论
+
+窗口状态继续归基础支撑。通用实现已由第三方插件提供，剩余注册、状态分组和生命周期保存属于桌面组装，内聚到根包即可。原 crate 不再有独立职责，因此直接删除；没有把窗口逻辑合并到通信、项目或图子系统。
+
+宿主 `src-tauri/crates/` 当前为 65 个包，计入根包后共 66 个。官方插件是第三方依赖，不纳入宿主 crate 总览。
+
+#### 12.5.5 验证与剩余平台检查
+
+聚焦验证覆盖平台创建的异步结果与监听清理、默认创建参数、窗口打开失败的租约收尾、结果显示生命周期、工作台关闭保护，以及 Rust 状态分组和架构依赖。工作台组合测试使用本机 SDK 的实际关闭处理方法，确认等待决定及取消关闭时窗口不会被销毁。
+
+本次 Windows 本机验证结果：
+
+| 检查                                                             | 结果                                                                                                                                                         |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check:rs:package -p yssbi --lib`                           | 通过，覆盖根包及通信适配依赖编译                                                                                                                             |
+| `pnpm test:rs:package -p yssbi --lib`                            | 41 项通过，包括窗口分组测试和 Rust 架构门禁；保留两处原有测试辅助代码未使用警告                                                                              |
+| `pnpm lint:rs:package -p yssbi --lib --no-deps '--' -D warnings` | 通过                                                                                                                                                         |
+| 前端聚焦行为测试                                                 | 平台创建、窗口创建与打开、窗口操作、结果窗口、关闭保护、工作台组合共 7 个文件、17 项通过                                                                     |
+| `pnpm check:ts` 与 `pnpm lint:ts`                                | 类型检查通过；lint 无错误，存在 11 项原有警告。该 lint 脚本固定包含仓库根目录，追加文件不会将其缩为局部检查                                                  |
+| 前端架构和状态归属                                               | 通过；扩大执行的语义门禁仅剩现有 `ArchitectureModal.tsx` 消费 `architecture.css` 未登记的问题                                                                |
+| 文档与生成物                                                     | 链接、源码路径、pnpm 命令的 3 项聚焦检查通过，模块清单校验和修改文件格式检查通过；完整文档检查仍报告架构目录中现有 `README.md`、`jsonDriver.md` 缺少状态声明 |
+| 工作区差异                                                       | `git diff --check` 通过；宿主包清单及锁文件已核对，旧 crate 已移除                                                                                           |
+
+上述 CSS 与文档状态问题对应的文件均与本轮开始时的 HEAD 一致，不属于窗口替换引入的问题。没有执行完整 CI、安装包构建或三平台实机窗口测试；后者不能由单元测试替代：
+
+| 实机检查             | 应观察的行为                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| 六类窗口及并存       | 调整后重开恢复，同类共享状态且实例/租约身份保持独立                                                 |
+| 缩放与显示器         | Windows 不同缩放、macOS Retina 与外接屏、Linux 实际桌面会话；换屏、负坐标、拔屏和小工作区下仍可操作 |
+| 普通、最大化、最小化 | 调整普通尺寸后最大化并重开，还原后的尺寸合理；最小化不污染普通尺寸；重点检查 macOS 无装饰窗口       |
+| 错误与可见性         | 首次启动、损坏状态文件及写入失败均可重新打开；内容未就绪不提前显示；取消关闭不销毁窗口              |
+
+上游有显示器相交检查，但不提供本项目已验证的完整工作区约束；macOS 无装饰窗口也有专门分支。后续以实际复现决定补充适配，当前不再维护平行的几何缓存或文件格式。
 
 ### 12.6 本轮结论与后续顺序
 
-`ndarray` 移除已完成；**本轮已将 `yss-project-discovery` 的手写递归替换为 `walkdir 2.5.0`。**公开函数、错误类型、项目名称处理和子系统归属保持原有契约。
+**已完成 `ndarray` 移除、`walkdir` 接入，以及 discovery → registry 合并。**当前项目名称由 project-model 统一拥有，项目运行时不再依赖扫描实现。扫描的公开入口仍为 registry 的 `scan_directory`，发现函数和错误类型已缩为私有模块内部接口。
 
-工作区统一声明版本，只有 discovery 增加直接依赖。锁文件中已有同版本 `walkdir` 及其依赖，本项只增加 discovery 的依赖关系，没有引入新包版本；架构门禁同步限制了直接依赖的归属。
+工作区统一声明 `walkdir` 版本，由 registry 直接依赖；锁文件未增加新的第三方包或版本。架构门禁、工作区成员、前端架构展示和文档索引同步移除了旧 discovery 包。
 
-这次收益是由成熟库管理遍历栈和打开句柄数量，减少自行维护递归与资源管理行为的责任。它并未缩短当前生产源码：按测试模块之前的行数统计，由 136 行变为 145 行；整个文件由 245 行变为 352 行，主要增量来自测试。保留项目策略仍有必要，也没有据此声称性能提升。[遍历与句柄控制](https://docs.rs/walkdir/2.5.0/walkdir/struct.WalkDir.html)
+遍历栈和打开句柄数量由 `walkdir` 管理，项目层保留以下策略。合并进一步减少了一个 crate、重复的默认名称与重解析点判断，没有增加转发门面；没有据此声称性能提升。[遍历与句柄控制](https://docs.rs/walkdir/2.5.0/walkdir/struct.WalkDir.html)
 
 | 保留的行为     | 本轮实现与检查                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -442,34 +506,195 @@ macOS、Windows、Linux 的底层监听事件并不保证完全一致，网络�
 | 取消与失败     | 开始前、扫描中及结束时继续检查取消；读取失败返回错误，不用 `filter_map(Result::ok)` 丢弃失败，也不把取消当成成功的部分结果 |
 | 输出与调用方   | 结果仍排序、去重；`yss-project-registry` 继续将取消映射为 `Cancelled`，无效根目录与 I/O 失败映射为 `ScanFailed`            |
 
-Windows 上实际运行了 discovery 的 6 项测试和 registry 的 5 项测试，覆盖目录排除、根目录名称例外、大小写匹配、符号链接、junction、无效根目录、遍历 I/O 失败及取消。扫描中取消通过发现首个元数据后取消的确定性场景检查；I/O 失败通过遍历开始前删除目录触发，没有将管理员环境中的权限设置当作有效的拒绝访问测试。registry 同时检查重复扫描不重复注册、已注册项目的身份和名称保持不变。
+Windows 聚焦测试覆盖模型默认名称、创建与注册一致性、重复扫描、根身份替换、数值时间排序、符号链接、junction、无效根目录、遍历 I/O 失败和取消。扫描中取消通过发现首个元数据后取消的确定性场景检查；任务末尾取消通过进度接收方取消检查；I/O 失败通过遍历开始前删除目录触发。取消不会回滚已经完成的注册或清理。
 
-本轮通过的 Rust 检查：
+本轮验证使用以下命令；结果见 12.8 节：
 
-- `pnpm test:rs:package -p yss-project-discovery -p yss-project-registry --lib`：11 项通过。
-- `pnpm lint:rs:package -p yss-project-discovery -p yss-project-registry --all-targets -- -D warnings`：通过。
-- `pnpm test:rs:package -p yssbi --lib architecture_tests`：89 项通过。
+- `pnpm test:rs:package -p yss-project-model -p yss-project-registry --lib`
+- `pnpm test:rs:package -p yss-application --lib project_lifecycle`
+- `pnpm lint:rs:package -p yss-project-model -p yss-project-registry -p yss-application --all-targets --no-deps '--' -D warnings`
+- `pnpm lint:rs:package -p yss-project --lib --no-deps '--' -D warnings`
+- `pnpm test:rs:package -p yssbi --lib architecture_tests`
 
 macOS、Linux 尚未执行运行验证。本机 WSL 因 `HCS_E_HYPERV_NOT_INSTALLED` 无法启动，macOS 没有可用执行环境；两者不能计作通过。下一步在对应平台运行上述聚焦检查，并以确实受限的普通用户目录核对拒绝访问时的错误传播。
 
-架构整理的下一项是处理 12.7 节中的 discovery / registry 合并候选。文件替换和窗口状态继续作为有明确收益时再处理的候选，暂不扩大替换范围。
+macOS、Linux 的运行证据继续作为待办；本机可以先按调用关系逐组评估其余小型 crate。`yss-project-operation` 的合并边界检查见 12.9 节，进一步的 `OperationId` 用途与删减判断见 12.10 节，余下清理按该节待办保留。窗口状态已完成 12.5 节的官方插件替换及调用链清理，剩余实机平台检查按该节执行；文件替换继续按实际维护收益评估。
 
 ### 12.7 本轮 crate 合并评估
 
-本轮检查项目发现及直接相关的宿主 crate，不包含插件内部 crate。**`yss-project-discovery` 与 `yss-project-registry` 是有条件推荐的合并候选；本轮尚未合并 crate。**它们同属项目与资源管理，合并不会改变“一个 crate 只有一个子系统归属”的原则。保留 crate 内的模块划分即可继续区分发现策略和注册流程，无需将每个模块都做成独立包。
+本轮检查项目发现及直接相关的宿主 crate，不包含插件内部 crate。**discovery 已合并为 registry 的私有模块，原 crate 已删除。**发现策略和注册流程仍在同一个子系统内分模块维护，符合“一个 crate 只有一个子系统归属”的原则。
 
-| 合并候选                                       | 当前调用与职责                                                                                                              | 结论                                                                                                                      |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| discovery → registry                           | 生产代码只有 registry 调用元数据扫描及按路径推导名称；但 `yss-project` 创建项目也调用 discovery 的 `normalize_project_name` | **有条件推荐**：先调整共享名称规则，再将扫描实现移入 registry 的私有 `discovery` 模块；可以减少一个包，且不必扩大公开接口 |
-| discovery → filesystem                         | discovery 搜索用户指定目录下的候选项目；filesystem 管理项目根身份、资源路径、事务和项目内文件操作                           | **暂不推荐**：两者扫描范围与生命周期不同；少量链接检查相似不足以证明应合并整个 crate                                      |
-| progress → discovery / registry                | progress 定义扫描和清理进度、取消令牌及当前任务登记，API 也直接消费；进度投递实现归通信适配                                 | **保留独立**：它是多个调用方共享的中性契约，合并会使单纯使用进度或取消的调用方依赖扫描或注册实现                          |
-| layout → discovery / filesystem                | layout 只定义项目文件名和路径分类，被图文档、数据集、项目变更、注册和运行时等使用                                           | **保留独立**：调用方需要无 I/O 的布局规则，不应因此依赖文件遍历或文件事务                                                 |
-| registry-contract / registry-sqlite → registry | contract 定义记录和存储端口，sqlite 用 `sqlx` 实现持久化；registry 测试使用内存存储实现                                     | **保留分离**：现有依赖隔离和替代实现已有实际用途；合并会把存储实现带入只需要契约或注册流程的调用方                        |
+| 合并候选                                       | 当前调用与职责                                                                                    | 结论                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| discovery → registry                           | 元数据扫描及按路径推导名称只由 registry 使用；共享项目名称规则已归 project-model                  | **已合并**：扫描实现位于私有 `discovery` 模块，减少一个包，项目运行时不依赖 registry               |
+| discovery → filesystem                         | discovery 搜索用户指定目录下的候选项目；filesystem 管理项目根身份、资源路径、事务和项目内文件操作 | **暂不推荐**：两者扫描范围与生命周期不同；少量链接检查相似不足以证明应合并整个 crate               |
+| progress → discovery / registry                | progress 定义扫描和清理进度、取消令牌及当前任务登记，API 也直接消费；进度投递实现归通信适配       | **保留独立**：它是多个调用方共享的中性契约，合并会使单纯使用进度或取消的调用方依赖扫描或注册实现   |
+| layout → discovery / filesystem                | layout 只定义项目文件名和路径分类，被图文档、数据集、项目变更、注册和运行时等使用                 | **保留独立**：调用方需要无 I/O 的布局规则，不应因此依赖文件遍历或文件事务                          |
+| registry-contract / registry-sqlite → registry | contract 定义记录和存储端口，sqlite 用 `sqlx` 实现持久化；registry 测试使用内存存储实现           | **保留分离**：现有依赖隔离和替代实现已有实际用途；合并会把存储实现带入只需要契约或注册流程的调用方 |
 
-合并 discovery 前需要处理的具体问题：
+已完成的依赖与归属调整：
 
-1. **统一项目名称规则的归属。**[项目创建](../../src-tauri/crates/yss-project/src/project_lifecycle.rs)和[项目注册](../../src-tauri/crates/yss-project-registry/src/lib.rs)共同使用 `normalize_project_name`；[项目模型](../../src-tauri/crates/yss-project-model/src/lib.rs)的 `ProjectMetadata::default` 还单独写有相同默认名称。建议优先让现有 `yss-project-model` 统一拥有默认名称与规范化规则，避免项目运行时仅为处理名称而依赖 registry。
-2. **核对这条依赖是否值得。**project-model 同时聚合图、数据库和历史模型，registry 当前没有直接依赖它；迁移名称规则时应检查新增依赖及其实际使用范围。不要为了几个函数新建名称 crate，也不要把项目默认名称塞进只负责磁盘布局的 layout。资源文件名校验和数据库显示名分配另有契约，不能直接替代项目名称规范化。
-3. **名称归属确定后再移动扫描模块。**让 registry 直接依赖 `walkdir`，内部保留发现策略、路径名称推导及聚焦测试；取消与进度仍通过 progress 协作。移除旧 discovery 包和依赖，不保留纯转发门面，并同步调整子系统总览、工作区索引和架构门禁。
+1. **名称规则归 project-model。**[项目创建](../../src-tauri/crates/yss-project/src/project_lifecycle.rs)、[项目注册](../../src-tauri/crates/yss-project-registry/src/lib.rs)和[空项目模型](../../src-tauri/crates/yss-project-model/src/lib.rs)共用默认名称与规范化规则。规则只处理首尾空白和空名称回退；资源文件名校验及数据库显示名分配继续保持各自契约。
+2. **新增依赖代价已核对。**迁移前通过 Windows 目标的 Cargo metadata 比较运行时依赖闭包：registry 引用 project-model 增加 `yss-project-model`、`yss-project-history`、`yss-database-contract` 三个现有模型/契约包，不增加第三方包，也不形成循环。项目运行时原本已依赖 model；合并后删除了它对 discovery 的依赖。
+3. **发现函数收为内部实现。**[discovery.rs](../../src-tauri/crates/yss-project-registry/src/discovery.rs)中的发现入口、路径名称推导及错误类型只对父模块可见。取消与进度仍由 progress 提供，重解析点检查复用 filesystem 的现有实现。
 
-这项合并应以“减少独立包而不扩大其他调用方的实现依赖”为验收条件。若名称归属调整的依赖代价不合适，就保留现有 discovery；接入 `walkdir` 本身并不要求删除 crate，也不证明当前所有小型 crate 都值得保留。
+### 12.8 本轮清理与一致性检查
+
+检查范围为项目名称、创建、发现、注册与清理链路，以及直接相关的模型、存储契约、架构声明和展示。以下是有源码或回归测试依据的问题，不代表已对全仓所有函数作出无缺陷保证。
+
+| 问题                            | 修复                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------- |
+| 默认名称存在重复事实源          | project-model 统一定义常量与规范化函数，删除 discovery 和模型默认构造中的重复定义            |
+| 链接与 Windows 重解析点判断重复 | 发现模块复用 filesystem 的 `metadata_is_redirect`，删除独立标志常量与判断函数                |
+| 扫描和直接注册的身份校验漂移    | 共用 `fetch_by_root`；读取存储后重验根绑定，已有记录身份变化时统一返回 `IdentityChanged`     |
+| 路径比较将两次解析失败视为相等  | 比较成功解析的注册根与已验证根，移除 `None == None` 和重复解析目标根的路径                   |
+| 最近打开时间按字符串排序        | 按 Unix 秒数值排序；同次首次注册共用一个时间值，避免创建和打开时间分开取值                   |
+| 最后阶段取消仍可能返回成功      | 扫描与清理在成功返回前重查取消状态，保留已完成副作用，不伪装为事务回滚                       |
+| 失效测试辅助函数                | 删除没有调用方的 `mark_registry_record_invalid` 及专用导入                                   |
+| 架构与版本说明漂移              | 同步工作区、门禁、模块索引、子系统计数和前端架构列表；项目 README 的格式版本改为引用源码常量 |
+
+旧 discovery crate、旧路径查找函数和独立链接判断函数直接删除，未增加 deprecated 别名或兼容转发层。已核对其余公开路径/注册入口的生产调用方，未将仍在使用的函数作为无效代码删除。前端新建表单中的 `New Project` 是可编辑输入预填值；后端空名称回退是另一项语义，不将两者合并为客户端持久化事实源。项目日期时间的钟面规范化继续遵循现有契约。
+
+Windows 验证结果：模型与 registry 的 15 项测试、Application 项目生命周期的 8 项测试、Rust 架构门禁的 40 项测试均通过。上述限定范围的 Clippy 通过；前端架构窗口的 6 项测试通过。一次性比对还确认子系统总览与前端架构列表均完整列出 67 个宿主包，每个包只出现一次。
+
+较宽范围的检查未全部通过：包含依赖的 Clippy 遇到未修改的 SCI 文件中的 61 项告警，以及 Project 的 `function_mutation.rs`、`external_resources.rs` 中两处测试模块位置告警。文档契约为 5 项通过、1 项失败，失败项来自既有 [architecture/README.md](../architecture/README.md) 和 [jsonDriver.md](../architecture/jsonDriver.md) 缺少维护状态声明；链接、源码路径、命令及生成模块索引检查通过。这些结果不计入本轮已修复项，也不将聚焦验证表述为完整门禁通过。
+
+### 12.9 操作登记 crate 的合并检查
+
+**依赖与归属上，`yss-project-operation` 具备合并到 `yss-project` 的条件。** 当前完成的是检查，尚未迁移或删除该 crate。它属于项目与资源管理子系统，管理项目会话内的操作登记与防重放；图、图表和数据库操作都使用这项能力，归属不应随调用方改变。本节证明的是合并边界可行，不据此认定整套登记机制必须保留；其必要性与 `OperationId` 的其他用途继续在 12.10 节分析。本次仍只分析宿主实现。
+
+依赖与公开边界：
+
+- [Cargo 依赖声明](../../src-tauri/crates/yss-project/Cargo.toml)中，只有 `yss-project` 直接依赖该包；[ProjectState](../../src-tauri/crates/yss-project/src/project_state/state.rs)持有唯一登记表，克隆 ProjectState 共享同一个 `Arc`。
+- 实现只使用标准库集合和同步原语、`thiserror`、`yss-project-identity`；后两者已经是 Project 的依赖。合并无需引入第三方库，也不需要增加操作管理框架。
+- 存在间接公开使用：[数据库准入 API](../../src-tauri/crates/yss-project/src/database_authority.rs)返回 `ProjectOperationReservation`，Application 的[数据库导入](../../src-tauri/crates/yss-application/src/database/import.rs)和[删除](../../src-tauri/crates/yss-application/src/database.rs)取得句柄并调用 `complete()`。不能据“只有一个直接依赖方”就把句柄也改为私有。
+- 图操作将句柄封装在 `GraphOperationAuthority` 内；图生命周期、函数签名和图表写入则在 Project 内部直接持有句柄。合并不会改变它们的子系统归属。
+
+| 检查项           | 源码结论与保留要求                                                                                                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 重复登记与状态   | `in_flight` 拒绝执行中的重复请求，`completed` 拒绝成功操作重放；二者是同一登记表的不同状态，未发现第二份同用途登记表                                                                                                                  |
+| 失败与释放       | 未完成句柄在 `Drop` 中释放登记，成功调用 `complete()` 后保留操作 ID；文件回滚、数据库恢复仍由各自事务负责，释放登记不等于回滚副作用                                                                                                   |
+| 项目替换         | [激活流程](../../src-tauri/crates/yss-project/src/project_state/activation.rs)在 publication 与 ledger 锁内重置登记；旧句柄完成或释放前比较捕获的 instance/session，不操作新会话登记                                                  |
+| 锁顺序           | 准入和激活均先取得 publication、再取得 ledger；句柄完成与释放只锁 ledger。本次所查调用链未发现这两把锁的相反获取顺序                                                                                                                  |
+| 相近状态是否重复 | `ResourceLifecycleRegistry` 管理资源路径/token 的生命周期所有权，资源 revision 管理版本；[dataset_operations](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)保存持久化提交及 publication 交接。它们不能由会话内操作登记替代 |
+| 无效函数与旧兼容 | `new`、`reserve`、`reset_for_project`、`complete` 和 `Drop` 都有实际生产用途；登记 crate 与准入适配中未发现 deprecated 兼容入口或被屏蔽的 dead code                                                                                   |
+
+检查中需要随合并处理或明确的事项：
+
+1. **公开边界偏大。**独立包使 ledger、内部准入错误与句柄都成为公开类型。合并后只需从 Project 导出供 Application 使用的句柄及完成方法，ledger 的构造、重置和内部错误可以缩小可见性；保持现有项目错误分类，不新增兼容转发包。
+2. **外部产物入口的无效登记已清理。**[commit_external_artifacts](../../src-tauri/crates/yss-project/src/external_resources.rs)已改为显式校验捕获项目的 instance/session，保留文件 lease、提交前重验及已有回执校验。重复产物继续由落盘回执、来源信息和内容哈希判断，不再生成只用于临时预留的项目 `OperationId`；实现与验证见 12.10 节。
+3. **防重放范围需要明确。**完成记录在当前项目会话内持续保留，项目替换时清空；没有容量或过期淘汰策略，也不提供跨进程的通用幂等保证。如果选择行为保持合并，就必须保留原有接受条件；删除登记或引入 TTL/LRU 都应作为单独的行为调整评估。数据库已有持久化操作记录，需要另外核对其恢复与防重放职责。
+
+如果后续决定保留登记能力，迁移范围是将登记表、句柄和现有测试归入 `project_operation_admission` 模块，调整公开返回类型和内部引用，再同步移除 workspace 成员、Cargo 依赖、锁文件条目及架构清单中的旧包。当前应先按 12.10 节逐入口确定防重放需求，避免为了减少一个 crate 而原样保留无必要的机制。
+
+合并评估阶段在 Windows 上执行的聚焦验证：
+
+- `pnpm test:rs:package -p yss-project-operation --lib`：4 项通过，覆盖执行中重复、失败释放后重试、完成后重放、替换与会话隔离。
+- `pnpm test:rs:package -p yss-project --lib operation`：3 项通过，覆盖准入错误分类、项目替换后拒绝旧资源加载、图覆盖保存。
+- `pnpm test:rs:package -p yss-application --lib database::tests`：5 项通过，包含重复导入拒绝、数据库保存与重新打开、最终激活失败后的会话恢复。
+- 文档相对链接聚焦检查通过；该阶段只更新评估文档，没有执行依赖迁移或完整架构门禁。后续清理结果见 12.10 节。
+
+这些实现未使用 Windows 专属 API，合并也不引入平台依赖。macOS、Linux 本次未运行验证，不能由源码可移植性推定三平台均已通过。
+
+### 12.10 OperationId 的实际用途与精简判断
+
+**已完成第一轮精简，`yss-project-operation` 暂未合并或删除。** 清理没有消费者、重复生成和仅回传的编号；保留请求/结果关联、数据库持久化提交身份及仍在使用的 Project 登记。`OperationId` 的使用范围大于登记 crate，不能因字段同名就把这些用途一并删除，也不能用日志替代提交确认和恢复。
+
+#### 编号来源与分析边界
+
+- [项目 OperationId](../../src-tauri/crates/yss-project-identity/src/identity.rs)是 UUID 的类型封装。前端普通修改由 [projectCommandContext](../../src/features/application/projectCommandContext.ts)默认生成 UUID，生命周期操作由 [projectLifecycleReceipt](../../src/features/application/projectLifecycleReceipt.ts)登记时生成；Graph Save 也在调用时生成新 UUID。
+- Assistant 触发保存时仍会在后端生成项目 OperationId。打开图和图编辑回执已不再生成它；Harness 通用编号改用 `uuid::Uuid`。保留的编号用途并非 React 专用机制。
+- 普通 [invokeCommand](../../src/services/ipc/invokeCommand.ts)只调用一次 `invoke`，没有自动重试。入口被再次调用并生成新 UUID 时，当前登记表会视为另一项操作；只有复用相同编号才会触发同 ID 防重放。
+- 宿主插件协议的 `operationId` 是另一种字符串：`op-时间戳-nonce`，由 [plugin-protocol](../../src-tauri/crates/yss-plugin-protocol/src/operation.rs)校验格式和有效期。它不使用项目的 UUID 类型，也不进入 `yss-project-operation`。下文单列宿主这一实现，不分析插件内部 crate。
+
+#### 用途、实际消费者与必要性
+
+| 用途                    | 实际使用方式                                                                                                                                   | 判断                                                                                                                                          |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 项目生命周期回执关联    | 新建、另存、删除等结果可经 command 返回值和 `ProjectLifecycleCommitted` 事件交付；前端按 ID 找到发起记录，合并两路结果，处理旧请求和一次性通知 | **当前有实际用途。** 即使只发送一次请求，也可能收到两路完成结果；这是结果关联需求，不能等同于重复发送请求                                     |
+| 资源修改结果归属        | 资源 delta 的 `causedBy` 携带操作 ID；Chart Save 按它找到本次保存结果，函数签名和数据库操作也校验请求/结果关联                                 | **当前有实际消费者。** 可以审查直接返回值上的重复校验，但应先保留仍用于本次修改确认的关联规则；它不要求同时保留项目级完成记录集合             |
+| 资源事件去重与排序      | publication coordinator 按 `publicationRevision` 排队、拒绝同版本冲突并忽略已覆盖结果；完整结果指纹包含操作 ID，但 ID 不是队列键               | **主要依据是版本。** 不能把这部分能力算作 OperationId 单独提供的防重放                                                                        |
+| Graph Save 内部操作绑定 | Rust capture 持有操作 ID 和预留句柄；文件事务和 commit 直接从捕获对象取得同一身份，API 回执不再回传 ID                                         | **已收窄。** 删除重复参数及对应的不一致错误分支；捕获时的登记、资源版本和生命周期校验继续保留                                                 |
+| 数据集提交与恢复        | `dataset_operations.id` 为唯一字段；提交前查重，同一事务保存 before/after snapshot，后续按 ID 查询提交状态并确认 publication                   | **有持久化用途。** 日志不能替代提交确认和恢复；需要提交标识，但不据此要求所有操作共用一套内存登记表，也不要求未来一定由前端生成该标识         |
+| 文件事务目录命名        | filesystem 将 ID 用作 `.yssbi-transaction/<id>` 的目录名，隔离暂存与备份文件                                                                   | **需要唯一事务目录，不必依赖前端操作号。** 可以改用事务内部生成的随机目录名，保留现有提交、回滚和根身份检查                                   |
+| 项目会话内同 ID 防重放  | Project ledger 保存 `in_flight` 与 `completed`，重复编号返回错误，失败释放，替换项目清空                                                       | **应单独评估删减。** 这是当前被明确实现的额外保证，但不是仅因 StrictMode 或存在操作编号就必需；现有测试证明实现行为，不单独证明产品需要该保证 |
+
+上述结论的主要源码入口：
+
+- **生命周期两路结果**：[后端发送事件并返回相同回执](../../src-tauri/crates/yss-api/src/commands/command_project/lifecycle.rs)、[前端事件入口](../../src/features/application/initialization/useProjectSync.ts)、[回执登记与合并](../../src/features/application/projectLifecycleReceipt.ts)。`recoverProjectLifecycleDirectFailure` 查看的是前端已经收到的回执状态，并不向后端查询或重新执行请求。
+- **资源关联与版本排序**：[图表保存确认](../../src/features/application/chart/saveChartDocument.ts)、[数据库结果确认](../../src/features/application/dataManagement/databaseMutation.ts)、[函数签名协调](../../src/features/application/editorMutation/functionSignatureCoordinator.ts)、[publication coordinator](../../src/features/application/editorMutation/projectPublicationCoordinator.ts)。按版本发布、按请求确认修改是两个用途；重复回执不是一概需要报错的异常。
+- **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-dataset-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database_mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-project-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
+
+#### 已完成的精简
+
+1. **删除无消费者的派生字段。**移除 `ProjectCommandContext.operationPendingKey` 的声明和构造，没有引入替代状态。
+2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph_open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
+3. **统一函数签名请求身份。**请求直接使用捕获上下文的 `operationId`，移除第二个生成器及 `pendingSignatureOperations` 集合。保留 coordinator epoch，在重置后丢弃迟到结果；资源版本、before-state 和结果关联校验继续有效。同一函数的不同 ID 并发修改由后端资源版本边界处理。
+4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphDraft/saveGraphDraft.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
+5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-automation-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-statistical-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-statistical-harness/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-api/src/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
+6. **通用编号使用通用库。**[HarnessIdGenerator](../../src-tauri/src/lib.rs)改用 workspace 已有的 `uuid::Uuid::new_v4()`，将根包的 UUID 测试依赖提升为生产依赖，保持 session、turn、tool、capability、memory、approval 等身份类型和前缀，没有引入新的第三方库。
+7. **删除外部产物的一次性预留。**[commit_external_artifacts](../../src-tauri/crates/yss-project/src/external_resources.rs)显式检查捕获项目实例，取得文件 lease 后重验项目与 session，提交前再次检查身份。落盘回执、来源信息、内容哈希和生命周期准入继续有效。来源中的插件 `operation_id` 保留，它属于另一套协议。
+
+#### 宿主插件中的同名字段
+
+[安装流程](../../src-tauri/crates/yss-plugin-runtime/src/lib.rs)按插件 operationId 找已有安装回执，相同 ID 配不同包摘要会报冲突；[任务准入](../../src-tauri/crates/yss-plugin-runtime/src/tasks.rs)按 plugin 与 operationId 查运行记录或归档，参数指纹相同则返回既有 task snapshot，不重新启动任务。[SQLite ledger](../../src-tauri/crates/yss-plugin-runtime/src/ledger.rs)持久化安装回执与终结任务，并执行保留期限清理。
+
+这是宿主插件已经实现的任务/安装幂等行为，和项目 ledger 的“同 ID 一律拒绝”不同。删除项目 OperationId 类型或 `yss-project-operation` crate，不应顺带删除这套不同协议中的身份与恢复能力。
+
+#### 下一步顺序与验证
+
+**状态：待处理。** 第一轮清理已完成，以下计划留待后续逐步执行，最终确定 `yss-project-operation` 的保留范围与归属。
+
+1. **检查普通资源操作的登记。**从图保存、图表保存、函数签名和资源增删改名开始，逐项确认登记额外保护了什么。对没有实际需求的登记予以删除，保留项目身份、资源版本、生命周期和文件事务校验。每个入口应给出明确的保留或删除结论及原因，并完成对应代码修改和聚焦验证。
+2. **单独检查数据库导入与删除。**厘清 Project 内存登记与持久化 `dataset_operations` 各自保护的提交阶段，确认是否存在可删除的重复职责。精简后仍须正确确认提交结果，并保留失败恢复所需的记录与校验。
+3. **收拢 crate。**完成入口取舍后，若没有剩余职责则删除 `yss-project-operation`；若仍需少量登记能力，则并入 `yss-project` 的内部模块。同步清理公开返回类型、调用方、workspace 成员、Cargo 依赖、锁文件和架构清单，不增加兼容转发包。
+
+**后续优先完成第 1 项。** 数据库持久化提交恢复、生命周期回执合并和资源结果关联继续分别由各自 owner 承担；操作编号的保留不等于必须保留通用登记表，不引入新的通用任务系统。
+
+#### 第一轮清理的验证记录
+
+以下为已完成的第一轮清理在 Windows 上的验证结果，不代表上述待办计划已经实施：
+
+- `pnpm test:rs:package -p yss-project -p yss-application -p yss-statistical-harness -p yss-api --lib`：141 项通过，覆盖打开图、图覆盖保存、函数签名版本、数据库恢复、Assistant 编辑幂等和插件产物身份校验。
+- `pnpm test:rs:package -p yss-statistical-harness-sqlite -p yss-automation-contract --lib`：5 项通过；SQLite 迁移用例确认旧回执升级后仍能按原幂等键读取，重复初始化不会丢失回执。
+- `pnpm test:ts src/features/application/editorMutation/functionSignatureCoordinator.test.ts src/services/nodeSystem/functionMutationService.test.ts src/services/nodeSystem/graphDraftService.test.ts src/features/core/graphDraft/graphDraftStore.test.ts src/features/application/projectLifecycleReceipt.test.ts src/features/application/editorMutation/projectPublicationIntegration.test.ts`：35 项通过，包含重置后丢弃迟到结果、Graph Save 成功解析和错误项目回执拒绝。
+- `pnpm test:rs:package -p yssbi --lib architecture_tests`：40 项通过，覆盖生产依赖与模块归属；根包测试代码仍有 2 条既有 dead code 警告。
+- `pnpm check:ts` 和 `pnpm check:rs:package -p yssbi --lib` 通过。根包将 `uuid` 从测试依赖移至生产依赖，并同步登记其 composition root 使用边界。
+- `pnpm lint:rs:package -p yss-application -p yss-automation-contract -p yss-project -p yss-statistical-harness -p yss-statistical-harness-sqlite --lib --no-deps '--' -D warnings` 通过。扩大到 API 和根包的严格 Clippy 被 API 未改动文件中的 11 条既有告警阻断，涉及命令参数数目、枚举大小和命名；没有添加 lint suppression。
+- `pnpm lint:ts` 无错误，保留其他文件中的 11 条既有警告。文档相对链接、源码路径和脚本入口共 3 项聚焦检查通过；本轮变更文件已格式化，`git diff --check` 通过。
+
+本轮没有新增第三方库或插件内部改动，未执行完整 CI、桌面安装包测试及 macOS/Linux 验证。
+
+### 12.11 DataFusion、SQLx 与外部数据源连接器的取舍
+
+**当前保留 SQLx 和 `yss-sql-source`，不执行连接器替换。** DataFusion 负责分析计算，SQLx 继续承担外部数据库访问和内部 SQLite 读写。社区 DataFusion 连接器仅作为后续评估候选，不作为已经确定的迁移方向。
+
+#### 当前职责与可替换范围
+
+- [yss-datafusion](../../src-tauri/crates/yss-datafusion/src/lib.rs)负责查询计划和 Arrow 数据执行，包括筛选、连接、聚合与数据分析。
+- [yss-sql-source](../../src-tauri/crates/yss-sql-source/src/lib.rs)负责外部 SQLite、PostgreSQL、MySQL 的连接、表发现、类型解码和有界 Arrow 批次读取。它已承担连接器职责，目前通过 SQLx 实现数据库访问。
+- `yss-dataset-store`、`yss-project-registry-sqlite`、`yss-statistical-harness-sqlite` 和宿主 `yss-plugin-runtime` 使用 SQLx 读写内部 SQLite，持久化数据集提交、项目登记、Assistant 状态和插件回执。数据库事务与提交恢复继续由这些 owner 管理；现成外部数据源连接器不能直接替代这部分业务职责。
+
+连接器是查询引擎与数据源之间的适配模块，负责建立连接、获取表结构、发送查询并将结果转换成引擎可处理的数据。采用现成连接器的潜在收益，是减少 `yss-sql-source` 自维护的连接和 Arrow 转换逻辑；是否替换整个 crate，还需检查保留下来的项目规则和调用边界，不能只按代码量决定。
+
+#### 官方扩展接口与社区实现
+
+DataFusion 提供 `TableProvider` 扩展接口。[datafusion-table-providers](https://github.com/datafusion-contrib/datafusion-table-providers)提供 PostgreSQL、MySQL、SQLite 等实现，属于 `datafusion-contrib` 社区项目。**它不属于 Apache DataFusion 核心项目，也不受 Apache 软件基金会治理。**[官方扩展列表](https://datafusion.apache.org/library-user-guide/extensions.html)明确区分了社区扩展与官方项目；被官方文档收录不等于由官方维护。
+
+社区维护本身不构成否决理由，但应结合版本跟进、平台证据和实际维护收益作出选择，不能仅因项目已经使用 DataFusion 就认定必须替换 SQLx。
+
+#### 2026-09-13 评估快照
+
+以下为此次比较依据，不是永久版本约束；重新评估时应核对 manifests、发布依赖与上游 CI。
+
+1. **DataFusion / Arrow 版本未对齐。**[项目 manifest](../../src-tauri/Cargo.toml)使用 DataFusion 55.0.0、Arrow 59.3.0；连接器稳定版 0.13.1 仍依赖 DataFusion 54、Arrow 58，不能直接接入当前引擎并共享同一套类型。[连接器发布依赖](https://crates.io/api/v1/crates/datafusion-table-providers/0.13.1/dependencies)
+2. **SQLite 底层依赖也需协调。**SQLite 连接器 0.13.1 引入 `rusqlite ^0.37`；其中 `rusqlite 0.37.0` 依赖 `libsqlite3-sys ^0.35.0`，项目当前 SQLx 使用的锁定版本为 `libsqlite3-sys 0.37.0`。需要先核对并解决原生 SQLite 链接依赖的兼容，不能只移除 `yss-sql-source` 的 SQLx 引用。[SQLite 连接器依赖](https://crates.io/api/v1/crates/datafusion-table-providers-sqlite/0.13.1/dependencies)、[rusqlite 依赖](https://crates.io/api/v1/crates/rusqlite/0.37.0/dependencies)、[项目锁文件](../../src-tauri/Cargo.lock)
+3. **三平台运行证据不足。**此次检查的[上游 PR CI](https://github.com/datafusion-contrib/datafusion-table-providers/blob/e5fdc19ae2c8b0d806a82c4eedbd4538dbbc59fc/.github/workflows/pr.yaml)在 Ubuntu 上构建和测试，不能据此确认 Windows、macOS 的行为。这不代表连接器只能运行于 Linux；采用前仍需按实际启用的 features 验证三平台。
+
+#### 重新考虑替换的条件
+
+- 连接器与当前 DataFusion、Arrow、SQLite 底层依赖兼容，并有 macOS、Windows、Linux 的构建与运行证据。
+- 核对并保留现有表发现、连接选项、空表 schema、NULL/二进制数据、严格类型错误、有界批次、取消与截止时间行为，复用 [SQL 数据源测试](../../src-tauri/crates/yss-sql-source/src/tests.rs)验证迁移。
+- 确认减少的自维护逻辑能够抵消新增驱动、传递依赖、版本跟进和适配成本，再决定是否替换外部读取实现、收窄 SQLx features 或合并 crate。
+
+本次仅补充选型结论与条件，没有引入连接器、修改依赖或执行迁移测试。

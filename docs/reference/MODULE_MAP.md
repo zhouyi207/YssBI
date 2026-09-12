@@ -99,14 +99,12 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | Module | Directory | Public entry |
 | --- | --- | --- |
 | `assistant` | `src/modules/assistant` | [public.ts](../../src/modules/assistant/public.ts) |
-| `bayes` | `src/modules/bayes` | — |
 | `chart` | `src/modules/chart` | [public.ts](../../src/modules/chart/public.ts) |
 | `commands` | `src/modules/commands` | [public.ts](../../src/modules/commands/public.ts) |
 | `data-explorer` | `src/modules/data-explorer` | [public.ts](../../src/modules/data-explorer/public.ts) |
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
-| `julia` | `src/modules/julia` | — |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |
