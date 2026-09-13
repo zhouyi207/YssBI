@@ -656,7 +656,7 @@ export const zhCN = {
           adoption: "提交与结果采用",
         },
         boundary:
-          "Application 组合各子系统运行时，重验身份和版本，不复制其业务状态。统计规则归 SCI，结果分析由 Execution 调用 runtime；editor_projection 的职责调整尚未完成。",
+          "Application 组合各子系统运行时，重验身份和版本。统计规则归 SCI，结果分析由 Graph Execution 调用 runtime；编辑器投影归 Graph Editor，Application 负责调用与身份校验。",
       },
       project: {
         title: "项目与资源管理",
@@ -680,7 +680,7 @@ export const zhCN = {
           execution: "执行与结果",
         },
         boundary:
-          "GraphSemanticSnapshot 是解析后图语义的唯一事实源。Compile、Save、Execute 相互独立；执行消费匹配产物，ResultStore 管理图结果。图投影模型当前仍在 Application，Run Output 的生产输出 producer 尚未接入。",
+          "GraphSemanticSnapshot 是解析后图语义的唯一事实源。Graph Editor 生成编辑器投影，Graph Runtime 管理解析与编译缓存，Graph Execution 执行匹配产物并管理结果。Compile、Save、Execute 相互独立；Run Output 的生产输出 producer 尚未接入。",
       },
       data: {
         title: "数据管理与查询",

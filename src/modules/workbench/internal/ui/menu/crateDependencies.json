@@ -64,12 +64,6 @@
         "target": null
       },
       {
-        "name": "yss-datafusion",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-dataset-profile",
         "kind": "normal",
         "optional": false,
@@ -83,12 +77,6 @@
       },
       {
         "name": "yss-display-naming",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-execution",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -137,6 +125,12 @@
       },
       {
         "name": "yss-graph-editor",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-execution",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -202,12 +196,6 @@
         "target": null
       },
       {
-        "name": "yss-project-layout",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-project-model",
         "kind": "normal",
         "optional": false,
@@ -215,12 +203,6 @@
       },
       {
         "name": "yss-project-registry-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-registry-sqlite",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -647,36 +629,6 @@
     "dependencies": []
   },
   {
-    "name": "yss-execution",
-    "manifest": "src-tauri/crates/yss-execution/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-data-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-relational-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
     "name": "yss-function-editor-projection",
     "manifest": "src-tauri/crates/yss-function-editor-projection/Cargo.toml",
     "dependencies": [
@@ -951,6 +903,18 @@
         "target": null
       },
       {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-graph-catalog",
         "kind": "normal",
         "optional": false,
@@ -988,6 +952,36 @@
       },
       {
         "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-execution",
+    "manifest": "src-tauri/crates/yss-graph-execution/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1154,13 +1148,13 @@
         "target": null
       },
       {
-        "name": "yss-execution",
+        "name": "yss-graph-document",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-graph-document",
+        "name": "yss-graph-execution",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1238,12 +1232,6 @@
         "target": null
       },
       {
-        "name": "yss-execution",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-analysis-contract",
         "kind": "normal",
         "optional": false,
@@ -1275,6 +1263,12 @@
       },
       {
         "name": "yss-graph-editor",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-execution",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -2224,7 +2218,7 @@
         "target": null
       },
       {
-        "name": "yss-execution",
+        "name": "yss-graph-execution",
         "kind": "normal",
         "optional": false,
         "target": null

@@ -174,7 +174,7 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yss-graph-compiler-diagnostics",
         "yss-graph-runtime",
         "yss-function-editor-projection",
-        "yss-execution",
+        "yss-graph-execution",
       ],
     },
   },

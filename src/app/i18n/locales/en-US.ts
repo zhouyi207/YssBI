@@ -743,7 +743,7 @@ export const enUS = {
           adoption: "Commit & adoption",
         },
         boundary:
-          "Application composes runtimes and revalidates identity and versions without duplicating business state. Statistical rules belong to SCI; Execution calls runtime for result analysis. The editor_projection migration remains open.",
+          "Application composes runtimes and revalidates identity and versions. Statistical rules belong to SCI; Graph Execution calls runtime for result analysis. Graph Editor owns editor projections; Application coordinates calls and identity checks.",
       },
       project: {
         title: "Project & resources",
@@ -769,7 +769,7 @@ export const enUS = {
           execution: "Execution & results",
         },
         boundary:
-          "GraphSemanticSnapshot is the semantic authority. Compile, Save and Execute are independent; execution consumes matching artifacts and ResultStore owns graph results. Projection models remain in Application; the Run Output producer is not connected yet.",
+          "GraphSemanticSnapshot is the semantic authority. Graph Editor creates projections, Graph Runtime owns resolution and compilation caches, and Graph Execution runs matching artifacts and owns results. Compile, Save and Execute are independent; the Run Output producer is not connected yet.",
       },
       data: {
         title: "Data management & queries",
