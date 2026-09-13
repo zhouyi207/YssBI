@@ -53,8 +53,10 @@ Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSessi
 `/editor?architecture=overview` 展示总览，`/editor?architecture=frontend` 展示前端子系统、状态归属与代表实现，
 `/editor?architecture=backend` 展示后端子系统，
 `/editor?architecture=communication` 展示 Tauri IPC 的 Command、Event、Channel 与 DTO / 错误契约。
-React、Rust、Tauri IPC 节点和面包屑通过路由切换视图，浏览器前进、后退同步更新内容；关闭弹窗移除该参数并保留其他查询参数。
+React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路由切换视图，浏览器前进、后退同步更新内容；关闭弹窗移除该参数并保留其他查询参数。
 架构导航保持工作台路由与 Dockview 挂载，不保存第二份弹窗打开状态或视图历史。
+
+`architecture=dependencies` 在同一张图上展示全部 Cargo workspace crates 及其直接引用关系，按依赖层级从左向右排列，箭头从引用方指向被依赖方。不设置单独的 crate 下拉框；点击节点仅高亮引用关系，`crate` 参数同步高亮状态，始终保留全部节点和连线。条件、可选和构建依赖以虚线标示，不显示 dev 或第三方依赖，也不宣称这些声明在同一次构建中全部启用。数据为静态快照，Cargo 清单变化后运行 `pnpm docs:crate-dependencies` 更新，`pnpm docs:crate-dependencies:check` 校验快照。
 
 应用内 Dialog 统一通过点击遮罩空白区域或按 Escape 关闭；遮罩不参与原生窗口拖动。
 调用方处理 `onOpenChange(false)` 更新弹窗状态，关闭弹窗不取消已经开始的后台操作。

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useLocation } from "react-router";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { architectureSearch } from "./architectureNavigation";
 
 export type BackendArchitectureNode = Node<
   {
@@ -310,6 +312,7 @@ export const backendEdges: Edge[] = [
 
 export function BackendSubsystemCard({ data }: NodeProps<BackendArchitectureNode>) {
   const { t } = useTranslation();
+  const location = useLocation();
   const key = `architectureModal.backendView.${data.section}`;
   const Icon = data.icon;
 
@@ -370,11 +373,25 @@ export function BackendSubsystemCard({ data }: NodeProps<BackendArchitectureNode
             <h3 className="font-semibold">{t(`${key}.title`)}</h3>
             <p className="leading-relaxed text-muted-foreground">{t(`${key}.boundary`)}</p>
             <div className="flex flex-wrap gap-1.5">
-              {data.crates.map((crate) => (
-                <Badge key={crate} variant="outline" className="normal-case tracking-normal">
-                  <code>{crate}</code>
-                </Badge>
-              ))}
+              {data.crates.map((crate) => {
+                const params = new URLSearchParams(
+                  architectureSearch(location.search, "dependencies"),
+                );
+                params.set("crate", crate);
+                return (
+                  <Button
+                    key={crate}
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="h-auto px-2 py-1 text-[11px]"
+                  >
+                    <Link to={{ ...location, search: `?${params}` }}>
+                      <code>{crate}</code>
+                    </Link>
+                  </Button>
+                );
+              })}
             </div>
           </PopoverContent>
         </Popover>

@@ -50,8 +50,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { architectureSearch, readArchitectureView } from "./architectureNavigation";
+import { CrateDependencies, crateCount } from "./CrateDependencies";
 import {
   backendEdges,
   backendNodes,
@@ -413,13 +421,23 @@ function ArchitectureViewport() {
   );
 }
 
+const architectureViews = [
+  "overview",
+  "frontend",
+  "backend",
+  "communication",
+  "dependencies",
+] as const;
+
 export function ArchitectureModal() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const view = readArchitectureView(location.search);
   const isBackend = view === "backend";
-  const detail = view && view !== "overview" ? detailDiagrams[view] : null;
+  const isDependencies = view === "dependencies";
+  const detail =
+    view && view !== "overview" && view !== "dependencies" ? detailDiagrams[view] : null;
   const detailKey = `${view}View`;
   const edges = useMemo<Edge[]>(
     () =>
@@ -513,7 +531,7 @@ export function ArchitectureModal() {
             <nav aria-label={t("architectureModal.breadcrumb")}>
               <ol className="flex items-center gap-1.5 text-xs">
                 <li>
-                  {detail ? (
+                  {detail || isDependencies ? (
                     <Button asChild variant="ghost" size="sm">
                       <Link
                         to={{
@@ -530,7 +548,7 @@ export function ArchitectureModal() {
                     </span>
                   )}
                 </li>
-                {detail && (
+                {(detail || isDependencies) && (
                   <>
                     <li aria-hidden="true">
                       <FiChevronRight className="size-3.5 text-muted-foreground" />
@@ -545,19 +563,47 @@ export function ArchitectureModal() {
               </ol>
             </nav>
             <Badge variant="outline" className="normal-case tracking-normal">
-              {isBackend
-                ? t("architectureModal.backendView.inventory", {
-                    systems: backendNodes.length,
-                    count: backendNodes.reduce((count, node) => count + node.data.crates.length, 0),
-                  })
-                : detail
-                  ? t(`architectureModal.${detailKey}.summary`, { count: detail.nodes.length })
-                  : "Tauri Desktop"}
+              {isDependencies
+                ? t("architectureModal.crates.total", { count: crateCount })
+                : isBackend
+                  ? t("architectureModal.backendView.inventory", {
+                      systems: backendNodes.length,
+                      count: backendNodes.reduce(
+                        (count, node) => count + node.data.crates.length,
+                        0,
+                      ),
+                    })
+                  : detail
+                    ? t(`architectureModal.${detailKey}.summary`, { count: detail.nodes.length })
+                    : "Tauri Desktop"}
             </Badge>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            {t("architectureModal.navigationHint")}
-          </p>
+          <Select
+            value={view ?? "overview"}
+            onValueChange={(value) => {
+              const nextView = architectureViews.find((item) => item === value);
+              if (nextView && nextView !== view)
+                void navigate({
+                  ...location,
+                  search: architectureSearch(location.search, nextView),
+                });
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="w-44 shrink-0 text-xs"
+              aria-label={t("architectureModal.viewSelector")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {architectureViews.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {t(`architectureModal.${item === "overview" ? "overview" : `${item}Page`}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {detail && (
           <p className="shrink-0 border-b border-border/40 px-5 py-2 text-[11px] leading-relaxed text-muted-foreground">
@@ -565,43 +611,47 @@ export function ArchitectureModal() {
           </p>
         )}
         <div className="architecture-surface min-h-0 flex-1">
-          <ReactFlow<DiagramNode>
-            key={view}
-            className="architecture-flow"
-            nodes={detail?.nodes ?? nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            defaultEdgeOptions={edgeOptions}
-            fitView
-            fitViewOptions={fitViewOptions}
-            minZoom={0.2}
-            maxZoom={1.8}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            nodesFocusable={false}
-            edgesFocusable={false}
-            edgesReconnectable={false}
-            elementsSelectable={false}
-            zoomOnDoubleClick={false}
-            deleteKeyCode={null}
-            selectionKeyCode={null}
-            proOptions={{ hideAttribution: true }}
-            aria-label={t("architectureModal.description")}
-            ariaLabelConfig={{
-              "controls.ariaLabel": t("architectureModal.controls"),
-              "controls.zoomIn.ariaLabel": t("architectureModal.zoomIn"),
-              "controls.zoomOut.ariaLabel": t("architectureModal.zoomOut"),
-              "controls.fitView.ariaLabel": t("architectureModal.fitView"),
-            }}
-          >
-            <Background
-              color="color-mix(in srgb, var(--muted-foreground) 20%, transparent)"
-              gap={24}
-              size={1}
-            />
-            <ArchitectureViewport />
-          </ReactFlow>
+          {isDependencies ? (
+            <CrateDependencies />
+          ) : (
+            <ReactFlow<DiagramNode>
+              key={view}
+              className="architecture-flow"
+              nodes={detail?.nodes ?? nodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              defaultEdgeOptions={edgeOptions}
+              fitView
+              fitViewOptions={fitViewOptions}
+              minZoom={0.2}
+              maxZoom={1.8}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              nodesFocusable={false}
+              edgesFocusable={false}
+              edgesReconnectable={false}
+              elementsSelectable={false}
+              zoomOnDoubleClick={false}
+              deleteKeyCode={null}
+              selectionKeyCode={null}
+              proOptions={{ hideAttribution: true }}
+              aria-label={t("architectureModal.description")}
+              ariaLabelConfig={{
+                "controls.ariaLabel": t("architectureModal.controls"),
+                "controls.zoomIn.ariaLabel": t("architectureModal.zoomIn"),
+                "controls.zoomOut.ariaLabel": t("architectureModal.zoomOut"),
+                "controls.fitView.ariaLabel": t("architectureModal.fitView"),
+              }}
+            >
+              <Background
+                color="color-mix(in srgb, var(--muted-foreground) 20%, transparent)"
+                gap={24}
+                size={1}
+              />
+              <ArchitectureViewport />
+            </ReactFlow>
+          )}
         </div>
       </DialogContent>
     </Dialog>
