@@ -15,7 +15,6 @@ import { ProjectService, isPickerTaskCancelledError } from "@/services/project/p
 import { revealPath } from "@/services/platform/opener";
 import { openPathDialog } from "@/services/platform/pathDialog";
 import type { ProjectRecordRow } from "@/shared/types/domain/project";
-import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerOperationError,
   isProjectPickerStaleError,
@@ -64,7 +63,7 @@ function rowToManagedProject(row: ProjectRecordRow): ManagedProject {
   return {
     id: row.id,
     name: row.name,
-    path: formatDisplayPath(row.path),
+    path: row.path,
     lastOpenedAt: row.lastOpenedAt ?? row.createdAt,
     isFavorite: row.isFavorite,
   };
@@ -145,8 +144,7 @@ export function useProjectPicker() {
   }, [currentPath, refresh]);
 
   const currentProjectId = useMemo(
-    () =>
-      projects.find((project) => pathsEqualForCompare(project.path, currentPath ?? ""))?.id ?? null,
+    () => projects.find((project) => project.path === currentPath)?.id ?? null,
     [currentPath, projects],
   );
 

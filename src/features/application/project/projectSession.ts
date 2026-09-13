@@ -1,5 +1,4 @@
 import { ProjectService } from "@/services/project/projectService";
-import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import { useProjectIOStore } from "./projectIOStore";
 import {
   captureProjectIdentity,
@@ -39,7 +38,7 @@ export async function hydrateProjectPath(): Promise<string | null> {
     if (!isCurrentProjectIdentity(identity)) return null;
     if (path) {
       useProjectIOStore.getState().setCurrentPath(path);
-      return formatDisplayPath(path);
+      return path;
     }
     return null;
   })();

@@ -117,6 +117,8 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 `walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-project-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
 
 `yss-file-replace` 按 Platform Adapter 分类。Application 的数据库导出模块和 Julia worker 的 assets 模块仅获 `atomic_replace` 的精确调用权限；这不会开放 Application/Backend Adapter 对整个平台层的依赖。
+
+路径转换直接复用 `dunce`，仅允许 Application 和 Project Registry 声明该依赖，使用层限制为 Application/Project。自建路径展示 crate 和前端前缀剥离工具已移除，路径投影语义见[当前架构](../architecture/ARCHITECTURE.md)。
 原生窗口几何改由官方 `tauri-plugin-window-state` 提供，运行时直接依赖仅声明于 `yssbi`，生产使用仅开放给 Composition Root。
 自有窗口状态 crate、窗口命令及其依赖 capability 已移除；这不开放领域层使用 Tauri 插件的权限。
 

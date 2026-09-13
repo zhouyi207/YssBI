@@ -29,6 +29,18 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-application",
+        mode: RustDependencyMode::Runtime,
+        package_name: "dunce",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-project-registry",
+        mode: RustDependencyMode::Runtime,
+        package_name: "dunce",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
         package_name: "tauri-plugin-window-state",
@@ -1381,6 +1393,16 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "dunce",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Project,
+        mode: RustDependencyMode::Runtime,
+        package_name: "dunce",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Project,
         mode: RustDependencyMode::Runtime,

@@ -2,7 +2,6 @@ import { createBoundApplicationStore } from "@/features/core/state/applicationSt
 import { LoadStatus } from "@/shared/types/ui/common";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
 import { logger } from "@/features/application/observability/appLogger";
-import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   beginGraphLoadLifecycle,
   loadGraphProjection,
@@ -42,7 +41,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
   graphLoadStatus: {},
   currentPath: null,
   projectInstanceId: null,
-  setCurrentPath: (path) => set({ currentPath: path ? formatDisplayPath(path) : null }),
+  setCurrentPath: (path) => set({ currentPath: path || null }),
   loadGraph: async (graphPath) => {
     if (isGraphCachedInMemory(graphPath)) {
       set((state) => ({

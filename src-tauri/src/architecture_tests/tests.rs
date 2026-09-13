@@ -493,14 +493,6 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-path-display"
-                && root.target == "yss_path_display"
-                && root.kind == ProductionRootKind::Library)
-    );
-    assert!(
-        workspace
-            .roots
-            .iter()
             .any(|root| root.package == "yss-tabular-contract"
                 && root.target == "yss_tabular_contract"
                 && root.kind == ProductionRootKind::Library)
@@ -873,13 +865,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-math-expr/src/lib.rs"),
     };
-    let path_display_root = ProductionRoot {
-        package_id: "path-display-package".to_owned(),
-        package: "yss-path-display".to_owned(),
-        target: "yss_path_display".to_owned(),
-        kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-path-display/src/lib.rs"),
-    };
     let project_registry_root = ProductionRoot {
         package_id: "project-registry-package".to_owned(),
         package: "yss-project-registry".to_owned(),
@@ -949,7 +934,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_type_mapping_root.clone(),
         graph_registry_root.clone(),
         math_root.clone(),
-        path_display_root.clone(),
         project_registry_root.clone(),
         project_history_root.clone(),
         project_manifest_root.clone(),
@@ -1068,11 +1052,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &math_root,
                 "src-tauri/crates/yss-math-expr/src/lib.rs",
                 "yss_math_expr",
-            ),
-            module(
-                &path_display_root,
-                "src-tauri/crates/yss-path-display/src/lib.rs",
-                "yss_path_display",
             ),
             module(
                 &project_registry_root,
@@ -1196,10 +1175,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math-expr/src/lib.rs"],
-        RustLayer::PureLeaf
-    );
-    assert_eq!(
-        classified["src-tauri/crates/yss-path-display/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(

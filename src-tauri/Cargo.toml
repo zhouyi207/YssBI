@@ -62,7 +62,6 @@ members = [
   "crates/yss-graph-type-mapping",
   "crates/yss-linalg",
   "crates/yss-math-expr",
-  "crates/yss-path-display",
   "crates/yss-project",
   "crates/yss-project-change",
   "crates/yss-project-filesystem",
@@ -94,6 +93,7 @@ members = [
 rust-version = "1.94"
 
 [workspace.dependencies]
+dunce = "1.0.5"
 semver = "1"
 arrow-array = "=59.3.0"
 futures-core = "0.3"

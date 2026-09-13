@@ -11,7 +11,6 @@ import {
 import type { GraphMeta } from "@/features/core/dataStore/graphMetaStore";
 import type { ChartIndexEntry } from "@/shared/types/domain/chart";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
-import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import { LoadStatus } from "@/shared/types/ui/common";
 
 export interface AuthoritativeProjectLoadSource {
@@ -189,7 +188,7 @@ export function buildAuthoritativeProjectLoadPlan(
         projectInstanceId: source.index.projectInstanceId,
         status: LoadStatus.Ready,
         error: null,
-        currentPath: source.path ? formatDisplayPath(source.path) : null,
+        currentPath: source.path || null,
       },
     },
   };

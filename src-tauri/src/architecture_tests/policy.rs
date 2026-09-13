@@ -1624,7 +1624,6 @@ fn non_build_memberships(
             | "yss-graph-type-mapping"
             | "yss-math-expr"
             | "yss-linalg"
-            | "yss-path-display"
             | "yss-project-change"
             | "yss-project-identity"
             | "yss-project-layout"

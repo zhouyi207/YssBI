@@ -13,7 +13,6 @@ use thiserror::Error;
 use discovery::{
     ProjectDiscoveryError, discover_project_metadata_files, project_name_from_metadata_path,
 };
-use yss_path_display::{format_path_for_user, format_path_for_user_path};
 use yss_project_filesystem::{NormalizedProjectRoot, ProjectRootBinding};
 use yss_project_identity::ProjectRegistrationId;
 use yss_project_layout::PROJECT_METADATA_FILE;
@@ -175,6 +174,7 @@ impl ProjectRegistry {
         if let Some(existing) = self.fetch_by_root(&binding).await? {
             let updated = ProjectRecord {
                 last_opened_at: Some(now_string()),
+                path,
                 ..existing
             };
             self.store
@@ -357,9 +357,11 @@ pub fn default_project_parent_directory() -> Result<String, String> {
             std::env::var("USERPROFILE").map_err(|_| "无法读取用户目录".to_string())?;
         let docs = PathBuf::from(&userprofile).join("Documents");
         if docs.is_dir() {
-            Ok(format_path_for_user_path(&docs))
+            Ok(dunce::simplified(&docs).to_string_lossy().into_owned())
         } else {
-            Ok(format_path_for_user(&userprofile))
+            Ok(dunce::simplified(Path::new(&userprofile))
+                .to_string_lossy()
+                .into_owned())
         }
     }
     #[cfg(not(windows))]
@@ -367,9 +369,11 @@ pub fn default_project_parent_directory() -> Result<String, String> {
         let home = std::env::var("HOME").map_err(|_| "无法读取 HOME".to_string())?;
         let docs = PathBuf::from(&home).join("Documents");
         if docs.is_dir() {
-            Ok(format_path_for_user_path(&docs))
+            Ok(dunce::simplified(&docs).to_string_lossy().into_owned())
         } else {
-            Ok(format_path_for_user(&home))
+            Ok(dunce::simplified(Path::new(&home))
+                .to_string_lossy()
+                .into_owned())
         }
     }
 }
@@ -429,8 +433,8 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
     if !file_name.eq_ignore_ascii_case(PROJECT_METADATA_FILE) {
         return Err(format!("项目文件必须是 {PROJECT_METADATA_FILE}"));
     }
-    std::fs::canonicalize(&pb)
-        .map(|path| format_path_for_user_path(&path))
+    dunce::canonicalize(&pb)
+        .map(|path| path.to_string_lossy().into_owned())
         .map_err(|error| format!("无法解析项目路径: {error}"))
 }
 
@@ -616,7 +620,13 @@ mod tests {
             .await
             .expect("register project");
         let reopened = registry
-            .register_project("Ignored replacement", root.to_string_lossy().as_ref())
+            .register_project(
+                "Ignored replacement",
+                std::fs::canonicalize(root.join(PROJECT_METADATA_FILE))
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            )
             .await
             .expect("re-register project");
 
@@ -641,6 +651,36 @@ mod tests {
         assert_eq!(scan.newly_registered, 0);
         assert_eq!(scan.projects[0].id, created.id);
         assert_eq!(scan.projects[0].name, "Example");
+    }
+
+    #[tokio::test]
+    async fn registering_long_paths_preserves_a_reopenable_path() {
+        let directory = TestDirectory::new("long-path");
+        let mut root = std::fs::canonicalize(directory.path()).unwrap();
+        for index in 0..5 {
+            root.push(format!("{index}-{}", "segment".repeat(9)));
+        }
+        std::fs::create_dir_all(&root).unwrap();
+        let metadata = root.join(PROJECT_METADATA_FILE);
+        std::fs::write(&metadata, b"{}").unwrap();
+        let registry = registry(Vec::new());
+        let created = registry
+            .register_project("Long", root.to_str().unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            created.path,
+            std::fs::canonicalize(&metadata).unwrap().to_string_lossy()
+        );
+        assert_eq!(std::fs::read(&created.path).unwrap(), b"{}");
+        let reopened = registry
+            .register_project("Ignored", &created.path)
+            .await
+            .unwrap();
+        assert_eq!(created.id, reopened.id);
+        assert_eq!(created.path, reopened.path);
+        assert_eq!(registry.list_projects().await.unwrap().len(), 1);
     }
 
     #[tokio::test]

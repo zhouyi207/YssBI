@@ -51,7 +51,6 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yss-file-replace",
         "yss-canonical-hash",
         "yss-display-naming",
-        "yss-path-display",
       ],
     },
   },

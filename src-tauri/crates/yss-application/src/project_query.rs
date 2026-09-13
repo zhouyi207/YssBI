@@ -7,7 +7,6 @@ use super::execution::session_slot::{
 };
 use yss_database_contract::DatabaseDecl;
 use yss_database_schema::DatabaseSchemaFact;
-use yss_path_display::format_path_for_user_path;
 use yss_project::{ProjectError, ProjectIndex, RevealProjectResourceRequest, resolve_reveal_path};
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
@@ -178,7 +177,7 @@ impl ApplicationState {
         }
         self.revalidate_captured_session(&captured)
             .map_err(ProjectQueryApplicationError::SessionChanged)?;
-        Ok(format_path_for_user_path(&path))
+        Ok(dunce::simplified(&path).to_string_lossy().into_owned())
     }
 
     fn capture_project_session(

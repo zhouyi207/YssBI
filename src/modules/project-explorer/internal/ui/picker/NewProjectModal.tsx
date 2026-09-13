@@ -22,7 +22,6 @@ import {
   type ProjectPickerRecoveryPresentation,
 } from "@/features/application/project";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
-import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerErrorDetails,
   ProjectPickerRecoveryDetails,
@@ -165,7 +164,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
 
     (async () => {
       try {
-        const parent = formatDisplayPath(await getDefaultProjectParentDirectory());
+        const parent = await getDefaultProjectParentDirectory();
         if (cancelled) return;
         const defaultName = DEFAULT_PROJECT_NAME;
         setParentBase(parent);
@@ -208,7 +207,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       if (!result.ok) throw new Error(result.failure.code);
       const selected = result.value;
       if (!selected || Array.isArray(selected)) return;
-      const parent = formatDisplayPath(selected);
+      const parent = selected;
       setParentBase(parent);
       setPathAuto(true);
       setPath(joinPath(parent, sanitizeDirSegment(name)));

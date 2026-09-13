@@ -9253,6 +9253,7 @@ name = "yss-application"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "dunce",
  "faer",
  "serde",
  "serde_json",
@@ -9290,7 +9291,6 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-math-expr",
- "yss-path-display",
  "yss-plugin-protocol",
  "yss-project",
  "yss-project-change",
@@ -9803,10 +9803,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-path-display"
-version = "0.1.0"
-
-[[package]]
 name = "yss-plugin-protocol"
 version = "0.2.0"
 dependencies = [
@@ -9963,11 +9959,11 @@ version = "0.1.0"
 name = "yss-project-registry"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "serde",
  "thiserror 2.0.20",
  "tokio",
  "walkdir",
- "yss-path-display",
  "yss-project-filesystem",
  "yss-project-identity",
  "yss-project-layout",
