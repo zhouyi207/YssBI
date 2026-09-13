@@ -42,17 +42,21 @@ pub(super) fn export_database_in_captured_session(
         state
             .revalidate_captured_session(captured)
             .map_err(DatabaseUseCaseError::SessionChanged)?;
-        yss_file_replace::atomic_replace(&temporary, destination).map_err(|error| {
-            DatabaseUseCaseError::Database(DatabaseOperationError::internal(
-                DatabaseApplicationOperation::ExportPublish,
-                error,
-            ))
-        })
+        // Unix can fail syncing the directory after rename committed. Never infer
+        // rollback from this error, retry publication, or clean up the destination.
+        atomicwrites::replace_atomic(&temporary, destination).map_err(publication_error)
     })();
     match result {
         Ok(()) => Ok(()),
         Err(error) => Err(cleanup_after_export_error(&temporary, error)),
     }
+}
+
+fn publication_error(error: std::io::Error) -> DatabaseUseCaseError {
+    DatabaseUseCaseError::Database(DatabaseOperationError::internal(
+        DatabaseApplicationOperation::ExportPublicationUncertain,
+        error,
+    ))
 }
 
 fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, DatabaseOperationError> {
@@ -127,5 +131,45 @@ fn cleanup_after_export_error(
             );
             primary
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn publication_error_preserves_target_before_and_after_rename() {
+        let directory = std::env::temp_dir().join(format!("export-publication-{}", Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let destination = directory.join("export.csv");
+        for committed in [false, true] {
+            std::fs::write(&destination, "old").unwrap();
+            let temporary = reserve_export_temporary_file(&destination).unwrap();
+            std::fs::write(&temporary, "new").unwrap();
+            if committed {
+                std::fs::rename(&temporary, &destination).unwrap();
+            }
+            // Model both rename failure and a directory-sync failure after rename.
+            let error = cleanup_after_export_error(
+                &temporary,
+                publication_error(std::io::Error::other("injected publication failure")),
+            );
+            let DatabaseUseCaseError::Database(DatabaseOperationError::Internal(error)) = error
+            else {
+                panic!("cleanup must preserve publication uncertainty");
+            };
+            assert_eq!(
+                error.operation(),
+                DatabaseApplicationOperation::ExportPublicationUncertain
+            );
+            assert_eq!(
+                std::fs::read_to_string(&destination).unwrap(),
+                if committed { "new" } else { "old" }
+            );
+            assert!(!temporary.exists());
+        }
+        std::fs::remove_file(destination).unwrap();
+        std::fs::remove_dir(directory).unwrap();
     }
 }

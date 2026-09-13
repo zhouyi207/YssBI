@@ -45,7 +45,6 @@ members = [
   "crates/yss-diagnostics",
   "crates/yss-display-naming",
   "crates/yss-execution",
-  "crates/yss-file-replace",
   "crates/yss-function-editor-projection",
   "crates/yss-graph-analysis",
   "crates/yss-graph-analysis-contract",
@@ -94,6 +93,7 @@ rust-version = "1.94"
 
 [workspace.dependencies]
 dunce = "1.0.5"
+atomicwrites = { version = "=0.4.4", default-features = false }
 semver = "1"
 arrow-array = "=59.3.0"
 futures-core = "0.3"

@@ -232,7 +232,10 @@ fn map_cleanup_failure(
 ) -> CommandError {
     let primary = database_command_error(primary);
     let cleanup = database_command_error(cleanup);
-    if primary.code() == "stale_project_lifecycle" {
+    if matches!(
+        primary.code(),
+        "stale_project_lifecycle" | "database_export_publication_uncertain"
+    ) {
         let details = CleanupErrorDetails {
             cleanup_error: CommandErrorSummary {
                 code: cleanup.code(),
@@ -263,7 +266,9 @@ fn internal_error_code(operation: DatabaseApplicationOperation) -> &'static str 
         | DatabaseApplicationOperation::ExportRead => "database_computation_failed",
         DatabaseApplicationOperation::ExportSerialize => "database_export_serialization_failed",
         DatabaseApplicationOperation::ExportReserve => "database_export_temp_reservation_failed",
-        DatabaseApplicationOperation::ExportPublish => "database_export_publication_failed",
+        DatabaseApplicationOperation::ExportPublicationUncertain => {
+            "database_export_publication_uncertain"
+        }
         DatabaseApplicationOperation::ExportCleanup => "database_export_cleanup_failed",
         DatabaseApplicationOperation::Load
         | DatabaseApplicationOperation::ReadEditState
@@ -308,7 +313,33 @@ fn operation_name(operation: DatabaseApplicationOperation) -> &'static str {
         DatabaseApplicationOperation::ExportRead => "exportRead",
         DatabaseApplicationOperation::ExportSerialize => "exportSerialize",
         DatabaseApplicationOperation::ExportReserve => "exportReserve",
-        DatabaseApplicationOperation::ExportPublish => "exportPublish",
+        DatabaseApplicationOperation::ExportPublicationUncertain => "exportPublicationUncertain",
         DatabaseApplicationOperation::ExportCleanup => "exportCleanup",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn publication_uncertainty_survives_cleanup_failure_on_the_wire() {
+        let error = database_command_error(DatabaseOperationError::CleanupAfterFailure {
+            primary: Box::new(DatabaseOperationError::internal_for_test(
+                DatabaseApplicationOperation::ExportPublicationUncertain,
+                "directory sync failed",
+            )),
+            cleanup: Box::new(DatabaseOperationError::internal_for_test(
+                DatabaseApplicationOperation::ExportCleanup,
+                "temporary cleanup failed",
+            )),
+        });
+        let wire = serde_json::to_value(error).unwrap();
+        assert_eq!(wire["code"], "database_export_publication_uncertain");
+        assert_eq!(
+            wire["details"]["cleanupError"]["code"],
+            "database_export_cleanup_failed"
+        );
+        assert!(!wire.to_string().contains("directory sync failed"));
     }
 }

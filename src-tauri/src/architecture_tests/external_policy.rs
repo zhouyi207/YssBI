@@ -41,6 +41,24 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-application",
+        mode: RustDependencyMode::Runtime,
+        package_name: "atomicwrites",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-plugin-runtime",
+        mode: RustDependencyMode::Runtime,
+        package_name: "atomicwrites",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-julia-worker",
+        mode: RustDependencyMode::Runtime,
+        package_name: "atomicwrites",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
         package_name: "tauri-plugin-window-state",
@@ -396,12 +414,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     },
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-plugin-runtime",
-        mode: RustDependencyMode::Runtime,
-        package_name: "windows-sys",
-        target_condition: Some("cfg(windows)"),
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-file-replace",
         mode: RustDependencyMode::Runtime,
         package_name: "windows-sys",
         target_condition: Some("cfg(windows)"),
@@ -1402,6 +1414,16 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::Project,
         mode: RustDependencyMode::Runtime,
         package_name: "dunce",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Application,
+        mode: RustDependencyMode::Runtime,
+        package_name: "atomicwrites",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BackendAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "atomicwrites",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Project,

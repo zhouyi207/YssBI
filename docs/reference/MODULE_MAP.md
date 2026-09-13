@@ -39,7 +39,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | — |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
 | `yss-execution` | `src-tauri/crates/yss-execution` | [Cargo.toml](../../src-tauri/crates/yss-execution/Cargo.toml) | — |
-| `yss-file-replace` | `src-tauri/crates/yss-file-replace` | [Cargo.toml](../../src-tauri/crates/yss-file-replace/Cargo.toml) | — |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | — |
 | `yss-graph-analysis-contract` | `src-tauri/crates/yss-graph-analysis-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis-contract/Cargo.toml) | — |

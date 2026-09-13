@@ -233,13 +233,66 @@ pub(crate) fn atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<
         serde_json::to_writer(&mut file, value).map_err(|_| invalid())?;
         file.sync_all().map_err(|_| invalid())?;
         drop(file);
-        yss_file_replace::atomic_replace(&temporary, path)
-            .map_err(|_| PluginFailure::new("plugin_storage_failed"))
+        Ok(())
     })();
-    if operation.is_err() {
+    if let Err(error) = operation {
         let _ = fs::remove_file(&temporary);
+        return Err(error);
     }
-    operation
+    finish_file_publication(&temporary, atomicwrites::replace_atomic(&temporary, path))
+}
+
+pub(crate) fn finish_file_publication(
+    temporary: &Path,
+    result: std::io::Result<()>,
+) -> Result<(), PluginFailure> {
+    result.map_err(|_| {
+        // Unix directory sync can fail after rename committed. Only clean up the
+        // temporary path; a missing temporary file is not proof of durable success.
+        let _ = fs::remove_file(temporary);
+        PluginFailure::new("plugin_file_publication_uncertain")
+    })
+}
+
+#[cfg(test)]
+mod publication_tests {
+    use super::*;
+
+    #[test]
+    fn publication_error_preserves_target_before_and_after_rename() {
+        let directory =
+            std::env::temp_dir().join(format!("plugin-publication-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let destination = directory.join("settings.json");
+        let temporary = directory.join("settings.tmp");
+        for committed in [false, true] {
+            fs::write(&destination, "old").unwrap();
+            fs::write(&temporary, "new").unwrap();
+            if committed {
+                fs::rename(&temporary, &destination).unwrap();
+            }
+            let error = finish_file_publication(
+                &temporary,
+                Err(std::io::Error::other("injected publication failure")),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "plugin_file_publication_uncertain");
+            assert_eq!(
+                fs::read_to_string(&destination).unwrap(),
+                if committed { "new" } else { "old" }
+            );
+            assert!(!temporary.exists());
+        }
+        // Exercise the real publisher as well: a completed JSON write replaces
+        // the existing file and can be read back by views.get_state.
+        atomic_json(&destination, &serde_json::json!({ "saved": true })).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&fs::read(&destination).unwrap()).unwrap(),
+            serde_json::json!({ "saved": true })
+        );
+        fs::remove_file(destination).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
 }
 pub(crate) fn package_path(root: &Path, digest: &str) -> Result<PathBuf, PluginFailure> {
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {

@@ -48,7 +48,6 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yssbi",
         "yss-tracing",
         "yss-diagnostics",
-        "yss-file-replace",
         "yss-canonical-hash",
         "yss-display-naming",
       ],

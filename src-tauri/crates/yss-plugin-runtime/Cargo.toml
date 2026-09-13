@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
 yss-plugin-sdk = { path = "../yss-plugin-sdk" }
-yss-file-replace = { path = "../yss-file-replace" }
+atomicwrites.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

@@ -28,6 +28,8 @@ export const zhCN = {
     incidentId: "事件编号",
     errorCode: "错误代码",
     unexpectedError: "发生意外错误",
+    filePublicationUncertain:
+      "目标文件可能已更新，但无法确认保存完成。请检查目标文件后再决定是否重试。",
   },
   notifications: {
     databaseEditor: {

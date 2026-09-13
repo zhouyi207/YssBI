@@ -746,7 +746,10 @@ mod tests {
 
         let error = write_asset(&target, "new").expect_err("asset publication must fail");
 
-        assert_eq!(error.code(), JuliaWorkerErrorCode::AssetUpdateFailed);
+        assert_eq!(
+            error.code(),
+            JuliaWorkerErrorCode::AssetPublicationUncertain
+        );
         assert_eq!(fs::read_dir(&worker_dir).unwrap().count(), 1);
     }
 

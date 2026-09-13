@@ -84,10 +84,12 @@ pub(super) fn write_asset(path: &Path, contents: &str) -> Result<(), JuliaWorker
             )
         })?;
         drop(file);
-        yss_file_replace::atomic_replace(&temporary, path).map_err(|error| {
+        // A Unix directory-sync error can follow a committed replacement. Stop
+        // preparation without rolling back the asset or retrying publication.
+        atomicwrites::replace_atomic(&temporary, path).map_err(|error| {
             JuliaWorkerError::new(
-                JuliaWorkerErrorCode::AssetUpdateFailed,
-                format!("Failed to publish Julia worker asset: {error}"),
+                JuliaWorkerErrorCode::AssetPublicationUncertain,
+                format!("Julia worker asset publication or durability is uncertain: {error}"),
             )
         })
     })();

@@ -8,8 +8,14 @@ export interface UserErrorSummary {
 
 export function summarizeUserError(error: unknown, t: TFunction): UserErrorSummary {
   if (isApplicationIpcError(error)) {
+    const publicationUncertain =
+      error.code === "database_export_publication_uncertain" ||
+      error.code === "plugin_file_publication_uncertain" ||
+      error.code === "julia_worker_asset_publication_uncertain";
     return {
-      message: `${t("common.error")} [${error.code}]`,
+      message: publicationUncertain
+        ? t("common.filePublicationUncertain")
+        : `${t("common.error")} [${error.code}]`,
       incidentId: error.incidentId,
     };
   }

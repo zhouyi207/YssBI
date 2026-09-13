@@ -65,7 +65,6 @@ fn julia_plugin_depends_only_on_plugin_crates_and_explicit_common_libraries() {
         "yss-plugin-sdk",
         "yss-math-expr",
         "yss-sci-contract",
-        "yss-file-replace",
     ];
     let mut pending = plugin_packages.iter().cloned().collect::<Vec<_>>();
     let mut visited = BTreeSet::new();
@@ -501,8 +500,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-file-replace"
-                && root.target == "yss_file_replace"
+            .any(|root| root.package == "yss-project-watcher-notify"
+                && root.target == "yss_project_watcher_notify"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -900,12 +899,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
     };
-    let file_replace_root = ProductionRoot {
-        package_id: "file-replace-package".to_owned(),
-        package: "yss-file-replace".to_owned(),
-        target: "yss_file_replace".to_owned(),
+    let watcher_notify_root = ProductionRoot {
+        package_id: "watcher-notify-package".to_owned(),
+        package: "yss-project-watcher-notify".to_owned(),
+        target: "yss_project_watcher_notify".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-file-replace/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-project-watcher-notify/src/lib.rs"),
     };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
@@ -939,7 +938,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         project_manifest_root.clone(),
         project_model_root.clone(),
         tabular_contract_root.clone(),
-        file_replace_root.clone(),
+        watcher_notify_root.clone(),
         build_root.clone(),
     ];
     let module = |root: &ProductionRoot, source_file: &str, owner: &str| RustModule {
@@ -1079,9 +1078,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_tabular_contract",
             ),
             module(
-                &file_replace_root,
-                "src-tauri/crates/yss-file-replace/src/lib.rs",
-                "yss_file_replace",
+                &watcher_notify_root,
+                "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
+                "yss_project_watcher_notify",
             ),
             module(
                 &execution_root,
@@ -1198,7 +1197,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-file-replace/src/lib.rs"],
+        classified["src-tauri/crates/yss-project-watcher-notify/src/lib.rs"],
         RustLayer::PlatformAdapter
     );
     assert_eq!(

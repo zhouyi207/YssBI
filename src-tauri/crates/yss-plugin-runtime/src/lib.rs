@@ -919,12 +919,14 @@ impl PluginManager {
                 return Err(fail("plugin_resource_exhausted"));
             }
             let temporary = target.with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
-            let result = fs::copy(source, &temporary)
-                .and_then(|_| yss_file_replace::atomic_replace(&temporary, &target));
-            if result.is_err() {
-                let _ = fs::remove_file(temporary);
+            if fs::copy(source, &temporary).is_err() {
+                let _ = fs::remove_file(&temporary);
                 return Err(fail("plugin_export_failed"));
             }
+            package::finish_file_publication(
+                &temporary,
+                atomicwrites::replace_atomic(&temporary, &target),
+            )?;
             return Ok(Value::Null);
         }
         let response = self.inner.services.invoke(

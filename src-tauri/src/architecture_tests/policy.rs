@@ -231,30 +231,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-plugin-runtime/src/lib.rs",
-        fully_qualified_owner: "yss_plugin_runtime",
-        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-plugin-runtime/src/package.rs",
-        fully_qualified_owner: "yss_plugin_runtime::package",
-        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Application,
-        repository_relative_source_file: "src-tauri/crates/yss-application/src/database/export.rs",
-        fully_qualified_owner: "yss_application::database::export",
-        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
-        repository_relative_source_file: "plugins/julia/native/crates/yss-julia-worker/src/assets.rs",
-        fully_qualified_owner: "yss_julia_worker::assets",
-        canonical_origin_targets: &["yss_file_replace::atomic_replace"],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::BackendAdapter,
         repository_relative_source_file: "plugins/julia/native/crates/yss-bayes-artifact-datafusion/src/plots.rs",
         fully_qualified_owner: "yss_bayes_artifact_datafusion::plots",
         canonical_origin_targets: &[
@@ -1685,7 +1661,7 @@ fn non_build_memberships(
         layers.insert(RustLayer::Execution);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
-    } else if matches!(package, "yss-project-watcher-notify" | "yss-file-replace") {
+    } else if package == "yss-project-watcher-notify" {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,

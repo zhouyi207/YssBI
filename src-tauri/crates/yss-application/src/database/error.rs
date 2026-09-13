@@ -32,7 +32,8 @@ pub enum DatabaseApplicationOperation {
     ExportRead,
     ExportSerialize,
     ExportReserve,
-    ExportPublish,
+    /// Replacement may have committed before directory synchronization failed.
+    ExportPublicationUncertain,
     ExportCleanup,
 }
 

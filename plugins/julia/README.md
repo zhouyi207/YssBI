@@ -70,8 +70,8 @@ src-tauri/crates/
 ```
 
 网页通信实现保留在 `web/src/sdk.ts`，由本插件的页面直接复用，不单独发布 npm 包。
-协议和 Rust SDK 保留原 crate 名称与路径。插件还复用 `yss-math-expr`、`yss-sci-contract` 和
-`yss-file-replace`：它们分别提供纯数学解析、数据值/取消契约和平台文件替换，不拥有宿主业务状态。
+协议和 Rust SDK 保留原 crate 名称与路径。插件还复用 `yss-math-expr`、`yss-sci-contract`，
+分别提供纯数学解析和数据值/取消契约；平台文件替换直接使用 `atomicwrites`，不依赖宿主的文件替换 crate。
 插件不依赖宿主的 SCI 算法运行时、项目模型、数据库适配器或数据库连接；数据通过协议授权的 Arrow 文件交换。
 
 Cargo workspace 和原有根命令继续使用 `src-tauri/Cargo.toml`，通过显式成员包含插件 crates，

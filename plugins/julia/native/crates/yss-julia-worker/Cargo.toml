@@ -7,7 +7,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
-yss-file-replace = { path = "../../../../../src-tauri/crates/yss-file-replace" }
+atomicwrites.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

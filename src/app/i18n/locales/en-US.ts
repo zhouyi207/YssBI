@@ -28,6 +28,8 @@ export const enUS = {
     incidentId: "Incident ID",
     errorCode: "Error code",
     unexpectedError: "An unexpected error occurred",
+    filePublicationUncertain:
+      "The target file may have been updated, but saving could not be confirmed. Check the target file before retrying.",
   },
   notifications: {
     databaseEditor: {

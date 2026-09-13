@@ -179,7 +179,10 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 - 宿主 IPC/CSV/Parquet 文件边界使用 Arrow batches；精确存储 Schema 与 Graph 语义 Schema 分开，见 [Database runtime](../../src-tauri/crates/yss-database-runtime/README.md)；
 - mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
 
-数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、窗口状态和 Julia worker assets 共用 `yss-file-replace` 的平台文件替换操作；临时文件、内容同步、会话重验和失败清理由各调用方负责。
+数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、插件 JSON/文件导出和 Julia worker assets 直接使用 `atomicwrites::replace_atomic`；临时文件、内容同步、会话重验和失败清理由各调用方负责。窗口状态由官方插件独立持久化。
+
+文件替换要求临时文件与目标位于同一文件系统。`replace_atomic` 在 Unix 重命名后同步父目录，返回错误时目标可能已经更新；调用方统一保守地报告发布结果不确定，不自动重试、不回滚或删除目标，只清理临时路径。不能通过临时文件消失推断持久化成功。
+数据库导出返回 `database_export_publication_uncertain`，插件 JSON/文件导出返回 `plugin_file_publication_uncertain`，Julia assets 返回 `julia_worker_asset_publication_uncertain` 并停止本次 worker 准备；写入前及内容写入失败继续使用原有失败码。替换失败不提交成功响应或后续内存更新，调用方需检查目标后决定后续操作。该协议不提供多文件事务或跨平台完整断电保证；`replace_atomic` 不同步文件内容，内容同步仍属于调用方。
 
 科学计算使用独立的中性契约，运行时实现由 composition root 注入：
 
