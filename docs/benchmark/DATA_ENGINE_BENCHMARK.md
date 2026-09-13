@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 2026-09-10 写入编码、有序前缀读取和编辑过滤优化后的本地测量
-> Canonical owners: `src-tauri/crates/yss-application/examples/dataset_engine_bench.rs` 与实际运行输出
+> Canonical owners: `src-tauri/crates/yss-application/examples/dataset_engine_bench.rs`、`src-tauri/crates/yss-execution/examples/ols_bench.rs` 与实际运行输出
 > Update when: 数据规模、构建配置或数据引擎实现改变后重新测量
 
 本次在 Windows、Intel Core i9-13900HX（24 核、32 逻辑处理器）、约 32 GiB RAM 上运行。
@@ -72,7 +72,12 @@ OLS 输入从 401.1 ms 降至约 24.5 ms。原编辑后过滤记录为 426.6 ms�
 ```powershell
 pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example dataset_engine_bench -- D:/Temp/yss-bench-new generate
 pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-application --example dataset_engine_bench -- D:/Temp/yss-bench-new measure
+pnpm exec cargo run --manifest-path src-tauri/Cargo.toml -p yss-execution --example ols_bench
 ```
+
+数据引擎 example 保留 OLS 输入物化测量；纯 OLS 计算测量已独立到 Execution 的 `ols_bench`，
+使用原数据前 100,000 行相同的响应和解释变量公式。上表仍是 2026-09-10 的测量快照；
+拆分后尚未重测，独立进程的内存与耗时不能直接视为原流程的新测量结果。
 
 程序逐场景输出 JSON。内存采样在构建结束后直接启动
 `src-tauri/target/debug/examples/dataset_engine_bench.exe`，不采样 Cargo 构建进程。

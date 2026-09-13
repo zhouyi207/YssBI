@@ -220,9 +220,11 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 标量除零在节点求值时拒绝；数据内的 NULL、除零、非有限值或溢出在批流实际消费时返回类型化错误。
 分页、统计输入消费沿用各自的取消、deadline 和内存边界，不将非法计算值写成正常结果。
 
-OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
+OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Execution 直接调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
-Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的后续假设检验由 Application 读取并复核结果身份，经 runtime 调用 SCI 的约束解析、线性化和 t/Wald 检验。IPC 使用中性请求/结果，不构造矩阵；通用数学语法由 `yss-math-expr` 拥有。
+Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
+
+只有 `yss-execution` 和 `yss-ipc-command` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。

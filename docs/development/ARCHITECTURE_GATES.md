@@ -114,7 +114,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 当前 gate 不保留 debt exemption list。真实 finding 直接失败；如果 policy 与目标架构需要共同改变，在同一变更中修改 implementation、policy、focused regression 和当前架构文档。
 
-`faer` 的外部依赖声明与生产使用仅允许 `yss-linalg`。Linalg 对外提供自己的矩阵/向量与借用视图，不暴露 faer 类型。`rust.internal.scientific-boundary` 在 canonical origin 上限制 Linalg 只由 SCI 调用、SCI 只由 runtime 调用，并拒绝插件到任意 SCI crate 的生产引用。现有 workspace 边界检查同时验证 Cargo 声明；插件的传递依赖检查不再允许 `yss-sci-contract`。矩阵封装、数值错误、分解检查和秩阈值见 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md)。
+`faer` 的外部依赖声明与生产使用仅允许 `yss-linalg`。Linalg 对外提供自己的矩阵/向量与借用视图，不暴露 faer 类型。`rust.internal.scientific-boundary` 在 canonical origin 上限制 Linalg 只由 SCI 调用、SCI 只由 runtime 调用、runtime 只由 Execution 和 IPC Command 调用，并拒绝插件到任意 SCI crate 的生产引用。workspace 边界检查同时验证 Cargo 声明；插件的传递依赖检查不允许 `yss-sci-contract`。矩阵封装、数值错误、分解检查和秩阈值见 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md)。
 
 `walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-project-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
 
@@ -128,7 +128,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConstantReference`。`yss-graph-document` 按 Pure Leaf 分类，常量定义及只读校验归属该层；Project 可校验持久化数据，不依赖 Graph 编辑或分析层。JSON 门禁仅允许 `model.rs` 的值类型别名，以及 `constant_value.rs` 解析常量字面量所需的精确 `serde_json` 操作，不开放其他 JSON 业务逻辑。
 
-科学计算端口和 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 service 实现按 SCI Core 分类，依赖中性契约与模型。Composition root 只获 runtime 构造器的精确调用权限；Execution 不依赖 SCI runtime 或模型实现。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
+科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Execution 的统计节点和结果分析、IPC 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition root 和 Application 不依赖 runtime；Application 通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
 Activity panel command 的 capability 只开放 Project/Nodes/Commands/Plugins 的 Application 文档查询、Plugin Manager 只读列表与
 Activity DTO，以及按游标返回增量的传输缓存。Composition root 只获缓存的构造权限，
@@ -164,8 +164,8 @@ SCI runtime 的输入准备使用 Arrow；其 Polars/Polars Arrow 使用权限�
 profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polars 代码的历史迁移测试固定旧实现。
 旧 DuckDB/Polars 适配器及其依赖权限已删除。`yss-bayes-artifact-datafusion` 按 Backend Adapter 审计，
 只为该包声明 DataFusion 查询依赖；Julia exchange 的两个消费者使用 Arrow。密度计算权限绑定到该适配器的 `plots` 模块。
-独立 `dataset_engine_bench` example 与桌面 composition root 可装配 `SciRuntimeBackend`；
-其他 Application 源码继续通过 `ScientificBackend` 端口，不能引用该实现。
+Application 的 `dataset_engine_bench` example 测量数据引擎与统计输入准备；OLS 计算测量归
+Execution 的 `ols_bench` example，仅开放 `yss_sci_runtime::ols` 的精确调用权限。
 
 `yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
 结果页 command 只调用 Application 查询；页面预算、快照读取和查询结束后的 currentness 检查位于 Application。

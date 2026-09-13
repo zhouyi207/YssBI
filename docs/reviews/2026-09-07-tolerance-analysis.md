@@ -84,7 +84,7 @@ OLS 先按 SVD 阈值确定秩和自由度，再对完整 `X'X` 进行 Cholesky 
 
 ## 与本轮删除独立的已有缺口
 
-缺失值偏好仍可以保存，但[Graph OLS adapter](../../src-tauri/crates/yss-sci-runtime/src/service.rs) 当前固定采用 Reject，尚未消费该全局偏好。本轮没有改变其算法行为；它需要单独决定接入或移除，不能据设置保存成功声称计算已生效。
+缺失值偏好仍可以保存，但[Graph OLS adapter](../../src-tauri/crates/yss-sci-runtime/src/computation.rs) 当前固定采用 Reject，尚未消费该全局偏好。本轮没有改变其算法行为；它需要单独决定接入或移除，不能据设置保存成功声称计算已生效。
 
 ## 建议实施顺序
 

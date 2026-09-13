@@ -192,12 +192,12 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 文件替换要求临时文件与目标位于同一文件系统。`replace_atomic` 在 Unix 重命名后同步父目录，返回错误时目标可能已经更新；调用方统一保守地报告发布结果不确定，不自动重试、不回滚或删除目标，只清理临时路径。不能通过临时文件消失推断持久化成功。
 数据库导出返回 `database_export_publication_uncertain`，插件 JSON/文件导出返回 `plugin_file_publication_uncertain`，Julia assets 返回 `julia_worker_asset_publication_uncertain` 并停止本次 worker 准备；写入前及内容写入失败继续使用原有失败码。替换失败不提交成功响应或后续内存更新，调用方需检查目标后决定后续操作。该协议不提供多文件事务或跨平台完整断电保证；`replace_atomic` 不同步文件内容，内容同步仍属于调用方。
 
-科学计算使用独立的中性契约，运行时实现由 composition root 注入：
+科学计算使用独立的中性契约，只有 Execution 和 IPC Command 直接调用 SCI runtime：
 
 ```text
-Application / Execution → yss-sci-contract
-yss-sci-runtime implements ScientificBackend
-  → yss-sci algorithms → yss-linalg Mat / Col / views / checked factors → faer
+Application → Execution → yss-sci-runtime (stateless functions)
+IPC Command → yss-sci-runtime
+yss-sci-runtime → yss-sci algorithms → yss-linalg Mat / Col / views / checked factors → faer
 yss-sci algorithms → shared model options/results in yss-sci-contract
 Plugin Manager → framed IPC → Julia extension → Bayes worker port → Julia adapter
 ```
@@ -206,7 +206,7 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 
 [`yss-linalg`](../../src-tauri/crates/yss-linalg/README.md) 拥有不透明的 `Mat`、`Col`、行与借用视图，以及矩阵运算、分解检查、稳定错误类型和秩阈值。faer 仅是该 crate 的实现依赖，对外不重导出原生类型。SCI 只通过 Linalg 使用矩阵；runtime 只调用 SCI，不依赖 Linalg 或 faer。中性契约使用业务结构和普通向量，Arrow 负责表格交换；输入与报告按逻辑行列转换，不依赖矩阵物理存储顺序。
 
-[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。共享端口与实现之间不再保留额外的 Execution→SCI 适配 crate。
+[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。`ols`、`acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。
 
