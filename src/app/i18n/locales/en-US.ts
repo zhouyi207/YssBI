@@ -743,7 +743,7 @@ export const enUS = {
           adoption: "Commit & adoption",
         },
         boundary:
-          "Application composes runtimes and revalidates identity and versions without duplicating business state. Statistical constraints and graph projection models are assigned to their domain owners in the document; hypothesis and editor_projection have not yet been migrated.",
+          "Application composes runtimes and revalidates identity and versions without duplicating business state. Statistical rules belong to SCI; Execution calls runtime for result analysis. The editor_projection migration remains open.",
       },
       project: {
         title: "Project & resources",
@@ -794,7 +794,7 @@ export const enUS = {
           mathematics: "Algebra & expressions",
         },
         boundary:
-          "SCI runtime implements ScientificBackend through runtime composition. Data provides inputs; Execution or use cases assign result identity. React does not recompute statistics. Julia/Bayes is a separate plugin. Application's statistical constraints still await migration.",
+          "Only Execution and IPC Command call SCI runtime directly. Application validates sessions and results. Runtime calls SCI algorithms, SCI uses Linalg for matrices, and hypothesis tests belong to SCI. React does not recompute statistics; Julia/Bayes plugins do not depend on SCI.",
       },
       assistant: {
         title: "Assistant",

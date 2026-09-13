@@ -256,12 +256,6 @@
         "target": null
       },
       {
-        "name": "yss-sci-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-sql-source",
         "kind": "normal",
         "optional": false,
@@ -670,6 +664,12 @@
       },
       {
         "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -2291,18 +2291,6 @@
       },
       {
         "name": "yss-project",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-runtime",
         "kind": "normal",
         "optional": false,
         "target": null

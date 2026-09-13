@@ -656,7 +656,7 @@ export const zhCN = {
           adoption: "提交与结果采用",
         },
         boundary:
-          "Application 组合各子系统运行时，重验身份和版本，不复制其业务状态。文档要求统计约束和图投影模型迁回对应领域；当前 hypothesis 与 editor_projection 的职责调整尚未完成。",
+          "Application 组合各子系统运行时，重验身份和版本，不复制其业务状态。统计规则归 SCI，结果分析由 Execution 调用 runtime；editor_projection 的职责调整尚未完成。",
       },
       project: {
         title: "项目与资源管理",
@@ -704,7 +704,7 @@ export const zhCN = {
           mathematics: "线性代数与表达式",
         },
         boundary:
-          "ScientificBackend 由 SCI runtime 实现，经组装接入；数据系统提供输入，业务用例或 Execution 决定结果身份。React 不重算统计事实；Julia/Bayes 属于独立插件。Application 内统计约束仍待归位。",
+          "只有 Execution 和 IPC Command 直接调用 SCI runtime；Application 管理会话和结果有效性。runtime 调用 SCI 算法，SCI 通过 Linalg 使用矩阵；假设检验归 SCI。React 不重算统计事实，Julia/Bayes 插件不依赖 SCI。",
       },
       assistant: {
         title: "Assistant",
