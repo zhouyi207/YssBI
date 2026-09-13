@@ -6,6 +6,8 @@ use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
 
+pub mod analysis;
+
 /// Opaque identity for an Execution-owned result.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ResultId(u64);

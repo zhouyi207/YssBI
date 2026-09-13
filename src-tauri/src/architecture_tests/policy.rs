@@ -144,6 +144,28 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::Execution,
+        repository_relative_source_file: "src-tauri/crates/yss-execution/src/statistics.rs",
+        fully_qualified_owner: "yss_execution::statistics",
+        canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Execution,
+        repository_relative_source_file: "src-tauri/crates/yss-execution/src/result/analysis.rs",
+        fully_qualified_owner: "yss_execution::result::analysis",
+        canonical_origin_targets: &[
+            "yss_sci_runtime::computation::acf_pacf",
+            "yss_sci_runtime::time_series::serial_tests::compute_serial_tests",
+            "yss_sci_runtime::hypothesis::run_hypothesis_test",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Execution,
+        repository_relative_source_file: "src-tauri/crates/yss-execution/examples/ols_bench.rs",
+        fully_qualified_owner: "ols_bench",
+        canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/command_harness/graph_client.rs",
         fully_qualified_owner: "yss_ipc_command::commands::command_harness::graph_client",
@@ -269,7 +291,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::database::samples::SampleCatalog::new",
             "yss_application::plugins::PluginHostServices::new",
             "yss_plugin_runtime::PluginManager::initialize",
-            "yss_sci_runtime::service::SciRuntimeBackend::new",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
             "yss_project_registry::ProjectRegistry::new",
             "yss_project::project_state::state::ProjectState",
@@ -279,9 +300,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::execution::session_slot::ApplicationSessionEpoch::INITIAL",
             "yss_application::execution::session_slot::ApplicationSessionSlot::new",
             "yss_application::execution::session_slot::ApplicationState",
-            "yss_application::execution::session_slot::ApplicationState::from_composition",
+            "yss_application::execution::session_slot::ApplicationState::new",
             "yss_application::execution::session_slot::SessionCaptureError",
-            "yss_sci_contract::scientific::ScientificBackend",
             "yss_project::project_state::state::ProjectState::new",
             "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
             "yss_ipc_command::invoke_handler",
@@ -1042,19 +1062,21 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::execution::ApplicationState",
             "yss_application::execution::session_slot::ApplicationState",
-            "yss_application::statistics::AcfPacfApplicationError",
-            "yss_application::statistics::compute_acf_pacf",
             "yss_application::execution::session_slot::SessionCaptureError",
             "yss_application::execution::session_slot::SessionCaptureError::Inactive",
             "yss_application::execution::session_slot::SessionCaptureError::Recovering",
             "yss_application::execution::session_slot::SessionCaptureError::Replacing",
             "yss_sci_contract::scientific::AcfPacfResult",
-            "yss_sci_contract::scientific::ScientificBackendError",
-            "yss_sci_contract::scientific::ScientificBackendError::Cancelled",
-            "yss_sci_contract::scientific::ScientificBackendError::ComputationFailed",
-            "yss_sci_contract::scientific::ScientificBackendError::DeadlineExceeded",
-            "yss_sci_contract::scientific::ScientificBackendError::InvalidInput",
-            "yss_sci_contract::scientific::ScientificBackendError::Unavailable",
+            "yss_sci_contract::scientific::AcfPacfRequest",
+            "yss_sci_contract::scientific::ScientificCancellationToken",
+            "yss_sci_contract::scientific::ScientificCancellationToken::new",
+            "yss_sci_contract::scientific::ScientificExecutionControl",
+            "yss_sci_runtime::computation::acf_pacf",
+            "yss_sci_contract::scientific::ScientificComputationError",
+            "yss_sci_contract::scientific::ScientificComputationError::Cancelled",
+            "yss_sci_contract::scientific::ScientificComputationError::ComputationFailed",
+            "yss_sci_contract::scientific::ScientificComputationError::DeadlineExceeded",
+            "yss_sci_contract::scientific::ScientificComputationError::InvalidInput",
             "yss_ipc_command::error::CommandError",
             "yss_ipc_command::schema::statistics::AcfPacfRequestDto",
             "yss_ipc_command::schema::statistics::AcfPacfResponseDto",
@@ -1065,10 +1087,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/command_serial_tests.rs",
         fully_qualified_owner: "yss_ipc_command::commands::command_serial_tests",
         canonical_origin_targets: &[
+            "yss_sci_contract::serial_tests::SerialTestsInput",
+            "yss_sci_runtime::time_series::serial_tests::compute_serial_tests",
             "yss_application::execution::session_slot::ApplicationState",
-            "yss_application::statistics::SerialTestsApplicationError",
-            "yss_application::statistics::SerialTestsRequest",
-            "yss_application::statistics::compute_serial_tests",
             "yss_ipc_command::error::CommandError",
             "yss_ipc_command::schema::statistics::DurbinWatsonResultDto",
             "yss_ipc_command::schema::statistics::SerialTestWithLagDto",
@@ -1836,6 +1857,11 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                         dependency.owning_package.as_str(),
                         "yss-sci" | "yss-sci-runtime"
                     ))
+                || (package_name == "yss-sci-runtime"
+                    && !matches!(
+                        dependency.owning_package.as_str(),
+                        "yss-sci-runtime" | "yss-execution" | "yss-ipc-command"
+                    ))
                 || (dependency.source_file.starts_with("plugins/")
                     && (package_name == "yss-sci" || package_name.starts_with("yss-sci-")));
             if !crosses_scientific_boundary
@@ -1939,7 +1965,6 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::Project
                     | RustLayer::Graph
                     | RustLayer::Execution
-                    | RustLayer::SciCore
                     | RustLayer::DatabaseCore
                     | RustLayer::Diagnostics
                     | RustLayer::PureLeaf

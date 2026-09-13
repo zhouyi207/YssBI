@@ -132,19 +132,15 @@ fn initialize_harness_state(
 fn initialize_application_state(
     project_state: Arc<yss_project::ProjectState>,
 ) -> Result<yss_application::execution::ApplicationState, ApplicationInitializationError> {
-    let scientific_backend: Arc<dyn yss_sci_contract::scientific::ScientificBackend> =
-        Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
     let candidate = yss_application::execution::session_factory::build_current_project_candidate(
         yss_application::execution::ApplicationSessionEpoch::INITIAL,
         Arc::clone(&project_state),
         std::iter::empty(),
-        Arc::clone(&scientific_backend),
     )
     .map_err(ApplicationInitializationError::SessionComposition)?;
-    let application = yss_application::execution::ApplicationState::from_composition(
-        Arc::new(yss_application::execution::ApplicationSessionSlot::new()),
-        scientific_backend,
-    );
+    let application = yss_application::execution::ApplicationState::new(Arc::new(
+        yss_application::execution::ApplicationSessionSlot::new(),
+    ));
     application
         .install_candidate(candidate)
         .map_err(|_| ApplicationInitializationError::SessionInstallation)?;

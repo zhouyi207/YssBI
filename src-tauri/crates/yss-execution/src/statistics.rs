@@ -5,7 +5,7 @@ use crate::value::RuntimeValue;
 use std::collections::BTreeMap;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 use yss_sci_contract::scientific::{
-    BackendExecutionControl, OlsRequest, ScientificBackend, ScientificBackendError,
+    OlsRequest, ScientificComputationError, ScientificExecutionControl,
 };
 
 #[derive(Clone, Copy)]
@@ -17,7 +17,6 @@ pub(crate) enum StatisticalKernel {
 pub(crate) fn execute(
     kind: StatisticalKernel,
     invocation: &PreparedKernelInvocation<'_>,
-    backend: &dyn ScientificBackend,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let values = match kind {
         StatisticalKernel::OlsFit | StatisticalKernel::OlsSummary => {
@@ -71,31 +70,30 @@ pub(crate) fn execute(
                         .collect::<Result<Vec<_>, _>>()?,
                 )
             };
-            let result = backend
-                .ols(
-                    OlsRequest {
-                        response,
-                        predictors,
-                        options: OlsOptions {
-                            constant,
-                            covariance,
-                        },
+            let result = yss_sci_runtime::ols(
+                OlsRequest {
+                    response,
+                    predictors,
+                    options: OlsOptions {
+                        constant,
+                        covariance,
                     },
-                    &BackendExecutionControl::from_shared(
-                        invocation.control.cancellation.clone(),
-                        invocation.control.deadline,
-                    ),
-                )
-                .map_err(|error| match error {
-                    ScientificBackendError::Cancelled => KernelExecutionError::Cancelled,
-                    ScientificBackendError::DeadlineExceeded => {
-                        KernelExecutionError::DeadlineExceeded
-                    }
-                    ScientificBackendError::InvalidInput { .. } => {
-                        KernelExecutionError::InvalidNumericInput
-                    }
-                    _ => KernelExecutionError::Failed,
-                })?;
+                },
+                &ScientificExecutionControl::from_shared(
+                    invocation.control.cancellation.clone(),
+                    invocation.control.deadline,
+                ),
+            )
+            .map_err(|error| match error {
+                ScientificComputationError::Cancelled => KernelExecutionError::Cancelled,
+                ScientificComputationError::DeadlineExceeded => {
+                    KernelExecutionError::DeadlineExceeded
+                }
+                ScientificComputationError::InvalidInput { .. } => {
+                    KernelExecutionError::InvalidNumericInput
+                }
+                _ => KernelExecutionError::Failed,
+            })?;
             match kind {
                 StatisticalKernel::OlsFit => vec![
                     RuntimeValue::Record(BTreeMap::from([

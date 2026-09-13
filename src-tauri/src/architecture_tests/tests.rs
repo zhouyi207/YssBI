@@ -1846,18 +1846,23 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
 }
 
 #[test]
-fn scientific_backend_contract_and_runtime_have_distinct_owners() {
+fn scientific_computation_dependencies_follow_the_runtime_boundary() {
+    let mut runtime_consumers = BTreeSet::new();
     for dependency in &workspace_facts().dependency_declarations {
-        if dependency.package_name == "faer" {
-            assert_eq!(dependency.owning_package, "yss-linalg");
-        }
-        if dependency.package_name == "yss-linalg" {
-            assert_eq!(dependency.owning_package, "yss-sci");
-        }
-        if dependency.package_name == "yss-sci" {
-            assert_eq!(dependency.owning_package, "yss-sci-runtime");
+        match dependency.package_name.as_str() {
+            "faer" => assert_eq!(dependency.owning_package, "yss-linalg"),
+            "yss-linalg" => assert_eq!(dependency.owning_package, "yss-sci"),
+            "yss-sci" => assert_eq!(dependency.owning_package, "yss-sci-runtime"),
+            "yss-sci-runtime" => {
+                runtime_consumers.insert(dependency.owning_package.as_str());
+            }
+            _ => {}
         }
     }
+    assert_eq!(
+        runtime_consumers,
+        BTreeSet::from(["yss-execution", "yss-ipc-command"])
+    );
     let facts = production_facts();
     assert_eq!(
         facts
@@ -1868,40 +1873,50 @@ fn scientific_backend_contract_and_runtime_have_distinct_owners() {
     assert_eq!(
         facts
             .classification
-            .get("src-tauri/crates/yss-sci-runtime/src/service.rs"),
+            .get("src-tauri/crates/yss-sci-runtime/src/computation.rs"),
         Some(&RustLayer::SciCore)
     );
-    assert!(
-        facts
-            .dependencies
-            .iter()
-            .any(|dependency| dependency.source_file
-                == "src-tauri/crates/yss-sci-runtime/src/service.rs"
-                && dependency.canonical_origin_target
-                    == "yss_sci_contract::scientific::ScientificBackend")
-    );
-    assert!(
-        facts
-            .dependencies
-            .iter()
-            .any(
-                |dependency| dependency.source_file == "src-tauri/src/lib.rs"
-                    && dependency.canonical_origin_target
-                        == "yss_sci_runtime::service::SciRuntimeBackend::new"
-            )
-    );
-    assert!(
-        facts
-            .dependencies
-            .iter()
-            .filter(|dependency| dependency
-                .source_file
-                .starts_with("src-tauri/crates/yss-execution/"))
-            .all(|dependency| !dependency
-                .canonical_origin_target
-                .starts_with("yss_sci_runtime::")
-                && !dependency.canonical_origin_target.starts_with("yss_sci::"))
-    );
+    let ols = facts
+        .dependencies
+        .iter()
+        .find(|dependency| {
+            dependency.source_file == "src-tauri/crates/yss-execution/src/statistics.rs"
+                && dependency.canonical_origin_target == "yss_sci_runtime::computation::ols"
+        })
+        .expect("Execution must call the runtime OLS entry point");
+    for (package, source, layer) in [
+        ("yssbi", "src-tauri/src/lib.rs", RustLayer::CompositionRoot),
+        (
+            "yss-application",
+            "src-tauri/crates/yss-application/src/lib.rs",
+            RustLayer::Application,
+        ),
+        (
+            "yss-julia-extension",
+            "plugins/julia/native/crates/yss-julia-extension/src/main.rs",
+            RustLayer::BackendAdapter,
+        ),
+    ] {
+        let mut dependency = ols.clone();
+        dependency.owning_package = package.into();
+        dependency.source_file = source.into();
+        let findings = rust_dependency_findings(
+            &[dependency],
+            &BTreeMap::from([
+                (source.into(), layer),
+                (
+                    "src-tauri/crates/yss-sci-runtime/src/computation.rs".into(),
+                    RustLayer::SciCore,
+                ),
+            ]),
+        )
+        .unwrap();
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.key.rule_id == "rust.internal.scientific-boundary")
+        );
+    }
 }
 
 #[test]

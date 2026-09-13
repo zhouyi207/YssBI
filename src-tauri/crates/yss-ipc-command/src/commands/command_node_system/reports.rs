@@ -17,7 +17,7 @@ pub(super) fn report_query_error(error: ReportQueryError) -> CommandError {
         ReportQueryError::Hypothesis(
             yss_sci_contract::hypothesis::HypothesisError::InvalidInput(_),
         ) => CommandError::expected("invalid_hypothesis"),
-        ReportQueryError::Serial(error) => CommandError::expected(error.command_code()),
+        ReportQueryError::Serial(error) => CommandError::expected(error.code()),
         error => CommandError::diagnosed("result_analysis_failed", format!("{error:?}")),
     }
 }

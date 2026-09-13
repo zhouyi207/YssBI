@@ -1,11 +1,14 @@
 //! Scientific-computing Tauri commands.
 
+use std::time::{Duration, Instant};
+
 use crate::error::CommandError;
 use crate::schema::statistics::{AcfPacfRequestDto, AcfPacfResponseDto};
 use tauri::State;
-use yss_application::execution::ApplicationState;
-use yss_application::statistics::{
-    AcfPacfApplicationError, compute_acf_pacf as compute_acf_pacf_application,
+use yss_application::execution::{ApplicationState, SessionCaptureError};
+use yss_sci_contract::scientific::{
+    AcfPacfRequest, AcfPacfResult, ScientificCancellationToken, ScientificComputationError,
+    ScientificExecutionControl,
 };
 
 #[tauri::command]
@@ -13,12 +16,28 @@ pub fn compute_acf_pacf(
     application: State<ApplicationState>,
     req: AcfPacfRequestDto,
 ) -> Result<AcfPacfResponseDto, CommandError> {
-    compute_acf_pacf_application(application.inner(), req.residuals, req.max_lag)
-        .map(acf_pacf_response)
-        .map_err(acf_pacf_command_error)
+    let _session = application.capture_session().map_err(|error| {
+        CommandError::expected(match error {
+            SessionCaptureError::Inactive => "stale_project_lifecycle",
+            SessionCaptureError::Replacing => "project_lifecycle_admission_closed",
+            SessionCaptureError::Recovering => "project_recovery_required",
+        })
+    })?;
+    yss_sci_runtime::acf_pacf(
+        AcfPacfRequest {
+            values: req.residuals,
+            max_lag: req.max_lag,
+        },
+        &ScientificExecutionControl {
+            cancellation: ScientificCancellationToken::new(),
+            deadline: Instant::now() + Duration::from_secs(60),
+        },
+    )
+    .map(acf_pacf_response)
+    .map_err(acf_pacf_command_error)
 }
 
-fn acf_pacf_response(result: yss_sci_contract::scientific::AcfPacfResult) -> AcfPacfResponseDto {
+fn acf_pacf_response(result: AcfPacfResult) -> AcfPacfResponseDto {
     AcfPacfResponseDto {
         acf: result.acf,
         pacf: result.pacf,
@@ -26,35 +45,11 @@ fn acf_pacf_response(result: yss_sci_contract::scientific::AcfPacfResult) -> Acf
     }
 }
 
-fn acf_pacf_command_error(error: AcfPacfApplicationError) -> CommandError {
-    match error {
-        AcfPacfApplicationError::SessionCapture(error) => match error {
-            yss_application::execution::SessionCaptureError::Inactive => {
-                CommandError::expected("stale_project_lifecycle")
-            }
-            yss_application::execution::SessionCaptureError::Replacing => {
-                CommandError::expected("project_lifecycle_admission_closed")
-            }
-            yss_application::execution::SessionCaptureError::Recovering => {
-                CommandError::expected("project_recovery_required")
-            }
-        },
-        AcfPacfApplicationError::Backend(error) => match error {
-            yss_sci_contract::scientific::ScientificBackendError::InvalidInput { .. } => {
-                CommandError::expected("invalid_acf_pacf_input")
-            }
-            yss_sci_contract::scientific::ScientificBackendError::Cancelled => {
-                CommandError::expected("operation_cancelled")
-            }
-            yss_sci_contract::scientific::ScientificBackendError::DeadlineExceeded => {
-                CommandError::expected("operation_deadline_exceeded")
-            }
-            yss_sci_contract::scientific::ScientificBackendError::Unavailable => {
-                CommandError::expected("scientific_backend_unavailable")
-            }
-            yss_sci_contract::scientific::ScientificBackendError::ComputationFailed => {
-                CommandError::expected("scientific_computation_failed")
-            }
-        },
-    }
+fn acf_pacf_command_error(error: ScientificComputationError) -> CommandError {
+    CommandError::expected(match error {
+        ScientificComputationError::InvalidInput { .. } => "invalid_acf_pacf_input",
+        ScientificComputationError::Cancelled => "operation_cancelled",
+        ScientificComputationError::DeadlineExceeded => "operation_deadline_exceeded",
+        ScientificComputationError::ComputationFailed => "scientific_computation_failed",
+    })
 }

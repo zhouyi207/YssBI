@@ -1,19 +1,15 @@
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
 use thiserror::Error;
 use yss_execution::result::{ResultReference, StoredResult};
 use yss_execution::value::RuntimeValue;
 use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::report::OlsModelSummary;
-use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, BackendExecutionControl, OlsResult, ScientificBackendError,
-};
+use yss_sci_contract::scientific::{AcfPacfResult, OlsResult, ScientificComputationError};
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::execution::{ApplicationState, SessionCaptureError};
-use crate::statistics::{SerialTestsApplicationError, SerialTestsRequest, SerialTestsResult};
-use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
+use yss_sci_contract::SciError;
+use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestOutput};
+use yss_sci_contract::serial_tests::SerialTestsOutput;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResultTablePart {
@@ -64,7 +60,7 @@ pub struct ResidualPlotProjection {
 pub enum ResultAnalysisProjection {
     ResidualPlot(ResidualPlotProjection),
     AcfPacf(AcfPacfResult),
-    SerialTests(SerialTestsResult),
+    SerialTests(SerialTestsOutput),
     Hypothesis(HypothesisTestOutput),
 }
 
@@ -81,11 +77,11 @@ pub enum ReportQueryError {
     #[error("report query is invalid")]
     InvalidRequest,
     #[error(transparent)]
-    Backend(#[from] ScientificBackendError),
+    Scientific(#[from] ScientificComputationError),
     #[error(transparent)]
     Hypothesis(#[from] HypothesisError),
     #[error("serial test failed")]
-    Serial(SerialTestsApplicationError),
+    Serial(SciError),
 }
 
 impl ApplicationState {
@@ -121,54 +117,21 @@ impl ApplicationState {
                 )?),
                 ResultAnalysisRequest::AcfPacf { max_lag } => {
                     validate_lags(max_lag)?;
-                    let control = BackendExecutionControl::from_shared(
-                        Arc::new(std::sync::atomic::AtomicBool::new(false)),
-                        Instant::now() + Duration::from_secs(60),
-                    );
-                    let value = self
-                        .scientific_backend()
-                        .ok_or(ScientificBackendError::Unavailable)?
-                        .acf_pacf(
-                            AcfPacfRequest {
-                                values: result.residuals.clone(),
-                                max_lag,
-                            },
-                            &control,
-                        )?;
+                    let value = yss_execution::result::analysis::acf_pacf(result, max_lag)?;
                     ResultAnalysisProjection::AcfPacf(value)
                 }
                 ResultAnalysisRequest::SerialTests { lags, bg_nomiss0 } => {
                     validate_lags(lags)?;
-                    let value = crate::statistics::compute_serial_tests(SerialTestsRequest {
-                        residuals: result.residuals.clone(),
-                        exog: Some(
-                            (0..result.residuals.len())
-                                .map(|row| result.design.iter().map(|column| column[row]).collect())
-                                .collect(),
-                        ),
-                        lags,
-                        bg_nomiss0,
-                    })
-                    .map_err(ReportQueryError::Serial)?;
+                    let value =
+                        yss_execution::result::analysis::serial_tests(result, lags, bg_nomiss0)
+                            .map_err(ReportQueryError::Serial)?;
                     ResultAnalysisProjection::SerialTests(value)
                 }
                 ResultAnalysisRequest::Hypothesis { hypothesis } => {
                     if hypothesis.trim().is_empty() || hypothesis.len() > 4096 {
                         return Err(ReportQueryError::InvalidRequest);
                     }
-                    let value =
-                        yss_sci_runtime::hypothesis::run_hypothesis_test(HypothesisTestInput {
-                            betas: result.coefficients.clone(),
-                            cov_beta: result.report.cov_beta.clone(),
-                            df_residual: result.report.model_basic_info.df_residual,
-                            param_names: result
-                                .report
-                                .coefficients
-                                .iter()
-                                .map(|coefficient| coefficient.variable.clone())
-                                .collect(),
-                            hypothesis,
-                        })?;
+                    let value = yss_execution::result::analysis::hypothesis(result, hypothesis)?;
                     ResultAnalysisProjection::Hypothesis(value)
                 }
             })

@@ -16,7 +16,6 @@ use yss_graph_runtime::GraphRuntimeState;
 use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
-use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct ApplicationSessionEpoch(u64);
@@ -758,7 +757,6 @@ impl ApplicationSessionSlot {
     fn finish_project_replacement(
         &self,
         mut replacement: ProjectReplacement,
-        scientific_backend: &Arc<dyn ScientificBackend>,
     ) -> Result<(), ApplicationSessionRefreshError> {
         replacement
             .worker
@@ -779,7 +777,6 @@ impl ApplicationSessionSlot {
             replacement.worker.epoch,
             replacement.project,
             reusable_instances,
-            Arc::clone(scientific_backend),
         )
         .map_err(|_| ApplicationSessionRefreshError::Candidate)?;
 
@@ -1105,36 +1102,16 @@ pub enum ApplicationSessionRefreshError {
     Candidate,
     #[error("application session replacement failed")]
     Replacement,
-    #[error("application session composition is not configured")]
-    CompositionUnavailable,
 }
 
 #[derive(Clone)]
 pub struct ApplicationState {
     session_slot: Arc<ApplicationSessionSlot>,
-    scientific_backend: Option<Arc<dyn ScientificBackend>>,
 }
 
 impl ApplicationState {
-    pub(crate) fn scientific_backend(&self) -> Option<&dyn ScientificBackend> {
-        self.scientific_backend.as_deref()
-    }
-
     pub fn new(session_slot: Arc<ApplicationSessionSlot>) -> Self {
-        Self {
-            session_slot,
-            scientific_backend: None,
-        }
-    }
-
-    pub fn from_composition(
-        session_slot: Arc<ApplicationSessionSlot>,
-        scientific_backend: Arc<dyn ScientificBackend>,
-    ) -> Self {
-        Self {
-            session_slot,
-            scientific_backend: Some(scientific_backend),
-        }
+        Self { session_slot }
     }
 
     pub fn install_candidate(
@@ -1165,12 +1142,7 @@ impl ApplicationState {
         &self,
         replacement: ProjectReplacement,
     ) -> Result<(), ApplicationSessionRefreshError> {
-        let scientific_backend = self
-            .scientific_backend
-            .as_ref()
-            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
-        self.session_slot
-            .finish_project_replacement(replacement, scientific_backend)
+        self.session_slot.finish_project_replacement(replacement)
     }
 
     pub fn retry_session_recovery(

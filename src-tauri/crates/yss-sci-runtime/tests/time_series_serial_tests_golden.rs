@@ -1,7 +1,6 @@
 use serde::Deserialize;
-use yss_sci_runtime::time_series::serial_tests::{
-    SerialTestWithLag, SerialTestsInput, SerialTestsOutput, compute_serial_tests,
-};
+use yss_sci_contract::serial_tests::{SerialTestWithLag, SerialTestsInput, SerialTestsOutput};
+use yss_sci_runtime::time_series::serial_tests::compute_serial_tests;
 
 const SIMPLE_RESIDUALS: &str =
     include_str!("fixtures/time_series/serial_tests/simple_residuals.json");

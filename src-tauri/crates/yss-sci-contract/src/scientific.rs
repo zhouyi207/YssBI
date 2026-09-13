@@ -6,11 +6,11 @@ use std::sync::{
 use std::time::Instant;
 
 #[derive(Clone, Default)]
-pub struct BackendCancellationToken {
+pub struct ScientificCancellationToken {
     cancelled: Arc<AtomicBool>,
 }
 
-impl BackendCancellationToken {
+impl ScientificCancellationToken {
     pub fn new() -> Self {
         Self::default()
     }
@@ -28,19 +28,19 @@ impl BackendCancellationToken {
     }
 }
 
-/// Admission control for a synchronous scientific backend call.
+/// Admission control for a synchronous scientific computation.
 ///
-/// Implementations sample cancellation and the deadline before dispatch. This
+/// Runtime functions sample cancellation and the deadline before dispatch. This
 /// contract does not claim cooperative interruption after computation starts.
-pub struct BackendExecutionControl {
-    pub cancellation: BackendCancellationToken,
+pub struct ScientificExecutionControl {
+    pub cancellation: ScientificCancellationToken,
     pub deadline: Instant,
 }
 
-impl BackendExecutionControl {
+impl ScientificExecutionControl {
     pub fn from_shared(cancellation: Arc<AtomicBool>, deadline: Instant) -> Self {
         Self {
-            cancellation: BackendCancellationToken::from_shared(cancellation),
+            cancellation: ScientificCancellationToken::from_shared(cancellation),
             deadline,
         }
     }
@@ -85,35 +85,15 @@ pub enum ScientificInputViolation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-pub enum ScientificBackendError {
+pub enum ScientificComputationError {
     #[error("scientific input is invalid")]
     InvalidInput { violation: ScientificInputViolation },
     #[error("scientific execution was cancelled")]
     Cancelled,
     #[error("scientific execution deadline was exceeded")]
     DeadlineExceeded,
-    #[error("scientific backend is unavailable")]
-    Unavailable,
     #[error("scientific computation failed")]
     ComputationFailed,
-}
-
-/// Shared scientific backend boundary for application and execution callers.
-///
-/// Every method applies [`BackendExecutionControl`] at admission. A concrete
-/// backend may add real cooperative checkpoints, but callers cannot infer them
-/// from this synchronous port.
-pub trait ScientificBackend: Send + Sync {
-    fn ols(
-        &self,
-        request: OlsRequest,
-        control: &BackendExecutionControl,
-    ) -> Result<OlsResult, ScientificBackendError>;
-    fn acf_pacf(
-        &self,
-        request: AcfPacfRequest,
-        control: &BackendExecutionControl,
-    ) -> Result<AcfPacfResult, ScientificBackendError>;
 }
 
 #[cfg(test)]

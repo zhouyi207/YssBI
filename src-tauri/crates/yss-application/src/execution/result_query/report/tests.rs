@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use super::*;
 use crate::execution::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::collections::BTreeMap;
@@ -22,13 +25,9 @@ fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
         ApplicationSessionEpoch::INITIAL,
         Arc::new(yss_project::ProjectState::new()),
         [],
-        Arc::new(yss_sci_runtime::SciRuntimeBackend::new()),
     )
     .unwrap();
-    let app = ApplicationState::from_composition(
-        Arc::new(ApplicationSessionSlot::new()),
-        Arc::new(yss_sci_runtime::SciRuntimeBackend::new()),
-    );
+    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
     app.install_candidate(candidate).unwrap();
     let captured = app.capture_session().unwrap();
     let session =
@@ -232,7 +231,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     else {
         panic!()
     };
-    let expected = crate::statistics::compute_acf_pacf(&app, fit.residuals.clone(), 8).unwrap();
+    let expected = yss_execution::result::analysis::acf_pacf(&fit, 8).unwrap();
     assert_eq!(acf, expected);
     assert_eq!(acf.n, 53_940);
     let ResultAnalysisProjection::SerialTests(serial) = app
@@ -247,17 +246,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     else {
         panic!()
     };
-    let expected = crate::statistics::compute_serial_tests(SerialTestsRequest {
-        residuals: fit.residuals.clone(),
-        lags: 4,
-        bg_nomiss0: true,
-        exog: Some(
-            (0..fit.residuals.len())
-                .map(|row| fit.design.iter().map(|column| column[row]).collect())
-                .collect(),
-        ),
-    })
-    .unwrap();
+    let expected = yss_execution::result::analysis::serial_tests(&fit, 4, true).unwrap();
     assert_eq!(serial.dw.d, expected.dw.d);
     assert_eq!(serial.q.unwrap().stat, expected.q.unwrap().stat);
     assert_eq!(serial.bg.unwrap().stat, expected.bg.unwrap().stat);

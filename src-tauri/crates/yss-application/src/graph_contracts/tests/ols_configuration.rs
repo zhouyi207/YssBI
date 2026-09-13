@@ -224,10 +224,9 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         );
         let package =
             crate::graph_contracts::execution_package_from_graph(package, execution_basis).unwrap();
-        let execution = ExecutionRuntimeState::from_composition(
+        let execution = ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
-            Arc::new(yss_sci_runtime::SciRuntimeBackend::new()),
         );
         let plan = execution
             .prepare_compiled_package(package, RuntimeGeneration::INITIAL)

@@ -135,15 +135,13 @@ impl Drop for Project {
     }
 }
 fn application(project: Arc<ProjectState>) -> ApplicationState {
-    let backend = Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
     let candidate = yss_application::execution::session_factory::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         project,
         [],
-        backend.clone(),
     )
     .unwrap();
-    let app = ApplicationState::from_composition(Arc::new(ApplicationSessionSlot::new()), backend);
+    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
     app.install_candidate(candidate).unwrap();
     app
 }

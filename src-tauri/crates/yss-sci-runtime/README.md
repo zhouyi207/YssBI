@@ -1,32 +1,34 @@
 # yss-sci-runtime
 
-Application-facing scientific computation entry points over `yss-sci`.
+Stateless scientific computation entry points over `yss-sci`, called directly
+only by `yss-execution` and `yss-ipc-command`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
 faer or `yss-linalg` dependency and does not construct numerical matrices or own
 estimators. Arrow remains the tabular exchange representation; SCI converts
 numeric inputs into Linalg matrices and returns computed results.
 
-The composition root constructs `SciRuntimeBackend`, which directly implements
-`yss_sci_contract::scientific::ScientificBackend`. Application and Execution share
-the neutral OLS/ACF contracts; the implementation has no Execution dependency.
-Cancellation and deadlines are checked at the synchronous backend admission
-boundary. These checks do not promise cooperative interruption of a running
-matrix decomposition.
+`ols` and `acf_pacf` accept neutral requests and `ScientificExecutionControl` from
+`yss-sci-contract`. Execution passes its run cancellation and deadline to OLS;
+result analyses and standalone IPC ACF/PACF use the existing 60-second deadline.
+Desktop composition and Application neither depend on this crate nor construct
+or inject a backend object. The runtime has no Execution dependency.
+Cancellation and deadlines are checked before dispatch and after computation;
+these checks do not promise cooperative interruption of a running matrix decomposition.
 
 ## Capability modules
 
-| Module               | Responsibility                                               |
-| -------------------- | ------------------------------------------------------------ |
-| `service`            | Private implementation of the shared scientific backend port |
-| `regression`         | SCI fit entry points and result serialization                |
-| `regression::report` | Report labels, fields and serialization                      |
-| `regression::types`  | Existing report/model records used by capability APIs        |
-| `hypothesis`         | Neutral hypothesis and margins `at()` entry points into SCI  |
-| `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points        |
-| `panel`              | Entry point into SCI DID randomization inference             |
-| `data`               | Arrow panel/time alignment and tabular transformations       |
-| `density`            | Density computation entry point                              |
+| Module               | Responsibility                                                        |
+| -------------------- | --------------------------------------------------------------------- |
+| `computation`        | Implementation of the exported OLS/ACF functions and admission checks |
+| `regression`         | SCI fit entry points and result serialization                         |
+| `regression::report` | Report labels, fields and serialization                               |
+| `regression::types`  | Existing report/model records used by capability APIs                 |
+| `hypothesis`         | Neutral hypothesis and margins `at()` entry points into SCI           |
+| `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points                 |
+| `panel`              | Entry point into SCI DID randomization inference                      |
+| `data`               | Arrow panel/time alignment and tabular transformations                |
+| `density`            | Density computation entry point                                       |
 
 There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
 entry points call the corresponding SCI owner; report encoding stays here.
@@ -40,12 +42,14 @@ an intermediate configuration mirror.
 
 SCI's `regression::fit::fit_ols` projects `OlsFit`, including its already-computed fitted
 values and residuals. `regression::report::ols_report` returns typed model and
-coefficient statistics without duplicating observation arrays. The shared scientific
-port returns these statistics alongside ordinary fitted/residual vectors and the fitted
+coefficient statistics without duplicating observation arrays. The OLS function
+returns these statistics alongside ordinary fitted/residual vectors and the fitted
 design columns. Execution shares that immutable result across its report outputs;
-Application projects report references and performs subsequent analysis against the
-same fit. No opaque JSON report crosses the scientific port. Numerical calculations
-remain unchanged.
+Application projects report references, validates the session and retained result,
+and asks Execution to derive ACF/PACF, serial-test or hypothesis inputs from the same
+fit. Execution calls the corresponding runtime functions. Serial-test input/output
+records belong to `yss-sci-contract::serial_tests`. No opaque JSON report crosses
+this boundary.
 
 Tabular preparation accepts Arrow arrays and `RecordBatch` values. Time alignment preserves
 Int64/Date32 and column metadata, fills gaps with nulls, and checks duplicate/null times and

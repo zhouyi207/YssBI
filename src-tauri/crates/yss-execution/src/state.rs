@@ -23,7 +23,6 @@ use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
 use crate::value::RuntimeValue;
 use yss_relational_contract::NumericOperation;
-use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Clone)]
 pub struct RunExecutionControl {
@@ -216,36 +215,8 @@ trait PreparedPlanExecutor: Send + Sync {
     ) -> Result<SchedulerOutput, KernelExecutionError>;
 }
 
-#[cfg(any(test, feature = "test-support"))]
-struct UnavailableScientificBackend;
-
-#[cfg(any(test, feature = "test-support"))]
-impl ScientificBackend for UnavailableScientificBackend {
-    fn ols(
-        &self,
-        _: yss_sci_contract::scientific::OlsRequest,
-        _: &yss_sci_contract::scientific::BackendExecutionControl,
-    ) -> Result<
-        yss_sci_contract::scientific::OlsResult,
-        yss_sci_contract::scientific::ScientificBackendError,
-    > {
-        Err(yss_sci_contract::scientific::ScientificBackendError::Unavailable)
-    }
-    fn acf_pacf(
-        &self,
-        _request: yss_sci_contract::scientific::AcfPacfRequest,
-        _control: &yss_sci_contract::scientific::BackendExecutionControl,
-    ) -> Result<
-        yss_sci_contract::scientific::AcfPacfResult,
-        yss_sci_contract::scientific::ScientificBackendError,
-    > {
-        Err(yss_sci_contract::scientific::ScientificBackendError::Unavailable)
-    }
-}
-
 struct NeutralPlanExecutor {
     kernels: KernelRegistry,
-    scientific_backend: Arc<dyn ScientificBackend>,
 }
 
 impl PreparedPlanExecutor for NeutralPlanExecutor {
@@ -333,7 +304,6 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .kernels
                 .execute(
                     operation.kernel_id(),
-                    self.scientific_backend.as_ref(),
                     &PreparedKernelInvocation {
                         inputs: &inputs,
                         input_slots: operation.inputs(),
@@ -756,7 +726,6 @@ impl KernelRegistry {
     fn execute(
         &self,
         id: &crate::plan::KernelId,
-        backend: &dyn ScientificBackend,
         invocation: &PreparedKernelInvocation<'_>,
     ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
         execute_kernel(
@@ -765,7 +734,6 @@ impl KernelRegistry {
                 .get(id)
                 .ok_or(KernelExecutionError::KernelNotFound)?,
             invocation,
-            backend,
         )
     }
 }
@@ -773,7 +741,6 @@ impl KernelRegistry {
 fn execute_kernel(
     kind: BuiltinKernel,
     invocation: &PreparedKernelInvocation<'_>,
-    backend: &dyn ScientificBackend,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let PreparedKernelInvocation {
         inputs,
@@ -789,7 +756,7 @@ fn execute_kernel(
     }
     let value = match kind {
         BuiltinKernel::Statistical(kind) => {
-            return crate::statistics::execute(kind, invocation, backend);
+            return crate::statistics::execute(kind, invocation);
         }
         BuiltinKernel::Relational(kind) => crate::relational::execute(kind, invocation),
         BuiltinKernel::Decompose => return crate::relational::decompose(invocation),
@@ -1040,37 +1007,21 @@ pub struct ExecutionRuntimeState {
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
     results: ResultStore,
     runs: RunRegistry,
-    scientific_backend: Arc<dyn ScientificBackend>,
     executor: Arc<dyn PreparedPlanExecutor>,
     active_controls: Mutex<BTreeMap<crate::run_registry::RunId, Arc<AtomicBool>>>,
     next_result_id: AtomicU64,
 }
 
 impl ExecutionRuntimeState {
-    #[cfg(any(test, feature = "test-support"))]
     pub fn new(session_id: ExecutionSessionId, generation: RuntimeGeneration) -> Self {
-        Self::from_composition(
-            session_id,
-            generation,
-            Arc::new(UnavailableScientificBackend),
-        )
-    }
-
-    pub fn from_composition(
-        session_id: ExecutionSessionId,
-        generation: RuntimeGeneration,
-        scientific_backend: Arc<dyn ScientificBackend>,
-    ) -> Self {
         Self {
             session_id,
             generation,
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
             results: ResultStore::new(),
             runs: RunRegistry::new(),
-            scientific_backend: scientific_backend.clone(),
             executor: Arc::new(NeutralPlanExecutor {
                 kernels: KernelRegistry::default(),
-                scientific_backend,
             }),
             active_controls: Mutex::new(BTreeMap::new()),
             next_result_id: AtomicU64::new(1),
@@ -1083,10 +1034,6 @@ impl ExecutionRuntimeState {
 
     pub fn generation(&self) -> RuntimeGeneration {
         self.generation
-    }
-
-    pub fn scientific_backend(&self) -> &dyn ScientificBackend {
-        self.scientific_backend.as_ref()
     }
 
     pub fn close_admission(&self) {

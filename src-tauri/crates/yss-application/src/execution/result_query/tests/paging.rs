@@ -121,7 +121,6 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             ApplicationSessionEpoch::INITIAL,
             project,
             [],
-            Arc::new(yss_sci_runtime::SciRuntimeBackend::new()),
         )
         .unwrap();
         let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));

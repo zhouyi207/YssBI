@@ -21,7 +21,6 @@ use yss_project::ProjectState;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
-use yss_sci_contract::scientific::ScientificBackend;
 
 #[derive(Debug, Eq, PartialEq, Error)]
 pub(crate) enum ReplacementCandidateInputError {
@@ -208,7 +207,6 @@ pub fn build_current_project_candidate(
     epoch: ApplicationSessionEpoch,
     project: Arc<ProjectState>,
     reusable_instances: impl IntoIterator<Item = DatabaseInstance>,
-    scientific_backend: Arc<dyn ScientificBackend>,
 ) -> Result<UnpublishedApplicationSession, ProjectSessionCandidateError> {
     let data = project
         .get_data()
@@ -305,10 +303,9 @@ pub fn build_current_project_candidate(
     ));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
     let runtime_generation = RuntimeGeneration::from_existing(epoch.get().saturating_add(1));
-    let execution = Arc::new(ExecutionRuntimeState::from_composition(
+    let execution = Arc::new(ExecutionRuntimeState::new(
         execution_session_id,
         runtime_generation,
-        scientific_backend,
     ));
     let bound_project_session =
         PlanProjectSessionId::from_existing(project_session_id.as_str().into());

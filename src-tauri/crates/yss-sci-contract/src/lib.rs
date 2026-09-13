@@ -12,3 +12,5 @@ pub mod hypothesis;
 
 pub mod density;
 pub mod panel;
+
+pub mod serial_tests;

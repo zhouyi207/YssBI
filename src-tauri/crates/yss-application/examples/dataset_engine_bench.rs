@@ -9,7 +9,6 @@ use yss_dataset_store::{DatasetCellEdit, DatasetColumnCast, DatasetSnapshot, Dat
 use yss_relational_contract::{
     RelationComparison, RelationControl, RelationHandle, RelationLiteral, RelationPredicate,
 };
-use yss_sci_contract::scientific::{BackendExecutionControl, OlsRequest, ScientificBackend};
 
 const ROWS: usize = 1_000_000;
 const COLUMNS: usize = 16;
@@ -223,7 +222,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     filter_scan(&engine, &edited_narrow, "edited_filter_narrow", true)?;
     let sample = narrow.limit(0, 100_000)?;
     let start = Instant::now();
-    let mut columns = sample.numeric_columns(
+    let columns = sample.numeric_columns(
         &[sample.select_series("c1")?, sample.select_series("c0")?],
         &control(),
     )?;
@@ -236,25 +235,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(columns[1].len(), 100_000);
     assert_eq!(columns[1].first(), Some(&0.0));
     assert_eq!(columns[1].last(), Some(&99.999));
-    let response = columns.remove(0);
-    let start = Instant::now();
-    let result = yss_sci_runtime::SciRuntimeBackend::new().ols(
-        OlsRequest {
-            response,
-            predictors: columns,
-            options: Default::default(),
-        },
-        &BackendExecutionControl::from_shared(
-            Arc::new(AtomicBool::new(false)),
-            Instant::now() + Duration::from_secs(300),
-        ),
-    )?;
-    report(
-        "ols_matrix",
-        start,
-        serde_json::json!({"rows":result.fitted.len(),"coefficients":result.coefficients}),
-    );
-    assert_eq!(result.fitted.len(), 100_000);
     let start = Instant::now();
     let compact = store.commit(store.prepare_compaction(
         &edited.snapshot,

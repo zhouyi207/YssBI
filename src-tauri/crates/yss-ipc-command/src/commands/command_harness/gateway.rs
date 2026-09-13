@@ -169,17 +169,15 @@ mod tests {
         project
             .activate_project_from_path(&created.metadata_path)
             .unwrap();
-        let backend = Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
+
         let candidate =
             yss_application::execution::session_factory::build_current_project_candidate(
                 ApplicationSessionEpoch::INITIAL,
                 project,
                 [],
-                backend.clone(),
             )
             .unwrap();
-        let application =
-            ApplicationState::from_composition(Arc::new(ApplicationSessionSlot::new()), backend);
+        let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
         application.install_candidate(candidate).unwrap();
         let session = application.capture_session().unwrap();
         let path = directory.0.join("source.csv");

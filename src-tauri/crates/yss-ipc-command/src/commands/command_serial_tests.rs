@@ -4,22 +4,20 @@ use crate::error::CommandError;
 use crate::schema::statistics::{
     DurbinWatsonResultDto, SerialTestWithLagDto, SerialTestsRequestDto, SerialTestsResponseDto,
 };
-use yss_application::statistics::{
-    SerialTestsApplicationError, SerialTestsRequest,
-    compute_serial_tests as compute_serial_tests_application,
-};
+use yss_sci_contract::serial_tests::SerialTestsInput;
+use yss_sci_runtime::time_series::serial_tests::compute_serial_tests as compute_serial_tests_runtime;
 
 #[tauri::command]
 pub fn compute_serial_tests(
     req: SerialTestsRequestDto,
 ) -> Result<SerialTestsResponseDto, CommandError> {
-    let result = compute_serial_tests_application(SerialTestsRequest {
+    let result = compute_serial_tests_runtime(SerialTestsInput {
         residuals: req.residuals,
         lags: req.lags,
         exog: req.exog,
         bg_nomiss0: req.bg_nomiss0,
     })
-    .map_err(sci_command_error)?;
+    .map_err(|error| CommandError::expected(error.code()))?;
     Ok(SerialTestsResponseDto {
         bg: result.bg.map(|value| SerialTestWithLagDto {
             stat: value.stat,
@@ -33,8 +31,4 @@ pub fn compute_serial_tests(
         }),
         dw: DurbinWatsonResultDto { d: result.dw.d },
     })
-}
-
-fn sci_command_error(error: SerialTestsApplicationError) -> CommandError {
-    CommandError::expected(error.command_code())
 }

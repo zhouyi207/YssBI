@@ -9279,7 +9279,6 @@ dependencies = [
  "yss-relational-contract",
  "yss-resource-naming",
  "yss-sci-contract",
- "yss-sci-runtime",
  "yss-sql-source",
  "yss-tabular-arrow",
  "yss-tabular-contract",
@@ -9528,6 +9527,7 @@ dependencies = [
  "yss-data-contract",
  "yss-relational-contract",
  "yss-sci-contract",
+ "yss-sci-runtime",
 ]
 
 [[package]]
@@ -10279,8 +10279,6 @@ dependencies = [
  "yss-project-watcher",
  "yss-project-watcher-notify",
  "yss-relational-contract",
- "yss-sci-contract",
- "yss-sci-runtime",
  "yss-statistical-harness",
  "yss-statistical-harness-sqlite",
  "yss-tabular-io",

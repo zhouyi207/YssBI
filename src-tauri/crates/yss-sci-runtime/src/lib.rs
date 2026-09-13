@@ -1,13 +1,13 @@
-//! Application-facing synchronous scientific-computing runtime.
+//! Stateless synchronous scientific-computing runtime for Execution and IPC Command.
 //!
-//! The composition root injects this crate's scientific backend implementation.
+//! Execution and IPC Command call stateless computation functions directly.
 //! Capability APIs prepare numeric inputs and project fitted results. The crate
 //! composes the Rust algorithms with `yss_sci_contract` and does
 //! not own Julia processes, project data, editing history, DuckDB state, DataFrame
 //! export, Tauri transport, or UI state.
 
-mod service;
-pub use service::SciRuntimeBackend;
+mod computation;
+pub use computation::{acf_pacf, ols};
 
 pub mod density;
 pub mod hypothesis;

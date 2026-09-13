@@ -168,8 +168,6 @@ yss-ipc-command = { path = "./crates/yss-ipc-command" }
 yss-ipc-channel = { path = "./crates/yss-ipc-channel" }
 
 
-yss-sci-contract = { path = "./crates/yss-sci-contract" }
-yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }

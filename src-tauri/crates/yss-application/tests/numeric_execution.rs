@@ -699,15 +699,14 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     project
         .activate_project_from_path(&created.metadata_path)
         .unwrap();
-    let backend = Arc::new(yss_sci_runtime::SciRuntimeBackend::new());
+
     let candidate = yss_application::execution::session_factory::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         project.clone(),
         [],
-        backend.clone(),
     )
     .unwrap();
-    let app = ApplicationState::from_composition(Arc::new(ApplicationSessionSlot::new()), backend);
+    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
     app.install_candidate(candidate).unwrap();
     let instance = app.capture_session().unwrap().project_instance_id().clone();
     let csv = directory.0.join("source.csv");

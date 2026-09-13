@@ -45,6 +45,13 @@ A command handler may:
 
 A command handler may not own filesystem transactions, long workflows, duplicated domain validation, Project/Graph reconciliation, statistical computation, or durable state. A delivery failure can produce a transport failure, but it does not pretend that an already committed authority mutation never occurred.
 
+Standalone statistical commands convert DTOs and directly call the stateless
+`yss-sci-runtime` functions. ACF/PACF retains Application session admission and its
+60-second deadline. Analyses of retained graph results go through Application's
+session/result validation and Execution's result analysis functions. Only
+`yss-ipc-command` and `yss-execution` directly consume SCI runtime; numerical rules
+remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
+
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
 Graph tools additionally use the ephemeral `HarnessGraphClientHub` channel because the webview owns unsaved drafts and their FIFO/history. The webview supplies that explicit draft to one Application action; Rust retains the capability receipt and sends an existing draft/compile/save projection for adoption. Claim and completion acknowledge adoption only, never accept model-authored results. Identity/hash checks reject stale or misrouted updates. This is a draft-owner boundary, not a generic command dispatcher.

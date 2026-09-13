@@ -62,7 +62,6 @@ yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-sci-contract = { path = "../yss-sci-contract" }
-yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sql-source = { path = "../yss-sql-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }

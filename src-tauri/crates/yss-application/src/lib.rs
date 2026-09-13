@@ -20,6 +20,5 @@ pub mod project_failure;
 pub mod project_lifecycle;
 pub mod project_query;
 pub mod resource_mutation;
-pub mod statistics;
 
 pub mod events;
