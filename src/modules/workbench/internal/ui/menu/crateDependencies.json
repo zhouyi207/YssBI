@@ -1,0 +1,2210 @@
+[
+  {
+    "name": "yss-agent-rig",
+    "manifest": "src-tauri/crates/yss-agent-rig/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-api",
+    "manifest": "src-tauri/crates/yss-api/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-application",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-schema",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-diagnostics",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-execution",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-function-editor-projection",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-editor",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-history",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-progress",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-statistical-harness",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-application",
+    "manifest": "src-tauri/crates/yss-application/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-schema",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-datafusion",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-profile",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-store",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-display-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-execution",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-function-editor-projection",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-compiler",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-editor",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-resource-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-change",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-history",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-sqlite",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sql-source",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-arrow",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-io",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-automation-contract",
+    "manifest": "src-tauri/crates/yss-automation-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-artifact-contract",
+    "manifest": "plugins/julia/native/crates/yss-bayes-artifact-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-artifact-datafusion",
+    "manifest": "plugins/julia/native/crates/yss-bayes-artifact-datafusion/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-artifact-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-model",
+    "manifest": "plugins/julia/native/crates/yss-bayes-model/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-result",
+    "manifest": "plugins/julia/native/crates/yss-bayes-result/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-bayes-runtime",
+    "manifest": "plugins/julia/native/crates/yss-bayes-runtime/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-artifact-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-worker",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-worker",
+    "manifest": "plugins/julia/native/crates/yss-bayes-worker/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-bayes-worker-julia",
+    "manifest": "plugins/julia/native/crates/yss-bayes-worker-julia/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-worker",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-julia-worker",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-canonical-hash",
+    "manifest": "src-tauri/crates/yss-canonical-hash/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-chart-document",
+    "manifest": "src-tauri/crates/yss-chart-document/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-data-contract",
+    "manifest": "src-tauri/crates/yss-data-contract/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-database-contract",
+    "manifest": "src-tauri/crates/yss-database-contract/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-database-edit",
+    "manifest": "src-tauri/crates/yss-database-edit/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-database-runtime",
+    "manifest": "src-tauri/crates/yss-database-runtime/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-schema",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-datafusion",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-profile",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-store",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-arrow",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-io",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-database-schema",
+    "manifest": "src-tauri/crates/yss-database-schema/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-datafusion",
+    "manifest": "src-tauri/crates/yss-datafusion/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-dataset-profile",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-arrow",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-dataset-profile",
+    "manifest": "src-tauri/crates/yss-dataset-profile/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-dataset-store",
+    "manifest": "src-tauri/crates/yss-dataset-store/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-datafusion",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-arrow",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-io",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-diagnostics",
+    "manifest": "src-tauri/crates/yss-diagnostics/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-tracing",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-display-naming",
+    "manifest": "src-tauri/crates/yss-display-naming/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-execution",
+    "manifest": "src-tauri/crates/yss-execution/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-function-editor-projection",
+    "manifest": "src-tauri/crates/yss-function-editor-projection/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-history",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-analysis",
+    "manifest": "src-tauri/crates/yss-graph-analysis/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-compiler-diagnostics",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-resource-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-analysis-contract",
+    "manifest": "src-tauri/crates/yss-graph-analysis-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-catalog",
+    "manifest": "src-tauri/crates/yss-graph-catalog/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-compiler-diagnostics",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-compiler",
+    "manifest": "src-tauri/crates/yss-graph-compiler/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-compiler-diagnostics",
+    "manifest": "src-tauri/crates/yss-graph-compiler-diagnostics/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-document",
+    "manifest": "src-tauri/crates/yss-graph-document/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-document-edit",
+    "manifest": "src-tauri/crates/yss-graph-document-edit/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-editor",
+    "manifest": "src-tauri/crates/yss-graph-editor/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-resource-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-protocol",
+    "manifest": "src-tauri/crates/yss-graph-protocol/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-graph-registry",
+    "manifest": "src-tauri/crates/yss-graph-registry/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-resource-contract",
+    "manifest": "src-tauri/crates/yss-graph-resource-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-runtime",
+    "manifest": "src-tauri/crates/yss-graph-runtime/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-compiler",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-editor",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-resource-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-graph-type-mapping",
+    "manifest": "src-tauri/crates/yss-graph-type-mapping/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-julia-extension",
+    "manifest": "plugins/julia/native/crates/yss-julia-extension/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-bayes-artifact-datafusion",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-result",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-bayes-worker-julia",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-julia-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-julia-worker",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-sdk",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-julia-runtime",
+    "manifest": "plugins/julia/native/crates/yss-julia-runtime/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-julia-worker",
+    "manifest": "plugins/julia/native/crates/yss-julia-worker/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-julia-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-linalg",
+    "manifest": "src-tauri/crates/yss-linalg/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-math-expr",
+    "manifest": "src-tauri/crates/yss-math-expr/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-plugin-protocol",
+    "manifest": "src-tauri/crates/yss-plugin-protocol/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-plugin-runtime",
+    "manifest": "src-tauri/crates/yss-plugin-runtime/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-sdk",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-plugin-sdk",
+    "manifest": "src-tauri/crates/yss-plugin-sdk/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project",
+    "manifest": "src-tauri/crates/yss-project/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-dataset-store",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-display-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-function-editor-projection",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document-edit",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-change",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-history",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-operation",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-lifecycle",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-change",
+    "manifest": "src-tauri/crates/yss-project-change/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-filesystem",
+    "manifest": "src-tauri/crates/yss-project-filesystem/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-lifecycle",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-resource-naming",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-history",
+    "manifest": "src-tauri/crates/yss-project-history/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-identity",
+    "manifest": "src-tauri/crates/yss-project-identity/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-layout",
+    "manifest": "src-tauri/crates/yss-project-layout/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-project-model",
+    "manifest": "src-tauri/crates/yss-project-model/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-history",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-operation",
+    "manifest": "src-tauri/crates/yss-project-operation/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-progress",
+    "manifest": "src-tauri/crates/yss-project-progress/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-project-registry",
+    "manifest": "src-tauri/crates/yss-project-registry/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-layout",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-model",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-progress",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-registry-contract",
+    "manifest": "src-tauri/crates/yss-project-registry-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-registry-sqlite",
+    "manifest": "src-tauri/crates/yss-project-registry-sqlite/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-watcher",
+    "manifest": "src-tauri/crates/yss-project-watcher/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-change",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-project-watcher-notify",
+    "manifest": "src-tauri/crates/yss-project-watcher-notify/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-change",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-relational-contract",
+    "manifest": "src-tauri/crates/yss-relational-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-resource-lifecycle",
+    "manifest": "src-tauri/crates/yss-resource-lifecycle/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-chart-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-resource-naming",
+    "manifest": "src-tauri/crates/yss-resource-naming/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-sci",
+    "manifest": "src-tauri/crates/yss-sci/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-linalg",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-sci-contract",
+    "manifest": "src-tauri/crates/yss-sci-contract/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-sci-runtime",
+    "manifest": "src-tauri/crates/yss-sci-runtime/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-linalg",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-sql-source",
+    "manifest": "src-tauri/crates/yss-sql-source/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-statistical-harness",
+    "manifest": "src-tauri/crates/yss-statistical-harness/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-statistical-harness-sqlite",
+    "manifest": "src-tauri/crates/yss-statistical-harness-sqlite/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-tabular-arrow",
+    "manifest": "src-tauri/crates/yss-tabular-arrow/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-database-schema",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-tabular-contract",
+    "manifest": "src-tauri/crates/yss-tabular-contract/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-tabular-io",
+    "manifest": "src-tauri/crates/yss-tabular-io/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-tabular-arrow",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-tracing",
+    "manifest": "src-tauri/crates/yss-tracing/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yssbi",
+    "manifest": "src-tauri/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-agent-rig",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-api",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-application",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-automation-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-diagnostics",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-execution",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-progress",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry-sqlite",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher-notify",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-statistical-harness-sqlite",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-statistical-harness",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tracing",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  }
+]

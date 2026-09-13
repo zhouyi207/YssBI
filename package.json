@@ -7,6 +7,8 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "docs:module-map": "node docs/reference/generate-module-map.mjs",
+    "docs:crate-dependencies": "node scripts/generate-crate-dependencies.mjs",
+    "docs:crate-dependencies:check": "node scripts/generate-crate-dependencies.mjs --check",
     "docs:module-map:check": "node docs/reference/generate-module-map.mjs --check",
     "preview": "vite preview",
     "check": "pnpm check:ts && pnpm check:rs",
