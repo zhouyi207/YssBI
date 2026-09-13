@@ -222,6 +222,8 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，通过该 crate 的 `ScientificBackend::ols` 调用 composition root 注入的 SCI runtime。节点默认值与模型使用同一个配置定义；端口返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
+Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的后续假设检验由 Application 读取并复核结果身份，经 runtime 调用 SCI 的约束解析、线性化和 t/Wald 检验。IPC 使用中性请求/结果，不构造矩阵；通用数学语法由 `yss-math-expr` 拥有。
+
 Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），

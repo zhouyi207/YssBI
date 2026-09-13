@@ -63,6 +63,10 @@ add or commit them unless explicitly requested.
   projections in one direction and keep drafts separate until Save succeeds.
 - Dependencies flow toward domain and application logic, never from domain code
   toward UI, Tauri, services, or concrete infrastructure adapters.
+- Scientific computations flow from `yss-sci-runtime` to `yss-sci` to
+  `yss-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
+  runtime uses neutral inputs/results. Julia plugin crates own their Bayes
+  input and cancellation contracts and do not depend on host SCI crates.
 - Desktop IPC is owned by `yss-ipc-command`, `yss-ipc-event`, `yss-ipc-channel`
   and their shared `yss-ipc-contract`. Command owns the sole invoke registry;
   Event/Channel never depend on Command, and Contract has no Tauri or runtime

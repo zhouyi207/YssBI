@@ -114,7 +114,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 当前 gate 不保留 debt exemption list。真实 finding 直接失败；如果 policy 与目标架构需要共同改变，在同一变更中修改 implementation、policy、focused regression 和当前架构文档。
 
-`faer` 的外部依赖声明限定于 `yss-linalg`、`yss-sci`、`yss-sci-runtime` 和当前构造假设检验输入的 `yss-application`；生产使用限定于 Pure Leaf、SCI Core 和 Application 分类。Graph、Execution、Transport 和其他适配层通过业务契约获取科学计算能力，不直接使用 faer。原生矩阵与向量可以在科学计算实现中共享；项目数值错误、分解检查和秩阈值由 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md) 维护。
+`faer` 的外部依赖声明与生产使用仅允许 `yss-linalg`。Linalg 对外提供自己的矩阵/向量与借用视图，不暴露 faer 类型。`rust.internal.scientific-boundary` 在 canonical origin 上限制 Linalg 只由 SCI 调用、SCI 只由 runtime 调用，并拒绝插件到任意 SCI crate 的生产引用。现有 workspace 边界检查同时验证 Cargo 声明；插件的传递依赖检查不再允许 `yss-sci-contract`。矩阵封装、数值错误、分解检查和秩阈值见 [`yss-linalg` README](../../src-tauri/crates/yss-linalg/README.md)。
 
 `walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-project-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
 
