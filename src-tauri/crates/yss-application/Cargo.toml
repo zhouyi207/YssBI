@@ -18,7 +18,6 @@ test-support = [
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 atomicwrites.workspace = true
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
-faer.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -50,7 +49,6 @@ yss-graph-registry = { path = "../yss-graph-registry" }
 yss-graph-resource-contract = { path = "../yss-graph-resource-contract" }
 yss-graph-runtime = { path = "../yss-graph-runtime" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
-yss-math-expr = { path = "../yss-math-expr" }
 dunce.workspace = true
 yss-project = { path = "../yss-project" }
 yss-project-change = { path = "../yss-project-change" }

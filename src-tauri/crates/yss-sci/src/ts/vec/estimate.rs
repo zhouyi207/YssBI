@@ -217,7 +217,7 @@ pub fn vec_estimate(
 
         let sigma2_eq = ss_r / sigma2_divisor;
         let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-        let cov_eq = faer::Scale(sigma2_eq) * &xtx_inv_nd;
+        let cov_eq = yss_linalg::Scale(sigma2_eq) * &xtx_inv_nd;
         cov_beta.push(cov_eq.clone());
         let se: Col<f64> = Col::from_fn(cov_eq.nrows().min(cov_eq.ncols()), |i| {
             cov_eq[(i, i)].sqrt()
@@ -370,7 +370,7 @@ pub fn vec_estimate(
     // veclmar: LM 残差自相关检验（Stata veclmar，与 varlmar 相同思路）
     // LM_s = (T - d - 0.5) * ln(|Σ̂| / |Σ̃_s|)，df = K²，使用 ML 估计 Σ
     let u_mat = Mat::from_fn(n, k, |i, j| residuals[j][i]);
-    let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / faer::Scale(n as f64);
+    let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / yss_linalg::Scale(n as f64);
     let mut det_sigma_ml_copy = sigma_ml.clone();
     let det_sigma_hat = match cholesky_lower_in_place(&mut det_sigma_ml_copy) {
         Ok(()) => {
@@ -417,7 +417,7 @@ pub fn vec_estimate(
             }
         }
 
-        let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / faer::Scale(n as f64);
+        let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_linalg::Scale(n as f64);
         let mut det_tilde = sigma_tilde.clone();
         let det_sigma_tilde = match cholesky_lower_in_place(&mut det_tilde) {
             Ok(()) => {

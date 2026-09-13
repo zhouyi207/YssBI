@@ -2,8 +2,8 @@
 //!
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
-use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF};
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 /// Durbin-Watson 统计量（Stata estat dwatson）

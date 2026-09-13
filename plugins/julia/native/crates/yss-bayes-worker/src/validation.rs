@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::{StatisticalInput, StatisticalScalar};
 use yss_bayes_model::{
     BayesModelSpec, BinaryOp, Expression, LikelihoodSpec, MathFunction, UnaryOp,
 };
-use yss_sci_contract::{StatisticalInput, StatisticalScalar};
 
 pub(super) fn validate_inputs(
     model: &BayesModelSpec,

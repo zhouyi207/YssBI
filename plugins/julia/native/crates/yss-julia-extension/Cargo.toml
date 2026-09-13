@@ -9,11 +9,11 @@ publish = false
 [dependencies]
 yss-plugin-protocol = { path = "../../../../../src-tauri/crates/yss-plugin-protocol" }
 yss-plugin-sdk = { path = "../../../../../src-tauri/crates/yss-plugin-sdk" }
-yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }
 yss-math-expr = { path = "../../../../../src-tauri/crates/yss-math-expr" }
 yss-bayes-runtime = { path = "../yss-bayes-runtime" }
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
+yss-bayes-worker = { path = "../yss-bayes-worker" }
 yss-bayes-worker-julia = { path = "../yss-bayes-worker-julia" }
 yss-bayes-artifact-datafusion = { path = "../yss-bayes-artifact-datafusion" }
 yss-julia-runtime = { path = "../yss-julia-runtime" }

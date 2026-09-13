@@ -14,12 +14,12 @@ use yss_bayes_result::{
     TaskStatus, TracePlotData,
 };
 use yss_bayes_worker::{
+    AbsoluteDeadline, BayesCancellationSource, CancelDeliveryControl, ExecutionControl,
+    StatisticalInput,
+};
+use yss_bayes_worker::{
     BayesArtifactMediaType, BayesTaskHandle, BayesTaskId, BayesTaskResult, BayesWorkerClient,
     BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, ValidatedBayesTask,
-};
-use yss_sci_contract::{
-    AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
-    StatisticalInput,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -262,7 +262,7 @@ struct BayesInferenceState {
     results: HashMap<String, StoredInferenceResult>,
     worker_queue: VecDeque<BayesWorkerJob>,
     worker_handles: HashMap<String, BayesTaskHandle>,
-    worker_sources: HashMap<String, Arc<SciCancellationSource>>,
+    worker_sources: HashMap<String, Arc<BayesCancellationSource>>,
     worker_runner_active: bool,
 }
 
@@ -274,7 +274,7 @@ struct StoredInferenceResult {
 
 struct BayesWorkerJob {
     task: ValidatedBayesTask,
-    cancellation: Arc<SciCancellationSource>,
+    cancellation: Arc<BayesCancellationSource>,
     deadline: Instant,
 }
 
@@ -337,7 +337,7 @@ impl BayesInferenceService {
             .map_err(|_| BayesApplicationError::ValidationFailed)?;
         let task = ValidatedBayesTask::try_new(worker_task_id, spec, inputs)
             .map_err(|_| BayesApplicationError::ValidationFailed)?;
-        let cancellation = Arc::new(SciCancellationSource::new().0);
+        let cancellation = Arc::new(BayesCancellationSource::new().0);
         let queued = queued_task(task_id.clone());
         let should_start_runner = {
             let mut state = self.lock_state()?;
@@ -998,7 +998,7 @@ mod tests {
         BayesWorkerAuthority, BayesWorkerError, BayesWorkerPort, BayesWorkerTerminalCode,
         ValidatedBayesTask,
     };
-    use yss_sci_contract::{
+    use yss_bayes_worker::{
         CancelDeliveryControl, ExecutionControl, StatisticalInput, StatisticalScalar,
     };
 

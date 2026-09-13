@@ -7,3 +7,5 @@ pub mod unit_root;
 pub mod var;
 pub mod vec;
 pub mod vec_vecrank_cv;
+
+pub mod models;

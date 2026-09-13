@@ -18,7 +18,7 @@ fn build_white_z_full(x: &Mat<f64>, k: usize, p: usize, n: usize) -> Vec<Vec<f64
 }
 
 /// 从列向量列表构建设计矩阵
-fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<faer::Mat<f64>> {
+fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<yss_linalg::Mat<f64>> {
     let n_cols = z_cols.len();
     if n_cols == 0 {
         return None;
@@ -29,7 +29,7 @@ fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<faer::Mat<f64>> {
             z_raw.push(col[i]);
         }
     }
-    let z_arr = faer::MatRef::from_row_major_slice(&(z_raw), n, n_cols).to_owned();
+    let z_arr = yss_linalg::MatRef::from_row_major_slice(&(z_raw), n, n_cols).to_owned();
     Some(z_arr.as_ref().to_owned())
 }
 

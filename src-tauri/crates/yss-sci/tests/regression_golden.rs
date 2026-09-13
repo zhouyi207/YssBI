@@ -2,8 +2,8 @@
 //! 覆盖 ols_summary / wls_summary 窗口展示的所有内容
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
-use faer::{Col, Mat};
 use std::f64::consts::PI;
+use yss_linalg::{Col, Mat};
 use yss_sci::regression::diagnostics;
 use yss_sci::regression::linear_model::{IV2SLS, IV2SLSConfig, OLS, WLS, WLSConfig};
 
@@ -47,7 +47,7 @@ fn load_iris() -> (Mat<f64>, Col<f64>, Col<f64>) {
         exog_data.push(petal_length[i]);
         exog_data.push(petal_width[i]);
     }
-    let exog = faer::MatRef::from_row_major_slice(&(exog_data), n, 4).to_owned();
+    let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_data), n, 4).to_owned();
     let endog = (sepal_length).into_iter().collect::<Col<f64>>();
     let weights = (sepal_width).into_iter().collect::<Col<f64>>();
     (exog, endog, weights)

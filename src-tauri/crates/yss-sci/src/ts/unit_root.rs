@@ -7,8 +7,8 @@
 
 use super::distributions::normal_cdf;
 
-use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, StudentsT};
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 /// 回归类型（对应 Stata dfuller 选项）
@@ -240,7 +240,7 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
     let sigma2 = rss / df_resid as f64;
 
     let xtx_inv_nd = xtx_inv.as_ref().to_owned();
-    let cov_beta = faer::Scale(sigma2) * &xtx_inv_nd;
+    let cov_beta = yss_linalg::Scale(sigma2) * &xtx_inv_nd;
 
     // y_{t-1} 的系数在列 lagged_col
     let betas_nd = betas.as_ref().to_owned();

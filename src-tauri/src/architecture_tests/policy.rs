@@ -488,8 +488,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/command_hypothesis.rs",
         fully_qualified_owner: "yss_ipc_command::commands::command_hypothesis",
         canonical_origin_targets: &[
-            "yss_application::hypothesis::HypothesisTestInput",
-            "yss_application::hypothesis::run_hypothesis_test",
+            "yss_sci_contract::hypothesis::HypothesisTestInput",
+            "yss_sci_runtime::hypothesis::run_hypothesis_test",
             "yss_ipc_command::schema::statistics::HypothesisTestResponseDto",
             "yss_ipc_command::error::CommandError",
         ],
@@ -788,7 +788,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_ipc_command::schema::result::ResultAnalysisResponseDto",
             "yss_application::execution::session_slot::ApplicationState",
             "yss_application::execution::result_query::report::ReportQueryError",
-            "yss_application::hypothesis::HypothesisApplicationError::InvalidInput",
+            "yss_sci_contract::hypothesis::HypothesisError::InvalidInput",
         ],
     },
     InternalDependencyCapability {
@@ -809,7 +809,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/schema/statistics.rs",
         fully_qualified_owner: "yss_ipc_command::schema::statistics",
-        canonical_origin_targets: &["yss_application::hypothesis::HypothesisTestOutput"],
+        canonical_origin_targets: &["yss_sci_contract::hypothesis::HypothesisTestOutput"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
@@ -882,8 +882,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yss_ipc_command::commands::command_panel_did",
         canonical_origin_targets: &[
             "yss_ipc_command::error::CommandError",
-            "yss_sci_runtime::panel::did::ComputeDidFakeGroupRequest",
-            "yss_sci_runtime::panel::did::DidPlaceboFakeGroupBlock",
+            "yss_sci_contract::panel::ComputeDidFakeGroupRequest",
+            "yss_sci_contract::panel::DidPlaceboFakeGroupBlock",
             "yss_sci_runtime::panel::did::compute_fake_group_ri",
         ],
     },
@@ -892,7 +892,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/command_parse_at.rs",
         fully_qualified_owner: "yss_ipc_command::commands::command_parse_at",
         canonical_origin_targets: &[
-            "yss_application::hypothesis::parse_at_values",
+            "yss_sci_runtime::hypothesis::parse_at_values",
             "yss_ipc_command::error::CommandError",
         ],
     },
@@ -1818,6 +1818,7 @@ pub(super) fn rust_dependency_findings_with_capabilities(
         .iter()
         .filter_map(|dependency| {
             let CanonicalOrigin::Repository {
+                package_name,
                 repository_relative_declaration_file,
                 ..
             } = &dependency.origin
@@ -1828,22 +1829,39 @@ pub(super) fn rust_dependency_findings_with_capabilities(
             let target_layer = classification
                 .get(repository_relative_declaration_file)
                 .copied();
-            if target_layer.is_some_and(|target| {
-                internal_layer_dependency_is_allowed(source_layer, target)
-                    || capabilities.iter().any(|capability| {
-                        capability.source_layer == source_layer
-                            && capability.repository_relative_source_file == dependency.source_file
-                            && capability.fully_qualified_owner == dependency.owner
-                            && capability
-                                .canonical_origin_targets
-                                .contains(&dependency.canonical_origin_target.as_str())
-                    })
-            }) {
+            let crosses_scientific_boundary = (package_name == "yss-linalg"
+                && !matches!(dependency.owning_package.as_str(), "yss-linalg" | "yss-sci"))
+                || (package_name == "yss-sci"
+                    && !matches!(
+                        dependency.owning_package.as_str(),
+                        "yss-sci" | "yss-sci-runtime"
+                    ))
+                || (dependency.source_file.starts_with("plugins/")
+                    && (package_name == "yss-sci" || package_name.starts_with("yss-sci-")));
+            if !crosses_scientific_boundary
+                && target_layer.is_some_and(|target| {
+                    internal_layer_dependency_is_allowed(source_layer, target)
+                        || capabilities.iter().any(|capability| {
+                            capability.source_layer == source_layer
+                                && capability.repository_relative_source_file
+                                    == dependency.source_file
+                                && capability.fully_qualified_owner == dependency.owner
+                                && capability
+                                    .canonical_origin_targets
+                                    .contains(&dependency.canonical_origin_target.as_str())
+                        })
+                })
+            {
                 return None;
             }
             Some(ArchitectureFinding {
                 key: ArchitectureFindingKey {
-                    rule_id: "rust.internal.source-layer".to_owned(),
+                    rule_id: if crosses_scientific_boundary {
+                        "rust.internal.scientific-boundary"
+                    } else {
+                        "rust.internal.source-layer"
+                    }
+                    .to_owned(),
                     repository_relative_source_file: dependency.source_file.clone(),
                     fully_qualified_owner: dependency.owner.clone(),
                     dependency_kind: dependency.kind,

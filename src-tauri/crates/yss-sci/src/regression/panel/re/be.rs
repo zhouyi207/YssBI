@@ -31,7 +31,7 @@ pub fn fit_panel_re_be(
         }
     }
     let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
-    let x_b = faer::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
+    let x_b = yss_linalg::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, omitted_be) = {
         let col_is_dummy = vec![false; k];

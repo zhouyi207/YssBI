@@ -1,4 +1,4 @@
-use faer::Mat;
+use yss_linalg::Mat;
 use yss_sci::ts::var::{VAR, VARConfig};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
 

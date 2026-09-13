@@ -7,10 +7,10 @@
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal};
 use statrs::statistics::Statistics;
 use yss_linalg::matrix_rank;
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 /// LIML 配置（与 2SLS 一致）
@@ -137,7 +137,7 @@ impl IVLIML {
                 z_raw.push(self.instruments[(i, j)]);
             }
         }
-        let z = faer::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
+        let z = yss_linalg::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
 
         // X1 = [const?, exog]
         let mut x1_raw = Vec::with_capacity(n * k1);
@@ -149,7 +149,7 @@ impl IVLIML {
                 x1_raw.push(self.exog[(i, j)]);
             }
         }
-        let x1 = faer::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
+        let x1 = yss_linalg::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
 
         // X = [const?, exog, endog_reg] (structural)
         let k_x = if self.config.constant {
@@ -169,7 +169,7 @@ impl IVLIML {
                 x_raw.push(self.endog_reg[(i, j)]);
             }
         }
-        let x = faer::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
+        let x = yss_linalg::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
 
         // Ỹ = [y Y] (n × (p+1))
         let mut y_tilde_raw = Vec::with_capacity(n * (k_endog + 1));
@@ -179,7 +179,8 @@ impl IVLIML {
                 y_tilde_raw.push(self.endog_reg[(i, j)]);
             }
         }
-        let y_tilde = faer::MatRef::from_row_major_slice(&(y_tilde_raw), n, k_endog + 1).to_owned();
+        let y_tilde =
+            yss_linalg::MatRef::from_row_major_slice(&(y_tilde_raw), n, k_endog + 1).to_owned();
 
         let z_matrix = z.as_ref().to_owned();
         let x1_matrix = x1.as_ref().to_owned();
@@ -257,11 +258,11 @@ impl IVLIML {
         let ztx_nd = ztx.as_ref().to_owned();
         let zty_y_nd = zty_y.as_ref().to_owned();
 
-        let xt_ikmz_x_nd: Mat<f64> = faer::Scale(1.0 - kappa) * &xtx_nd
-            + faer::Scale(kappa)
+        let xt_ikmz_x_nd: Mat<f64> = yss_linalg::Scale(1.0 - kappa) * &xtx_nd
+            + yss_linalg::Scale(kappa)
                 * ((xtz_nd.as_ref() * ztz_inv_nd.as_ref()).as_ref() * ztx_nd.as_ref());
-        let xt_ikmz_y_nd: Col<f64> = faer::Scale(1.0 - kappa) * &xty_nd
-            + faer::Scale(kappa)
+        let xt_ikmz_y_nd: Col<f64> = yss_linalg::Scale(1.0 - kappa) * &xty_nd
+            + yss_linalg::Scale(kappa)
                 * ((xtz_nd.as_ref() * ztz_inv_nd.as_ref()).as_ref() * zty_y_nd.as_ref());
 
         let xt_ikmz_x_matrix = xt_ikmz_x_nd.as_ref().to_owned();
@@ -327,8 +328,8 @@ impl IVLIML {
             .map(|&z| 2.0 * (1.0 - std_normal.cdf(z.abs())))
             .collect();
         let z_crit = std_normal.inverse_cdf(0.975);
-        let ci_lower = &betas_nd - faer::Scale(z_crit) * &std_err;
-        let ci_upper = &betas_nd + faer::Scale(z_crit) * &std_err;
+        let ci_lower = &betas_nd - yss_linalg::Scale(z_crit) * &std_err;
+        let ci_upper = &betas_nd + yss_linalg::Scale(z_crit) * &std_err;
 
         let covariance_type = if self.config.cov_type.is_empty() {
             "nonrobust".to_string()
@@ -391,7 +392,7 @@ impl IVLIML {
             } else {
                 1e-300
             };
-            let cov_gamma = faer::Scale(sigma2_j) * &ztz_inv_nd;
+            let cov_gamma = yss_linalg::Scale(sigma2_j) * &ztz_inv_nd;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
             let gamma_nd = gamma.as_ref().to_owned();
             let t_dist = statrs::distribution::StudentsT::new(0.0, 1.0, df_z as f64)

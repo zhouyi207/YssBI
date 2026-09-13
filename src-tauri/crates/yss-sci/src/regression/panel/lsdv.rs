@@ -7,8 +7,8 @@
 
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
-use faer::{Col, Mat};
 use std::collections::HashMap;
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 use yss_sci_contract::regression::CovParams;
 
@@ -67,7 +67,7 @@ pub fn fit_panel_lsdv(
         }
     }
 
-    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
+    let x_lsdv = yss_linalg::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     // col_is_dummy: exog cols = false, entity dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
@@ -285,7 +285,7 @@ pub fn fit_panel_lsdv_time(
         }
     }
 
-    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
+    let x_lsdv = yss_linalg::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     // col_is_dummy: exog cols = false, time dummies = true. Intercept at col 0.
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
@@ -516,7 +516,7 @@ pub fn fit_panel_lsdv_twoway(
         }
     }
 
-    let x_lsdv = faer::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
+    let x_lsdv = yss_linalg::MatRef::from_row_major_slice(&(x_data), n, k + n_dummies).to_owned();
 
     let col_is_dummy: Vec<bool> = (0..k + n_dummies).map(|j| j >= k).collect();
     let (x_reduced, omitted_indices) = drop_collinear_columns(&x_lsdv, &col_is_dummy, Some(0))?;

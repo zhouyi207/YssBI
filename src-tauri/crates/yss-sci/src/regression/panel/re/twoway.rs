@@ -110,7 +110,7 @@ pub fn fit_panel_re_fgls_twoway(
         }
     }
     let y_b_e_arr = (y_b_e).into_iter().collect::<Col<f64>>();
-    let x_b_e_arr = faer::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
+    let x_b_e_arr = yss_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -146,7 +146,7 @@ pub fn fit_panel_re_fgls_twoway(
         }
     }
     let y_b_t_arr = (y_b_t).into_iter().collect::<Col<f64>>();
-    let x_b_t_arr = faer::MatRef::from_row_major_slice(&(x_b_t_data), n_b_t, k).to_owned();
+    let x_b_t_arr = yss_linalg::MatRef::from_row_major_slice(&(x_b_t_data), n_b_t, k).to_owned();
     let (x_b_t_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -404,8 +404,8 @@ pub fn fit_panel_re_fgls_twoway(
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
-    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
+    let conf_int_left_z = &result.betas - yss_linalg::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + yss_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,
@@ -611,7 +611,7 @@ pub fn fit_panel_re_mle_twoway(
             x_b_e_data.push(x_b_e[i][c]);
         }
     }
-    let x_b_e_arr = faer::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
+    let x_b_e_arr = yss_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = drop_collinear_columns(
         &x_b_e_arr,
         &vec![false; k],
@@ -635,7 +635,7 @@ pub fn fit_panel_re_mle_twoway(
 
     let (_, y_b_t, x_b_t) = group_means(&y_vec, exog, time_id);
     let n_b_t = y_b_t.len();
-    let x_b_t_arr = faer::MatRef::from_row_major_slice(&({
+    let x_b_t_arr = yss_linalg::MatRef::from_row_major_slice(&({
         let mut v = Vec::with_capacity(n_b_t * k);
         for i in 0..n_b_t {
             for c in 0..k {
@@ -685,7 +685,7 @@ pub fn fit_panel_re_mle_twoway(
         let x_const_star: Vec<f64> = (0..n)
             .map(|_| 1.0 - theta_id - theta_time + theta_total)
             .collect();
-        let x_const = faer::MatRef::from_row_major_slice(&(x_const_star), n, 1).to_owned();
+        let x_const = yss_linalg::MatRef::from_row_major_slice(&(x_const_star), n, 1).to_owned();
         let res_const = OLS {
             endog: y_star_const,
             exog: x_const,
@@ -727,7 +727,7 @@ pub fn fit_panel_re_mle_twoway(
             let x_c: Vec<f64> = (0..n)
                 .map(|_| 1.0 - theta_id - theta_time + theta_total)
                 .collect();
-            let x_c_arr = faer::MatRef::from_row_major_slice(&(x_c), n, 1).to_owned();
+            let x_c_arr = yss_linalg::MatRef::from_row_major_slice(&(x_c), n, 1).to_owned();
             let res_c = OLS {
                 endog: y_star_c,
                 exog: x_c_arr,
@@ -1083,8 +1083,8 @@ pub fn fit_panel_re_mle_twoway(
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
-    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
+    let conf_int_left_z = &result.betas - yss_linalg::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + yss_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

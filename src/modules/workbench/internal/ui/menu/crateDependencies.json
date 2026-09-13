@@ -172,12 +172,6 @@
         "target": null
       },
       {
-        "name": "yss-math-expr",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-plugin-protocol",
         "kind": "normal",
         "optional": false,
@@ -379,12 +373,6 @@
         "kind": "normal",
         "optional": false,
         "target": null
-      },
-      {
-        "name": "yss-sci-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
       }
     ]
   },
@@ -400,12 +388,6 @@
       },
       {
         "name": "yss-bayes-result",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -436,12 +418,6 @@
       },
       {
         "name": "yss-julia-worker",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1532,6 +1508,12 @@
         "target": null
       },
       {
+        "name": "yss-bayes-worker",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-julia-runtime",
         "kind": "normal",
         "optional": false,
@@ -1557,12 +1539,6 @@
       },
       {
         "name": "yss-plugin-sdk",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -2077,6 +2053,12 @@
         "target": null
       },
       {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-sci-contract",
         "kind": "normal",
         "optional": false,
@@ -2093,12 +2075,6 @@
     "name": "yss-sci-runtime",
     "manifest": "src-tauri/crates/yss-sci-runtime/Cargo.toml",
     "dependencies": [
-      {
-        "name": "yss-linalg",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
       {
         "name": "yss-sci-contract",
         "kind": "normal",

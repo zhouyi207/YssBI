@@ -1,10 +1,10 @@
-use super::RegressionFit;
-use super::types::{
-    BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, PraisInfo,
-    RegressionStatistics,
-};
+use super::types::PraisInfo;
 use crate::error::computation_failed;
 use serde::Serialize;
+use yss_sci_contract::regression::fit::{
+    BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, RegressionFit,
+    RegressionStatistics,
+};
 use yss_sci_contract::regression::report::{
     OlsDiagnostics, OlsModelSummary, OlsSummary, RegressionCoefficient,
 };

@@ -1,7 +1,7 @@
 //! Ordinary least squares: one configuration and one fitted result.
 mod fit;
 mod inference;
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use yss_sci_contract::regression::OlsOptions;
 
 #[derive(Debug, Clone, PartialEq)]

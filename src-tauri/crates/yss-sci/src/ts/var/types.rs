@@ -36,7 +36,7 @@ fn cholesky_lower_in_place(a: &mut Mat<f64>) -> Result<(), ()> {
     Ok(())
 }
 
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use serde::{Deserialize, Serialize};
 use yss_linalg::{MatrixExt, Solve};
 

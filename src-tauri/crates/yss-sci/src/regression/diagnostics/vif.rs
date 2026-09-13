@@ -38,7 +38,7 @@ pub fn vif_centered(x: &Mat<f64>, has_constant: bool) -> Result<Vec<VifEntry>, S
                 }
             }
         }
-        let x_other = faer::MatRef::from_row_major_slice(&(x_other), n, k - 1).to_owned();
+        let x_other = yss_linalg::MatRef::from_row_major_slice(&(x_other), n, k - 1).to_owned();
 
         let y_j: Col<f64> = (0..n).map(|i| x[(i, j)]).collect();
 

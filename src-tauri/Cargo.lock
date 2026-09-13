@@ -9231,7 +9231,6 @@ dependencies = [
  "arrow",
  "atomicwrites",
  "dunce",
- "faer",
  "serde",
  "serde_json",
  "sqlx",
@@ -9266,7 +9265,6 @@ dependencies = [
  "yss-graph-resource-contract",
  "yss-graph-runtime",
  "yss-graph-type-mapping",
- "yss-math-expr",
  "yss-plugin-protocol",
  "yss-project",
  "yss-project-change",
@@ -9350,18 +9348,17 @@ dependencies = [
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-worker",
- "yss-sci-contract",
 ]
 
 [[package]]
 name = "yss-bayes-worker"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "yss-bayes-model",
  "yss-bayes-result",
- "yss-sci-contract",
 ]
 
 [[package]]
@@ -9377,7 +9374,6 @@ dependencies = [
  "yss-bayes-result",
  "yss-bayes-worker",
  "yss-julia-worker",
- "yss-sci-contract",
 ]
 
 [[package]]
@@ -9829,13 +9825,13 @@ dependencies = [
  "yss-bayes-model",
  "yss-bayes-result",
  "yss-bayes-runtime",
+ "yss-bayes-worker",
  "yss-bayes-worker-julia",
  "yss-julia-runtime",
  "yss-julia-worker",
  "yss-math-expr",
  "yss-plugin-protocol",
  "yss-plugin-sdk",
- "yss-sci-contract",
 ]
 
 [[package]]
@@ -10122,11 +10118,13 @@ name = "yss-sci"
 version = "0.1.0"
 dependencies = [
  "csv",
- "faer",
  "num-traits",
+ "rand 0.10.2",
  "serde",
+ "serde_json",
  "statrs",
  "yss-linalg",
+ "yss-math-expr",
  "yss-sci-contract",
 ]
 
@@ -10145,13 +10143,9 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "chrono",
- "faer",
- "rand 0.10.2",
  "serde",
  "serde_json",
- "statrs",
  "thiserror 2.0.20",
- "yss-linalg",
  "yss-sci",
  "yss-sci-contract",
 ]

@@ -4,7 +4,7 @@
 //! 与 Stata D. 算子一致：仅在原始数据中相邻时间点之间差分（delta=1），不跨 gap。
 
 use crate::regression::linear_model::OLS;
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use yss_sci_contract::regression::CovParams;
 
 /// Panel First Difference estimator
@@ -65,7 +65,7 @@ pub fn fit_panel_fd(
             dx_data.push(dx_cols[c][i]);
         }
     }
-    let dx_arr = faer::MatRef::from_row_major_slice(&(dx_data), n_fd, k).to_owned();
+    let dx_arr = yss_linalg::MatRef::from_row_major_slice(&(dx_data), n_fd, k).to_owned();
 
     // 若存在常数列，差分后全为 0，需剔除
     let (dx_use, has_const) = if constant && k > 0 {

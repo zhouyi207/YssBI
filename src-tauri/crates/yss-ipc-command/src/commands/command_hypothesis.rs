@@ -3,7 +3,8 @@
 use crate::error::CommandError;
 use crate::schema::statistics::HypothesisTestResponseDto as HypothesisTestResponse;
 use serde::Deserialize;
-use yss_application::hypothesis::{HypothesisTestInput, run_hypothesis_test};
+use yss_sci_contract::hypothesis::HypothesisTestInput;
+use yss_sci_runtime::hypothesis::run_hypothesis_test;
 
 /// 假设检验请求
 #[derive(Debug, Deserialize)]

@@ -266,7 +266,7 @@ pub fn fit_panel_re_mle(
                 .collect();
             // Quasi-demeaned constant: 1 - θ (not 1), so OLS gives α = ȳ
             let x_star_const: Vec<f64> = (0..n).map(|i| 1.0 - theta_arr[i]).collect();
-            let x_const = faer::MatRef::from_row_major_slice(&(x_star_const), n, 1).to_owned();
+            let x_const = yss_linalg::MatRef::from_row_major_slice(&(x_star_const), n, 1).to_owned();
             let (x_use, _) = drop_collinear_columns(&x_const, &[false], Some(0))
                 .map_err(|e| format!("const-only init: {}", e))?;
             let res = OLS {
@@ -687,8 +687,8 @@ pub fn fit_panel_re_mle(
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - faer::Scale(z_crit) * &result.stds;
-    let conf_int_right_z = &result.betas + faer::Scale(z_crit) * &result.stds;
+    let conf_int_left_z = &result.betas - yss_linalg::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + yss_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

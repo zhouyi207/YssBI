@@ -2,10 +2,10 @@
 
 Application-facing scientific computation entry points over `yss-sci`.
 
-Numerical preparation uses native faer matrices and vectors. External contracts
-retain ordinary vectors, slices and report records; Arrow remains the tabular
-exchange representation. Row-major inputs and serialized rows are converted
-explicitly, independently of faer storage order or padding.
+Runtime calls SCI with ordinary vectors, slices and contract records. It has no
+faer or `yss-linalg` dependency and does not construct numerical matrices or own
+estimators. Arrow remains the tabular exchange representation; SCI converts
+numeric inputs into Linalg matrices and returns computed results.
 
 The composition root constructs `SciRuntimeBackend`, which directly implements
 `yss_sci_contract::scientific::ScientificBackend`. Application and Execution share
@@ -16,20 +16,20 @@ matrix decomposition.
 
 ## Capability modules
 
-| Module               | Responsibility                                                  |
-| -------------------- | --------------------------------------------------------------- |
-| `service`            | Private implementation of the shared scientific backend port    |
-| `regression`         | Model input preparation and projection of computed statistics   |
-| `regression::report` | Report labels, fields and serialization                         |
-| `regression::types`  | Existing report/model records used by capability APIs           |
-| `hypothesis`         | Validated t/Wald-test entry points over shared contract results |
-| `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points           |
-| `panel`              | Panel inference workflows                                       |
-| `data`               | Arrow panel/time alignment and tabular transformations          |
-| `density`            | Density computation entry point                                 |
+| Module               | Responsibility                                               |
+| -------------------- | ------------------------------------------------------------ |
+| `service`            | Private implementation of the shared scientific backend port |
+| `regression`         | SCI fit entry points and result serialization                |
+| `regression::report` | Report labels, fields and serialization                      |
+| `regression::types`  | Existing report/model records used by capability APIs        |
+| `hypothesis`         | Neutral hypothesis and margins `at()` entry points into SCI  |
+| `time_series`        | ACF/PACF, serial tests, ADF, VAR and VEC entry points        |
+| `panel`              | Entry point into SCI DID randomization inference             |
+| `data`               | Arrow panel/time alignment and tabular transformations       |
+| `density`            | Density computation entry point                              |
 
-There is no empty `SciContext` or parallel `api/backends/rust` route. Each
-capability owns its entry and implementation together.
+There is no empty `SciContext` or parallel `api/backends/rust` route. Capability
+entry points call the corresponding SCI owner; report encoding stays here.
 
 ## OLS data flow
 
@@ -38,10 +38,10 @@ capability owns its entry and implementation together.
 from that contract. The runtime passes the selected options to the model without
 an intermediate configuration mirror.
 
-`regression::fit_ols` projects `OlsFit`, including its already-computed fitted
+SCI's `regression::fit::fit_ols` projects `OlsFit`, including its already-computed fitted
 values and residuals. `regression::report::ols_report` returns typed model and
 coefficient statistics without duplicating observation arrays. The shared scientific
-port returns these statistics alongside native fitted/residual vectors and the fitted
+port returns these statistics alongside ordinary fitted/residual vectors and the fitted
 design columns. Execution shares that immutable result across its report outputs;
 Application projects report references and performs subsequent analysis against the
 same fit. No opaque JSON report crosses the scientific port. Numerical calculations

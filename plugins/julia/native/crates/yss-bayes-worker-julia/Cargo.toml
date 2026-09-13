@@ -16,4 +16,3 @@ yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
 yss-bayes-worker = { path = "../yss-bayes-worker" }
 yss-julia-worker = { path = "../yss-julia-worker" }
-yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }

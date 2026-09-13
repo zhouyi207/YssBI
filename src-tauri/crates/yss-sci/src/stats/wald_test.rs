@@ -2,8 +2,8 @@
 //!
 //! 统一处理单/多约束，F = W/q ~ F(q, df_residual)。
 
-use faer::{Col, Mat};
 use statrs::distribution::{ContinuousCDF, FisherSnedecor};
+use yss_linalg::{Col, Mat};
 
 use yss_sci_contract::hypothesis::{Alternative, WaldTestResult};
 
@@ -108,7 +108,7 @@ pub fn wald_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use faer::{col, mat};
+    use yss_linalg::{col, mat};
 
     #[test]
     fn test_wald_single_constraint() {

@@ -1,48 +1,14 @@
 //! Hypothesis testing orchestration: parse → linearize → format → dispatch.
 use yss_sci_contract::hypothesis::Alternative as SciAlternative;
 
-use faer::{Col, Mat};
 use std::collections::HashMap;
+use yss_linalg::{Col, Mat};
 
+use super::linear_test::{LinearHypothesisTestInput, t_test, wald_test};
 use yss_math_expr::{
     BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
-use yss_sci_contract::SciError;
-use yss_sci_runtime::hypothesis::{LinearHypothesisTestInput, t_test, wald_test};
-
-pub struct HypothesisTestInput {
-    pub betas: Vec<f64>,
-    pub cov_beta: Vec<Vec<f64>>,
-    pub df_residual: usize,
-    pub param_names: Vec<String>,
-    pub hypothesis: String,
-}
-
-pub struct HypothesisTestOutput {
-    pub test_type: String,
-    pub h0_form: String,
-    pub h1_form: String,
-    pub alternative: String,
-    pub r_beta_minus_r: f64,
-    pub stat: f64,
-    pub df1: usize,
-    pub df2: usize,
-    pub p_value: f64,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum HypothesisApplicationError {
-    #[error("hypothesis input is invalid: {0}")]
-    InvalidInput(String),
-    #[error(transparent)]
-    Scientific(#[from] SciError),
-}
-
-impl From<String> for HypothesisApplicationError {
-    fn from(detail: String) -> Self {
-        Self::InvalidInput(detail)
-    }
-}
+use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Alternative {
@@ -76,14 +42,12 @@ struct ResolvedLinearHypothesis {
 fn resolve_linear_hypothesis(
     hypothesis: &str,
     param_names: &[String],
-) -> Result<ResolvedLinearHypothesis, HypothesisApplicationError> {
-    let constraints =
-        parse_relations(hypothesis, ParseOptions::plain(param_names)).map_err(|error| {
-            HypothesisApplicationError::InvalidInput(format!("解析假设失败: {error}"))
-        })?;
-    let kind = constraint_kind(&constraints).map_err(HypothesisApplicationError::from)?;
+) -> Result<ResolvedLinearHypothesis, HypothesisError> {
+    let constraints = parse_relations(hypothesis, ParseOptions::plain(param_names))
+        .map_err(|error| HypothesisError::InvalidInput(format!("解析假设失败: {error}")))?;
+    let kind = constraint_kind(&constraints).map_err(HypothesisError::from)?;
     if constraints.len() > 1 && kind != LinearConstraintKind::Eq {
-        return Err(HypothesisApplicationError::InvalidInput(
+        return Err(HypothesisError::InvalidInput(
             "Wald 检验仅支持等式约束 (Rβ = r)，请使用 = 而非 > 或 <".to_string(),
         ));
     }
@@ -100,7 +64,7 @@ fn resolve_linear_hypothesis(
         let mut form = linearize(&relation.left, &columns)
             .and_then(|left| linearize(&relation.right, &columns).map(|right| left.sub(right)))
             .map_err(|error| {
-                HypothesisApplicationError::InvalidInput(format!(
+                HypothesisError::InvalidInput(format!(
                     "线性展开失败: 第 {} 条约束: {error}",
                     row + 1
                 ))
@@ -139,10 +103,10 @@ fn resolve_linear_hypothesis(
 
 pub fn run_hypothesis_test(
     input: HypothesisTestInput,
-) -> Result<HypothesisTestOutput, HypothesisApplicationError> {
+) -> Result<HypothesisTestOutput, HypothesisError> {
     let k = input.betas.len();
     if input.param_names.len() != k {
-        return Err(HypothesisApplicationError::InvalidInput(format!(
+        return Err(HypothesisError::InvalidInput(format!(
             "param_names 长度 {} 与 betas 长度 {} 不一致",
             input.param_names.len(),
             k
@@ -163,7 +127,7 @@ pub fn run_hypothesis_test(
     let betas = Col::from_iter(input.betas);
     let covariance_values = input.cov_beta.into_iter().flatten().collect::<Vec<_>>();
     if k.checked_mul(k) != Some(covariance_values.len()) {
-        return Err(HypothesisApplicationError::InvalidInput(
+        return Err(HypothesisError::InvalidInput(
             "cov_beta 形状错误: 协方差矩阵维度必须与参数数量一致".to_owned(),
         ));
     }
@@ -214,13 +178,13 @@ pub fn run_hypothesis_test(
 pub fn parse_at_values(
     at_spec: &str,
     param_names: &[String],
-) -> Result<HashMap<String, f64>, HypothesisApplicationError> {
+) -> Result<HashMap<String, f64>, HypothesisError> {
     if at_spec.trim().is_empty() {
         return Ok(HashMap::new());
     }
     let resolved = resolve_linear_hypothesis(at_spec, param_names)?;
     if resolved.kind != LinearConstraintKind::Eq {
-        return Err(HypothesisApplicationError::InvalidInput(
+        return Err(HypothesisError::InvalidInput(
             "at() 仅支持线性等式约束 (param = value)".to_string(),
         ));
     }
@@ -234,14 +198,14 @@ pub fn parse_at_values(
             .filter(|(_, coefficient)| coefficient.abs() > 1e-14)
             .collect::<Vec<_>>();
         if columns.len() != 1 {
-            return Err(HypothesisApplicationError::InvalidInput(format!(
+            return Err(HypothesisError::InvalidInput(format!(
                 "at() 约束 {} 必须是简单形式 param = value",
                 row_index + 1
             )));
         }
         let (column, coefficient) = columns[0];
         if coefficient.abs() <= f64::EPSILON {
-            return Err(HypothesisApplicationError::InvalidInput(format!(
+            return Err(HypothesisError::InvalidInput(format!(
                 "at() 约束 {} 的参数系数不能为零",
                 row_index + 1
             )));

@@ -3,8 +3,8 @@
 //! IRLS is mathematically equivalent to Newton-Raphson for logistic regression.
 //! Each iteration solves a weighted least squares problem.
 
-use faer::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 const MAX_ITER: usize = 100;
@@ -115,7 +115,7 @@ impl Logit {
 
             let mut xw = self.exog.clone();
             for (i, mut row) in xw.row_iter_mut().enumerate() {
-                row *= faer::Scale(sqrt_w[i]);
+                row *= yss_linalg::Scale(sqrt_w[i]);
             }
             let zw: Col<f64> = z
                 .iter()
@@ -158,7 +158,7 @@ impl Logit {
                 // Covariance: (X'WX)^{-1} at convergence
                 let mut xw_final = self.exog.clone();
                 for (i, mut row) in xw_final.row_iter_mut().enumerate() {
-                    row *= faer::Scale(w_final[i].sqrt());
+                    row *= yss_linalg::Scale(w_final[i].sqrt());
                 }
                 let xtx_final = xw_final.as_ref().to_owned();
                 let xtx_f = xtx_final.transpose() * xtx_final.as_ref();
@@ -181,8 +181,8 @@ impl Logit {
                     .map(|&z| 2.0 * (1.0 - normal.cdf(z.abs())))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
-                let ci_lower = beta.clone() - faer::Scale(z_crit) * std_err.clone();
-                let ci_upper = beta.clone() + faer::Scale(z_crit) * std_err.clone();
+                let ci_lower = beta.clone() - yss_linalg::Scale(z_crit) * std_err.clone();
+                let ci_upper = beta.clone() + yss_linalg::Scale(z_crit) * std_err.clone();
 
                 // Log-likelihood: L = Σ [y*log(p) + (1-y)*log(1-p)]
                 let ll: f64 = self
@@ -305,7 +305,7 @@ mod tests {
             exog_raw.push(x);
         }
         let endog = (endog).into_iter().collect::<Col<f64>>();
-        let exog = faer::MatRef::from_row_major_slice(&(exog_raw), n, 2).to_owned();
+        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_raw), n, 2).to_owned();
 
         let logit = Logit {
             endog,

@@ -1,15 +1,18 @@
-//! Project numerical conventions over faer's native dense matrices and vectors.
+//! Dense matrix/vector types and project numerical conventions.
 //!
-//! Matrix arithmetic and views come from faer. This crate owns decomposition
-//! errors, reusable checked factors and the rank/conditioning convention.
+//! Opaque owned and borrowed types keep faer inside this crate. Arithmetic,
+//! checked factors, numerical errors and rank conventions share that boundary.
 
 mod backend;
+mod dense;
 mod error;
 
 pub use backend::{Cholesky, Eigen, Lu, Svd, SymmetricEigen};
+pub use dense::{
+    Col, ColMut, ColRef, DiagRef, LowerTriangularRhs, Mat, MatMut, MatRef, Row, RowMut, RowRef,
+    Scale,
+};
 pub use error::LinalgError;
-
-use faer::{Col, ColRef, Mat, MatRef};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ComplexValue {

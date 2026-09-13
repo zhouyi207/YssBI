@@ -1,13 +1,13 @@
 # yss-linalg
 
-Project numerical conventions over native `faer::Mat`, `Col` and borrowed views.
-SCI algorithms use faer directly for matrix arithmetic; this crate owns checked
+Owns opaque `Mat`, `Col`, row and borrowed-view types, matrix arithmetic, checked
 factorizations, stable numerical errors and the rank/conditioning convention.
-The faer version is declared in the shared workspace dependencies.
+faer is an implementation dependency of this crate alone. Public APIs and macros
+expose project types, with no native-type re-export, conversion escape hatch or
+`Deref` to faer. The faer version remains in shared workspace dependencies.
 
 ```rust
-use faer::{col, mat};
-use yss_linalg::{MatrixExt, Solve};
+use yss_linalg::{MatrixExt, Solve, col, mat};
 
 let a = mat![[4.0, 1.0], [1.0, 3.0]];
 let b = col![6.0, 7.0];
@@ -18,8 +18,8 @@ let reconstructed = &a * &x;
 
 ## Contract
 
-- Matrix multiplication, slicing and triangular in-place solves use native faer
-  APIs. Statistical formulas and elementwise operations stay with their callers.
+- Matrix multiplication, slicing and triangular in-place solves delegate to faer
+  internally. Statistical formulas and elementwise operations stay in SCI.
 - `MatrixExt::checked_cholesky` and `checked_lu` preserve project error semantics.
   Factors are reusable; `Solve` accepts owned or borrowed matrix/vector RHS values.
   Cholesky reads the lower triangle. LU rejects an exactly zero pivot without
@@ -35,7 +35,7 @@ let reconstructed = &a * &x;
 - RHS dimensions are programmer preconditions; nonsquare matrices and numerical
   decomposition failures use `LinalgError`. SCI callers retain their existing
   rank-failure fallback.
-- Native borrowed views preserve logical indices and may be strided or reversed.
+- Borrowed wrappers preserve logical indices and may be strided or reversed.
   Owned matrices are column major and may have padding. Serialized row order must
   be assembled explicitly; native storage must not be treated as a flat row-major
   array. There is no second array representation or raw-pointer conversion layer.

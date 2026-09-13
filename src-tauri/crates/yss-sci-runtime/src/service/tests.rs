@@ -115,30 +115,32 @@ fn shared_ols_options_reach_the_model_and_typed_report() {
             &active_control(),
         )
         .unwrap();
-    let numerical = yss_sci::regression::linear_model::OLS {
-        endog: faer::Col::from_iter(response.iter().copied()),
-        exog: faer::Mat::from_fn(response.len(), 1, |row, _| predictors[0][row]),
-        config: options,
-    }
-    .fit()
+    let numerical = yss_sci::regression::fit::fit_ols(
+        response.clone(),
+        &predictors,
+        options,
+        yss_sci_contract::StatisticalObservationMetadata {
+            original_observation_count: response.len(),
+            used_observation_count: response.len(),
+            dropped_null_count: 0,
+            dropped_nan_count: 0,
+            missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
+        },
+    )
     .unwrap();
-    assert_eq!(
-        result.coefficients,
-        numerical.betas.iter().copied().collect::<Vec<_>>()
-    );
-    assert_eq!(
-        result.fitted,
-        numerical.fitted.iter().copied().collect::<Vec<_>>()
-    );
-    assert_eq!(
-        result.residuals,
-        numerical.residuals.iter().copied().collect::<Vec<_>>()
-    );
+    let yss_sci_contract::regression::fit::RegressionStatistics::Linear { model, .. } =
+        &numerical.statistics
+    else {
+        panic!("OLS must produce linear regression statistics");
+    };
+    assert_eq!(result.coefficients, numerical.coefficients);
+    assert_eq!(result.fitted, numerical.fitted);
+    assert_eq!(result.residuals, numerical.residuals);
     assert_eq!(result.design, predictors);
     assert_eq!(result.report.model_basic_info.covariance_type, "HC3");
     assert_eq!(
         result.report.model_basic_info.df_residual,
-        numerical.df_residual
+        model.df_residual
     );
     assert_eq!(result.report.coefficients.len(), 1);
     assert_eq!(result.report.coefficients[0].variable, "x1");

@@ -62,7 +62,7 @@ Ownership checks include:
 - task path must equal `tasks_root/<task-id>` and have that exact parent;
 - cleanup revalidates canonical app root, tasks root and task path before `remove_dir_all`.
 
-The RAII owner cleans the directory on drop. If an inference result retains posterior samples or posterior predictive artifacts, `JuliaBayesBackend` transfers the task-directory owner to the result; clearing/dropping the result then releases the artifacts. A result that claims retained artifacts without an owner is rejected.
+The RAII owner cleans the directory on drop. `JuliaBayesWorkerAdapter` retains the task-directory owner while task results and artifacts remain available; clearing/dropping the retained task releases its artifacts.
 
 ## Data plane
 
@@ -101,4 +101,4 @@ The runtime probe accepts Julia `>=1.10,<2.0`, matching `Project.toml`; incompat
 
 ## Interface rule
 
-Business callers enter through `application::bayes` and `sci::api::bayes::BayesBackend`. They do not invoke worker operations or task paths directly. This adapter seam keeps process lifecycle, exchange files, typed error mapping and artifact ownership local to the Julia implementation.
+Plugin callers enter through `yss-bayes-runtime` and the `yss-bayes-worker::BayesWorkerClient`/`BayesWorkerPort` boundary. Inputs, cancellation and deadline contracts belong to `yss-bayes-worker`. No host SCI crate participates in this path. The Julia adapter owns process calls, exchange files, typed error mapping and artifact retention.

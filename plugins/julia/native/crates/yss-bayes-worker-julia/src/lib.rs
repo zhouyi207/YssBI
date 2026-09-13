@@ -14,8 +14,8 @@ use yss_bayes_worker::{
     BayesTaskResult, BayesWorkerAuthority, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort,
     BayesWorkerTerminalCode, ValidatedBayesTask,
 };
+use yss_bayes_worker::{CancelDeliveryControl, ExecutionControl};
 use yss_julia_worker::{JuliaWorkerError, JuliaWorkerManager, JuliaWorkerTaskDirectory};
-use yss_sci_contract::{CancelDeliveryControl, ExecutionControl};
 
 mod fit;
 mod predictor;
@@ -555,14 +555,14 @@ mod tests {
     };
     use yss_bayes_model::BayesModelSpec;
     use yss_bayes_worker::{
+        AbsoluteDeadline, BayesCancellationSource, CancelDeliveryControl, ExecutionControl,
+        StatisticalInput, StatisticalScalar,
+    };
+    use yss_bayes_worker::{
         BayesArtifactMediaType, BayesCancelTerminal, BayesTaskId, BayesWorkerClient,
         BayesWorkerError, ValidatedBayesTask,
     };
     use yss_julia_worker::{JuliaWorkerError, JuliaWorkerTaskDirectory};
-    use yss_sci_contract::{
-        AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
-        StatisticalInput, StatisticalScalar,
-    };
 
     struct TemporaryAppRoot(std::path::PathBuf);
 
@@ -762,7 +762,7 @@ mod tests {
         let future = now
             .checked_add(Duration::from_secs(30))
             .expect("test deadline must be representable");
-        let (_source, token) = SciCancellationSource::new();
+        let (_source, token) = BayesCancellationSource::new();
         (
             ExecutionControl::new(token, AbsoluteDeadline::at(future)),
             CancelDeliveryControl::new(AbsoluteDeadline::at(future)),
@@ -848,7 +848,7 @@ mod tests {
             runtime.clone(),
         )));
         let (run_control, cancel_control, now) = controls();
-        let (_source, token) = SciCancellationSource::new();
+        let (_source, token) = BayesCancellationSource::new();
         let expired_run = ExecutionControl::new(token, AbsoluteDeadline::at(now));
         assert!(matches!(
             adapter.start(validated_task("expired-start"), &expired_run),

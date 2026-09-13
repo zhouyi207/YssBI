@@ -1,4 +1,4 @@
-use faer::Col;
+use yss_linalg::Col;
 
 pub fn skewness_kurtosis(x: &Col<f64>) -> (f64, f64) {
     assert!(x.nrows() > 0, "cannot compute moments of an empty sample");

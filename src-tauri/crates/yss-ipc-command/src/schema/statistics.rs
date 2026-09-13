@@ -27,8 +27,8 @@ pub struct HypothesisTestResponseDto {
     pub p_value: f64,
 }
 
-impl From<yss_application::hypothesis::HypothesisTestOutput> for HypothesisTestResponseDto {
-    fn from(out: yss_application::hypothesis::HypothesisTestOutput) -> Self {
+impl From<yss_sci_contract::hypothesis::HypothesisTestOutput> for HypothesisTestResponseDto {
+    fn from(out: yss_sci_contract::hypothesis::HypothesisTestOutput) -> Self {
         Self {
             test_type: out.test_type,
             h0_form: out.h0_form,

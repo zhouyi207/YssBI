@@ -3,7 +3,16 @@ use std::sync::Arc;
 
 use yss_bayes_model::{BayesModelSpec, model_spec_is_valid};
 use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
-use yss_sci_contract::{CancelDeliveryControl, ExecutionControl, StatisticalInput};
+mod control;
+mod input;
+
+pub use control::{
+    AbsoluteDeadline, BayesCancellationSource, BayesCancellationToken, CancelDeliveryControl,
+    ExecutionControl,
+};
+pub use input::{
+    BayesCategoricalRole, StatisticalInput, StatisticalInputValidationError, StatisticalScalar,
+};
 
 const MAX_OPAQUE_ID_LEN: usize = 128;
 

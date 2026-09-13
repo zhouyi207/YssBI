@@ -6,11 +6,11 @@ use super::types::FirstStageSummary;
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use faer::Mat;
 use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor},
     statistics::Statistics,
 };
+use yss_linalg::Mat;
 use yss_linalg::{MatrixExt, Solve};
 
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
@@ -44,7 +44,7 @@ pub(crate) fn compute_first_stage_summary(
             x1_raw.push(exog[(i, j)]);
         }
     }
-    let x1 = faer::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
+    let x1 = yss_linalg::MatRef::from_row_major_slice(&(x1_raw), n, k1).to_owned();
 
     let x1tx1 = x1.transpose() * x1.as_ref();
     let x1tx1_inv = x1tx1
@@ -65,7 +65,7 @@ pub(crate) fn compute_first_stage_summary(
             mx1_y_data.push(y_val - py_val);
         }
     }
-    let mx1_y = faer::MatRef::from_row_major_slice(&(mx1_y_data), n, k_endog).to_owned();
+    let mx1_y = yss_linalg::MatRef::from_row_major_slice(&(mx1_y_data), n, k_endog).to_owned();
     let mut mx1_x2_data = Vec::with_capacity(n * k_iv);
     for i in 0..n {
         for j in 0..k_iv {
@@ -74,7 +74,7 @@ pub(crate) fn compute_first_stage_summary(
             mx1_x2_data.push(x2_val - px_val);
         }
     }
-    let mx1_x2 = faer::MatRef::from_row_major_slice(&(mx1_x2_data), n, k_iv).to_owned();
+    let mx1_x2 = yss_linalg::MatRef::from_row_major_slice(&(mx1_x2_data), n, k_iv).to_owned();
 
     // M_Z for Cragg-Donald
     let ztz = z.transpose() * z.as_ref();
@@ -94,10 +94,10 @@ pub(crate) fn compute_first_stage_summary(
             mz_y_data.push(y_val - py_val);
         }
     }
-    let mz_y = faer::MatRef::from_row_major_slice(&(mz_y_data), n, k_endog).to_owned();
+    let mz_y = yss_linalg::MatRef::from_row_major_slice(&(mz_y_data), n, k_endog).to_owned();
 
     // Σ_VV = (1/(N-k_z)) Y' M_Z Y
-    let sigma_vv = (mz_y.transpose() * mz_y.as_ref()) / faer::Scale(df_z.max(1) as f64);
+    let sigma_vv = (mz_y.transpose() * mz_y.as_ref()) / yss_linalg::Scale(df_z.max(1) as f64);
 
     // Min eigenvalue: Cragg-Donald. G = (1/k_z) Σ_VV^{-1/2} Y' M_X1' X2 (X2' M_X1 X2)^{-1} X2' M_X1 Y Σ_VV^{-1/2}
     let x2_mx1 = mx1_x2.clone();
@@ -118,14 +118,14 @@ pub(crate) fn compute_first_stage_summary(
             y_mx1_data.push(y_val - py_val);
         }
     }
-    let y_mx1 = faer::MatRef::from_row_major_slice(&(y_mx1_data), n, k_endog).to_owned();
+    let y_mx1 = yss_linalg::MatRef::from_row_major_slice(&(y_mx1_data), n, k_endog).to_owned();
     let inner = y_mx1.transpose()
         * x2_mx1.as_ref()
         * x2_mx1_x2_inv_nd.as_ref()
         * (x2_mx1.transpose() * y_mx1.as_ref());
     // Cragg-Donald uses k_iv (excluded instruments), not k_z. For k_endog=1, min_eig = F stat.
     // F = (inner/k_iv) / sigma_vv => min_eig = inner/(k_iv*sigma_vv). Wrong: inner/(k_z*sigma_vv) gave F/2 when k_z=1+k_iv.
-    let inner_scaled = inner / faer::Scale(k_iv.max(1) as f64);
+    let inner_scaled = inner / yss_linalg::Scale(k_iv.max(1) as f64);
 
     // Min eigenvalue: Cragg-Donald = min eig of Σ_VV^{-1} * (1/k_iv) * inner. For k_endog=1, equals F stat.
     let min_eigenvalue_from_cd = if k_endog == 1 {
@@ -321,9 +321,10 @@ pub(crate) fn compute_first_stage_summary(
                     }
                 }
                 let y0_mat =
-                    faer::MatRef::from_row_major_slice(&(y0_data), n, k_endog - 1).to_owned();
+                    yss_linalg::MatRef::from_row_major_slice(&(y0_data), n, k_endog - 1).to_owned();
                 let y0_hat_mat =
-                    faer::MatRef::from_row_major_slice(&(y0_hat_data), n, k_endog - 1).to_owned();
+                    yss_linalg::MatRef::from_row_major_slice(&(y0_hat_data), n, k_endog - 1)
+                        .to_owned();
                 (Some(y0_mat), Some(y0_hat_mat))
             } else {
                 (None, None)

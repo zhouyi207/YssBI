@@ -60,12 +60,7 @@ fn julia_plugin_depends_only_on_plugin_crates_and_explicit_common_libraries() {
         .map(|root| root.package.clone())
         .collect::<BTreeSet<_>>();
     assert!(!plugin_packages.is_empty());
-    let common = [
-        "yss-plugin-protocol",
-        "yss-plugin-sdk",
-        "yss-math-expr",
-        "yss-sci-contract",
-    ];
+    let common = ["yss-plugin-protocol", "yss-plugin-sdk", "yss-math-expr"];
     let mut pending = plugin_packages.iter().cloned().collect::<Vec<_>>();
     let mut visited = BTreeSet::new();
     while let Some(package) = pending.pop() {
@@ -1852,6 +1847,17 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
 
 #[test]
 fn scientific_backend_contract_and_runtime_have_distinct_owners() {
+    for dependency in &workspace_facts().dependency_declarations {
+        if dependency.package_name == "faer" {
+            assert_eq!(dependency.owning_package, "yss-linalg");
+        }
+        if dependency.package_name == "yss-linalg" {
+            assert_eq!(dependency.owning_package, "yss-sci");
+        }
+        if dependency.package_name == "yss-sci" {
+            assert_eq!(dependency.owning_package, "yss-sci-runtime");
+        }
+    }
     let facts = production_facts();
     assert_eq!(
         facts

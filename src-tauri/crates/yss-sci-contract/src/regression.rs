@@ -1,4 +1,5 @@
 //! Shared ordinary least-squares configuration.
+pub mod fit;
 pub mod report;
 
 #[derive(Debug, Clone, PartialEq, Default)]

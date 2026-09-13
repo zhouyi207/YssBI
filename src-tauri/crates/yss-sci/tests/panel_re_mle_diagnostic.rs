@@ -4,8 +4,8 @@
 //! Stata: xtreg ltvfo ltlan ltwlab ltpow ltfer hrs mipric1 giprice mci ngca, re mle
 //! Expected: Log likelihood = 334.64947, sigma_e = 0.1056, sigma_u = 0.2166
 
-use faer::{Col, Mat};
 use std::io::Write;
+use yss_linalg::{Col, Mat};
 use yss_sci::regression::panel::fit_panel_re_mle;
 
 fn load_lin_csv() -> Result<(Col<f64>, Mat<f64>, Vec<usize>), Box<dyn std::error::Error>> {
@@ -129,7 +129,7 @@ fn load_lin_csv() -> Result<(Col<f64>, Mat<f64>, Vec<usize>), Box<dyn std::error
     for row in &exog_clean {
         exog_flat.extend_from_slice(row);
     }
-    let exog = faer::MatRef::from_row_major_slice(&(exog_flat), n_clean, k).to_owned();
+    let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_flat), n_clean, k).to_owned();
     let endog = (endog_clean).into_iter().collect::<Col<f64>>();
 
     Ok((endog, exog, entity_clean))

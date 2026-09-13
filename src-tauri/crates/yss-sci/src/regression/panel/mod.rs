@@ -13,7 +13,7 @@ pub use re::{
     fit_panel_re_fgls_twoway, fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
 };
 
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 
 /// R² Within/Between/Overall. None for MLE (does not report these).
 #[derive(Debug, Clone)]
@@ -116,3 +116,5 @@ pub struct PanelOLSResult {
     /// MLE full model iterations (Stata "Fitting full model"). None for non-MLE.
     pub mle_iter_log_lik: Option<Vec<f64>>,
 }
+
+pub mod did;

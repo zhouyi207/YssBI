@@ -6,7 +6,7 @@
 // - `estat hettest, iid`：z = 拟合值，Koenker 形式 (LM = n×R²)
 // - `estat hettest, rhs iid`：z = RHS 变量，Koenker 形式
 
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, FisherSnedecor};
 use yss_linalg::{MatrixExt, Solve};
 
@@ -22,7 +22,7 @@ pub struct BreuschPaganResult {
 }
 
 /// 辅助函数：给定 z 矩阵，计算原始 BP 统计量 LM = (1/2)·ESS
-fn bp_stat_stata(g: &Col<f64>, z_matrix: &faer::Mat<f64>) -> Result<(f64, usize), String> {
+fn bp_stat_stata(g: &Col<f64>, z_matrix: &yss_linalg::Mat<f64>) -> Result<(f64, usize), String> {
     let m = z_matrix.ncols();
     let g_col = g.as_ref().to_owned();
 
@@ -54,7 +54,7 @@ fn bp_stat_stata(g: &Col<f64>, z_matrix: &faer::Mat<f64>) -> Result<(f64, usize)
 /// 辅助函数：给定 z 矩阵，计算 Koenker 统计量 LM = n×R²（假定 g 均值为 1）
 fn bp_stat_koenker(
     g: &Col<f64>,
-    z_matrix: &faer::Mat<f64>,
+    z_matrix: &yss_linalg::Mat<f64>,
 ) -> Result<(f64, usize), String> {
     let n = g.nrows();
     let m = z_matrix.ncols();
@@ -184,7 +184,7 @@ pub fn breusch_pagan_koenker_rhs(
 }
 
 /// 构建 z = [1, fitted_values] 矩阵
-fn build_z_fitted(n: usize, fitted: &Col<f64>) -> faer::Mat<f64> {
+fn build_z_fitted(n: usize, fitted: &Col<f64>) -> yss_linalg::Mat<f64> {
     let mut z = Mat::zeros(n, 2);
     for i in 0..n {
         z[(i, 0)] = 1.0;

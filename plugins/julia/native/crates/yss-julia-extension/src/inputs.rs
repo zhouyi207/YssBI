@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use arrow::array::{Array, ArrayRef, Float64Array, StringArray};
 use arrow::datatypes::DataType;
+use yss_bayes_worker::{StatisticalInput, StatisticalScalar};
 use yss_plugin_protocol::PluginFailure;
-use yss_sci_contract::{StatisticalInput, StatisticalScalar};
 
 const MAX_INPUT_BYTES: usize = 128 * 1024 * 1024;
 

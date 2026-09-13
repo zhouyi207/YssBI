@@ -1,4 +1,4 @@
-use faer::Col;
+use yss_linalg::Col;
 
 pub struct StandardizeStats1D {
     mean: f64,
@@ -58,7 +58,7 @@ impl StandardizeTransform1D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use faer::col;
+    use yss_linalg::col;
 
     #[test]
     fn standardization_preserves_sample_scale_and_degenerate_inputs() {

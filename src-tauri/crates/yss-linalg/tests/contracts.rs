@@ -1,5 +1,5 @@
-use faer::{Mat, MatRef, col, mat};
 use yss_linalg::{LinalgError, MatrixExt, Solve, Svd, matrix_rank};
+use yss_linalg::{Mat, MatRef, col, mat};
 
 fn near(actual: f64, expected: f64) {
     assert!(

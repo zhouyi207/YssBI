@@ -12,8 +12,8 @@ use yss_sci_contract::scientific::{
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::execution::{ApplicationState, SessionCaptureError};
-use crate::hypothesis::{HypothesisApplicationError, HypothesisTestInput, HypothesisTestOutput};
 use crate::statistics::{SerialTestsApplicationError, SerialTestsRequest, SerialTestsResult};
+use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResultTablePart {
@@ -83,7 +83,7 @@ pub enum ReportQueryError {
     #[error(transparent)]
     Backend(#[from] ScientificBackendError),
     #[error(transparent)]
-    Hypothesis(#[from] HypothesisApplicationError),
+    Hypothesis(#[from] HypothesisError),
     #[error("serial test failed")]
     Serial(SerialTestsApplicationError),
 }
@@ -156,18 +156,19 @@ impl ApplicationState {
                     if hypothesis.trim().is_empty() || hypothesis.len() > 4096 {
                         return Err(ReportQueryError::InvalidRequest);
                     }
-                    let value = crate::hypothesis::run_hypothesis_test(HypothesisTestInput {
-                        betas: result.coefficients.clone(),
-                        cov_beta: result.report.cov_beta.clone(),
-                        df_residual: result.report.model_basic_info.df_residual,
-                        param_names: result
-                            .report
-                            .coefficients
-                            .iter()
-                            .map(|coefficient| coefficient.variable.clone())
-                            .collect(),
-                        hypothesis,
-                    })?;
+                    let value =
+                        yss_sci_runtime::hypothesis::run_hypothesis_test(HypothesisTestInput {
+                            betas: result.coefficients.clone(),
+                            cov_beta: result.report.cov_beta.clone(),
+                            df_residual: result.report.model_basic_info.df_residual,
+                            param_names: result
+                                .report
+                                .coefficients
+                                .iter()
+                                .map(|coefficient| coefficient.variable.clone())
+                                .collect(),
+                            hypothesis,
+                        })?;
                     ResultAnalysisProjection::Hypothesis(value)
                 }
             })

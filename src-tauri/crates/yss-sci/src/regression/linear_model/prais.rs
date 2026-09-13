@@ -5,12 +5,12 @@
 //! - Cochrane-Orcutt (corc): drops first observation
 
 use crate::ts::serial_correlation::durbin_watson;
-use faer::{Col, Mat};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
 use yss_linalg::matrix_rank;
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 /// Transform method: Prais-Winsten (keep t=1) or Cochrane-Orcutt (drop t=1)
@@ -172,7 +172,7 @@ impl Prais {
                 }
                 (
                     (y_star).into_iter().collect::<Col<f64>>(),
-                    faer::MatRef::from_row_major_slice(&(x_star), n - 1, k).to_owned(),
+                    yss_linalg::MatRef::from_row_major_slice(&(x_star), n - 1, k).to_owned(),
                 )
             } else {
                 let mut y_star = Vec::with_capacity(n);
@@ -189,7 +189,7 @@ impl Prais {
                 }
                 (
                     (y_star).into_iter().collect::<Col<f64>>(),
-                    faer::MatRef::from_row_major_slice(&(x_star), n, k).to_owned(),
+                    yss_linalg::MatRef::from_row_major_slice(&(x_star), n, k).to_owned(),
                 )
             };
 
@@ -257,7 +257,7 @@ impl Prais {
 
                 // cov(β) = σ² (X*'X*)⁻¹, σ² = ms_residual
                 let xtx_inv_nd = xtx_inv_s.as_ref().to_owned();
-                let cov_beta = faer::Scale(ms_residual) * &xtx_inv_nd;
+                let cov_beta = yss_linalg::Scale(ms_residual) * &xtx_inv_nd;
                 let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
                 let t_values: Vec<f64> = betas
                     .iter()
@@ -329,7 +329,7 @@ impl Prais {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use faer::Col;
+    use yss_linalg::Col;
 
     #[test]
     fn test_prais_basic() {
@@ -344,7 +344,7 @@ mod tests {
             exog.push(x[i]);
         }
         let endog = (y).into_iter().collect::<Col<f64>>();
-        let exog = faer::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
+        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
 
         let prais = Prais {
             endog: endog.clone(),
@@ -374,7 +374,7 @@ mod tests {
             exog.push(i as f64);
         }
         let endog = (y).into_iter().collect::<Col<f64>>();
-        let exog = faer::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
+        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
 
         let prais = Prais {
             endog,

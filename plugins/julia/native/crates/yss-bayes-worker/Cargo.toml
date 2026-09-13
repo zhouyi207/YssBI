@@ -7,10 +7,10 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+serde.workspace = true
 thiserror.workspace = true
 yss-bayes-model = { path = "../yss-bayes-model" }
 yss-bayes-result = { path = "../yss-bayes-result" }
-yss-sci-contract = { path = "../../../../../src-tauri/crates/yss-sci-contract" }
 
 [dev-dependencies]
 serde_json.workspace = true

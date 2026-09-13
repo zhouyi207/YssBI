@@ -8,7 +8,7 @@ use super::vec_vecrank_cv::{max_eigen_critical_row, trace_critical_row};
 
 use yss_linalg::{MatrixExt, Solve};
 
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use serde::{Deserialize, Serialize};
 
 /// 趋势设定：与 Stata trend() 对应

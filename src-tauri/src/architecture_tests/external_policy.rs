@@ -589,12 +589,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
-        package_name: "faer",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-application",
-        mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
@@ -704,6 +698,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-bayes-worker",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-bayes-worker",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1273,12 +1273,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
-        package_name: "faer",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci",
-        mode: RustDependencyMode::Runtime,
         package_name: "num-traits",
         target_condition: None,
     },
@@ -1313,13 +1307,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci-runtime",
-        mode: RustDependencyMode::Runtime,
-        package_name: "faer",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci-runtime",
+        owning_package: "yss-sci",
         mode: RustDependencyMode::Runtime,
         package_name: "rand",
         target_condition: None,
@@ -1334,12 +1322,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-sci-runtime",
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-sci-runtime",
-        mode: RustDependencyMode::Runtime,
-        package_name: "statrs",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1766,11 +1748,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
-        mode: RustDependencyMode::Runtime,
-        package_name: "faer",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::SciCore,
         mode: RustDependencyMode::Runtime,
         package_name: "faer",
     },
@@ -2227,11 +2204,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Application,
         mode: RustDependencyMode::Runtime,
-        package_name: "faer",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Application,
-        mode: RustDependencyMode::Runtime,
         package_name: "windows-sys",
     },
     ExternalDependencyUseAllowance {
@@ -2351,7 +2323,7 @@ pub(super) fn rust_external_dependency_findings(
                 && candidate.mode == dependency.mode
                 && candidate.package_name == origin.package_name
         });
-        if allowed {
+        if allowed && (origin.package_name != "faer" || dependency.owning_package == "yss-linalg") {
             continue;
         }
         findings.push(ArchitectureFinding {

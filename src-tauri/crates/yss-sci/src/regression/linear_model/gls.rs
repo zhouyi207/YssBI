@@ -1,9 +1,9 @@
-use faer::{Col, Mat};
 use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
 use yss_linalg::matrix_rank;
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 pub struct GLSConfig {
@@ -125,8 +125,8 @@ impl GLS {
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas_nd.clone() - faer::Scale(t_crit) * std_err.clone();
-        let ci_upper = betas_nd.clone() + faer::Scale(t_crit) * std_err.clone();
+        let ci_lower = betas_nd.clone() - yss_linalg::Scale(t_crit) * std_err.clone();
+        let ci_upper = betas_nd.clone() + yss_linalg::Scale(t_crit) * std_err.clone();
 
         Ok(GLSResult {
             num_observation: n,

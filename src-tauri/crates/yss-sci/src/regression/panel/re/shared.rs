@@ -8,7 +8,7 @@ use crate::regression::linear_model::OLS;
 
 use yss_linalg::{MatrixExt, Solve};
 
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use std::collections::HashMap;
 

@@ -13,7 +13,6 @@ pub mod execution;
 pub mod graph_compile;
 pub mod graph_contracts;
 pub mod graph_open;
-pub mod hypothesis;
 pub mod pin_preview_generation;
 pub mod plugins;
 pub mod project_change;

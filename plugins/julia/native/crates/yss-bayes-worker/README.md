@@ -3,6 +3,12 @@
 Owns the backend-neutral Bayesian worker boundary: validated tasks, opaque task and artifact
 handles, terminal/error contracts, and the client-to-worker port.
 
+`input` owns validated `StatisticalInput`/`StatisticalScalar` values and the
+plugin's `BayesCategoricalRole`. `control` owns `BayesCancellationSource`,
+`BayesCancellationToken`, monotonic deadlines and execution/cancel-delivery
+controls. The plugin's model/runtime/Julia adapter share these contracts without
+depending on any host SCI crate.
+
 `BayesWorkerClient` grants an unforgeable `BayesWorkerAuthority` only while invoking a port.
 Backend adapters use that temporary capability to create handles and results; application and
 transport code can only consume the validated projections.

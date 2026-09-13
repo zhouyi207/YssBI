@@ -5,12 +5,14 @@ edition = "2024"
 rust-version.workspace = true
 
 [dependencies]
+yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 yss-linalg = { path = "../yss-linalg" }
-faer.workspace = true
 num-traits.workspace = true
 serde.workspace = true
 statrs.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 csv = "1.3"

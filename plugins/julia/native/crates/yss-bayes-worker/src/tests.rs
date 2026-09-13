@@ -11,12 +11,12 @@ use super::{
     BayesWorkerAuthority, BayesWorkerClient, BayesWorkerError, BayesWorkerPhase, BayesWorkerPort,
     BayesWorkerTerminalCode, ValidatedBayesTask,
 };
-use yss_bayes_model::{BayesModelSpec, Expression};
-use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
-use yss_sci_contract::{
-    AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
+use crate::{
+    AbsoluteDeadline, BayesCancellationSource, CancelDeliveryControl, ExecutionControl,
     StatisticalInput, StatisticalScalar,
 };
+use yss_bayes_model::{BayesModelSpec, Expression};
+use yss_bayes_result::{InferenceDiagnostics, ParameterSummary};
 
 fn valid_model() -> BayesModelSpec {
     serde_json::from_value(serde_json::json!({
@@ -136,7 +136,7 @@ fn validated_task(task_id: &str) -> ValidatedBayesTask {
 }
 
 fn execution_control(deadline: Instant) -> ExecutionControl {
-    let (_source, token) = SciCancellationSource::new();
+    let (_source, token) = BayesCancellationSource::new();
     ExecutionControl::new(token, AbsoluteDeadline::at(deadline))
 }
 
@@ -726,7 +726,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     let start_gate = TestGate::new();
     let gated_worker = Arc::new(FakeWorker::with_gates(now, Some(start_gate.clone()), None));
     let gated_client = BayesWorkerClient::new(gated_worker.clone());
-    let (cancel_source, cancel_token) = SciCancellationSource::new();
+    let (cancel_source, cancel_token) = BayesCancellationSource::new();
     let start_control = ExecutionControl::new(cancel_token, AbsoluteDeadline::at(future));
     let start_worker = gated_client.clone();
     let start_thread = std::thread::spawn(move || {
@@ -803,7 +803,7 @@ fn bayes_worker_handle_cancel_completion_and_artifact_deadlines_are_typed() {
     let independent_cancel = worker
         .start(validated_task("independent-cancel"), &run_control)
         .expect("start must publish a handle");
-    let (run_cancel_source, run_cancel_token) = SciCancellationSource::new();
+    let (run_cancel_source, run_cancel_token) = BayesCancellationSource::new();
     run_cancel_source.cancel();
     let cancelled_run = ExecutionControl::new(run_cancel_token, AbsoluteDeadline::at(future));
     assert!(cancelled_run.is_cancelled());

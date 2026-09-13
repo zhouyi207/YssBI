@@ -1,5 +1,5 @@
 use super::{OLS, OlsFit, OlsFitError};
-use faer::{Col, Mat};
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve, matrix_rank};
 pub(super) struct OlsSolution {
     pub x: Mat<f64>,

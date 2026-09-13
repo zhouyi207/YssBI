@@ -1,5 +1,5 @@
-use crate::{ComplexValue, LinalgError};
-use faer::{Col, ColRef, Mat, MatRef, Side, linalg::solvers::Solve};
+use crate::{Col, ColRef, ComplexValue, LinalgError, Mat, MatRef};
+use faer::{Side, linalg::solvers::Solve};
 
 fn square(matrix: MatRef<'_, f64>) -> Result<(), LinalgError> {
     if matrix.nrows() == matrix.ncols() {
@@ -17,23 +17,24 @@ impl Cholesky {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
         square(matrix)?;
         let factor = matrix
+            .0
             .llt(Side::Lower)
             .map_err(|_| LinalgError::NotPositiveDefinite)?;
         Ok(Self { factor })
     }
 
     pub fn lower(&self) -> Mat<f64> {
-        self.factor.L().to_owned()
+        Mat(self.factor.L().to_owned())
     }
 
     pub(crate) fn solve_matrix(&self, rhs: MatRef<'_, f64>) -> Mat<f64> {
         assert_eq!(self.factor.L().nrows(), rhs.nrows(), "solve dimensions");
-        self.factor.solve(rhs)
+        Mat(self.factor.solve(rhs.0))
     }
 
     pub(crate) fn solve_vector(&self, rhs: ColRef<'_, f64>) -> Col<f64> {
         assert_eq!(self.factor.L().nrows(), rhs.nrows(), "solve dimensions");
-        self.factor.solve(rhs)
+        Col(self.factor.solve(rhs.0))
     }
 }
 
@@ -45,7 +46,7 @@ pub struct Lu {
 impl Lu {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
         square(matrix)?;
-        let factor = matrix.partial_piv_lu();
+        let factor = matrix.0.partial_piv_lu();
         if factor
             .U()
             .diagonal()
@@ -63,12 +64,12 @@ impl Lu {
 
     pub(crate) fn solve_matrix(&self, rhs: MatRef<'_, f64>) -> Mat<f64> {
         assert_eq!(self.size, rhs.nrows(), "solve dimensions");
-        self.factor.solve(rhs)
+        Mat(self.factor.solve(rhs.0))
     }
 
     pub(crate) fn solve_vector(&self, rhs: ColRef<'_, f64>) -> Col<f64> {
         assert_eq!(self.size, rhs.nrows(), "solve dimensions");
-        self.factor.solve(rhs)
+        Col(self.factor.solve(rhs.0))
     }
 }
 
@@ -78,20 +79,23 @@ pub struct Svd {
 
 impl Svd {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
-        let factor = matrix.svd().map_err(|_| LinalgError::DecompositionFailed)?;
+        let factor = matrix
+            .0
+            .svd()
+            .map_err(|_| LinalgError::DecompositionFailed)?;
         Ok(Self { factor })
     }
 
     pub fn left_vectors(&self) -> MatRef<'_, f64> {
-        self.factor.U()
+        MatRef(self.factor.U())
     }
 
     pub fn right_vectors(&self) -> MatRef<'_, f64> {
-        self.factor.V()
+        MatRef(self.factor.V())
     }
 
     pub fn values(&self) -> ColRef<'_, f64> {
-        self.factor.S().column_vector()
+        ColRef(self.factor.S().column_vector())
     }
 }
 
@@ -103,17 +107,17 @@ pub struct SymmetricEigen {
 impl SymmetricEigen {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
         square(matrix)?;
-        let factor = faer::linalg::solvers::SelfAdjointEigen::new(matrix, Side::Lower)
+        let factor = faer::linalg::solvers::SelfAdjointEigen::new(matrix.0, Side::Lower)
             .map_err(|_| LinalgError::DecompositionFailed)?;
         Ok(Self { factor })
     }
 
     pub fn vectors(&self) -> MatRef<'_, f64> {
-        self.factor.U()
+        MatRef(self.factor.U())
     }
 
     pub fn values(&self) -> ColRef<'_, f64> {
-        self.factor.S().column_vector()
+        ColRef(self.factor.S().column_vector())
     }
 }
 
@@ -126,7 +130,7 @@ pub struct Eigen {
 impl Eigen {
     pub fn factor(matrix: MatRef<'_, f64>) -> Result<Self, LinalgError> {
         square(matrix)?;
-        let factor = faer::linalg::solvers::Eigen::new_from_real(matrix)
+        let factor = faer::linalg::solvers::Eigen::new_from_real(matrix.0)
             .map_err(|_| LinalgError::DecompositionFailed)?;
         let vectors = factor.U();
         let values = factor.S().column_vector();

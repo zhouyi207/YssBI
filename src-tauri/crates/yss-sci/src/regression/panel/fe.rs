@@ -8,8 +8,8 @@ use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
 use yss_sci_contract::regression::CovParams;
 
-use faer::{Col, Mat};
 use std::collections::HashMap;
+use yss_linalg::{Col, Mat};
 use yss_linalg::{MatrixExt, Solve};
 
 /// Compute FE-specific stats (Stata xtreg, fe style)
@@ -670,26 +670,26 @@ pub fn fit_panel_fe(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = faer::Col::zeros(k_vars + 1);
+    let mut betas = yss_linalg::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = faer::Col::zeros(k_vars + 1);
+    let mut stds = yss_linalg::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = faer::Col::zeros(k_vars + 1);
+    let mut tvalues = yss_linalg::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = faer::Col::zeros(k_vars + 1);
+    let mut pvalues = yss_linalg::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_left = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_right = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
@@ -948,26 +948,26 @@ pub fn fit_panel_fe_time(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = faer::Col::zeros(k_vars + 1);
+    let mut betas = yss_linalg::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = faer::Col::zeros(k_vars + 1);
+    let mut stds = yss_linalg::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = faer::Col::zeros(k_vars + 1);
+    let mut tvalues = yss_linalg::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = faer::Col::zeros(k_vars + 1);
+    let mut pvalues = yss_linalg::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_left = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_right = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {
@@ -1219,26 +1219,26 @@ pub fn fit_panel_fe_twoway(
     let const_ci_l = const_coef - t_crit * const_std_err;
     let const_ci_u = const_coef + t_crit * const_std_err;
 
-    let mut betas = faer::Col::zeros(k_vars + 1);
+    let mut betas = yss_linalg::Col::zeros(k_vars + 1);
     betas[0] = const_coef;
     for i in 0..k_vars {
         betas[i + 1] = result.betas[i];
     }
-    let mut stds = faer::Col::zeros(k_vars + 1);
+    let mut stds = yss_linalg::Col::zeros(k_vars + 1);
     stds[0] = const_std_err;
     for i in 0..k_vars {
         stds[i + 1] = result.stds[i];
     }
-    let mut tvalues = faer::Col::zeros(k_vars + 1);
+    let mut tvalues = yss_linalg::Col::zeros(k_vars + 1);
     tvalues[0] = const_t;
     for i in 0..k_vars {
         tvalues[i + 1] = result.tvalues[i];
     }
-    let mut pvalues = faer::Col::zeros(k_vars + 1);
+    let mut pvalues = yss_linalg::Col::zeros(k_vars + 1);
     pvalues[0] = const_p;
-    let mut conf_int_left = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_left = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_left[0] = const_ci_l;
-    let mut conf_int_right = faer::Col::zeros(k_vars + 1);
+    let mut conf_int_right = yss_linalg::Col::zeros(k_vars + 1);
     conf_int_right[0] = const_ci_u;
     for i in 0..k_vars {
         pvalues[i + 1] = if use_cluster_df {

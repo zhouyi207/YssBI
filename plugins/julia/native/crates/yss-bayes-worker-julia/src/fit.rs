@@ -18,11 +18,11 @@ use yss_bayes_worker::{
     ArtifactId, BayesArtifactHandle, BayesArtifactMediaType, BayesTaskHandle, BayesTaskResult,
     BayesWorkerAuthority, BayesWorkerError, BayesWorkerTerminalCode, ValidatedBayesTask,
 };
+use yss_bayes_worker::{BayesCategoricalRole, StatisticalInput, StatisticalScalar};
 use yss_julia_worker::{
     JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerTask,
     JuliaWorkerTaskDirectory,
 };
-use yss_sci_contract::{CategoricalRole, StatisticalInput, StatisticalScalar};
 
 const JULIA_BAYES_WORKER_TRACING_TARGET: &str = "yssbi::bayes_worker_julia";
 
@@ -197,9 +197,11 @@ fn write_task_files(
             .map(|input| JuliaExchangeColumn {
                 name: input.name(),
                 categorical_role: match input.categorical_role() {
-                    Some(CategoricalRole::General) => Some(JuliaCategoricalRole::General),
-                    Some(CategoricalRole::Individual) => Some(JuliaCategoricalRole::Individual),
-                    Some(CategoricalRole::Time) => Some(JuliaCategoricalRole::Time),
+                    Some(BayesCategoricalRole::General) => Some(JuliaCategoricalRole::General),
+                    Some(BayesCategoricalRole::Individual) => {
+                        Some(JuliaCategoricalRole::Individual)
+                    }
+                    Some(BayesCategoricalRole::Time) => Some(JuliaCategoricalRole::Time),
                     None => None,
                 },
             })
@@ -335,8 +337,12 @@ fn julia_exchange_preserves_numeric_category_and_null_values_across_batches() {
         .collect();
     let inputs = [
         StatisticalInput::try_new("response".into(), numeric, None).unwrap(),
-        StatisticalInput::try_new("group".into(), categories, Some(CategoricalRole::General))
-            .unwrap(),
+        StatisticalInput::try_new(
+            "group".into(),
+            categories,
+            Some(BayesCategoricalRole::General),
+        )
+        .unwrap(),
     ];
     write_input_table(&file.0, &inputs).unwrap();
     let reader =

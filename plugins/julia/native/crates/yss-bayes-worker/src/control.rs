@@ -5,17 +5,17 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 #[derive(Clone)]
-pub struct SciCancellationToken {
+pub struct BayesCancellationToken {
     cancelled: Arc<AtomicBool>,
 }
 
-pub struct SciCancellationSource {
-    token: SciCancellationToken,
+pub struct BayesCancellationSource {
+    token: BayesCancellationToken,
 }
 
-impl SciCancellationSource {
-    pub fn new() -> (Self, SciCancellationToken) {
-        let token = SciCancellationToken {
+impl BayesCancellationSource {
+    pub fn new() -> (Self, BayesCancellationToken) {
+        let token = BayesCancellationToken {
             cancelled: Arc::new(AtomicBool::new(false)),
         };
         (
@@ -30,12 +30,12 @@ impl SciCancellationSource {
         self.token.cancelled.store(true, Ordering::Release);
     }
 
-    pub fn token(&self) -> SciCancellationToken {
+    pub fn token(&self) -> BayesCancellationToken {
         self.token.clone()
     }
 }
 
-impl SciCancellationToken {
+impl BayesCancellationToken {
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
     }
@@ -61,19 +61,19 @@ impl AbsoluteDeadline {
 }
 
 pub struct ExecutionControl {
-    cancellation: SciCancellationToken,
+    cancellation: BayesCancellationToken,
     deadline: AbsoluteDeadline,
 }
 
 impl ExecutionControl {
-    pub fn new(cancellation: SciCancellationToken, deadline: AbsoluteDeadline) -> Self {
+    pub fn new(cancellation: BayesCancellationToken, deadline: AbsoluteDeadline) -> Self {
         Self {
             cancellation,
             deadline,
         }
     }
 
-    pub fn cancellation(&self) -> &SciCancellationToken {
+    pub fn cancellation(&self) -> &BayesCancellationToken {
         &self.cancellation
     }
 
@@ -120,11 +120,13 @@ impl CancelDeliveryControl {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource};
+    use super::{
+        AbsoluteDeadline, BayesCancellationSource, CancelDeliveryControl, ExecutionControl,
+    };
 
     #[test]
     fn cancellation_source_sets_every_clone_once_and_never_resets() {
-        let (source, token) = SciCancellationSource::new();
+        let (source, token) = BayesCancellationSource::new();
         let cloned = token.clone();
 
         assert!(!token.is_cancelled());
@@ -141,7 +143,7 @@ mod tests {
         let future = now
             .checked_add(Duration::from_secs(5))
             .expect("short test deadline must be representable");
-        let (source, token) = SciCancellationSource::new();
+        let (source, token) = BayesCancellationSource::new();
         source.cancel();
 
         let execution = ExecutionControl::new(token, AbsoluteDeadline::at(future));

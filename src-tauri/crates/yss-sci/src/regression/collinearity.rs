@@ -3,8 +3,8 @@
 //! When X has rank deficiency (strict multicollinearity), iteratively drop columns
 //! until full rank. Removal priority: continuous > dummy > intercept.
 
-use faer::Mat;
 use std::collections::BTreeSet;
+use yss_linalg::Mat;
 use yss_linalg::matrix_rank;
 
 /// Column type for removal priority: continuous (remove first), dummy, intercept (remove last).
@@ -116,7 +116,7 @@ pub fn drop_collinear_columns(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use faer::mat;
+    use yss_linalg::mat;
 
     #[test]
     fn test_full_rank_no_drop() {

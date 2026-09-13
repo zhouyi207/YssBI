@@ -1,5 +1,5 @@
-use faer::Col;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
+use yss_linalg::Col;
 
 use crate::tools::skewness_kurtosis;
 
