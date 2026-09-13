@@ -154,12 +154,22 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+tauri.workspace = true
+tauri-plugin-opener = "2.5.4"
+tauri-plugin-dialog = "2.7"
+tauri-plugin-fs = "2.5"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-window-state = "=2.4.1"
+
 yss-plugin-protocol = { path = "./crates/yss-plugin-protocol" }
 yss-plugin-runtime = { path = "./crates/yss-plugin-runtime" }
-yss-sci-contract = { path = "./crates/yss-sci-contract" }
-yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
+
 yss-ipc-command = { path = "./crates/yss-ipc-command" }
 yss-ipc-channel = { path = "./crates/yss-ipc-channel" }
+
+
+yss-sci-contract = { path = "./crates/yss-sci-contract" }
+yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
 yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }
@@ -175,12 +185,7 @@ yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
 yss-statistical-harness = { path = "./crates/yss-statistical-harness" }
 yss-statistical-harness-sqlite = { path = "./crates/yss-statistical-harness-sqlite" }
 yss-tracing = { path = "./crates/yss-tracing" }
-tauri.workspace = true
-tauri-plugin-opener = "2.5.4"
-tauri-plugin-dialog = "2.7"
-tauri-plugin-fs = "2.5"
-tauri-plugin-clipboard-manager = "2"
-tauri-plugin-window-state = "=2.4.1"
+
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
