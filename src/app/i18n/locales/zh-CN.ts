@@ -577,11 +577,11 @@ export const zhCN = {
           "Command 用于查询、保存、编译或启动任务。前端创建 Channel 后，将它作为 Command 参数传入，为后续消息建立交付通道。一次命令的处理结果与持续消息流分别遵守各自契约。",
       },
       transport: {
-        title: "yss-api 通信适配",
+        title: "Command 命令适配",
         description: "注册命令、校验输入、转换类型，调用业务用例并映射交付结果。",
         parts: { registry: "命令注册", validation: "输入校验", mapping: "DTO 映射" },
         boundary:
-          "yss-api 是唯一 Tauri 传输边界。命令保持轻薄：解析和校验 wire 输入、转换类型、调用业务用例，再映射 DTO 或 CommandError；按对应业务契约交付 Event 或 Channel 消息。文件事务、科学计算和完整业务流程由业务层负责。",
+          "yss-ipc-command 拥有唯一命令注册表，依赖 Event、Channel 适配和共享 Contract。命令保持轻薄：解析和校验 wire 输入、转换类型、调用业务用例，再映射 DTO 或 CommandError；按对应业务契约交付 Event 或 Channel 消息。文件事务、科学计算和完整业务流程由业务层负责。",
       },
       business: {
         title: "Rust 业务用例",
@@ -591,11 +591,11 @@ export const zhCN = {
           "应用层与领域层承担业务编排、文件事务及计算，向通信适配层返回类型化结果。耗时工作进入既有 blocking 边界；Tauri 命令不复制这些职责。大表在后端查询、分页或生成摘要，控制传输规模。",
       },
       contract: {
-        title: "DTO 与 CommandError",
+        title: "Contract 共享协议",
         description: "Rust 映射传输结构，前端解析并验证身份；稳定错误码由 React 本地化。",
         parts: { wireTypes: "显式传输类型", identity: "结果身份", paging: "分页与摘要" },
         boundary:
-          "内部业务类型由 Rust 映射为 DTO，前端解析结构并校验响应身份。大表通过后端查询、分页和摘要限制规模。Command 错误固定包含以下三个字段；React 根据 code 提供本地化提示，后端不返回用户错误文案。",
+          "yss-ipc-contract 定义共享 DTO 与错误载荷，不依赖 Tauri 或 Application；各适配器转换业务结果，前端解析并校验响应身份。大表通过后端查询、分页和摘要限制规模。Command 错误固定包含以下三个字段；React 根据 code 提供本地化提示，后端不返回用户错误文案。",
         fields: {
           code: "稳定的错误类别，用于前端本地化。",
           details: "安全的结构化信息，无附加信息时为 null。",
@@ -607,7 +607,7 @@ export const zhCN = {
         description: "资源提交等低频通知，通过前端订阅进入已有发布流程。",
         parts: { commit: "提交后通知", subscription: "前端订阅", cleanup: "订阅清理" },
         boundary:
-          "Event 表示发生了变化，不构成完整业务状态。订阅方明确通知产生时机、消费者与清理责任。不能假设所有事件必然送达，也不能据此重建已提交状态；需要时通过 Command 查询后端快照。",
+          "yss-ipc-event 使用共享包络发送 Tauri Event，表示业务已经发生变化。订阅方明确通知产生时机、消费者与清理责任。不能假设所有事件必然送达，也不能据此重建已提交状态；需要时通过 Command 查询后端快照。",
       },
       publication: {
         title: "前端发布与去重",
@@ -621,7 +621,7 @@ export const zhCN = {
         description: "后端通过绑定通道持续向前端交付进度、执行事件和诊断。",
         parts: { progress: "进度", execution: "执行事件", diagnostics: "诊断" },
         boundary:
-          "前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
+          "yss-ipc-channel 负责通道适配和订阅管理；前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
         lifecycle: { create: "创建", bind: "绑定", receive: "接收", end: "结束", cleanup: "清理" },
       },
       links: {
@@ -739,7 +739,7 @@ export const zhCN = {
           delivery: "Event / Channel",
         },
         boundary:
-          "yss-api 是唯一 Tauri 传输接缝，不拥有已提交业务状态。错误统一为 { code, details, incidentId }；业务提交后交付通知，交付失败不撤销已成功的提交。插件进程协议归插件系统。",
+          "Command、Event、Channel 与共享 Contract 组成桌面 IPC 边界，各自负责命令、事件、通道和 wire 类型，不拥有已提交业务状态。错误统一为 { code, details, incidentId }；业务提交后交付通知，交付失败不撤销已成功的提交。插件进程协议归插件系统。",
       },
       support: {
         title: "基础支撑",
@@ -775,7 +775,8 @@ export const zhCN = {
       incoming: "被引用 {{count}}",
       outgoing: "依赖 {{count}}",
       conditional: "条件 / 构建",
-      legend: "全部 workspace crates · 箭头：引用方 → 被依赖方。点击节点高亮引用关系；虚线为条件或构建依赖。不含 dev 和第三方依赖。",
+      legend:
+        "全部 workspace crates · 箭头：引用方 → 被依赖方。点击节点高亮引用关系；虚线为条件或构建依赖。不含 dev 和第三方依赖。",
     },
     controls: "架构图视图控制",
     zoomIn: "放大",
@@ -839,7 +840,7 @@ export const zhCN = {
       },
       boundaryTitle: "DTO 与统一错误契约",
       boundary:
-        "src/services → invokeCommand → yss-api。命令只做适配，业务交给 Rust 应用层或领域模块。",
+        "src/services → invokeCommand → yss-ipc-command。命令只做适配，业务交给 Rust 应用层或领域模块。",
     },
     backend: {
       title: "后端",

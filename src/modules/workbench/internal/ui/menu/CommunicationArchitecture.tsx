@@ -70,7 +70,7 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       color: "var(--chart-4)",
       icon: FiShuffle,
       parts: ["registry", "validation", "mapping"],
-      reference: "yss-api",
+      reference: "yss-ipc-command",
     },
   },
   {
@@ -98,7 +98,7 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       color: "var(--chart-3)",
       icon: FiCode,
       parts: ["wireTypes", "identity", "paging"],
-      reference: "DTO / CommandError",
+      reference: "yss-ipc-contract",
     },
   },
   {
@@ -112,7 +112,7 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       color: "var(--chart-2)",
       icon: FiBell,
       parts: ["commit", "subscription", "cleanup"],
-      reference: "Event",
+      reference: "yss-ipc-event",
     },
   },
   {
@@ -140,7 +140,7 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       color: "var(--chart-3)",
       icon: FiActivity,
       parts: ["progress", "execution", "diagnostics"],
-      reference: "Channel",
+      reference: "yss-ipc-channel",
     },
   },
 ];

@@ -639,7 +639,7 @@ export const enUS = {
           "Commands query, save, compile or start tasks. The frontend creates a Channel and passes it as a Command argument to bind subsequent delivery. The command outcome and continuous messages each follow their own contract.",
       },
       transport: {
-        title: "yss-api transport adapter",
+        title: "Command adapter",
         description:
           "Register commands, validate input, convert types, invoke use cases and map outgoing results.",
         parts: {
@@ -648,7 +648,7 @@ export const enUS = {
           mapping: "DTO mapping",
         },
         boundary:
-          "yss-api is the only Tauri transport seam. Thin commands parse and validate wire input, convert types, invoke a use case and map its outcome to a DTO or CommandError. Event and Channel delivery follow the corresponding business contract. Filesystem transactions, scientific computation and complete workflows belong to business owners.",
+          "yss-ipc-command owns the sole command registry and uses Event, Channel and shared Contract crates. Thin commands parse and validate wire input, convert types, invoke a use case and map its outcome to a DTO or CommandError. Event and Channel delivery follow the corresponding business contract. Filesystem transactions, scientific computation and complete workflows belong to business owners.",
       },
       business: {
         title: "Rust business use case",
@@ -659,7 +659,7 @@ export const enUS = {
           "Application and domain owners perform orchestration, filesystem transactions and computation, returning typed outcomes to the transport adapter. Expensive work enters the established blocking boundary. Large tables are queried, paged or summarized in Rust to bound transfer size.",
       },
       contract: {
-        title: "DTO & CommandError",
+        title: "Shared IPC contract",
         description:
           "Rust maps wire structures; the frontend parses and checks identity, then localizes stable error codes.",
         parts: {
@@ -668,7 +668,7 @@ export const enUS = {
           paging: "Paging & summaries",
         },
         boundary:
-          "Rust maps internal business types to DTOs; the frontend parses their shape and checks response identity. Backend queries, paging and summaries bound large transfers. Command errors always contain these three fields. React localizes code; the backend does not return user-facing error prose.",
+          "yss-ipc-contract defines shared DTOs and error payloads with no Tauri or Application dependency. Adapters map business results; the frontend parses them and checks response identity. Backend queries, paging and summaries bound large transfers. Command errors always contain these three fields. React localizes code; the backend does not return user-facing error prose.",
         fields: {
           code: "A stable error category used for frontend localization.",
           details: "Safe structured information, or null when absent.",
@@ -681,7 +681,7 @@ export const enUS = {
           "Low-rate notifications, such as resource commits, enter the existing frontend publication flow.",
         parts: { commit: "After commit", subscription: "Subscription", cleanup: "Cleanup" },
         boundary:
-          "Events indicate changes without constituting complete business state. Each subscription identifies production timing, consumers and cleanup ownership. Delivery is not assumed complete and committed state is not reconstructed from event history; query the backend snapshot through a Command when needed.",
+          "yss-ipc-event sends Tauri Events using shared envelopes after business changes. Each subscription identifies production timing, consumers and cleanup ownership. Delivery is not assumed complete and committed state is not reconstructed from event history; query the backend snapshot through a Command when needed.",
       },
       publication: {
         title: "Frontend publication & deduplication",
@@ -701,7 +701,7 @@ export const enUS = {
           "The backend continuously delivers progress, execution events and diagnostics to the frontend.",
         parts: { progress: "Progress", execution: "Execution events", diagnostics: "Diagnostics" },
         boundary:
-          "The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
+          "yss-ipc-channel owns stream adapters and subscriptions. The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
         lifecycle: {
           create: "Create",
           bind: "Bind",
@@ -832,7 +832,7 @@ export const enUS = {
           delivery: "Event / Channel",
         },
         boundary:
-          "yss-api is the sole Tauri transport seam and owns no committed business state. Failures use { code, details, incidentId }. Notifications follow business commits; delivery failure does not undo a successful commit. Plugin process protocols belong to Plugins.",
+          "Command, Event, Channel and shared Contract form the desktop IPC boundary and own no committed business state. Failures use { code, details, incidentId }. Notifications follow business commits; delivery failure does not undo a successful commit. Plugin process protocols belong to Plugins.",
       },
       support: {
         title: "Infrastructure support",
@@ -869,7 +869,8 @@ export const enUS = {
       incoming: "Used by {{count}}",
       outgoing: "Depends on {{count}}",
       conditional: "Conditional / build",
-      legend: "All workspace crates · Arrows: consumer → dependency. Click a node to highlight its links; dashed lines indicate conditional or build dependencies. Excludes dev and third-party dependencies.",
+      legend:
+        "All workspace crates · Arrows: consumer → dependency. Click a node to highlight its links; dashed lines indicate conditional or build dependencies. Excludes dev and third-party dependencies.",
     },
     controls: "Architecture view controls",
     zoomIn: "Zoom in",
@@ -940,7 +941,7 @@ export const enUS = {
       },
       boundaryTitle: "DTO and shared error contract",
       boundary:
-        "src/services → invokeCommand → yss-api. Commands adapt requests to Rust application or domain logic.",
+        "src/services → invokeCommand → yss-ipc-command. Commands adapt requests to Rust application or domain logic.",
     },
     backend: {
       title: "Backend",
