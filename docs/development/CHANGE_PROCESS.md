@@ -33,7 +33,7 @@
 - [Workbench layout](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Runtime signals / feedback](../architecture/RUNTIME_SIGNALS.md)
 - [Statistical Harness](../architecture/STATISTICAL_HARNESS.md)
-- [Tauri / IPC transport](../../src-tauri/crates/yss-api/README.md)
+- [Tauri / IPC transport](../../src-tauri/crates/yss-ipc-command/README.md)
 
 ## 3. Scale, safety, and errors
 

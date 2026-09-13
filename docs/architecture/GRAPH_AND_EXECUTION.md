@@ -24,18 +24,18 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 
 ## 2. Module ownership
 
-| Owner                            | 职责                                                                        |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| yss-graph-document / protocol    | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                      |
-| yss-graph-document-edit / editor | structural validation、typed mutation、连接预检、端口顺序、clipboard        |
-| yss-graph-analysis               | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof |
-| yss-graph-resource-contract      | immutable resource facts 与一次 Resolve 的 dependency observations          |
-| yss-graph-runtime                | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                     |
-| yss-graph-compiler               | Ready snapshot 驱动的 immutable package lowering                            |
-| yss-project                      | committed authority、资源版本、文件事务与 publication                       |
-| yss-application                  | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                 |
-| yss-execution                    | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter     |
-| yss-api                          | command/event/channel DTO 与错误映射                                        |
+| Owner                                                                | 职责                                                                        |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| yss-graph-document / protocol                                        | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                      |
+| yss-graph-document-edit / editor                                     | structural validation、typed mutation、连接预检、端口顺序、clipboard        |
+| yss-graph-analysis                                                   | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof |
+| yss-graph-resource-contract                                          | immutable resource facts 与一次 Resolve 的 dependency observations          |
+| yss-graph-runtime                                                    | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                     |
+| yss-graph-compiler                                                   | Ready snapshot 驱动的 immutable package lowering                            |
+| yss-project                                                          | committed authority、资源版本、文件事务与 publication                       |
+| yss-application                                                      | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                 |
+| yss-execution                                                        | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter     |
+| yss-ipc-command / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
 
@@ -327,13 +327,13 @@ API 在成功交付 terminal event 后，用 command error details 的 `terminal
 
 ## 9. Cross-boundary routing
 
-| 信息                            | 去向                         |
-| ------------------------------- | ---------------------------- |
-| 普通 Graph validation / Blocked | Graph Projection / Problems  |
-| 计算结果                        | ResultStore + typed query    |
-| 用户程序 stdout/stderr          | Run Output                   |
-| 内部技术故障                    | sanitized tracing / incident |
-| command rejection               | yss-api stable error wire    |
-| 用户反馈                        | React localization / UI      |
+| 信息                            | 去向                              |
+| ------------------------------- | --------------------------------- |
+| 普通 Graph validation / Blocked | Graph Projection / Problems       |
+| 计算结果                        | ResultStore + typed query         |
+| 用户程序 stdout/stderr          | Run Output                        |
+| 内部技术故障                    | sanitized tracing / incident      |
+| command rejection               | yss-ipc-command stable error wire |
+| 用户反馈                        | React localization / UI           |
 
-详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-api/README.md)、[Workbench](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。
+详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-ipc-command/README.md)、[Workbench](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。

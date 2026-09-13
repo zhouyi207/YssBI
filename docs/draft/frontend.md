@@ -238,7 +238,7 @@ Rust Harness 拥有 session、turn、工具流程、审批与事件顺序，Reac
 
 Service 负责传输与解析，Application 决定响应是否仍适用于当前项目、草稿或请求，并协调采用。订阅的业务生命周期由对应 owner 决定，适配层提供创建与释放机制。
 
-Command 失败使用 Rust 定义的 `{ code, details, incidentId }`，用户提示由前端本地化。完整通信链路在[通信草稿](communication.md)展开，当前接口契约见 [`yss-api`](../../src-tauri/crates/yss-api/README.md)。
+Command 失败使用 Rust 定义的 `{ code, details, incidentId }`，用户提示由前端本地化。完整通信链路在[通信草稿](communication.md)展开，当前接口契约见 [`yss-ipc-command`](../../src-tauri/crates/yss-ipc-command/README.md)。
 
 ## 10. 客户端设置与通用支撑
 

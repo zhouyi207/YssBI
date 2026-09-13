@@ -19,7 +19,7 @@
 
 ## 子系统总览
 
-本表只统计宿主侧源码包，共 **64 个包**：`src-tauri/crates/` 下 63 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
+本表只统计宿主侧源码包，共 **67 个包**：`src-tauri/crates/` 下 66 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
 
 表中每个包只列在一个所属子系统下。后端包含七个业务子系统、通信适配子系统和基础支撑子系统，合计九个子系统；基础支撑只承担明确的技术能力，不接收其他业务子系统的领域规则。
 
@@ -32,9 +32,9 @@
 | 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                                                                                                |      5 |
 | Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                                                                                            |      4 |
 | 插件系统       | 宿主插件安装启用、进程管理、任务与结果接入             | `yss-plugin-runtime`、`yss-plugin-protocol`、`yss-plugin-sdk`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |      3 |
-| 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-api`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |      1 |
-| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`                                                                                                                                                                                                                                                                                                          |      5 |
-| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **64** |
+| 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-ipc-command`、`yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract`                                                                                                                                                                                                                                                                                                                                                                                                                                                |      4 |
+| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`                                                                                                                                                                                                                                                                                                                                                                      |      5 |
+| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **67** |
 
 插件系统一行保留宿主的通用插件管理、协议与 SDK，均位于 `src-tauri/crates/`。
 
@@ -42,7 +42,7 @@
 
 项目监听两个 crate 在项目与资源管理中展开：`yss-project-watcher` 管理监听生命周期与交付协议，`yss-project-watcher-notify` 提供具体文件系统适配；应用层协调项目切换和变化采用。
 
-启动组装、日志诊断和通用平台操作归基础支撑子系统，项目专属的文件系统与监听适配仍归项目与资源管理。`yss-api` 归通信适配子系统，在本文说明内部组织；前后端完整通信链路在[通信部分](communication.md)展开。增删或调整宿主侧包时，同步更新本表及数量。
+启动组装、日志诊断和通用平台操作归基础支撑子系统，项目专属的文件系统与监听适配仍归项目与资源管理。`yss-ipc-command` 归通信适配子系统，在本文说明内部组织；前后端完整通信链路在[通信部分](communication.md)展开。增删或调整宿主侧包时，同步更新本表及数量。
 
 ## 1. 应用与会话管理
 
@@ -229,17 +229,19 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 ## 8. 通信适配
 
-负责 React 与 Rust 通信的后端一侧，核心 crate 为 `yss-api`。接收请求、转换传输类型、调用业务能力，再将响应或消息交付给前端。
+负责 React 与 Rust 通信的后端一侧，由 Command、Event、Channel 三种适配与共享 Contract 四个 crate 组成。接收请求、转换传输类型、调用业务能力，再将响应或消息交付给前端。
 
 ### 内部结构
 
-| 部分                 | 职责                                                                      | 当前实现位置                                                |
-| -------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Command 定义与注册   | 定义命令处理入口，提供统一命令注册表供桌面入口接入                        | `yss-api` 的 `commands` 与 `lib.rs` 中的 `invoke_handler()` |
-| 请求解析与 DTO 映射  | 校验传输输入，将请求转换为业务参数，将业务结果映射为显式 DTO              | `commands` 与 `schema`                                      |
-| 业务用例调用         | 调用 Application 或对应子系统的用例，将耗时工作移入既有 blocking 边界     | `commands` 中的处理函数与调度适配器                         |
-| 错误映射             | 将业务失败转换为统一 `CommandError`，保留稳定类别、安全详情和诊断关联身份 | `error` 与命令中的错误映射                                  |
-| Event / Channel 交付 | 将业务通知、有序事件及进度转换为前端消息，管理相应传输订阅                | `event` 与命令中的 Channel 适配                             |
+| 部分                | 职责                                                                      | 当前实现位置                                                        |
+| ------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Command 定义与注册  | 定义命令处理入口，提供统一命令注册表供桌面入口接入                        | `yss-ipc-command` 的 `commands` 与 `lib.rs` 中的 `invoke_handler()` |
+| 请求解析与 DTO 映射 | 校验传输输入，将请求转换为业务参数，将业务结果映射为显式 DTO              | `commands` 与 `schema`                                              |
+| 业务用例调用        | 调用 Application 或对应子系统的用例，将耗时工作移入既有 blocking 边界     | `commands` 中的处理函数与调度适配器                                 |
+| 错误映射            | 将业务失败转换为统一 `CommandError`，保留稳定类别、安全详情和诊断关联身份 | `error` 与命令中的错误映射                                          |
+| Event 交付          | 在业务提交后发送既有事件包络                                              | `yss-ipc-event`                                                     |
+| Channel 交付        | 管理 Harness、图草稿交接、执行输出、项目进度和诊断的通道适配              | `yss-ipc-channel`                                                   |
+| 共享 wire 协议      | 定义跨适配器共享的 DTO、事件包络与错误载荷；不依赖 Tauri 或 Application   | `yss-ipc-contract`                                                  |
 
 ### 状态与边界
 
@@ -249,7 +251,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 错误统一使用 `{ code, details, incidentId }`，由前端生成本地化提示。Command、Event、Channel 的整体用法及前端响应处理在[通信草稿](communication.md)中展开。
 
-宿主与独立插件之间的进程协议仍由插件子系统管理；这里负责的是 Tauri 前后端通信。桌面组装入口接入 `yss-api` 提供的命令注册表，业务代码不反向依赖 Tauri。
+宿主与独立插件之间的进程协议仍由插件子系统管理；这里负责的是 Tauri 前后端通信。桌面组装入口接入 `yss-ipc-command` 提供的命令注册表，业务代码不反向依赖 Tauri。
 
 ## 9. 基础支撑
 
@@ -283,17 +285,17 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 以下列举已核对的代表性关系。这张表说明协作，不重新分配归属，也不参与 crate 数量统计。
 
-| Crate                                             | 所属子系统     | 协作对象与作用                                                  | 归属判断                                         |
-| ------------------------------------------------- | -------------- | --------------------------------------------------------------- | ------------------------------------------------ |
-| `yss-application`                                 | 应用与会话管理 | 协调项目、图、数据、科学计算及 Assistant / 插件业务入口         | 用例编排属于应用；领域规则由对应子系统提供       |
-| `yss-api`                                         | 通信适配       | 为多个业务子系统提供 Command、DTO 和消息交付                    | 统一承担传输适配，不因接口覆盖面广而多重归属     |
-| `yss-execution`                                   | 图分析与执行   | 通过数据与科学计算契约获取执行能力                              | 拥有运行与结果生命周期，不拥有查询引擎或统计算法 |
-| `yss-data-contract`、`yss-relational-contract`    | 数据管理与查询 | 为项目、图或执行提供数据值和关系访问契约                        | 共享的是数据含义及访问接口                       |
-| `yss-sci-contract`                                | 科学计算       | 为图节点目录、执行和应用提供计算契约                            | 计算输入、选项和结果的含义由科学计算定义         |
-| `yss-automation-contract`                         | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
-| `yss-function-editor-projection`                  | 图分析与执行   | 将 Project 保存的函数签名转换为编辑器投影，由项目及应用接口交付 | 输入使用项目文档，输出表达函数编辑语义           |
-| `yss-project-history`                             | 项目与资源管理 | 用统一资源身份与 mutation envelope 描述图、数据库和图表资源变更 | 资源种类多，不等于拥有各资源的计算规则           |
-| `yssbi`、`yss-canonical-hash` | 基础支撑       | 分别完成运行时组装和规范哈希，被业务模块使用      | 每个 crate 保持独立技术职责，业务决策留在调用方  |
+| Crate                                                                     | 所属子系统     | 协作对象与作用                                                  | 归属判断                                         |
+| ------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------- | ------------------------------------------------ |
+| `yss-application`                                                         | 应用与会话管理 | 协调项目、图、数据、科学计算及 Assistant / 插件业务入口         | 用例编排属于应用；领域规则由对应子系统提供       |
+| `yss-ipc-command`、`yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract` | 通信适配       | 分别承担命令、事件、通道和共享 wire 协议                        | 都归通信适配子系统，业务规则仍属于原业务 owner   |
+| `yss-execution`                                                           | 图分析与执行   | 通过数据与科学计算契约获取执行能力                              | 拥有运行与结果生命周期，不拥有查询引擎或统计算法 |
+| `yss-data-contract`、`yss-relational-contract`                            | 数据管理与查询 | 为项目、图或执行提供数据值和关系访问契约                        | 共享的是数据含义及访问接口                       |
+| `yss-sci-contract`                                                        | 科学计算       | 为图节点目录、执行和应用提供计算契约                            | 计算输入、选项和结果的含义由科学计算定义         |
+| `yss-automation-contract`                                                 | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
+| `yss-function-editor-projection`                                          | 图分析与执行   | 将 Project 保存的函数签名转换为编辑器投影，由项目及应用接口交付 | 输入使用项目文档，输出表达函数编辑语义           |
+| `yss-project-history`                                                     | 项目与资源管理 | 用统一资源身份与 mutation envelope 描述图、数据库和图表资源变更 | 资源种类多，不等于拥有各资源的计算规则           |
+| `yssbi`、`yss-canonical-hash`                                             | 基础支撑       | 分别完成运行时组装和规范哈希，被业务模块使用                    | 每个 crate 保持独立技术职责，业务决策留在调用方  |
 
 源码依赖需要区分业务契约和具体实现：部分能力通过接口注入，例如科学计算后端、Harness 存储和模型驱动；当前 Application、Project 也直接依赖部分运行时和存储组件。不能把这份职责图理解为所有 crate 都已实现严格的单向分层。
 
@@ -333,14 +335,14 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 下表更新初次筛选的 10 项工具或适配能力的当前状态，不再沿用历史源码行数。已删除的 crate 只用于标识原能力；保留某项职责不等于要求它永久独立成 crate。依赖版本以 [workspace manifest](../../src-tauri/Cargo.toml) 和 [锁文件](../../src-tauri/Cargo.lock) 为准。
 
-| 能力 | 当前状态 | 当前实现与归属 | 保留的项目职责或后续条件 |
-| ---- | -------- | -------------- | ------------------------ |
-| 显示名称分配 | **保留项目规则** | `yss-display-naming` 使用标准库 `HashSet` | 后缀识别、编号起点和大小写规则由项目定义 |
-| 规范哈希 | **保留当前字节契约** | `yss-canonical-hash` 使用 `serde_json` 和 `sha2` | 采用 JCS 必须作为指纹契约迁移，不能直接替换序列化器 |
-| 资源命名 | **保留项目规则** | `yss-resource-naming` 使用 Unicode 规范化、大小写折叠和正则库 | 三平台采用同一套名称校验与冲突规则 |
-| 文件监听 | **保留现有适配** | `yss-project-watcher-notify` 使用 `notify` | 继续维护全局重扫信号和停止、排空流程；按路径增量更新时再评估去抖库 |
-| 数据库编辑历史 | **暂不替换** | `yss-database-edit` 提供撤销、重做历史容器 | 出现编辑合并或独立保存点需求时，再评估 `undo` |
-| 项目进度与取消 | **暂不替换** | `yss-project-progress` 使用标准库完成同步取消轮询和任务登记 | 需要异步等待或父子任务取消时，再评估 `CancellationToken` |
+| 能力           | 当前状态             | 当前实现与归属                                                | 保留的项目职责或后续条件                                           |
+| -------------- | -------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 显示名称分配   | **保留项目规则**     | `yss-display-naming` 使用标准库 `HashSet`                     | 后缀识别、编号起点和大小写规则由项目定义                           |
+| 规范哈希       | **保留当前字节契约** | `yss-canonical-hash` 使用 `serde_json` 和 `sha2`              | 采用 JCS 必须作为指纹契约迁移，不能直接替换序列化器                |
+| 资源命名       | **保留项目规则**     | `yss-resource-naming` 使用 Unicode 规范化、大小写折叠和正则库 | 三平台采用同一套名称校验与冲突规则                                 |
+| 文件监听       | **保留现有适配**     | `yss-project-watcher-notify` 使用 `notify`                    | 继续维护全局重扫信号和停止、排空流程；按路径增量更新时再评估去抖库 |
+| 数据库编辑历史 | **暂不替换**         | `yss-database-edit` 提供撤销、重做历史容器                    | 出现编辑合并或独立保存点需求时，再评估 `undo`                      |
+| 项目进度与取消 | **暂不替换**         | `yss-project-progress` 使用标准库完成同步取消轮询和任务登记   | 需要异步等待或父子任务取消时，再评估 `CancellationToken`           |
 
 “已替换”表示代码迁移完成，不表示已完成三平台运行验证；窗口状态的官方插件替换另见 12.5 节。
 
@@ -361,7 +363,6 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 #### 文件监听与数值计算：继续复用已有底层库
 
 [监听适配器](../../src-tauri/crates/yss-project-watcher-notify/src/lib.rs)已使用 `notify`，将事件合并为全局重扫信号并等待静默窗口。`notify-debouncer-mini` 的按文件去抖不能直接替代该流程；需要按路径增量更新时，再评估去抖库及轮询监听。停止、排空和实际变化确认仍由项目层负责。[去抖库文档](https://docs.rs/notify-debouncer-mini/0.7.0/notify_debouncer_mini/)、[notify 平台限制](https://docs.rs/notify/8.2.0/notify/)
-
 
 ### 12.4 其余 20 个小型 crate
 
@@ -428,7 +429,7 @@ Dockview 布局持久化、结果租约和应用装饰设置继续由各自现�
 
 窗口状态继续归基础支撑。通用实现已由第三方插件提供，剩余注册、状态分组和生命周期保存属于桌面组装，内聚到根包即可。原 crate 不再有独立职责，因此直接删除；没有把窗口逻辑合并到通信、项目或图子系统。
 
-宿主 `src-tauri/crates/` 当前为 63 个包，计入根包后共 64 个。官方插件是第三方依赖，不纳入宿主 crate 总览。
+宿主 `src-tauri/crates/` 当前为 66 个包，计入根包后共 67 个。官方插件是第三方依赖，不纳入宿主 crate 总览。
 
 #### 12.5.5 验证与剩余平台检查
 
@@ -590,7 +591,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 上述结论的主要源码入口：
 
-- **生命周期两路结果**：[后端发送事件并返回相同回执](../../src-tauri/crates/yss-api/src/commands/command_project/lifecycle.rs)、[前端事件入口](../../src/features/application/initialization/useProjectSync.ts)、[回执登记与合并](../../src/features/application/projectLifecycleReceipt.ts)。`recoverProjectLifecycleDirectFailure` 查看的是前端已经收到的回执状态，并不向后端查询或重新执行请求。
+- **生命周期两路结果**：[后端发送事件并返回相同回执](../../src-tauri/crates/yss-ipc-command/src/commands/command_project/lifecycle.rs)、[前端事件入口](../../src/features/application/initialization/useProjectSync.ts)、[回执登记与合并](../../src/features/application/projectLifecycleReceipt.ts)。`recoverProjectLifecycleDirectFailure` 查看的是前端已经收到的回执状态，并不向后端查询或重新执行请求。
 - **资源关联与版本排序**：[图表保存确认](../../src/features/application/chart/saveChartDocument.ts)、[数据库结果确认](../../src/features/application/dataManagement/databaseMutation.ts)、[函数签名协调](../../src/features/application/editorMutation/functionSignatureCoordinator.ts)、[publication coordinator](../../src/features/application/editorMutation/projectPublicationCoordinator.ts)。按版本发布、按请求确认修改是两个用途；重复回执不是一概需要报错的异常。
 - **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-dataset-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database_mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-project-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
 
@@ -600,7 +601,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph_open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
 3. **统一函数签名请求身份。**请求直接使用捕获上下文的 `operationId`，移除第二个生成器及 `pendingSignatureOperations` 集合。保留 coordinator epoch，在重置后丢弃迟到结果；资源版本、before-state 和结果关联校验继续有效。同一函数的不同 ID 并发修改由后端资源版本边界处理。
 4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphDraft/saveGraphDraft.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
-5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-automation-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-statistical-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-statistical-harness/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-api/src/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
+5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-automation-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-statistical-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-statistical-harness/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-ipc-command/src/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
 6. **通用编号使用通用库。**[HarnessIdGenerator](../../src-tauri/src/lib.rs)改用 workspace 已有的 `uuid::Uuid::new_v4()`，将根包的 UUID 测试依赖提升为生产依赖，保持 session、turn、tool、capability、memory、approval 等身份类型和前缀，没有引入新的第三方库。
 7. **删除外部产物的一次性预留。**[commit_external_artifacts](../../src-tauri/crates/yss-project/src/external_resources.rs)显式检查捕获项目实例，取得文件 lease 后重验项目与 session，提交前再次检查身份。落盘回执、来源信息、内容哈希和生命周期准入继续有效。来源中的插件 `operation_id` 保留，它属于另一套协议。
 

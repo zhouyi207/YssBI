@@ -34,7 +34,7 @@ flowchart TB
   subgraph Host["YssBI 宿主"]
     UI["Workbench / 宿主标准 UI"]
     Webview["隔离插件页面容器"]
-    Transport["yss-api / 桌面传输适配"]
+    Transport["yss-ipc-command / 桌面传输适配"]
     Manager["Plugin Manager"]
     Gateway["Extension Gateway"]
     Runner["进程与资源适配器"]
@@ -645,7 +645,7 @@ operationId 和 taskId 的命名空间、回执保留期限、snapshot/lease 到
 本契约提供目标职责，不给过渡实现豁免，也不以当前原型的 crate 和字段反向限制架构。实现偏差应在对应变更中消除，并同步 Current 专项文档；尚未通过验收时不得声称已完成完整插件化。
 
 - 当前系统 authority 与链路：[系统架构](ARCHITECTURE.md)。
-- 宿主 Tauri wire：[yss-api](../../src-tauri/crates/yss-api/README.md)。
+- 宿主 Tauri wire：[yss-ipc-command](../../src-tauri/crates/yss-ipc-command/README.md)。
 - 布局、关闭、reset 和项目替换：[Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)。
 - Graph、执行和结果：[Graph 与 Execution](GRAPH_AND_EXECUTION.md)。
 - 日志、错误、反馈与运行信号：[Runtime Signals](RUNTIME_SIGNALS.md)。

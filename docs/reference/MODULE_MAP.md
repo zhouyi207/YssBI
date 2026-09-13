@@ -16,7 +16,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | Package | Directory | Manifest | Owner README |
 | --- | --- | --- | --- |
 | `yss-agent-rig` | `src-tauri/crates/yss-agent-rig` | [Cargo.toml](../../src-tauri/crates/yss-agent-rig/Cargo.toml) | — |
-| `yss-api` | `src-tauri/crates/yss-api` | [Cargo.toml](../../src-tauri/crates/yss-api/Cargo.toml) | [README](../../src-tauri/crates/yss-api/README.md) |
 | `yss-application` | `src-tauri/crates/yss-application` | [Cargo.toml](../../src-tauri/crates/yss-application/Cargo.toml) | [README](../../src-tauri/crates/yss-application/README.md) |
 | `yss-automation-contract` | `src-tauri/crates/yss-automation-contract` | [Cargo.toml](../../src-tauri/crates/yss-automation-contract/Cargo.toml) | — |
 | `yss-bayes-artifact-contract` | `plugins/julia/native/crates/yss-bayes-artifact-contract` | [Cargo.toml](../../plugins/julia/native/crates/yss-bayes-artifact-contract/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-bayes-artifact-contract/README.md) |
@@ -53,6 +52,10 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-graph-resource-contract` | `src-tauri/crates/yss-graph-resource-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-resource-contract/Cargo.toml) | — |
 | `yss-graph-runtime` | `src-tauri/crates/yss-graph-runtime` | [Cargo.toml](../../src-tauri/crates/yss-graph-runtime/Cargo.toml) | — |
 | `yss-graph-type-mapping` | `src-tauri/crates/yss-graph-type-mapping` | [Cargo.toml](../../src-tauri/crates/yss-graph-type-mapping/Cargo.toml) | — |
+| `yss-ipc-channel` | `src-tauri/crates/yss-ipc-channel` | [Cargo.toml](../../src-tauri/crates/yss-ipc-channel/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-channel/README.md) |
+| `yss-ipc-command` | `src-tauri/crates/yss-ipc-command` | [Cargo.toml](../../src-tauri/crates/yss-ipc-command/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-command/README.md) |
+| `yss-ipc-contract` | `src-tauri/crates/yss-ipc-contract` | [Cargo.toml](../../src-tauri/crates/yss-ipc-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-contract/README.md) |
+| `yss-ipc-event` | `src-tauri/crates/yss-ipc-event` | [Cargo.toml](../../src-tauri/crates/yss-ipc-event/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-event/README.md) |
 | `yss-julia-extension` | `plugins/julia/native/crates/yss-julia-extension` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-extension/Cargo.toml) | — |
 | `yss-julia-runtime` | `plugins/julia/native/crates/yss-julia-runtime` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-runtime/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `plugins/julia/native/crates/yss-julia-worker` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-worker/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-worker/README.md) |

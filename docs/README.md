@@ -37,7 +37,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Focused implementation contracts
 
-- [Tauri / IPC transport](../src-tauri/crates/yss-api/README.md)
+- [Tauri / IPC transport](../src-tauri/crates/yss-ipc-command/README.md)
 - [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [Dataset snapshot store](../src-tauri/crates/yss-dataset-store/README.md)

@@ -11,7 +11,7 @@
 
 - [ ] 补齐目录中 DataFrame 选列、求和节点的执行实现及选列类型推断；当前 `yssbi.dataframe.series.select` 输出泛型无法解析，且这两个节点均未注册到执行器。
 - [ ] 按 [Tolerance 分析](docs/reviews/2026-09-07-tolerance-analysis.md) 处理数值策略：优先修复判秩失败回退和 Prais 迭代上限被当作成功，再统一模型级秩不足策略、模型参数与报告，最后评估 SVD 重复计算。
-- [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-api` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
+- [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-ipc-command` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
 - [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
 - [ ] 按需核对 [legacy TODO snapshot](docs/version/legacy-todo-2026-09-04.md)，只把经当前代码验证仍有效的条目迁回本文件或对应 roadmap；不要把历史 change summary 重新标为开放任务。
 
@@ -55,3 +55,54 @@ JSON 是不是合法？
 如果后端或者 AI 会不断修改页面：
 
 不要：.图表格式从 schema 3 升到 4
+
+
+
+
+
+
+这三段是在 向 Tauri 注册三个应用级共享状态。后续 IPC 命令通过 State<T> 或 app.state::<T>() 获取同一个实例。
+
+  1. ProjectWatcherState：管理当前项目的文件监听
+
+  ProjectWatcherState::new(
+      Arc::new(NotifyProjectFileWatcher::new()),
+  )
+
+  这里分成两个角色：
+
+  - ProjectWatcherState 管理监听的启动、切换、停止，以及屏蔽旧项目的延迟事件。
+  - NotifyProjectFileWatcher 使用 notify 库实际监听操作系统文件变化。
+
+  这行只是组装并注册。项目加载等流程调用 watch_project() 后才开始监听；收到变化后，通过 Application 更新项目索引，再通知
+  前端。
+
+  实现见 ProjectWatcherState (src-tauri/crates/yss-project-watcher/src/lib.rs:217)。
+
+  2. ProjectTaskCancellationRegistry：管理项目选择器任务的取消
+
+  它记录当前正在执行的扫描或清理任务：
+
+  - begin()：创建取消标记，同时取消前一个任务。
+  - cancel_active()：请求取消当前任务。
+  - end()：任务结束后清除对应记录。
+
+  例如，用户扫描目录寻找项目时点击“取消”，IPC 命令会通过这个共享状态发出取消请求。任务自己检查标记并退出，不会强制杀死线
+  程。
+
+  实现见 取消管理器 (src-tauri/crates/yss-project-progress/src/lib.rs:60)。
+
+  3. ActivityPanelSyncState：缓存侧栏面板的增量同步基线
+
+  它服务于项目、节点、命令、插件等侧栏面板的数据传输：
+
+  - 前端首次请求：返回完整 Snapshot。
+  - 前端携带上次的 cursor 请求：与缓存基线比较，返回 Patch。
+  - 没有匹配基线：重新返回完整快照。
+  - 数据没变化：返回空补丁。
+
+  缓存区分窗口、语言、面板和项目，并有数量与内存上限。它保存的是用于传输的面板投影，不负责保存项目文件或管理 Dockview 布
+  局。
+
+  实现见 ActivityPanelSyncState (src-tauri/crates/yss-ipc-command/src/activity_panel_sync.rs:16)，调用入口是
+  get_activity_panel_document (src-tauri/crates/yss-ipc-command/src/commands/command_activity_panel.rs:26)。
