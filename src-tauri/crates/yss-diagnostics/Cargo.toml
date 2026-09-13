@@ -10,7 +10,6 @@ yss-tracing = { path = "../yss-tracing" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tauri.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 

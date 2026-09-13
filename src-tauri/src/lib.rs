@@ -83,7 +83,7 @@ impl IdGeneratorPort for HarnessIdGenerator {
 fn initialize_harness_state(
     app_dir: std::path::PathBuf,
     application: yss_application::execution::ApplicationState,
-) -> Result<yss_api::HarnessRuntimeState, HarnessInitializationError> {
+) -> Result<yss_ipc_command::HarnessRuntimeState, HarnessInitializationError> {
     let captured = application.capture_session()?;
     let current_project = yss_automation_contract::ProjectSessionBinding::new(
         captured.project_instance_id().clone(),
@@ -92,8 +92,8 @@ fn initialize_harness_state(
     let store = Arc::new(tauri::async_runtime::block_on(
         yss_statistical_harness_sqlite::SqliteHarnessStore::connect(app_dir),
     )?);
-    let channels = Arc::new(yss_api::HarnessChannelHub::new());
-    let graph_clients = Arc::new(yss_api::HarnessGraphClientHub::new());
+    let channels = Arc::new(yss_ipc_channel::HarnessChannelHub::new());
+    let graph_clients = Arc::new(yss_ipc_channel::HarnessGraphClientHub::new());
     let agent_driver = Arc::new(yss_agent_rig::ConfigurableAgentDriver::new());
     let clock = Arc::new(SystemHarnessClock);
     tauri::async_runtime::block_on(
@@ -102,7 +102,7 @@ fn initialize_harness_state(
     let host = Arc::new(yss_statistical_harness::HarnessHost::new(
         yss_statistical_harness::HarnessPorts {
             agent_driver: agent_driver.clone(),
-            capability_gateway: Arc::new(yss_api::ApplicationCapabilityGateway::new(
+            capability_gateway: Arc::new(yss_ipc_command::ApplicationCapabilityGateway::new(
                 application,
                 graph_clients.clone(),
             )),
@@ -121,7 +121,7 @@ fn initialize_harness_state(
     tauri::async_runtime::block_on(host.recover_interrupted_turns())?;
     tauri::async_runtime::block_on(host.reconcile_project_session(&current_project))?;
     tauri::async_runtime::block_on(host.recover_workflows())?;
-    Ok(yss_api::HarnessRuntimeState::new(
+    Ok(yss_ipc_command::HarnessRuntimeState::new(
         host,
         channels,
         agent_driver,
@@ -169,7 +169,7 @@ pub fn run() {
             std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
         ))
         .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
-        .manage(yss_api::ActivityPanelSyncState::default())
+        .manage(yss_ipc_command::ActivityPanelSyncState::default())
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
             let diagnostics = yss_diagnostics::DiagnosticsRuntime::initialize()
@@ -244,7 +244,7 @@ pub fn run() {
                 application.close_result_owner(window.label());
             }
         })
-        .invoke_handler(yss_api::invoke_handler())
+        .invoke_handler(yss_ipc_command::invoke_handler())
         .build(tauri::generate_context!());
     match app {
         Ok(app) => app.run(|app, event| {

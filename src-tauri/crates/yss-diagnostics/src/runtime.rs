@@ -1,4 +1,3 @@
-use tauri::ipc::Channel;
 use yss_tracing::LogRecordSink;
 
 use super::dispatcher::{
@@ -43,13 +42,6 @@ impl DiagnosticsRuntime {
         let pending = entries.iter().map(frontend_pending).collect();
         self.hub.publish(pending)?;
         Ok(())
-    }
-
-    pub fn subscribe(
-        &self,
-        on_records: Channel<DiagnosticBatchDto>,
-    ) -> Result<DiagnosticSubscriptionDto, DiagnosticsUnavailable> {
-        self.subscribe_batches(move |batch| on_records.send(batch).is_ok())
     }
 
     /// Subscribes a platform-neutral bounded batch sink and returns the

@@ -26,7 +26,10 @@ members = [
   "../plugins/julia/native/crates/yss-julia-runtime",
   "../plugins/julia/native/crates/yss-julia-worker",
 
-  "crates/yss-api",
+  "crates/yss-ipc-command",
+  "crates/yss-ipc-contract",
+  "crates/yss-ipc-event",
+  "crates/yss-ipc-channel",
   "crates/yss-agent-rig",
   "crates/yss-application",
   "crates/yss-automation-contract",
@@ -155,7 +158,8 @@ yss-plugin-protocol = { path = "./crates/yss-plugin-protocol" }
 yss-plugin-runtime = { path = "./crates/yss-plugin-runtime" }
 yss-sci-contract = { path = "./crates/yss-sci-contract" }
 yss-sci-runtime = { path = "./crates/yss-sci-runtime" }
-yss-api = { path = "./crates/yss-api" }
+yss-ipc-command = { path = "./crates/yss-ipc-command" }
+yss-ipc-channel = { path = "./crates/yss-ipc-channel" }
 yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }

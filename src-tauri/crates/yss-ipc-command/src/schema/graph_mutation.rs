@@ -1,0 +1,295 @@
+use serde::{Deserialize, Serialize};
+use yss_graph_protocol::PortKey;
+use yss_ipc_contract::graph::PortAddressDto;
+
+use yss_graph_document::{
+    ConnectionId, JsonValue, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress,
+    PortInstanceId,
+};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum PortPlacementDto {
+    Append,
+    Before { instance_id: PortInstanceId },
+    After { instance_id: PortInstanceId },
+}
+
+impl From<PortPlacementDto> for yss_graph_editor::PortPlacement {
+    fn from(value: PortPlacementDto) -> Self {
+        match value {
+            PortPlacementDto::Append => Self::Append,
+            PortPlacementDto::Before { instance_id } => Self::Before(instance_id),
+            PortPlacementDto::After { instance_id } => Self::After(instance_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "type",
+    content = "payload",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum EditorGraphMutationDto {
+    InsertConstantReference {
+        id: yss_graph_document::ConstantId,
+        position: NodePosition,
+    },
+    SetConstant {
+        id: yss_graph_document::ConstantId,
+        constant: Option<yss_graph_document::GraphConstant>,
+    },
+    CreateNode {
+        descriptor: crate::schema::catalog::NodeCreationDescriptorDto,
+        position: NodePosition,
+        user_label: Option<String>,
+        #[serde(default)]
+        connect_from: Option<PortAddressDto>,
+    },
+    DeleteNodes {
+        node_ids: Vec<NodeId>,
+    },
+    SetParameters {
+        node_id: NodeId,
+        parameters: ParameterValues,
+    },
+    MoveNodes {
+        positions: Vec<NodePositionMutationDto>,
+    },
+    Connect {
+        output: PortAddressDto,
+        input: PortAddressDto,
+        order: Option<OrderKey>,
+    },
+    MoveConnections {
+        source: PortAddressDto,
+        target: PortAddressDto,
+    },
+    DisconnectConnections {
+        connection_ids: Vec<ConnectionId>,
+    },
+    InsertReroute {
+        connection_id: ConnectionId,
+        position: NodePosition,
+    },
+    DisconnectPort {
+        address: PortAddressDto,
+    },
+    DisconnectNode {
+        node_id: NodeId,
+    },
+    SetLiteral {
+        address: PortAddressDto,
+        literal: Option<JsonValue>,
+    },
+    SetConfiguration {
+        node_id: NodeId,
+        key: yss_graph_protocol::ParameterKey,
+        values: yss_graph_document::ParameterValues,
+    },
+    AddPortInstance {
+        node_id: NodeId,
+        template_key: PortKey,
+        placement: PortPlacementDto,
+    },
+    MovePortInstance {
+        address: PortAddressDto,
+        placement: PortPlacementDto,
+    },
+    RemovePortInstance {
+        address: PortAddressDto,
+    },
+    DuplicateSubgraph {
+        node_ids: Vec<NodeId>,
+        offset: NodePosition,
+    },
+    InsertSubgraph {
+        snapshot_json: String,
+        anchor: NodePosition,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodePositionMutationDto {
+    pub node_id: NodeId,
+    pub position: NodePosition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum EditorMutationMappingError {
+    #[error("editor mutation contains an invalid port address")]
+    InvalidPortAddress,
+    #[error("editor mutation contains an invalid node creation descriptor")]
+    InvalidNodeCreation,
+    #[error("editor mutation contains an invalid clipboard subgraph")]
+    InvalidClipboardSubgraph,
+}
+
+impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
+    type Error = EditorMutationMappingError;
+
+    fn try_from(value: EditorGraphMutationDto) -> Result<Self, Self::Error> {
+        let address = |value: PortAddressDto| {
+            PortAddress::try_from(value).map_err(|_| EditorMutationMappingError::InvalidPortAddress)
+        };
+        Ok(match value {
+            EditorGraphMutationDto::InsertConstantReference { id, position } => {
+                yss_graph_editor::EditorGraphMutation::InsertConstantReference { id, position }
+            }
+            EditorGraphMutationDto::SetConstant { id, constant } => {
+                yss_graph_editor::EditorGraphMutation::SetConstant { id, constant }
+            }
+            EditorGraphMutationDto::CreateNode {
+                descriptor,
+                position,
+                user_label,
+                connect_from,
+            } => yss_graph_editor::EditorGraphMutation::CreateNode {
+                descriptor: descriptor
+                    .try_into()
+                    .map_err(|_| EditorMutationMappingError::InvalidNodeCreation)?,
+                position,
+                user_label,
+                connect_from: connect_from.map(address).transpose()?,
+            },
+            EditorGraphMutationDto::DeleteNodes { node_ids } => {
+                yss_graph_editor::EditorGraphMutation::DeleteNodes { node_ids }
+            }
+            EditorGraphMutationDto::SetParameters {
+                node_id,
+                parameters,
+            } => yss_graph_editor::EditorGraphMutation::SetParameters {
+                node_id,
+                parameters,
+            },
+            EditorGraphMutationDto::MoveNodes { positions } => {
+                yss_graph_editor::EditorGraphMutation::MoveNodes {
+                    positions: positions
+                        .into_iter()
+                        .map(|position| yss_graph_editor::NodePositionMutation {
+                            node_id: position.node_id,
+                            position: position.position,
+                        })
+                        .collect(),
+                }
+            }
+            EditorGraphMutationDto::Connect {
+                output,
+                input,
+                order,
+            } => yss_graph_editor::EditorGraphMutation::Connect {
+                output: address(output)?,
+                input: address(input)?,
+                order,
+            },
+            EditorGraphMutationDto::MoveConnections { source, target } => {
+                yss_graph_editor::EditorGraphMutation::MoveConnections {
+                    source: address(source)?,
+                    target: address(target)?,
+                }
+            }
+            EditorGraphMutationDto::DisconnectConnections { connection_ids } => {
+                yss_graph_editor::EditorGraphMutation::DisconnectConnections { connection_ids }
+            }
+            EditorGraphMutationDto::InsertReroute {
+                connection_id,
+                position,
+            } => yss_graph_editor::EditorGraphMutation::InsertReroute {
+                connection_id,
+                position,
+            },
+            EditorGraphMutationDto::DisconnectPort { address: value } => {
+                yss_graph_editor::EditorGraphMutation::DisconnectPort {
+                    address: address(value)?,
+                }
+            }
+            EditorGraphMutationDto::DisconnectNode { node_id } => {
+                yss_graph_editor::EditorGraphMutation::DisconnectNode { node_id }
+            }
+            EditorGraphMutationDto::SetLiteral {
+                address: value,
+                literal,
+            } => yss_graph_editor::EditorGraphMutation::SetLiteral {
+                address: address(value)?,
+                literal,
+            },
+            EditorGraphMutationDto::SetConfiguration {
+                node_id,
+                key,
+                values,
+            } => yss_graph_editor::EditorGraphMutation::SetConfiguration {
+                node_id,
+                key,
+                values,
+            },
+            EditorGraphMutationDto::AddPortInstance {
+                node_id,
+                template_key,
+                placement,
+            } => yss_graph_editor::EditorGraphMutation::AddPortInstance {
+                node_id,
+                template_key,
+                placement: placement.into(),
+            },
+            EditorGraphMutationDto::MovePortInstance {
+                address: value,
+                placement,
+            } => yss_graph_editor::EditorGraphMutation::MovePortInstance {
+                address: address(value)?,
+                placement: placement.into(),
+            },
+            EditorGraphMutationDto::RemovePortInstance { address: value } => {
+                yss_graph_editor::EditorGraphMutation::RemovePortInstance {
+                    address: address(value)?,
+                }
+            }
+            EditorGraphMutationDto::DuplicateSubgraph { node_ids, offset } => {
+                yss_graph_editor::EditorGraphMutation::DuplicateSubgraph { node_ids, offset }
+            }
+            EditorGraphMutationDto::InsertSubgraph {
+                snapshot_json,
+                anchor,
+            } => yss_graph_editor::EditorGraphMutation::InsertSubgraph {
+                snapshot: crate::schema::graph_clipboard::parse_clipboard_snapshot(&snapshot_json)
+                    .map_err(|_| EditorMutationMappingError::InvalidClipboardSubgraph)?,
+                anchor,
+            },
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use yss_ipc_contract::graph::PortAddressMappingError;
+
+    #[test]
+    fn port_address_dto_preserves_tagged_camel_case_wire_and_typed_errors() {
+        let node = NodeId::from_uuid(uuid::Uuid::from_u128(1));
+        let declared = PortAddressDto::Declared {
+            node_id: node.to_string().into(),
+            port_key: "value".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&declared).unwrap(),
+            json!({ "kind": "declared", "nodeId": node.to_string(), "portKey": "value" })
+        );
+        assert!(matches!(
+            PortAddress::try_from(PortAddressDto::Declared {
+                node_id: "bad".into(),
+                port_key: "value".into(),
+            }),
+            Err(PortAddressMappingError::InvalidNodeId)
+        ));
+    }
+}

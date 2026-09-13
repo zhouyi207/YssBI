@@ -1,0 +1,24 @@
+[package]
+name = "yss-ipc-channel"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+tauri.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+yss-ipc-contract = { path = "../yss-ipc-contract" }
+yss-application = { path = "../yss-application" }
+yss-automation-contract = { path = "../yss-automation-contract" }
+yss-diagnostics = { path = "../yss-diagnostics" }
+yss-execution = { path = "../yss-execution" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-progress = { path = "../yss-project-progress" }
+
+[dev-dependencies]
+serde_json.workspace = true
+yss-execution = { path = "../yss-execution", features = ["test-support"] }

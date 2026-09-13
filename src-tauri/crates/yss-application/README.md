@@ -6,7 +6,7 @@
 
 - 只依赖领域与运行期 crate，不依赖根包、Tauri、Commands 或 Schema；
 - `ApplicationState` 是运行期 authority 组合后的应用会话入口，不是全局 backend 容器；
-- 对外返回 Application-owned typed facts，由 `yss-api` transport adapter 投影为 wire DTO；
+- 对外返回 Application-owned typed facts，由 `yss-ipc-command` transport adapter 投影为 wire DTO；
 - `test-support` 只开放跨 crate contract 测试所需的构造与 publication seam。
 
 ## Bundled samples

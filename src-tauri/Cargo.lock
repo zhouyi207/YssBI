@@ -9225,60 +9225,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-api"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "serde",
- "serde_json",
- "tauri",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "yss-application",
- "yss-automation-contract",
- "yss-chart-document",
- "yss-data-contract",
- "yss-database-contract",
- "yss-database-edit",
- "yss-database-runtime",
- "yss-database-schema",
- "yss-diagnostics",
- "yss-execution",
- "yss-function-editor-projection",
- "yss-graph-analysis",
- "yss-graph-analysis-contract",
- "yss-graph-catalog",
- "yss-graph-document",
- "yss-graph-document-edit",
- "yss-graph-editor",
- "yss-graph-protocol",
- "yss-graph-registry",
- "yss-graph-runtime",
- "yss-math-expr",
- "yss-plugin-protocol",
- "yss-plugin-runtime",
- "yss-project",
- "yss-project-filesystem",
- "yss-project-history",
- "yss-project-identity",
- "yss-project-model",
- "yss-project-progress",
- "yss-project-registry",
- "yss-project-registry-contract",
- "yss-project-watcher",
- "yss-relational-contract",
- "yss-sci-contract",
- "yss-sci-runtime",
- "yss-statistical-harness",
- "yss-tabular-arrow",
- "yss-tabular-contract",
- "yss-tracing",
-]
-
-[[package]]
 name = "yss-application"
 version = "0.1.0"
 dependencies = [
@@ -9564,7 +9510,6 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
- "tauri",
  "thiserror 2.0.20",
  "tracing",
  "tracing-subscriber",
@@ -9766,6 +9711,110 @@ dependencies = [
  "thiserror 2.0.20",
  "yss-data-contract",
  "yss-graph-protocol",
+]
+
+[[package]]
+name = "yss-ipc-channel"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
+ "yss-application",
+ "yss-automation-contract",
+ "yss-diagnostics",
+ "yss-execution",
+ "yss-graph-document",
+ "yss-ipc-contract",
+ "yss-project-identity",
+ "yss-project-progress",
+]
+
+[[package]]
+name = "yss-ipc-command"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "serde",
+ "serde_json",
+ "tauri",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "yss-application",
+ "yss-automation-contract",
+ "yss-chart-document",
+ "yss-data-contract",
+ "yss-database-contract",
+ "yss-database-edit",
+ "yss-database-runtime",
+ "yss-database-schema",
+ "yss-diagnostics",
+ "yss-execution",
+ "yss-graph-analysis",
+ "yss-graph-analysis-contract",
+ "yss-graph-catalog",
+ "yss-graph-document",
+ "yss-graph-document-edit",
+ "yss-graph-editor",
+ "yss-graph-protocol",
+ "yss-graph-registry",
+ "yss-graph-runtime",
+ "yss-ipc-channel",
+ "yss-ipc-contract",
+ "yss-ipc-event",
+ "yss-math-expr",
+ "yss-plugin-protocol",
+ "yss-plugin-runtime",
+ "yss-project",
+ "yss-project-filesystem",
+ "yss-project-history",
+ "yss-project-identity",
+ "yss-project-model",
+ "yss-project-progress",
+ "yss-project-registry",
+ "yss-project-registry-contract",
+ "yss-project-watcher",
+ "yss-relational-contract",
+ "yss-sci-contract",
+ "yss-sci-runtime",
+ "yss-statistical-harness",
+ "yss-tabular-arrow",
+ "yss-tabular-contract",
+ "yss-tracing",
+]
+
+[[package]]
+name = "yss-ipc-contract"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "yss-automation-contract",
+ "yss-data-contract",
+ "yss-function-editor-projection",
+ "yss-graph-analysis-contract",
+ "yss-graph-document",
+ "yss-graph-protocol",
+ "yss-graph-registry",
+ "yss-project-history",
+ "yss-project-identity",
+ "yss-project-registry-contract",
+]
+
+[[package]]
+name = "yss-ipc-event"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tracing",
+ "yss-ipc-contract",
 ]
 
 [[package]]
@@ -10216,7 +10265,6 @@ dependencies = [
  "tracing",
  "uuid",
  "yss-agent-rig",
- "yss-api",
  "yss-application",
  "yss-automation-contract",
  "yss-database-contract",
@@ -10225,6 +10273,8 @@ dependencies = [
  "yss-dataset-store",
  "yss-diagnostics",
  "yss-execution",
+ "yss-ipc-channel",
+ "yss-ipc-command",
  "yss-plugin-protocol",
  "yss-plugin-runtime",
  "yss-project",

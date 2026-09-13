@@ -522,13 +522,13 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             .workspace_member_crate_aliases
             .iter()
             .any(|alias| {
-                alias.owning_package == "yss-api"
+                alias.owning_package == "yss-ipc-command"
                     && alias.declared_name == "yss_sci_runtime"
                     && alias.member_package == "yss-sci-runtime"
             })
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
-        dependency.owning_package == "yss-api"
+        dependency.owning_package == "yss-ipc-command"
             && dependency.package_name == "yss-sci-runtime"
             && matches!(
                 dependency.authority,
@@ -537,7 +537,7 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
     }));
     for (owning_package, declared_name, member_package) in [
         ("yssbi", "yss_application", "yss-application"),
-        ("yss-api", "yss_data_contract", "yss-data-contract"),
+        ("yss-ipc-contract", "yss_data_contract", "yss-data-contract"),
         (
             "yss-application",
             "yss_graph_compiler",
@@ -2020,7 +2020,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     const INTERNAL_CAPABILITIES: &[InternalDependencyCapability] =
         &[InternalDependencyCapability {
             source_layer: RustLayer::Commands,
-            repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/mod.rs",
+            repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/mod.rs",
             fully_qualified_owner: "fixture_lib::commands",
             canonical_origin_targets: &["fixture_lib::application::run"],
         }];
@@ -2063,7 +2063,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     let classification = BTreeMap::from([
         ("src-tauri/build.rs".to_owned(), RustLayer::BuildScript),
         (
-            "src-tauri/crates/yss-api/src/commands/mod.rs".to_owned(),
+            "src-tauri/crates/yss-ipc-command/src/commands/mod.rs".to_owned(),
             RustLayer::Commands,
         ),
         ("src-tauri/src/graph/mod.rs".to_owned(), RustLayer::Graph),
@@ -2086,7 +2086,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         "build",
     );
     let approved_command = external_dependency(
-        "src-tauri/crates/yss-api/src/commands/mod.rs",
+        "src-tauri/crates/yss-ipc-command/src/commands/mod.rs",
         "fixture_lib::commands",
         RustDependencyMode::Runtime,
         "tauri",
@@ -2199,7 +2199,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
 
     let approved_command_seam = CanonicalDependency {
         owning_package: "fixture".to_owned(),
-        source_file: "src-tauri/crates/yss-api/src/commands/mod.rs".to_owned(),
+        source_file: "src-tauri/crates/yss-ipc-command/src/commands/mod.rs".to_owned(),
         owner: "fixture_lib::commands".to_owned(),
         kind: RustDependencyKind::Path,
         mode: RustDependencyMode::Runtime,
@@ -2241,7 +2241,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     const INVALID_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] =
         &[InternalDependencyCapability {
             source_layer: RustLayer::Commands,
-            repository_relative_source_file: "src-tauri/crates/yss-api/src/commands/*",
+            repository_relative_source_file: "src-tauri/crates/yss-ipc-command/src/commands/*",
             fully_qualified_owner: "fixture_lib::commands",
             canonical_origin_targets: &["fixture_lib::application::*"],
         }];
@@ -2366,7 +2366,7 @@ fn sample_catalog_composition_capability_does_not_grant_business_queries() {
 
 #[test]
 fn result_projection_capability_does_not_grant_application_state_access() {
-    let source = "src-tauri/crates/yss-api/src/schema/result.rs";
+    let source = "src-tauri/crates/yss-ipc-command/src/schema/result.rs";
     let projection = "src-tauri/crates/yss-application/src/execution/result_query/report.rs";
     let state = "src-tauri/crates/yss-application/src/execution/session_slot.rs";
     let classification = BTreeMap::from([
@@ -2375,9 +2375,9 @@ fn result_projection_capability_does_not_grant_application_state_access() {
         (state.to_owned(), RustLayer::Application),
     ]);
     let dependency = |declaration: &str, target: &str, symbol: &str| CanonicalDependency {
-        owning_package: "yss-api".into(),
+        owning_package: "yss-ipc-command".into(),
         source_file: source.into(),
-        owner: "yss_api::schema::result".into(),
+        owner: "yss_ipc_command::schema::result".into(),
         kind: RustDependencyKind::Use,
         mode: RustDependencyMode::Runtime,
         origin: CanonicalOrigin::Repository {

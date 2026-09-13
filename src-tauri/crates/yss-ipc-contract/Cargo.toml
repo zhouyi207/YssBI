@@ -1,0 +1,22 @@
+[package]
+name = "yss-ipc-contract"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+yss-automation-contract = { path = "../yss-automation-contract" }
+yss-data-contract = { path = "../yss-data-contract" }
+yss-function-editor-projection = { path = "../yss-function-editor-projection" }
+yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
+yss-graph-document = { path = "../yss-graph-document" }
+yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-graph-registry = { path = "../yss-graph-registry" }
+yss-project-history = { path = "../yss-project-history" }
+yss-project-identity = { path = "../yss-project-identity" }
+yss-project-registry-contract = { path = "../yss-project-registry-contract" }
