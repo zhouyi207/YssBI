@@ -19,7 +19,7 @@
 
 ## 子系统总览
 
-本表只统计宿主侧源码包，共 **66 个包**：`src-tauri/crates/` 下 65 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
+本表只统计宿主侧源码包，共 **64 个包**：`src-tauri/crates/` 下 63 个，以及根包 `yssbi`。使用 Cargo package 名称标识 crate，不单独计数同一包的 library、binary、example 和 test target；插件内部 crate 与第三方依赖不纳入本表。
 
 表中每个包只列在一个所属子系统下。后端包含七个业务子系统、通信适配子系统和基础支撑子系统，合计九个子系统；基础支撑只承担明确的技术能力，不接收其他业务子系统的领域规则。
 
@@ -33,8 +33,8 @@
 | Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                                                                                            |      4 |
 | 插件系统       | 宿主插件安装启用、进程管理、任务与结果接入             | `yss-plugin-runtime`、`yss-plugin-protocol`、`yss-plugin-sdk`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |      3 |
 | 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-api`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |      1 |
-| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**平台文件操作**：`yss-file-replace`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`、`yss-path-display`                                                                                                                                                                                                                                                                                                          |      7 |
-| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **66** |
+| 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**日志与运行诊断**：`yss-tracing`、`yss-diagnostics`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`                                                                                                                                                                                                                                                                                                          |      5 |
+| **合计**       |                                                        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | **64** |
 
 插件系统一行保留宿主的通用插件管理、协议与 SDK，均位于 `src-tauri/crates/`。
 
@@ -293,7 +293,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 | `yss-automation-contract`                         | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
 | `yss-function-editor-projection`                  | 图分析与执行   | 将 Project 保存的函数签名转换为编辑器投影，由项目及应用接口交付 | 输入使用项目文档，输出表达函数编辑语义           |
 | `yss-project-history`                             | 项目与资源管理 | 用统一资源身份与 mutation envelope 描述图、数据库和图表资源变更 | 资源种类多，不等于拥有各资源的计算规则           |
-| `yssbi`、`yss-file-replace`、`yss-canonical-hash` | 基础支撑       | 分别完成运行时组装、平台文件替换和规范哈希，被业务模块使用      | 每个 crate 保持独立技术职责，业务决策留在调用方  |
+| `yssbi`、`yss-canonical-hash` | 基础支撑       | 分别完成运行时组装和规范哈希，被业务模块使用      | 每个 crate 保持独立技术职责，业务决策留在调用方  |
 
 源码依赖需要区分业务契约和具体实现：部分能力通过接口注入，例如科学计算后端、Harness 存储和模型驱动；当前 Application、Project 也直接依赖部分运行时和存储组件。不能把这份职责图理解为所有 crate 都已实现严格的单向分层。
 
@@ -312,7 +312,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 ## 12. 小型 crate 与开源库复用评估
 
-初次评估筛选了 `src-tauri/crates/` 下 67 个宿主 crate，其中 **30 个 crate 的 `src/**/*.rs` 总行数不超过 500 行**。行数包含空行、注释和 `src` 内的测试，不包含 crate 外测试与生成产物，仅用于定位候选，不能视为生产代码量或维护成本。根包 `yssbi` 和插件内部 crate 不参与这次小包筛选；宿主侧插件 SDK 仍在范围内。下表保留当时的评估快照。当前 discovery 已合并进 registry，自有窗口状态 crate 已由官方插件替换；宿主 crate 减为 65 个，包含根包时共 66 个。窗口替换见 12.5 节，发现与注册的合并清理见 12.7、12.8 节。
+初次评估筛选了 `src-tauri/crates/` 下 67 个宿主 crate，其中 **30 个 crate 的 `src/**/*.rs` 总行数不超过 500 行**。行数包含空行、注释和 `src` 内的测试，不包含 crate 外测试与生成产物，仅用于定位候选，不能视为生产代码量或维护成本。根包 `yssbi` 和插件内部 crate 不参与这次小包筛选；宿主侧插件 SDK 仍在范围内。这些数字只记录初评范围，当前包清单见[模块索引](../reference/MODULE_MAP.md)。12.2、12.3 更新通用能力的当前状态与选型边界；窗口替换见 12.5 节，发现与注册的合并清理见 12.7、12.8 节。
 
 以下依据当前源码，以及 2026-09-12 查阅的上游文档和发布源码进行判断。列出的版本是本次比较对象，不表示已经加入依赖或完成三平台运行验证。
 
@@ -327,72 +327,41 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 | 维护收益   | 比较可减少的自维护逻辑、传递依赖、版本与 features 约束、迁移范围；不能只比较本地行数                       |
 | 唯一归属   | 复用第三方能力不改变宿主 crate 的子系统归属；若替换后只剩无意义转发，再评估移除，不为保留包数量增加包装    |
 
-适配层可以在内部使用 `cfg(windows)`、`cfg(unix)` 或平台 API。关键是同一项公共能力在三个平台都有明确实现，平台分支不侵入业务规则。现有 `yss-file-replace` 的 Windows 分支并不意味着该 crate 只能用于 Windows。
+适配层可以在内部使用 `cfg(windows)`、`cfg(unix)` 或平台 API。关键是同一项公共能力在三个平台都有明确实现，平台分支不侵入业务规则。文件替换的平台差异已交由 `atomicwrites` 实现。
 
 ### 12.2 通用功能与适配实现
 
-下表覆盖筛选出的 10 个工具或适配类 crate。平台说明来自上游文档或源码；“通用逻辑”表示候选功能不依赖平台文件、窗口等专属 API，不代表已在本仓完成三平台测试。
+下表更新初次筛选的 10 项工具或适配能力的当前状态，不再沿用历史源码行数。已删除的 crate 只用于标识原能力；保留某项职责不等于要求它永久独立成 crate。依赖版本以 [workspace manifest](../../src-tauri/Cargo.toml) 和 [锁文件](../../src-tauri/Cargo.lock) 为准。
 
-| 当前 crate                   | 源码行数 | 当前职责                               | 开源能力与平台条件                                                                                                                                                                    | 建议                                                                                    |
-| ---------------------------- | -------: | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `yss-file-replace`           |       42 | 将已准备好的临时文件替换到目标路径     | [atomicwrites 0.4.4](https://docs.rs/atomicwrites/0.4.4/atomicwrites/fn.replace_atomic.html)，提供 Unix 与 Windows 实现，覆盖三平台                                                   | **条件性候选**：接口接近，但需先处理 Unix 替换后的同步失败语义和依赖成本                |
-| `yss-path-display`           |       65 | 将路径转换为便于展示的字符串           | [dunce 1.0.5](https://docs.rs/dunce/1.0.5/dunce/fn.simplified.html)，可跨平台使用，但 `simplified` 在非 Windows 上不作转换                                                            | **保留**：现有逻辑在任意宿主平台都处理传入的 Windows 路径字符串，两者行为不同           |
-| `yss-display-naming`         |      108 | 按既定后缀规则分配不重复的显示名称     | 现有标准库 `HashSet` 已覆盖集合查找，无需引入新的通用库                                                                                                                               | **保留**：后缀识别、编号起点和大小写规则仍须由本项目定义                                |
-| `yss-canonical-hash`         |      118 | 领域隔离的序列化哈希与文件内容哈希     | 已复用 `sha2`；[serde_jcs 0.2.0](https://docs.rs/serde_jcs/0.2.0/serde_jcs/) 提供通用 JCS 序列化                                                                                      | **保留**：哈希算法已复用，JCS 会改变当前序列化与指纹契约                                |
-| `yss-database-edit`          |      126 | 数据库编辑历史的撤销、重做栈与状态     | [undo 0.52.0](https://docs.rs/undo/0.52.0/undo/) 提供通用编辑命令、历史、合并和保存点                                                                                                 | **暂不替换**：当前只管理历史容器，数据库操作仍需遵循准备与提交流程                      |
-| `yss-project-progress`       |      158 | 项目扫描、清理进度与当前任务取消登记   | [tokio-util 0.7.19 的 CancellationToken](https://docs.rs/tokio-util/0.7.19/tokio_util/sync/struct.CancellationToken.html) 支持取消标记、异步等待与子令牌                              | **暂不替换**：当前同步轮询已由标准库实现，任务登记和进度契约仍须保留                    |
-| `yss-resource-naming`        |      214 | 资源名称校验、Unicode 规范化与重名规则 | 已复用 Unicode 库；[sanitize-filename 0.6.0](https://docs.rs/sanitize-filename/0.6.0/sanitize_filename/) 提供文件名清理，默认 Windows 规则随宿主平台变化                              | **保留**：三平台项目资源必须采用一致规则，不能直接采用按宿主变化的默认行为              |
-| 原 `yss-project-discovery`   |      352 | 遍历目录并发现项目元数据文件           | 已接入跨平台 [walkdir 2.5.0](https://docs.rs/walkdir/2.5.0/walkdir/)，复用目录遍历、剪枝和文件描述符数量控制                                                                          | **已合并进 registry**：此行保留原候选快照，现有实现见 12.7 节                           |
-| `yss-project-watcher-notify` |      399 | 将系统文件事件转换为项目重扫请求       | 已复用跨平台 [notify 8.2.0](https://docs.rs/notify/8.2.0/notify/)；[notify-debouncer-mini 0.7.0](https://docs.rs/notify-debouncer-mini/0.7.0/notify_debouncer_mini/) 可提供按文件去抖 | **保留现有适配**：当前是全局重扫信号合并，与按文件去抖不同                              |
-| `yss-linalg`                 |      288 | 分解检查、数值错误与秩阈值约定         | 已使用 [faer](https://docs.rs/faer/0.24.0/faer/) 原生矩阵与向量；工作区统一声明 `0.24.0`，锁定版本为 `0.24.4`，已移除 `ndarray`                                                       | **保留项目数值约定**：通用矩阵运算直接复用 faer，不再维护数组表示转换；归属仍为科学计算 |
+| 能力 | 当前状态 | 当前实现与归属 | 保留的项目职责或后续条件 |
+| ---- | -------- | -------------- | ------------------------ |
+| 显示名称分配 | **保留项目规则** | `yss-display-naming` 使用标准库 `HashSet` | 后缀识别、编号起点和大小写规则由项目定义 |
+| 规范哈希 | **保留当前字节契约** | `yss-canonical-hash` 使用 `serde_json` 和 `sha2` | 采用 JCS 必须作为指纹契约迁移，不能直接替换序列化器 |
+| 资源命名 | **保留项目规则** | `yss-resource-naming` 使用 Unicode 规范化、大小写折叠和正则库 | 三平台采用同一套名称校验与冲突规则 |
+| 文件监听 | **保留现有适配** | `yss-project-watcher-notify` 使用 `notify` | 继续维护全局重扫信号和停止、排空流程；按路径增量更新时再评估去抖库 |
+| 数据库编辑历史 | **暂不替换** | `yss-database-edit` 提供撤销、重做历史容器 | 出现编辑合并或独立保存点需求时，再评估 `undo` |
+| 项目进度与取消 | **暂不替换** | `yss-project-progress` 使用标准库完成同步取消轮询和任务登记 | 需要异步等待或父子任务取消时，再评估 `CancellationToken` |
 
-### 12.3 需要展开的行为差异
+“已替换”表示代码迁移完成，不表示已完成三平台运行验证；窗口状态的官方插件替换另见 12.5 节。
 
-#### 文件替换：接口接近，但提交结果不能只看函数签名
+### 12.3 行为边界与后续选型条件
 
-[现有实现](../../src-tauri/crates/yss-file-replace/src/lib.rs)只接收临时路径和目标路径。临时文件创建、内容写入、同步、业务校验和清理由调用方负责；非 Windows 分支调用 `std::fs::rename`，Windows 分支使用带替换与写穿标志的 `MoveFileExW`。
+#### 名称与哈希：保留项目契约
 
-`atomicwrites::replace_atomic` 同样接收两个路径，其 Windows 实现与现有调用接近；Unix 实现则在重命名后继续同步父目录。因此在 macOS/Linux 上可能出现“目标已经替换，但后续目录同步失败，函数返回错误”的情况。迁移时必须检查调用方如何判定提交成功、更新内存和清理临时文件，不能将所有错误统一解释为未替换。原子替换还要求源与目标位于同一文件系统。[atomicwrites 0.4.4 源码](https://docs.rs/crate/atomicwrites/0.4.4/source/src/lib.rs)
+[显示名称分配](../../src-tauri/crates/yss-display-naming/src/lib.rs)和[资源命名](../../src-tauri/crates/yss-resource-naming/src/lib.rs)承担不同规则：前者分配显示名称的数字后缀，后者校验持久化资源名称及冲突。通用集合、Unicode 和正则能力已经复用；`sanitize-filename` 的默认文件名清理规则不能替代三平台统一的项目资源规则。[候选库文档](https://docs.rs/sanitize-filename/0.6.0/sanitize_filename/)
 
-该版本还引入 `tempfile`、Unix 下的 `rustix 0.38` 和 Windows 下的 `windows-sys 0.52`；本仓目前声明的是 `windows-sys 0.61.2`。是否值得替换，要连同实际解析后的依赖变化一起判断，不能把删除 42 行视为必然降低成本。[依赖清单](https://docs.rs/crate/atomicwrites/0.4.4/source/Cargo.toml)
+[规范哈希](../../src-tauri/crates/yss-canonical-hash/src/lib.rs)将领域名称长度、领域名称与 `serde_json::to_vec` 的结果组合后交给 `sha2`，并未实现 RFC 8785。改用 `serde_jcs` 可能改变序列化字节和既有指纹；只有明确需要跨语言 JCS 契约时，才连同调用方一起迁移。当前继续由调用方保证输入序列化的确定性。[JCS 候选库文档](https://docs.rs/serde_jcs/0.2.0/serde_jcs/)
 
-[atomic-write-file 0.3.1](https://docs.rs/atomic-write-file/0.3.1/atomic_write_file/)也覆盖 Unix 与 Windows，但管理的是临时文件创建、写入和 `commit` 的完整生命周期。它更适合未来评估配置文件写入流程，不能直接替代所有调用方已有的临时文件提交协议；其 Linux 专属可选能力也不能成为三平台公共行为的前提。
+#### 撤销与取消：按新增需求重新评估
 
-**当前建议：保留实现，将 `atomicwrites` 列为有明确收益时再验证的候选。**如果最终采用第三方库，先确定调用方所需的提交语义，再决定本 crate 是否还有独立价值。
+`yss-database-edit` 只提供历史容器。[数据库运行时](../../src-tauri/crates/yss-database-runtime/src/database_instance.rs)先复制历史、准备恢复操作，再采用提交结果。`undo` 同时组织编辑执行与撤销；迁移必须衔接操作失败和历史提交，当前仅为替换双栈没有足够收益。需要编辑合并或独立保存点时再评估。[undo 文档](https://docs.rs/undo/0.52.0/undo/)
 
-#### 项目发现：复用遍历工具，保留项目策略
+`yss-project-progress` 当前只需同步轮询取消。即使采用 `CancellationToken`，新任务取消旧任务、旧任务结束不能清除新任务的登记规则，以及扫描和清理进度仍需保留。需要异步等待或父子任务取消时再评估。[CancellationToken 文档](https://docs.rs/tokio-util/0.7.19/tokio_util/sync/struct.CancellationToken.html)
 
-[现有发现逻辑](../../src-tauri/crates/yss-project-registry/src/discovery.rs)已收敛为 registry 的私有模块，使用 `walkdir` 遍历目录，继续负责识别项目元数据文件、跳过构建和依赖目录、检查取消状态、拒绝符号链接与 Windows 重解析点，并对结果排序去重。重解析点判断复用 filesystem 的 `metadata_is_redirect`，不再维护另一份 Windows 标志规则。
+#### 文件监听与数值计算：继续复用已有底层库
 
-通用遍历和资源管理交由 `walkdir`，根目录校验、链接与重解析点规则、取消检查和错误传播保留在项目层。实现显式设置 `follow_links(false)` 与 `follow_root_links(false)`，并继续检查 Windows 重解析点；遍历错误转换为原有 `ProjectDiscoveryError::Io`，不会变成“没有项目”。默认不跟随遍历中的符号链接，并不意味着默认拒绝根路径链接或所有 Windows 重解析点。[walkdir 文档](https://docs.rs/walkdir/2.5.0/walkdir/)、[根路径链接选项](https://docs.rs/walkdir/2.5.0/walkdir/struct.WalkDir.html#method.follow_root_links)
+[监听适配器](../../src-tauri/crates/yss-project-watcher-notify/src/lib.rs)已使用 `notify`，将事件合并为全局重扫信号并等待静默窗口。`notify-debouncer-mini` 的按文件去抖不能直接替代该流程；需要按路径增量更新时，再评估去抖库及轮询监听。停止、排空和实际变化确认仍由项目层负责。[去抖库文档](https://docs.rs/notify-debouncer-mini/0.7.0/notify_debouncer_mini/)、[notify 平台限制](https://docs.rs/notify/8.2.0/notify/)
 
-**当前状态：遍历替换及 crate 合并已完成，发现能力仍归项目与资源管理。**旧 discovery 包和公开转发入口已移除；macOS、Linux 运行验证仍待补齐。
-
-#### 路径与资源命名：跨平台应采用一致的项目规则
-
-[路径显示](../../src-tauri/crates/yss-path-display/src/lib.rs)处理的是展示字符串，不能用会访问文件系统的路径规范化代替。`dunce::simplified` 在非 Windows 上原样返回，在 Windows 上也只简化可安全转换的路径；它与现有字符串转换不是等价操作。[dunce 行为说明](https://docs.rs/dunce/1.0.5/dunce/fn.simplified.html)
-
-[资源命名](../../src-tauri/crates/yss-resource-naming/src/lib.rs)已经使用 `unicode-normalization`、`unicode-casefold` 和 `regex`，剩余的是 NFC、80 字符上限、保留名、大小写折叠后的冲突判断等项目规则。`sanitize-filename` 主要提供清理与检查，默认截断限制为 255 字节，其 `windows` 选项默认取决于运行平台。这些默认值无法代替项目资源规范；即便显式启用一致的 Windows 规则，也仍需保留其他项目校验。[sanitize-filename 0.6.0 源码](https://docs.rs/crate/sanitize-filename/0.6.0/source/src/lib.rs)
-
-**当前建议：两者都保留。**资源在三平台之间移动时，名称规则不随当前操作系统变化；显示名称分配与文件名校验也继续保持各自职责。
-
-#### 规范哈希：通用算法已复用，字节契约由项目拥有
-
-[当前哈希实现](../../src-tauri/crates/yss-canonical-hash/src/lib.rs)使用 `serde_json::to_vec` 生成内容，再把领域名称长度、领域名称和内容组合后交给 `sha2`。它没有实现 RFC 8785 的 JCS 规范化，不能仅根据 crate 名称认为二者等价。
-
-引入 `serde_jcs` 会改变对象键排序、数值表示等序列化规则，进而可能改变资源或缓存指纹。除非明确需要跨语言 JCS 契约并同步调整调用方，否则应保留当前协议；同时由调用方保证输入序列化的确定性。[serde_jcs 文档](https://docs.rs/serde_jcs/0.2.0/serde_jcs/)
-
-#### 撤销与取消：是否需要通用库取决于控制流程
-
-`yss-database-edit` 的双栈由数据库运行时配合提交使用。[当前调用方](../../src-tauri/crates/yss-database-runtime/src/database_instance.rs)先复制历史，再准备恢复操作，后续采用提交结果。`undo` 的 `Edit` / `Record` 同时组织编辑的执行与撤销，并提供合并、保存点等额外能力；迁移需要重新衔接操作准备、失败和历史采用流程。当前不值得仅为替换双栈引入另一套编辑控制方式，出现合并编辑或独立保存点需求时再评估。[undo 文档](https://docs.rs/undo/0.52.0/undo/)
-
-`yss-project-progress` 的取消令牌可由 `CancellationToken` 承担部分底层功能，但“新任务取消旧任务、旧任务结束不能清除新任务”的登记规则，以及扫描和清理进度仍由项目定义。当前只需同步轮询，不必为此新增 Tokio 工具依赖；需要异步等待或父子任务取消时，再比较迁移收益。[CancellationToken 文档](https://docs.rs/tokio-util/0.7.19/tokio_util/sync/struct.CancellationToken.html)
-
-#### 文件监听：已经使用跨平台库，项目信号仍需适配
-
-[现有适配器](../../src-tauri/crates/yss-project-watcher-notify/src/lib.rs)使用 `notify::recommended_watcher`，将变化合并为一个待处理的全局重扫信号，并等待静默窗口。`notify-debouncer-mini 0.7.0` 依赖 `notify 8.2.0`，版本路线与本仓相容，但它按文件管理去抖事件，不能直接取代全局重扫、停止和排空等生命周期约定。[去抖库文档](https://docs.rs/notify-debouncer-mini/0.7.0/notify_debouncer_mini/)、[依赖清单](https://docs.rs/crate/notify-debouncer-mini/0.7.0/source/Cargo.toml)
-
-macOS、Windows、Linux 的底层监听事件并不保证完全一致，网络文件系统等环境也可能需要轮询。继续让库处理平台事件，让项目层决定何时重扫、如何确认实际变化；如果以后需要按路径增量更新，再评估去抖库及 `PollWatcher` 的接入需求。[notify 平台行为与限制](https://docs.rs/notify/8.2.0/notify/)
 
 ### 12.4 其余 20 个小型 crate
 
@@ -459,7 +428,7 @@ Dockview 布局持久化、结果租约和应用装饰设置继续由各自现�
 
 窗口状态继续归基础支撑。通用实现已由第三方插件提供，剩余注册、状态分组和生命周期保存属于桌面组装，内聚到根包即可。原 crate 不再有独立职责，因此直接删除；没有把窗口逻辑合并到通信、项目或图子系统。
 
-宿主 `src-tauri/crates/` 当前为 65 个包，计入根包后共 66 个。官方插件是第三方依赖，不纳入宿主 crate 总览。
+宿主 `src-tauri/crates/` 当前为 63 个包，计入根包后共 64 个。官方插件是第三方依赖，不纳入宿主 crate 总览。
 
 #### 12.5.5 验证与剩余平台检查
 
