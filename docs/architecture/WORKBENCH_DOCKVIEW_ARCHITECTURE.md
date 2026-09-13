@@ -413,9 +413,10 @@ Persistence invariant：
 持久化到应用配置目录的 `.window-state.json`。前端不再持有几何快照、保存命令或次级窗口几何 localStorage。
 主窗口默认尺寸来自 Tauri 配置，子窗口逻辑像素默认尺寸来自
 [createPersistedWindow](../../src/features/application/window/createPersistedWindow.ts)；保存后的物理几何由插件恢复。
-`main` 和 `dataview-*`、`logs-*`、`plot-*`、`inspect-*`、`info-*` 分别按种类共享状态，实例 label 仍用于窗口及结果租约身份。
+所有原生窗口均参与状态管理，以 label 第一个 `-` 前的部分作为状态键，按种类共享状态；实例 label 仍用于窗口及结果租约身份。
 
-插件不管理可见性、装饰或全屏：主窗口在 Rust setup 中恢复后显示，子窗口隐藏创建，由内容准备流程显示；
+插件在窗口创建时自动恢复几何；配置中的主窗口在应用 setup 前完成插件恢复，随后由 Rust setup 显示。
+插件不管理可见性、装饰或全屏：子窗口隐藏创建，由内容准备流程显示；
 装饰继续采用当前应用设置。创建 Promise 等待原生 `tauri://created` 或 `tauri://error`，结果租约据此判断打开是否成功。
 
 工作台只有 `useWorkbenchWindowCloseGuard` 决定是否关闭，先处理未保存内容和布局 flush。

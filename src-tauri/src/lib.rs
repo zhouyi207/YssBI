@@ -11,7 +11,7 @@ mod architecture_tests;
 
 use std::sync::Arc;
 use tauri::Manager;
-use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use yss_automation_contract::{
     AutomationIdKind, ClockPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
 };
@@ -162,14 +162,6 @@ pub fn run() {
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(WINDOW_STATE_FLAGS)
                 .map_label(window_state_key)
-                .with_filter(|kind| {
-                    matches!(
-                        kind,
-                        "main" | "dataview" | "logs" | "plot" | "inspect" | "info"
-                    )
-                })
-                // Main is restored explicitly in setup before it is shown.
-                .skip_initial_state("main")
                 .build(),
         )
         // 注册全局状态管理器
@@ -230,15 +222,8 @@ pub fn run() {
             );
             app.manage(plugins);
 
+            // Configured windows run the plugin's restore hook before application setup.
             if let Some(win) = app.get_webview_window("main") {
-                if let Err(error) = win.restore_state(WINDOW_STATE_FLAGS) {
-                    tracing::warn!(
-                        target: "yssbi::window_state",
-                        diagnostic_domain = "ui",
-                        error = %error,
-                        "Failed to restore main window geometry"
-                    );
-                }
                 if let Err(error) = win.show() {
                     tracing::warn!(
                         target: "yssbi::window_state",
@@ -288,24 +273,5 @@ pub fn run() {
             error = %error,
             "Tauri application runtime failed"
         ),
-    }
-}
-
-#[cfg(test)]
-mod window_state_tests {
-    use super::{WINDOW_STATE_FLAGS, window_state_key};
-    use tauri_plugin_window_state::StateFlags;
-
-    #[test]
-    fn window_instances_share_geometry_by_kind_without_restoring_visibility_or_decorations() {
-        for kind in ["main", "dataview", "logs", "plot", "inspect", "info"] {
-            assert_eq!(window_state_key(kind), kind);
-            assert_eq!(window_state_key(&format!("{kind}-first-instance")), kind);
-            assert_eq!(window_state_key(&format!("{kind}-second-instance")), kind);
-        }
-        assert!(
-            !WINDOW_STATE_FLAGS
-                .intersects(StateFlags::VISIBLE | StateFlags::DECORATIONS | StateFlags::FULLSCREEN)
-        );
     }
 }
