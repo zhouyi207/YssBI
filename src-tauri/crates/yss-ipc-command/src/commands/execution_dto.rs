@@ -1,10 +1,10 @@
 use serde::Serialize;
 use yss_application::execution::result_query::{ResultPageKind, ResultPageProjection};
 use yss_application::execution::run_graph::RunDemand;
-use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{ResultId, StoredResult, StoredResultSnapshot};
-use yss_execution::value::RuntimeValue;
 use yss_graph_document::GraphResourcePath;
+use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+use yss_graph_execution::result::{ResultId, StoredResult, StoredResultSnapshot};
+use yss_graph_execution::value::RuntimeValue;
 use yss_ipc_channel::execution::{RunEventDtoError, output_dto};
 use yss_ipc_contract::execution::{
     ExecutionDemandDto, GraphOutputRefDto, MAX_SAFE_PREVIEW_GENERATION,
@@ -166,61 +166,67 @@ impl ResultDescriptorDto {
     }
 }
 
-fn result_presentation(category: yss_execution::plan::ResultCategory) -> ResultPresentationDto {
+fn result_presentation(
+    category: yss_graph_execution::plan::ResultCategory,
+) -> ResultPresentationDto {
     match category {
-        yss_execution::plan::ResultCategory::Value => ResultPresentationDto::Inspector,
-        yss_execution::plan::ResultCategory::PlotData(kind) => ResultPresentationDto::Plot {
+        yss_graph_execution::plan::ResultCategory::Value => ResultPresentationDto::Inspector,
+        yss_graph_execution::plan::ResultCategory::PlotData(kind) => ResultPresentationDto::Plot {
             chart: match kind {
-                yss_execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
-                yss_execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
-                yss_execution::plan::PlotDataKind::Plot => ResultPlotKindDto::Plot,
-                yss_execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
-                yss_execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
-                yss_execution::plan::PlotDataKind::Histogram => ResultPlotKindDto::Histogram,
-                yss_execution::plan::PlotDataKind::Correlation => ResultPlotKindDto::Correlation,
-                yss_execution::plan::PlotDataKind::Correlogram => ResultPlotKindDto::Correlogram,
+                yss_graph_execution::plan::PlotDataKind::Scatter => ResultPlotKindDto::Scatter,
+                yss_graph_execution::plan::PlotDataKind::Line => ResultPlotKindDto::Line,
+                yss_graph_execution::plan::PlotDataKind::Plot => ResultPlotKindDto::Plot,
+                yss_graph_execution::plan::PlotDataKind::Ecdf => ResultPlotKindDto::Ecdf,
+                yss_graph_execution::plan::PlotDataKind::Kde => ResultPlotKindDto::Kde,
+                yss_graph_execution::plan::PlotDataKind::Histogram => ResultPlotKindDto::Histogram,
+                yss_graph_execution::plan::PlotDataKind::Correlation => {
+                    ResultPlotKindDto::Correlation
+                }
+                yss_graph_execution::plan::PlotDataKind::Correlogram => {
+                    ResultPlotKindDto::Correlogram
+                }
             },
         },
-        yss_execution::plan::ResultCategory::StatisticalReport(kind) => {
+        yss_graph_execution::plan::ResultCategory::StatisticalReport(kind) => {
             ResultPresentationDto::Report {
                 report: match kind {
-                    yss_execution::plan::StatisticalReportKind::OlsSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::OlsSummary => {
                         ResultReportKindDto::OlsSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::BinarySummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::BinarySummary => {
                         ResultReportKindDto::BinarySummary
                     }
-                    yss_execution::plan::StatisticalReportKind::Iv2slsSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::Iv2slsSummary => {
                         ResultReportKindDto::Iv2slsSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::IvLimlSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::IvLimlSummary => {
                         ResultReportKindDto::IvLimlSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::PraisSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::PraisSummary => {
                         ResultReportKindDto::PraisSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::VarSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::VarSummary => {
                         ResultReportKindDto::VarSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::VarSoc => {
+                    yss_graph_execution::plan::StatisticalReportKind::VarSoc => {
                         ResultReportKindDto::VarSoc
                     }
-                    yss_execution::plan::StatisticalReportKind::PanelSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::PanelSummary => {
                         ResultReportKindDto::PanelSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::PanelDid => {
+                    yss_graph_execution::plan::StatisticalReportKind::PanelDid => {
                         ResultReportKindDto::PanelDid
                     }
-                    yss_execution::plan::StatisticalReportKind::DfAdfSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::DfAdfSummary => {
                         ResultReportKindDto::DfAdfSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::DfAdfSummaryList => {
+                    yss_graph_execution::plan::StatisticalReportKind::DfAdfSummaryList => {
                         ResultReportKindDto::DfAdfSummaryList
                     }
-                    yss_execution::plan::StatisticalReportKind::VecSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::VecSummary => {
                         ResultReportKindDto::VecSummary
                     }
-                    yss_execution::plan::StatisticalReportKind::VecRankSummary => {
+                    yss_graph_execution::plan::StatisticalReportKind::VecRankSummary => {
                         ResultReportKindDto::VecRankSummary
                     }
                 },

@@ -2,7 +2,7 @@ use super::ResultQueryApplicationError;
 use crate::execution::ApplicationState;
 use std::collections::BTreeSet;
 use uuid::Uuid;
-use yss_execution::result::{ResultReference, StoredResultSnapshot};
+use yss_graph_execution::result::{ResultReference, StoredResultSnapshot};
 
 impl ApplicationState {
     pub fn retain_result(

@@ -9,9 +9,11 @@ use yss_database_runtime::runtime::{
     DatabaseDrainDeadline, DatabaseDrainOutcome, DatabaseRuntimeSession,
     DatabaseSessionDrainControl,
 };
-use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_execution::resource_preparation::ResourceProviderFactory;
-use yss_execution::state::{ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState};
+use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_graph_execution::resource_preparation::ResourceProviderFactory;
+use yss_graph_execution::state::{
+    ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState,
+};
 use yss_graph_runtime::GraphRuntimeState;
 use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
@@ -1181,8 +1183,8 @@ mod tests {
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_execution::identity::ExecutionSessionId;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_execution::identity::ExecutionSessionId;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch};
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {

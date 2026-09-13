@@ -11,11 +11,11 @@ use yss_database_contract::{
 };
 use yss_database_runtime::runtime::DatabaseRuntimeSession;
 use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_dataset_instance};
-use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_execution::plan::PlanProjectSessionId;
-use yss_execution::resource_preparation::ResourceProviderFactory;
-use yss_execution::state::ExecutionRuntimeState;
 use yss_graph_catalog::build_builtin_node_system;
+use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_graph_execution::plan::PlanProjectSessionId;
+use yss_graph_execution::resource_preparation::ResourceProviderFactory;
+use yss_graph_execution::state::ExecutionRuntimeState;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 use yss_project::ProjectState;
 use yss_project_filesystem::ProjectFilesystemError;
@@ -334,10 +334,10 @@ mod tests {
         DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-    use yss_execution::plan::PlanProjectSessionId;
-    use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+    use yss_graph_execution::plan::PlanProjectSessionId;
+    use yss_graph_execution::state::ExecutionRuntimeState;
     use yss_project::ProjectState;
     use yss_project_identity::ProjectInstanceId;
     use yss_project_identity::ProjectSessionId;

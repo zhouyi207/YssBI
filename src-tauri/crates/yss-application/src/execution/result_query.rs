@@ -3,12 +3,12 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use super::session_slot::{ApplicationState, SessionCaptureError};
-use yss_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_execution::result::{
+use yss_graph_document::{GraphResourcePath, PortAddress};
+use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+use yss_graph_execution::result::{
     ResultReference, ResultRetentionError, StoredResult, StoredResultSnapshot,
 };
-use yss_execution::value::RuntimeValue;
-use yss_graph_document::{GraphResourcePath, PortAddress};
+use yss_graph_execution::value::RuntimeValue;
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 use yss_tabular_contract::TabularScalar;
 
@@ -305,7 +305,7 @@ fn charge_value(
 mod tests {
     mod paging;
     use super::*;
-    use yss_execution::plan::{PlanGraphId, PlanPortAddress};
+    use yss_graph_execution::plan::{PlanGraphId, PlanPortAddress};
 
     #[test]
     fn result_query_maps_opaque_graph_and_port_identities() {

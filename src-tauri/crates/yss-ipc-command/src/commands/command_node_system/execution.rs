@@ -128,9 +128,9 @@ fn project_preparation_command_code(
 }
 
 fn prepared_execution_command_code(
-    error: &yss_execution::state::ExecutePreparedError,
+    error: &yss_graph_execution::state::ExecutePreparedError,
 ) -> &'static str {
-    use yss_execution::state::ExecutePreparedError;
+    use yss_graph_execution::state::ExecutePreparedError;
 
     match error {
         ExecutePreparedError::RuntimeGenerationMismatch { .. } => "stale_project_lifecycle",
@@ -140,12 +140,12 @@ fn prepared_execution_command_code(
         ExecutePreparedError::Cancelled { .. } => "run_cancelled",
         ExecutePreparedError::DeadlineExceeded { .. } => "run_deadline_exceeded",
         ExecutePreparedError::Kernel(_) => match error.failure().code {
-            yss_execution::error::RunFailureCode::DivisionByZero => "run_division_by_zero",
-            yss_execution::error::RunFailureCode::NonFiniteResult => "run_non_finite_result",
-            yss_execution::error::RunFailureCode::InvalidNumericInput => {
+            yss_graph_execution::error::RunFailureCode::DivisionByZero => "run_division_by_zero",
+            yss_graph_execution::error::RunFailureCode::NonFiniteResult => "run_non_finite_result",
+            yss_graph_execution::error::RunFailureCode::InvalidNumericInput => {
                 "run_invalid_numeric_input"
             }
-            yss_execution::error::RunFailureCode::KernelNotFound => "run_kernel_not_found",
+            yss_graph_execution::error::RunFailureCode::KernelNotFound => "run_kernel_not_found",
             _ => "run_failed",
         },
         ExecutePreparedError::ResultIdentityExhausted
@@ -174,7 +174,7 @@ pub fn cancel_graph_run(
     let run_id = parse_opaque_u64("runId", &run_id)?;
     let outcome = yss_application::execution::run_graph::cancel_run(
         state.inner(),
-        yss_execution::run_registry::RunId::from_existing(run_id),
+        yss_graph_execution::run_registry::RunId::from_existing(run_id),
     )
     .map_err(map_application_execution_error)?;
     Ok(matches!(

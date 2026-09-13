@@ -3,19 +3,19 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
-use yss_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
-    PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-    ResourceAccess, ResourceKind,
-};
-use yss_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
-use yss_execution::state::RunExecutionControl;
-use yss_execution::value::RuntimeValue;
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
     DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
 };
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+    PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
+    ResourceAccess, ResourceKind,
+};
+use yss_graph_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
+use yss_graph_execution::state::RunExecutionControl;
+use yss_graph_execution::value::RuntimeValue;
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot,
 };
@@ -225,7 +225,7 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             .unwrap();
         assert!(runtime.publish_committed_results(execution.handoff()));
         let result_id = execution.handoff().results()[0].result_id();
-        let reference = yss_execution::result::ResultReference {
+        let reference = yss_graph_execution::result::ResultReference {
             execution_session_id: captured.execution_session_id(),
             result_id,
         };

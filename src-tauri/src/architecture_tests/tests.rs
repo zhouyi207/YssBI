@@ -383,8 +383,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-execution"
-                && root.target == "yss_execution"
+            .any(|root| root.package == "yss-graph-execution"
+                && root.target == "yss_graph_execution"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -770,10 +770,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let execution_root = ProductionRoot {
         package_id: "execution-package".to_owned(),
-        package: "yss-execution".to_owned(),
-        target: "yss_execution".to_owned(),
+        package: "yss-graph-execution".to_owned(),
+        target: "yss_graph_execution".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-execution/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-execution/src/lib.rs"),
     };
     let graph_analysis_root = ProductionRoot {
         package_id: "graph-analysis-package".to_owned(),
@@ -1079,8 +1079,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &execution_root,
-                "src-tauri/crates/yss-execution/src/state.rs",
-                "yss_execution::state",
+                "src-tauri/crates/yss-graph-execution/src/state.rs",
+                "yss_graph_execution::state",
             ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
@@ -1196,7 +1196,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PlatformAdapter
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-execution/src/state.rs"],
+        classified["src-tauri/crates/yss-graph-execution/src/state.rs"],
         RustLayer::Execution
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
@@ -1546,7 +1546,7 @@ fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
     for relative in [
         "src-tauri/src/node_system",
         "src-tauri/src/execution/plan/legacy",
-        "src-tauri/crates/yss-execution/src/plan/legacy",
+        "src-tauri/crates/yss-graph-execution/src/plan/legacy",
     ] {
         assert!(
             !root.join(relative).exists(),
@@ -1861,7 +1861,7 @@ fn scientific_computation_dependencies_follow_the_runtime_boundary() {
     }
     assert_eq!(
         runtime_consumers,
-        BTreeSet::from(["yss-execution", "yss-ipc-command"])
+        BTreeSet::from(["yss-graph-execution", "yss-ipc-command"])
     );
     let facts = production_facts();
     assert_eq!(
@@ -1880,7 +1880,7 @@ fn scientific_computation_dependencies_follow_the_runtime_boundary() {
         .dependencies
         .iter()
         .find(|dependency| {
-            dependency.source_file == "src-tauri/crates/yss-execution/src/statistics.rs"
+            dependency.source_file == "src-tauri/crates/yss-graph-execution/src/statistics.rs"
                 && dependency.canonical_origin_target == "yss_sci_runtime::computation::ols"
         })
         .expect("Execution must call the runtime OLS entry point");

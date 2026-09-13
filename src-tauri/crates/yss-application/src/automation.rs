@@ -14,11 +14,11 @@ use yss_automation_contract::{
 };
 use yss_database_contract::DatabaseId;
 use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
-use yss_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
-use yss_execution::result::{ResultId, StoredResult};
-use yss_execution::value::RuntimeValue;
 use yss_graph_catalog::LocalizedCatalogItem;
 use yss_graph_document::{PortAddress, PortRef};
+use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
+use yss_graph_execution::result::{ResultId, StoredResult};
+use yss_graph_execution::value::RuntimeValue;
 
 use crate::catalog_query::{
     CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,

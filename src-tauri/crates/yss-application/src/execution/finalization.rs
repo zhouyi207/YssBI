@@ -9,10 +9,10 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 
-use yss_execution::finalization::ExecutionFinalizationHandoff;
-use yss_execution::plan::{PlanGraphId, PlanProjectSessionId, PlanSourceIdentity};
-use yss_execution::result_store::ResultId;
-use yss_execution::run_registry::RunId;
+use yss_graph_execution::finalization::ExecutionFinalizationHandoff;
+use yss_graph_execution::plan::{PlanGraphId, PlanProjectSessionId, PlanSourceIdentity};
+use yss_graph_execution::result_store::ResultId;
+use yss_graph_execution::run_registry::RunId;
 
 /// The outer identity used by the same run's start and terminal records.
 ///
@@ -96,7 +96,7 @@ impl CommittedRunOutcome {
         &self.handoff
     }
 
-    pub fn results(&self) -> &[yss_execution::finalization::ReadyResult] {
+    pub fn results(&self) -> &[yss_graph_execution::finalization::ReadyResult] {
         self.handoff.results()
     }
 
@@ -171,8 +171,8 @@ fn validate_handoff(handoff: &ExecutionFinalizationHandoff) -> Result<(), Finali
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_execution::finalization::test_support;
-    use yss_execution::plan::PlanGraphId;
+    use yss_graph_execution::finalization::test_support;
+    use yss_graph_execution::plan::PlanGraphId;
 
     #[test]
     fn committed_explicit_inspect_maps_once_and_ordinary_result_maps_nothing() {

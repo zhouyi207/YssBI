@@ -357,9 +357,6 @@ mod tests {
     use super::*;
     use std::{sync::Arc, time::Duration};
     use yss_application::{
-        editor_projection::{
-            EditorProjectionBasis, EditorProjectionModel, EditorResolutionOutcome,
-        },
         events::GraphProjectionReplacement,
         resource_mutation::{GraphDraftSave, GraphDraftTransform},
     };
@@ -369,6 +366,9 @@ mod tests {
         ProjectSessionBinding, SaveGraphRequest,
     };
     use yss_graph_document::GraphDocument;
+    use yss_graph_editor::projection::{
+        EditorProjectionBasis, EditorProjectionModel, EditorResolutionOutcome,
+    };
     use yss_project_identity::{ProjectSessionId, ResourceRevision};
     const PATH: &str = "events/Main.yssbi-event";
     fn context() -> CapabilityInvocationContext {

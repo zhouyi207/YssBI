@@ -1,4 +1,4 @@
-//! Authoritative execution plans, ports, runtime state, and result lifecycle.
+//! Graph execution plans, kernels, runtime state, and result lifecycle.
 
 #![deny(unused_must_use)]
 

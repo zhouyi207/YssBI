@@ -123,7 +123,7 @@ fn analysis_with_facts(
 }
 
 #[test]
-fn application_projection_closes_resource_node_port_and_connection_facts() {
+fn editor_projection_closes_resource_node_port_and_connection_facts() {
     let source = node_id(2);
     let target = node_id(3);
     let source_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
@@ -205,7 +205,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
         analysis: &analysis,
         registry_fingerprint: [6; 32],
     })
-    .expect("complete neutral facts should produce an application model");
+    .expect("complete neutral facts should produce an editor model");
 
     assert_eq!(
         model
@@ -246,7 +246,7 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
 }
 
 #[test]
-fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
+fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
     let source = node_id(12);
     let target = node_id(13);
     let source_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
@@ -346,7 +346,7 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
         analysis: &analysis,
         registry_fingerprint: [6; 32],
     })
-    .expect("diagnostic facts should produce an application model");
+    .expect("diagnostic facts should produce an editor model");
 
     assert_eq!(
         diagnostic_codes(&model.diagnostics),
@@ -378,7 +378,7 @@ fn application_projection_preserves_canonical_diagnostics_and_builds_node_indexe
 }
 
 #[test]
-fn application_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
+fn editor_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     let node = node_id(8);
     let node_type = NodeTypeId::new("yssbi.constant.get").expect("test node type is valid");
     let mut document = GraphDocument::default();

@@ -4,15 +4,6 @@ use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
 use yss_database_runtime::session_api::DatabaseCatalogSnapshot;
-use yss_execution::plan::{
-    CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
-    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, KernelId, PlanGraphId,
-    PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind, PlanInputSource,
-    PlanKernelSpecialization, PlanNodeId, PlanObservationIntent, PlanOperation, PlanOutputBinding,
-    PlanOutputRef, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
-    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
-    PlanTypeBinding, ValueRef,
-};
 use yss_graph_analysis::{GraphPlotDataKind, GraphResultCategory, GraphStatisticalReportKind};
 use yss_graph_analysis_contract::{
     CompilationBasis, ResourceKey as GraphResourceKey, ResourceObservedState,
@@ -23,6 +14,15 @@ use yss_graph_compiler::{
     GraphParameterValue, GraphSourceIdentity,
 };
 use yss_graph_document::GraphResourcePath;
+use yss_graph_execution::plan::{
+    CanonicalDecimal, CompiledExecutionPackage, CompiledFunctionBundle,
+    CompiledParameterBundleBuilder, CompiledParameterHandle, ExecutionPlan, KernelId, PlanGraphId,
+    PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind, PlanInputSource,
+    PlanKernelSpecialization, PlanNodeId, PlanObservationIntent, PlanOperation, PlanOutputBinding,
+    PlanOutputRef, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
+    PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProvenance, PlanSourceIdentity,
+    PlanTypeBinding, ValueRef,
+};
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
     ResourceCatalogFingerprint, ResourceCatalogSnapshot,
@@ -201,7 +201,7 @@ fn catalog_fingerprint(
 /// consumed by analysis and lowering.  The conversion is deliberately kept in
 /// Application: neither Graph nor Execution imports the other's package model.
 pub fn graph_compilation_basis(
-    basis: &yss_execution::plan::PlanCompilationBasis,
+    basis: &yss_graph_execution::plan::PlanCompilationBasis,
 ) -> CompilationBasis {
     CompilationBasis {
         registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
@@ -222,10 +222,10 @@ pub fn graph_compilation_basis(
             .iter()
             .map(|(key, observed)| {
                 let state = match observed {
-                    yss_execution::plan::PlanResourceObservedState::Present(version) => {
+                    yss_graph_execution::plan::PlanResourceObservedState::Present(version) => {
                         ResourceObservedState::Present(GraphResourceVersion::new(version.as_str()))
                     }
-                    yss_execution::plan::PlanResourceObservedState::Absent(version) => {
+                    yss_graph_execution::plan::PlanResourceObservedState::Absent(version) => {
                         ResourceObservedState::Absent(
                             version
                                 .as_ref()
@@ -242,26 +242,26 @@ pub fn graph_compilation_basis(
 #[derive(Debug, Error)]
 pub enum GraphPackageMappingError {
     #[error("graph package identity is invalid")]
-    Identity(#[source] yss_execution::plan::InvalidPlanIdentity),
+    Identity(#[source] yss_graph_execution::plan::InvalidPlanIdentity),
     #[error("graph package parameter identity is invalid")]
-    ParameterIdentity(#[source] yss_execution::plan::InvalidPlanParameterId),
+    ParameterIdentity(#[source] yss_graph_execution::plan::InvalidPlanParameterId),
     #[error("graph package contains a non-finite decimal")]
-    Decimal(#[source] yss_execution::plan::CanonicalDecimalError),
+    Decimal(#[source] yss_graph_execution::plan::CanonicalDecimalError),
     #[error("graph package contains an invalid operation kind")]
-    OperationKind(#[source] yss_execution::plan::InvalidPlanIdentity),
+    OperationKind(#[source] yss_graph_execution::plan::InvalidPlanIdentity),
     #[error("graph package parameter handle is duplicated")]
-    DuplicateParameter(#[source] yss_execution::plan::CompiledParameterBundleError),
+    DuplicateParameter(#[source] yss_graph_execution::plan::CompiledParameterBundleError),
     #[error("graph package contains a resolved type unsupported by execution")]
     UnsupportedResolvedType,
     #[error("graph constant cannot be represented at runtime")]
-    ConstantValue(#[source] yss_execution::value::RuntimeValueError),
+    ConstantValue(#[source] yss_graph_execution::value::RuntimeValueError),
 }
 
 /// Map the Graph-owned lowered package into the Execution-owned immutable
 /// package at the Application boundary.
 pub fn execution_package_from_graph(
     package: GraphCompiledPackage,
-    basis: yss_execution::plan::PlanCompilationBasis,
+    basis: yss_graph_execution::plan::PlanCompilationBasis,
 ) -> Result<CompiledExecutionPackage, GraphPackageMappingError> {
     let operations = package
         .operations()
@@ -291,11 +291,11 @@ pub fn execution_package_from_graph(
                     Ok(PlanInputBinding::new(
                         port,
                         source,
-                        yss_execution::plan::PlanInputContract {
+                        yss_graph_execution::plan::PlanInputContract {
                             group: contract
                                 .group
                                 .map(|group| {
-                                    yss_execution::plan::PlanInputGroupId::new(
+                                    yss_graph_execution::plan::PlanInputGroupId::new(
                                         group.to_string().into_boxed_str(),
                                     )
                                 })
@@ -346,8 +346,10 @@ pub fn execution_package_from_graph(
             let specialization = plan_specialization(operation.specialization())?;
             Ok(PlanOperation::new(
                 source,
-                yss_execution::plan::PlanNodeTypeId::new(operation.node_type().as_str().into())
-                    .map_err(GraphPackageMappingError::Identity)?,
+                yss_graph_execution::plan::PlanNodeTypeId::new(
+                    operation.node_type().as_str().into(),
+                )
+                .map_err(GraphPackageMappingError::Identity)?,
                 parameter_handles,
                 inputs,
                 observation_intents,
@@ -373,7 +375,7 @@ pub fn execution_package_from_graph(
     let provenance = PlanProvenance::new(
         PlanSourceIdentity::new(graph, None, None),
         basis.clone(),
-        yss_execution::plan::PlanCompileId::from_existing(package.compile_id().get()),
+        yss_graph_execution::plan::PlanCompileId::from_existing(package.compile_id().get()),
     );
     Ok(CompiledExecutionPackage::new(
         std::sync::Arc::new(ExecutionPlan::new(operations.into_boxed_slice())),
@@ -434,17 +436,17 @@ fn plan_coercion_kind(kind: yss_graph_protocol::InputCoercionKind) -> PlanInputC
 
 fn map_output_contract(
     contract: &yss_graph_compiler::GraphOutputContract,
-) -> Result<yss_execution::plan::PlanOutputContract, GraphPackageMappingError> {
+) -> Result<yss_graph_execution::plan::PlanOutputContract, GraphPackageMappingError> {
     use yss_data_contract::DataType;
     use yss_graph_protocol::RelationalScalarType;
-    Ok(yss_execution::plan::PlanOutputContract {
+    Ok(yss_graph_execution::plan::PlanOutputContract {
         data_type: yss_graph_type_mapping::data_type_from_resolved_type(&contract.value_type)
             .ok_or(GraphPackageMappingError::UnsupportedResolvedType)?,
         schema: contract.schema.as_ref().map(|schema| {
             schema
                 .fields
                 .iter()
-                .map(|field| yss_execution::plan::PlanOutputField {
+                .map(|field| yss_graph_execution::plan::PlanOutputField {
                     name: field.name.0.clone(),
                     data_type: match field.scalar_type {
                         RelationalScalarType::Boolean => DataType::Boolean,
@@ -456,7 +458,7 @@ fn map_output_contract(
                         RelationalScalarType::Unknown => DataType::Any,
                     },
                     lineage: field.lineage.as_ref().map(|lineage| {
-                        yss_execution::plan::PlanFieldLineage {
+                        yss_graph_execution::plan::PlanFieldLineage {
                             source_identity: lineage.source.clone(),
                             field_identity: lineage.field.clone(),
                         }
@@ -521,7 +523,7 @@ fn map_parameter_value(
             GraphParameterScalar::String(value) => PlanParameterScalar::String(value.clone()),
         }),
         GraphParameterValue::Resource(resource) => PlanParameterValue::Resource(
-            yss_execution::plan::PlanResourceId::new(resource.clone())
+            yss_graph_execution::plan::PlanResourceId::new(resource.clone())
                 .map_err(GraphPackageMappingError::Identity)?,
         ),
         GraphParameterValue::List(values) => PlanParameterValue::List(
@@ -546,8 +548,8 @@ fn map_parameter_value(
 
 fn constant_runtime_value(
     constant: &yss_graph_document::GraphConstant,
-) -> Result<yss_execution::value::RuntimeValue, GraphPackageMappingError> {
-    use yss_execution::value::RuntimeValue;
+) -> Result<yss_graph_execution::value::RuntimeValue, GraphPackageMappingError> {
+    use yss_graph_execution::value::RuntimeValue;
     use yss_tabular_contract::TabularScalar;
     let Some(snapshot) = &constant.tabular else {
         return RuntimeValue::try_from(&constant.data_value)
@@ -588,8 +590,8 @@ fn constant_runtime_value(
     ))
 }
 
-fn map_result_category(category: GraphResultCategory) -> yss_execution::plan::ResultCategory {
-    use yss_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
+fn map_result_category(category: GraphResultCategory) -> yss_graph_execution::plan::ResultCategory {
+    use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
     match category {
         GraphResultCategory::Value => ResultCategory::Value,
         GraphResultCategory::PlotData(kind) => ResultCategory::PlotData(match kind {
@@ -744,9 +746,9 @@ mod tests {
                 ),
             ]),
         );
-        let basis = yss_execution::plan::PlanCompilationBasis::new(
-            yss_execution::plan::PlanProjectSessionId::from_existing("session".into()),
-            yss_execution::plan::PlanRegistryFingerprint::from_bytes([0; 32]),
+        let basis = yss_graph_execution::plan::PlanCompilationBasis::new(
+            yss_graph_execution::plan::PlanProjectSessionId::from_existing("session".into()),
+            yss_graph_execution::plan::PlanRegistryFingerprint::from_bytes([0; 32]),
             BTreeMap::new(),
             BTreeMap::new(),
         );
@@ -778,19 +780,22 @@ mod tests {
         );
         assert_eq!(
             operation.outputs()[0].contract().category,
-            yss_execution::plan::ResultCategory::Value
+            yss_graph_execution::plan::ResultCategory::Value
         );
         assert_eq!(
             operation.outputs()[1].contract().category,
-            yss_execution::plan::ResultCategory::StatisticalReport(
-                yss_execution::plan::StatisticalReportKind::OlsSummary
+            yss_graph_execution::plan::ResultCategory::StatisticalReport(
+                yss_graph_execution::plan::StatisticalReportKind::OlsSummary
             )
         );
-        yss_execution::state::ExecutionRuntimeState::new(
-            yss_execution::identity::ExecutionSessionId::new(uuid::Uuid::nil()),
-            yss_execution::identity::RuntimeGeneration::INITIAL,
+        yss_graph_execution::state::ExecutionRuntimeState::new(
+            yss_graph_execution::identity::ExecutionSessionId::new(uuid::Uuid::nil()),
+            yss_graph_execution::identity::RuntimeGeneration::INITIAL,
         )
-        .prepare_compiled_package(mapped, yss_execution::identity::RuntimeGeneration::INITIAL)
+        .prepare_compiled_package(
+            mapped,
+            yss_graph_execution::identity::RuntimeGeneration::INITIAL,
+        )
         .unwrap();
     }
 

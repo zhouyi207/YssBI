@@ -5,7 +5,7 @@ use crate::schema::result::ResultReferenceDto;
 use serde::Serialize;
 use tauri::{State, WebviewWindow};
 use yss_application::execution::ApplicationState;
-use yss_execution::result::StoredResultSnapshot;
+use yss_graph_execution::result::StoredResultSnapshot;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

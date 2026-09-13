@@ -1,6 +1,6 @@
 use thiserror::Error;
-use yss_execution::result::{ResultReference, StoredResult};
-use yss_execution::value::RuntimeValue;
+use yss_graph_execution::result::{ResultReference, StoredResult};
+use yss_graph_execution::value::RuntimeValue;
 use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::report::OlsModelSummary;
 use yss_sci_contract::scientific::{AcfPacfResult, OlsResult, ScientificComputationError};
@@ -117,21 +117,23 @@ impl ApplicationState {
                 )?),
                 ResultAnalysisRequest::AcfPacf { max_lag } => {
                     validate_lags(max_lag)?;
-                    let value = yss_execution::result::analysis::acf_pacf(result, max_lag)?;
+                    let value = yss_graph_execution::result::analysis::acf_pacf(result, max_lag)?;
                     ResultAnalysisProjection::AcfPacf(value)
                 }
                 ResultAnalysisRequest::SerialTests { lags, bg_nomiss0 } => {
                     validate_lags(lags)?;
-                    let value =
-                        yss_execution::result::analysis::serial_tests(result, lags, bg_nomiss0)
-                            .map_err(ReportQueryError::Serial)?;
+                    let value = yss_graph_execution::result::analysis::serial_tests(
+                        result, lags, bg_nomiss0,
+                    )
+                    .map_err(ReportQueryError::Serial)?;
                     ResultAnalysisProjection::SerialTests(value)
                 }
                 ResultAnalysisRequest::Hypothesis { hypothesis } => {
                     if hypothesis.trim().is_empty() || hypothesis.len() > 4096 {
                         return Err(ReportQueryError::InvalidRequest);
                     }
-                    let value = yss_execution::result::analysis::hypothesis(result, hypothesis)?;
+                    let value =
+                        yss_graph_execution::result::analysis::hypothesis(result, hypothesis)?;
                     ResultAnalysisProjection::Hypothesis(value)
                 }
             })

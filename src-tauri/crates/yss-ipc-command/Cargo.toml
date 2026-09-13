@@ -26,7 +26,7 @@ yss-database-edit = { path = "../yss-database-edit" }
 yss-database-runtime = { path = "../yss-database-runtime" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-diagnostics = { path = "../yss-diagnostics" }
-yss-execution = { path = "../yss-execution" }
+yss-graph-execution = { path = "../yss-graph-execution" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-catalog = { path = "../yss-graph-catalog" }
@@ -55,7 +55,7 @@ tracing-subscriber.workspace = true
 yss-application = { path = "../yss-application", features = ["test-support"] }
 arrow.workspace = true
 yss-tabular-arrow = { path = "../yss-tabular-arrow" }
-yss-execution = { path = "../yss-execution", features = ["test-support"] }
+yss-graph-execution = { path = "../yss-graph-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
 yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }

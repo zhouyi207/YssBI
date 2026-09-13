@@ -3,7 +3,6 @@ use super::{
     invalid_request, map_catalog_error, map_session_capture_error, map_session_revalidation_error,
 };
 use crate::catalog_query::{LocalizedCatalogRequest, localized_node_catalog_in_session};
-use crate::editor_projection::*;
 use crate::events::GraphProjectionReplacement;
 use crate::execution::run_graph::{
     RunApplicationEvent, RunApplicationEventKind, RunGraphRequest, run_graph_with_sink,
@@ -22,6 +21,7 @@ use yss_graph_document::{
     PortRef,
 };
 use yss_graph_document_edit::apply_graph_document_patch;
+use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
 use yss_graph_protocol::PortKey;
 use yss_project_identity::OperationId;

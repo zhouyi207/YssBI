@@ -3,9 +3,6 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::catalog_query::capture_localized_project_facts;
-use super::editor_projection::{
-    EditorProjectionError, EditorProjectionInput, build_editor_projection,
-};
 use super::events::{
     CommittedResourceMutation, GraphProjectionReplacement, committed_resource_mutation_from_project,
 };
@@ -18,14 +15,19 @@ use super::graph_contracts::{
 use std::collections::BTreeMap;
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::catalog_snapshot;
-use yss_execution::plan::{PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint};
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
+use yss_graph_editor::projection::{
+    EditorProjectionError, EditorProjectionInput, build_editor_projection,
+};
 use yss_graph_editor::{
     CatalogFunctionParameter, CatalogFunctionSignature, CatalogMutationResource,
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
+};
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_history::{FunctionDocumentPatch, MutationRequest};
@@ -329,7 +331,7 @@ impl ApplicationState {
         graph_path: GraphResourcePath,
         document: GraphDocument,
         locale: String,
-    ) -> Result<crate::editor_projection::EditorProjectionModel, ResourceMutationApplicationError>
+    ) -> Result<yss_graph_editor::projection::EditorProjectionModel, ResourceMutationApplicationError>
     {
         let captured = self.capture_resource_session(&project_instance_id)?;
         validate_graph_document(&document).map_err(|error| {

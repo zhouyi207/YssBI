@@ -1,4 +1,4 @@
-use yss_application::editor_projection::{
+use yss_graph_editor::projection::{
     EditorCompilationStage, EditorDiagnosticModel, EditorDiagnosticSeverity,
     EditorEffectiveInputBinding, EditorFilterLiteralType, EditorParameterConfiguration,
     EditorParameterModel, EditorPortModel, EditorPortStatus, EditorPortTypeState,
@@ -52,7 +52,7 @@ pub fn map_editor_projection(model: &EditorProjectionModel) -> EditorGraphProjec
 
 fn map_node(
     model: &EditorProjectionModel,
-    node: &yss_application::editor_projection::EditorNodeModel,
+    node: &yss_graph_editor::projection::EditorNodeModel,
 ) -> EditorNodeProjectionDto {
     EditorNodeProjectionDto {
         graph_path: model.graph_path.as_str().into(),
@@ -388,17 +388,17 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::collections::BTreeMap;
-    use yss_application::editor_projection::{
+    use yss_graph_analysis_contract::{
+        DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
+    };
+    use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
+    use yss_graph_editor::projection::{
         EditorAcceptedType, EditorColumnOption, EditorConnectionModel, EditorDiagnosticModel,
         EditorNodeCapabilities, EditorNodeDisplay, EditorNodeModel, EditorParameterConfiguration,
         EditorParameterDisplay, EditorParameterModel, EditorPortConnectionCapabilities,
         EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorPortTypeState,
         EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
     };
-    use yss_graph_analysis_contract::{
-        DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
-    };
-    use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
     use yss_graph_protocol::{
         NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
         RelationalScalarType,

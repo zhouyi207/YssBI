@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use yss_application::execution::result_query::report::{
     OlsReportProjection, ResultAnalysisProjection, ResultAnalysisRequest, ResultTablePart,
 };
-use yss_execution::identity::ExecutionSessionId;
-use yss_execution::result::{ResultId, ResultReference};
+use yss_graph_execution::identity::ExecutionSessionId;
+use yss_graph_execution::result::{ResultId, ResultReference};
 use yss_sci_contract::regression::report::OlsModelSummary;
 
 use super::statistics::{

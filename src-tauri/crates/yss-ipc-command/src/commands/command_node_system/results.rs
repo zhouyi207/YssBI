@@ -7,8 +7,8 @@ use serde::Serialize;
 use tauri::State;
 use yss_application::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
 use yss_application::execution::{ApplicationState, SessionCaptureError};
-use yss_execution::result::{ResultId, ResultRetentionError, StoredResult};
-use yss_execution::value::RuntimeValue;
+use yss_graph_execution::result::{ResultId, ResultRetentionError, StoredResult};
+use yss_graph_execution::value::RuntimeValue;
 
 pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
@@ -62,7 +62,7 @@ pub fn get_result_descriptor(
     reference: ResultReferenceDto,
 ) -> Result<Option<ResultDescriptorDto>, CommandError> {
     let reference = reference.try_into()?;
-    let yss_execution::result::ResultReference { result_id, .. } = reference;
+    let yss_graph_execution::result::ResultReference { result_id, .. } = reference;
     state
         .query_result(reference)
         .map_err(result_query_command_error)?
@@ -79,7 +79,7 @@ pub fn get_result_value(
     reference: ResultReferenceDto,
 ) -> Result<Option<ResultValueDto>, CommandError> {
     let reference = reference.try_into()?;
-    let yss_execution::result::ResultReference { result_id, .. } = reference;
+    let yss_graph_execution::result::ResultReference { result_id, .. } = reference;
     let Some(result) = state
         .query_result(reference)
         .map_err(result_query_command_error)?
@@ -129,7 +129,7 @@ pub async fn get_result_page(
     limit: usize,
 ) -> Result<Option<ResultPageDto>, CommandError> {
     let reference = reference.try_into()?;
-    let yss_execution::result::ResultReference { result_id, .. } = reference;
+    let yss_graph_execution::result::ResultReference { result_id, .. } = reference;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         state

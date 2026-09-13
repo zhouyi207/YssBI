@@ -47,7 +47,7 @@ members = [
   "crates/yss-dataset-store",
   "crates/yss-diagnostics",
   "crates/yss-display-naming",
-  "crates/yss-execution",
+  "crates/yss-graph-execution",
   "crates/yss-function-editor-projection",
   "crates/yss-graph-analysis",
   "crates/yss-graph-analysis-contract",
@@ -172,7 +172,7 @@ yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
-yss-execution = { path = "./crates/yss-execution" }
+yss-graph-execution = { path = "./crates/yss-graph-execution" }
 yss-project = { path = "./crates/yss-project" }
 yss-project-identity = { path = "./crates/yss-project-identity" }
 yss-project-progress = { path = "./crates/yss-project-progress" }

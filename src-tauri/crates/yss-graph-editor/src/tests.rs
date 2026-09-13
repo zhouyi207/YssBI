@@ -1,6 +1,4 @@
-use crate::{
-    CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode,
-};
+use crate::{CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode};
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
 use yss_graph_catalog::{authoritative_static_descriptor, build_builtin_node_system};

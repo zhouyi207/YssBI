@@ -5,12 +5,6 @@ use super::*;
 use crate::execution::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::collections::BTreeMap;
 use yss_data_contract::{DataSeriesValue, DataType, DataValue};
-use yss_execution::identity::ExecutionSessionId;
-use yss_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
-};
-use yss_execution::resource_preparation::RunResourceBindings;
-use yss_execution::state::RunExecutionControl;
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
@@ -18,6 +12,12 @@ use yss_graph_document::{
     NodePosition, ParameterValues, PortAddress,
 };
 use yss_graph_editor::{EditorGraphMutation, PortPlacement};
+use yss_graph_execution::identity::ExecutionSessionId;
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+};
+use yss_graph_execution::resource_preparation::RunResourceBindings;
+use yss_graph_execution::state::RunExecutionControl;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
@@ -231,7 +231,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     else {
         panic!()
     };
-    let expected = yss_execution::result::analysis::acf_pacf(&fit, 8).unwrap();
+    let expected = yss_graph_execution::result::analysis::acf_pacf(&fit, 8).unwrap();
     assert_eq!(acf, expected);
     assert_eq!(acf.n, 53_940);
     let ResultAnalysisProjection::SerialTests(serial) = app
@@ -246,7 +246,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     else {
         panic!()
     };
-    let expected = yss_execution::result::analysis::serial_tests(&fit, 4, true).unwrap();
+    let expected = yss_graph_execution::result::analysis::serial_tests(&fit, 4, true).unwrap();
     assert_eq!(serial.dw.d, expected.dw.d);
     assert_eq!(serial.q.unwrap().stat, expected.q.unwrap().stat);
     assert_eq!(serial.bg.unwrap().stat, expected.bg.unwrap().stat);

@@ -1,7 +1,7 @@
 # yss-sci-runtime
 
 Stateless scientific computation entry points over `yss-sci`, called directly
-only by `yss-execution` and `yss-ipc-command`.
+only by `yss-graph-execution` and `yss-ipc-command`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
 faer or `yss-linalg` dependency and does not construct numerical matrices or own

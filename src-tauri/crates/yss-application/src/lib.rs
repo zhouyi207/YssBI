@@ -8,7 +8,6 @@ pub mod chart_plot;
 pub mod database;
 pub(crate) mod database_mutation;
 pub(crate) mod database_session;
-pub mod editor_projection;
 pub mod execution;
 pub mod graph_compile;
 pub mod graph_contracts;

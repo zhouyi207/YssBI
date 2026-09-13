@@ -9251,7 +9251,6 @@ dependencies = [
  "yss-dataset-profile",
  "yss-dataset-store",
  "yss-display-naming",
- "yss-execution",
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
@@ -9260,6 +9259,7 @@ dependencies = [
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-editor",
+ "yss-graph-execution",
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-resource-contract",
@@ -9517,20 +9517,6 @@ name = "yss-display-naming"
 version = "0.1.0"
 
 [[package]]
-name = "yss-execution"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "yss-data-contract",
- "yss-relational-contract",
- "yss-sci-contract",
- "yss-sci-runtime",
-]
-
-[[package]]
 name = "yss-function-editor-projection"
 version = "0.1.0"
 dependencies = [
@@ -9641,8 +9627,11 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.20",
  "uuid",
  "yss-data-contract",
+ "yss-graph-analysis",
+ "yss-graph-analysis-contract",
  "yss-graph-catalog",
  "yss-graph-document",
  "yss-graph-document-edit",
@@ -9650,6 +9639,20 @@ dependencies = [
  "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-type-mapping",
+]
+
+[[package]]
+name = "yss-graph-execution"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "yss-data-contract",
+ "yss-relational-contract",
+ "yss-sci-contract",
+ "yss-sci-runtime",
 ]
 
 [[package]]
@@ -9721,8 +9724,9 @@ dependencies = [
  "yss-application",
  "yss-automation-contract",
  "yss-diagnostics",
- "yss-execution",
  "yss-graph-document",
+ "yss-graph-editor",
+ "yss-graph-execution",
  "yss-ipc-contract",
  "yss-project-identity",
  "yss-project-progress",
@@ -9750,13 +9754,13 @@ dependencies = [
  "yss-database-runtime",
  "yss-database-schema",
  "yss-diagnostics",
- "yss-execution",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
  "yss-graph-catalog",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-editor",
+ "yss-graph-execution",
  "yss-graph-protocol",
  "yss-graph-registry",
  "yss-graph-runtime",
@@ -10266,7 +10270,7 @@ dependencies = [
  "yss-database-runtime",
  "yss-dataset-store",
  "yss-diagnostics",
- "yss-execution",
+ "yss-graph-execution",
  "yss-ipc-channel",
  "yss-ipc-command",
  "yss-plugin-protocol",

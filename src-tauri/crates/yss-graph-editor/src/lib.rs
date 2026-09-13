@@ -1,10 +1,11 @@
-//! Graph editor mutations, validation, and portable subgraph operations.
+//! Graph editor mutations, semantic projections, and portable subgraph operations.
 
 #![forbid(unsafe_code)]
 #![deny(unused_must_use)]
 
 mod compatibility;
 mod mutation;
+pub mod projection;
 mod subgraph;
 
 #[cfg(test)]

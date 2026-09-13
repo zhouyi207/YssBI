@@ -4,7 +4,14 @@ use std::{
     time::{Duration, Instant},
 };
 use yss_data_contract::DataType;
-use yss_execution::{
+use yss_graph_analysis_contract::CompilationBasis;
+use yss_graph_document::{
+    DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues,
+    PortAddress,
+};
+use yss_graph_document_edit::apply_graph_document_patch;
+use yss_graph_editor::{EditorGraphMutation, PortPlacement};
+use yss_graph_execution::{
     identity::{ExecutionSessionId, RuntimeGeneration},
     plan::{
         PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
@@ -14,13 +21,6 @@ use yss_execution::{
     state::{ExecutionRuntimeState, RunExecutionControl},
     value::RuntimeValue,
 };
-use yss_graph_analysis_contract::CompilationBasis;
-use yss_graph_document::{
-    DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues,
-    PortAddress,
-};
-use yss_graph_document_edit::apply_graph_document_patch;
-use yss_graph_editor::{EditorGraphMutation, PortPlacement};
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
 
@@ -148,11 +148,11 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
                 graph.clone(),
                 &catalog,
                 &basis,
-                &yss_execution::state::supports_kernel,
+                &yss_graph_execution::state::supports_kernel,
             )
             .unwrap();
-        let projection = crate::editor_projection::build_editor_projection(
-            crate::editor_projection::EditorProjectionInput {
+        let projection = yss_graph_editor::projection::build_editor_projection(
+            yss_graph_editor::projection::EditorProjectionInput {
                 graph_path: &graph,
                 document,
                 analysis: compiled.analysis(),
@@ -175,8 +175,9 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
             .iter()
             .find(|parameter| parameter.key.as_str() == "configuration")
             .unwrap();
-        let Some(crate::editor_projection::EditorParameterConfiguration::Configuration { fields }) =
-            &parameter.configuration
+        let Some(yss_graph_editor::projection::EditorParameterConfiguration::Configuration {
+            fields,
+        }) = &parameter.configuration
         else {
             panic!("configuration must be projected as a node parameter");
         };
@@ -185,7 +186,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
             .find(|field| field.key.as_str() == "covariance")
             .unwrap();
         assert!(
-            matches!(&selected.configuration, Some(crate::editor_projection::EditorParameterConfiguration::SelectOptions { options }) if options.iter().any(|option| option.as_ref() == "HC1"))
+            matches!(&selected.configuration, Some(yss_graph_editor::projection::EditorParameterConfiguration::SelectOptions { options }) if options.iter().any(|option| option.as_ref() == "HC1"))
         );
         let expected_fields = match selected
             .value
@@ -356,7 +357,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
                 graph,
                 &catalog,
                 &basis,
-                &yss_execution::state::supports_kernel
+                &yss_graph_execution::state::supports_kernel
             )
             .unwrap()
             .artifact_id()

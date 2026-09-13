@@ -2,21 +2,23 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 use yss_application::graph_contracts::execution_package_from_graph;
-use yss_execution::error::RunFailureCode;
-use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-use yss_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
-};
-use yss_execution::resource_preparation::{ResourceProviderFactory, RunResourceBindings};
-use yss_execution::result::StoredResult;
-use yss_execution::state::{ExecutePreparedError, ExecutionRuntimeState, RunExecutionControl};
-use yss_execution::value::RuntimeValue;
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
 };
+use yss_graph_execution::error::RunFailureCode;
+use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+};
+use yss_graph_execution::resource_preparation::{ResourceProviderFactory, RunResourceBindings};
+use yss_graph_execution::result::StoredResult;
+use yss_graph_execution::state::{
+    ExecutePreparedError, ExecutionRuntimeState, RunExecutionControl,
+};
+use yss_graph_execution::value::RuntimeValue;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
 fn execute(
@@ -430,11 +432,11 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     use arrow::datatypes::{DataType, Field, Schema};
     use arrow::record_batch::RecordBatch;
     use yss_database_contract::DatabaseId;
-    use yss_execution::plan::{
+    use yss_graph_execution::plan::{
         PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
         ResourceAccess, ResourceKind,
     };
-    use yss_execution::resource_preparation::RunResourceBinding;
+    use yss_graph_execution::resource_preparation::RunResourceBinding;
     use yss_graph_resource_contract::{ColumnSchema, DataSchema, GraphResourceId};
     use yss_relational_contract::{RelationBinding, RelationControl};
 
@@ -497,7 +499,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     let builtin = yss_graph_catalog::build_builtin_node_system().unwrap();
     let semantics =
         yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources)
-            .with_execution_kernel_support(&yss_execution::state::supports_kernel);
+            .with_execution_kernel_support(&yss_graph_execution::state::supports_kernel);
     let package = compile(GraphCompilationInput::new(
         semantics
             .ready()

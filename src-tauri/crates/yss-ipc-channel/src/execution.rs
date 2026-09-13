@@ -1,9 +1,9 @@
 //! Execution and Run Output encoding and channel delivery.
 use tauri::ipc::Channel;
 use yss_application::execution::run_graph::{RunApplicationEvent, RunApplicationEventKind};
-use yss_execution::plan::{PlanOutputRef, PlanPortAddress};
-use yss_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_graph_document::GraphResourcePath;
+use yss_graph_execution::plan::{PlanOutputRef, PlanPortAddress};
+use yss_graph_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_ipc_contract::execution::*;
 use yss_ipc_contract::graph::PortAddressDto;
 
@@ -44,7 +44,7 @@ fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEventD
 }
 
 fn run_output_source(
-    source: &yss_execution::plan::PlanSourceIdentity,
+    source: &yss_graph_execution::plan::PlanSourceIdentity,
 ) -> Result<(String, String, PortAddressDto), RunEventDtoError> {
     GraphResourcePath::new(source.graph().as_str()).map_err(|_| RunEventDtoError::InvalidOutput)?;
     let node = source.node().ok_or(RunEventDtoError::InvalidOutput)?;
@@ -95,8 +95,10 @@ fn run_output_dto(
     }
 }
 
-fn run_failure_to_transport(failure: &yss_execution::error::RunFailure) -> RunErrorOutcomeDto {
-    use yss_execution::error::{RunFailureCode, RunPhase};
+fn run_failure_to_transport(
+    failure: &yss_graph_execution::error::RunFailure,
+) -> RunErrorOutcomeDto {
+    use yss_graph_execution::error::{RunFailureCode, RunPhase};
     RunErrorOutcomeDto {
         code: match failure.code {
             RunFailureCode::KernelFailed => "kernelFailed",
@@ -214,15 +216,15 @@ impl TauriExecutionChannelAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
-    use yss_execution::run_output::test_support;
-    use yss_execution::run_registry::RunId;
+    use yss_graph_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
+    use yss_graph_execution::run_output::test_support;
+    use yss_graph_execution::run_registry::RunId;
 
     #[test]
     fn run_failure_wire_preserves_the_cause_phase_and_node() {
-        let failure = yss_execution::error::RunFailure {
-            code: yss_execution::error::RunFailureCode::DivisionByZero,
-            phase: yss_execution::error::RunPhase::Execution,
+        let failure = yss_graph_execution::error::RunFailure {
+            code: yss_graph_execution::error::RunFailureCode::DivisionByZero,
+            phase: yss_graph_execution::error::RunPhase::Execution,
             source: Some(PlanSourceIdentity::new(
                 PlanGraphId::from_existing("events/contract.yssbi-event".into()),
                 Some(PlanNodeId::from_existing(

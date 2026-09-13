@@ -8,8 +8,11 @@ publish = false
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 uuid.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
+yss-graph-analysis = { path = "../yss-graph-analysis" }
+yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-graph-catalog = { path = "../yss-graph-catalog" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }

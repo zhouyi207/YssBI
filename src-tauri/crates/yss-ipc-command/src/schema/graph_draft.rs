@@ -28,7 +28,7 @@ pub(crate) fn compile_graph_draft_to_transport(
 
 pub(crate) fn graph_editor_session_to_transport(
     document: &yss_graph_document::GraphDocument,
-    projection: &yss_application::editor_projection::EditorProjectionModel,
+    projection: &yss_graph_editor::projection::EditorProjectionModel,
 ) -> GraphEditorSessionDto {
     GraphEditorSessionDto {
         document: document.clone(),

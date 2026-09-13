@@ -1,9 +1,6 @@
 use thiserror::Error;
 
 use crate::catalog_query::{capture_localized_project_facts, revalidate_project_catalog_facts};
-use crate::editor_projection::{
-    EditorProjectionError, EditorProjectionInput, EditorProjectionModel, build_editor_projection,
-};
 use crate::execution::{ApplicationState, SessionCaptureError, SessionRevalidationError};
 use crate::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
@@ -12,9 +9,14 @@ use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use yss_execution::plan::{PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
+use yss_graph_editor::projection::{
+    EditorProjectionError, EditorProjectionInput, EditorProjectionModel, build_editor_projection,
+};
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
+};
 use yss_graph_runtime::GraphDraftCompilationError;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
@@ -108,7 +110,7 @@ pub fn compile_graph_draft(
             graph_path.clone(),
             &graph_catalog,
             &graph_basis,
-            &yss_execution::state::supports_kernel,
+            &yss_graph_execution::state::supports_kernel,
         )
         .map_err(CompileGraphDraftError::Compilation)?;
     let analysis = captured.graph().localize_analysis(

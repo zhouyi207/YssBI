@@ -49,7 +49,7 @@ Standalone statistical commands convert DTOs and directly call the stateless
 `yss-sci-runtime` functions. ACF/PACF retains Application session admission and its
 60-second deadline. Analyses of retained graph results go through Application's
 session/result validation and Execution's result analysis functions. Only
-`yss-ipc-command` and `yss-execution` directly consume SCI runtime; numerical rules
+`yss-ipc-command` and `yss-graph-execution` directly consume SCI runtime; numerical rules
 remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.

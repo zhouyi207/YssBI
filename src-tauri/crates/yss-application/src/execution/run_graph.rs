@@ -13,18 +13,18 @@ use crate::catalog_query::capture_localized_project_facts;
 use crate::graph_contracts::{build_resource_catalog, execution_package_from_graph};
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::catalog_snapshot;
-use yss_execution::error::RunPhase;
-use yss_execution::package_preparation::PackagePreparationError;
-use yss_execution::plan::{
+use yss_graph_document::GraphResourcePath;
+use yss_graph_execution::error::RunPhase;
+use yss_graph_execution::package_preparation::PackagePreparationError;
+use yss_graph_execution::plan::{
     InvalidPlanIdentity, PlanExecutionDemand, PlanGraphId, PlanOutputRef, PlanProjectSessionId,
     PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState, PlanResourceVersion,
 };
-use yss_execution::run_registry::{RunId, RunState};
-use yss_execution::state::{
+use yss_graph_execution::run_registry::{RunId, RunState};
+use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, PreparedExecutionEvent,
     RunExecutionControl,
 };
-use yss_graph_document::GraphResourcePath;
 use yss_project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
@@ -115,14 +115,14 @@ impl RunGraphRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RunIdentity {
-    execution_session_id: yss_execution::identity::ExecutionSessionId,
+    execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     graph_path: GraphResourcePath,
     run_id: RunId,
 }
 
 impl RunIdentity {
     fn new(
-        execution_session_id: yss_execution::identity::ExecutionSessionId,
+        execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
         graph_path: GraphResourcePath,
         run_id: RunId,
     ) -> Self {
@@ -133,7 +133,7 @@ impl RunIdentity {
         }
     }
 
-    pub fn execution_session_id(&self) -> &yss_execution::identity::ExecutionSessionId {
+    pub fn execution_session_id(&self) -> &yss_graph_execution::identity::ExecutionSessionId {
         &self.execution_session_id
     }
 
@@ -154,18 +154,18 @@ pub enum RunApplicationEventKind {
     RunCompleted,
     RunCancelled,
     RunErrored {
-        failure: yss_execution::error::RunFailure,
+        failure: yss_graph_execution::error::RunFailure,
     },
     PinPreviewResultReady {
         output: PlanOutputRef,
         generation: u64,
-        result_id: yss_execution::result::ResultId,
+        result_id: yss_graph_execution::result::ResultId,
     },
     ResultInspectionRequested {
-        result_id: yss_execution::result::ResultId,
-        source: yss_execution::plan::PlanSourceIdentity,
+        result_id: yss_graph_execution::result::ResultId,
+        source: yss_graph_execution::plan::PlanSourceIdentity,
     },
-    RunOutput(yss_execution::run_output::RunOutputMessage),
+    RunOutput(yss_graph_execution::run_output::RunOutputMessage),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -225,7 +225,7 @@ pub enum ExecutionApplicationError {
     #[error("execution finalization failed")]
     Finalization(#[source] FinalizationError),
     #[error("execution run terminal publication failed")]
-    RunFinalization(#[source] yss_execution::run_registry::RunRegistryError),
+    RunFinalization(#[source] yss_graph_execution::run_registry::RunRegistryError),
     #[error("captured application session is stale")]
     StaleSession(#[source] SessionRevalidationError),
 }
@@ -566,16 +566,16 @@ fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplic
     }
 }
 
-fn finalization_failure() -> yss_execution::error::RunFailure {
-    yss_execution::error::RunFailure {
-        code: yss_execution::error::RunFailureCode::FinalizationFailed,
+fn finalization_failure() -> yss_graph_execution::error::RunFailure {
+    yss_graph_execution::error::RunFailure {
+        code: yss_graph_execution::error::RunFailureCode::FinalizationFailed,
         phase: RunPhase::Finalization,
         source: None,
     }
 }
 
 fn publish_run_failure<D>(
-    execution: &yss_execution::state::ExecutionRuntimeState,
+    execution: &yss_graph_execution::state::ExecutionRuntimeState,
     run_id: RunId,
     identity: &RunIdentity,
     deliver: &mut D,
@@ -680,7 +680,7 @@ fn collect_resource_requirements(
 fn plan_basis(
     captured: &ApplicationSession,
     grants: &[ProjectResourceGrant],
-) -> Result<yss_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
+) -> Result<yss_graph_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
     let mut versions = BTreeMap::new();
     let mut observations = BTreeMap::new();
     for grant in grants {
@@ -712,7 +712,7 @@ fn plan_basis(
             },
         );
     }
-    Ok(yss_execution::plan::PlanCompilationBasis::new(
+    Ok(yss_graph_execution::plan::PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
         PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
         versions,
@@ -723,7 +723,7 @@ fn plan_basis(
 fn map_project_resource_facts(
     captured: &ApplicationSession,
     grants: &[ProjectResourceGrant],
-) -> Result<yss_execution::resource_preparation::RunResourceBindings, ResourceBindingError> {
+) -> Result<yss_graph_execution::resource_preparation::RunResourceBindings, ResourceBindingError> {
     let mut requirements = Vec::new();
     let mut bindings = Vec::new();
     for grant in grants {
@@ -731,17 +731,19 @@ fn map_project_resource_facts(
             .map_err(|_| ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
         let kind = match grant.kind() {
             ProjectResourceKind::DatabaseConnection => {
-                yss_execution::plan::ResourceKind::DatabaseConnection
+                yss_graph_execution::plan::ResourceKind::DatabaseConnection
             }
-            ProjectResourceKind::DataFrame => yss_execution::plan::ResourceKind::DataFrame,
-            ProjectResourceKind::File => yss_execution::plan::ResourceKind::File,
-            ProjectResourceKind::Plot => yss_execution::plan::ResourceKind::Plot,
+            ProjectResourceKind::DataFrame => yss_graph_execution::plan::ResourceKind::DataFrame,
+            ProjectResourceKind::File => yss_graph_execution::plan::ResourceKind::File,
+            ProjectResourceKind::Plot => yss_graph_execution::plan::ResourceKind::Plot,
         };
         let access = match grant.access() {
-            ProjectResourceAccess::Shared => yss_execution::plan::ResourceAccess::Shared,
-            ProjectResourceAccess::Exclusive => yss_execution::plan::ResourceAccess::Exclusive,
+            ProjectResourceAccess::Shared => yss_graph_execution::plan::ResourceAccess::Shared,
+            ProjectResourceAccess::Exclusive => {
+                yss_graph_execution::plan::ResourceAccess::Exclusive
+            }
         };
-        let requirement = yss_execution::plan::PlanResourceRequirement::new(
+        let requirement = yss_graph_execution::plan::PlanResourceRequirement::new(
             resource.clone(),
             kind,
             access,
@@ -769,12 +771,12 @@ fn map_project_resource_facts(
                     version.get(),
                 )
                 .map_err(ResourceBindingError::Dataset)?;
-            yss_execution::value::RuntimeValue::Relation(relation)
+            yss_graph_execution::value::RuntimeValue::Relation(relation)
         } else {
-            yss_execution::value::RuntimeValue::Resource(resource.as_str().into())
+            yss_graph_execution::value::RuntimeValue::Resource(resource.as_str().into())
         };
         bindings.push(
-            yss_execution::resource_preparation::RunResourceBinding::new(
+            yss_graph_execution::resource_preparation::RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing(version.get().to_string().into()),
                 value,
@@ -782,7 +784,7 @@ fn map_project_resource_facts(
         );
     }
     Ok(
-        yss_execution::resource_preparation::RunResourceBindings::new(
+        yss_graph_execution::resource_preparation::RunResourceBindings::new(
             PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
             requirements,
             bindings,
@@ -800,10 +802,10 @@ mod tests {
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_execution::identity::{ExecutionSessionId, RuntimeGeneration};
-    use yss_execution::resource_preparation::ResourceProviderFactory;
-    use yss_execution::state::ExecutionRuntimeState;
     use yss_graph_catalog::build_builtin_node_system;
+    use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+    use yss_graph_execution::resource_preparation::ResourceProviderFactory;
+    use yss_graph_execution::state::ExecutionRuntimeState;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
     use yss_project::ProjectState;
     use yss_project_identity::ProjectSessionId;

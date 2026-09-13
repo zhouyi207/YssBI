@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use yss_execution::identity::MAX_SAFE_PREVIEW_GENERATION;
+use yss_graph_execution::identity::MAX_SAFE_PREVIEW_GENERATION;
 
 #[derive(Debug)]
 pub struct PinPreviewGenerationAllocator {

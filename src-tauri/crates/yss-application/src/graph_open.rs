@@ -3,23 +3,25 @@ use std::sync::Arc;
 use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
-use yss_execution::plan::{PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint};
 use yss_graph_analysis::GraphAnalysis;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
+use yss_graph_execution::plan::{
+    PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
+};
 use yss_graph_runtime::GraphMaterializationError;
 use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 use super::catalog_query::revalidate_project_catalog_facts;
 use super::catalog_query::{ProjectCatalogReadError, capture_localized_project_facts};
-use super::editor_projection::{
-    EditorProjectionError, EditorProjectionInput, EditorProjectionModel, build_editor_projection,
-};
 use super::execution::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use super::graph_contracts::{
     GraphContractMappingError, build_resource_catalog, graph_compilation_basis,
+};
+use yss_graph_editor::projection::{
+    EditorProjectionError, EditorProjectionInput, EditorProjectionModel, build_editor_projection,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
