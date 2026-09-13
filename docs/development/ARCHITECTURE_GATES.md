@@ -164,8 +164,12 @@ SCI runtime 的输入准备使用 Arrow；其 Polars/Polars Arrow 使用权限�
 profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polars 代码的历史迁移测试固定旧实现。
 旧 DuckDB/Polars 适配器及其依赖权限已删除。`yss-bayes-artifact-datafusion` 按 Backend Adapter 审计，
 只为该包声明 DataFusion 查询依赖；Julia exchange 的两个消费者使用 Arrow。密度计算权限绑定到该适配器的 `plots` 模块。
-Application 的 `dataset_engine_bench` example 测量数据引擎与统计输入准备；OLS 计算测量归
-Execution 的 `ols_bench` example，仅开放 `yss_sci_runtime::ols` 的精确调用权限。
+`yss-dataset-store` 的 `dataset_engine_bench` example 测量数据引擎与统计输入准备，复用该包的存储与查询依赖；OLS 计算测量归
+`yss-graph-execution` 的 `ols_bench` example，仅开放 `yss_sci_runtime::ols` 的精确调用权限。
+
+图编辑器投影归 `yss-graph-editor::projection`，按 Graph 分类；其错误类型使用该包显式声明的 `thiserror`。
+IPC 的 editor projection 与 graph draft mapper 只获对应 Graph 投影类型的精确读取权限。
+Application 的 `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite` 仅用于测试，声明为 dev-dependencies。
 
 `yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
 结果页 command 只调用 Application 查询；页面预算、快照读取和查询结束后的 currentness 检查位于 Application。

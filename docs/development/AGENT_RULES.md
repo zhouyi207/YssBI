@@ -63,7 +63,7 @@ add or commit them unless explicitly requested.
   projections in one direction and keep drafts separate until Save succeeds.
 - Dependencies flow toward domain and application logic, never from domain code
   toward UI, Tauri, services, or concrete infrastructure adapters.
-- Only `yss-execution` and `yss-ipc-command` directly consume `yss-sci-runtime`.
+- Only `yss-graph-execution` and `yss-ipc-command` directly consume `yss-sci-runtime`.
   Desktop composition and Application do not construct or inject a scientific
   backend. Runtime exposes stateless functions and calls `yss-sci`, which calls
   `yss-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;

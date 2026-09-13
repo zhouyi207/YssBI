@@ -37,7 +37,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-dataset-store` | `src-tauri/crates/yss-dataset-store` | [Cargo.toml](../../src-tauri/crates/yss-dataset-store/Cargo.toml) | [README](../../src-tauri/crates/yss-dataset-store/README.md) |
 | `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | — |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
-| `yss-execution` | `src-tauri/crates/yss-execution` | [Cargo.toml](../../src-tauri/crates/yss-execution/Cargo.toml) | — |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | — |
 | `yss-graph-analysis-contract` | `src-tauri/crates/yss-graph-analysis-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis-contract/Cargo.toml) | — |
@@ -47,6 +46,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-graph-document` | `src-tauri/crates/yss-graph-document` | [Cargo.toml](../../src-tauri/crates/yss-graph-document/Cargo.toml) | — |
 | `yss-graph-document-edit` | `src-tauri/crates/yss-graph-document-edit` | [Cargo.toml](../../src-tauri/crates/yss-graph-document-edit/Cargo.toml) | — |
 | `yss-graph-editor` | `src-tauri/crates/yss-graph-editor` | [Cargo.toml](../../src-tauri/crates/yss-graph-editor/Cargo.toml) | — |
+| `yss-graph-execution` | `src-tauri/crates/yss-graph-execution` | [Cargo.toml](../../src-tauri/crates/yss-graph-execution/Cargo.toml) | — |
 | `yss-graph-protocol` | `src-tauri/crates/yss-graph-protocol` | [Cargo.toml](../../src-tauri/crates/yss-graph-protocol/Cargo.toml) | — |
 | `yss-graph-registry` | `src-tauri/crates/yss-graph-registry` | [Cargo.toml](../../src-tauri/crates/yss-graph-registry/Cargo.toml) | — |
 | `yss-graph-resource-contract` | `src-tauri/crates/yss-graph-resource-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-resource-contract/Cargo.toml) | — |

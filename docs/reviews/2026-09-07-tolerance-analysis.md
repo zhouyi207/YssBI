@@ -76,7 +76,7 @@ OLS 先按 SVD 阈值确定秩和自由度，再对完整 `X'X` 进行 Cholesky 
 
 ### T06：实际算法参数和停止原因缺乏追溯
 
-当前 [ResultProvenance](../../src-tauri/crates/yss-execution/src/result.rs) 记录结果 ID、Run ID 和时间；模型报告中的有效数值参数与停止原因尚不完整。
+当前 [ResultProvenance](../../src-tauri/crates/yss-graph-execution/src/result.rs) 记录结果 ID、Run ID 和时间；模型报告中的有效数值参数与停止原因尚不完整。
 
 后续运行入口解析一次有效模型参数，同一次运行使用固定参数。需要说明哪些配置来自节点、哪些采用算法默认值；结果按操作需要记录有效参数和停止原因。全局比较设置已经删除，不再设计对应的全局配置快照或设置更新触发重算机制。
 

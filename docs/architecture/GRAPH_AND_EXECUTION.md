@@ -24,20 +24,27 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 
 ## 2. Module ownership
 
-| Owner                                                                | 职责                                                                        |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| yss-graph-document / protocol                                        | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                      |
-| yss-graph-document-edit / editor                                     | structural validation、typed mutation、连接预检、端口顺序、clipboard        |
-| yss-graph-analysis                                                   | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof |
-| yss-graph-resource-contract                                          | immutable resource facts 与一次 Resolve 的 dependency observations          |
-| yss-graph-runtime                                                    | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                     |
-| yss-graph-compiler                                                   | Ready snapshot 驱动的 immutable package lowering                            |
-| yss-project                                                          | committed authority、资源版本、文件事务与 publication                       |
-| yss-application                                                      | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                 |
-| yss-execution                                                        | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter     |
-| yss-ipc-command / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                |
+| Owner                                                                | 职责                                                                             |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| yss-graph-document / protocol                                        | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                           |
+| yss-graph-document-edit / editor                                     | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
+| yss-graph-analysis                                                   | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
+| yss-graph-resource-contract                                          | immutable resource facts 与一次 Resolve 的 dependency observations               |
+| yss-graph-runtime                                                    | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                          |
+| yss-graph-compiler                                                   | Ready snapshot 驱动的 immutable package lowering                                 |
+| yss-project                                                          | committed authority、资源版本、文件事务与 publication                            |
+| yss-application                                                      | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
+| yss-graph-execution                                                  | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter          |
+| yss-ipc-command / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
+
+`yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
+生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
+IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
+
+`yss-graph-runtime` 负责解析与编译产物缓存；`yss-graph-execution` 负责执行计划、节点 kernel、
+run、Results 和 Run Output。两者通过 Application 的执行包转换连接，执行端不依赖编辑器投影。
 
 ## 3. Open and Draft lifecycle
 
@@ -222,9 +229,9 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Execution 直接调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
-Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
+Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
-只有 `yss-execution` 和 `yss-ipc-command` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
+只有 `yss-graph-execution` 和 `yss-ipc-command` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。

@@ -94,6 +94,7 @@ Tauri composition root
 
 - command 只解析和校验输入、映射 DTO/error、调用 use case，并在 commit 后交付事件或 channel；
 - Application 组合跨 owner 用例和 currentness gate，不重新实现 Project、Graph、Database 或 SCI 规则；
+- 图编辑器投影由 `yss-graph-editor::projection` 从语义快照生成；Application 负责调用与身份重验，IPC 负责 wire 映射；
 - domain crate 不依赖 Tauri、React、command schema 或具体基础设施；
 - adapter 实现窄 port，不反向拥有 session、approval、project 或 workflow authority。
 
@@ -195,7 +196,7 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 科学计算使用独立的中性契约，只有 Execution 和 IPC Command 直接调用 SCI runtime：
 
 ```text
-Application → Execution → yss-sci-runtime (stateless functions)
+Application → yss-graph-execution → yss-sci-runtime (stateless functions)
 IPC Command → yss-sci-runtime
 yss-sci-runtime → yss-sci algorithms → yss-linalg Mat / Col / views / checked factors → faer
 yss-sci algorithms → shared model options/results in yss-sci-contract

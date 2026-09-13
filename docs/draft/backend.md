@@ -27,7 +27,7 @@
 | -------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -----: |
 | 应用与会话管理 | 组织业务用例，协调跨模块操作与项目会话生命周期         | `yss-application`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |      1 |
 | 项目与资源管理 | 管理已提交项目、资源身份、版本、文档事务及外部文件变化 | **主体、模型与身份**：`yss-project`、`yss-project-model`、`yss-project-layout`、`yss-project-identity`<br>**资源与提交**：`yss-project-operation`、`yss-project-change`、`yss-project-history`、`yss-resource-lifecycle`、`yss-resource-naming`、`yss-chart-document`<br>**文件与进度**：`yss-project-filesystem`、`yss-project-progress`<br>**发现与注册**：`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`<br>**项目监听**：`yss-project-watcher`、`yss-project-watcher-notify` |     17 |
-| 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-protocol`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**目录与注册**：`yss-graph-catalog`、`yss-graph-registry`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-execution`                     |     15 |
+| 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-protocol`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**目录与注册**：`yss-graph-catalog`、`yss-graph-registry`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-graph-execution`               |     15 |
 | 数据管理与查询 | 数据契约、数据集目录、存储、查询、编辑与导入导出       | **数据与查询契约**：`yss-data-contract`、`yss-tabular-contract`、`yss-relational-contract`、`yss-database-contract`<br>**数据库运行与编辑**：`yss-database-runtime`、`yss-database-edit`、`yss-database-schema`<br>**数据集与分析**：`yss-dataset-store`、`yss-dataset-profile`<br>**引擎与外部数据源**：`yss-datafusion`、`yss-sql-source`<br>**批次与文件交换**：`yss-tabular-arrow`、`yss-tabular-io`                                                                                                                 |     13 |
 | 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                                                                                                |      5 |
 | Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                                                                                            |      4 |
@@ -50,12 +50,12 @@
 
 ### 内部结构
 
-| 部分               | 职责                                                              |
-| ------------------ | ----------------------------------------------------------------- |
-| 用例入口           | 接收业务参数，组织打开、保存、导入、编译、执行等操作              |
-| 跨模块编排         | 捕获相关业务事实，协调 Project、Graph、Database、Execution 和 SCI |
-| 会话管理           | 组合当前项目的运行时，管理任务准入、会话替换和旧任务清理          |
-| 提交与结果采用协调 | 在关键操作前重验身份和版本，返回真实提交结果或失败类别            |
+| 部分               | 职责                                                               |
+| ------------------ | ------------------------------------------------------------------ |
+| 用例入口           | 接收业务参数，组织打开、保存、导入、编译、执行等操作               |
+| 跨模块编排         | 捕获相关业务事实，协调 Project、Graph、Database 和 Graph Execution |
+| 会话管理           | 组合当前项目的运行时，管理任务准入、会话替换和旧任务清理           |
+| 提交与结果采用协调 | 在关键操作前重验身份和版本，返回真实提交结果或失败类别             |
 
 ### 状态与边界
 
@@ -63,7 +63,7 @@
 
 应用编排安排步骤，具体规则交给对应子系统。例如执行图时，应用捕获会话、检查编译产物及依赖，再调用执行系统；不会重新实现图编译或统计拟合。
 
-按唯一归属原则，Application 的职责止于用例编排和应用结果组织。假设检验规则已归 SCI；已保存结果的分析交由 Execution 调用 runtime。`editor_projection` 中独立的图投影模型与映射仍需按本文末尾的职责调整项收敛。
+按唯一归属原则，Application 的职责止于用例编排和应用结果组织。假设检验规则归 SCI；已保存结果的分析交由 `yss-graph-execution` 调用 runtime。图投影模型与映射归 `yss-graph-editor::projection`，Application 只协调其调用与身份校验。
 
 ## 2. 项目与资源管理
 
@@ -86,7 +86,7 @@ Project 拥有已提交项目、资源版本和保存后的文档。前端未保
 
 ## 3. 图分析与执行
 
-负责从图文档到图执行结果的完整过程，内部按文档编辑、语义分析、编辑器投影、编译产物、执行运行和结果管理展开。文档将这些能力归入一个子系统，源码中的图模块与 `yss-execution` 继续保持独立职责，由应用层连接。
+负责从图文档到图执行结果的完整过程，内部按文档编辑、语义分析、编辑器投影、编译产物、执行运行和结果管理展开。文档将这些能力归入一个子系统，源码中的图模块与 `yss-graph-execution` 继续保持独立职责，由应用层连接。
 
 ### 3.1 图文档与编辑
 
@@ -102,7 +102,7 @@ Project 拥有已提交项目、资源版本和保存后的文档。前端未保
 
 ### 3.3 编辑器投影
 
-将语义事实组织成编辑器可采用的数据。按本文职责划分，图投影模型及其语义映射应归图分析与执行；当前实现仍位于 `yss-application` 的 `editor_projection`，尚未完成职责迁移。Application 继续负责捕获输入、调用投影能力和采用前的身份校验。
+`yss-graph-editor::projection` 将语义事实组织成编辑器可采用的数据，拥有节点、端口、Schema、诊断和解析结果的投影模型及纯映射。它依赖 Graph Analysis，不依赖 Application；Application 负责捕获输入、调用投影能力和采用前的身份校验，IPC 负责 wire DTO 映射。
 
 Canvas、Details 和 Problems 消费同一套解析结果，前端不自行推导另一套类型或诊断。
 
@@ -116,7 +116,7 @@ Compile、Save、Execute 保持独立：Compile 不保存项目，Save 不隐式
 
 ### 3.5 执行与运行管理
 
-核心位于 `yss-execution`，负责消费准备好的执行包，运行图并管理运行生命周期。
+核心位于 `yss-graph-execution`，负责消费准备好的执行包，运行图并管理运行生命周期。
 
 - **计划与执行需求**：确定本次需要计算的输出及其依赖。
 - **执行调度**：按数据依赖组织 kernel 执行，通过接口使用数据和科学计算能力。
@@ -184,7 +184,7 @@ Project 管理资源声明；数据集存储管理已提交表数据；Database 
 
 ### 状态与边界
 
-计算契约定义共享数据和执行控制。只有 `yss-execution` 与 `yss-ipc-command` 直接调用 SCI runtime 的普通函数；`yssbi` 和 Application 不依赖 runtime，也不装配科学后端对象。runtime 使用普通数组调用 SCI，SCI 使用 `yss-linalg` 的矩阵类型与运算。faer 仅作为 `yss-linalg` 的内部实现依赖。
+计算契约定义共享数据和执行控制。只有 `yss-graph-execution` 与 `yss-ipc-command` 直接调用 SCI runtime 的普通函数；`yssbi` 和 Application 不依赖 runtime，也不装配科学后端对象。runtime 使用普通数组调用 SCI，SCI 使用 `yss-linalg` 的矩阵类型与运算。faer 仅作为 `yss-linalg` 的内部实现依赖。
 
 数据系统提供输入，SCI 产生计算结果，Execution 或对应业务用例决定结果的身份和使用方式。假设检验的约束解析、线性化、矩阵构造和 t/Wald 检验归 SCI。React 只转换展示模型，不重算统计事实。Julia/Bayes 属于独立插件，不依赖宿主 SCI crates，输入与取消契约由插件自己的 Bayes worker 拥有。
 
@@ -289,7 +289,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 | ------------------------------------------------------------------------- | -------------- | --------------------------------------------------------------- | ------------------------------------------------ |
 | `yss-application`                                                         | 应用与会话管理 | 协调项目、图、数据、科学计算及 Assistant / 插件业务入口         | 用例编排属于应用；领域规则由对应子系统提供       |
 | `yss-ipc-command`、`yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract` | 通信适配       | 分别承担命令、事件、通道和共享 wire 协议                        | 都归通信适配子系统，业务规则仍属于原业务 owner   |
-| `yss-execution`                                                           | 图分析与执行   | 通过数据与科学计算契约获取执行能力                              | 拥有运行与结果生命周期，不拥有查询引擎或统计算法 |
+| `yss-graph-execution`                                                     | 图分析与执行   | 通过数据与科学计算契约获取执行能力                              | 拥有运行与结果生命周期，不拥有查询引擎或统计算法 |
 | `yss-data-contract`、`yss-relational-contract`                            | 数据管理与查询 | 为项目、图或执行提供数据值和关系访问契约                        | 共享的是数据含义及访问接口                       |
 | `yss-sci-contract`                                                        | 科学计算       | 为图节点目录、执行和应用提供计算契约                            | 计算输入、选项和结果的含义由科学计算定义         |
 | `yss-automation-contract`                                                 | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
@@ -301,13 +301,20 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 
 后续选择一个子系统，继续说明其输入输出、内部模块、状态归属、依赖关系和失败处理。每次增改 crate 时检查公开接口和实现是否仍围绕唯一归属；出现独立的变更原因时，再判断移动模块还是拆包。
 
-## 11. 当前职责差异与待调整项
+## 11. Application 与 Graph 的职责边界
 
-已核对宿主 crate 清单、公开入口和代表性的跨子系统调用，并重点检查了 Application 内部实现。以下是相对本文模块化原则确认的职责差异，表中的职责迁移尚未执行；本表不代表对全部函数完成了实现审计。
+Application 保留跨子系统用例、会话一致性和提交协调，具体图规则由 Graph crate 拥有。
 
-| 当前实现                                                                                               | 源码事实                                                     | 按原则确定的职责边界                                                                                            | 后续调整方向                                                                                               |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `yss-application` 的 [editor_projection](../../src-tauri/crates/yss-application/src/editor_projection) | 定义图编辑器投影模型，映射节点、端口、Schema、诊断和解析结果 | 图投影模型与语义映射归图分析与执行；Application 负责事实捕获、操作编排和结果采用协调；wire DTO 映射仍归通信适配 | 在图子系统内确定模型与映射的承接位置，先核对依赖方向和循环风险，再迁移；不直接等同于现有函数签名投影 crate |
+| Owner                                                                                    | 职责                                                                                                                       |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `yss-application`                                                                        | Project、Graph、Database、Execution 的事实捕获、会话准入、版本重验与提交协调；`graph_contracts` 转换跨子系统的资源与执行包 |
+| [`yss-graph-editor::projection`](../../src-tauri/crates/yss-graph-editor/src/projection) | 编辑器投影模型，以及从同一语义快照生成节点、端口、Schema、诊断和解析结果的纯映射                                           |
+| `yss-graph-runtime`                                                                      | 图解析编排与编译产物缓存                                                                                                   |
+| `yss-graph-execution`                                                                    | 图执行计划、节点计算、run、结果生命周期及已有结果的统计分析                                                                |
+| IPC schema                                                                               | 将应用回执和 Graph 投影转换为 wire DTO                                                                                     |
+
+Application 的 `yss-datafusion`、`yss-project-layout` 和 `yss-project-registry-sqlite` 仅作为测试依赖。
+数据引擎基准示例归 `yss-dataset-store`，直接复用其存储与查询依赖；示例资源生成器仍随 Application 的数据库导入用例维护。
 
 职责调整优先使用现有 owner。新建 crate 必须有明确且可独立维护的职责，不能只为了让目录或数量呈现一对多关系。
 
