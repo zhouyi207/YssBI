@@ -29,6 +29,12 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-application",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-ipc-contract",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -68,12 +74,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-ipc-channel",
         mode: RustDependencyMode::Runtime,
         package_name: "tauri",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-channel",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tokio",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -131,7 +131,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
+        owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
         package_name: "tokio",
         target_condition: None,
@@ -551,42 +551,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tauri",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-ipc-command",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -661,19 +625,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
         package_name: "tracing",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yssbi",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {

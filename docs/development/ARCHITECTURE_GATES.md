@@ -81,11 +81,11 @@ Diagnostics
 Pure Shared
 ```
 
-这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。桌面 `src-tauri/src/lib.rs`、`harness.rs` 和 `projects.rs` 均按确切文件分类为 Composition Root；适配器构造能力只授权给实际组装模块。Application 的 Harness 和项目管理入口不获得 Tauri 或具体 provider/store 的访问权限。
+这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。桌面根入口、[Application runtime](../../src-tauri/crates/yss-application/src/runtime.rs)、[Harness 组装](../../src-tauri/crates/yss-application/src/runtime/harness.rs) 和 [Command runtime](../../src-tauri/crates/yss-application/src/ipc/runtime.rs) 按确切文件分类为 Composition Root。Application runtime 可以接收 Tauri app 并选择具体适配器；普通 Application 用例模块不获得 Tauri 或 provider/store 构造权限。内部 IPC runtime 直接组装共享通道和命令上下文。根包所有 scope 的内部依赖断言仅允许 `yss-application`。
 
 一个 Cargo package 可能包含由 source-level policy 精确判断的不同 root；不要在 `MODULE_MAP.md` 手工复制分类。
 
-IPC 拆分后，`yss-ipc-command` 的 handlers 按 Commands 分类，命令内的 schema、error 与响应缓存仍按 Transport 分类；`yss-ipc-event`、`yss-ipc-channel` 和 `yss-ipc-contract` 按 Transport 分类。跨层能力继续绑定确切 source 与 canonical symbol，不开放 Transport 对 Application 的通配访问。Contract 不声明 Tauri 或运行时依赖；Event/Channel 不反向依赖 Command。Diagnostics 仅暴露中立 batch sink，不再声明 Tauri 依赖或使用权限。
+Application 内部 `ipc` 注册表及 `ipc/commands` 按 Commands 分类，`ipc/schema`、`ipc/error`、响应缓存与应用专属 `ipc/channel` 适配按 Transport 分类；`yss-ipc-event`、`yss-ipc-channel` 和 `yss-ipc-contract` 按 Transport 分类。跨层能力继续绑定确切 source 与 canonical symbol，不开放 Transport 对 Application 的通配访问。Contract 不声明 Tauri 或运行时依赖；Event/Channel 不反向依赖 Application。Diagnostics 仅暴露中立 batch sink，不再声明 Tauri 依赖或使用权限。
 
 ## 4. Canonical origin resolution
 
@@ -126,11 +126,11 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 原生窗口几何改由官方 `tauri-plugin-window-state` 提供，运行时直接依赖仅声明于 `yssbi`，生产使用仅开放给 Composition Root。
 自有窗口状态 crate、窗口命令及其依赖 capability 已移除；这不开放领域层使用 Tauri 插件的权限。
 
-执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md#error-contract) 维护。
+执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md#error-contract) 维护。
 
 Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConstantReference`。`yss-graph-document` 按 Pure Leaf 分类，常量定义及只读校验归属该层；Project 可校验持久化数据，不依赖 Graph 编辑或分析层。JSON 门禁仅允许 `model.rs` 的值类型别名，以及 `constant_value.rs` 解析常量字面量所需的精确 `serde_json` 操作，不开放其他 JSON 业务逻辑。
 
-科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Execution 的统计节点和结果分析、IPC 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition root 和 Application 不依赖 runtime；Application 通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
+科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Execution 的统计节点和结果分析、Application 内 `ipc/commands` 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition Root 和其他 Application 模块不能直接访问 SCI runtime；结果用例通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
 Activity panel command 的 capability 只开放 Project/Nodes/Commands/Plugins 的 Application 文档查询、Plugin Manager 只读列表与
 Activity DTO，以及按游标返回增量的传输缓存。Composition root 只获缓存的构造权限，
