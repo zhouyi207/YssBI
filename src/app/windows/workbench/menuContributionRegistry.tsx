@@ -238,7 +238,6 @@ export function WorkbenchMenuContribution({
   const dataItems: MenuItem[] = [
     { label: t("menubar.importData"), onClick: handleImportData },
     { label: t("menubar.databaseEditor"), onClick: handleDatabaseEditor },
-    { label: t("menubar.newChart"), onClick: () => void addChart() },
     { label: "-", type: "separator" },
     { label: t("menubar.schemaViewer") },
   ];
