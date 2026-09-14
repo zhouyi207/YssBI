@@ -140,10 +140,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/crates/yss-graph-execution/src/resource_preparation.rs",
         RustLayer::Execution,
     ),
-    (
-        "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
-        RustLayer::BuiltinComposition,
-    ),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -304,10 +300,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-graph-document/src/model.rs",
         fully_qualified_owner: "yss_graph_document::model",
         canonical_origin_targets: &[
-            "yss_graph_protocol::identity::NodeTypeId",
-            "yss_graph_protocol::identity::ParameterKey",
-            "yss_graph_protocol::identity::PortKey",
-            "yss_graph_protocol::types::TypeExpr",
+            "yss_node_protocol::identity::NodeTypeId",
+            "yss_node_protocol::identity::ParameterKey",
+            "yss_node_protocol::identity::PortKey",
+            "yss_node_protocol::types::TypeExpr",
         ],
     },
     InternalDependencyCapability {
@@ -414,8 +410,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/execution/session_factory.rs",
         fully_qualified_owner: "yss_application::execution::session_factory",
         canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::build_builtin_node_system",
-            "yss_graph_catalog::builtin::BuiltinInitializationError",
+            "yss_node_catalog::builtin::build_builtin_node_system",
+            "yss_node_catalog::builtin::BuiltinInitializationError",
         ],
     },
     InternalDependencyCapability {
@@ -1175,35 +1171,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         ],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::BuiltinComposition,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
-        fully_qualified_owner: "yss_graph_catalog::builtin",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::core_nodes",
-            "yss_graph_catalog::dataframe",
-            "yss_graph_catalog::distribution",
-            "yss_graph_catalog::localization::Aliases",
-            "yss_graph_catalog::localization::BuiltinCatalog",
-            "yss_graph_catalog::localization::I18nBundleValidationError",
-            "yss_graph_catalog::localization::Message",
-            "yss_graph_catalog::localization::Text",
-            "yss_graph_catalog::plot",
-            "yss_graph_catalog::project",
-            "yss_graph_catalog::statistics",
-            "yss_graph_compiler_diagnostics::COMPILER_DIAGNOSTIC_DEFINITIONS",
-            "yss_graph_compiler_diagnostics::CompilerDiagnosticDefinitionError",
-            "yss_graph_compiler_diagnostics::validate_compiler_diagnostic_definitions",
-            "yss_graph_registry::LeafImplementation",
-            "yss_graph_registry::NodeRegistrationError",
-            "yss_graph_registry::NodeRegistry",
-            "yss_graph_registry::NodeRegistryBuilder",
-            "yss_graph_registry::ProviderRegistration",
-            "yss_graph_registry::RegisteredNode",
-            "yss_graph_registry::TypeConstructorRegistration",
-            "yss_graph_registry::TypeRegistration",
-        ],
-    },
-    InternalDependencyCapability {
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/schema/database.rs",
         fully_qualified_owner: "yss_application::ipc::schema::database",
@@ -1249,25 +1216,25 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yss_application::ipc::schema::catalog",
         canonical_origin_targets: &[
             "yss_application::catalog_query::CatalogQueryResult",
-            "yss_graph_catalog::localization::CatalogResourcePath",
-            "yss_graph_catalog::localization::CatalogResourcePath::new",
-            "yss_graph_catalog::localization::LocalizedCatalog",
-            "yss_graph_catalog::localization::LocalizedCatalogItem",
-            "yss_graph_catalog::localization::LocalizedCategory",
-            "yss_graph_catalog::localization::LocalizedParameter",
-            "yss_graph_catalog::localization::LocalizedPort",
-            "yss_graph_catalog::localization::NodeCreation",
-            "yss_graph_catalog::localization::NodeCreation::ParameterizedStatic",
-            "yss_graph_catalog::localization::NodeCreation::ResourceBound",
-            "yss_graph_catalog::localization::NodeCreation::Static",
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs",
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs::Database",
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs::Function",
-            "yss_graph_protocol::identity::NodeTypeId",
-            "yss_graph_protocol::identity::NodeTypeId::new",
-            "yss_graph_protocol::identity::ParameterKey",
-            "yss_graph_protocol::identity::ParameterKey::new",
-            "yss_graph_protocol::parameter::ParameterKey",
+            "yss_node_catalog::localization::CatalogResourcePath",
+            "yss_node_catalog::localization::CatalogResourcePath::new",
+            "yss_node_catalog::localization::LocalizedCatalog",
+            "yss_node_catalog::localization::LocalizedCatalogItem",
+            "yss_node_catalog::localization::LocalizedCategory",
+            "yss_node_catalog::localization::LocalizedParameter",
+            "yss_node_catalog::localization::LocalizedPort",
+            "yss_node_catalog::localization::NodeCreation",
+            "yss_node_catalog::localization::NodeCreation::ParameterizedStatic",
+            "yss_node_catalog::localization::NodeCreation::ResourceBound",
+            "yss_node_catalog::localization::NodeCreation::Static",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs::Database",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs::Function",
+            "yss_node_protocol::identity::NodeTypeId",
+            "yss_node_protocol::identity::NodeTypeId::new",
+            "yss_node_protocol::identity::ParameterKey",
+            "yss_node_protocol::identity::ParameterKey::new",
+            "yss_node_protocol::parameter::ParameterKey",
         ],
     },
     InternalDependencyCapability {
@@ -1324,15 +1291,15 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Parameter",
             "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Port",
             "yss_graph_analysis_contract::diagnostic::DiagnosticLocation::Resource",
-            "yss_graph_registry::fingerprint::RegistryFingerprint",
-            "yss_graph_protocol::PortDirection",
-            "yss_graph_protocol::PortKey",
-            "yss_graph_protocol::TypeExpr",
-            "yss_graph_protocol::model::PortDirection",
-            "yss_graph_protocol::model::PortDirection::Input",
-            "yss_graph_protocol::model::PortDirection::Output",
-            "yss_graph_protocol::types::TypeExpr",
-            "yss_graph_registry::RegistryFingerprint",
+            "yss_node_registry::fingerprint::RegistryFingerprint",
+            "yss_node_protocol::PortDirection",
+            "yss_node_protocol::PortKey",
+            "yss_node_protocol::TypeExpr",
+            "yss_node_protocol::model::PortDirection",
+            "yss_node_protocol::model::PortDirection::Input",
+            "yss_node_protocol::model::PortDirection::Output",
+            "yss_node_protocol::types::TypeExpr",
+            "yss_node_registry::RegistryFingerprint",
         ],
     },
     InternalDependencyCapability {
@@ -1343,12 +1310,12 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_analysis_contract::ResourceVersionSet",
             "yss_graph_analysis_contract::basis::ResourceVersionSet",
             "yss_graph_analysis_contract::basis::ResourceObservationSet",
-            "yss_graph_protocol::dataframe::FilterOperator",
-            "yss_graph_protocol::parameter::ParameterPresentation",
-            "yss_graph_protocol::types::TypeExpr",
-            "yss_graph_protocol::model::ParameterPresentation",
-            "yss_graph_registry::RegistryFingerprint",
-            "yss_graph_registry::fingerprint::RegistryFingerprint",
+            "yss_node_protocol::dataframe::FilterOperator",
+            "yss_node_protocol::parameter::ParameterPresentation",
+            "yss_node_protocol::types::TypeExpr",
+            "yss_node_protocol::model::ParameterPresentation",
+            "yss_node_registry::RegistryFingerprint",
+            "yss_node_registry::fingerprint::RegistryFingerprint",
         ],
     },
     InternalDependencyCapability {
@@ -1356,9 +1323,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/schema/graph_clipboard.rs",
         fully_qualified_owner: "yss_application::ipc::schema::graph_clipboard",
         canonical_origin_targets: &[
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs",
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs::Database",
-            "yss_graph_catalog::localization::ResourceBoundCreateArgs::Function",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs::Database",
+            "yss_node_catalog::localization::ResourceBoundCreateArgs::Function",
             "yss_graph_editor::subgraph::clipboard::ClipboardConnection",
             "yss_graph_editor::subgraph::clipboard::ClipboardDynamicMemberOrigin",
             "yss_graph_editor::subgraph::clipboard::ClipboardDynamicPortBinding",
@@ -1374,8 +1341,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::MutationConflict",
             "yss_graph_editor::mutation::MutationConflict",
             "yss_graph_editor::mutation::MutationConflict::ClipboardSubgraphInvalid",
-            "yss_graph_protocol::parameter::ParameterValues",
-            "yss_graph_protocol::types::TypeExpr",
+            "yss_node_protocol::parameter::ParameterValues",
+            "yss_node_protocol::types::TypeExpr",
         ],
     },
     InternalDependencyCapability {
@@ -1419,7 +1386,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::mutation::EditorGraphMutation::SetParameters",
             "yss_graph_editor::NodePositionMutation",
             "yss_graph_editor::mutation::NodePositionMutation",
-            "yss_graph_protocol::identity::PortKey",
+            "yss_node_protocol::identity::PortKey",
         ],
     },
     InternalDependencyCapability {
@@ -1429,122 +1396,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_project_history::ResourceKey",
             "yss_project::project_writers::ProjectSaveResult",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/core_nodes/mod.rs",
-        fully_qualified_owner: "yss_graph_catalog::core_nodes",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/core_nodes/reroute.rs",
-        fully_qualified_owner: "yss_graph_catalog::core_nodes::reroute",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/core_nodes/support.rs",
-        fully_qualified_owner: "yss_graph_catalog::core_nodes::support",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/dataframe/mod.rs",
-        fully_qualified_owner: "yss_graph_catalog::dataframe",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::configuration_parameter",
-            "yss_graph_catalog::builtin::iid",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/distribution/mod.rs",
-        fully_qualified_owner: "yss_graph_catalog::distribution",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_decimal",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::configuration_parameter",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/plot/mod.rs",
-        fully_qualified_owner: "yss_graph_catalog::plot",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::configuration_parameter",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/project.rs",
-        fully_qualified_owner: "yss_graph_catalog::project",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::iid",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/lib.rs",
-        fully_qualified_owner: "yss_graph_catalog",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::BuiltinInitializationError",
-            "yss_graph_catalog::builtin::BuiltinNodeSystem",
-            "yss_graph_catalog::builtin::build_builtin_node_system",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Graph,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-catalog/src/statistics/mod.rs",
-        fully_qualified_owner: "yss_graph_catalog::statistics",
-        canonical_origin_targets: &[
-            "yss_graph_catalog::builtin::BuiltinAssemblyError",
-            "yss_graph_catalog::builtin::ProviderFragment",
-            "yss_graph_catalog::builtin::assembled_decimal",
-            "yss_graph_catalog::builtin::assembled_interface",
-            "yss_graph_catalog::builtin::assembled_parameters",
-            "yss_graph_catalog::builtin::configuration_parameter",
-            "yss_graph_catalog::builtin::iid",
-            "yss_graph_catalog::builtin::leaf",
-            "yss_graph_catalog::builtin::sid",
         ],
     },
     InternalDependencyCapability {
@@ -1733,7 +1584,6 @@ fn non_build_memberships(
             | "yss-database-schema"
             | "yss-display-naming"
             | "yss-graph-document"
-            | "yss-graph-protocol"
             | "yss-graph-resource-contract"
             | "yss-graph-type-mapping"
             | "yss-math-expr"
@@ -1782,8 +1632,11 @@ fn non_build_memberships(
         || package == "yss-resource-lifecycle"
     {
         layers.insert(RustLayer::Project);
-    } else if package == "yss-graph-catalog" {
-        layers.insert(exact_layer.unwrap_or(RustLayer::Graph));
+    } else if matches!(
+        package,
+        "yss-node-protocol" | "yss-node-registry" | "yss-node-catalog"
+    ) {
+        layers.insert(RustLayer::Node);
     } else if matches!(
         package,
         "yss-graph-analysis"
@@ -1792,7 +1645,6 @@ fn non_build_memberships(
             | "yss-graph-compiler-diagnostics"
             | "yss-graph-document-edit"
             | "yss-graph-editor"
-            | "yss-graph-registry"
             | "yss-graph-runtime"
     ) {
         layers.insert(RustLayer::Graph);
@@ -1841,7 +1693,7 @@ fn non_build_memberships(
             | "yss-statistical-harness-sqlite"
     ) {
         layers.insert(RustLayer::BackendAdapter);
-    } else if let Some(layer) = cohesive_owner_layer(namespace, exact_layer) {
+    } else if let Some(layer) = cohesive_owner_layer(namespace) {
         layers.insert(layer);
     }
     layers
@@ -1853,7 +1705,7 @@ fn exact_source_layer(source_file: &str) -> Option<RustLayer> {
         .find_map(|(source, layer)| (*source == source_file).then_some(*layer))
 }
 
-fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Option<RustLayer> {
+fn cohesive_owner_layer(namespace: &str) -> Option<RustLayer> {
     if namespace.is_empty() {
         return None;
     }
@@ -1867,7 +1719,6 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "sci" => Some(RustLayer::SciCore),
         "julia" => Some(RustLayer::BackendAdapter),
         "event" | "schema" | "error" => Some(RustLayer::Transport),
-        "graph" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "graph" => Some(RustLayer::Graph),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,
@@ -1933,10 +1784,16 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                     && (package_name == "yss-sci" || package_name.starts_with("yss-sci-")));
             let crosses_filesystem_boundary =
                 dependency.owning_package == "yss-filesystem" && package_name != "yss-filesystem";
+            let crosses_node_boundary =
+                source_layer == RustLayer::Node && package_name.starts_with("yss-graph-");
             if !crosses_scientific_boundary
                 && !crosses_filesystem_boundary
+                && !crosses_node_boundary
                 && target_layer.is_some_and(|target| {
                     internal_layer_dependency_is_allowed(source_layer, target)
+                        // Node declarations remain available to pure document and transport owners.
+                        || (package_name == "yss-node-protocol"
+                            && internal_layer_dependency_is_allowed(source_layer, RustLayer::PureLeaf))
                         || capabilities.iter().any(|capability| {
                             capability.source_layer == source_layer
                                 && capability.repository_relative_source_file
@@ -1954,6 +1811,8 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                 key: ArchitectureFindingKey {
                     rule_id: if crosses_filesystem_boundary {
                         "rust.internal.filesystem-boundary"
+                    } else if crosses_node_boundary {
+                        "rust.internal.node-boundary"
                     } else if crosses_scientific_boundary {
                         "rust.internal.scientific-boundary"
                     } else {
@@ -2036,14 +1895,18 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::Application,
                 RustLayer::Project
                     | RustLayer::Filesystem
+                    | RustLayer::Node
                     | RustLayer::Graph
                     | RustLayer::Execution
                     | RustLayer::DatabaseCore
                     | RustLayer::Diagnostics
                     | RustLayer::PureLeaf
             )
-            | (RustLayer::Project, RustLayer::PureLeaf | RustLayer::Filesystem)
-            | (RustLayer::Graph, RustLayer::PureLeaf)
+            | (
+                RustLayer::Project,
+                RustLayer::PureLeaf | RustLayer::Filesystem
+            )
+            | (RustLayer::Graph, RustLayer::Node | RustLayer::PureLeaf)
             | (RustLayer::Execution, RustLayer::PureLeaf)
             | (RustLayer::SciCore, RustLayer::PureLeaf)
             | (RustLayer::DatabaseCore, RustLayer::PureLeaf)
@@ -2051,14 +1914,7 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::BackendAdapter,
                 RustLayer::DatabaseCore | RustLayer::Diagnostics | RustLayer::PureLeaf
             )
-            // The built-in catalog is the one named assembly seam that wires
-            // Graph-owned protocol/registry modules into the final catalog.
-            // This is a layer edge, not a wildcard capability; individual
-            // Graph submodule -> built-in imports remain exact capabilities.
-            | (
-                RustLayer::BuiltinComposition,
-                RustLayer::Graph | RustLayer::PureLeaf,
-            )
+            | (RustLayer::Node, RustLayer::PureLeaf)
             | (RustLayer::Transport, RustLayer::PureLeaf)
             | (RustLayer::Diagnostics, RustLayer::PureLeaf)
     )

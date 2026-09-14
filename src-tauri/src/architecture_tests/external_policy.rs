@@ -983,7 +983,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-catalog",
+        owning_package: "yss-node-catalog",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
@@ -1109,25 +1109,25 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-protocol",
+        owning_package: "yss-node-protocol",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-protocol",
+        owning_package: "yss-node-protocol",
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-registry",
+        owning_package: "yss-node-registry",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-graph-registry",
+        owning_package: "yss-node-registry",
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
         target_condition: None,
@@ -2201,9 +2201,14 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "tracing",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::BuiltinComposition,
+        source_layer: RustLayer::Node,
         mode: RustDependencyMode::Runtime,
-        package_name: "tracing",
+        package_name: "serde",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Node,
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Transport,

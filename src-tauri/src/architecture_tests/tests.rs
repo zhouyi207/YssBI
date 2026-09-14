@@ -423,8 +423,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-graph-catalog"
-                && root.target == "yss_graph_catalog"
+            .any(|root| root.package == "yss-node-catalog"
+                && root.target == "yss_node_catalog"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -463,8 +463,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-graph-protocol"
-                && root.target == "yss_graph_protocol"
+            .any(|root| root.package == "yss-node-protocol"
+                && root.target == "yss_node_protocol"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -487,8 +487,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-graph-registry"
-                && root.target == "yss_graph_registry"
+            .any(|root| root.package == "yss-node-registry"
+                && root.target == "yss_node_registry"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -555,7 +555,7 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
             "yss-graph-compiler",
         ),
         (
-            "yss-graph-catalog",
+            "yss-graph-runtime",
             "yss_graph_compiler_diagnostics",
             "yss-graph-compiler-diagnostics",
         ),
@@ -807,10 +807,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let graph_catalog_root = ProductionRoot {
         package_id: "graph-catalog-package".to_owned(),
-        package: "yss-graph-catalog".to_owned(),
-        target: "yss_graph_catalog".to_owned(),
+        package: "yss-node-catalog".to_owned(),
+        target: "yss_node_catalog".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-graph-catalog/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-node-catalog/src/lib.rs"),
     };
     let graph_compiler_root = ProductionRoot {
         package_id: "graph-compiler-package".to_owned(),
@@ -842,10 +842,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let graph_protocol_root = ProductionRoot {
         package_id: "graph-protocol-package".to_owned(),
-        package: "yss-graph-protocol".to_owned(),
-        target: "yss_graph_protocol".to_owned(),
+        package: "yss-node-protocol".to_owned(),
+        target: "yss_node_protocol".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-graph-protocol/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-node-protocol/src/lib.rs"),
     };
     let graph_resource_contract_root = ProductionRoot {
         package_id: "graph-resource-contract-package".to_owned(),
@@ -863,10 +863,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let graph_registry_root = ProductionRoot {
         package_id: "graph-registry-package".to_owned(),
-        package: "yss-graph-registry".to_owned(),
-        target: "yss_graph_registry".to_owned(),
+        package: "yss-node-registry".to_owned(),
+        target: "yss_node_registry".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-graph-registry/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-node-registry/src/lib.rs"),
     };
     let math_root = ProductionRoot {
         package_id: "math-package".to_owned(),
@@ -970,13 +970,13 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &graph_catalog_root,
-                "src-tauri/crates/yss-graph-catalog/src/lib.rs",
-                "yss_graph_catalog",
+                "src-tauri/crates/yss-node-catalog/src/lib.rs",
+                "yss_node_catalog",
             ),
             module(
                 &graph_catalog_root,
-                "src-tauri/crates/yss-graph-catalog/src/builtin.rs",
-                "yss_graph_catalog::builtin",
+                "src-tauri/crates/yss-node-catalog/src/builtin.rs",
+                "yss_node_catalog::builtin",
             ),
             module(
                 &canonical_hash_root,
@@ -1040,8 +1040,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &graph_protocol_root,
-                "src-tauri/crates/yss-graph-protocol/src/lib.rs",
-                "yss_graph_protocol",
+                "src-tauri/crates/yss-node-protocol/src/lib.rs",
+                "yss_node_protocol",
             ),
             module(
                 &graph_resource_contract_root,
@@ -1055,8 +1055,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &graph_registry_root,
-                "src-tauri/crates/yss-graph-registry/src/lib.rs",
-                "yss_graph_registry",
+                "src-tauri/crates/yss-node-registry/src/lib.rs",
+                "yss_node_registry",
             ),
             module(
                 &math_root,
@@ -1112,12 +1112,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Application
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-graph-catalog/src/builtin.rs"],
-        RustLayer::BuiltinComposition
+        classified["src-tauri/crates/yss-node-catalog/src/builtin.rs"],
+        RustLayer::Node
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-graph-catalog/src/lib.rs"],
-        RustLayer::Graph
+        classified["src-tauri/crates/yss-node-catalog/src/lib.rs"],
+        RustLayer::Node
     );
     assert_eq!(
         classified["src-tauri/crates/yss-canonical-hash/src/lib.rs"],
@@ -1168,8 +1168,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Graph
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-graph-protocol/src/lib.rs"],
-        RustLayer::PureLeaf
+        classified["src-tauri/crates/yss-node-protocol/src/lib.rs"],
+        RustLayer::Node
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-resource-contract/src/lib.rs"],
@@ -1180,8 +1180,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-graph-registry/src/lib.rs"],
-        RustLayer::Graph
+        classified["src-tauri/crates/yss-node-registry/src/lib.rs"],
+        RustLayer::Node
     );
     assert_eq!(
         classified["src-tauri/crates/yss-math-expr/src/lib.rs"],
@@ -1620,7 +1620,7 @@ fn graph_resource_contract_has_one_owner_distinct_from_builtin_catalog() {
     )
     .expect("graph resource contract root must be readable");
     assert!(
-        source.contains("The built-in node catalog remains owned by `yss-graph-catalog`"),
+        source.contains("The built-in node catalog remains owned by `yss-node-catalog`"),
         "resource snapshots and the built-in node catalog must remain distinct authorities"
     );
 }
@@ -1798,6 +1798,48 @@ fn chart_resource_cutover_does_not_keep_a_retired_rust_path() {
     let root = repository_root();
     let retired_resource_term = ["work", "sheet"].concat();
     inspect(&root.join("src-tauri"), &root, &retired_resource_term);
+}
+
+#[test]
+fn node_definitions_do_not_depend_on_graph_instances_or_analysis() {
+    let facts = production_facts();
+    for dependency in &workspace_facts().dependency_declarations {
+        if dependency.owning_package.starts_with("yss-node-") {
+            assert!(
+                !dependency.package_name.starts_with("yss-graph-"),
+                "{dependency:?}"
+            );
+        }
+    }
+    let declaration = "src-tauri/crates/yss-graph-document/src/lib.rs";
+    let target = "yss_graph_document::GraphDocument";
+    for (source, layer) in &facts.classification {
+        if !source.starts_with("src-tauri/crates/yss-node-") {
+            continue;
+        }
+        assert_eq!(*layer, RustLayer::Node, "{source}");
+    }
+    // GraphDocument is a PureLeaf; the Node boundary must still reject instance ownership.
+    let source = "src-tauri/crates/yss-node-protocol/src/lib.rs";
+    let dependency = CanonicalDependency {
+        owning_package: "yss-node-protocol".into(),
+        source_file: source.into(),
+        owner: "yss_node_protocol".into(),
+        kind: RustDependencyKind::Use,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: "yss-graph-document".into(),
+            repository_relative_declaration_file: declaration.into(),
+            fully_qualified_target: target.into(),
+            symbol: "GraphDocument".into(),
+        },
+        canonical_origin_target: target.into(),
+        line: 1,
+        column: 1,
+    };
+    let findings = rust_dependency_findings(&[dependency], &facts.classification).unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].key.rule_id, "rust.internal.node-boundary");
 }
 
 #[test]

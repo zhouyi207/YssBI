@@ -60,12 +60,14 @@ Execution
 SCI Core
 Database Core
 Backend Adapter
-Built-in Composition
+Node
 Transport
 Logging
 Diagnostics
 Pure Leaf
 ```
+
+`yss-node-protocol`、`yss-node-registry`、`yss-node-catalog` 的全部生产模块归 Node。Graph 可以消费节点定义、注册表和目录；其他层按原有纯契约权限消费 Node Protocol。`rust.internal.node-boundary` 禁止 Node 引用任何 Graph crate，包括按 Pure Leaf 分类的图文档，精确 capability 也不能绕过此约束。Cargo 声明检查同时覆盖 Node 的开发依赖。
 
 Frontend 当前 taxonomy：
 
