@@ -1,12 +1,11 @@
+use crate::ProjectOperationError;
 use crate::manifest::ProjectManifest;
 use crate::{GraphResourceFile, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use yss_chart_document::{ChartDocument, ChartResourcePath};
+use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
 use yss_graph_document::GraphResourcePath;
-use yss_project_filesystem::{
-    ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
-};
 use yss_project_history::{ChartResourceKey, FunctionResourceKey, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
@@ -175,13 +174,13 @@ pub(crate) fn context(
     }
 }
 
-fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
+fn prepare_error(error: impl ToString) -> ProjectOperationError {
+    ProjectOperationError::TransactionPrepareFailed {
         message: error.to_string(),
     }
 }
 
-fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("yssbi-event" | "yssbi-function") => {
             serde_json::from_slice::<GraphResourceFile>(contents)
@@ -207,16 +206,16 @@ impl ProjectState {
     pub(crate) fn capture_writer_snapshot(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-    ) -> Result<WriterSnapshot, ProjectFilesystemError> {
+    ) -> Result<WriterSnapshot, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "writer project instance is stale".into(),
             });
         }
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project changed during writer snapshot".into(),
             });
         }
@@ -238,13 +237,13 @@ impl ProjectState {
         &self,
         context: &ProjectTransactionContext,
         authority_generation: u64,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         self.validate_project_session(&context.session)?;
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != context.session.instance_id.as_str()
             || publication.authority_generation() != authority_generation
         {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project authority changed while writer was waiting".into(),
             });
         }
@@ -284,7 +283,7 @@ impl ProjectState {
                 Err(error) => return Err(prepare_error(error)),
             };
             if present != must_exist {
-                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                return Err(ProjectOperationError::ResourceRevisionConflict {
                     message: format!("resource presence changed for {resource:?}"),
                 });
             }
@@ -296,7 +295,7 @@ impl ProjectState {
         &self,
         context: &ProjectTransactionContext,
         authority_generation: u64,
-    ) -> Result<CommittedProjectSave, ProjectFilesystemError> {
+    ) -> Result<CommittedProjectSave, ProjectOperationError> {
         self.validate_writer_context(context, authority_generation)?;
         let publication = self.mutation_publication.lock().unwrap();
         Ok(CommittedProjectSave {
@@ -314,10 +313,10 @@ impl ProjectState {
         snapshot: &WriterSnapshot,
         context: ProjectTransactionContext,
         mutations: Vec<StagedFilesystemMutation>,
-    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectOperationError> {
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             context.filesystem_context(),
             lease,
             mutations,
@@ -330,7 +329,7 @@ impl ProjectState {
             Err(error) => {
                 return match committed.rollback() {
                     Ok(()) => Err(error),
-                    Err(rollback_error) => Err(rollback_error),
+                    Err(rollback_error) => Err(rollback_error.into()),
                 };
             }
         };

@@ -5,37 +5,34 @@ impl ProjectState {
         self.project_path.read().unwrap().clone()
     }
 
-    pub(crate) fn filesystem(&self) -> &ProjectFilesystemCoordinator {
+    pub(crate) fn filesystem(&self) -> &FilesystemCoordinator {
         &self.filesystem
     }
 
     pub fn acquire_filesystem_lease(
         &self,
-        root: NormalizedProjectRoot,
-    ) -> Result<yss_project_filesystem::ProjectFilesystemLeaseSet, ProjectFilesystemError> {
-        self.filesystem.acquire(root)
+        root: NormalizedRoot,
+    ) -> Result<yss_filesystem::FilesystemLeaseSet, ProjectOperationError> {
+        self.filesystem.acquire(root).map_err(Into::into)
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn filesystem_for_test(&self) -> &ProjectFilesystemCoordinator {
+    pub fn filesystem_for_test(&self) -> &FilesystemCoordinator {
         &self.filesystem
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn set_project_filesystem_fault(
-        &self,
-        fault: Option<yss_project_filesystem::ProjectFilesystemFaultPoint>,
-    ) {
-        self.filesystem.set_project_filesystem_fault(fault);
+    pub fn set_filesystem_fault(&self, fault: Option<yss_filesystem::FilesystemFaultPoint>) {
+        self.filesystem.set_filesystem_fault(fault);
     }
 
-    pub(crate) fn project_recovery_marker(&self) -> yss_project_filesystem::ProjectRecoveryMarker {
+    pub(crate) fn project_recovery_marker(&self) -> yss_filesystem::RecoveryMarker {
         self.recovery_marker.clone()
     }
 
-    pub fn ensure_project_operational(&self) -> Result<(), ProjectFilesystemError> {
+    pub fn ensure_project_operational(&self) -> Result<(), ProjectOperationError> {
         match self.recovery_marker.error() {
-            Some(error) => Err(error),
+            Some(error) => Err(error.into()),
             None => Ok(()),
         }
     }
@@ -46,19 +43,19 @@ impl ProjectState {
         })
     }
 
-    pub fn capture_project_session(&self) -> Result<ProjectSession, ProjectFilesystemError> {
+    pub fn capture_project_session(&self) -> Result<ProjectSession, ProjectOperationError> {
         self.ensure_project_operational()?;
         let (instance_id, project_path) = {
             let publication = self.mutation_publication.lock().unwrap();
             let path = self.project_path.read().unwrap();
             let project_path =
                 path.clone()
-                    .ok_or_else(|| ProjectFilesystemError::StaleProjectLifecycle {
+                    .ok_or_else(|| ProjectOperationError::StaleProjectLifecycle {
                         message: "no project is active".into(),
                     })?;
             (publication.project_instance_id.clone(), project_path)
         };
-        let root = NormalizedProjectRoot::from_project_path(project_path)?;
+        let root = NormalizedRoot::from_path(crate::project_root_from_path(project_path))?;
         Ok(ProjectSession {
             instance_id: ProjectInstanceId::from_existing(instance_id),
             root,
@@ -68,24 +65,24 @@ impl ProjectState {
     pub fn validate_project_session(
         &self,
         session: &ProjectSession,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         self.ensure_project_operational()?;
         let project_path = {
             let publication = self.mutation_publication.lock().unwrap();
             let path = self.project_path.read().unwrap();
             if publication.project_instance_id != session.instance_id.as_str() {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
                     message: "project instance changed".into(),
                 });
             }
             path.clone()
-                .ok_or_else(|| ProjectFilesystemError::StaleProjectLifecycle {
+                .ok_or_else(|| ProjectOperationError::StaleProjectLifecycle {
                     message: "project was closed".into(),
                 })?
         };
-        let current_root = NormalizedProjectRoot::from_project_path(project_path)?;
+        let current_root = NormalizedRoot::from_path(crate::project_root_from_path(project_path))?;
         if current_root != session.root {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project root changed".into(),
             });
         }
@@ -95,7 +92,7 @@ impl ProjectState {
     pub(crate) fn coherent_project_read_snapshot(
         &self,
         session: &ProjectSession,
-    ) -> Result<(String, u64, ProjectData), ProjectFilesystemError> {
+    ) -> Result<(String, u64, ProjectData), ProjectOperationError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         let path = self.project_path.read().unwrap();
@@ -105,7 +102,7 @@ impl ProjectState {
             || identity.project_root.as_ref() != Some(&session.root)
             || path.is_none()
         {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project changed before read publication".into(),
             });
         }

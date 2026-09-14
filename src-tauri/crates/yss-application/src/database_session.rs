@@ -11,7 +11,7 @@ use yss_database_contract::{
 };
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
-use yss_project_filesystem::NormalizedProjectRoot;
+use yss_filesystem::NormalizedRoot;
 use yss_project_identity::ProjectSessionId;
 
 /// Owned Project facts used to open one Database runtime session. The Database
@@ -20,7 +20,7 @@ use yss_project_identity::ProjectSessionId;
 pub(crate) struct ProjectDatabaseSessionFacts {
     project_session_id: ProjectSessionId,
     generation: NonZeroU64,
-    root: Option<NormalizedProjectRoot>,
+    root: Option<NormalizedRoot>,
     declarations: Arc<[DatabaseDecl]>,
     observations: DatabaseDeclarationObservationSet,
 }
@@ -29,7 +29,7 @@ impl ProjectDatabaseSessionFacts {
     pub(crate) fn new(
         project_session_id: ProjectSessionId,
         generation: NonZeroU64,
-        root: Option<NormalizedProjectRoot>,
+        root: Option<NormalizedRoot>,
         declarations: Arc<[DatabaseDecl]>,
         observations: DatabaseDeclarationObservationSet,
     ) -> Self {

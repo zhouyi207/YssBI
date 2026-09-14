@@ -5,8 +5,8 @@ use std::sync::Arc;
 use tauri::Manager;
 use thiserror::Error;
 use yss_diagnostics::DiagnosticsRuntime;
+use yss_filesystem::watcher::WatcherState;
 use yss_plugin_runtime::PluginManager;
-use yss_project_watcher::ProjectWatcherState;
 
 use crate::database::samples::SampleCatalog;
 use crate::execution::ApplicationState;
@@ -28,7 +28,7 @@ struct ApplicationServices {
     samples: SampleCatalog,
     harness: HarnessServices,
     projects: ProjectManagement,
-    watcher: ProjectWatcherState,
+    watcher: WatcherState,
     plugins: PluginManager,
 }
 
@@ -47,8 +47,10 @@ impl ApplicationServices {
         paths: ApplicationPaths,
         connect_harness: impl FnOnce(ApplicationState) -> HarnessTransportPorts,
     ) -> Result<Self, ApplicationStartupError> {
-        let watcher = ProjectWatcherState::new(Arc::new(
-            yss_project_watcher_notify::NotifyProjectFileWatcher::new(),
+        let watcher = WatcherState::new(Arc::new(
+            yss_filesystem::watcher::notify::NotifyFileWatcher::with_filter(
+                yss_project::is_project_index_watch_path,
+            ),
         ));
         let application = ApplicationState::initialize()?;
         let samples = SampleCatalog::new(paths.samples_dir);

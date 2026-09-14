@@ -29,6 +29,48 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "notify",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-casefold",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-normalization",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-filesystem",
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+        target_condition: Some("cfg(windows)"),
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "tauri-plugin-tracing",
         mode: RustDependencyMode::Runtime,
         package_name: "regex",
@@ -1157,42 +1199,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "unicode-casefold",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "unicode-normalization",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-filesystem",
-        mode: RustDependencyMode::Runtime,
-        package_name: "windows-sys",
-        target_condition: Some("cfg(windows)"),
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-project-model",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1202,36 +1208,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-project-operation",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-watcher",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-watcher",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-watcher-notify",
-        mode: RustDependencyMode::Runtime,
-        package_name: "notify",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-watcher-notify",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-project-watcher-notify",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -1429,6 +1405,41 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "notify",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-casefold",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "unicode-normalization",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Filesystem,
+        mode: RustDependencyMode::Runtime,
+        package_name: "windows-sys",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Diagnostics,
         mode: RustDependencyMode::Runtime,
@@ -2331,7 +2342,9 @@ pub(super) fn rust_external_dependency_findings(
                 && candidate.mode == dependency.mode
                 && candidate.package_name == origin.package_name
         });
-        if allowed && (origin.package_name != "faer" || dependency.owning_package == "yss-sci-linalg") {
+        if allowed
+            && (origin.package_name != "faer" || dependency.owning_package == "yss-sci-linalg")
+        {
             continue;
         }
         findings.push(ArchitectureFinding {

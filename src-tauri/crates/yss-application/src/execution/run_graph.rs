@@ -25,13 +25,13 @@ use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, PreparedExecutionEvent,
     RunExecutionControl,
 };
+use yss_project::ProjectOperationError;
 use yss_project::execution_authority::{
     CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
     ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
     ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
     ProjectResourceRequirement,
 };
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_model::ProjectData;
 
@@ -201,7 +201,7 @@ pub enum ExecutionApplicationError {
     #[error("project execution preparation failed")]
     ProjectPreparation(#[source] ProjectExecutionPreparationError),
     #[error("project snapshot failed")]
-    ProjectSnapshot(#[source] ProjectFilesystemError),
+    ProjectSnapshot(#[source] ProjectOperationError),
     #[error("project resource binding failed")]
     ResourceBindings(#[source] ResourceBindingError),
     #[error("project facts could not be captured for execution")]

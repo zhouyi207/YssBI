@@ -7,8 +7,8 @@ use super::execution::session_slot::{
 };
 use yss_database_contract::DatabaseDecl;
 use yss_database_schema::DatabaseSchemaFact;
+use yss_project::ProjectOperationError;
 use yss_project::{ProjectError, ProjectIndex, RevealProjectResourceRequest, resolve_reveal_path};
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::normalize_existing_path;
 
@@ -19,7 +19,7 @@ pub enum ProjectQueryApplicationError {
     #[error("project query belongs to another project instance")]
     ProjectIdentityMismatch { requested: ProjectInstanceId },
     #[error(transparent)]
-    Project(#[from] ProjectFilesystemError),
+    Project(#[from] ProjectOperationError),
     #[error(transparent)]
     ProjectRead(#[from] ProjectError),
     #[error(transparent)]

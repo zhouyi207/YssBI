@@ -32,6 +32,7 @@ pub(super) enum RustLayer {
     BuildScript,
     Commands,
     PlatformAdapter,
+    Filesystem,
     Application,
     Project,
     Graph,
@@ -47,11 +48,12 @@ pub(super) enum RustLayer {
 }
 
 impl RustLayer {
-    pub(super) const ALL: [Self; 16] = [
+    pub(super) const ALL: [Self; 17] = [
         Self::CompositionRoot,
         Self::BuildScript,
         Self::Commands,
         Self::PlatformAdapter,
+        Self::Filesystem,
         Self::Application,
         Self::Project,
         Self::Graph,

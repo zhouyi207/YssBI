@@ -10,7 +10,7 @@ test-support = [
   "yss-graph-execution/test-support",
   "yss-graph-runtime/test-support",
   "yss-project/test-support",
-  "yss-project-filesystem/test-support",
+  "yss-filesystem/test-support",
   "yss-project-identity/test-support",
 ]
 
@@ -23,8 +23,6 @@ yss-sci-runtime = { path = "../yss-sci-runtime" }
 tokio = { workspace = true, features = ["sync", "time"] }
 tauri.workspace = true
 yss-statistical-harness-sqlite = { path = "../yss-statistical-harness-sqlite" }
-yss-project-watcher-notify = { path = "../yss-project-watcher-notify" }
-yss-project-watcher = { path = "../yss-project-watcher" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
 yss-diagnostics = { path = "../yss-diagnostics" }
@@ -64,8 +62,7 @@ yss-graph-runtime = { path = "../yss-graph-runtime" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 dunce.workspace = true
 yss-project = { path = "../yss-project" }
-yss-project-change = { path = "../yss-project-change" }
-yss-project-filesystem = { path = "../yss-project-filesystem" }
+yss-filesystem = { path = "../yss-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-model = { path = "../yss-project-model" }
@@ -92,5 +89,5 @@ tracing-subscriber.workspace = true
 yss-graph-execution = { path = "../yss-graph-execution", features = ["test-support"] }
 yss-graph-runtime = { path = "../yss-graph-runtime", features = ["test-support"] }
 yss-project = { path = "../yss-project", features = ["test-support"] }
-yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }
+yss-filesystem = { path = "../yss-filesystem", features = ["test-support"] }
 yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }

@@ -29,7 +29,7 @@ use yss_graph_editor::{
 use yss_graph_execution::plan::{
     PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
 };
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_history::{FunctionDocumentPatch, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_project_model::GraphResourceDocument;
@@ -39,7 +39,7 @@ pub enum ResourceMutationApplicationError {
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error(transparent)]
-    Project(#[from] ProjectFilesystemError),
+    Project(#[from] ProjectOperationError),
     #[error("graph resource mutation conflicted")]
     Mutation(#[source] MutationConflict),
     #[error("project resource mutation conflicted")]
@@ -154,7 +154,7 @@ fn build_graph_shell(
             [(
                 yss_graph_protocol::ParameterKey::new("function").map_err(|error| {
                     ResourceMutationApplicationError::Project(
-                        ProjectFilesystemError::TransactionPrepareFailed {
+                        ProjectOperationError::TransactionPrepareFailed {
                             message: error.to_string(),
                         },
                     )
@@ -172,7 +172,7 @@ fn build_graph_shell(
                 id,
                 node_type: yss_graph_protocol::NodeTypeId::new(*node_type).map_err(|error| {
                     ResourceMutationApplicationError::Project(
-                        ProjectFilesystemError::TransactionPrepareFailed {
+                        ProjectOperationError::TransactionPrepareFailed {
                             message: error.to_string(),
                         },
                     )
@@ -309,7 +309,7 @@ fn build_graph_projection_replacement(
         .transpose()
         .map_err(|error| {
             ResourceMutationApplicationError::Project(
-                ProjectFilesystemError::TransactionPrepareFailed {
+                ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 },
             )
@@ -644,7 +644,7 @@ impl ApplicationState {
         let captured = self.capture_session()?;
         if captured.project_instance_id() != project_instance_id {
             return Err(ResourceMutationApplicationError::Project(
-                ProjectFilesystemError::StaleProjectLifecycle {
+                ProjectOperationError::StaleProjectLifecycle {
                     message: "resource mutation project instance is stale".into(),
                 },
             ));

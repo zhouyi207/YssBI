@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
+use crate::ProjectOperationError;
 use crate::ProjectSession;
+use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation, TransactionContext};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_project_filesystem::{
-    ProjectFilesystemError, ProjectFilesystemTransaction, ProjectFilesystemTransactionContext,
-    StagedFilesystemMutation,
-};
 use yss_project_history::ProjectGraphResidency;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_operation::ProjectOperationReservation;
@@ -57,11 +55,11 @@ pub struct GraphCommitReceipt {
 #[error("graph operation capture failed")]
 pub struct ProjectGraphOperationSource {
     #[source]
-    source: ProjectFilesystemError,
+    source: ProjectOperationError,
 }
 
 impl ProjectGraphOperationSource {
-    fn new(source: ProjectFilesystemError) -> Self {
+    fn new(source: ProjectOperationError) -> Self {
         Self { source }
     }
 }
@@ -113,9 +111,15 @@ pub enum ProjectGraphCommitError {
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectGraphSaveError {
     #[error(transparent)]
-    Filesystem(#[from] ProjectFilesystemError),
+    Filesystem(#[from] ProjectOperationError),
     #[error(transparent)]
     Commit(#[from] ProjectGraphCommitError),
+}
+
+impl From<yss_filesystem::FilesystemError> for ProjectGraphSaveError {
+    fn from(error: yss_filesystem::FilesystemError) -> Self {
+        Self::Filesystem(error.into())
+    }
 }
 
 impl ProjectState {
@@ -225,15 +229,15 @@ impl ProjectState {
         let reservation = self
             .reserve_resource_operation(project_instance_id, operation_id)
             .map_err(|error| match error {
-                ProjectFilesystemError::DuplicateOperation { .. } => {
+                ProjectOperationError::DuplicateOperation { .. } => {
                     ProjectGraphOperationError::OperationOwnershipChanged { operation_id }
                 }
-                ProjectFilesystemError::ProjectRecoveryRequired { .. } => {
+                ProjectOperationError::ProjectRecoveryRequired { .. } => {
                     ProjectGraphOperationError::RecoveryRequired
                 }
-                ProjectFilesystemError::StaleProjectLifecycle { .. }
-                | ProjectFilesystemError::StaleResourceLifecycle { .. }
-                | ProjectFilesystemError::ProjectLifecycleAdmissionClosed { .. } => {
+                ProjectOperationError::StaleProjectLifecycle { .. }
+                | ProjectOperationError::StaleResourceLifecycle { .. }
+                | ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
                     ProjectGraphOperationError::ResourceLifecycleChanged {
                         graph: graph_path.clone(),
                     }
@@ -426,23 +430,23 @@ impl ProjectState {
 
         let data = self.get_data()?;
         let mut resource = data.graphs.get(&graph_path).cloned().ok_or_else(|| {
-            ProjectFilesystemError::StaleResourceLifecycle {
+            ProjectOperationError::StaleResourceLifecycle {
                 message: format!("graph '{graph_path}' is not resident"),
             }
         })?;
         resource.document = candidate_document.as_ref().clone();
         let contents =
             crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
+                ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 }
             })?;
         let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let prepared = ProjectFilesystemTransaction::prepare(
-            ProjectFilesystemTransactionContext {
+        let prepared = FilesystemTransaction::prepare_with_validator(
+            TransactionContext {
                 root: session.root,
-                operation_id,
+                transaction_id: yss_filesystem::TransactionId::from_uuid(operation_id.as_uuid()),
                 recovery_marker: Some(self.project_recovery_marker()),
             },
             filesystem_lease,
@@ -450,6 +454,7 @@ impl ProjectState {
                 relative_path: graph_path.as_str().into(),
                 contents,
             }],
+            crate::project_writers::validate_document,
         )?;
         let committed = prepared.commit()?;
 
@@ -466,20 +471,20 @@ impl ProjectState {
     }
 }
 
-fn capture_lifecycle_error(error: ProjectFilesystemError) -> ProjectGraphOperationError {
+fn capture_lifecycle_error(error: ProjectOperationError) -> ProjectGraphOperationError {
     match error {
-        ProjectFilesystemError::ProjectRecoveryRequired { .. } => {
+        ProjectOperationError::ProjectRecoveryRequired { .. } => {
             ProjectGraphOperationError::RecoveryRequired
         }
-        ProjectFilesystemError::StaleProjectLifecycle { .. }
-        | ProjectFilesystemError::ProjectLifecycleAdmissionClosed { .. } => {
+        ProjectOperationError::StaleProjectLifecycle { .. }
+        | ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
             ProjectGraphOperationError::AdmissionClosed
         }
         source => ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source)),
     }
 }
 
-fn capture_session_error(error: ProjectFilesystemError) -> ProjectGraphOperationError {
+fn capture_session_error(error: ProjectOperationError) -> ProjectGraphOperationError {
     capture_lifecycle_error(error)
 }
 

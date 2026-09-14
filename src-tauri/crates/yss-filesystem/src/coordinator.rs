@@ -1,19 +1,19 @@
-use crate::{NormalizedProjectRoot, ProjectFilesystemError};
+use crate::{FilesystemError, NormalizedRoot};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
 struct RootLeaseState {
-    reserved: BTreeSet<NormalizedProjectRoot>,
-    lifecycle_closed: BTreeSet<NormalizedProjectRoot>,
-    admitted: BTreeMap<NormalizedProjectRoot, usize>,
+    reserved: BTreeSet<NormalizedRoot>,
+    lifecycle_closed: BTreeSet<NormalizedRoot>,
+    admitted: BTreeMap<NormalizedRoot, usize>,
 
     #[cfg(any(test, feature = "test-support"))]
     next_wait_observer: Option<std::sync::mpsc::Sender<()>>,
     #[cfg(any(test, feature = "test-support"))]
     next_lifecycle_drain_observer: Option<std::sync::mpsc::Sender<()>>,
     #[cfg(any(test, feature = "test-support"))]
-    acquire_many_observer: Option<std::sync::mpsc::Sender<Vec<NormalizedProjectRoot>>>,
+    acquire_many_observer: Option<std::sync::mpsc::Sender<Vec<NormalizedRoot>>>,
 }
 
 #[derive(Default)]
@@ -24,8 +24,8 @@ struct RootLeaseRegistry {
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Default)]
-struct ProjectFilesystemTestControls {
-    fault: Mutex<Option<crate::ProjectFilesystemFaultPoint>>,
+struct FilesystemTestControls {
+    fault: Mutex<Option<crate::FilesystemFaultPoint>>,
     rollback_fault: Mutex<bool>,
     rollback_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     before_remove_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
@@ -33,26 +33,20 @@ struct ProjectFilesystemTestControls {
 }
 
 #[derive(Clone, Default)]
-pub struct ProjectFilesystemCoordinator {
+pub struct FilesystemCoordinator {
     registry: Arc<RootLeaseRegistry>,
     #[cfg(any(test, feature = "test-support"))]
-    test_controls: Arc<ProjectFilesystemTestControls>,
+    test_controls: Arc<FilesystemTestControls>,
 }
 
-impl ProjectFilesystemCoordinator {
-    pub fn acquire(
-        &self,
-        root: NormalizedProjectRoot,
-    ) -> Result<ProjectFilesystemLeaseSet, ProjectFilesystemError> {
+impl FilesystemCoordinator {
+    pub fn acquire(&self, root: NormalizedRoot) -> Result<FilesystemLeaseSet, FilesystemError> {
         self.acquire_many([root])
     }
 
-    pub fn acquire_many<I>(
-        &self,
-        roots: I,
-    ) -> Result<ProjectFilesystemLeaseSet, ProjectFilesystemError>
+    pub fn acquire_many<I>(&self, roots: I) -> Result<FilesystemLeaseSet, FilesystemError>
     where
-        I: IntoIterator<Item = NormalizedProjectRoot>,
+        I: IntoIterator<Item = NormalizedRoot>,
     {
         let roots = roots.into_iter().collect::<BTreeSet<_>>();
         let mut state = self.lock_state();
@@ -73,7 +67,7 @@ impl ProjectFilesystemCoordinator {
         state.reserved.extend(roots.iter().cloned());
         drop(state);
 
-        Ok(ProjectFilesystemLeaseSet {
+        Ok(FilesystemLeaseSet {
             coordinator: self.clone(),
             roots: roots.into_iter().collect(),
             owns_admission: true,
@@ -82,8 +76,8 @@ impl ProjectFilesystemCoordinator {
 
     pub fn begin_root_lifecycle(
         &self,
-        root: NormalizedProjectRoot,
-    ) -> Result<ProjectRootLifecycleGuard, ProjectFilesystemError> {
+        root: NormalizedRoot,
+    ) -> Result<RootLifecycleGuard, FilesystemError> {
         let mut state = self.lock_state();
         if !state.lifecycle_closed.insert(root.clone()) {
             return Err(admission_closed(&root));
@@ -93,10 +87,10 @@ impl ProjectFilesystemCoordinator {
         state.reserved.insert(root.clone());
         drop(state);
 
-        Ok(ProjectRootLifecycleGuard {
+        Ok(RootLifecycleGuard {
             coordinator: self.clone(),
             root: root.clone(),
-            lease: Some(ProjectFilesystemLeaseSet {
+            lease: Some(FilesystemLeaseSet {
                 coordinator: self.clone(),
                 roots: vec![root],
                 owns_admission: false,
@@ -104,13 +98,13 @@ impl ProjectFilesystemCoordinator {
         })
     }
 
-    fn acquire_lifecycle_lease(&self, root: &NormalizedProjectRoot) -> ProjectFilesystemLeaseSet {
+    fn acquire_lifecycle_lease(&self, root: &NormalizedRoot) -> FilesystemLeaseSet {
         let roots = BTreeSet::from([root.clone()]);
         let mut state = self.lock_state();
         state = self.wait_until_available(state, &roots);
         state.reserved.insert(root.clone());
         drop(state);
-        ProjectFilesystemLeaseSet {
+        FilesystemLeaseSet {
             coordinator: self.clone(),
             roots: vec![root.clone()],
             owns_admission: false,
@@ -127,7 +121,7 @@ impl ProjectFilesystemCoordinator {
     fn wait_until_available<'a>(
         &self,
         mut state: std::sync::MutexGuard<'a, RootLeaseState>,
-        roots: &BTreeSet<NormalizedProjectRoot>,
+        roots: &BTreeSet<NormalizedRoot>,
     ) -> std::sync::MutexGuard<'a, RootLeaseState> {
         while roots.iter().any(|root| state.reserved.contains(root)) {
             #[cfg(any(test, feature = "test-support"))]
@@ -144,20 +138,17 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn set_project_filesystem_fault(&self, fault: Option<crate::ProjectFilesystemFaultPoint>) {
+    pub fn set_filesystem_fault(&self, fault: Option<crate::FilesystemFaultPoint>) {
         *self.test_controls.fault.lock().unwrap() = fault;
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
+    pub fn set_filesystem_rollback_fault(&self, enabled: bool) {
         *self.test_controls.rollback_fault.lock().unwrap() = enabled;
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn set_project_filesystem_rollback_test_hook(
-        &self,
-        hook: Option<Arc<dyn Fn() + Send + Sync>>,
-    ) {
+    pub fn set_filesystem_rollback_test_hook(&self, hook: Option<Arc<dyn Fn() + Send + Sync>>) {
         *self.test_controls.rollback_hook.lock().unwrap() = hook;
     }
 
@@ -176,7 +167,7 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    fn take_fault(&self, point: crate::ProjectFilesystemFaultPoint) -> bool {
+    fn take_fault(&self, point: crate::FilesystemFaultPoint) -> bool {
         let mut fault = self.test_controls.fault.lock().unwrap();
         if *fault == Some(point) {
             *fault = None;
@@ -221,9 +212,7 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn observe_acquire_many_attempts(
-        &self,
-    ) -> std::sync::mpsc::Receiver<Vec<NormalizedProjectRoot>> {
+    pub fn observe_acquire_many_attempts(&self) -> std::sync::mpsc::Receiver<Vec<NormalizedRoot>> {
         let (sender, receiver) = std::sync::mpsc::channel();
         self.lock_state().acquire_many_observer = Some(sender);
         receiver
@@ -244,7 +233,7 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn lifecycle_state_for_test(&self, root: &NormalizedProjectRoot) -> (bool, bool, usize) {
+    pub fn lifecycle_state_for_test(&self, root: &NormalizedRoot) -> (bool, bool, usize) {
         let state = self.lock_state();
         (
             state.lifecycle_closed.contains(root),
@@ -254,20 +243,20 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub fn is_reserved_for_test(&self, root: &NormalizedProjectRoot) -> bool {
+    pub fn is_reserved_for_test(&self, root: &NormalizedRoot) -> bool {
         self.lock_state().reserved.contains(root)
     }
 }
 
-pub struct ProjectFilesystemLeaseSet {
-    coordinator: ProjectFilesystemCoordinator,
-    roots: Vec<NormalizedProjectRoot>,
+pub struct FilesystemLeaseSet {
+    coordinator: FilesystemCoordinator,
+    roots: Vec<NormalizedRoot>,
     owns_admission: bool,
 }
 
-impl ProjectFilesystemLeaseSet {
+impl FilesystemLeaseSet {
     #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn take_fault(&self, point: crate::ProjectFilesystemFaultPoint) -> bool {
+    pub(super) fn take_fault(&self, point: crate::FilesystemFaultPoint) -> bool {
         self.coordinator.take_fault(point)
     }
 
@@ -291,16 +280,16 @@ impl ProjectFilesystemLeaseSet {
         self.coordinator.run_before_move_target_delete_hook();
     }
 
-    pub fn roots(&self) -> &[NormalizedProjectRoot] {
+    pub fn roots(&self) -> &[NormalizedRoot] {
         &self.roots
     }
 
-    pub fn contains(&self, root: &NormalizedProjectRoot) -> bool {
+    pub fn contains(&self, root: &NormalizedRoot) -> bool {
         self.roots.binary_search(root).is_ok()
     }
 }
 
-impl Drop for ProjectFilesystemLeaseSet {
+impl Drop for FilesystemLeaseSet {
     fn drop(&mut self) {
         let mut state = self.coordinator.lock_state();
         for root in self.roots.iter().rev() {
@@ -319,13 +308,13 @@ impl Drop for ProjectFilesystemLeaseSet {
     }
 }
 
-pub struct ProjectRootLifecycleGuard {
-    coordinator: ProjectFilesystemCoordinator,
-    root: NormalizedProjectRoot,
-    lease: Option<ProjectFilesystemLeaseSet>,
+pub struct RootLifecycleGuard {
+    coordinator: FilesystemCoordinator,
+    root: NormalizedRoot,
+    lease: Option<FilesystemLeaseSet>,
 }
 
-impl ProjectRootLifecycleGuard {
+impl RootLifecycleGuard {
     pub fn release_initial_and_drain(&mut self) {
         self.lease.take();
         let mut state = self.coordinator.lock_state();
@@ -343,7 +332,7 @@ impl ProjectRootLifecycleGuard {
         }
     }
 
-    pub fn acquire_final(&mut self) -> Result<(), ProjectFilesystemError> {
+    pub fn acquire_final(&mut self) -> Result<(), FilesystemError> {
         if self.lease.is_none() {
             self.lease = Some(self.coordinator.acquire_lifecycle_lease(&self.root));
         }
@@ -355,7 +344,7 @@ impl ProjectRootLifecycleGuard {
     }
 }
 
-impl Drop for ProjectRootLifecycleGuard {
+impl Drop for RootLifecycleGuard {
     fn drop(&mut self) {
         self.lease.take();
         let mut state = self.coordinator.lock_state();
@@ -365,8 +354,8 @@ impl Drop for ProjectRootLifecycleGuard {
     }
 }
 
-fn admission_closed(root: &NormalizedProjectRoot) -> ProjectFilesystemError {
-    ProjectFilesystemError::ProjectLifecycleAdmissionClosed {
+fn admission_closed(root: &NormalizedRoot) -> FilesystemError {
+    FilesystemError::RootAdmissionClosed {
         message: format!(
             "new operations are rejected for '{}'",
             root.as_path().display()

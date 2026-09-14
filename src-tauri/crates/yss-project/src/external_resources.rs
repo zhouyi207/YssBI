@@ -1,7 +1,7 @@
 use crate::{ProjectError, ProjectState};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs, io::Write, path::PathBuf};
-use yss_project_filesystem::{metadata_is_redirect, read_secure_project_file};
+use yss_filesystem::{metadata_is_redirect, read_secure_file};
 use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
 pub struct ExternalArtifact {
@@ -138,7 +138,7 @@ impl ProjectState {
                 .collect(),
         };
         if target.exists() {
-            let metadata = read_secure_project_file(
+            let metadata = read_secure_file(
                 &root,
                 &PathBuf::from(&receipt.resource_ref).join("resource.json"),
             )
@@ -149,7 +149,7 @@ impl ProjectState {
                 return Err(invalid());
             }
             for file in &receipt.files {
-                let bytes = read_secure_project_file(
+                let bytes = read_secure_file(
                     &root,
                     &PathBuf::from(&receipt.resource_ref).join(&file.name),
                 )
@@ -271,8 +271,7 @@ mod tests {
                 )
                 .is_err()
         );
-        let tree =
-            yss_project_filesystem::read_project_source_tree(session.root.as_path()).unwrap();
+        let tree = yss_filesystem::read_source_tree(session.root.as_path()).unwrap();
         assert!(
             tree.files
                 .contains_key(&PathBuf::from(&receipt.resource_ref).join("summary.csv"))

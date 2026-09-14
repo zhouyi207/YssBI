@@ -1,15 +1,14 @@
 //! Authoritative project state for normalized node-system graph documents.
 
+use crate::ProjectOperationError;
 use crate::{
     PreparedProjectActivation, ProjectSession, ProjectStore, ProjectTransactionContext,
     ResourceRenameOwnershipLease,
 };
 use std::sync::{Arc, Mutex, RwLock};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
+use yss_filesystem::{FilesystemCoordinator, NormalizedRoot};
 use yss_graph_document::GraphResourcePath;
-use yss_project_filesystem::{
-    NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemError,
-};
 use yss_project_history::{MutationRequest, ProjectResourceMutationError, ResourceKey};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::{OperationId, ResourceRevision};
@@ -61,7 +60,7 @@ use test_support::ProjectStateTestHooks;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 impl ProjectState {
-    pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
+    pub fn get_data(&self) -> Result<ProjectData, ProjectOperationError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
     }
@@ -187,7 +186,7 @@ impl ProjectState {
 
     pub fn chart_creation_snapshot(
         &self,
-    ) -> Result<(Vec<String>, Option<String>), ProjectFilesystemError> {
+    ) -> Result<(Vec<String>, Option<String>), ProjectOperationError> {
         self.ensure_project_operational()?;
         let data = self.project_data.read().unwrap();
         Ok((

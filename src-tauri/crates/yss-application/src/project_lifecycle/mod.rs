@@ -13,8 +13,8 @@ use crate::execution::session_slot::{
     SessionRevalidationError,
 };
 use crate::project_query::ProjectActivation;
+use yss_project::ProjectOperationError;
 use yss_project::ProjectState;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::{ProjectRegistry, normalize_existing_path};
@@ -30,9 +30,9 @@ pub enum ProjectLifecycleError {
     #[error("registered project was not found")]
     ProjectNotFound,
     #[error("project load failed")]
-    LoadFailed(#[source] ProjectFilesystemError),
+    LoadFailed(#[source] ProjectOperationError),
     #[error("project lifecycle authority operation failed")]
-    AuthorityFailed(#[source] ProjectFilesystemError),
+    AuthorityFailed(#[source] ProjectOperationError),
     #[error("project registry lookup failed")]
     RegistryLookupFailed(#[source] ProjectRegistryFailure),
 }

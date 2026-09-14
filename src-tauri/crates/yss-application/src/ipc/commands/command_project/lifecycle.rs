@@ -6,6 +6,7 @@ use crate::project_lifecycle::ProjectManagement;
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
+use yss_filesystem::watcher::{ChangeSink, ObservedChange, WatcherError, WatcherState};
 use yss_ipc_contract::event::Event;
 use yss_ipc_contract::event::EventProject;
 use yss_ipc_contract::event::EventResource;
@@ -20,9 +21,6 @@ use yss_ipc_event::emit_project_event_result;
 use yss_project::ProjectState;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
-use yss_project_watcher::{
-    ObservedProjectChange, ProjectChangeSink, ProjectWatcherError, ProjectWatcherState,
-};
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
@@ -73,7 +71,7 @@ pub(super) fn map_application_project_lifecycle_error(
 fn start_project_watcher(
     app: &AppHandle,
     application: &ApplicationState,
-    watcher: &ProjectWatcherState,
+    watcher: &WatcherState,
     path: &str,
     project_instance_id: &ProjectInstanceId,
 ) {
@@ -83,7 +81,7 @@ fn start_project_watcher(
         project_instance_id: project_instance_id.clone(),
         version: Mutex::new(0),
     });
-    if let Err(error) = watcher.watch_project(path, sink) {
+    if let Err(error) = watcher.watch(yss_project::project_root_from_path(path), sink) {
         tracing::warn!(
             target: "yssbi::project::watcher",
             log_domain = "system",
@@ -101,8 +99,8 @@ struct ProjectEventWatcherSink {
     version: Mutex<u64>,
 }
 
-impl ProjectChangeSink for ProjectEventWatcherSink {
-    fn publish(&self, change: ObservedProjectChange) {
+impl ChangeSink for ProjectEventWatcherSink {
+    fn publish(&self, change: ObservedChange) {
         let invalidation = match self
             .application
             .reconcile_project_change(&self.project_instance_id, change.change)
@@ -161,11 +159,11 @@ impl ProjectChangeSink for ProjectEventWatcherSink {
     }
 }
 
-fn watcher_error_kind(error: &ProjectWatcherError) -> &'static str {
+fn watcher_error_kind(error: &WatcherError) -> &'static str {
     match error {
-        ProjectWatcherError::Start(_) => "source_start_failed",
-        ProjectWatcherError::EpochExhausted => "epoch_exhausted",
-        ProjectWatcherError::TimedOut(_) => "drain_timeout",
+        WatcherError::Start(_) => "source_start_failed",
+        WatcherError::EpochExhausted => "epoch_exhausted",
+        WatcherError::TimedOut(_) => "drain_timeout",
     }
 }
 
@@ -190,7 +188,7 @@ fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
 pub fn load_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<ProjectWatcherState>,
+    watcher: State<WatcherState>,
     path: String,
 ) -> Result<ProjectActivationResultDto, CommandError> {
     tracing::info!(
@@ -231,7 +229,7 @@ pub fn load_project(
 pub async fn save_project_as(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<'_, ProjectWatcherState>,
+    watcher: State<'_, WatcherState>,
     projects: State<'_, ProjectManagement>,
     path: String,
     project_instance_id: ProjectInstanceId,
@@ -363,7 +361,7 @@ pub fn flush_project(
 pub fn new_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    watcher: State<ProjectWatcherState>,
+    watcher: State<WatcherState>,
 ) -> Result<(), CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
@@ -387,7 +385,7 @@ mod tests {
     use yss_ipc_contract::project::LifecycleMutationKindDto;
     use yss_ipc_contract::project::LifecycleMutationPhaseDto;
     use yss_ipc_contract::project::LifecycleRecoveryDto;
-    use yss_project_filesystem::ProjectFilesystemError;
+    use yss_project::ProjectOperationError;
     use yss_project_identity::OperationId;
     use yss_project_model::ProjectData;
 
@@ -441,7 +439,7 @@ mod tests {
         assert!(not_found.incident_id().is_none());
 
         let authority = map_project_lifecycle_error(ProjectLifecycleError::AuthorityFailed(
-            ProjectFilesystemError::StaleProjectLifecycle {
+            ProjectOperationError::StaleProjectLifecycle {
                 message: "test authority failure".into(),
             },
         ));
@@ -449,7 +447,7 @@ mod tests {
         assert!(authority.incident_id().is_none());
 
         let diagnosed = map_project_lifecycle_error(ProjectLifecycleError::LoadFailed(
-            ProjectFilesystemError::TransactionPrepareFailed {
+            ProjectOperationError::TransactionPrepareFailed {
                 message: "test load failure".into(),
             },
         ));

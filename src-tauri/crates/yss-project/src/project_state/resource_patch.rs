@@ -49,7 +49,7 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
-    ) -> Result<crate::project_writers::ProjectResourceMutationFacts, ProjectFilesystemError> {
+    ) -> Result<crate::project_writers::ProjectResourceMutationFacts, ProjectOperationError> {
         self.apply_resource_document_patch_internal(context, patch, rename_ownership)
             .map(CommittedResourceMutation::into_project_facts)
     }
@@ -59,7 +59,7 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         mut patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
-    ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
+    ) -> Result<CommittedResourceMutation, ProjectOperationError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
         let authority = self.capture_project_authority_for_session(&context.session)?;
@@ -67,12 +67,12 @@ impl ProjectState {
         let receipt = {
             let mut publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != context.session.instance_id.as_str() {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
                     message: "project instance changed before patch publication".into(),
                 });
             }
             if !authority.matches_publication(&publication) {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
                     message: "projection environment changed before patch publication".into(),
                 });
             }

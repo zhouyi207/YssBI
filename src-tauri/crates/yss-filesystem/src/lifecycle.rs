@@ -1,21 +1,18 @@
-use crate::{
-    NormalizedProjectRoot, ProjectFilesystemError, metadata_is_redirect, read_secure_project_file,
-};
+use crate::{FilesystemError, metadata_is_redirect, read_secure_file};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use yss_project_layout::PROJECT_METADATA_FILE;
 
-pub struct ProjectSourceTree {
+pub struct SourceTree {
     pub directories: BTreeSet<PathBuf>,
     pub files: BTreeMap<PathBuf, Vec<u8>>,
 }
 
-pub struct ProjectFileInventory {
+pub struct FileInventory {
     pub directories: BTreeSet<PathBuf>,
     pub files: BTreeSet<PathBuf>,
 }
 
-pub fn ensure_directory(root: &Path) -> Result<bool, ProjectFilesystemError> {
+pub fn ensure_directory(root: &Path) -> Result<bool, FilesystemError> {
     let created = !root.exists();
     if created {
         std::fs::create_dir_all(root).map_err(prepare_error)?;
@@ -29,7 +26,7 @@ pub fn remove_directory_if_created(root: &Path, created: bool) {
     }
 }
 
-pub fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
+pub fn validate_destination_policy(root: &Path) -> Result<(), FilesystemError> {
     if !root.exists() {
         let parent = root
             .parent()
@@ -54,48 +51,24 @@ pub fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemE
     Ok(())
 }
 
-pub fn validate_deletion_root(root: &NormalizedProjectRoot) -> Result<(), ProjectFilesystemError> {
-    let metadata = std::fs::symlink_metadata(root.as_path()).map_err(prepare_error)?;
-    if metadata_is_redirect(&metadata) || !metadata.is_dir() {
-        return Err(invalid_root(
-            root.as_path(),
-            "project root is not a real directory",
-        ));
-    }
-    let manifest = root.as_path().join(PROJECT_METADATA_FILE);
-    let metadata = std::fs::symlink_metadata(&manifest).map_err(prepare_error)?;
-    if metadata_is_redirect(&metadata) || !metadata.is_file() {
-        return Err(invalid_root(
-            root.as_path(),
-            "project manifest is not a regular file",
-        ));
-    }
-    Ok(())
-}
-
-pub fn read_project_source_tree(
-    source_root: &Path,
-) -> Result<ProjectSourceTree, ProjectFilesystemError> {
-    let inventory = read_project_file_inventory(source_root)?;
+pub fn read_source_tree(source_root: &Path) -> Result<SourceTree, FilesystemError> {
+    let inventory = read_file_inventory(source_root)?;
     let files = inventory
         .files
         .into_iter()
         .map(|relative| {
-            let contents =
-                read_secure_project_file(source_root, &relative).map_err(prepare_error)?;
+            let contents = read_secure_file(source_root, &relative).map_err(prepare_error)?;
             Ok((relative, contents))
         })
-        .collect::<Result<_, ProjectFilesystemError>>()?;
-    Ok(ProjectSourceTree {
+        .collect::<Result<_, FilesystemError>>()?;
+    Ok(SourceTree {
         directories: inventory.directories,
         files,
     })
 }
 
-pub fn read_project_file_inventory(
-    source_root: &Path,
-) -> Result<ProjectFileInventory, ProjectFilesystemError> {
-    let mut tree = ProjectFileInventory {
+pub fn read_file_inventory(source_root: &Path) -> Result<FileInventory, FilesystemError> {
+    let mut tree = FileInventory {
         directories: BTreeSet::new(),
         files: BTreeSet::new(),
     };
@@ -106,8 +79,8 @@ pub fn read_project_file_inventory(
 fn collect_source_files(
     source_root: &Path,
     directory: &Path,
-    tree: &mut ProjectFileInventory,
-) -> Result<(), ProjectFilesystemError> {
+    tree: &mut FileInventory,
+) -> Result<(), FilesystemError> {
     for entry in std::fs::read_dir(directory).map_err(prepare_error)? {
         let entry = entry.map_err(prepare_error)?;
         let relative = entry
@@ -121,7 +94,7 @@ fn collect_source_files(
         let metadata = std::fs::symlink_metadata(entry.path()).map_err(prepare_error)?;
         if metadata_is_redirect(&metadata) {
             return Err(prepare_error(format!(
-                "project copy source '{}' is a redirect",
+                "copy source '{}' is a redirect",
                 relative.display()
             )));
         }
@@ -132,7 +105,7 @@ fn collect_source_files(
             tree.files.insert(relative);
         } else {
             return Err(prepare_error(format!(
-                "project copy source '{}' is not a regular file or directory",
+                "copy source '{}' is not a regular file or directory",
                 relative.display()
             )));
         }
@@ -140,15 +113,15 @@ fn collect_source_files(
     Ok(())
 }
 
-fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::InvalidRoot {
+fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> FilesystemError {
+    FilesystemError::InvalidRoot {
         path: path.as_ref().to_path_buf(),
         message: message.into(),
     }
 }
 
-fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
+fn prepare_error(error: impl ToString) -> FilesystemError {
+    FilesystemError::TransactionPrepareFailed {
         message: error.to_string(),
     }
 }

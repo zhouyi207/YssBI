@@ -1,0 +1,23 @@
+[package]
+name = "yss-filesystem"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[features]
+test-support = []
+
+[dependencies]
+notify.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicode-casefold.workspace = true
+unicode-normalization.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

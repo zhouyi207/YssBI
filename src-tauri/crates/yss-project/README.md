@@ -7,13 +7,13 @@
 
 `yss-project` 是项目运行期权威状态的唯一 owner。它负责 `ProjectState`、项目会话与实例身份、资源 revision、持久化事务，以及磁盘提交后的 publication。
 
-该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-project-filesystem` 等更低层 crate，但不依赖 Tauri、Commands、IPC schema、Application 工作流或 Database runtime。
+该 crate 组合 `yss-project-model`、`yss-project-history`、`yss-project-operation`、`yss-resource-lifecycle` 与 `yss-filesystem` 等更低层 crate，但不依赖 Tauri、Commands、IPC schema、Application 工作流或 Database runtime。
 
 边界约束：
 
 - `ProjectData` 是 resident project facts 的权威聚合；
 - 项目默认名称与名称规范化由 `yss-project-model` 统一拥有，创建、注册和空项目模型共用同一规则；
-- `yss-project-filesystem` 只拥有安全文件系统原语，`yss-project` 拥有 session/revision 校验与 publication；
+- `yss-filesystem` 只拥有安全文件系统原语，`yss-project` 拥有 session/revision 校验与 publication；
 - 对外返回 Project-owned typed facts，由 Application 和 API 层投影为事件与 DTO；
 - `test-support` 只暴露跨 crate 测试所需的 fixture 与故障注入 seam。
 
@@ -22,6 +22,12 @@
 日历展示不再依赖浏览器的本地时区转换；registry 的 Unix 秒计数保持数值时间点语义。
 
 Graph 撤销/重做由前端 Graph Draft 管理，数据库编辑历史由 Database runtime 管理。Project 提交发布资源版本和 delta，不维护项目级撤销栈。`yss-project-history` 保留共享的资源身份、变更请求、函数文档、delta、错误及图驻留状态契约；文件事务回滚与失败恢复继续由 Project 和 filesystem owner 负责。
+
+## Filesystem boundary
+
+项目入口路径解释位于 `src/filesystem.rs`，索引变化策略与 ProjectIndexInvalidation 位于 `src/file_changes.rs`，业务失败由 `src/operation_error.rs` 的 ProjectOperationError 表达。FS 仅接收明确的目录、相对路径、字节与校验回调，不依赖项目契约。项目操作 ID 显式转换为 TransactionId；注册库的根身份与 FS RootIdentity 通过不解释内容的字符串投影比较，已有存储值保持不变。
+
+所有项目写入在暂存阶段显式调用 Project 的文档校验器；通用 FS prepare 默认不限制文件格式。项目删除前对 metadata.yssbi 的校验也由 Project 执行。FilesystemError 在 Project 边界映射为既有业务错误类别，前端错误 wire 不变。
 
 ## Graph resource revisions
 

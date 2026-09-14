@@ -43,8 +43,8 @@ use yss_database_runtime::error::{DatabaseError, DatabaseErrorCode};
 use yss_database_runtime::session_api;
 use yss_database_schema::DatabaseColumnFact;
 use yss_display_naming::allocate_unique_display_name;
+use yss_project::ProjectOperationError;
 use yss_project::{ProjectDatabaseError, ProjectState};
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_sql_source::list_tables as list_sql_source_tables;
 use yss_tabular_contract::TabularSnapshot;
@@ -129,7 +129,7 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
                 self.expected_project_revision,
             )
             .map_err(|error| match error {
-                ProjectDatabaseError::Project(ProjectFilesystemError::StaleProjectLifecycle {
+                ProjectDatabaseError::Project(ProjectOperationError::StaleProjectLifecycle {
                     ..
                 }) => ProjectDatabaseMutationError::StaleSession,
                 _ => ProjectDatabaseMutationError::AuthorityUnavailable,
@@ -178,7 +178,7 @@ impl ProjectDatabaseMutationPort for ProjectDatabaseAuthority<'_> {
         publication
             .map(ProjectDatabaseMutationReceipt::from_project)
             .map_err(|error| match error {
-                ProjectDatabaseError::Project(ProjectFilesystemError::StaleProjectLifecycle {
+                ProjectDatabaseError::Project(ProjectOperationError::StaleProjectLifecycle {
                     ..
                 }) => ProjectDatabaseFinalizeError::StaleSession,
                 error => ProjectDatabaseFinalizeError::Project(error),

@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [features]
-test-support = ["yss-project-filesystem/test-support", "yss-project-identity/test-support"]
+test-support = ["yss-filesystem/test-support", "yss-project-identity/test-support"]
 
 [dependencies]
 yss-canonical-hash = { path = "../yss-canonical-hash" }
@@ -25,8 +25,7 @@ yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-protocol = { path = "../yss-graph-protocol" }
-yss-project-change = { path = "../yss-project-change" }
-yss-project-filesystem = { path = "../yss-project-filesystem" }
+yss-filesystem = { path = "../yss-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
@@ -37,5 +36,5 @@ yss-resource-naming = { path = "../yss-resource-naming" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
-yss-project-filesystem = { path = "../yss-project-filesystem", features = ["test-support"] }
+yss-filesystem = { path = "../yss-filesystem", features = ["test-support"] }
 yss-project-identity = { path = "../yss-project-identity", features = ["test-support"] }

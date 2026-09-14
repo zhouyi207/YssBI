@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use walkdir::WalkDir;
-use yss_project_filesystem::metadata_is_redirect;
+use yss_filesystem::metadata_is_redirect;
 use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_model::{DEFAULT_PROJECT_NAME, normalize_project_name};
 use yss_project_progress::ProjectTaskCancellation;

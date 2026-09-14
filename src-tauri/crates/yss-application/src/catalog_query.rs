@@ -18,7 +18,7 @@ use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
 use yss_project::ProjectIndex;
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{
@@ -108,7 +108,7 @@ pub struct ProjectCatalogReadSource {
 #[derive(Debug, thiserror::Error)]
 enum ProjectCatalogReadSourceKind {
     #[error("project filesystem read failed")]
-    Filesystem(#[source] ProjectFilesystemError),
+    Filesystem(#[source] ProjectOperationError),
     #[error("project graph declaration path is invalid")]
     InvalidGraphPath(#[source] yss_graph_document::GraphResourcePathError),
     #[error("project function declaration type is invalid")]
@@ -118,7 +118,7 @@ enum ProjectCatalogReadSourceKind {
 }
 
 impl ProjectCatalogReadSource {
-    fn filesystem(error: ProjectFilesystemError) -> Self {
+    fn filesystem(error: ProjectOperationError) -> Self {
         Self {
             reason: ProjectCatalogReadSourceKind::Filesystem(error),
         }
@@ -607,23 +607,23 @@ pub(crate) fn revalidate_project_catalog_facts(
         .map_err(map_project_catalog_error)
 }
 
-fn map_project_catalog_error(error: ProjectFilesystemError) -> ProjectCatalogReadError {
+fn map_project_catalog_error(error: ProjectOperationError) -> ProjectCatalogReadError {
     match error {
-        ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
             ProjectCatalogReadError::ProjectLifecycleChanged
         }
-        ProjectFilesystemError::CatalogResourceStale { .. } => {
+        ProjectOperationError::CatalogResourceStale { .. } => {
             ProjectCatalogReadError::CatalogResourceStale {
                 resource: GraphResourceId::new("project/catalog"),
             }
         }
-        ProjectFilesystemError::ProjectLifecycleAdmissionClosed { .. } => {
+        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
             ProjectCatalogReadError::AdmissionClosed
         }
-        ProjectFilesystemError::ProjectRecoveryRequired { .. } => {
+        ProjectOperationError::ProjectRecoveryRequired { .. } => {
             ProjectCatalogReadError::RecoveryRequired
         }
-        ProjectFilesystemError::FilesystemTransactionBusy { .. } => {
+        ProjectOperationError::FilesystemTransactionBusy { .. } => {
             ProjectCatalogReadError::FilesystemBusy
         }
         error => ProjectCatalogReadError::ReadFailed(ProjectCatalogReadSource::filesystem(error)),

@@ -37,158 +37,19 @@ fn validate_signature_request<'a>(
 }
 
 pub(super) fn function_mutation_error(
-    error: ProjectFilesystemError,
+    error: impl Into<ProjectOperationError>,
 ) -> ProjectResourceMutationError {
+    let error = error.into();
     match error {
-        ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
             ProjectResourceMutationError::StaleProjectLifecycle(error.to_string().into())
         }
-        ProjectFilesystemError::ProjectRecoveryRequired { .. }
-        | ProjectFilesystemError::TransactionRollbackFailed {
+        ProjectOperationError::ProjectRecoveryRequired { .. }
+        | ProjectOperationError::TransactionRollbackFailed {
             recovery_required: true,
             ..
         } => ProjectResourceMutationError::RecoveryRequired(error.to_string().into()),
         _ => ProjectResourceMutationError::Mutation(error.to_string().into()),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::fixtures::TempProject;
-    use yss_graph_document::GraphResourceKind;
-    use yss_project_history::{FunctionDocument, FunctionDocumentPatch, FunctionSignature};
-
-    fn function_project(revision: ResourceRevision) -> (TempProject, GraphResourcePath) {
-        let path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
-        let mut graph = GraphResourceDocument::new("Compute", GraphResourceKind::Function);
-        graph.function = Some(FunctionDocument {
-            revision,
-            signature: FunctionSignature::default(),
-        });
-        let mut data = ProjectData::new();
-        data.graphs.insert(path.clone(), graph);
-        (TempProject::activate("function-mutation", data), path)
-    }
-
-    #[test]
-    fn signature_commit_preserves_revision_and_patch_admission() {
-        let (fixture, path) = function_project(ResourceRevision::INITIAL);
-        let state = fixture.state();
-        let project = ProjectInstanceId::from_existing(state.project_instance_id());
-        let after = FunctionSignature {
-            return_type: Some("Int64".into()),
-            ..FunctionSignature::default()
-        };
-        let request = MutationRequest::new(
-            ResourceKey::Function(yss_project_history::FunctionResourceKey(
-                path.as_str().into(),
-            )),
-            ResourceRevision::INITIAL,
-            OperationId::new(),
-            FunctionDocumentPatch::new(FunctionSignature::default(), after.clone()),
-        );
-        let receipt = state
-            .update_function_signature(&project, &path, request.clone())
-            .unwrap()
-            .into_parts();
-        let next_revision = ResourceRevision::INITIAL.checked_next().unwrap();
-        assert_eq!(receipt.deltas[0].from_revision, ResourceRevision::INITIAL);
-        assert_eq!(receipt.deltas[0].to_revision, next_revision);
-        let committed = state.get_data().unwrap().graphs[&path].function.clone();
-        assert_eq!(committed.as_ref().unwrap().signature, after);
-        assert_eq!(committed.as_ref().unwrap().revision, next_revision);
-        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
-
-        let session = state.capture_project_session().unwrap();
-        let persisted = crate::project_io::load_project_graph_from_file(
-            session.root.as_path().to_str().unwrap(),
-            &path,
-        )
-        .unwrap();
-        assert_eq!(persisted.function, committed);
-        let before_rescan = state
-            .read_project_index(&project)
-            .unwrap()
-            .publication_revision;
-        state
-            .reconcile_project_change(
-                &project,
-                yss_project_change::ProjectChange::rescan_required(),
-            )
-            .unwrap();
-        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
-        assert_eq!(
-            state
-                .read_project_index(&project)
-                .unwrap()
-                .publication_revision,
-            before_rescan
-        );
-        state.unload_graph_resource(&path).unwrap();
-        assert_eq!(
-            state.read_project_index(&project).unwrap().graphs[0].revision,
-            next_revision
-        );
-        state
-            .load_graph_document(&project, &path, u64::MAX - 1)
-            .unwrap();
-        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
-        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
-
-        let stale = MutationRequest {
-            operation_id: OperationId::new(),
-            ..request.clone()
-        };
-        assert!(matches!(
-            state.update_function_signature(&project, &path, stale),
-            Err(ProjectResourceMutationError::StaleRevision { .. })
-        ));
-        let mismatched_patch = MutationRequest {
-            operation_id: OperationId::new(),
-            base_revision: next_revision,
-            ..request
-        };
-        assert!(matches!(
-            state.update_function_signature(&project, &path, mismatched_patch),
-            Err(ProjectResourceMutationError::Mutation(_))
-        ));
-        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
-    }
-
-    #[test]
-    fn exhausted_signature_revision_preserves_project_publication_and_data() {
-        let revision = ResourceRevision::new(u64::MAX);
-        let (fixture, path) = function_project(revision);
-        let state = fixture.state();
-        let session = state.capture_project_session().unwrap();
-        let before_publication = state.coherent_project_read_snapshot(&session).unwrap().1;
-        let before = state.get_data().unwrap().graphs[&path].function.clone();
-        let before_revisions = state.revision_state_for_test();
-        let request = MutationRequest::new(
-            ResourceKey::Function(yss_project_history::FunctionResourceKey(
-                path.as_str().into(),
-            )),
-            revision,
-            OperationId::new(),
-            FunctionDocumentPatch::new(
-                FunctionSignature::default(),
-                FunctionSignature {
-                    return_type: Some("Int64".into()),
-                    ..FunctionSignature::default()
-                },
-            ),
-        );
-        assert!(matches!(
-            state.update_function_signature(&session.instance_id, &path, request),
-            Err(ProjectResourceMutationError::Mutation(_))
-        ));
-        assert_eq!(state.get_data().unwrap().graphs[&path].function, before);
-        assert_eq!(state.revision_state_for_test(), before_revisions);
-        assert_eq!(
-            state.coherent_project_read_snapshot(&session).unwrap().1,
-            before_publication
-        );
     }
 }
 
@@ -203,7 +64,7 @@ impl ProjectState {
         let session = self
             .capture_project_session()
             .map_err(|error| match error {
-                ProjectFilesystemError::StaleProjectLifecycle { message } => {
+                ProjectOperationError::StaleProjectLifecycle { message } => {
                     ProjectResourceMutationError::StaleProjectLifecycle(message.into())
                 }
                 error => ProjectResourceMutationError::RecoveryRequired(error.to_string().into()),
@@ -255,13 +116,14 @@ impl ProjectState {
         });
         let contents = crate::project_io::serialize_graph_resource_document(&candidate)
             .map_err(|error| ProjectResourceMutationError::Mutation(error.to_string().into()))?;
-        let prepared = yss_project_filesystem::ProjectFilesystemTransaction::prepare(
+        let prepared = yss_filesystem::FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
-            vec![yss_project_filesystem::StagedFilesystemMutation::Write {
+            vec![yss_filesystem::StagedFilesystemMutation::Write {
                 relative_path: graph_path.as_str().into(),
                 contents,
             }],
+            crate::project_writers::validate_document,
         )
         .map_err(function_mutation_error)?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)
@@ -365,5 +227,145 @@ impl ProjectState {
             deltas,
             expected_graph_paths,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures::TempProject;
+    use yss_graph_document::GraphResourceKind;
+    use yss_project_history::{FunctionDocument, FunctionDocumentPatch, FunctionSignature};
+
+    fn function_project(revision: ResourceRevision) -> (TempProject, GraphResourcePath) {
+        let path = GraphResourcePath::new("functions/Compute.yssbi-function").unwrap();
+        let mut graph = GraphResourceDocument::new("Compute", GraphResourceKind::Function);
+        graph.function = Some(FunctionDocument {
+            revision,
+            signature: FunctionSignature::default(),
+        });
+        let mut data = ProjectData::new();
+        data.graphs.insert(path.clone(), graph);
+        (TempProject::activate("function-mutation", data), path)
+    }
+
+    #[test]
+    fn signature_commit_preserves_revision_and_patch_admission() {
+        let (fixture, path) = function_project(ResourceRevision::INITIAL);
+        let state = fixture.state();
+        let project = ProjectInstanceId::from_existing(state.project_instance_id());
+        let after = FunctionSignature {
+            return_type: Some("Int64".into()),
+            ..FunctionSignature::default()
+        };
+        let request = MutationRequest::new(
+            ResourceKey::Function(yss_project_history::FunctionResourceKey(
+                path.as_str().into(),
+            )),
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            FunctionDocumentPatch::new(FunctionSignature::default(), after.clone()),
+        );
+        let receipt = state
+            .update_function_signature(&project, &path, request.clone())
+            .unwrap()
+            .into_parts();
+        let next_revision = ResourceRevision::INITIAL.checked_next().unwrap();
+        assert_eq!(receipt.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(receipt.deltas[0].to_revision, next_revision);
+        let committed = state.get_data().unwrap().graphs[&path].function.clone();
+        assert_eq!(committed.as_ref().unwrap().signature, after);
+        assert_eq!(committed.as_ref().unwrap().revision, next_revision);
+        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
+
+        let session = state.capture_project_session().unwrap();
+        let persisted = crate::project_io::load_project_graph_from_file(
+            session.root.as_path().to_str().unwrap(),
+            &path,
+        )
+        .unwrap();
+        assert_eq!(persisted.function, committed);
+        let before_rescan = state
+            .read_project_index(&project)
+            .unwrap()
+            .publication_revision;
+        state
+            .reconcile_project_change(
+                &project,
+                yss_filesystem::change::FilesystemChange::rescan_required(),
+            )
+            .unwrap();
+        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
+        assert_eq!(
+            state
+                .read_project_index(&project)
+                .unwrap()
+                .publication_revision,
+            before_rescan
+        );
+        state.unload_graph_resource(&path).unwrap();
+        assert_eq!(
+            state.read_project_index(&project).unwrap().graphs[0].revision,
+            next_revision
+        );
+        state
+            .load_graph_document(&project, &path, u64::MAX - 1)
+            .unwrap();
+        assert_eq!(state.revision_state_for_test().0[&path], next_revision);
+        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
+
+        let stale = MutationRequest {
+            operation_id: OperationId::new(),
+            ..request.clone()
+        };
+        assert!(matches!(
+            state.update_function_signature(&project, &path, stale),
+            Err(ProjectResourceMutationError::StaleRevision { .. })
+        ));
+        let mismatched_patch = MutationRequest {
+            operation_id: OperationId::new(),
+            base_revision: next_revision,
+            ..request
+        };
+        assert!(matches!(
+            state.update_function_signature(&project, &path, mismatched_patch),
+            Err(ProjectResourceMutationError::Mutation(_))
+        ));
+        assert_eq!(state.get_data().unwrap().graphs[&path].function, committed);
+    }
+
+    #[test]
+    fn exhausted_signature_revision_preserves_project_publication_and_data() {
+        let revision = ResourceRevision::new(u64::MAX);
+        let (fixture, path) = function_project(revision);
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let before_publication = state.coherent_project_read_snapshot(&session).unwrap().1;
+        let before = state.get_data().unwrap().graphs[&path].function.clone();
+        let before_revisions = state.revision_state_for_test();
+        let request = MutationRequest::new(
+            ResourceKey::Function(yss_project_history::FunctionResourceKey(
+                path.as_str().into(),
+            )),
+            revision,
+            OperationId::new(),
+            FunctionDocumentPatch::new(
+                FunctionSignature::default(),
+                FunctionSignature {
+                    return_type: Some("Int64".into()),
+                    ..FunctionSignature::default()
+                },
+            ),
+        );
+        assert!(matches!(
+            state.update_function_signature(&session.instance_id, &path, request),
+            Err(ProjectResourceMutationError::Mutation(_))
+        ));
+        assert_eq!(state.get_data().unwrap().graphs[&path].function, before);
+        assert_eq!(state.revision_state_for_test(), before_revisions);
+        assert_eq!(
+            state.coherent_project_read_snapshot(&session).unwrap().1,
+            before_publication
+        );
     }
 }

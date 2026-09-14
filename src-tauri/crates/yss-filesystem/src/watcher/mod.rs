@@ -1,3 +1,5 @@
+pub mod notify;
+use crate::change::FilesystemChange;
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -5,25 +7,23 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use yss_project_change::ProjectChange;
-use yss_project_filesystem::project_root_from_path;
 
-const PROJECT_WATCHER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
-const PROJECT_WATCHER_REAPER_TIMEOUT: Duration = Duration::from_secs(1);
+const WATCHER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+const WATCHER_REAPER_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ProjectWatcherEpoch(u64);
+pub struct WatcherEpoch(u64);
 
-impl ProjectWatcherEpoch {
+impl WatcherEpoch {
     pub(crate) const fn new(value: u64) -> Self {
         Self(value)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ObservedProjectChange {
-    pub epoch: ProjectWatcherEpoch,
-    pub change: ProjectChange,
+pub struct ObservedChange {
+    pub epoch: WatcherEpoch,
+    pub change: FilesystemChange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -48,25 +48,25 @@ impl WatcherShutdownControl {
 
 #[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
 pub enum FileWatcherStartError {
-    #[error("project file watcher failed to start")]
+    #[error("filesystem watcher failed to start")]
     StartFailed,
 }
 
-pub trait ProjectChangeSink: Send + Sync {
-    fn publish(&self, change: ObservedProjectChange);
+pub trait ChangeSink: Send + Sync {
+    fn publish(&self, change: ObservedChange);
 }
 
-pub trait ProjectFileWatcherSession: Send {
-    fn close_admission(self: Box<Self>) -> Box<dyn ProjectFileWatcherDrain>;
+pub trait FileWatcherSession: Send {
+    fn close_admission(self: Box<Self>) -> Box<dyn FileWatcherDrain>;
 }
 
-pub enum ProjectFileWatcherDrainOutcome {
+pub enum FileWatcherDrainOutcome {
     Drained,
     WorkerPanicked,
-    TimedOut(Box<dyn ProjectFileWatcherDrain>),
+    TimedOut(Box<dyn FileWatcherDrain>),
 }
 
-impl fmt::Debug for ProjectFileWatcherDrainOutcome {
+impl fmt::Debug for FileWatcherDrainOutcome {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Drained => formatter.write_str("Drained"),
@@ -76,30 +76,30 @@ impl fmt::Debug for ProjectFileWatcherDrainOutcome {
     }
 }
 
-pub trait ProjectFileWatcherDrain: Send {
-    fn finish(self: Box<Self>, control: WatcherShutdownControl) -> ProjectFileWatcherDrainOutcome;
+pub trait FileWatcherDrain: Send {
+    fn finish(self: Box<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome;
 }
 
-pub trait ProjectFileWatcherFactory: Send + Sync {
+pub trait FileWatcherFactory: Send + Sync {
     fn start(
         &self,
-        project_root: &Path,
-        epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectChangeSink>,
-    ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError>;
+        root: &Path,
+        epoch: WatcherEpoch,
+        sink: Arc<dyn ChangeSink>,
+    ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError>;
 }
 
 #[derive(Error)]
-pub enum ProjectWatcherError {
-    #[error("project file watcher failed to start")]
+pub enum WatcherError {
+    #[error("filesystem watcher failed to start")]
     Start(#[source] FileWatcherStartError),
-    #[error("project watcher epoch is exhausted")]
+    #[error("filesystem watcher epoch is exhausted")]
     EpochExhausted,
-    #[error("project watcher shutdown timed out")]
-    TimedOut(Box<dyn ProjectFileWatcherDrain>),
+    #[error("filesystem watcher shutdown timed out")]
+    TimedOut(Box<dyn FileWatcherDrain>),
 }
 
-impl fmt::Debug for ProjectWatcherError {
+impl fmt::Debug for WatcherError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Start(error) => formatter.debug_tuple("Start").field(error).finish(),
@@ -110,7 +110,7 @@ impl fmt::Debug for ProjectWatcherError {
 }
 
 struct EpochAdmission {
-    epoch: ProjectWatcherEpoch,
+    epoch: WatcherEpoch,
     state: Mutex<EpochAdmissionState>,
 }
 
@@ -121,7 +121,7 @@ struct EpochAdmissionState {
 }
 
 impl EpochAdmission {
-    fn new(epoch: ProjectWatcherEpoch) -> Self {
+    fn new(epoch: WatcherEpoch) -> Self {
         Self {
             epoch,
             state: Mutex::new(EpochAdmissionState::default()),
@@ -133,7 +133,7 @@ impl EpochAdmission {
         state.closed = true;
     }
 
-    fn admit(self: &Arc<Self>, epoch: ProjectWatcherEpoch) -> Option<EpochPermit> {
+    fn admit(self: &Arc<Self>, epoch: WatcherEpoch) -> Option<EpochPermit> {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         if state.closed || epoch != self.epoch {
             return None;
@@ -162,11 +162,11 @@ impl Drop for EpochPermit {
 
 struct EpochFilteringSink {
     admission: Arc<EpochAdmission>,
-    sink: Arc<dyn ProjectChangeSink>,
+    sink: Arc<dyn ChangeSink>,
 }
 
-impl ProjectChangeSink for EpochFilteringSink {
-    fn publish(&self, change: ObservedProjectChange) {
+impl ChangeSink for EpochFilteringSink {
+    fn publish(&self, change: ObservedChange) {
         let Some(_permit) = self.admission.admit(change.epoch) else {
             return;
         };
@@ -175,23 +175,23 @@ impl ProjectChangeSink for EpochFilteringSink {
 }
 
 struct ActiveWatcher {
-    epoch: ProjectWatcherEpoch,
+    epoch: WatcherEpoch,
     admission: Arc<EpochAdmission>,
-    session: Box<dyn ProjectFileWatcherSession>,
+    session: Box<dyn FileWatcherSession>,
 }
 
 enum WatcherLifecycleState {
     Idle,
     Starting {
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
     },
     Active(ActiveWatcher),
     Closing {
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: Arc<EpochAdmission>,
     },
     Draining {
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: Arc<EpochAdmission>,
         drain: Arc<DrainCell>,
         finishing: bool,
@@ -214,34 +214,34 @@ impl WatcherLifecycle {
     }
 }
 
-pub struct ProjectWatcherState {
-    factory: Arc<dyn ProjectFileWatcherFactory>,
+pub struct WatcherState {
+    factory: Arc<dyn FileWatcherFactory>,
     lifecycle: WatcherLifecycle,
     shutdown_timeout: Duration,
 }
 
-impl ProjectWatcherState {
-    pub fn new(factory: Arc<dyn ProjectFileWatcherFactory>) -> Self {
+impl WatcherState {
+    pub fn new(factory: Arc<dyn FileWatcherFactory>) -> Self {
         Self {
             factory,
             lifecycle: WatcherLifecycle::new(),
-            shutdown_timeout: PROJECT_WATCHER_SHUTDOWN_TIMEOUT,
+            shutdown_timeout: WATCHER_SHUTDOWN_TIMEOUT,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn for_test<S>(factory: Arc<S>) -> Self
     where
-        S: ProjectFileWatcherFactory + 'static,
+        S: FileWatcherFactory + 'static,
     {
         Self::new(factory)
     }
 
-    pub fn watch_project(
+    pub fn watch(
         &self,
-        metadata_path: &str,
-        sink: Arc<dyn ProjectChangeSink>,
-    ) -> Result<(), ProjectWatcherError> {
+        root: impl AsRef<Path>,
+        sink: Arc<dyn ChangeSink>,
+    ) -> Result<(), WatcherError> {
         self.retire_active(WatcherShutdownControl::after(self.shutdown_timeout))?;
 
         let (epoch, admission) = self.reserve_start()?;
@@ -249,12 +249,12 @@ impl ProjectWatcherState {
             admission: admission.clone(),
             sink,
         });
-        let root = project_root_from_path(metadata_path);
-        let session = match self.factory.start(root.as_path(), epoch, filtered_sink) {
+        let root = root.as_ref();
+        let session = match self.factory.start(root, epoch, filtered_sink) {
             Ok(session) => session,
             Err(error) => {
                 self.abort_start(epoch);
-                return Err(ProjectWatcherError::Start(error));
+                return Err(WatcherError::Start(error));
             }
         };
         self.install_active(epoch, admission, session);
@@ -264,17 +264,15 @@ impl ProjectWatcherState {
     pub fn stop(&self) {
         if let Err(error) = self.retire_active(WatcherShutdownControl::new(Instant::now())) {
             tracing::warn!(
-                target: "yssbi::project_watcher",
+                target: "yss_filesystem::watcher",
                 log_domain = "system",
                 error = %error,
-                "Project watcher shutdown remains pending"
+                "Filesystem watcher shutdown remains pending"
             );
         }
     }
 
-    fn reserve_start(
-        &self,
-    ) -> Result<(ProjectWatcherEpoch, Arc<EpochAdmission>), ProjectWatcherError> {
+    fn reserve_start(&self) -> Result<(WatcherEpoch, Arc<EpochAdmission>), WatcherError> {
         let mut state = self
             .lifecycle
             .state
@@ -288,10 +286,10 @@ impl ProjectWatcherState {
                     .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                         current.checked_add(1)
                     })
-                    .map_err(|_| ProjectWatcherError::EpochExhausted)?
+                    .map_err(|_| WatcherError::EpochExhausted)?
                     .checked_add(1)
-                    .ok_or(ProjectWatcherError::EpochExhausted)?;
-                let epoch = ProjectWatcherEpoch::new(next);
+                    .ok_or(WatcherError::EpochExhausted)?;
+                let epoch = WatcherEpoch::new(next);
                 let admission = Arc::new(EpochAdmission::new(epoch));
                 *state = WatcherLifecycleState::Starting { epoch };
                 return Ok((epoch, admission));
@@ -304,7 +302,7 @@ impl ProjectWatcherState {
         }
     }
 
-    fn abort_start(&self, epoch: ProjectWatcherEpoch) {
+    fn abort_start(&self, epoch: WatcherEpoch) {
         let mut state = self
             .lifecycle
             .state
@@ -319,9 +317,9 @@ impl ProjectWatcherState {
 
     fn install_active(
         &self,
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: Arc<EpochAdmission>,
-        session: Box<dyn ProjectFileWatcherSession>,
+        session: Box<dyn FileWatcherSession>,
     ) {
         let mut state = self
             .lifecycle
@@ -346,7 +344,7 @@ impl ProjectWatcherState {
         spawn_drain_reaper(cell);
     }
 
-    fn retire_active(&self, control: WatcherShutdownControl) -> Result<(), ProjectWatcherError> {
+    fn retire_active(&self, control: WatcherShutdownControl) -> Result<(), WatcherError> {
         let target = self.begin_retirement();
         let Some(target) = target else {
             return Ok(());
@@ -370,23 +368,23 @@ impl ProjectWatcherState {
 
         let outcome = drain.finish(control);
         match outcome {
-            ProjectFileWatcherDrainOutcome::Drained => {
+            FileWatcherDrainOutcome::Drained => {
                 self.finish_draining(epoch, &admission, &drain);
                 Ok(())
             }
-            ProjectFileWatcherDrainOutcome::WorkerPanicked => {
+            FileWatcherDrainOutcome::WorkerPanicked => {
                 tracing::error!(
-                    target: "yssbi::project_watcher",
+                    target: "yss_filesystem::watcher",
                     log_domain = "system",
-                    log_event = "projectWatcherWorkerPanicked",
-                    "Project watcher worker panicked while shutting down"
+                    log_event = "watcherWorkerPanicked",
+                    "Filesystem watcher worker panicked while shutting down"
                 );
                 self.finish_draining(epoch, &admission, &drain);
                 Ok(())
             }
-            ProjectFileWatcherDrainOutcome::TimedOut(timeout_drain) => {
+            FileWatcherDrainOutcome::TimedOut(timeout_drain) => {
                 self.mark_drain_retryable(epoch, &admission, &drain);
-                Err(ProjectWatcherError::TimedOut(timeout_drain))
+                Err(WatcherError::TimedOut(timeout_drain))
             }
         }
     }
@@ -470,7 +468,7 @@ impl ProjectWatcherState {
 
     fn install_draining(
         &self,
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: Arc<EpochAdmission>,
         drain: Arc<DrainCell>,
     ) {
@@ -490,7 +488,7 @@ impl ProjectWatcherState {
 
     fn finish_draining(
         &self,
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: &Arc<EpochAdmission>,
         drain: &Arc<DrainCell>,
     ) {
@@ -517,7 +515,7 @@ impl ProjectWatcherState {
 
     fn mark_drain_retryable(
         &self,
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: &Arc<EpochAdmission>,
         drain: &Arc<DrainCell>,
     ) {
@@ -548,32 +546,32 @@ impl ProjectWatcherState {
 enum RetirementTarget {
     Active(ActiveWatcher),
     Draining {
-        epoch: ProjectWatcherEpoch,
+        epoch: WatcherEpoch,
         admission: Arc<EpochAdmission>,
         drain: Arc<DrainCell>,
     },
 }
 
 struct DrainCell {
-    owner: Mutex<Option<Box<dyn ProjectFileWatcherDrain>>>,
+    owner: Mutex<Option<Box<dyn FileWatcherDrain>>>,
     terminal: Mutex<bool>,
 }
 
 impl DrainCell {
-    fn new(owner: Box<dyn ProjectFileWatcherDrain>) -> Self {
+    fn new(owner: Box<dyn FileWatcherDrain>) -> Self {
         Self {
             owner: Mutex::new(Some(owner)),
             terminal: Mutex::new(false),
         }
     }
 
-    fn handle(self: &Arc<Self>) -> Box<dyn ProjectFileWatcherDrain> {
+    fn handle(self: &Arc<Self>) -> Box<dyn FileWatcherDrain> {
         Box::new(DrainHandle {
             cell: Arc::clone(self),
         })
     }
 
-    fn finish(self: &Arc<Self>, control: WatcherShutdownControl) -> ProjectFileWatcherDrainOutcome {
+    fn finish(self: &Arc<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
         let owner = self
             .owner
             .lock()
@@ -581,16 +579,16 @@ impl DrainCell {
             .take();
         let Some(owner) = owner else {
             if *self.terminal.lock().unwrap_or_else(PoisonError::into_inner) {
-                return ProjectFileWatcherDrainOutcome::Drained;
+                return FileWatcherDrainOutcome::Drained;
             }
-            return ProjectFileWatcherDrainOutcome::WorkerPanicked;
+            return FileWatcherDrainOutcome::WorkerPanicked;
         };
 
         let outcome = owner.finish(control);
         match outcome {
-            ProjectFileWatcherDrainOutcome::TimedOut(owner) => {
+            FileWatcherDrainOutcome::TimedOut(owner) => {
                 *self.owner.lock().unwrap_or_else(PoisonError::into_inner) = Some(owner);
-                ProjectFileWatcherDrainOutcome::TimedOut(self.handle())
+                FileWatcherDrainOutcome::TimedOut(self.handle())
             }
             terminal => {
                 *self.terminal.lock().unwrap_or_else(PoisonError::into_inner) = true;
@@ -604,19 +602,19 @@ struct DrainHandle {
     cell: Arc<DrainCell>,
 }
 
-impl ProjectFileWatcherDrain for DrainHandle {
-    fn finish(self: Box<Self>, control: WatcherShutdownControl) -> ProjectFileWatcherDrainOutcome {
+impl FileWatcherDrain for DrainHandle {
+    fn finish(self: Box<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
         self.cell.finish(control)
     }
 }
 
 fn spawn_drain_reaper(cell: Arc<DrainCell>) {
     let _ = thread::Builder::new()
-        .name("yssbi-project-watcher-reaper".into())
+        .name("yss-filesystem-watcher-reaper".into())
         .spawn(move || {
-            while let ProjectFileWatcherDrainOutcome::TimedOut(_) = cell.finish(
-                WatcherShutdownControl::after(PROJECT_WATCHER_REAPER_TIMEOUT),
-            ) {}
+            while let FileWatcherDrainOutcome::TimedOut(_) =
+                cell.finish(WatcherShutdownControl::after(WATCHER_REAPER_TIMEOUT))
+            {}
         });
 }
 
@@ -626,7 +624,7 @@ impl WatcherShutdownControl {
     }
 }
 
-impl Drop for ProjectWatcherState {
+impl Drop for WatcherState {
     fn drop(&mut self) {
         let state = self
             .lifecycle

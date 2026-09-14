@@ -5,7 +5,7 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let mut expected = BTreeMap::new();
         let mut mutations = vec![StagedFilesystemMutation::Write {
@@ -79,7 +79,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: OperationId,
-    ) -> Result<ProjectSaveResult, ProjectFilesystemError> {
+    ) -> Result<ProjectSaveResult, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let resource = snapshot
             .data
@@ -87,14 +87,14 @@ impl ProjectState {
             .get(graph_path)
             .ok_or_else(|| prepare_error(format!("graph '{}' is not loaded", graph_path)))?;
         if snapshot.graph_resource_revisions.get(graph_path).copied() != Some(expected_revision) {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });
         }
         let mut expected = BTreeMap::from([(graph_key(graph_path), expected_revision)]);
         if let Some(function) = &resource.function {
             if function.revision != expected_revision {
-                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                return Err(ProjectOperationError::ResourceRevisionConflict {
                     message: format!(
                         "function '{}' signature revision differs from graph",
                         graph_path

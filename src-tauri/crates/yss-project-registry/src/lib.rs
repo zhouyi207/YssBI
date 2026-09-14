@@ -13,7 +13,7 @@ use thiserror::Error;
 use discovery::{
     ProjectDiscoveryError, discover_project_metadata_files, project_name_from_metadata_path,
 };
-use yss_project_filesystem::{NormalizedProjectRoot, ProjectRootBinding};
+use yss_filesystem::{NormalizedRoot, RootBinding};
 use yss_project_identity::ProjectRegistrationId;
 use yss_project_layout::PROJECT_METADATA_FILE;
 use yss_project_model::normalize_project_name;
@@ -136,7 +136,7 @@ impl ProjectRegistry {
 
     async fn fetch_by_root(
         &self,
-        binding: &ProjectRootBinding,
+        binding: &RootBinding,
     ) -> Result<Option<ProjectRecord>, ProjectRegistryError> {
         let identity = binding
             .identity()
@@ -146,13 +146,12 @@ impl ProjectRegistry {
             .revalidate()
             .map_err(|_| ProjectRegistryError::IdentityChanged)?;
         let record = records.into_iter().find(|record| {
-            NormalizedProjectRoot::from_project_path(&record.path)
+            NormalizedRoot::from_path(project_root_path(&record.path))
                 .is_ok_and(|root| &root == binding.normalized())
         });
-        if record
-            .as_ref()
-            .is_some_and(|record| record.deletion_identity() != Some(identity))
-        {
+        if record.as_ref().is_some_and(|record| {
+            record.deletion_identity().map(|value| value.as_str()) != Some(identity.as_str())
+        }) {
             return Err(ProjectRegistryError::IdentityChanged);
         }
         Ok(record)
@@ -163,11 +162,15 @@ impl ProjectRegistry {
         name: &str,
         path: &str,
     ) -> Result<ProjectRecord, ProjectRegistryError> {
-        let binding = ProjectRootBinding::for_existing(path)
+        let binding = RootBinding::for_existing(project_root_path(path))
             .map_err(|_| ProjectRegistryError::InvalidPath)?;
         let root_identity = binding
             .identity()
-            .cloned()
+            .map(|identity| {
+                yss_project_identity::ProjectRootIdentity::from_canonical(
+                    identity.as_str().to_owned(),
+                )
+            })
             .ok_or(ProjectRegistryError::RootIdentityMissing)?;
         let path = normalize_existing_path(path).map_err(|_| ProjectRegistryError::InvalidPath)?;
 
@@ -251,11 +254,12 @@ impl ProjectRegistry {
                 }));
             }
             let current_identity = (project.root_identity_state == ProjectRootIdentityState::Valid)
-                .then(|| ProjectRootBinding::for_existing(&project.path).ok())
+                .then(|| RootBinding::for_existing(project_root_path(&project.path)).ok())
                 .flatten()
                 .and_then(|binding| binding.identity().cloned());
             if project.root_identity_state == ProjectRootIdentityState::Valid
-                && current_identity.as_ref() == Some(&project.root_identity)
+                && current_identity.as_ref().map(|identity| identity.as_str())
+                    == Some(project.root_identity.as_str())
             {
                 continue;
             }
@@ -314,7 +318,7 @@ impl ProjectRegistry {
             let path = metadata_path.to_string_lossy().into_owned();
             let normalized =
                 normalize_existing_path(&path).map_err(|_| ProjectRegistryError::ScanFailed)?;
-            let binding = ProjectRootBinding::for_existing(metadata_path)
+            let binding = RootBinding::for_existing(project_root_path(metadata_path))
                 .map_err(|_| ProjectRegistryError::ScanFailed)?;
             let existing = self.fetch_by_root(&binding).await?;
             let (record, is_new) = match existing {
@@ -407,6 +411,28 @@ pub fn validate_new_project_path(path: &str) -> Result<(), ProjectPathValidation
 
 fn directory_has_entries(path: &Path) -> bool {
     std::fs::read_dir(path).map_or(true, |mut entries| entries.next().is_some())
+}
+
+fn trim_path(path: &Path) -> PathBuf {
+    path.to_str()
+        .map(|text| PathBuf::from(text.trim()))
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+fn project_root_path(path: impl AsRef<Path>) -> PathBuf {
+    let path = trim_path(path.as_ref());
+    let is_metadata_file = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(PROJECT_METADATA_FILE));
+    if path.is_file() || is_metadata_file {
+        path.parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or(path)
+    } else {
+        path
+    }
 }
 
 pub fn normalize_existing_path(path: &str) -> Result<String, String> {
@@ -761,8 +787,12 @@ mod tests {
         std::fs::rename(&root, directory.child("original-root")).unwrap();
         std::fs::create_dir(&root).unwrap();
         std::fs::write(root.join(PROJECT_METADATA_FILE), "{}").unwrap();
-        let binding = yss_project_filesystem::ProjectRootBinding::for_existing(&root).unwrap();
-        assert_ne!(binding.identity(), Some(&original.root_identity));
+        let binding =
+            yss_filesystem::RootBinding::for_existing(super::project_root_path(&root)).unwrap();
+        assert_ne!(
+            binding.identity().map(|identity| identity.as_str()),
+            Some(original.root_identity.as_str())
+        );
 
         assert!(matches!(
             registry

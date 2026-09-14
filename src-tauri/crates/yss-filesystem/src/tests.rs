@@ -1,16 +1,15 @@
 use super::{
-    NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemFaultPoint,
-    ProjectFilesystemTransaction, ProjectFilesystemTransactionContext, ProjectRecoveryMarker,
-    StagedFilesystemMutation,
+    FilesystemCoordinator, FilesystemFaultPoint, FilesystemTransaction, NormalizedRoot,
+    RecoveryMarker, StagedFilesystemMutation, TransactionContext,
 };
+use crate::TransactionId;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use yss_project_identity::OperationId;
-use yss_project_layout::PROJECT_METADATA_FILE;
+const FIXTURE_FILE: &str = "sample.json";
 
 struct TestDirectory {
     path: PathBuf,
-    coordinator: ProjectFilesystemCoordinator,
+    coordinator: FilesystemCoordinator,
 }
 
 impl TestDirectory {
@@ -19,7 +18,7 @@ impl TestDirectory {
         std::fs::create_dir_all(&path).unwrap();
         Self {
             path,
-            coordinator: ProjectFilesystemCoordinator::default(),
+            coordinator: FilesystemCoordinator::default(),
         }
     }
 
@@ -27,7 +26,7 @@ impl TestDirectory {
         &self.path
     }
 
-    fn coordinator(&self) -> &ProjectFilesystemCoordinator {
+    fn coordinator(&self) -> &FilesystemCoordinator {
         &self.coordinator
     }
 }
@@ -38,26 +37,69 @@ impl Drop for TestDirectory {
     }
 }
 
-fn normalized(path: impl AsRef<Path>) -> NormalizedProjectRoot {
-    NormalizedProjectRoot::from_project_path(path).unwrap()
+fn normalized(path: impl AsRef<Path>) -> NormalizedRoot {
+    NormalizedRoot::from_path(path).unwrap()
 }
 
-fn transaction_context(root: NormalizedProjectRoot) -> ProjectFilesystemTransactionContext {
-    ProjectFilesystemTransactionContext {
+fn transaction_context(root: NormalizedRoot) -> TransactionContext {
+    TransactionContext {
         root,
-        operation_id: OperationId::new(),
+        transaction_id: TransactionId::new(),
         recovery_marker: None,
     }
 }
 
+#[test]
+fn transactions_accept_arbitrary_bytes_and_only_apply_explicit_content_validation() {
+    let directory = TestDirectory::new("generic-content");
+    let root = normalized(directory.path());
+    let binary = vec![0, 255, 128, 17];
+    let prepared = FilesystemTransaction::prepare(
+        transaction_context(root.clone()),
+        directory.coordinator().acquire(root.clone()).unwrap(),
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "text.txt".into(),
+                contents: b"plain text, not JSON".to_vec(),
+            },
+            StagedFilesystemMutation::Write {
+                relative_path: "bytes.bin".into(),
+                contents: binary.clone(),
+            },
+        ],
+    )
+    .unwrap();
+    prepared.commit().unwrap().finalize();
+    assert_eq!(
+        std::fs::read(directory.path().join("bytes.bin")).unwrap(),
+        binary
+    );
+    assert_eq!(
+        std::fs::read(directory.path().join("text.txt")).unwrap(),
+        b"plain text, not JSON"
+    );
+
+    let rejected = FilesystemTransaction::prepare_with_validator(
+        transaction_context(root.clone()),
+        directory.coordinator().acquire(root).unwrap(),
+        vec![StagedFilesystemMutation::Write {
+            relative_path: "rejected.bin".into(),
+            contents: vec![1],
+        }],
+        |_, _| Err("caller rejected content".into()),
+    );
+    assert!(rejected.is_err());
+    assert!(!directory.path().join("rejected.bin").exists());
+}
+
 fn prepare_json_transaction_with_coordinator(
-    coordinator: &ProjectFilesystemCoordinator,
+    coordinator: &FilesystemCoordinator,
     temporary: &TestDirectory,
     mutations: Vec<StagedFilesystemMutation>,
-) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
+) -> Result<super::PreparedFilesystemTransaction, super::FilesystemError> {
     let root = normalized(temporary.path());
     let lease = coordinator.acquire(root.clone()).unwrap();
-    ProjectFilesystemTransaction::prepare_with_validator(
+    FilesystemTransaction::prepare_with_validator(
         transaction_context(root),
         lease,
         mutations,
@@ -72,29 +114,24 @@ fn prepare_json_transaction_with_coordinator(
 fn prepare_json_transaction(
     temporary: &TestDirectory,
     mutations: Vec<StagedFilesystemMutation>,
-) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
+) -> Result<super::PreparedFilesystemTransaction, super::FilesystemError> {
     prepare_json_transaction_with_coordinator(temporary.coordinator(), temporary, mutations)
 }
 
 fn prepare_json_transaction_with_recovery_marker(
     temporary: &TestDirectory,
     mutations: Vec<StagedFilesystemMutation>,
-    marker: ProjectRecoveryMarker,
-) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
+    marker: RecoveryMarker,
+) -> Result<super::PreparedFilesystemTransaction, super::FilesystemError> {
     let root = normalized(temporary.path());
     let lease = temporary.coordinator().acquire(root.clone()).unwrap();
     let mut context = transaction_context(root);
     context.recovery_marker = Some(marker);
-    ProjectFilesystemTransaction::prepare_with_validator(
-        context,
-        lease,
-        mutations,
-        |_, contents| {
-            serde_json::from_slice::<serde_json::Value>(contents)
-                .map(|_| ())
-                .map_err(|error| error.to_string())
-        },
-    )
+    FilesystemTransaction::prepare_with_validator(context, lease, mutations, |_, contents| {
+        serde_json::from_slice::<serde_json::Value>(contents)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    })
 }
 
 fn move_recovery_copies(temporary: &TestDirectory) -> Vec<PathBuf> {
@@ -163,7 +200,7 @@ fn windows_root_preserves_native_path_and_uses_case_insensitive_identity() {
     assert_eq!(upper, lower);
     assert_eq!(upper.cmp(&lower), std::cmp::Ordering::Equal);
 
-    let hash = |root: &NormalizedProjectRoot| {
+    let hash = |root: &NormalizedRoot| {
         let mut hasher = DefaultHasher::new();
         root.hash(&mut hasher);
         hasher.finish()
@@ -172,33 +209,46 @@ fn windows_root_preserves_native_path_and_uses_case_insensitive_identity() {
 }
 
 #[test]
-fn metadata_and_directory_paths_normalize_to_the_same_root() {
+fn root_paths_do_not_infer_a_parent_from_file_names() {
     let temporary = TestDirectory::new("filesystem-metadata-root");
     let root = temporary.path().join("project");
     std::fs::create_dir_all(&root).unwrap();
-    let metadata = root.join(PROJECT_METADATA_FILE);
+    let metadata = root.join(FIXTURE_FILE);
     std::fs::write(&metadata, "{}").unwrap();
 
-    assert_eq!(normalized(&root), normalized(&metadata));
-    assert_eq!(normalized(&root), normalized(root.join("METADATA.YSSBI")));
+    assert_ne!(normalized(&root), normalized(&metadata));
+    assert_eq!(
+        normalized(&metadata).as_path(),
+        std::fs::canonicalize(&metadata).unwrap()
+    );
+    assert!(crate::RootBinding::for_existing(&metadata).is_err());
+
+    let ordinary_directory = root.join("metadata.yssbi");
+    std::fs::create_dir(&ordinary_directory).unwrap();
+    assert_eq!(
+        crate::RootBinding::for_existing(&ordinary_directory)
+            .unwrap()
+            .normalized(),
+        &normalized(&ordinary_directory)
+    );
 }
 
 #[test]
 fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
     let temporary = TestDirectory::new("filesystem-lifecycle-close");
     let root = normalized(temporary.path().join("project"));
-    let coordinator = ProjectFilesystemCoordinator::default();
+    let coordinator = FilesystemCoordinator::default();
 
     let mut lifecycle = coordinator.begin_root_lifecycle(root.clone()).unwrap();
     let error = coordinator.acquire(root.clone()).err().unwrap();
-    assert_eq!(error.code(), "project_lifecycle_admission_closed");
+    assert_eq!(error.code(), "filesystem_root_admission_closed");
 
     lifecycle.release_initial_and_drain();
     lifecycle.acquire_final().unwrap();
     assert!(lifecycle.holds_lease());
     assert_eq!(
         coordinator.acquire(root.clone()).err().unwrap().code(),
-        "project_lifecycle_admission_closed"
+        "filesystem_root_admission_closed"
     );
 
     drop(lifecycle);
@@ -234,7 +284,7 @@ fn file_move_rollback_restores_source_but_retains_target_for_recovery() {
     let source = temporary.path().join("source.json");
     let target = temporary.path().join("destination.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -259,14 +309,14 @@ fn file_move_rollback_restores_source_but_retains_target_for_recovery() {
 }
 
 #[test]
-fn nested_move_always_places_recovery_artifact_in_project_root() {
+fn nested_move_always_places_recovery_artifact_in_root() {
     let temporary = TestDirectory::new("transaction-nested-move-root-recovery");
     let source_directory = temporary.path().join("dir");
     let source = source_directory.join("source.json");
     let target = temporary.path().join("target.json");
     std::fs::create_dir(&source_directory).unwrap();
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -304,7 +354,7 @@ fn mixed_move_explicit_rollback_falls_back_to_root_recovery_copy() {
     let target = temporary.path().join("target.json");
     std::fs::create_dir(&source_directory).unwrap();
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![
@@ -349,7 +399,7 @@ fn mixed_move_commit_failure_retains_root_recovery_copy_for_applied_prefix() {
     let target = temporary.path().join("target.json");
     std::fs::create_dir(&source_directory).unwrap();
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let prepared = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![
@@ -389,7 +439,7 @@ fn mixed_move_drop_unwind_marks_recovery_and_retains_root_copy() {
     let target = temporary.path().join("target.json");
     std::fs::create_dir(&source_directory).unwrap();
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![
@@ -431,7 +481,7 @@ fn file_move_publication_rollback_preserves_replaced_target_and_marks_recovery()
     let source = temporary.path().join("source.json");
     let target = temporary.path().join("destination.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -446,7 +496,7 @@ fn file_move_publication_rollback_preserves_replaced_target_and_marks_recovery()
     let target_for_hook = target.clone();
     temporary
         .coordinator()
-        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+        .set_filesystem_rollback_test_hook(Some(Arc::new(move || {
             std::fs::remove_file(&target_for_hook).unwrap();
             std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
         })));
@@ -469,7 +519,7 @@ fn file_move_rollback_does_not_overwrite_existing_source() {
     let source = temporary.path().join("source.json");
     let target = temporary.path().join("destination.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -500,7 +550,7 @@ fn file_move_rollback_fault_retains_original_bytes_in_recovery_copy() {
     let source = temporary.path().join("source.json");
     let target = temporary.path().join("destination.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -515,13 +565,11 @@ fn file_move_rollback_fault_retains_original_bytes_in_recovery_copy() {
     let target_for_hook = target.clone();
     temporary
         .coordinator()
-        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+        .set_filesystem_rollback_test_hook(Some(Arc::new(move || {
             std::fs::remove_file(&target_for_hook).unwrap();
             std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
         })));
-    temporary
-        .coordinator()
-        .set_project_filesystem_rollback_fault(true);
+    temporary.coordinator().set_filesystem_rollback_fault(true);
 
     let error = committed.rollback().unwrap_err();
 
@@ -541,7 +589,7 @@ fn case_only_file_move_rollback_retains_target_and_recovery_copy() {
     let source = temporary.path().join("Report.json");
     let target = temporary.path().join("report.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -575,7 +623,7 @@ fn case_only_publication_rollback_preserves_replaced_target() {
     let target = temporary.path().join("report.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
     let case_sensitive = !target.exists();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -590,7 +638,7 @@ fn case_only_publication_rollback_preserves_replaced_target() {
     let target_for_hook = target.clone();
     temporary
         .coordinator()
-        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+        .set_filesystem_rollback_test_hook(Some(Arc::new(move || {
             std::fs::remove_file(&target_for_hook).unwrap();
             std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
         })));
@@ -715,7 +763,7 @@ fn file_move_source_removal_failure_retains_target_and_marks_recovery() {
     let source = temporary.path().join("source.json");
     let target = temporary.path().join("destination.json");
     std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let prepared = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![StagedFilesystemMutation::MoveFile {
@@ -727,7 +775,7 @@ fn file_move_source_removal_failure_retains_target_and_marks_recovery() {
     .unwrap();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveSourceRemoval));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::MoveSourceRemoval));
 
     let error = prepared.commit().unwrap_err();
 
@@ -754,7 +802,7 @@ fn file_move_cleanup_never_deletes_target_replaced_after_identity_check() {
     .unwrap();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveSourceRemoval));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::MoveSourceRemoval));
     let target_for_hook = target.clone();
     temporary
         .coordinator()
@@ -787,7 +835,7 @@ fn file_move_target_cleanup_failure_requires_recovery() {
     .unwrap();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveTargetCleanup));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::MoveTargetCleanup));
 
     let error = prepared.commit().unwrap_err();
 
@@ -1160,7 +1208,7 @@ fn prepare_serializes_every_document_before_touching_live_files() {
 
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagedSerialization));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::StagedSerialization));
     let error = prepare_json_transaction(
         &temporary,
         vec![
@@ -1209,7 +1257,7 @@ fn commit_failure_restores_only_touched_files_and_directory_topology() {
     .unwrap();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::SecondLiveReplacement));
 
     let error = prepared.commit().unwrap_err();
 
@@ -1233,7 +1281,7 @@ fn generic_directory_topology_check_precedes_destructive_child_restore() {
     let external = directory.join("external.json");
     std::fs::create_dir(&directory).unwrap();
     std::fs::write(&child, br#"{"original":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
+    let marker = RecoveryMarker::default();
     let committed = prepare_json_transaction_with_recovery_marker(
         &temporary,
         vec![
@@ -1284,18 +1332,14 @@ fn rollback_failure_reports_transaction_rollback_failed_with_recovery_requiremen
     .unwrap();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::SecondLiveReplacement));
-    temporary
-        .coordinator()
-        .set_project_filesystem_rollback_fault(true);
+        .set_filesystem_fault(Some(FilesystemFaultPoint::SecondLiveReplacement));
+    temporary.coordinator().set_filesystem_rollback_fault(true);
 
     let error = prepared.commit().unwrap_err();
 
     assert_eq!(error.code(), "transaction_rollback_failed");
     assert!(error.recovery_required());
-    temporary
-        .coordinator()
-        .set_project_filesystem_rollback_fault(false);
+    temporary.coordinator().set_filesystem_rollback_fault(false);
 }
 
 #[test]
@@ -1333,7 +1377,7 @@ fn staging_directory_is_removed_after_commit_and_rollback() {
     let staging_root = prepared.staging_root().to_path_buf();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::FirstLiveReplacement));
     assert_eq!(
         prepared.commit().unwrap_err().code(),
         "transaction_commit_failed"
@@ -1351,7 +1395,7 @@ fn staging_directory_is_removed_after_commit_and_rollback() {
     let staging_root = prepared.staging_root().to_path_buf();
     temporary
         .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::StagingCleanup));
+        .set_filesystem_fault(Some(FilesystemFaultPoint::StagingCleanup));
     assert_eq!(
         prepared.commit().unwrap_err().code(),
         "transaction_commit_failed"

@@ -24,8 +24,7 @@ use super::policy::{
     rust_dependency_findings_with_capabilities,
 };
 use super::semantic_guards::{
-    PROJECT_WATCHER_BOUNDARY_RULE, PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE,
-    project_to_graph_production_edges, project_watcher_source_violations,
+    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE, project_to_graph_production_edges,
     pure_leaf_graph_document_json_violations, tabular_contract_source_violations,
 };
 
@@ -512,8 +511,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-project-watcher-notify"
-                && root.target == "yss_project_watcher_notify"
+            .any(|root| root.package == "yss-filesystem"
+                && root.target == "yss_filesystem"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -913,10 +912,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let watcher_notify_root = ProductionRoot {
         package_id: "watcher-notify-package".to_owned(),
-        package: "yss-project-watcher-notify".to_owned(),
-        target: "yss_project_watcher_notify".to_owned(),
+        package: "yss-filesystem".to_owned(),
+        target: "yss_filesystem".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-project-watcher-notify/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-filesystem/src/lib.rs"),
     };
     let build_root = ProductionRoot {
         package_id: "fixture-package".to_owned(),
@@ -1091,8 +1090,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &watcher_notify_root,
-                "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
-                "yss_project_watcher_notify",
+                "src-tauri/crates/yss-filesystem/src/lib.rs",
+                "yss_filesystem",
             ),
             module(
                 &execution_root,
@@ -1209,8 +1208,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::PureLeaf
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-project-watcher-notify/src/lib.rs"],
-        RustLayer::PlatformAdapter
+        classified["src-tauri/crates/yss-filesystem/src/lib.rs"],
+        RustLayer::Filesystem
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-execution/src/state.rs"],
@@ -1802,104 +1801,79 @@ fn chart_resource_cutover_does_not_keep_a_retired_rust_path() {
 }
 
 #[test]
-fn project_watcher_has_one_lifecycle_owner_and_notify_adapter_crate() {
+fn filesystem_has_no_internal_dependencies_and_project_policy_stays_above_it() {
     let facts = production_facts();
+    let filesystem_prefix = "src-tauri/crates/yss-filesystem/src/";
+    let mut modules = 0;
+    for (source, layer) in &facts.classification {
+        if source.starts_with(filesystem_prefix) {
+            modules += 1;
+            assert_eq!(*layer, RustLayer::Filesystem, "{source}");
+        }
+    }
+    assert!(modules > 0);
+    for dependency in &workspace_facts().dependency_declarations {
+        if dependency.owning_package == "yss-filesystem" {
+            assert_eq!(
+                dependency.authority,
+                CargoDependencyAuthority::External,
+                "{dependency:?}"
+            );
+            assert!(!dependency.package_name.starts_with("tauri"));
+        }
+    }
+    for dependency in &facts.dependencies {
+        if dependency.owning_package != "yss-filesystem" {
+            continue;
+        }
+        match &dependency.origin {
+            CanonicalOrigin::Repository { package_name, .. } => {
+                assert_eq!(package_name, "yss-filesystem")
+            }
+            CanonicalOrigin::External(origin) if origin.package_name == "notify" => {
+                assert_eq!(
+                    dependency.source_file,
+                    "src-tauri/crates/yss-filesystem/src/watcher/notify.rs"
+                );
+            }
+            _ => {}
+        }
+    }
     assert_eq!(
-        facts
-            .classification
-            .get("src-tauri/crates/yss-project-watcher/src/lib.rs"),
-        Some(&RustLayer::Application),
-        "the platform-neutral watcher lifecycle must be an Application service"
+        facts.classification["src-tauri/crates/yss-project/src/file_changes.rs"],
+        RustLayer::Project
     );
     assert_eq!(
-        facts
-            .classification
-            .get("src-tauri/crates/yss-project-watcher-notify/src/lib.rs"),
-        Some(&RustLayer::PlatformAdapter),
-        "the Notify implementation must be a Platform adapter"
+        facts.classification["src-tauri/crates/yss-project/src/filesystem.rs"],
+        RustLayer::Project
     );
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-project-watcher/Cargo.toml",
-        "src-tauri/crates/yss-project-watcher/src/lib.rs",
-        "src-tauri/crates/yss-project-watcher/src/tests.rs",
-        "src-tauri/crates/yss-project-watcher-notify/Cargo.toml",
-        "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "project watcher owner must exist at {relative}"
-        );
-    }
-    assert!(
-        !root
-            .join("src-tauri/crates/yss-application/src/project_watcher.rs")
-            .exists(),
-        "the root Application must not retain the watcher lifecycle owner"
-    );
-    for removed_root_adapter in [
-        "src-tauri/src/platform/mod.rs",
-        "src-tauri/src/platform/project_file_watcher.rs",
-    ] {
-        assert!(
-            !root.join(removed_root_adapter).exists(),
-            "the root crate must not retain watcher adapter {removed_root_adapter}"
-        );
-    }
-    for dependency in [
-        "yss-project-change = { path = \"../yss-project-change\" }",
-        "yss-project-filesystem = { path = \"../yss-project-filesystem\" }",
-    ] {
-        assert!(
-            declares_dependency("yss-project-watcher", dependency),
-            "project watcher must declare its canonical dependency {dependency}"
-        );
-    }
-    for forbidden in ["notify", "tauri"] {
-        assert!(
-            !declares_dependency_family("yss-project-watcher", forbidden),
-            "the platform-neutral watcher must not depend on {forbidden}"
-        );
-    }
-    for dependency in [
-        "notify.workspace = true",
-        "yss-project-change = { path = \"../yss-project-change\" }",
-        "yss-project-watcher = { path = \"../yss-project-watcher\" }",
-    ] {
-        assert!(
-            declares_dependency("yss-project-watcher-notify", dependency),
-            "Notify watcher must declare its canonical dependency {dependency}"
-        );
-    }
-    assert!(
-        !declares_dependency_family("yss-project-watcher-notify", "tauri"),
-        "the Notify adapter must remain independent of Tauri"
-    );
-    let owner =
-        std::fs::read_to_string(root.join("src-tauri/crates/yss-project-watcher/src/lib.rs"))
-            .expect("project watcher owner must be readable");
-    for owned_api in [
-        "pub struct ProjectWatcherState",
-        "pub trait ProjectFileWatcherFactory",
-        "pub trait ProjectChangeSink",
-        "pub enum ProjectFileWatcherDrainOutcome",
-    ] {
-        assert!(
-            owner.contains(owned_api),
-            "project watcher crate must own {owned_api}"
-        );
-    }
-    for removed_drift in ["PROJECT_WATCHER_QUIET_PERIOD", "DeliveryFailed"] {
-        assert!(
-            !owner.contains(removed_drift),
-            "project watcher must not restore dead or duplicate fact {removed_drift}"
-        );
-    }
-    let violations = project_watcher_source_violations(&repository_root());
-    assert!(
-        violations.is_empty(),
-        "{PROJECT_WATCHER_BOUNDARY_RULE} violations: {violations:#?}"
-    );
+
+    let source = "src-tauri/crates/yss-filesystem/src/root.rs";
+    let target = "yss_project_identity::identity::OperationId";
+    let declaration = "src-tauri/crates/yss-project-identity/src/identity.rs";
+    let dependency = CanonicalDependency {
+        owning_package: "yss-filesystem".into(),
+        source_file: source.into(),
+        owner: "yss_filesystem::root".into(),
+        kind: RustDependencyKind::Use,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: "yss-project-identity".into(),
+            repository_relative_declaration_file: declaration.into(),
+            fully_qualified_target: target.into(),
+            symbol: "OperationId".into(),
+        },
+        canonical_origin_target: target.into(),
+        line: 1,
+        column: 1,
+    };
+    let classification = BTreeMap::from([
+        (source.into(), RustLayer::Filesystem),
+        (declaration.into(), RustLayer::PureLeaf),
+    ]);
+    let findings = rust_dependency_findings(&[dependency], &classification).unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].key.rule_id, "rust.internal.filesystem-boundary");
 }
 
 #[test]

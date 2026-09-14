@@ -147,7 +147,7 @@ impl HostServices for PluginHostServices {
                 }
                 let directory = exchange_dir.join("snapshots");
                 fs::create_dir_all(&directory).map_err(|_| fail("plugin_storage_failed"))?;
-                if yss_project_filesystem::metadata_is_redirect(
+                if yss_filesystem::metadata_is_redirect(
                     &fs::symlink_metadata(&directory).map_err(|_| fail("plugin_storage_failed"))?,
                 ) {
                     return Err(fail("plugin_permission_denied"));
@@ -259,7 +259,7 @@ impl HostServices for PluginHostServices {
                     let mut component = root.clone();
                     for part in relative.split('/') {
                         component.push(part);
-                        if yss_project_filesystem::metadata_is_redirect(
+                        if yss_filesystem::metadata_is_redirect(
                             &fs::symlink_metadata(&component)
                                 .map_err(|_| fail("plugin_artifact_invalid"))?,
                         ) {

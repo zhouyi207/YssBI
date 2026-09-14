@@ -9265,6 +9265,7 @@ dependencies = [
  "yss-dataset-store",
  "yss-diagnostics",
  "yss-display-naming",
+ "yss-filesystem",
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
@@ -9286,8 +9287,6 @@ dependencies = [
  "yss-plugin-protocol",
  "yss-plugin-runtime",
  "yss-project",
- "yss-project-change",
- "yss-project-filesystem",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",
@@ -9296,8 +9295,6 @@ dependencies = [
  "yss-project-registry",
  "yss-project-registry-contract",
  "yss-project-registry-sqlite",
- "yss-project-watcher",
- "yss-project-watcher-notify",
  "yss-relational-contract",
  "yss-resource-naming",
  "yss-sci-contract",
@@ -9538,6 +9535,20 @@ dependencies = [
 [[package]]
 name = "yss-display-naming"
 version = "0.1.0"
+
+[[package]]
+name = "yss-filesystem"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+ "unicode-casefold",
+ "unicode-normalization",
+ "uuid",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "yss-function-editor-projection"
@@ -9822,13 +9833,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-sci-linalg"
-version = "0.1.0"
-dependencies = [
- "faer",
-]
-
-[[package]]
 name = "yss-math-expr"
 version = "0.1.0"
 dependencies = [
@@ -9894,43 +9898,16 @@ dependencies = [
  "yss-database-contract",
  "yss-dataset-store",
  "yss-display-naming",
+ "yss-filesystem",
  "yss-function-editor-projection",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-protocol",
- "yss-project-change",
- "yss-project-filesystem",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-model",
  "yss-project-operation",
- "yss-resource-lifecycle",
- "yss-resource-naming",
-]
-
-[[package]]
-name = "yss-project-change"
-version = "0.1.0"
-dependencies = [
- "yss-project-identity",
- "yss-project-layout",
-]
-
-[[package]]
-name = "yss-project-filesystem"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "thiserror 2.0.20",
- "unicode-casefold",
- "unicode-normalization",
- "uuid",
- "windows-sys 0.61.2",
- "yss-chart-document",
- "yss-graph-document",
- "yss-project-identity",
- "yss-project-layout",
  "yss-resource-lifecycle",
  "yss-resource-naming",
 ]
@@ -9997,7 +9974,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "walkdir",
- "yss-project-filesystem",
+ "yss-filesystem",
  "yss-project-identity",
  "yss-project-layout",
  "yss-project-model",
@@ -10024,27 +10001,6 @@ dependencies = [
  "tracing",
  "yss-project-identity",
  "yss-project-registry-contract",
-]
-
-[[package]]
-name = "yss-project-watcher"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.20",
- "tracing",
- "yss-project-change",
- "yss-project-filesystem",
-]
-
-[[package]]
-name = "yss-project-watcher-notify"
-version = "0.1.0"
-dependencies = [
- "notify",
- "thiserror 2.0.20",
- "tracing",
- "yss-project-change",
- "yss-project-watcher",
 ]
 
 [[package]]
@@ -10088,9 +10044,9 @@ dependencies = [
  "serde",
  "serde_json",
  "statrs",
- "yss-sci-linalg",
  "yss-math-expr",
  "yss-sci-contract",
+ "yss-sci-linalg",
 ]
 
 [[package]]
@@ -10100,6 +10056,13 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "yss-sci-linalg"
+version = "0.1.0"
+dependencies = [
+ "faer",
 ]
 
 [[package]]

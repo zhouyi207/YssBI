@@ -17,12 +17,12 @@ pub(crate) fn application_project_command_error(
 #[cfg(test)]
 mod tests {
     use super::application_project_command_error;
-    use yss_project_filesystem::ProjectFilesystemError;
+    use yss_project::ProjectOperationError;
 
     #[test]
     fn retains_recovery_required_wire_detail() {
         let error =
-            application_project_command_error(ProjectFilesystemError::ProjectRecoveryRequired {
+            application_project_command_error(ProjectOperationError::ProjectRecoveryRequired {
                 message: "test recovery".into(),
             });
 

@@ -4,8 +4,16 @@ pub mod execution_authority;
 pub mod graph_resource_index;
 mod manifest;
 pub use manifest::CURRENT_PROJECT_SCHEMA_VERSION;
+mod file_changes;
+mod filesystem;
+mod operation_error;
 pub(crate) mod project_change_reconciliation;
 pub mod project_error;
+pub use file_changes::{
+    ProjectIndexInvalidation, filesystem_change_affects_project_index, is_project_index_watch_path,
+};
+pub use filesystem::project_root_from_path;
+pub use operation_error::ProjectOperationError;
 mod resource_lifecycle_operation;
 
 pub mod database_authority;
@@ -82,7 +90,7 @@ pub mod fixtures {
     pub fn write_project(project_data: &ProjectData, path: &str) -> Result<(), ProjectError> {
         super::project_io::initialize_project_directory(
             project_data,
-            yss_project_filesystem::project_root_from_path(path).as_path(),
+            crate::project_root_from_path(path).as_path(),
         )
     }
 
@@ -91,7 +99,7 @@ pub mod fixtures {
         path: &str,
         graph_path: &GraphResourcePath,
     ) -> Result<String, ProjectError> {
-        let root = yss_project_filesystem::project_root_from_path(path);
+        let root = crate::project_root_from_path(path);
         std::fs::create_dir_all(&root)?;
         let (relative_path, contents) =
             super::project_io::serialize_graph_document(project_data, graph_path)?;
@@ -127,10 +135,7 @@ pub mod fixtures {
 
     pub fn flush_state(
         state: &super::ProjectState,
-    ) -> Result<
-        crate::project_writers::ProjectSaveResult,
-        yss_project_filesystem::ProjectFilesystemError,
-    > {
+    ) -> Result<crate::project_writers::ProjectSaveResult, crate::ProjectOperationError> {
         let session = state.capture_project_session()?;
         state.flush_project_documents(
             &session.instance_id,
@@ -141,10 +146,7 @@ pub mod fixtures {
     pub fn write_state_graph(
         state: &super::ProjectState,
         graph_path: &GraphResourcePath,
-    ) -> Result<
-        crate::project_writers::ProjectSaveResult,
-        yss_project_filesystem::ProjectFilesystemError,
-    > {
+    ) -> Result<crate::project_writers::ProjectSaveResult, crate::ProjectOperationError> {
         let session = state.capture_project_session()?;
         let revision = state
             .graph_resource_revisions
@@ -152,10 +154,8 @@ pub mod fixtures {
             .unwrap()
             .get(graph_path)
             .copied()
-            .ok_or_else(|| {
-                yss_project_filesystem::ProjectFilesystemError::TransactionPrepareFailed {
-                    message: format!("graph '{}' has no resource revision", graph_path),
-                }
+            .ok_or_else(|| crate::ProjectOperationError::TransactionPrepareFailed {
+                message: format!("graph '{}' has no resource revision", graph_path),
             })?;
         state.save_graph_document(
             &session.instance_id,

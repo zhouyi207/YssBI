@@ -1,7 +1,7 @@
+use crate::ProjectOperationError;
 use crate::{ProjectIndex, ProjectSession, ProjectState};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
 use yss_function_editor_projection::FunctionEditorProjection;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
@@ -10,7 +10,7 @@ impl ProjectState {
     pub fn read_project_index(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-    ) -> Result<ProjectIndex, ProjectFilesystemError> {
+    ) -> Result<ProjectIndex, ProjectOperationError> {
         read_project_index_with(self, expected_project_instance_id, |root| {
             crate::project_io::read_project_index_from_root(root).map_err(read_error)
         })
@@ -22,7 +22,7 @@ impl ProjectState {
         project: &ProjectInstanceId,
         publication_revision: u64,
         authority_generation: u64,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         let session = expected_session(self, project)?;
         self.validate_project_session(&session)?;
         let publication = self.mutation_publication.lock().unwrap();
@@ -46,7 +46,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         chart_path: &ChartResourcePath,
         expected_publication_revision: Option<u64>,
-    ) -> Result<ChartDocument, ProjectFilesystemError> {
+    ) -> Result<ChartDocument, ProjectOperationError> {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
@@ -55,7 +55,7 @@ impl ProjectState {
             return Err(stale_catalog("chart changed during index preparation"));
         }
         let document = data.charts.get(chart_path).cloned().ok_or_else(|| {
-            ProjectFilesystemError::ChartNotFound {
+            ProjectOperationError::ChartNotFound {
                 path: chart_path.clone(),
             }
         })?;
@@ -64,14 +64,14 @@ impl ProjectState {
     }
 }
 
-fn stale_project_lifecycle(message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::StaleProjectLifecycle {
+fn stale_project_lifecycle(message: impl Into<String>) -> ProjectOperationError {
+    ProjectOperationError::StaleProjectLifecycle {
         message: message.into(),
     }
 }
 
-fn stale_catalog(message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::CatalogResourceStale {
+fn stale_catalog(message: impl Into<String>) -> ProjectOperationError {
+    ProjectOperationError::CatalogResourceStale {
         message: message.into(),
     }
 }
@@ -79,10 +79,10 @@ fn stale_catalog(message: impl Into<String>) -> ProjectFilesystemError {
 fn expected_session(
     state: &ProjectState,
     expected_project_instance_id: &ProjectInstanceId,
-) -> Result<ProjectSession, ProjectFilesystemError> {
+) -> Result<ProjectSession, ProjectOperationError> {
     let session = state.capture_project_session()?;
     if &session.instance_id != expected_project_instance_id {
-        return Err(ProjectFilesystemError::StaleProjectLifecycle {
+        return Err(ProjectOperationError::StaleProjectLifecycle {
             message: format!(
                 "requested project instance '{}' is no longer active",
                 expected_project_instance_id
@@ -106,8 +106,8 @@ struct ProjectIndexAuthorityCapture {
 fn read_project_index_with(
     state: &ProjectState,
     expected_project_instance_id: &ProjectInstanceId,
-    read: impl FnOnce(&std::path::Path) -> Result<ProjectIndex, ProjectFilesystemError>,
-) -> Result<ProjectIndex, ProjectFilesystemError> {
+    read: impl FnOnce(&std::path::Path) -> Result<ProjectIndex, ProjectOperationError>,
+) -> Result<ProjectIndex, ProjectOperationError> {
     let session = expected_session(state, expected_project_instance_id)?;
     let _lease = state.filesystem().acquire(session.root.clone())?;
     state.validate_project_session(&session)?;
@@ -131,7 +131,7 @@ fn read_project_index_with(
 fn capture_project_index_authority(
     state: &ProjectState,
     session: &ProjectSession,
-) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
+) -> Result<ProjectIndexAuthorityCapture, ProjectOperationError> {
     capture_project_index_authority_with(state, session, || {})
 }
 
@@ -139,7 +139,7 @@ fn capture_project_index_authority_with(
     state: &ProjectState,
     session: &ProjectSession,
     after_declaration_capture: impl FnOnce(),
-) -> Result<ProjectIndexAuthorityCapture, ProjectFilesystemError> {
+) -> Result<ProjectIndexAuthorityCapture, ProjectOperationError> {
     let publication = state.mutation_publication.lock().unwrap();
     if publication.project_instance_id != session.instance_id.as_str() {
         return Err(stale_project_lifecycle(
@@ -175,7 +175,7 @@ fn validate_project_index_authority(
     state: &ProjectState,
     session: &ProjectSession,
     capture: &ProjectIndexAuthorityCapture,
-) -> Result<(), ProjectFilesystemError> {
+) -> Result<(), ProjectOperationError> {
     state.validate_project_session(session)?;
     state.validate_project_index_version(
         &session.instance_id,
@@ -193,7 +193,7 @@ fn overlay_authoritative_project_index(
     chart_revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
     database_revisions: &std::collections::HashMap<String, u64>,
     index: &mut ProjectIndex,
-) -> Result<(), ProjectFilesystemError> {
+) -> Result<(), ProjectOperationError> {
     index.databases = data
         .databases
         .iter()
@@ -235,7 +235,7 @@ fn overlay_authoritative_project_index(
             entry.function_signature = Some(function.signature.clone());
             entry.function_editor_projection = Some(
                 FunctionEditorProjection::try_from(function).map_err(|message| {
-                    ProjectFilesystemError::TransactionPrepareFailed {
+                    ProjectOperationError::TransactionPrepareFailed {
                         message: message.to_string(),
                     }
                 })?,
@@ -245,8 +245,8 @@ fn overlay_authoritative_project_index(
     Ok(())
 }
 
-fn read_error(error: crate::ProjectError) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
+fn read_error(error: crate::ProjectError) -> ProjectOperationError {
+    ProjectOperationError::TransactionPrepareFailed {
         message: error.to_string(),
     }
 }

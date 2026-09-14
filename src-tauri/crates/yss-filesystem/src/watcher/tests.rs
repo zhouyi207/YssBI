@@ -1,11 +1,11 @@
 use super::*;
+use crate::change::{FileChangeKind, FilesystemChange, RelativePath};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
-use yss_project_change::{ProjectChange, ProjectFileChangeKind, ProjectRelativePath};
 
 #[derive(Default)]
 struct FakeFactory {
@@ -13,15 +13,15 @@ struct FakeFactory {
 }
 
 struct FakeSessionControl {
-    epoch: ProjectWatcherEpoch,
-    sink: Arc<dyn ProjectChangeSink>,
+    epoch: WatcherEpoch,
+    sink: Arc<dyn ChangeSink>,
 }
 
 impl FakeFactory {
     fn emit_after_barrier(
         &self,
         session_index: usize,
-        change: ProjectChange,
+        change: FilesystemChange,
         ready: Arc<Barrier>,
         release: Arc<Barrier>,
     ) -> JoinHandle<()> {
@@ -35,14 +35,14 @@ impl FakeFactory {
         thread::spawn(move || {
             ready.wait();
             release.wait();
-            control.sink.publish(ObservedProjectChange {
+            control.sink.publish(ObservedChange {
                 epoch: control.epoch,
                 change,
             });
         })
     }
 
-    fn emit(&self, session_index: usize, change: ProjectChange) {
+    fn emit(&self, session_index: usize, change: FilesystemChange) {
         let control = self
             .sessions
             .lock()
@@ -50,20 +50,20 @@ impl FakeFactory {
             .get(session_index)
             .cloned()
             .expect("test watcher session exists");
-        control.sink.publish(ObservedProjectChange {
+        control.sink.publish(ObservedChange {
             epoch: control.epoch,
             change,
         });
     }
 }
 
-impl ProjectFileWatcherFactory for FakeFactory {
+impl FileWatcherFactory for FakeFactory {
     fn start(
         &self,
-        _project_root: &Path,
-        epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectChangeSink>,
-    ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
+        _root: &Path,
+        epoch: WatcherEpoch,
+        sink: Arc<dyn ChangeSink>,
+    ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
         self.sessions
             .lock()
             .unwrap()
@@ -74,22 +74,22 @@ impl ProjectFileWatcherFactory for FakeFactory {
 
 struct FakeSession;
 
-impl ProjectFileWatcherSession for FakeSession {
-    fn close_admission(self: Box<Self>) -> Box<dyn ProjectFileWatcherDrain> {
+impl FileWatcherSession for FakeSession {
+    fn close_admission(self: Box<Self>) -> Box<dyn FileWatcherDrain> {
         Box::new(ImmediateDrain)
     }
 }
 
 struct ImmediateDrain;
 
-impl ProjectFileWatcherDrain for ImmediateDrain {
-    fn finish(self: Box<Self>, _control: WatcherShutdownControl) -> ProjectFileWatcherDrainOutcome {
-        ProjectFileWatcherDrainOutcome::Drained
+impl FileWatcherDrain for ImmediateDrain {
+    fn finish(self: Box<Self>, _control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
+        FileWatcherDrainOutcome::Drained
     }
 }
 
 struct RecordingSink {
-    changes: Mutex<Vec<ProjectChange>>,
+    changes: Mutex<Vec<FilesystemChange>>,
 }
 
 impl RecordingSink {
@@ -100,27 +100,27 @@ impl RecordingSink {
     }
 }
 
-impl ProjectChangeSink for RecordingSink {
-    fn publish(&self, change: ObservedProjectChange) {
+impl ChangeSink for RecordingSink {
+    fn publish(&self, change: ObservedChange) {
         self.changes.lock().unwrap().push(change.change);
     }
 }
 
-fn relevant_change() -> ProjectChange {
-    ProjectChange::file(
-        ProjectRelativePath::try_new("events/changed.yssbi-event").unwrap(),
-        ProjectFileChangeKind::Modified,
+fn relevant_change() -> FilesystemChange {
+    FilesystemChange::file(
+        RelativePath::try_new("events/changed.yssbi-event").unwrap(),
+        FileChangeKind::Modified,
     )
 }
 
 #[test]
-fn replacement_drops_old_watcher_changes_before_project_reconciliation() {
+fn replacement_drops_old_watcher_changes_before_delivery() {
     let factory = Arc::new(FakeFactory::default());
-    let state = ProjectWatcherState::for_test(factory.clone());
+    let state = WatcherState::for_test(factory.clone());
     let sink = RecordingSink::new();
 
     state
-        .watch_project("C:/project/metadata.yssbi", sink.clone())
+        .watch("C:/project/metadata.yssbi", sink.clone())
         .unwrap();
 
     let ready = Arc::new(Barrier::new(2));
@@ -130,7 +130,7 @@ fn replacement_drops_old_watcher_changes_before_project_reconciliation() {
     ready.wait();
 
     state
-        .watch_project("C:/project/metadata.yssbi", sink.clone())
+        .watch("C:/project/metadata.yssbi", sink.clone())
         .unwrap();
 
     release.wait();
@@ -148,13 +148,10 @@ struct BlockingDrain {
     joined: Sender<()>,
 }
 
-impl ProjectFileWatcherDrain for BlockingDrain {
-    fn finish(
-        mut self: Box<Self>,
-        control: WatcherShutdownControl,
-    ) -> ProjectFileWatcherDrainOutcome {
+impl FileWatcherDrain for BlockingDrain {
+    fn finish(mut self: Box<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
         if control.is_expired() && !self.worker_done.load(Ordering::Acquire) {
-            return ProjectFileWatcherDrainOutcome::TimedOut(self);
+            return FileWatcherDrainOutcome::TimedOut(self);
         }
 
         self.worker
@@ -164,7 +161,7 @@ impl ProjectFileWatcherDrain for BlockingDrain {
             .unwrap();
         self.join_count.fetch_add(1, Ordering::AcqRel);
         self.joined.send(()).unwrap();
-        ProjectFileWatcherDrainOutcome::Drained
+        FileWatcherDrainOutcome::Drained
     }
 }
 
@@ -173,8 +170,8 @@ struct BlockingSession {
     drain: Option<BlockingDrain>,
 }
 
-impl ProjectFileWatcherSession for BlockingSession {
-    fn close_admission(mut self: Box<Self>) -> Box<dyn ProjectFileWatcherDrain> {
+impl FileWatcherSession for BlockingSession {
+    fn close_admission(mut self: Box<Self>) -> Box<dyn FileWatcherDrain> {
         self.close_count.fetch_add(1, Ordering::AcqRel);
         Box::new(self.drain.take().expect("test drain is present"))
     }
@@ -194,7 +191,7 @@ fn watcher_shutdown_timeout_retains_handle_and_retry_joins_worker() {
     });
     let join_count = Arc::new(AtomicUsize::new(0));
     let close_count = Arc::new(AtomicUsize::new(0));
-    let session: Box<dyn ProjectFileWatcherSession> = Box::new(BlockingSession {
+    let session: Box<dyn FileWatcherSession> = Box::new(BlockingSession {
         close_count: close_count.clone(),
         drain: Some(BlockingDrain {
             worker: Some(worker),
@@ -207,9 +204,8 @@ fn watcher_shutdown_timeout_retains_handle_and_retry_joins_worker() {
     let drain = session.close_admission();
     assert_eq!(close_count.load(Ordering::Acquire), 1);
     let drain = match drain.finish(WatcherShutdownControl::new(Instant::now())) {
-        ProjectFileWatcherDrainOutcome::TimedOut(drain) => drain,
-        ProjectFileWatcherDrainOutcome::Drained
-        | ProjectFileWatcherDrainOutcome::WorkerPanicked => {
+        FileWatcherDrainOutcome::TimedOut(drain) => drain,
+        FileWatcherDrainOutcome::Drained | FileWatcherDrainOutcome::WorkerPanicked => {
             panic!("the blocked worker must retain its drain owner")
         }
     };
@@ -219,7 +215,7 @@ fn watcher_shutdown_timeout_retains_handle_and_retry_joins_worker() {
     worker_done_rx.recv().unwrap();
     assert!(matches!(
         drain.finish(WatcherShutdownControl::new(Instant::now())),
-        ProjectFileWatcherDrainOutcome::Drained
+        FileWatcherDrainOutcome::Drained
     ));
     joined_rx.recv().unwrap();
     assert_eq!(join_count.load(Ordering::Acquire), 1);

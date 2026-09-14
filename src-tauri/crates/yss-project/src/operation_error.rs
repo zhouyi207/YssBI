@@ -5,7 +5,7 @@ use yss_graph_document::GraphResourcePath;
 use yss_resource_naming::ResourceNameValidationError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ProjectFilesystemError {
+pub enum ProjectOperationError {
     #[error("invalid resource name: {0}")]
     InvalidResourceName(#[from] ResourceNameValidationError),
     #[error("invalid chart resource path: {0}")]
@@ -59,7 +59,7 @@ pub enum ProjectFilesystemError {
     },
 }
 
-impl ProjectFilesystemError {
+impl ProjectOperationError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidResourceName(source) => resource_name_error_code(source),
@@ -102,7 +102,7 @@ impl ProjectFilesystemError {
     }
 }
 
-impl From<yss_resource_lifecycle::ResourceLifecycleError> for ProjectFilesystemError {
+impl From<yss_resource_lifecycle::ResourceLifecycleError> for ProjectOperationError {
     fn from(error: yss_resource_lifecycle::ResourceLifecycleError) -> Self {
         match error {
             yss_resource_lifecycle::ResourceLifecycleError::TransactionBusy { message } => {
@@ -126,9 +126,38 @@ const fn resource_name_error_code(error: &ResourceNameValidationError) -> &'stat
     }
 }
 
+impl From<yss_filesystem::FilesystemError> for ProjectOperationError {
+    fn from(error: yss_filesystem::FilesystemError) -> Self {
+        match error {
+            yss_filesystem::FilesystemError::InvalidRoot { path, message } => {
+                Self::InvalidRoot { path, message }
+            }
+            yss_filesystem::FilesystemError::RootAdmissionClosed { message } => {
+                Self::ProjectLifecycleAdmissionClosed { message }
+            }
+            yss_filesystem::FilesystemError::RecoveryRequired { message } => {
+                Self::ProjectRecoveryRequired { message }
+            }
+            yss_filesystem::FilesystemError::TransactionPrepareFailed { message } => {
+                Self::TransactionPrepareFailed { message }
+            }
+            yss_filesystem::FilesystemError::TransactionCommitFailed { message } => {
+                Self::TransactionCommitFailed { message }
+            }
+            yss_filesystem::FilesystemError::TransactionRollbackFailed {
+                message,
+                recovery_required,
+            } => Self::TransactionRollbackFailed {
+                message,
+                recovery_required,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ProjectFilesystemError;
+    use super::ProjectOperationError;
     use yss_chart_document::ChartResourcePathError;
     use yss_resource_lifecycle::ResourceLifecycleError;
     use yss_resource_naming::ResourceNameValidationError;
@@ -159,7 +188,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                ProjectFilesystemError::InvalidResourceName(source).code(),
+                ProjectOperationError::InvalidResourceName(source).code(),
                 code
             );
         }
@@ -167,12 +196,11 @@ mod tests {
 
     #[test]
     fn resource_path_errors_preserve_name_error_ipc_codes() {
-        let not_normalized = ProjectFilesystemError::InvalidChartResourcePath(
+        let not_normalized = ProjectOperationError::InvalidChartResourcePath(
             ChartResourcePathError::InvalidName(ResourceNameValidationError::NotNfc),
         );
-        let structurally_invalid = ProjectFilesystemError::InvalidChartResourcePath(
-            ChartResourcePathError::WrongDirectory,
-        );
+        let structurally_invalid =
+            ProjectOperationError::InvalidChartResourcePath(ChartResourcePathError::WrongDirectory);
 
         assert_eq!(not_normalized.code(), "resource_name_not_normalized");
         assert_eq!(structurally_invalid.code(), "invalid_resource_name");
@@ -180,21 +208,21 @@ mod tests {
 
     #[test]
     fn resource_lifecycle_errors_preserve_filesystem_error_categories() {
-        let busy = ProjectFilesystemError::from(ResourceLifecycleError::TransactionBusy {
+        let busy = ProjectOperationError::from(ResourceLifecycleError::TransactionBusy {
             message: "rename is active".into(),
         });
-        let stale = ProjectFilesystemError::from(ResourceLifecycleError::StaleLifecycle {
+        let stale = ProjectOperationError::from(ResourceLifecycleError::StaleLifecycle {
             message: "token was superseded".into(),
         });
 
         assert!(matches!(
             busy,
-            ProjectFilesystemError::FilesystemTransactionBusy { .. }
+            ProjectOperationError::FilesystemTransactionBusy { .. }
         ));
         assert_eq!(busy.code(), "filesystem_transaction_busy");
         assert!(matches!(
             stale,
-            ProjectFilesystemError::StaleResourceLifecycle { .. }
+            ProjectOperationError::StaleResourceLifecycle { .. }
         ));
         assert_eq!(stale.code(), "stale_resource_lifecycle");
     }

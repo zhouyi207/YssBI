@@ -127,7 +127,7 @@ describe("Architecture route navigation", () => {
 
     await click('[data-architecture-node="project"] button');
     expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain(
-      "yss-project-watcher-notify",
+      "yss-project-registry",
     );
 
     await click('button[aria-label="common.close"]');

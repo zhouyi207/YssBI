@@ -5,7 +5,7 @@ use super::execution::session_slot::{
     ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use yss_chart_document::{ChartDocument, ChartResourcePath};
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 use yss_resource_naming::ResourceName;
 
@@ -14,7 +14,7 @@ pub enum ChartApplicationError {
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error(transparent)]
-    Project(#[from] ProjectFilesystemError),
+    Project(#[from] ProjectOperationError),
     #[error("captured application session changed during chart operation")]
     SessionChanged(#[source] SessionRevalidationError),
 }
@@ -28,7 +28,7 @@ impl ApplicationState {
         database_id: Option<String>,
     ) -> Result<CommittedResourceMutation, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
-        let name = ResourceName::parse(&name).map_err(ProjectFilesystemError::from)?;
+        let name = ResourceName::parse(&name).map_err(ProjectOperationError::from)?;
         let result = captured.project().create_chart_resource(
             &project_instance_id,
             &name,
@@ -105,7 +105,7 @@ impl ApplicationState {
         lifecycle_token: u64,
     ) -> Result<CommittedResourceMutation, ChartApplicationError> {
         let captured = self.capture_chart_session(&project_instance_id)?;
-        let new_name = ResourceName::parse(&new_name).map_err(ProjectFilesystemError::from)?;
+        let new_name = ResourceName::parse(&new_name).map_err(ProjectOperationError::from)?;
         let result = captured.project().rename_chart_resource(
             &project_instance_id,
             &chart_path,
@@ -145,7 +145,7 @@ impl ApplicationState {
         let captured = self.capture_session()?;
         if captured.project_instance_id() != project_instance_id {
             return Err(ChartApplicationError::Project(
-                ProjectFilesystemError::StaleProjectLifecycle {
+                ProjectOperationError::StaleProjectLifecycle {
                     message: "chart project instance is stale".into(),
                 },
             ));

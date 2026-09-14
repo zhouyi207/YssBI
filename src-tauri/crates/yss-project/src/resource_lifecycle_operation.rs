@@ -1,5 +1,5 @@
+use crate::ProjectOperationError;
 use crate::ProjectSession;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_resource_lifecycle::{
     ResourceLifecycleBoundary, ResourceLifecycleGuard, ResourceLifecycleIntent,
     ResourceLifecycleOwner,
@@ -19,8 +19,8 @@ impl ResourceLifecycleOperation {
         }
     }
 
-    pub(crate) fn stale_error(&self) -> ProjectFilesystemError {
-        ProjectFilesystemError::StaleProjectLifecycle {
+    pub(crate) fn stale_error(&self) -> ProjectOperationError {
+        ProjectOperationError::StaleProjectLifecycle {
             message: format!(
                 "stale project lifecycle for resource '{}' in project instance '{}'",
                 self.owner.resource_path, self.owner.project_instance_id
@@ -45,10 +45,10 @@ impl ResourceRenameOwnershipLease {
     pub(crate) fn commit_with_boundary(
         &mut self,
         boundary: &mut ResourceLifecycleBoundary<'_>,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         boundary
             .commit_guard(&mut self.guard, ResourceLifecycleIntent::Unload)
-            .map_err(ProjectFilesystemError::from)?;
+            .map_err(ProjectOperationError::from)?;
         Ok(())
     }
 }
@@ -92,7 +92,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ProjectFilesystemError::StaleProjectLifecycle { .. }
+            ProjectOperationError::StaleProjectLifecycle { .. }
         ));
         std::fs::remove_dir_all(root).unwrap();
     }

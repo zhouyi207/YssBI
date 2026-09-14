@@ -10,7 +10,7 @@ serde.workspace = true
 thiserror.workspace = true
 walkdir.workspace = true
 dunce.workspace = true
-yss-project-filesystem = { path = "../yss-project-filesystem" }
+yss-filesystem = { path = "../yss-filesystem" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-project-model = { path = "../yss-project-model" }

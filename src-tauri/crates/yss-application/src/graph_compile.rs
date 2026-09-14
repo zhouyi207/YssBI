@@ -18,7 +18,7 @@ use yss_graph_execution::plan::{
     PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_runtime::GraphDraftCompilationError;
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,7 +46,7 @@ pub enum CompileGraphDraftError {
     #[error("project facts could not be captured")]
     ProjectFacts(#[source] crate::catalog_query::ProjectCatalogReadError),
     #[error("project snapshot failed")]
-    Project(#[source] ProjectFilesystemError),
+    Project(#[source] ProjectOperationError),
     #[error("database catalog snapshot failed")]
     Database(#[source] DatabaseError),
     #[error("graph resource contract mapping failed")]

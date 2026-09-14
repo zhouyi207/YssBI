@@ -1,7 +1,12 @@
-//! Native filesystem observation for the platform-neutral project watcher.
+//! Native filesystem observation for the platform-neutral filesystem watcher.
 
 #![forbid(unsafe_code)]
 
+use super::{
+    ChangeSink, FileWatcherDrain, FileWatcherDrainOutcome, FileWatcherFactory, FileWatcherSession,
+    FileWatcherStartError, ObservedChange, WatcherEpoch, WatcherShutdownControl,
+};
+use crate::change::{FileChangeKind, FilesystemChange, RelativePath};
 use notify::event::{AccessKind, AccessMode, ModifyKind};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
@@ -10,70 +15,75 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use thiserror::Error;
-use yss_project_change::{ProjectChange, ProjectFileChangeKind, ProjectRelativePath};
-use yss_project_watcher::{
-    FileWatcherStartError, ObservedProjectChange, ProjectChangeSink, ProjectFileWatcherDrain,
-    ProjectFileWatcherDrainOutcome, ProjectFileWatcherFactory, ProjectFileWatcherSession,
-    ProjectWatcherEpoch, WatcherShutdownControl,
-};
 
-const PROJECT_CHANGE_QUEUE_CAPACITY: usize = 1;
-const PROJECT_FILE_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);
+const CHANGE_QUEUE_CAPACITY: usize = 1;
+const FILE_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);
 
-pub struct NotifyProjectFileWatcher;
+pub struct NotifyFileWatcher {
+    filter: Arc<dyn Fn(&Path) -> bool + Send + Sync>,
+}
 
-impl NotifyProjectFileWatcher {
-    pub const fn new() -> Self {
-        Self
+impl NotifyFileWatcher {
+    pub fn new() -> Self {
+        Self::with_filter(|_| true)
+    }
+
+    /// Select observed relative paths without assigning domain meaning to them.
+    pub fn with_filter(filter: impl Fn(&Path) -> bool + Send + Sync + 'static) -> Self {
+        Self {
+            filter: Arc::new(filter),
+        }
     }
 }
 
-impl Default for NotifyProjectFileWatcher {
+impl Default for NotifyFileWatcher {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
+impl FileWatcherFactory for NotifyFileWatcher {
     fn start(
         &self,
-        project_root: &Path,
-        epoch: ProjectWatcherEpoch,
-        sink: Arc<dyn ProjectChangeSink>,
-    ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
-        let (sender, receiver) = mpsc::sync_channel(PROJECT_CHANGE_QUEUE_CAPACITY);
-        let callback_root = project_root.to_path_buf();
+        root: &Path,
+        epoch: WatcherEpoch,
+        sink: Arc<dyn ChangeSink>,
+    ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
+        let (sender, receiver) = mpsc::sync_channel(CHANGE_QUEUE_CAPACITY);
+        let callback_root = root.to_path_buf();
+        let filter = self.filter.clone();
         let callback_sender = sender.clone();
         let mut watcher =
             notify::recommended_watcher(move |result: notify::Result<Event>| match result {
                 Ok(event) => {
-                    if project_change_from_event(callback_root.as_path(), &event).is_some() {
+                    if change_from_event(callback_root.as_path(), &event, filter.as_ref()).is_some()
+                    {
                         enqueue(&callback_sender);
                     }
                 }
                 Err(source) => {
-                    let error = NotifyProjectFileWatcherError::Callback(source);
+                    let error = NotifyFileWatcherError::Callback(source);
                     tracing::warn!(
-                        target: "yssbi::project_watcher_notify",
+                        target: "yss_filesystem::watcher::notify",
                         log_domain = "system",
                         log_event = "watcherError",
                         error = %error,
-                        "Project file watcher reported an error"
+                        "Filesystem watcher reported an error"
                     );
                     enqueue(&callback_sender);
                 }
             })
-            .map_err(NotifyProjectFileWatcherError::Create)
+            .map_err(NotifyFileWatcherError::Create)
             .map_err(report_start_error)?;
         watcher
-            .watch(project_root, RecursiveMode::Recursive)
-            .map_err(NotifyProjectFileWatcherError::Watch)
+            .watch(root, RecursiveMode::Recursive)
+            .map_err(NotifyFileWatcherError::Watch)
             .map_err(report_start_error)?;
 
         let (completion_sender, completion_receiver) = mpsc::sync_channel(1);
         let worker = spawn_worker(receiver, epoch, sink, completion_sender)
-            .map_err(|error| report_start_error(NotifyProjectFileWatcherError::Worker(error)))?;
-        Ok(Box::new(NotifyProjectFileWatcherSession {
+            .map_err(|error| report_start_error(NotifyFileWatcherError::Worker(error)))?;
+        Ok(Box::new(NotifyFileWatcherSession {
             sender: Some(sender),
             watcher: Some(watcher),
             completion: Some(completion_receiver),
@@ -87,53 +97,52 @@ fn enqueue(sender: &SyncSender<()>) {
     let _ = sender.try_send(());
 }
 
-fn project_change_from_event(root: &Path, event: &Event) -> Option<ProjectChange> {
+fn change_from_event(
+    root: &Path,
+    event: &Event,
+    filter: &dyn Fn(&Path) -> bool,
+) -> Option<FilesystemChange> {
     if event.need_rescan() {
-        return Some(ProjectChange::rescan_required());
+        return Some(FilesystemChange::rescan_required());
     }
-    let kind = project_file_change_kind(&event.kind)?;
+    file_change_kind(&event.kind)?;
     event.paths.iter().find_map(|path| {
         let relative = path.strip_prefix(root).ok()?.to_path_buf();
-        let relative = ProjectRelativePath::try_new(relative).ok()?;
-        let change = ProjectChange::file(relative, kind);
-        change
-            .affects_project_index()
-            .then_some(ProjectChange::rescan_required())
+        if relative.as_os_str().is_empty() {
+            return Some(FilesystemChange::rescan_required());
+        }
+        let relative = RelativePath::try_new(relative).ok()?;
+        filter(relative.as_path()).then_some(FilesystemChange::rescan_required())
     })
 }
 
-fn project_file_change_kind(kind: &EventKind) -> Option<ProjectFileChangeKind> {
+fn file_change_kind(kind: &EventKind) -> Option<FileChangeKind> {
     match kind {
-        EventKind::Create(_) => Some(ProjectFileChangeKind::Created),
-        EventKind::Modify(ModifyKind::Name(_)) => Some(ProjectFileChangeKind::Renamed),
-        EventKind::Modify(_) => Some(ProjectFileChangeKind::Modified),
-        EventKind::Remove(_) => Some(ProjectFileChangeKind::Removed),
-        EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
-            Some(ProjectFileChangeKind::Modified)
-        }
+        EventKind::Create(_) => Some(FileChangeKind::Created),
+        EventKind::Modify(ModifyKind::Name(_)) => Some(FileChangeKind::Renamed),
+        EventKind::Modify(_) => Some(FileChangeKind::Modified),
+        EventKind::Remove(_) => Some(FileChangeKind::Removed),
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => Some(FileChangeKind::Modified),
         EventKind::Access(_) => None,
-        EventKind::Other | EventKind::Any => Some(ProjectFileChangeKind::Modified),
+        EventKind::Other | EventKind::Any => Some(FileChangeKind::Modified),
     }
 }
 
 fn spawn_worker(
     receiver: Receiver<()>,
-    epoch: ProjectWatcherEpoch,
-    sink: Arc<dyn ProjectChangeSink>,
+    epoch: WatcherEpoch,
+    sink: Arc<dyn ChangeSink>,
     completion: SyncSender<WorkerTerminal>,
 ) -> Result<JoinHandle<()>, std::io::Error> {
     thread::Builder::new()
-        .name("yssbi-project-watcher".into())
+        .name("yss-filesystem-watcher".into())
         .spawn(move || {
             let terminal = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 while receiver.recv().is_ok() {
-                    while receiver
-                        .recv_timeout(PROJECT_FILE_WATCHER_QUIET_PERIOD)
-                        .is_ok()
-                    {}
-                    sink.publish(ObservedProjectChange {
+                    while receiver.recv_timeout(FILE_WATCHER_QUIET_PERIOD).is_ok() {}
+                    sink.publish(ObservedChange {
                         epoch,
-                        change: ProjectChange::rescan_required(),
+                        change: FilesystemChange::rescan_required(),
                     });
                 }
             }));
@@ -151,25 +160,25 @@ enum WorkerTerminal {
     Panicked,
 }
 
-struct NotifyProjectFileWatcherSession {
+struct NotifyFileWatcherSession {
     sender: Option<SyncSender<()>>,
     watcher: Option<RecommendedWatcher>,
     completion: Option<Receiver<WorkerTerminal>>,
     worker: Option<JoinHandle<()>>,
 }
 
-impl ProjectFileWatcherSession for NotifyProjectFileWatcherSession {
-    fn close_admission(mut self: Box<Self>) -> Box<dyn ProjectFileWatcherDrain> {
+impl FileWatcherSession for NotifyFileWatcherSession {
+    fn close_admission(mut self: Box<Self>) -> Box<dyn FileWatcherDrain> {
         self.sender.take();
         self.watcher.take();
-        Box::new(NotifyProjectFileWatcherDrain {
+        Box::new(NotifyFileWatcherDrain {
             completion: self.completion.take(),
             worker: self.worker.take(),
         })
     }
 }
 
-impl Drop for NotifyProjectFileWatcherSession {
+impl Drop for NotifyFileWatcherSession {
     fn drop(&mut self) {
         self.sender.take();
         self.watcher.take();
@@ -179,29 +188,26 @@ impl Drop for NotifyProjectFileWatcherSession {
     }
 }
 
-struct NotifyProjectFileWatcherDrain {
+struct NotifyFileWatcherDrain {
     completion: Option<Receiver<WorkerTerminal>>,
     worker: Option<JoinHandle<()>>,
 }
 
-impl ProjectFileWatcherDrain for NotifyProjectFileWatcherDrain {
-    fn finish(
-        mut self: Box<Self>,
-        control: WatcherShutdownControl,
-    ) -> ProjectFileWatcherDrainOutcome {
+impl FileWatcherDrain for NotifyFileWatcherDrain {
+    fn finish(mut self: Box<Self>, control: WatcherShutdownControl) -> FileWatcherDrainOutcome {
         let terminal = match self.completion.as_ref() {
             Some(completion) => match control.remaining() {
                 Some(remaining) => match completion.recv_timeout(remaining) {
                     Ok(terminal) => terminal,
                     Err(mpsc::RecvTimeoutError::Timeout) => {
-                        return ProjectFileWatcherDrainOutcome::TimedOut(self);
+                        return FileWatcherDrainOutcome::TimedOut(self);
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => WorkerTerminal::Panicked,
                 },
                 None => match completion.try_recv() {
                     Ok(terminal) => terminal,
                     Err(mpsc::TryRecvError::Empty) => {
-                        return ProjectFileWatcherDrainOutcome::TimedOut(self);
+                        return FileWatcherDrainOutcome::TimedOut(self);
                     }
                     Err(mpsc::TryRecvError::Disconnected) => WorkerTerminal::Panicked,
                 },
@@ -213,13 +219,13 @@ impl ProjectFileWatcherDrain for NotifyProjectFileWatcherDrain {
             join_worker(worker);
         }
         match terminal {
-            WorkerTerminal::Drained => ProjectFileWatcherDrainOutcome::Drained,
-            WorkerTerminal::Panicked => ProjectFileWatcherDrainOutcome::WorkerPanicked,
+            WorkerTerminal::Drained => FileWatcherDrainOutcome::Drained,
+            WorkerTerminal::Panicked => FileWatcherDrainOutcome::WorkerPanicked,
         }
     }
 }
 
-impl Drop for NotifyProjectFileWatcherDrain {
+impl Drop for NotifyFileWatcherDrain {
     fn drop(&mut self) {
         if let Some(worker) = self.worker.take() {
             spawn_worker_reaper(worker);
@@ -233,29 +239,29 @@ fn join_worker(worker: JoinHandle<()>) {
 
 fn spawn_worker_reaper(worker: JoinHandle<()>) {
     let _ = thread::Builder::new()
-        .name("yssbi-project-watcher-reaper".into())
+        .name("yss-filesystem-watcher-reaper".into())
         .spawn(move || join_worker(worker));
 }
 
 #[derive(Debug, Error)]
-enum NotifyProjectFileWatcherError {
-    #[error("failed to create the project file watcher")]
+enum NotifyFileWatcherError {
+    #[error("failed to create the filesystem watcher")]
     Create(#[source] notify::Error),
-    #[error("failed to watch the project root")]
+    #[error("failed to watch the filesystem root")]
     Watch(#[source] notify::Error),
-    #[error("project file watcher callback failed")]
+    #[error("filesystem watcher callback failed")]
     Callback(#[source] notify::Error),
-    #[error("failed to spawn the project file watcher worker")]
+    #[error("failed to spawn the filesystem watcher worker")]
     Worker(#[source] std::io::Error),
 }
 
-fn report_start_error(error: NotifyProjectFileWatcherError) -> FileWatcherStartError {
+fn report_start_error(error: NotifyFileWatcherError) -> FileWatcherStartError {
     tracing::warn!(
-        target: "yssbi::project_watcher_notify",
+        target: "yss_filesystem::watcher::notify",
         log_domain = "system",
         log_event = "watcherStartFailed",
         error = %error,
-        "Failed to start project file watcher"
+        "Failed to start filesystem watcher"
     );
     FileWatcherStartError::StartFailed
 }
@@ -266,6 +272,10 @@ mod tests {
     use notify::event::{EventAttributes, RenameMode};
     use std::path::PathBuf;
 
+    fn observe(root: &Path, event: &Event) -> Option<FilesystemChange> {
+        change_from_event(root, event, &|_| true)
+    }
+
     fn path_event(root: &Path, relative: &str) -> Event {
         Event {
             kind: EventKind::Modify(ModifyKind::Any),
@@ -275,29 +285,40 @@ mod tests {
     }
 
     #[test]
-    fn unrelated_event_does_not_block_a_relevant_change() {
-        let root = PathBuf::from(r"C:\project");
+    fn caller_filter_controls_file_admission_without_suppressing_root_rescans() {
+        let root = PathBuf::from("watch-root");
+        let filter = |path: &Path| path.extension().is_some_and(|extension| extension == "bin");
+        assert!(change_from_event(&root, &path_event(&root, "ignored.txt"), &filter).is_none());
+        assert!(change_from_event(&root, &path_event(&root, "accepted.bin"), &filter).is_some());
+        let root_event =
+            Event::new(EventKind::Remove(notify::event::RemoveKind::Folder)).add_path(root.clone());
+        assert!(change_from_event(&root, &root_event, &filter).is_some());
+    }
+
+    #[test]
+    fn default_observer_accepts_arbitrary_file_names() {
+        let root = PathBuf::from("watch-root");
         let unrelated = path_event(root.as_path(), "README.md");
         let relevant = path_event(root.as_path(), "events/foo.yssbi-event");
 
-        assert!(project_change_from_event(root.as_path(), &unrelated).is_none());
+        assert!(observe(root.as_path(), &unrelated).is_some());
         assert_eq!(
-            project_change_from_event(root.as_path(), &relevant),
-            Some(ProjectChange::RescanRequired)
+            observe(root.as_path(), &relevant),
+            Some(FilesystemChange::RescanRequired)
         );
     }
 
     #[test]
-    fn observed_paths_outside_the_project_root_are_rejected() {
-        let root = PathBuf::from(r"C:\project");
+    fn observed_paths_outside_the_root_are_rejected() {
+        let root = PathBuf::from("watch-root");
         let outside = path_event(root.as_path(), r"..\other\metadata.yssbi");
 
-        assert!(project_change_from_event(root.as_path(), &outside).is_none());
+        assert!(observe(root.as_path(), &outside).is_none());
     }
 
     #[test]
     fn read_access_is_ignored_while_write_close_and_rename_are_retained() {
-        let root = PathBuf::from(r"C:\project");
+        let root = PathBuf::from("watch-root");
         let access = Event {
             kind: EventKind::Access(AccessKind::Read),
             paths: vec![root.join("metadata.yssbi")],
@@ -314,17 +335,17 @@ mod tests {
             attrs: EventAttributes::default(),
         };
 
-        assert!(project_change_from_event(root.as_path(), &access).is_none());
-        assert!(project_change_from_event(root.as_path(), &write_closed).is_some());
+        assert!(observe(root.as_path(), &access).is_none());
+        assert!(observe(root.as_path(), &write_closed).is_some());
         assert_eq!(
-            project_change_from_event(root.as_path(), &rename),
-            Some(ProjectChange::RescanRequired)
+            observe(root.as_path(), &rename),
+            Some(FilesystemChange::RescanRequired)
         );
     }
 
     #[test]
     fn mixed_boundary_event_keeps_a_relevant_in_root_path() {
-        let root = PathBuf::from(r"C:\project");
+        let root = PathBuf::from("watch-root");
         let event = Event {
             kind: EventKind::Modify(ModifyKind::Name(RenameMode::Any)),
             paths: vec![
@@ -334,34 +355,34 @@ mod tests {
             attrs: EventAttributes::default(),
         };
 
-        assert!(project_change_from_event(root.as_path(), &event).is_some());
+        assert!(observe(root.as_path(), &event).is_some());
         let rescan = Event::new(EventKind::Other).set_flag(notify::event::Flag::Rescan);
         assert_eq!(
-            project_change_from_event(root.as_path(), &rescan),
-            Some(ProjectChange::RescanRequired)
+            observe(root.as_path(), &rescan),
+            Some(FilesystemChange::RescanRequired)
         );
     }
 
     #[test]
     fn pending_rescan_survives_a_full_queue_while_the_sink_is_busy() {
-        struct CaptureEpoch(SyncSender<ProjectWatcherEpoch>);
-        impl ProjectFileWatcherFactory for CaptureEpoch {
+        struct CaptureEpoch(SyncSender<WatcherEpoch>);
+        impl FileWatcherFactory for CaptureEpoch {
             fn start(
                 &self,
                 _: &Path,
-                epoch: ProjectWatcherEpoch,
-                _: Arc<dyn ProjectChangeSink>,
-            ) -> Result<Box<dyn ProjectFileWatcherSession>, FileWatcherStartError> {
+                epoch: WatcherEpoch,
+                _: Arc<dyn ChangeSink>,
+            ) -> Result<Box<dyn FileWatcherSession>, FileWatcherStartError> {
                 self.0.send(epoch).unwrap();
                 Err(FileWatcherStartError::StartFailed)
             }
         }
         struct BlockingSink {
-            published: SyncSender<ObservedProjectChange>,
+            published: SyncSender<ObservedChange>,
             resume: std::sync::Mutex<Receiver<()>>,
         }
-        impl ProjectChangeSink for BlockingSink {
-            fn publish(&self, change: ObservedProjectChange) {
+        impl ChangeSink for BlockingSink {
+            fn publish(&self, change: ObservedChange) {
                 let _ = self.published.send(change);
                 let _ = self.resume.lock().unwrap().recv();
             }
@@ -373,15 +394,15 @@ mod tests {
             resume: std::sync::Mutex::new(waiting),
         });
         let (epochs, epoch) = mpsc::sync_channel(1);
-        let owner = yss_project_watcher::ProjectWatcherState::new(Arc::new(CaptureEpoch(epochs)));
-        assert!(owner.watch_project("test-project", sink.clone()).is_err());
+        let owner = crate::watcher::WatcherState::new(Arc::new(CaptureEpoch(epochs)));
+        assert!(owner.watch("test-directory", sink.clone()).is_err());
         let epoch = epoch.recv().unwrap();
-        let (sender, receiver) = mpsc::sync_channel(PROJECT_CHANGE_QUEUE_CAPACITY);
+        let (sender, receiver) = mpsc::sync_channel(CHANGE_QUEUE_CAPACITY);
         let (complete, completion) = mpsc::sync_channel(1);
         let worker = spawn_worker(receiver, epoch, sink, complete).unwrap();
         enqueue(&sender);
         let first = observed.recv_timeout(Duration::from_secs(3)).unwrap();
-        assert_eq!(first.change, ProjectChange::RescanRequired);
+        assert_eq!(first.change, FilesystemChange::RescanRequired);
         for _ in 0..100 {
             enqueue(&sender);
         }

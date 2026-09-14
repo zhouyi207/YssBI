@@ -1,10 +1,8 @@
-use crate::ProjectFilesystemError;
+use crate::{FilesystemError, RootIdentity};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::{Component, Path, PathBuf};
-use yss_project_identity::ProjectRootIdentity;
-use yss_project_layout::PROJECT_METADATA_FILE;
 
 #[cfg(any(test, feature = "test-support"))]
 thread_local! {
@@ -20,16 +18,16 @@ type NativePathIdentity = WindowsPathIdentity;
 type NativePathIdentity = PathBuf;
 
 #[derive(Clone, Debug)]
-pub struct ProjectRootBinding {
+pub struct RootBinding {
     caller_root: PathBuf,
-    normalized: NormalizedProjectRoot,
-    identity: Option<ProjectRootIdentity>,
+    normalized: NormalizedRoot,
+    identity: Option<RootIdentity>,
 }
 
-impl ProjectRootBinding {
-    pub fn for_destination(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+impl RootBinding {
+    pub fn for_destination(path: impl AsRef<Path>) -> Result<Self, FilesystemError> {
         let caller_root = validate_caller_root_components(path.as_ref(), false)?;
-        let normalized = NormalizedProjectRoot::from_project_path(&caller_root)?;
+        let normalized = NormalizedRoot::from_path(&caller_root)?;
         let identity = root_object_identity_if_existing(&caller_root)?;
         Ok(Self {
             caller_root,
@@ -38,9 +36,9 @@ impl ProjectRootBinding {
         })
     }
 
-    pub fn for_existing(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+    pub fn for_existing(path: impl AsRef<Path>) -> Result<Self, FilesystemError> {
         let caller_root = validate_caller_root_components(path.as_ref(), true)?;
-        let normalized = NormalizedProjectRoot::from_project_path(&caller_root)?;
+        let normalized = NormalizedRoot::from_path(&caller_root)?;
         let identity = Some(root_object_identity(&caller_root)?);
         Ok(Self {
             caller_root,
@@ -49,31 +47,31 @@ impl ProjectRootBinding {
         })
     }
 
-    pub fn normalized(&self) -> &NormalizedProjectRoot {
+    pub fn normalized(&self) -> &NormalizedRoot {
         &self.normalized
     }
 
-    pub fn identity(&self) -> Option<&ProjectRootIdentity> {
+    pub fn identity(&self) -> Option<&RootIdentity> {
         self.identity.as_ref()
     }
 
-    pub fn bind_existing(&self) -> Result<Self, ProjectFilesystemError> {
+    pub fn bind_existing(&self) -> Result<Self, FilesystemError> {
         let rebound = Self::for_existing(&self.caller_root)?;
         if rebound.normalized != self.normalized {
             return Err(invalid_root(
                 &self.caller_root,
-                "project root changed while waiting",
+                "filesystem root changed while waiting",
             ));
         }
         Ok(rebound)
     }
 
-    pub fn revalidate(&self) -> Result<(), ProjectFilesystemError> {
+    pub fn revalidate(&self) -> Result<(), FilesystemError> {
         let rebound = Self::for_existing(&self.caller_root)?;
         if rebound.normalized != self.normalized || rebound.identity != self.identity {
             return Err(invalid_root(
                 &self.caller_root,
-                "project root native identity changed",
+                "filesystem root native identity changed",
             ));
         }
         Ok(())
@@ -81,43 +79,43 @@ impl ProjectRootBinding {
 }
 
 #[derive(Clone, Debug)]
-pub struct NormalizedProjectRoot {
+pub struct NormalizedRoot {
     path: PathBuf,
     identity: NativePathIdentity,
 }
 
-impl NormalizedProjectRoot {
-    pub fn from_project_path(path: impl AsRef<Path>) -> Result<Self, ProjectFilesystemError> {
+impl NormalizedRoot {
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, FilesystemError> {
         #[cfg(any(test, feature = "test-support"))]
         NORMALIZED_ROOT_RECONSTRUCTIONS.set(NORMALIZED_ROOT_RECONSTRUCTIONS.get() + 1);
         let original = path.as_ref().to_path_buf();
-        let trimmed = trim_path(&original);
-        if trimmed.as_os_str().is_empty() {
-            return Err(ProjectFilesystemError::InvalidRoot {
+        let input = original.clone();
+        if input.as_os_str().is_empty() {
+            return Err(FilesystemError::InvalidRoot {
                 path: original,
                 message: "path is empty".into(),
             });
         }
 
-        let project_root = native_project_root_from_path(&trimmed);
-        let absolute = if project_root.is_absolute() {
-            project_root
+        let directory = input;
+        let absolute = if directory.is_absolute() {
+            directory
         } else {
             std::env::current_dir()
-                .map_err(|error| ProjectFilesystemError::InvalidRoot {
+                .map_err(|error| FilesystemError::InvalidRoot {
                     path: original.clone(),
                     message: format!("failed to resolve current directory: {error}"),
                 })?
-                .join(project_root)
+                .join(directory)
         };
         let path = normalize_from_existing_ancestor(&absolute).map_err(|error| {
-            ProjectFilesystemError::InvalidRoot {
+            FilesystemError::InvalidRoot {
                 path: original.clone(),
                 message: error.to_string(),
             }
         })?;
         let identity =
-            native_path_identity(&path).map_err(|error| ProjectFilesystemError::InvalidRoot {
+            native_path_identity(&path).map_err(|error| FilesystemError::InvalidRoot {
                 path: original,
                 message: format!("failed to build filesystem identity: {error}"),
             })?;
@@ -140,27 +138,27 @@ pub fn normalized_root_reconstruction_count_for_test() -> usize {
     NORMALIZED_ROOT_RECONSTRUCTIONS.get()
 }
 
-impl PartialEq for NormalizedProjectRoot {
+impl PartialEq for NormalizedRoot {
     fn eq(&self, other: &Self) -> bool {
         self.identity == other.identity
     }
 }
 
-impl Eq for NormalizedProjectRoot {}
+impl Eq for NormalizedRoot {}
 
-impl Hash for NormalizedProjectRoot {
+impl Hash for NormalizedRoot {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.identity.hash(state);
     }
 }
 
-impl PartialOrd for NormalizedProjectRoot {
+impl PartialOrd for NormalizedRoot {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for NormalizedProjectRoot {
+impl Ord for NormalizedRoot {
     fn cmp(&self, other: &Self) -> Ordering {
         self.identity.cmp(&other.identity)
     }
@@ -169,13 +167,13 @@ impl Ord for NormalizedProjectRoot {
 fn validate_caller_root_components(
     path: &Path,
     require_existing: bool,
-) -> Result<PathBuf, ProjectFilesystemError> {
+) -> Result<PathBuf, FilesystemError> {
     let original = path.to_path_buf();
-    let trimmed = trim_path(path);
-    if trimmed.as_os_str().is_empty() {
+    let input = original.clone();
+    if input.as_os_str().is_empty() {
         return Err(invalid_root(original, "path is empty"));
     }
-    let root = native_project_root_from_path(&trimmed);
+    let root = input;
     let absolute = if root.is_absolute() {
         root
     } else {
@@ -197,7 +195,7 @@ fn validate_caller_root_components(
                     return Err(invalid_root(
                         &original,
                         format!(
-                            "project root component '{}' is a redirect",
+                            "filesystem root component '{}' is a redirect",
                             current.display()
                         ),
                     ));
@@ -206,7 +204,7 @@ fn validate_caller_root_components(
                     return Err(invalid_root(
                         &original,
                         format!(
-                            "project root ancestor '{}' is not a directory",
+                            "filesystem root ancestor '{}' is not a directory",
                             current.display()
                         ),
                     ));
@@ -217,7 +215,7 @@ fn validate_caller_root_components(
         }
     }
     if require_existing && missing {
-        return Err(invalid_root(&original, "project root does not exist"));
+        return Err(invalid_root(&original, "filesystem root does not exist"));
     }
     Ok(lexical)
 }
@@ -238,9 +236,7 @@ fn lexical_absolute_path(path: &Path) -> PathBuf {
     normalized
 }
 
-fn root_object_identity_if_existing(
-    root: &Path,
-) -> Result<Option<ProjectRootIdentity>, ProjectFilesystemError> {
+fn root_object_identity_if_existing(root: &Path) -> Result<Option<RootIdentity>, FilesystemError> {
     match std::fs::symlink_metadata(root) {
         Ok(_) => root_object_identity(root).map(Some),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -248,11 +244,14 @@ fn root_object_identity_if_existing(
     }
 }
 
-fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFilesystemError> {
+fn root_object_identity(root: &Path) -> Result<RootIdentity, FilesystemError> {
     let metadata =
         std::fs::symlink_metadata(root).map_err(|error| invalid_root(root, error.to_string()))?;
     if super::transaction::metadata_is_redirect(&metadata) || !metadata.is_dir() {
-        return Err(invalid_root(root, "project root is not a real directory"));
+        return Err(invalid_root(
+            root,
+            "filesystem root is not a real directory",
+        ));
     }
     #[cfg(windows)]
     {
@@ -279,10 +278,10 @@ fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFiles
             ));
         }
         if information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return Err(invalid_root(root, "project root is a reparse point"));
+            return Err(invalid_root(root, "filesystem root is a reparse point"));
         }
         let file = ((information.nFileIndexHigh as u64) << 32) | information.nFileIndexLow as u64;
-        return Ok(ProjectRootIdentity::from_canonical(format!(
+        return Ok(RootIdentity::from_native(format!(
             "windows:{:08x}:{file:016x}",
             information.dwVolumeSerialNumber
         )));
@@ -290,7 +289,7 @@ fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFiles
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        return Ok(ProjectRootIdentity::from_canonical(format!(
+        return Ok(RootIdentity::from_native(format!(
             "unix:{:016x}:{:016x}",
             metadata.dev(),
             metadata.ino()
@@ -299,41 +298,15 @@ fn root_object_identity(root: &Path) -> Result<ProjectRootIdentity, ProjectFiles
     #[allow(unreachable_code)]
     Err(invalid_root(
         root,
-        "native project root identity is unsupported",
+        "native filesystem root identity is unsupported",
     ))
 }
 
-fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::InvalidRoot {
+fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> FilesystemError {
+    FilesystemError::InvalidRoot {
         path: path.as_ref().to_path_buf(),
         message: message.into(),
     }
-}
-
-fn trim_path(path: &Path) -> PathBuf {
-    path.to_str()
-        .map(|text| PathBuf::from(text.trim()))
-        .unwrap_or_else(|| path.to_path_buf())
-}
-
-pub fn project_root_from_path(path: impl AsRef<Path>) -> PathBuf {
-    let path = trim_path(path.as_ref());
-    let is_metadata_file = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case(PROJECT_METADATA_FILE));
-    if path.is_file() || is_metadata_file {
-        path.parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .map(Path::to_path_buf)
-            .unwrap_or(path)
-    } else {
-        path
-    }
-}
-
-fn native_project_root_from_path(path: &Path) -> PathBuf {
-    project_root_from_path(path)
 }
 
 fn normalize_from_existing_ancestor(path: &Path) -> std::io::Result<PathBuf> {

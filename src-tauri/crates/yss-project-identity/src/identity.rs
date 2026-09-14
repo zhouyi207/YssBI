@@ -36,6 +36,10 @@ impl OperationId {
     pub const fn from_uuid(value: Uuid) -> Self {
         Self(value)
     }
+
+    pub const fn as_uuid(self) -> Uuid {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

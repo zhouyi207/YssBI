@@ -9,10 +9,10 @@ pub(crate) fn validate_context_revisions(
         ChartResourcePath,
         yss_project_identity::ResourceRevision,
     >,
-) -> Result<(), ProjectFilesystemError> {
+) -> Result<(), ProjectOperationError> {
     for resource in &context.affected_resources {
         let expected = context.expected_revisions.get(resource).ok_or_else(|| {
-            ProjectFilesystemError::ResourceRevisionConflict {
+            ProjectOperationError::ResourceRevisionConflict {
                 message: format!("missing expected revision for {resource:?}"),
             }
         })?;
@@ -34,7 +34,7 @@ pub(crate) fn validate_context_revisions(
                 .and_then(|path| chart_revisions.get(&path).copied()),
         };
         if actual != Some(*expected) {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: format!(
                     "revision for {resource:?} changed from {} to {}",
                     expected.get(),
@@ -63,7 +63,7 @@ pub(crate) fn validate_context_revisions(
                 .is_some_and(|path| data.charts.contains_key(&path)),
         };
         if present {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: format!("expected {resource:?} to remain absent"),
             });
         }
@@ -74,12 +74,12 @@ pub(crate) fn validate_context_revisions(
 pub(super) fn validate_chart_path_insertion(
     data: &ProjectData,
     chart_path: &ChartResourcePath,
-) -> Result<(), ProjectFilesystemError> {
+) -> Result<(), ProjectOperationError> {
     let portable_key = chart_path.display_name().portable_key();
     if data.charts.keys().any(|existing| {
         existing != chart_path && existing.display_name().portable_key() == portable_key
     }) {
-        return Err(ProjectFilesystemError::ResourceRevisionConflict {
+        return Err(ProjectOperationError::ResourceRevisionConflict {
             message: format!(
                 "chart path '{}' conflicts with an existing portable name",
                 chart_path.as_str()
@@ -92,10 +92,10 @@ pub(super) fn validate_chart_path_insertion(
 pub(crate) fn checked_resource_revision(
     resource: impl Into<String>,
     retained: ResourceRevision,
-) -> Result<ResourceRevision, ProjectFilesystemError> {
+) -> Result<ResourceRevision, ProjectOperationError> {
     retained
         .checked_next()
-        .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
+        .map_err(|error| ProjectOperationError::ResourceRevisionOverflow {
             resource: resource.into(),
             retained: error.retained,
         })
@@ -105,7 +105,7 @@ pub(super) fn authoritative_function_revision(
     path: &GraphResourcePath,
     incoming: ResourceRevision,
     retained: Option<ResourceRevision>,
-) -> Result<ResourceRevision, ProjectFilesystemError> {
+) -> Result<ResourceRevision, ProjectOperationError> {
     let Some(retained) = retained else {
         return Ok(incoming);
     };
@@ -117,7 +117,7 @@ pub(crate) fn normalize_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
     retained: Option<ResourceRevision>,
-) -> Result<ResourceRevision, ProjectFilesystemError> {
+) -> Result<ResourceRevision, ProjectOperationError> {
     if resource.kind != yss_graph_document::GraphResourceKind::Function {
         return Ok(retained.unwrap_or(ResourceRevision::INITIAL));
     }
@@ -137,7 +137,7 @@ pub(super) fn normalize_function_patch_revisions(
     patch: &mut ProjectDataPatch,
     data: &ProjectData,
     graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-) -> Result<(), ProjectFilesystemError> {
+) -> Result<(), ProjectOperationError> {
     match patch {
         ProjectDataPatch::InsertGraph { path, resource } => {
             normalize_function_resource_revision(
@@ -154,7 +154,7 @@ pub(super) fn normalize_function_patch_revisions(
                     graph_resource_revisions.get(path).copied(),
                 )?;
                 if canonical != *revision {
-                    return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    return Err(ProjectOperationError::ResourceRevisionConflict {
                         message: format!(
                             "declared function '{}' revision changed before publication",
                             path
@@ -240,7 +240,7 @@ pub(super) fn chart_publication_deltas(
     patch: &ProjectDataPatch,
     data: &ProjectData,
     revisions: &std::collections::HashMap<ChartResourcePath, ResourceRevision>,
-) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectFilesystemError> {
+) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectOperationError> {
     let chart_key = |path: &ChartResourcePath| {
         ResourceKey::Chart(yss_project_history::ChartResourceKey(path.as_str().into()))
     };
@@ -254,7 +254,7 @@ pub(super) fn chart_publication_deltas(
             };
             let (from_revision, payload) = if let Some(before) = before {
                 (
-                    retained.ok_or_else(|| ProjectFilesystemError::ResourceRevisionConflict {
+                    retained.ok_or_else(|| ProjectOperationError::ResourceRevisionConflict {
                         message: format!("chart '{}' has no resource revision", path.as_str()),
                     })?,
                     yss_project_history::ResourceDocumentPatch::Chart(
@@ -285,7 +285,7 @@ pub(super) fn chart_publication_deltas(
         }
         ProjectDataPatch::RemoveChart { path, revision } => {
             if !data.charts.contains_key(path) {
-                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                return Err(ProjectOperationError::ResourceRevisionConflict {
                     message: format!("chart '{}' is absent", path.as_str()),
                 });
             }
@@ -304,7 +304,7 @@ pub(super) fn chart_publication_deltas(
         }
         ProjectDataPatch::MoveChart { from, to, .. } => {
             let from_revision = revisions.get(from).copied().ok_or_else(|| {
-                ProjectFilesystemError::ResourceRevisionConflict {
+                ProjectOperationError::ResourceRevisionConflict {
                     message: format!("chart '{}' has no resource revision", from.as_str()),
                 }
             })?;
@@ -329,14 +329,14 @@ pub(super) fn canonical_resource_lifecycle_events(
     context: &ProjectTransactionContext,
     patch: &ProjectDataPatch,
     graph_resource_revisions: &std::collections::HashMap<GraphResourcePath, ResourceRevision>,
-) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectFilesystemError> {
+) -> Result<Vec<yss_project_history::ResourceDeltaEvent>, ProjectOperationError> {
     let graph_key = |path: &GraphResourcePath| ResourceKey::Graph(path.clone());
     let expected_revision = |resource: &ResourceKey| {
         context
             .expected_revisions
             .get(resource)
             .copied()
-            .ok_or_else(|| ProjectFilesystemError::ResourceRevisionConflict {
+            .ok_or_else(|| ProjectOperationError::ResourceRevisionConflict {
                 message: format!("missing expected revision for {resource:?}"),
             })
     };
@@ -459,7 +459,7 @@ pub(super) fn canonical_resource_lifecycle_events(
                 payload: graph_move_patch(),
             })
         })
-        .collect::<Result<Vec<_>, ProjectFilesystemError>>()?;
+        .collect::<Result<Vec<_>, ProjectOperationError>>()?;
     deltas.extend(referenced_graph_deltas);
     Ok(deltas)
 }

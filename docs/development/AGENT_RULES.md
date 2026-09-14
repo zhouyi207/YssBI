@@ -62,7 +62,12 @@ add or commit them unless explicitly requested.
 - Do not merge or reconcile parallel committed Rust and React models. Replace
   projections in one direction and keep drafts separate until Save succeeds.
 - Dependencies flow toward domain and application logic, never from domain code
-  toward UI, Tauri, services, or concrete infrastructure adapters.
+  toward UI, Tauri, services, or concrete business infrastructure adapters.
+  Generic filesystem primitives are an explicit foundation for Project and Application.
+- `yss-filesystem` owns generic file access, transactions, change facts and watcher
+  sessions, with zero dependencies on repository crates. Project path conventions,
+  document validation, index invalidation and business failures belong to Project
+  or its application adapters, never to FS.
 - Only `yss-graph-execution` and Application's `ipc/commands` modules consume
   `yss-sci-runtime`. Other Application modules and desktop composition do not
   construct or inject a scientific backend. Runtime exposes stateless functions and calls `yss-sci`, which calls

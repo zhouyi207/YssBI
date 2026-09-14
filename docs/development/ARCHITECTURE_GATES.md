@@ -52,6 +52,7 @@ Composition Root
 Build Script
 Commands
 Platform Adapter
+Filesystem
 Application
 Project
 Graph
@@ -118,7 +119,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 `faer` 的外部依赖声明与生产使用仅允许 `yss-sci-linalg`。Linalg 对外提供自己的矩阵/向量与借用视图，不暴露 faer 类型。`rust.internal.scientific-boundary` 在 canonical origin 上限制 Linalg 只由 SCI 调用、SCI 只由 runtime 调用、runtime 只由 Execution 和 IPC Command 调用，并拒绝插件到任意 SCI crate 的生产引用。workspace 边界检查同时验证 Cargo 声明；插件的传递依赖检查不允许 `yss-sci-contract`。矩阵封装、数值错误、分解检查和秩阈值见 [`yss-sci-linalg` README](../../src-tauri/crates/yss-sci-linalg/README.md)。
 
-`walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-project-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
+`walkdir` 的运行时直接依赖声明限定于 `yss-project-registry`，生产使用归 Project 分类。它只承担私有 `discovery` 模块的目录遍历；根目录校验、目录排除、元数据识别、取消及错误语义仍由项目层拥有。根路径与子目录均不跟随符号链接，重解析点判断复用 `yss-filesystem`；这不开放其他层直接使用遍历实现的权限。项目名称规则由 `yss-project-model` 统一拥有，项目运行时不依赖注册或扫描实现。
 
 文件发布直接复用外部 `atomicwrites`，依赖声明仅允许 Application、Plugin Runtime 和 Julia Worker 三个包；使用层限制为 Application/Backend Adapter。原自建文件替换 crate 及其内部平台依赖例外已移除，Platform Adapter 分类测试复用 Notify watcher。发布结果不确定的语义见[当前架构](../architecture/ARCHITECTURE.md)。
 
@@ -151,6 +152,8 @@ Application 的 `serde` 直接依赖用于静态目录和离线源定义的反�
 不依赖 tabular adapter 作为时钟服务。
 
 ## 6. Changing the architecture policy
+
+`yss-filesystem` 的生产源码统一按 Filesystem 分类。Project、Application 和启动组装可使用 FS；FS 对任何其他内部 crate 的引用都触发 `rust.internal.filesystem-boundary`，即使提供普通 capability 也不能绕过。门禁同时核对 Cargo 的全部依赖 scope 均为外部依赖，并确认 notify 只在 `watcher/notify.rs` 中使用。项目入口解释、索引失效和业务错误按 Project 分类。原四 crate 的路径字符串检查改为真实依赖与隔离 fixture 检查。
 
 `tauri-plugin-tracing` 的 `collector/` 按 Logging 分类，插件的存储和 Tauri 适配按 Platform Adapter 分类；构建脚本仅获 `tauri-plugin` 的 build 权限。collector 包含原 yss-tracing 实现，不再有独立的日志核心 crate。Diagnostics 与 Logging/日志插件之间的依赖双向禁止，Composition Root 不能直接接入 collector；入口仅获插件 `init` 的精确调用权限。诊断只接收显式数据，由 Application 独立初始化。现有诊断 owner fixture 同时验证层级方向与诊断依赖闭包，禁止通过其他 workspace crate 间接引入 tracing 或日志插件。
 

@@ -1,6 +1,6 @@
+use crate::ProjectOperationError;
 use crate::ProjectState;
 use std::sync::Arc;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::{OperationId, ProjectInstanceId};
 use yss_project_operation::{
     ProjectOperationAdmissionError, ProjectOperationLedger, ProjectOperationReservation,
@@ -11,10 +11,10 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         operation_id: OperationId,
-    ) -> Result<ProjectOperationReservation, ProjectFilesystemError> {
+    ) -> Result<ProjectOperationReservation, ProjectOperationError> {
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != project_instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project changed before resource operation admission".into(),
             });
         }
@@ -29,14 +29,14 @@ impl ProjectState {
     }
 }
 
-fn map_operation_admission_error(error: ProjectOperationAdmissionError) -> ProjectFilesystemError {
+fn map_operation_admission_error(error: ProjectOperationAdmissionError) -> ProjectOperationError {
     let message = error.to_string();
     match error {
         ProjectOperationAdmissionError::StaleProject { .. } => {
-            ProjectFilesystemError::StaleProjectLifecycle { message }
+            ProjectOperationError::StaleProjectLifecycle { message }
         }
         ProjectOperationAdmissionError::DuplicateOperation { .. } => {
-            ProjectFilesystemError::DuplicateOperation { message }
+            ProjectOperationError::DuplicateOperation { message }
         }
     }
 }
@@ -61,11 +61,11 @@ mod tests {
 
         assert!(matches!(
             stale,
-            ProjectFilesystemError::StaleProjectLifecycle { .. }
+            ProjectOperationError::StaleProjectLifecycle { .. }
         ));
         assert!(matches!(
             duplicate,
-            ProjectFilesystemError::DuplicateOperation { .. }
+            ProjectOperationError::DuplicateOperation { .. }
         ));
     }
 }

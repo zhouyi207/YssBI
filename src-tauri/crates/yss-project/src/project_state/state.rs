@@ -7,10 +7,10 @@ pub struct ProjectState {
     pub(crate) project_store: Arc<RwLock<ProjectStore>>,
     pub(crate) project_activation: crate::ProjectActivationCoordinator,
     pub(crate) mutation_publication: Arc<Mutex<MutationPublication>>,
-    pub(crate) filesystem: ProjectFilesystemCoordinator,
+    pub(crate) filesystem: FilesystemCoordinator,
     pub(crate) resource_lifecycle: ResourceLifecycleRegistry,
     pub(crate) resource_operations: Arc<Mutex<yss_project_operation::ProjectOperationLedger>>,
-    pub(crate) recovery_marker: yss_project_filesystem::ProjectRecoveryMarker,
+    pub(crate) recovery_marker: yss_filesystem::RecoveryMarker,
     pub(crate) activation_generation: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) activation_identity: Arc<RwLock<ProjectAuthorityExpectation>>,
     pub(crate) graph_resource_revisions: Arc<
@@ -37,16 +37,10 @@ impl Default for ProjectState {
 
 impl ProjectState {
     pub fn new() -> Self {
-        Self::from_store_and_filesystem(
-            ProjectStore::new(),
-            ProjectFilesystemCoordinator::default(),
-        )
+        Self::from_store_and_filesystem(ProjectStore::new(), FilesystemCoordinator::default())
     }
 
-    fn from_store_and_filesystem(
-        store: ProjectStore,
-        filesystem: ProjectFilesystemCoordinator,
-    ) -> Self {
+    fn from_store_and_filesystem(store: ProjectStore, filesystem: FilesystemCoordinator) -> Self {
         let publication = MutationPublication::default();
         let activation_identity = ProjectAuthorityExpectation {
             project_instance_id: ProjectInstanceId::from_existing(
@@ -69,7 +63,7 @@ impl ProjectState {
                     activation_identity.project_session_id.clone(),
                 ),
             )),
-            recovery_marker: yss_project_filesystem::ProjectRecoveryMarker::default(),
+            recovery_marker: yss_filesystem::RecoveryMarker::default(),
             activation_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activation_identity: Arc::new(RwLock::new(activation_identity)),
             graph_resource_revisions: Arc::new(RwLock::new(std::collections::HashMap::new())),

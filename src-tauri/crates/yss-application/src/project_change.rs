@@ -1,6 +1,7 @@
 use thiserror::Error;
-use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_filesystem::change::FilesystemChange;
+use yss_project::ProjectIndexInvalidation;
+use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 use super::execution::session_slot::{ApplicationState, SessionCaptureError};
@@ -15,7 +16,7 @@ pub enum ApplicationProjectWatchError {
     Reconciliation(
         #[source]
         #[from]
-        ProjectFilesystemError,
+        ProjectOperationError,
     ),
     #[error("captured application session changed during watcher reconciliation")]
     SessionChanged,
@@ -25,7 +26,7 @@ impl ApplicationState {
     pub fn reconcile_project_change(
         &self,
         project_instance_id: &ProjectInstanceId,
-        change: ProjectChange,
+        change: FilesystemChange,
     ) -> Result<Option<ProjectIndexInvalidation>, ApplicationProjectWatchError> {
         let captured = self.capture_session()?;
         if captured.project_instance_id() != project_instance_id {

@@ -1,21 +1,22 @@
+use crate::ProjectIndexInvalidation;
+use crate::ProjectOperationError;
 use crate::ProjectState;
-use yss_project_change::{ProjectChange, ProjectIndexInvalidation};
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_filesystem::change::FilesystemChange;
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 
 impl ProjectState {
     pub fn reconcile_project_change(
         &self,
         project: &ProjectInstanceId,
-        change: ProjectChange,
-    ) -> Result<Option<ProjectIndexInvalidation>, ProjectFilesystemError> {
-        if !change.affects_project_index() {
+        change: FilesystemChange,
+    ) -> Result<Option<ProjectIndexInvalidation>, ProjectOperationError> {
+        if !crate::filesystem_change_affects_project_index(&change) {
             return Ok(None);
         }
 
         let session = self.capture_project_session()?;
         if &session.instance_id != project {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "watched project is no longer active".into(),
             });
         }
@@ -69,7 +70,7 @@ impl ProjectState {
         if !graph_changes.is_empty() || !chart_changes.is_empty() {
             let mut publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != project.as_str() {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
                     message: "watched project changed during rescan".into(),
                 });
             }
@@ -115,8 +116,8 @@ impl ProjectState {
     }
 }
 
-fn read_error(error: crate::ProjectError) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
+fn read_error(error: crate::ProjectError) -> ProjectOperationError {
+    ProjectOperationError::TransactionPrepareFailed {
         message: error.to_string(),
     }
 }
@@ -124,7 +125,7 @@ fn read_error(error: crate::ProjectError) -> ProjectFilesystemError {
 fn next_revision(
     path: &str,
     retained: Option<ResourceRevision>,
-) -> Result<ResourceRevision, ProjectFilesystemError> {
+) -> Result<ResourceRevision, ProjectOperationError> {
     retained
         .map(|revision| crate::project_state::checked_resource_revision(path, revision))
         .transpose()
@@ -135,7 +136,7 @@ fn next_revision(
 mod tests {
     use super::*;
     use crate::fixtures;
-    use yss_project_change::{ProjectFileChangeKind, ProjectRelativePath};
+    use yss_filesystem::change::{FileChangeKind, RelativePath};
     use yss_project_model::ProjectData;
 
     #[test]
@@ -146,9 +147,9 @@ mod tests {
             .state()
             .reconcile_project_change(
                 &project,
-                ProjectChange::file(
-                    ProjectRelativePath::try_new("README.md").unwrap(),
-                    ProjectFileChangeKind::Modified,
+                FilesystemChange::file(
+                    RelativePath::try_new("README.md").unwrap(),
+                    FileChangeKind::Modified,
                 ),
             )
             .unwrap();
@@ -164,9 +165,9 @@ mod tests {
             .state()
             .reconcile_project_change(
                 &project,
-                ProjectChange::file(
-                    ProjectRelativePath::try_new("metadata.yssbi").unwrap(),
-                    ProjectFileChangeKind::Modified,
+                FilesystemChange::file(
+                    RelativePath::try_new("metadata.yssbi").unwrap(),
+                    FileChangeKind::Modified,
                 ),
             )
             .unwrap()
@@ -197,7 +198,7 @@ mod tests {
         let index = state.read_project_index(&session.instance_id).unwrap();
         assert!(index.graphs.is_empty() && index.charts.is_empty());
         state
-            .reconcile_project_change(&session.instance_id, ProjectChange::rescan_required())
+            .reconcile_project_change(&session.instance_id, FilesystemChange::rescan_required())
             .unwrap();
         let data = state.get_data().unwrap();
         assert!(data.graphs.is_empty() && data.charts.is_empty());
@@ -207,7 +208,7 @@ mod tests {
             .publication_revision;
         assert!(revision > 0);
         state
-            .reconcile_project_change(&session.instance_id, ProjectChange::rescan_required())
+            .reconcile_project_change(&session.instance_id, FilesystemChange::rescan_required())
             .unwrap();
         assert_eq!(
             state

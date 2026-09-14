@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 /// Opaque native identity of a project root directory.
 ///
-/// The platform filesystem adapter creates this value. Persistence adapters
-/// only preserve and compare it; they must not interpret its contents.
+/// Project registration projects a filesystem RootIdentity into this persisted
+/// contract. Persistence adapters only preserve and compare the opaque value.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ProjectRootIdentity(String);

@@ -99,6 +99,12 @@
         "target": null
       },
       {
+        "name": "yss-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-function-editor-projection",
         "kind": "normal",
         "optional": false,
@@ -219,18 +225,6 @@
         "target": null
       },
       {
-        "name": "yss-project-change",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-filesystem",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-project-history",
         "kind": "normal",
         "optional": false,
@@ -268,18 +262,6 @@
       },
       {
         "name": "yss-project-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher-notify",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -708,6 +690,11 @@
   {
     "name": "yss-display-naming",
     "manifest": "src-tauri/crates/yss-display-naming/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-filesystem",
+    "manifest": "src-tauri/crates/yss-filesystem/Cargo.toml",
     "dependencies": []
   },
   {
@@ -1405,11 +1392,6 @@
     ]
   },
   {
-    "name": "yss-sci-linalg",
-    "manifest": "src-tauri/crates/yss-sci-linalg/Cargo.toml",
-    "dependencies": []
-  },
-  {
     "name": "yss-math-expr",
     "manifest": "src-tauri/crates/yss-math-expr/Cargo.toml",
     "dependencies": []
@@ -1490,6 +1472,12 @@
         "target": null
       },
       {
+        "name": "yss-filesystem",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-function-editor-projection",
         "kind": "normal",
         "optional": false,
@@ -1509,18 +1497,6 @@
       },
       {
         "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-change",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-filesystem",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1551,66 +1527,6 @@
       },
       {
         "name": "yss-project-operation",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-resource-lifecycle",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-resource-naming",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-project-change",
-    "manifest": "src-tauri/crates/yss-project-change/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-project-identity",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-layout",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-project-filesystem",
-    "manifest": "src-tauri/crates/yss-project-filesystem/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-chart-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-identity",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-layout",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1734,7 +1650,7 @@
     "manifest": "src-tauri/crates/yss-project-registry/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-project-filesystem",
+        "name": "yss-filesystem",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1802,42 +1718,6 @@
     ]
   },
   {
-    "name": "yss-project-watcher",
-    "manifest": "src-tauri/crates/yss-project-watcher/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-project-change",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-filesystem",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-project-watcher-notify",
-    "manifest": "src-tauri/crates/yss-project-watcher-notify/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-project-change",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
     "name": "yss-relational-contract",
     "manifest": "src-tauri/crates/yss-relational-contract/Cargo.toml",
     "dependencies": [
@@ -1889,12 +1769,6 @@
     "manifest": "src-tauri/crates/yss-sci/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-sci-linalg",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-math-expr",
         "kind": "normal",
         "optional": false,
@@ -1905,12 +1779,23 @@
         "kind": "normal",
         "optional": false,
         "target": null
+      },
+      {
+        "name": "yss-sci-linalg",
+        "kind": "normal",
+        "optional": false,
+        "target": null
       }
     ]
   },
   {
     "name": "yss-sci-contract",
     "manifest": "src-tauri/crates/yss-sci-contract/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-sci-linalg",
+    "manifest": "src-tauri/crates/yss-sci-linalg/Cargo.toml",
     "dependencies": []
   },
   {

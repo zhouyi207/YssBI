@@ -9,7 +9,7 @@ use yss_graph_execution::plan::{
     PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_runtime::GraphMaterializationError;
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 use super::catalog_query::revalidate_project_catalog_facts;
@@ -74,7 +74,7 @@ pub struct OpenGraphProjectSource {
 #[derive(Debug, thiserror::Error)]
 enum OpenGraphProjectSourceKind {
     #[error("project filesystem operation failed")]
-    Filesystem(#[source] ProjectFilesystemError),
+    Filesystem(#[source] ProjectOperationError),
     #[error("project catalog facts could not be captured")]
     Catalog(#[source] ProjectCatalogReadError),
     #[error("graph-open project invariant failed")]
@@ -82,7 +82,7 @@ enum OpenGraphProjectSourceKind {
 }
 
 impl OpenGraphProjectSource {
-    fn filesystem(error: ProjectFilesystemError) -> Self {
+    fn filesystem(error: ProjectOperationError) -> Self {
         Self {
             reason: OpenGraphProjectSourceKind::Filesystem(error),
         }
@@ -347,47 +347,47 @@ fn map_project_facts_open_error(
 
 fn map_project_open_error(
     graph: &GraphResourcePath,
-    error: ProjectFilesystemError,
+    error: ProjectOperationError,
 ) -> OpenGraphApplicationError {
     match &error {
-        ProjectFilesystemError::InvalidGraphDocument { path, .. } => {
+        ProjectOperationError::InvalidGraphDocument { path, .. } => {
             OpenGraphProjectError::InvalidGraphDocument {
                 graph: path.clone(),
             }
             .into()
         }
-        ProjectFilesystemError::StaleProjectLifecycle { .. } => {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
             OpenGraphProjectError::StaleProjectAuthority {
                 graph: graph.clone(),
             }
             .into()
         }
-        ProjectFilesystemError::StaleResourceLifecycle { .. } => {
+        ProjectOperationError::StaleResourceLifecycle { .. } => {
             OpenGraphProjectError::ResourceLifecycleChanged {
                 graph: graph.clone(),
             }
             .into()
         }
-        ProjectFilesystemError::ProjectLifecycleAdmissionClosed { .. } => {
+        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
             OpenGraphProjectError::AdmissionClosed.into()
         }
-        ProjectFilesystemError::ProjectRecoveryRequired { .. } => {
+        ProjectOperationError::ProjectRecoveryRequired { .. } => {
             OpenGraphProjectError::RecoveryRequired.into()
         }
-        ProjectFilesystemError::ResourceRevisionOverflow { retained, .. } => {
+        ProjectOperationError::ResourceRevisionOverflow { retained, .. } => {
             OpenGraphProjectError::RevisionExhausted {
                 graph: graph.clone(),
                 revision: yss_project_identity::ResourceRevision::new(*retained),
             }
             .into()
         }
-        ProjectFilesystemError::FilesystemTransactionBusy { .. } => {
+        ProjectOperationError::FilesystemTransactionBusy { .. } => {
             OpenGraphProjectError::FilesystemBusy.into()
         }
-        ProjectFilesystemError::TransactionCommitFailed { .. } => {
+        ProjectOperationError::TransactionCommitFailed { .. } => {
             OpenGraphProjectError::CommitFailed(OpenGraphProjectSource::filesystem(error)).into()
         }
-        ProjectFilesystemError::TransactionRollbackFailed {
+        ProjectOperationError::TransactionRollbackFailed {
             recovery_required, ..
         } => OpenGraphProjectError::RollbackFailed {
             recovery_required: *recovery_required,

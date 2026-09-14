@@ -1,10 +1,11 @@
+use crate::ProjectOperationError;
 use crate::{ProjectSession, ProjectState, ProjectStore};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use yss_chart_document::ChartResourcePath;
+use yss_filesystem::NormalizedRoot;
 use yss_graph_document::GraphResourcePath;
-use yss_project_filesystem::{NormalizedProjectRoot, ProjectFilesystemError};
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 use yss_project_model::ProjectData;
@@ -61,13 +62,13 @@ impl Drop for ProjectActivationToken {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PreparedAuthorityBasis {
     pub project_instance_id: ProjectInstanceId,
-    pub project_root: NormalizedProjectRoot,
+    pub project_root: NormalizedRoot,
     pub publication_revision: u64,
     pub authority_generation: u64,
 }
 
 pub struct PreparedProjectActivation {
-    pub session_root: Option<NormalizedProjectRoot>,
+    pub session_root: Option<NormalizedRoot>,
     pub data: ProjectData,
     pub store: ProjectStore,
     pub(crate) graph_resource_revisions: HashMap<GraphResourcePath, ResourceRevision>,
@@ -78,14 +79,14 @@ pub struct PreparedProjectActivation {
 
 impl PreparedProjectActivation {
     pub(super) fn from_data(
-        session_root: Option<NormalizedProjectRoot>,
+        session_root: Option<NormalizedRoot>,
         data: ProjectData,
         authority_basis: Option<PreparedAuthorityBasis>,
         requires_final_rebuild: bool,
-    ) -> Result<Self, ProjectFilesystemError> {
+    ) -> Result<Self, ProjectOperationError> {
         for (path, graph) in &data.graphs {
             yss_graph_document::validate_constant_definitions(&graph.document.constants).map_err(
-                |error| ProjectFilesystemError::TransactionPrepareFailed {
+                |error| ProjectOperationError::TransactionPrepareFailed {
                     message: format!("graph '{path}' is invalid: {error}"),
                 },
             )?;
@@ -117,17 +118,17 @@ impl ProjectState {
     pub fn prepare_project_activation(
         &self,
         path: Option<&Path>,
-    ) -> Result<PreparedProjectActivation, ProjectFilesystemError> {
+    ) -> Result<PreparedProjectActivation, ProjectOperationError> {
         let Some(path) = path else {
             return PreparedProjectActivation::from_data(None, ProjectData::new(), None, false);
         };
-        let root = NormalizedProjectRoot::from_project_path(path)?;
+        let root = NormalizedRoot::from_path(crate::project_root_from_path(path))?;
         let lease = self.filesystem().acquire(root.clone())?;
         let authority_before = self.capture_prepared_authority_basis(&root)?;
         let data = self.read_activation_data(&root)?;
         let authority_after = self.capture_prepared_authority_basis(&root)?;
         if authority_before != authority_after {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project authority changed during activation preparation".into(),
             });
         }
@@ -140,12 +141,12 @@ impl ProjectState {
     pub fn activate_prepared_project(
         &self,
         mut prepared: PreparedProjectActivation,
-    ) -> Result<ProjectSession, ProjectFilesystemError> {
+    ) -> Result<ProjectSession, ProjectOperationError> {
         let root =
             prepared
                 .session_root
                 .clone()
-                .ok_or_else(|| ProjectFilesystemError::InvalidRoot {
+                .ok_or_else(|| ProjectOperationError::InvalidRoot {
                     path: PathBuf::new(),
                     message: "a pathless activation must use clear_project".into(),
                 })?;
@@ -181,12 +182,12 @@ impl ProjectState {
     pub fn activate_project_from_path(
         &self,
         path: &Path,
-    ) -> Result<ProjectSession, ProjectFilesystemError> {
+    ) -> Result<ProjectSession, ProjectOperationError> {
         let prepared = self.prepare_project_activation(Some(path))?;
         self.activate_prepared_project(prepared)
     }
 
-    pub fn clear_project(&self) -> Result<ProjectInstanceId, ProjectFilesystemError> {
+    pub fn clear_project(&self) -> Result<ProjectInstanceId, ProjectOperationError> {
         let prepared = self.prepare_project_activation(None)?;
         let _activation = self.project_activation.acquire();
         self.run_project_activation_test_hook();
@@ -196,7 +197,7 @@ impl ProjectState {
 
     #[cfg(any(test, feature = "test-support"))]
     pub fn activate_project_fixture(&self, path: String, data: ProjectData) {
-        let root = NormalizedProjectRoot::from_project_path(path).unwrap();
+        let root = NormalizedRoot::from_path(crate::project_root_from_path(path)).unwrap();
         self.activate_prepared_project(
             PreparedProjectActivation::from_data(Some(root), data, None, false).unwrap(),
         )

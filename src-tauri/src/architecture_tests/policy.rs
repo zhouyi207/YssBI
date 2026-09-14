@@ -336,9 +336,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_plugin_runtime::PluginManager",
             "yss_plugin_runtime::PluginManager::initialize",
             "yss_project_registry_sqlite::SqliteProjectRegistryStore::connect",
-            "yss_project_watcher::ProjectWatcherState",
-            "yss_project_watcher::ProjectWatcherState::new",
-            "yss_project_watcher_notify::NotifyProjectFileWatcher::new",
+            "yss_filesystem::watcher::WatcherState",
+            "yss_filesystem::watcher::WatcherState::new",
+            "yss_filesystem::watcher::notify::NotifyFileWatcher::with_filter",
         ],
     },
     InternalDependencyCapability {
@@ -989,10 +989,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::project_change::ApplicationProjectWatchError::Reconciliation",
             "yss_application::project_change::ApplicationProjectWatchError::SessionCapture",
             "yss_application::project_change::ApplicationProjectWatchError::SessionChanged",
-            "yss_project_watcher::ProjectWatcherError",
-            "yss_project_watcher::ProjectWatcherState",
-            "yss_project_watcher::ObservedProjectChange",
-            "yss_project_watcher::ProjectChangeSink",
+            "yss_filesystem::watcher::WatcherError",
+            "yss_filesystem::watcher::WatcherState",
+            "yss_filesystem::watcher::ObservedChange",
+            "yss_filesystem::watcher::ChangeSink",
+            "yss_project::filesystem::project_root_from_path",
             "yss_ipc_contract::event::event_resource::EventResource",
             "yss_application::project_lifecycle::registry::ProjectManagement",
             "yss_ipc_contract::project::ProjectSaveResultDto",
@@ -1020,22 +1021,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_ipc_contract::project::LifecycleMutationResultDto",
             "yss_ipc_contract::project::ProjectActivationResultDto",
             "yss_application::ipc::schema::project::project_save_to_transport",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::PlatformAdapter,
-        repository_relative_source_file: "src-tauri/crates/yss-project-watcher-notify/src/lib.rs",
-        fully_qualified_owner: "yss_project_watcher_notify",
-        canonical_origin_targets: &[
-            "yss_project_watcher::FileWatcherStartError",
-            "yss_project_watcher::ObservedProjectChange",
-            "yss_project_watcher::ProjectChangeSink",
-            "yss_project_watcher::ProjectFileWatcherDrain",
-            "yss_project_watcher::ProjectFileWatcherDrainOutcome",
-            "yss_project_watcher::ProjectFileWatcherFactory",
-            "yss_project_watcher::ProjectFileWatcherSession",
-            "yss_project_watcher::ProjectWatcherEpoch",
-            "yss_project_watcher::WatcherShutdownControl",
         ],
     },
     InternalDependencyCapability {
@@ -1753,7 +1738,6 @@ fn non_build_memberships(
             | "yss-graph-type-mapping"
             | "yss-math-expr"
             | "yss-sci-linalg"
-            | "yss-project-change"
             | "yss-project-identity"
             | "yss-project-layout"
             | "yss-project-progress"
@@ -1765,6 +1749,10 @@ fn non_build_memberships(
             | "yss-chart-document"
     ) {
         layers.insert(RustLayer::PureLeaf);
+    } else if package == "yss-filesystem"
+        && source_file.starts_with("src-tauri/crates/yss-filesystem/src/")
+    {
+        layers.insert(RustLayer::Filesystem);
     } else if package == "yss-application" {
         if let Some(layer) = exact_layer {
             layers.insert(layer);
@@ -1783,16 +1771,12 @@ fn non_build_memberships(
         } else {
             layers.insert(RustLayer::Application);
         }
-    } else if matches!(
-        package,
-        "yss-project-watcher" | "yss-statistical-harness" | "yss-bayes-runtime"
-    ) {
+    } else if matches!(package, "yss-statistical-harness" | "yss-bayes-runtime") {
         layers.insert(RustLayer::Application);
     } else if matches!(
         package,
         "yss-project" | "yss-project-history" | "yss-project-model"
     ) || package == "yss-function-editor-projection"
-        || package == "yss-project-filesystem"
         || package == "yss-project-operation"
         || package == "yss-project-registry"
         || package == "yss-resource-lifecycle"
@@ -1839,9 +1823,8 @@ fn non_build_memberships(
         && source_file.starts_with("src-tauri/crates/tauri-plugin-tracing/src/collector/")
     {
         layers.insert(RustLayer::Logging);
-    } else if package == "yss-project-watcher-notify"
-        || (package == "tauri-plugin-tracing"
-            && source_file.starts_with("src-tauri/crates/tauri-plugin-tracing/src/"))
+    } else if package == "tauri-plugin-tracing"
+        && source_file.starts_with("src-tauri/crates/tauri-plugin-tracing/src/")
     {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
@@ -1928,7 +1911,10 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                 .get(repository_relative_declaration_file)
                 .copied();
             let crosses_scientific_boundary = (package_name == "yss-sci-linalg"
-                && !matches!(dependency.owning_package.as_str(), "yss-sci-linalg" | "yss-sci"))
+                && !matches!(
+                    dependency.owning_package.as_str(),
+                    "yss-sci-linalg" | "yss-sci"
+                ))
                 || (package_name == "yss-sci"
                     && !matches!(
                         dependency.owning_package.as_str(),
@@ -1945,7 +1931,10 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                             .starts_with("src-tauri/crates/yss-application/src/ipc/commands/"))))
                 || (dependency.source_file.starts_with("plugins/")
                     && (package_name == "yss-sci" || package_name.starts_with("yss-sci-")));
+            let crosses_filesystem_boundary =
+                dependency.owning_package == "yss-filesystem" && package_name != "yss-filesystem";
             if !crosses_scientific_boundary
+                && !crosses_filesystem_boundary
                 && target_layer.is_some_and(|target| {
                     internal_layer_dependency_is_allowed(source_layer, target)
                         || capabilities.iter().any(|capability| {
@@ -1963,7 +1952,9 @@ pub(super) fn rust_dependency_findings_with_capabilities(
             }
             Some(ArchitectureFinding {
                 key: ArchitectureFindingKey {
-                    rule_id: if crosses_scientific_boundary {
+                    rule_id: if crosses_filesystem_boundary {
+                        "rust.internal.filesystem-boundary"
+                    } else if crosses_scientific_boundary {
                         "rust.internal.scientific-boundary"
                     } else {
                         "rust.internal.source-layer"
@@ -2033,6 +2024,7 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
         (
             RustLayer::CompositionRoot,
             RustLayer::Commands
+                | RustLayer::Filesystem
                 | RustLayer::Diagnostics
                 | RustLayer::PureLeaf
         ) | (RustLayer::Commands, RustLayer::PureLeaf)
@@ -2043,13 +2035,14 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
             | (
                 RustLayer::Application,
                 RustLayer::Project
+                    | RustLayer::Filesystem
                     | RustLayer::Graph
                     | RustLayer::Execution
                     | RustLayer::DatabaseCore
                     | RustLayer::Diagnostics
                     | RustLayer::PureLeaf
             )
-            | (RustLayer::Project, RustLayer::PureLeaf)
+            | (RustLayer::Project, RustLayer::PureLeaf | RustLayer::Filesystem)
             | (RustLayer::Graph, RustLayer::PureLeaf)
             | (RustLayer::Execution, RustLayer::PureLeaf)
             | (RustLayer::SciCore, RustLayer::PureLeaf)

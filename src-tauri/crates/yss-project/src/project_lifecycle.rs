@@ -1,12 +1,13 @@
+use crate::ProjectOperationError;
+use crate::filesystem::validate_deletion_root;
 use crate::manifest::ProjectManifest;
 use crate::{PreparedProjectActivation, ProjectSession, ProjectState, ProjectTransactionContext};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use yss_chart_document::ChartDocument;
-use yss_project_filesystem::{
-    NormalizedProjectRoot, ProjectFilesystemError, ProjectFilesystemTransaction,
-    ProjectRootBinding, ProjectRootLifecycleGuard, StagedFilesystemMutation, ensure_directory,
-    read_project_file_inventory, remove_directory_if_created, validate_deletion_root,
+use yss_filesystem::{
+    FilesystemTransaction, NormalizedRoot, RootBinding, RootLifecycleGuard,
+    StagedFilesystemMutation, ensure_directory, read_file_inventory, remove_directory_if_created,
     validate_destination_policy,
 };
 use yss_project_identity::{OperationId, ProjectInstanceId, ProjectRootIdentity};
@@ -37,16 +38,16 @@ pub struct CreatedProject {
 
 #[derive(Debug)]
 pub struct ProjectDeletionResult {
-    pub deleted_root: NormalizedProjectRoot,
+    pub deleted_root: NormalizedRoot,
     pub cleared_project_instance_id: Option<ProjectInstanceId>,
 }
 
 pub struct PreparedProjectDeletion {
-    deleted_root: NormalizedProjectRoot,
+    deleted_root: NormalizedRoot,
     post_activation_failed: bool,
     active_project_instance_id: Option<ProjectInstanceId>,
     activation: Option<crate::ProjectActivationToken>,
-    lifecycle: Option<ProjectRootLifecycleGuard>,
+    lifecycle: Option<RootLifecycleGuard>,
 }
 
 impl PreparedProjectDeletion {
@@ -68,7 +69,7 @@ struct DestinationRootGuard {
 }
 
 impl DestinationRootGuard {
-    fn ensure(root: &Path) -> Result<Self, ProjectFilesystemError> {
+    fn ensure(root: &Path) -> Result<Self, ProjectOperationError> {
         Ok(Self {
             root: root.to_path_buf(),
             remove_on_drop: ensure_directory(root)?,
@@ -92,7 +93,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         destination: &Path,
         operation_id: OperationId,
-    ) -> Result<PreparedProjectCopy, ProjectFilesystemError> {
+    ) -> Result<PreparedProjectCopy, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
             return Err(stale("save-as project instance is stale"));
@@ -105,7 +106,8 @@ impl ProjectState {
             .capture_prepared_authority_basis(&session.root)?
             .filter(|basis| basis == &basis_before)
             .ok_or_else(|| stale("save-as authority changed during snapshot capture"))?;
-        let destination_binding = ProjectRootBinding::for_destination(destination)?;
+        let destination_binding =
+            RootBinding::for_destination(crate::project_root_from_path(destination))?;
         let destination_root = destination_binding.normalized().clone();
         if session.root == destination_root {
             return Err(invalid_root(
@@ -136,7 +138,7 @@ impl ProjectState {
             operation_id,
             self,
         );
-        let prepared = ProjectFilesystemTransaction::prepare_with_file_validator(
+        let prepared = FilesystemTransaction::prepare_with_file_validator(
             context.filesystem_context(),
             lease,
             mutations,
@@ -172,9 +174,10 @@ impl ProjectState {
         name: &str,
         destination: &Path,
         operation_id: OperationId,
-    ) -> Result<CreatedProject, ProjectFilesystemError> {
+    ) -> Result<CreatedProject, ProjectOperationError> {
         let project_name = normalize_project_name(name);
-        let destination_binding = ProjectRootBinding::for_destination(destination)?;
+        let destination_binding =
+            RootBinding::for_destination(crate::project_root_from_path(destination))?;
         let destination_root = destination_binding.normalized().clone();
         validate_destination_policy(destination_root.as_path())?;
         let lease = self.filesystem().acquire(destination_root.clone())?;
@@ -192,7 +195,7 @@ impl ProjectState {
             operation_id,
             self,
         );
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             context.filesystem_context(),
             lease,
             new_project_mutations(&data)?,
@@ -216,10 +219,11 @@ impl ProjectState {
         root: &Path,
         expected_root_identity: Option<&ProjectRootIdentity>,
         expected_active_instance_id: Option<&ProjectInstanceId>,
-    ) -> Result<PreparedProjectDeletion, ProjectFilesystemError> {
-        let root_binding = ProjectRootBinding::for_existing(root)?;
-        if expected_root_identity.is_some_and(|expected| root_binding.identity() != Some(expected))
-        {
+    ) -> Result<PreparedProjectDeletion, ProjectOperationError> {
+        let root_binding = RootBinding::for_existing(crate::project_root_from_path(root))?;
+        if expected_root_identity.is_some_and(|expected| {
+            root_binding.identity().map(|identity| identity.as_str()) != Some(expected.as_str())
+        }) {
             return Err(stale("registered project root identity changed"));
         }
         let normalized = root_binding.normalized().clone();
@@ -276,7 +280,7 @@ impl ProjectState {
         root: &Path,
         expected_root_identity: Option<&ProjectRootIdentity>,
         expected_active_instance_id: Option<&ProjectInstanceId>,
-    ) -> Result<ProjectDeletionResult, ProjectFilesystemError> {
+    ) -> Result<ProjectDeletionResult, ProjectOperationError> {
         let prepared = self.prepare_project_deletion(
             root,
             expected_root_identity,
@@ -305,7 +309,7 @@ pub fn set_recycle_bin_test_hook(hook: Option<RecycleBinTestHook>) {
     *RECYCLE_BIN_TEST_HOOK.lock().unwrap() = hook;
 }
 
-fn move_project_to_recycle_bin(root: &Path) -> Result<(), ProjectFilesystemError> {
+fn move_project_to_recycle_bin(root: &Path) -> Result<(), ProjectOperationError> {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(hook) = RECYCLE_BIN_TEST_HOOK.lock().unwrap().clone() {
         return hook(root).map_err(|error| recycle_bin_error(root, error));
@@ -322,8 +326,8 @@ fn move_project_to_recycle_bin(root: &Path) -> Result<(), ProjectFilesystemError
     }
 }
 
-fn recycle_bin_error(root: &Path, error: impl ToString) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionCommitFailed {
+fn recycle_bin_error(root: &Path, error: impl ToString) -> ProjectOperationError {
+    ProjectOperationError::TransactionCommitFailed {
         message: format!(
             "failed to move project root '{}' to the system recycle bin: {}",
             root.display(),
@@ -349,9 +353,9 @@ fn lifecycle_context(
 
 fn active_session_for_deletion(
     state: &ProjectState,
-    root: &NormalizedProjectRoot,
+    root: &NormalizedRoot,
     expected: Option<&ProjectInstanceId>,
-) -> Result<Option<ProjectSession>, ProjectFilesystemError> {
+) -> Result<Option<ProjectSession>, ProjectOperationError> {
     let current = state.capture_project_session().ok();
     let active = current.filter(|session| &session.root == root);
     match (active, expected) {
@@ -366,7 +370,7 @@ fn active_session_for_deletion(
 
 fn new_project_mutations(
     data: &ProjectData,
-) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
+) -> Result<Vec<StagedFilesystemMutation>, ProjectOperationError> {
     let mut mutations = PROJECT_CONTENT_DIRECTORIES
         .into_iter()
         .map(create_directory)
@@ -381,14 +385,14 @@ fn new_project_mutations(
 fn copy_mutations(
     source: &Path,
     authority: &ProjectData,
-) -> Result<Vec<StagedFilesystemMutation>, ProjectFilesystemError> {
+) -> Result<Vec<StagedFilesystemMutation>, ProjectOperationError> {
     let catalog = yss_dataset_store::DatasetStore::open(source)
         .and_then(|store| store.catalog_snapshot())
         .map_err(prepare_error)?;
-    let source_tree = read_project_file_inventory(source)?;
+    let source_tree = read_file_inventory(source)?;
     let mut directories = source_tree.directories;
     directories.extend(PROJECT_CONTENT_DIRECTORIES.map(PathBuf::from));
-    let source_root = NormalizedProjectRoot::from_project_path(source)?;
+    let source_root = NormalizedRoot::from_path(crate::project_root_from_path(source))?;
     let mut files = source_tree
         .files
         .into_iter()
@@ -482,21 +486,21 @@ fn write_mutation(path: impl Into<PathBuf>, contents: Vec<u8>) -> StagedFilesyst
     }
 }
 
-fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::InvalidRoot {
+fn invalid_root(path: impl AsRef<Path>, message: impl Into<String>) -> ProjectOperationError {
+    ProjectOperationError::InvalidRoot {
         path: path.as_ref().to_path_buf(),
         message: message.into(),
     }
 }
 
-fn stale(message: impl Into<String>) -> ProjectFilesystemError {
-    ProjectFilesystemError::StaleProjectLifecycle {
+fn stale(message: impl Into<String>) -> ProjectOperationError {
+    ProjectOperationError::StaleProjectLifecycle {
         message: message.into(),
     }
 }
 
-fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
-    ProjectFilesystemError::TransactionPrepareFailed {
+fn prepare_error(error: impl ToString) -> ProjectOperationError {
+    ProjectOperationError::TransactionPrepareFailed {
         message: error.to_string(),
     }
 }

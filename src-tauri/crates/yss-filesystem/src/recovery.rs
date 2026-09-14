@@ -1,12 +1,12 @@
-use crate::ProjectFilesystemError;
+use crate::FilesystemError;
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, Default)]
-pub struct ProjectRecoveryMarker {
+pub struct RecoveryMarker {
     state: Arc<Mutex<Option<String>>>,
 }
 
-impl ProjectRecoveryMarker {
+impl RecoveryMarker {
     pub fn mark(&self, message: impl Into<String>) {
         *self
             .state
@@ -37,11 +37,11 @@ impl ProjectRecoveryMarker {
             .take();
     }
 
-    pub fn error(&self) -> Option<ProjectFilesystemError> {
+    pub fn error(&self) -> Option<FilesystemError> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
-            .map(|message| ProjectFilesystemError::ProjectRecoveryRequired { message })
+            .map(|message| FilesystemError::RecoveryRequired { message })
     }
 }

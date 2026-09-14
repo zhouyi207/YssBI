@@ -442,7 +442,7 @@ fn opening_a_version_four_project_does_not_create_a_catalog_or_change_its_files(
         error,
         crate::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(
             crate::project_lifecycle::ProjectLifecycleError::LoadFailed(
-                ProjectFilesystemError::TransactionPrepareFailed { .. }
+                ProjectOperationError::TransactionPrepareFailed { .. }
             )
         )
     ));

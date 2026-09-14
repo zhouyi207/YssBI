@@ -8,7 +8,7 @@ use std::time::Instant;
 use thiserror::Error;
 
 use crate::{MutationPublication, ProjectSession, ProjectState};
-use yss_project_filesystem::NormalizedProjectRoot;
+use yss_filesystem::NormalizedRoot;
 
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
@@ -638,7 +638,7 @@ fn current_project_session(
     project_path: &Option<String>,
 ) -> Result<ProjectSession, ()> {
     let path = project_path.as_deref().ok_or(())?;
-    let root = NormalizedProjectRoot::from_project_path(path).map_err(|_| ())?;
+    let root = NormalizedRoot::from_path(crate::project_root_from_path(path)).map_err(|_| ())?;
     Ok(ProjectSession {
         instance_id: ProjectInstanceId::from_existing(publication.project_instance_id.clone()),
         root,

@@ -230,7 +230,7 @@ fn valid_hash(value: &str) -> bool {
 
 fn reject_redirect(path: &Path) -> Result<(), SampleError> {
     let metadata = std::fs::symlink_metadata(path)?;
-    if yss_project_filesystem::metadata_is_redirect(&metadata) {
+    if yss_filesystem::metadata_is_redirect(&metadata) {
         return Err(SampleError::InvalidPath);
     }
     Ok(())

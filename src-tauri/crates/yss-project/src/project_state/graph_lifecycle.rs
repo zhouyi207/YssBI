@@ -2,12 +2,11 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{ProjectState, ResourceLifecycleOperation};
 
+use crate::ProjectOperationError;
+use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
     NodeId, PortAddress, PortInstanceId, PortRef,
-};
-use yss_project_filesystem::{
-    ProjectFilesystemError, ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{GraphResourceDocument, ProjectDataPatch};
@@ -21,11 +20,11 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-    ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
+    ) -> Result<GraphResourceDocument, ProjectOperationError> {
         self.ensure_project_operational()?;
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "graph read project instance is stale".into(),
             });
         }
@@ -36,7 +35,7 @@ impl ProjectState {
                 session.root.as_path().to_string_lossy().as_ref(),
                 graph_path,
             )
-            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?,
         };
@@ -50,7 +49,7 @@ impl ProjectState {
         name: &str,
         mut resource: GraphResourceDocument,
         operation_id: yss_project_identity::OperationId,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -79,11 +78,11 @@ impl ProjectState {
         }
         let contents =
             crate::project_io::serialize_graph_resource_document(&resource).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
+                ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 }
             })?;
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::Write {
@@ -121,7 +120,7 @@ impl ProjectState {
         source_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -144,7 +143,7 @@ impl ProjectState {
                 snapshot.session.root.as_path().to_string_lossy().as_ref(),
                 source_path,
             )
-            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?,
         };
@@ -172,17 +171,18 @@ impl ProjectState {
         }
         let contents =
             crate::project_io::serialize_graph_resource_document(&duplicate).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
+                ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 }
             })?;
-        let prepared = ProjectFilesystemTransaction::prepare(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: target.as_str().into(),
                 contents,
             }],
+            crate::project_writers::validate_document,
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
@@ -212,7 +212,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
         expected_revision: ResourceRevision,
         operation_id: yss_project_identity::OperationId,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let reservation =
             self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
@@ -229,12 +229,13 @@ impl ProjectState {
             Default::default(),
         );
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
-        let prepared = ProjectFilesystemTransaction::prepare(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             mutation_context.filesystem_context(),
             lease,
             vec![StagedFilesystemMutation::RemoveFile {
                 relative_path: graph_path.as_str().into(),
             }],
+            crate::project_writers::validate_document,
         )?;
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let committed = prepared.commit()?;
@@ -263,10 +264,10 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         lifecycle_token: u64,
-    ) -> Result<GraphDocument, ProjectFilesystemError> {
+    ) -> Result<GraphDocument, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "graph load project instance is stale".into(),
             });
         }
@@ -294,7 +295,7 @@ impl ProjectState {
             session.root.as_path().to_string_lossy().as_ref(),
             graph_path,
         )
-        .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
         self.run_graph_load_after_read_test_hook();
@@ -344,7 +345,7 @@ impl ProjectState {
             .graphs
             .get(graph_path)
             .map(|resource| resource.document.clone())
-            .ok_or_else(|| ProjectFilesystemError::TransactionCommitFailed {
+            .ok_or_else(|| ProjectOperationError::TransactionCommitFailed {
                 message: "graph load committed without a resident document".into(),
             })
     }
@@ -354,10 +355,10 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         token: u64,
-    ) -> Result<bool, ProjectFilesystemError> {
+    ) -> Result<bool, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "graph unload project instance is stale".into(),
             });
         }
@@ -409,10 +410,10 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         name: &str,
         kind: yss_graph_document::GraphResourceKind,
-    ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
+    ) -> Result<(GraphResourcePath, String), ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "graph allocation project instance is stale".into(),
             });
         }
@@ -425,12 +426,12 @@ impl ProjectState {
         data: &yss_project_model::ProjectData,
         name: &str,
         kind: yss_graph_document::GraphResourceKind,
-    ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
+    ) -> Result<(GraphResourcePath, String), ProjectOperationError> {
         let persisted = project_path
             .map(|path| {
-                let root = yss_project_filesystem::project_root_from_path(path);
+                let root = crate::project_root_from_path(path);
                 crate::scan_graph_resource_index(&root)
-                    .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                    .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                         message: error.to_string(),
                     })
                     .map(|index| {
@@ -466,7 +467,7 @@ impl ProjectState {
         };
         let path =
             GraphResourcePath::new(format!("{directory}/{}.{extension}", allocated.as_str()))
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 })?;
         Ok((path, allocated.as_str().to_owned()))
@@ -475,7 +476,7 @@ impl ProjectState {
     pub fn unload_graph_resource(
         &self,
         graph_path: &GraphResourcePath,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         let project_instance_id = self.capture_project_session()?.instance_id;
         let _ = self.unload_graph_resource_for_lifecycle(
             &project_instance_id,
@@ -488,7 +489,7 @@ impl ProjectState {
     fn next_lifecycle_token(
         &self,
         graph_path: &GraphResourcePath,
-    ) -> Result<u64, ProjectFilesystemError> {
+    ) -> Result<u64, ProjectOperationError> {
         let session = self.capture_project_session()?;
         let guard = self.resource_lifecycle.allocate_and_register(
             &session.instance_id,
@@ -505,10 +506,10 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         resource_path: LifecycleResourcePath,
         lifecycle_token: u64,
-    ) -> Result<crate::ResourceRenameOwnershipLease, ProjectFilesystemError> {
+    ) -> Result<crate::ResourceRenameOwnershipLease, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "resource rename project instance is stale".into(),
             });
         }
@@ -525,7 +526,7 @@ impl ProjectState {
     pub(crate) fn validate_resource_lifecycle_operation(
         &self,
         operation: &ResourceLifecycleOperation,
-    ) -> Result<(), ProjectFilesystemError> {
+    ) -> Result<(), ProjectOperationError> {
         self.validate_project_session(&operation.session)?;
         Ok(self.resource_lifecycle.validate(&operation.owner)?)
     }
@@ -538,7 +539,7 @@ impl ProjectState {
         new_name: &str,
         lifecycle_token: u64,
         operation_id: yss_project_identity::OperationId,
-    ) -> Result<ProjectResourceMutationFacts, ProjectFilesystemError> {
+    ) -> Result<ProjectResourceMutationFacts, ProjectOperationError> {
         self.ensure_project_operational()?;
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
         let session = snapshot.session.clone();
@@ -558,7 +559,7 @@ impl ProjectState {
                 session.root.as_path().to_string_lossy().as_ref(),
                 graph_path,
             )
-            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
             GraphResourceDocument {
@@ -574,7 +575,7 @@ impl ProjectState {
             .copied()
             .unwrap_or(ResourceRevision::INITIAL);
         if current_revision != expected_revision {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
+            return Err(ProjectOperationError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });
         }
@@ -588,12 +589,12 @@ impl ProjectState {
                 && ResourceName::parse(path.display_name())
                     .is_ok_and(|name| name.portable_key() == target_name_key)
         }) {
-            return Err(ProjectFilesystemError::ResourceNameConflict {
+            return Err(ProjectOperationError::ResourceNameConflict {
                 message: format!("a graph named '{}' already exists", requested.as_str()),
             });
         }
         if std::fs::symlink_metadata(session.root.as_path().join(target.as_str())).is_ok() {
-            return Err(ProjectFilesystemError::ResourceNameConflict {
+            return Err(ProjectOperationError::ResourceNameConflict {
                 message: format!("a graph named '{}' already exists", requested.as_str()),
             });
         }
@@ -606,7 +607,7 @@ impl ProjectState {
         let next_revision = current_revision
             .max(retained_target)
             .checked_next()
-            .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
+            .map_err(|error| ProjectOperationError::ResourceRevisionOverflow {
                 resource: graph_path.as_str().to_owned(),
                 retained: error.retained,
             })?;
@@ -616,7 +617,7 @@ impl ProjectState {
         }
 
         let target_contents = crate::project_io::serialize_graph_resource_document(&source)
-            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             })?;
 
@@ -639,7 +640,7 @@ impl ProjectState {
                 snapshot.graph_resource_revisions.get(path).copied(),
             )?;
             let contents = crate::project_io::serialize_graph_resource_document(&changed).map_err(
-                |error| ProjectFilesystemError::TransactionPrepareFailed {
+                |error| ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 },
             )?;
@@ -686,10 +687,11 @@ impl ProjectState {
                 contents: contents.clone(),
             }
         }));
-        let prepared = ProjectFilesystemTransaction::prepare(
+        let prepared = FilesystemTransaction::prepare_with_validator(
             context.filesystem_context(),
             filesystem_lease,
             mutations,
+            crate::project_writers::validate_document,
         )?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         self.validate_writer_context(&context, snapshot.authority_generation)?;
@@ -728,7 +730,7 @@ impl ProjectState {
 fn renamed_graph_path(
     name: &ResourceName,
     kind: yss_graph_document::GraphResourceKind,
-) -> Result<GraphResourcePath, ProjectFilesystemError> {
+) -> Result<GraphResourcePath, ProjectOperationError> {
     let (directory, extension) = match kind {
         yss_graph_document::GraphResourceKind::Event => (
             yss_project_layout::EVENTS_DIR,
@@ -740,7 +742,7 @@ fn renamed_graph_path(
         ),
     };
     GraphResourcePath::new(format!("{directory}/{}.{extension}", name.as_str())).map_err(|error| {
-        ProjectFilesystemError::TransactionPrepareFailed {
+        ProjectOperationError::TransactionPrepareFailed {
             message: error.to_string(),
         }
     })
@@ -988,7 +990,7 @@ mod tests {
         state.unload_graph_resource(&path).unwrap();
         assert!(matches!(
             create(),
-            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+            Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
         let wrong_revision = ResourceRevision::INITIAL.checked_next().unwrap();
         assert!(matches!(
@@ -998,7 +1000,7 @@ mod tests {
                 wrong_revision,
                 yss_project_identity::OperationId::new()
             ),
-            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+            Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
         assert!(matches!(
             state.duplicate_graph_resource(
@@ -1007,7 +1009,7 @@ mod tests {
                 wrong_revision,
                 yss_project_identity::OperationId::new()
             ),
-            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+            Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
         assert_eq!(std::fs::read(&file).unwrap(), bytes);
 
@@ -1030,7 +1032,7 @@ mod tests {
         std::fs::remove_file(&file).unwrap();
         assert!(matches!(
             state.validate_writer_context(&context, snapshot.authority_generation),
-            Err(ProjectFilesystemError::ResourceRevisionConflict { .. })
+            Err(ProjectOperationError::ResourceRevisionConflict { .. })
         ));
     }
 

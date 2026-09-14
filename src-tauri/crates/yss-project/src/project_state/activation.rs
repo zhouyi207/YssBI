@@ -39,10 +39,10 @@ impl PublishedProjectActivation {
 impl ProjectState {
     pub(crate) fn read_activation_data(
         &self,
-        root: &NormalizedProjectRoot,
-    ) -> Result<ProjectData, ProjectFilesystemError> {
+        root: &NormalizedRoot,
+    ) -> Result<ProjectData, ProjectOperationError> {
         crate::load_project_from_file(root.as_path().to_string_lossy().as_ref()).map_err(|error| {
-            ProjectFilesystemError::TransactionPrepareFailed {
+            ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
             }
         })
@@ -50,8 +50,8 @@ impl ProjectState {
 
     pub(crate) fn capture_prepared_authority_basis(
         &self,
-        root: &NormalizedProjectRoot,
-    ) -> Result<Option<crate::PreparedAuthorityBasis>, ProjectFilesystemError> {
+        root: &NormalizedRoot,
+    ) -> Result<Option<crate::PreparedAuthorityBasis>, ProjectOperationError> {
         let publication = self.mutation_publication.lock().unwrap();
         let identity = self.activation_identity.read().unwrap();
         Ok(
@@ -69,14 +69,14 @@ impl ProjectState {
     pub(crate) fn publish_project_activation(
         &self,
         prepared: PreparedProjectActivation,
-    ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
+    ) -> Result<PublishedProjectActivation, ProjectOperationError> {
         self.publish_project_activation_with_test_hooks(prepared, true)
     }
 
     pub(crate) fn publish_project_activation_without_test_hooks(
         &self,
         prepared: PreparedProjectActivation,
-    ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
+    ) -> Result<PublishedProjectActivation, ProjectOperationError> {
         self.publish_project_activation_with_test_hooks(prepared, false)
     }
 
@@ -84,7 +84,7 @@ impl ProjectState {
         &self,
         prepared: PreparedProjectActivation,
         run_test_hooks: bool,
-    ) -> Result<PublishedProjectActivation, ProjectFilesystemError> {
+    ) -> Result<PublishedProjectActivation, ProjectOperationError> {
         let PreparedProjectActivation {
             session_root: project_root,
             data,
@@ -161,7 +161,7 @@ impl ProjectState {
                     || publication.authority_generation != basis.authority_generation
                     || current_identity.project_root.as_ref() != Some(&basis.project_root)
             }) {
-                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                return Err(ProjectOperationError::StaleProjectLifecycle {
                     message: "prepared project activation was superseded by committed authority"
                         .into(),
                 });

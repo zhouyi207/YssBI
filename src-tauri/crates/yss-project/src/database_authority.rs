@@ -1,13 +1,13 @@
 use super::ProjectState;
+use crate::ProjectOperationError;
 use crate::ProjectSession;
 use yss_database_contract::DatabaseDecl;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectDatabaseError {
     #[error(transparent)]
-    Project(#[from] ProjectFilesystemError),
+    Project(#[from] ProjectOperationError),
     #[error("stale database revision")]
     StaleDatabaseRevision,
     #[error("database already exists")]
@@ -80,10 +80,10 @@ impl ProjectState {
     pub(crate) fn validate_database_project_identity(
         &self,
         project_instance_id: &ProjectInstanceId,
-    ) -> Result<ProjectSession, ProjectFilesystemError> {
+    ) -> Result<ProjectSession, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != project_instance_id {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project instance changed".into(),
             });
         }
@@ -103,7 +103,7 @@ impl ProjectState {
         let session = self.validate_database_project_identity(project_instance_id)?;
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project instance changed".into(),
             }
             .into());
@@ -115,7 +115,7 @@ impl ProjectState {
             return Err(ProjectDatabaseError::DatabaseNotFound);
         }
         let database_revision = revisions.get(id).copied().ok_or_else(|| {
-            ProjectDatabaseError::from(ProjectFilesystemError::StaleProjectLifecycle {
+            ProjectDatabaseError::from(ProjectOperationError::StaleProjectLifecycle {
                 message: "database authority is missing".into(),
             })
         })?;
@@ -155,7 +155,7 @@ impl ProjectState {
             || token.database_id != id
             || revisions.get(id).copied() != Some(token.database_revision)
         {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "database authority conflict".into(),
             }
             .into());
@@ -168,7 +168,7 @@ impl ProjectState {
         retained: yss_project_identity::ResourceRevision,
     ) -> Result<yss_project_identity::ResourceRevision, ProjectDatabaseError> {
         retained.checked_next().map_err(|error| {
-            ProjectFilesystemError::ResourceRevisionOverflow {
+            ProjectOperationError::ResourceRevisionOverflow {
                 resource: format!("databases/{id}"),
                 retained: error.retained,
             }
@@ -280,7 +280,7 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut revisions = self.database_authority_revisions.write().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project instance changed".into(),
             }
             .into());
@@ -319,7 +319,7 @@ impl ProjectState {
         let mut data = self.project_data.write().unwrap();
         let mut revisions = self.database_authority_revisions.write().unwrap();
         if publication.project_instance_id != session.instance_id.as_str() {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project instance changed".into(),
             }
             .into());

@@ -1,8 +1,8 @@
 use super::*;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use yss_filesystem::RootBinding;
 use yss_project::{ProjectState, fixtures};
-use yss_project_filesystem::ProjectRootBinding;
 use yss_project_model::ProjectData;
 use yss_project_registry::ProjectRegistry;
 use yss_project_registry_contract::{
@@ -376,7 +376,7 @@ fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
         let state = activate_named_project(&root, "Registered");
         let session = state.capture_project_session().unwrap();
         let record = register_root(&registry, &root, "Registered").await;
-        let normalized = ProjectRootBinding::for_existing(&root)
+        let normalized = RootBinding::for_existing(&root)
             .unwrap()
             .normalized()
             .clone();
@@ -447,7 +447,7 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
         let record = register_root(&registry, &root, "Registered").await;
         let identity = record.deletion_identity().unwrap().clone();
         let operation_id = OperationId::new();
-        let normalized = ProjectRootBinding::for_existing(&root)
+        let normalized = RootBinding::for_existing(&root)
             .unwrap()
             .normalized()
             .clone();
@@ -529,7 +529,7 @@ fn registry_failure_commits_clear_and_returns_registry_pending_with_released_own
         let state = activate_named_project(&root, "Registered");
         let session = state.capture_project_session().unwrap();
         let record = register_root(&registry, &root, "Registered").await;
-        let normalized = ProjectRootBinding::for_existing(&root)
+        let normalized = RootBinding::for_existing(&root)
             .unwrap()
             .normalized()
             .clone();

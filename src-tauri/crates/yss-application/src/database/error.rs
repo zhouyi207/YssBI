@@ -2,7 +2,7 @@ use std::error::Error;
 use std::fmt;
 
 use yss_project::ProjectDatabaseError;
-use yss_project_filesystem::ProjectFilesystemError;
+use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ResourceRevision;
 
@@ -136,7 +136,7 @@ pub enum DatabaseOperationError {
         project_instance_id: ProjectInstanceId,
         database_id: Option<String>,
         #[source]
-        source: ProjectFilesystemError,
+        source: ProjectOperationError,
     },
     #[error("database export cleanup failed after another failure")]
     CleanupAfterFailure {
@@ -158,7 +158,7 @@ impl DatabaseOperationError {
     }
 
     pub(super) fn from_project_filesystem(
-        source: ProjectFilesystemError,
+        source: ProjectOperationError,
         operation: DatabaseApplicationOperation,
         project_instance_id: &ProjectInstanceId,
         database_id: Option<&str>,
@@ -196,7 +196,7 @@ impl DatabaseOperationError {
         requested_name: Option<&str>,
     ) -> Self {
         match error {
-            ProjectDatabaseError::Project(ProjectFilesystemError::StaleProjectLifecycle {
+            ProjectDatabaseError::Project(ProjectOperationError::StaleProjectLifecycle {
                 ..
             }) => Self::StaleProject {
                 project_instance_id: project_instance_id.clone(),

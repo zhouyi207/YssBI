@@ -19,8 +19,8 @@ use yss_graph_execution::plan::PlanProjectSessionId;
 use yss_graph_execution::resource_preparation::ResourceProviderFactory;
 use yss_graph_execution::state::ExecutionRuntimeState;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+use yss_project::ProjectOperationError;
 use yss_project::ProjectState;
-use yss_project_filesystem::ProjectFilesystemError;
 use yss_project_identity::ProjectInstanceId;
 use yss_project_identity::ProjectSessionId;
 
@@ -151,7 +151,7 @@ impl From<SessionCandidateBuildError> for InvalidSessionCandidateError {
 #[derive(Debug, Error)]
 pub enum ProjectSessionCandidateError {
     #[error("project snapshot could not be captured for the application session")]
-    ProjectSnapshot(#[source] ProjectFilesystemError),
+    ProjectSnapshot(#[source] ProjectOperationError),
     #[error("project database declaration observations could not be captured")]
     DatabaseObservations(#[source] yss_database_contract::DatabaseDeclarationObservationSetError),
     #[error("database session could not be opened for the application session")]

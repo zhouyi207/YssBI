@@ -3,7 +3,7 @@ use super::*;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ProjectAuthorityExpectation {
     pub(crate) project_instance_id: ProjectInstanceId,
-    pub(crate) project_root: Option<NormalizedProjectRoot>,
+    pub(crate) project_root: Option<NormalizedRoot>,
     pub(crate) project_session_id: yss_project_identity::ProjectSessionId,
 }
 
@@ -51,11 +51,11 @@ impl MutationPublication {
 
     pub(crate) fn prepare_authority_generation(
         &self,
-    ) -> Result<PreparedPublicationAdvance, ProjectFilesystemError> {
+    ) -> Result<PreparedPublicationAdvance, ProjectOperationError> {
         let next_authority_generation = self
             .authority_generation
             .checked_add(1)
-            .ok_or(ProjectFilesystemError::AuthorityGenerationExhausted)?;
+            .ok_or(ProjectOperationError::AuthorityGenerationExhausted)?;
         Ok(PreparedPublicationAdvance {
             previous_resource_revision: self.resource_revision,
             next_resource_revision: self.resource_revision,
@@ -66,15 +66,15 @@ impl MutationPublication {
 
     pub(crate) fn prepare_resource_revision(
         &self,
-    ) -> Result<PreparedPublicationAdvance, ProjectFilesystemError> {
+    ) -> Result<PreparedPublicationAdvance, ProjectOperationError> {
         let next_resource_revision = self
             .resource_revision
             .checked_add(1)
-            .ok_or(ProjectFilesystemError::PublicationRevisionExhausted)?;
+            .ok_or(ProjectOperationError::PublicationRevisionExhausted)?;
         let next_authority_generation = self
             .authority_generation
             .checked_add(1)
-            .ok_or(ProjectFilesystemError::AuthorityGenerationExhausted)?;
+            .ok_or(ProjectOperationError::AuthorityGenerationExhausted)?;
         Ok(PreparedPublicationAdvance {
             previous_resource_revision: self.resource_revision,
             next_resource_revision,
@@ -113,13 +113,13 @@ impl ProjectState {
     pub(crate) fn projection_environment_expectation_for_identity(
         &self,
         project_instance_id: &str,
-        project_root: &NormalizedProjectRoot,
-    ) -> Result<ProjectAuthorityExpectation, ProjectFilesystemError> {
+        project_root: &NormalizedRoot,
+    ) -> Result<ProjectAuthorityExpectation, ProjectOperationError> {
         let expected = self.current_projection_environment_expectation();
         if expected.project_instance_id.as_str() != project_instance_id
             || expected.project_root.as_ref() != Some(project_root)
         {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project changed before authority capture".into(),
             });
         }
@@ -129,7 +129,7 @@ impl ProjectState {
     pub(crate) fn capture_project_authority_for_session(
         &self,
         session: &ProjectSession,
-    ) -> Result<ProjectAuthoritySnapshot, ProjectFilesystemError> {
+    ) -> Result<ProjectAuthoritySnapshot, ProjectOperationError> {
         let expected = self.projection_environment_expectation_for_identity(
             session.instance_id.as_str(),
             &session.root,
@@ -138,7 +138,7 @@ impl ProjectState {
             .activation_generation
             .load(std::sync::atomic::Ordering::Acquire);
         if !generation.is_multiple_of(2) {
-            return Err(ProjectFilesystemError::FilesystemTransactionBusy {
+            return Err(ProjectOperationError::FilesystemTransactionBusy {
                 message: "project authority publication is in progress".into(),
             });
         }
@@ -152,7 +152,7 @@ impl ProjectState {
                 .load(std::sync::atomic::Ordering::Acquire)
                 != generation
         {
-            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
                 message: "project authority changed during capture".into(),
             });
         }
@@ -170,24 +170,24 @@ pub(crate) struct ActivationGenerationTransition {
 impl ActivationGenerationTransition {
     pub(crate) fn begin(
         generation: &Arc<std::sync::atomic::AtomicU64>,
-    ) -> Result<Self, ProjectFilesystemError> {
+    ) -> Result<Self, ProjectOperationError> {
         use std::sync::atomic::Ordering;
 
         let current = generation.load(Ordering::Acquire);
         if !current.is_multiple_of(2) {
-            return Err(ProjectFilesystemError::FilesystemTransactionBusy {
+            return Err(ProjectOperationError::FilesystemTransactionBusy {
                 message: "project activation publication is already in progress".into(),
             });
         }
         let changing = current
             .checked_add(1)
             .filter(|_| current.checked_add(2).is_some())
-            .ok_or(ProjectFilesystemError::ActivationGenerationExhausted)?;
+            .ok_or(ProjectOperationError::ActivationGenerationExhausted)?;
         if generation
             .compare_exchange(current, changing, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            return Err(ProjectFilesystemError::FilesystemTransactionBusy {
+            return Err(ProjectOperationError::FilesystemTransactionBusy {
                 message: "project activation publication is already in progress".into(),
             });
         }

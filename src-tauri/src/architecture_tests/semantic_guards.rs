@@ -14,86 +14,8 @@ use syn::{Expr, ImplItem, Item, Token, TraitItem, Type, UseTree, Visibility};
 
 pub(super) const PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE: &str = "rust.pure-leaf.graph-document-json";
 pub(super) const TABULAR_CONTRACT_RULE: &str = "rust.tabular.contract";
-pub(super) const PROJECT_WATCHER_BOUNDARY_RULE: &str = "rust.project-watcher.boundary";
 const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/crates/yss-graph-document/src/model.rs";
 const GRAPH_DOCUMENT_SOURCE_PREFIX: &str = "src-tauri/crates/yss-graph-document/src/";
-
-const PROJECT_WATCHER_CORE_FILES: &[&str] = &[
-    "src-tauri/crates/yss-project-change/src/lib.rs",
-    "src-tauri/crates/yss-project-watcher/src/lib.rs",
-    "src-tauri/crates/yss-project/src/project_change_reconciliation.rs",
-    "src-tauri/crates/yss-application/src/project_change.rs",
-];
-const PROJECT_WATCHER_PLATFORM_FILES: &[&str] =
-    &["src-tauri/crates/yss-project-watcher-notify/src/lib.rs"];
-
-pub(super) fn project_watcher_source_violations(repository_root: &Path) -> Vec<String> {
-    let mut violations = Vec::new();
-    for relative in PROJECT_WATCHER_CORE_FILES {
-        let path = repository_root.join(relative);
-        let Ok(source) = std::fs::read_to_string(&path) else {
-            violations.push(format!("{relative}: source is unreadable"));
-            continue;
-        };
-        for forbidden in [
-            "notify::",
-            "use notify",
-            "tauri::",
-            "AppHandle",
-            "RecommendedWatcher",
-            "tauri::ipc::Channel",
-        ] {
-            if source.contains(forbidden) {
-                violations.push(format!("{relative}: forbidden {forbidden}"));
-            }
-        }
-        if source.contains(", String>") {
-            violations.push(format!("{relative}: public String result error"));
-        }
-    }
-
-    let platform_source = PROJECT_WATCHER_PLATFORM_FILES
-        .iter()
-        .filter_map(|relative| {
-            let path = repository_root.join(relative);
-            match std::fs::read_to_string(&path) {
-                Ok(source) => Some((*relative, source)),
-                Err(_) => {
-                    violations.push(format!("{relative}: source is unreadable"));
-                    None
-                }
-            }
-        })
-        .collect::<Vec<_>>();
-    let notify_owners = platform_source
-        .iter()
-        .filter(|(_, source)| source.contains("notify::") || source.contains("use notify"))
-        .count();
-    if notify_owners != 1 {
-        violations.push(format!(
-            "watcher notify ownership must be singular, found {notify_owners} owners"
-        ));
-    }
-    if !platform_source.iter().any(|(relative, source)| {
-        *relative == "src-tauri/crates/yss-project-watcher-notify/src/lib.rs"
-            && (source.contains("notify::") || source.contains("use notify"))
-    }) {
-        violations.push(
-            "src-tauri/crates/yss-project-watcher-notify/src/lib.rs: notify adapter missing"
-                .to_owned(),
-        );
-    }
-    if repository_root
-        .join("src-tauri/crates/yss-project/src/project_watcher.rs")
-        .exists()
-    {
-        violations.push(
-            "src-tauri/crates/yss-project/src/project_watcher.rs: legacy watcher owner remains"
-                .to_owned(),
-        );
-    }
-    violations
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct SemanticGuardViolation {

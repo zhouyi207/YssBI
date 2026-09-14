@@ -66,7 +66,7 @@ pub enum GraphContractMappingError {
     FunctionDocument {
         graph: GraphResourcePath,
         #[source]
-        source: yss_project_filesystem::ProjectFilesystemError,
+        source: yss_project::ProjectOperationError,
     },
     #[error("database schema is missing from the catalog snapshot")]
     MissingDatabaseSchema { database: DatabaseId },
