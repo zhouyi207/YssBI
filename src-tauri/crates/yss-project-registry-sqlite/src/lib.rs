@@ -93,8 +93,8 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             .map_err(|error| {
                 tracing::warn!(
                     target: "yss_project_registry_sqlite",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectRegistryLoadFailed",
+                    log_domain = "system",
+                    log_event = "projectRegistryLoadFailed",
                     error = %error,
                     "Project registry load failed"
                 );
@@ -140,8 +140,8 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
             .map_err(|error| {
                 tracing::warn!(
                     target: "yss_project_registry_sqlite",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectRegistryUpsertFailed",
+                    log_domain = "system",
+                    log_event = "projectRegistryUpsertFailed",
                     error = %error,
                     "Project registry upsert failed"
                 );
@@ -163,8 +163,8 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
                 .map_err(|error| {
                     tracing::warn!(
                         target: "yss_project_registry_sqlite",
-                        diagnostic_domain = "system",
-                        diagnostic_event = "projectRegistryRemoveFailed",
+                        log_domain = "system",
+                        log_event = "projectRegistryRemoveFailed",
                         error = %error,
                         "Project registry remove failed"
                     );

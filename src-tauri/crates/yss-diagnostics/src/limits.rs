@@ -1,8 +1,7 @@
-/// Canonical per-record content limits shared by logging and diagnostic
-/// projection validation.
-pub struct LogLimits;
+/// Content limits for explicit diagnostic events and frontend submissions.
+pub struct DiagnosticLimits;
 
-impl LogLimits {
+impl DiagnosticLimits {
     pub const MAX_TARGET_BYTES: usize = 256;
     pub const MAX_EVENT_BYTES: usize = 256;
     pub const MAX_MESSAGE_BYTES: usize = 16 * 1024;

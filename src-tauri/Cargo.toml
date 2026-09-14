@@ -87,7 +87,6 @@ members = [
   "crates/yss-tabular-arrow",
   "crates/yss-tabular-io",
   "crates/tauri-plugin-tracing",
-  "crates/yss-tracing",
   "crates/yss-chart-document",
 ]
 

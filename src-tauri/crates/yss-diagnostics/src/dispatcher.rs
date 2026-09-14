@@ -14,7 +14,7 @@ use super::dto::{
     DiagnosticRecordDto, DiagnosticSubscriptionDto,
 };
 use super::worker::{BoundedWorker, EnqueueResult};
-use yss_tracing::{
+use crate::sanitizer::{
     sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
 };
 

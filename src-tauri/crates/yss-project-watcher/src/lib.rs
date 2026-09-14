@@ -265,7 +265,7 @@ impl ProjectWatcherState {
         if let Err(error) = self.retire_active(WatcherShutdownControl::new(Instant::now())) {
             tracing::warn!(
                 target: "yssbi::project_watcher",
-                diagnostic_domain = "system",
+                log_domain = "system",
                 error = %error,
                 "Project watcher shutdown remains pending"
             );
@@ -377,8 +377,8 @@ impl ProjectWatcherState {
             ProjectFileWatcherDrainOutcome::WorkerPanicked => {
                 tracing::error!(
                     target: "yssbi::project_watcher",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectWatcherWorkerPanicked",
+                    log_domain = "system",
+                    log_event = "projectWatcherWorkerPanicked",
                     "Project watcher worker panicked while shutting down"
                 );
                 self.finish_draining(epoch, &admission, &drain);

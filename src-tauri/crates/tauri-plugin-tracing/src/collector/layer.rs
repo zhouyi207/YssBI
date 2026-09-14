@@ -9,8 +9,8 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
-use crate::runtime::OutputHandle;
-use crate::{LogFields, LogLevel, LogLimits, LogRecord, LogRecordSink, sanitize_fields};
+use crate::collector::runtime::OutputHandle;
+use crate::collector::{LogFields, LogLevel, LogLimits, LogRecord, LogRecordSink, sanitize_fields};
 
 const MESSAGE_FIELD: &str = "message";
 const TRUNCATED_SUFFIX: &str = "…[truncated]";
@@ -63,10 +63,10 @@ where
                 .format("%Y-%m-%dT%H:%M:%S%.3f")
                 .to_string(),
             level: LogLevel::from(metadata.level()),
-            target: crate::sanitize_target(metadata.target()),
+            target: crate::collector::sanitize_target(metadata.target()),
             message: visitor
                 .message
-                .unwrap_or_else(|| crate::sanitize_message(metadata.name())),
+                .unwrap_or_else(|| crate::collector::sanitize_message(metadata.name())),
             fields: sanitize_fields(visitor.fields),
         });
 
@@ -88,7 +88,7 @@ struct LogVisitor {
 impl LogVisitor {
     fn record_value(&mut self, field: &Field, value: Value) {
         if field.name() == MESSAGE_FIELD {
-            self.message = Some(crate::sanitize_message(&value_to_text(&value)));
+            self.message = Some(crate::collector::sanitize_message(&value_to_text(&value)));
         } else {
             self.fields.insert(field.name().to_owned(), value);
         }
@@ -232,7 +232,10 @@ mod tests {
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].target, "yssbi::test");
         assert_eq!(records[0].level, LogLevel::Warn);
-        assert_eq!(records[0].fields["password"], crate::REDACTED_VALUE);
+        assert_eq!(
+            records[0].fields["password"],
+            crate::collector::sanitizer::REDACTED_VALUE
+        );
         assert_eq!(records[0].fields["count"], 3);
         assert!(!records[0].message.contains("hidden"));
     }

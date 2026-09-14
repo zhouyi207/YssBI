@@ -24,6 +24,8 @@ Application initialization directly constructs the concrete `CommandRuntime`, ob
 
 `tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Application retains the separate `submit_frontend_diagnostics`, `subscribe_diagnostics` and `unsubscribe_diagnostics` commands backed by `yss-diagnostics`; diagnostic records do not use the plugin's storage or sequence. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
 
+Diagnostics initialization requires no logging plugin, subscriber or LoggingRuntime. Backend diagnostic data is explicitly published through `DiagnosticsRuntime::publish(DiagnosticEvent)`; ordinary tracing events and CommandError incident logs do not automatically populate diagnostics. Command error wire and frontend diagnostic wire remain unchanged.
+
 `HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal capability calls and delegates draft delivery to the local graph-client adapter. Logging, diagnostics, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
 Native window geometry uses the official Window State plugin registered by the composition root.

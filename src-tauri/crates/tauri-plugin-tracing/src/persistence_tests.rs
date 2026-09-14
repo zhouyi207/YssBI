@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, sync::mpsc, time::Duration};
 
+use crate::collector::LogLayer;
 use sqlx::{ConnectOptions, Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use tracing_subscriber::prelude::*;
-use yss_tracing::LogLayer;
 
 use crate::{FrontendLogEntryDto, LogDomain, LogLevel, LogOrigin, LogQuery, LogRuntime};
 

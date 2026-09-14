@@ -4,7 +4,8 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-use crate::{LogFields, LogLimits};
+use crate::dto::DiagnosticFields;
+use crate::limits::DiagnosticLimits;
 
 const MAX_SANITIZED_ARRAY_ENTRIES: usize = 64;
 const MAX_SANITIZED_OBJECT_ENTRIES: usize = 64;
@@ -16,50 +17,50 @@ const TRUNCATED_FIELD: &str = "_diagnosticsTruncated";
 
 static SENSITIVE_HEADER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?im)\b(authorization|cookie|set-cookie)\s*:\s*[^\r\n]+")
-        .expect("valid logging sensitive-header regex")
+        .expect("valid diagnostic sensitive-header regex")
 });
 static LABELED_SECRET_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?i)\b["']?(password|passwd|pwd|(?:access|refresh|id|auth)[_\- ]?token|token|authorization|cookie|set[_\- ]?cookie|api[_\- ]?key|connection[_\- ]?string|database[_\- ]?url)["']?\s*[:=]\s*(?:bearer\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)"#,
     )
-    .expect("valid logging labeled-secret regex")
+    .expect("valid diagnostic labeled-secret regex")
 });
 static BEARER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\bbearer\s+[a-z0-9._~+/=\-]+").expect("valid logging bearer-token regex")
+    Regex::new(r"(?i)\bbearer\s+[a-z0-9._~+/=\-]+").expect("valid diagnostic bearer-token regex")
 });
 static URI_USERINFO_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^@\s/]+@")
-        .expect("valid logging URI-userinfo regex")
+        .expect("valid diagnostic URI-userinfo regex")
 });
 static PROHIBITED_CONTENT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?is)\b(dataframe|rows|cell[_\- ]?values?|document|clipboard[_\- ]?(?:content|text|html))\s*[:=]\s*.+",
     )
-    .expect("valid logging prohibited-content regex")
+    .expect("valid diagnostic prohibited-content regex")
 });
 
 pub fn sanitize_target(value: &str) -> String {
-    sanitize_text(value, LogLimits::MAX_TARGET_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_TARGET_BYTES, false)
 }
 
 pub fn sanitize_event(value: &str) -> String {
-    sanitize_text(value, LogLimits::MAX_EVENT_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_EVENT_BYTES, false)
 }
 
 pub fn sanitize_message(value: &str) -> String {
-    sanitize_content_text(value, LogLimits::MAX_MESSAGE_BYTES)
+    sanitize_content_text(value, DiagnosticLimits::MAX_MESSAGE_BYTES)
 }
 
 pub fn sanitize_source(value: &str) -> String {
-    sanitize_text(value, LogLimits::MAX_SOURCE_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_SOURCE_BYTES, false)
 }
 
 pub(crate) fn sanitize_field_string(value: &str) -> String {
-    sanitize_content_text(value, LogLimits::MAX_FIELD_STRING_BYTES)
+    sanitize_content_text(value, DiagnosticLimits::MAX_FIELD_STRING_BYTES)
 }
 
 fn sanitize_field_key(value: &str) -> String {
-    sanitize_text(value, LogLimits::MAX_FIELD_KEY_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_FIELD_KEY_BYTES, false)
 }
 
 pub(crate) fn should_redact_field(name: &str) -> bool {
@@ -75,13 +76,13 @@ pub(crate) fn redacted_json_value() -> Value {
     Value::String(REDACTED_VALUE.to_owned())
 }
 
-pub fn sanitize_fields(fields: LogFields) -> LogFields {
+pub fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
     let mut context = SanitizeContext::default();
-    let mut sanitized = LogFields::new();
+    let mut sanitized = DiagnosticFields::new();
     let mut encoded_bytes = 2_usize;
 
     for (index, (raw_key, raw_value)) in fields.into_iter().enumerate() {
-        if index >= LogLimits::MAX_FIELD_COUNT {
+        if index >= DiagnosticLimits::MAX_FIELD_COUNT {
             context.truncated = true;
             break;
         }
@@ -101,7 +102,7 @@ pub fn sanitize_fields(fields: LogFields) -> LogFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            > LogLimits::MAX_FIELDS_BYTES
+            > DiagnosticLimits::MAX_FIELDS_BYTES
         {
             context.truncated = true;
             continue;
@@ -118,7 +119,7 @@ pub fn sanitize_fields(fields: LogFields) -> LogFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            <= LogLimits::MAX_FIELDS_BYTES
+            <= DiagnosticLimits::MAX_FIELDS_BYTES
         {
             sanitized.insert(TRUNCATED_FIELD.to_owned(), value);
         }
@@ -142,7 +143,9 @@ fn sanitize_json_value(
     if should_redact_field(key) {
         return redacted_json_value();
     }
-    if depth > LogLimits::MAX_FIELD_DEPTH || context.values_seen >= LogLimits::MAX_FIELD_VALUES {
+    if depth > DiagnosticLimits::MAX_FIELD_DEPTH
+        || context.values_seen >= DiagnosticLimits::MAX_FIELD_VALUES
+    {
         context.truncated = true;
         return Value::String(TRUNCATED_VALUE.to_owned());
     }
@@ -365,7 +368,7 @@ mod tests {
 
     #[test]
     fn bounds_text_and_json_shape() {
-        let long = "x".repeat(LogLimits::MAX_FIELD_STRING_BYTES + 100);
+        let long = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
         let fields = BTreeMap::from([
             ("long".into(), json!(long)),
             (
@@ -379,12 +382,16 @@ mod tests {
         ]);
 
         let sanitized = sanitize_fields(fields);
-        assert!(sanitized["long"].as_str().unwrap().len() <= LogLimits::MAX_FIELD_STRING_BYTES);
+        assert!(
+            sanitized["long"].as_str().unwrap().len() <= DiagnosticLimits::MAX_FIELD_STRING_BYTES
+        );
         assert_eq!(
             sanitized["array"].as_array().unwrap().len(),
             MAX_SANITIZED_ARRAY_ENTRIES
         );
         assert_eq!(sanitized[TRUNCATED_FIELD], true);
-        assert!(serde_json::to_vec(&sanitized).unwrap().len() <= LogLimits::MAX_FIELDS_BYTES);
+        assert!(
+            serde_json::to_vec(&sanitized).unwrap().len() <= DiagnosticLimits::MAX_FIELDS_BYTES
+        );
     }
 }

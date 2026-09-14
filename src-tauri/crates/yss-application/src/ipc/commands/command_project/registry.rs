@@ -49,7 +49,7 @@ pub async fn scan_projects_in_directory(
         ProjectProgressDrainOutcome::Drained(Err(error)) => {
             tracing::warn!(
                 target: "yssbi::commands::project",
-                diagnostic_domain = "system",
+                log_domain = "system",
                 error_kind = ?error,
                 "Project progress delivery failed"
             );
@@ -81,7 +81,7 @@ pub async fn cleanup_invalid_registered_projects(
         ProjectProgressDrainOutcome::Drained(Err(error)) => {
             tracing::warn!(
                 target: "yssbi::commands::project",
-                diagnostic_domain = "system",
+                log_domain = "system",
                 error_kind = ?error,
                 "Project progress delivery failed"
             );

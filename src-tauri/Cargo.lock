@@ -7303,6 +7303,7 @@ name = "tauri-plugin-tracing"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "regex",
  "serde",
  "serde_json",
  "sqlx",
@@ -7312,9 +7313,9 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
+ "tracing-log",
  "tracing-subscriber",
  "uuid",
- "yss-tracing",
 ]
 
 [[package]]
@@ -9307,7 +9308,6 @@ dependencies = [
  "yss-tabular-arrow",
  "yss-tabular-contract",
  "yss-tabular-io",
- "yss-tracing",
 ]
 
 [[package]]
@@ -9528,13 +9528,11 @@ name = "yss-diagnostics"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
- "tracing",
- "tracing-subscriber",
  "uuid",
- "yss-tracing",
 ]
 
 [[package]]
@@ -10189,20 +10187,6 @@ dependencies = [
  "thiserror 2.0.20",
  "yss-tabular-arrow",
  "yss-tabular-contract",
-]
-
-[[package]]
-name = "yss-tracing"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
 ]
 
 [[package]]

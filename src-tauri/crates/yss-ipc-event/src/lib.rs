@@ -13,8 +13,8 @@ pub fn emit_project_event(app_handle: &AppHandle, event: Event) {
     if let Err(error) = emit_project_event_result(app_handle, &event) {
         tracing::error!(
             target: "yssbi::project::events",
-            diagnostic_domain = "application",
-            diagnostic_event = "projectEventEmitFailed",
+            log_domain = "application",
+            log_event = "projectEventEmitFailed",
             error = %error,
             "Failed to emit project event"
         );

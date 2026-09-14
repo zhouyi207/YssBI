@@ -15,7 +15,7 @@ use super::dto::{
     LogBatchDto, LogDomain, LogFields, LogLevel, LogOrigin, LogRecordDto, LogSubscriptionDto,
 };
 use super::worker::{BoundedWorker, EnqueueResult};
-use yss_tracing::{
+use crate::collector::{
     sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
 };
 

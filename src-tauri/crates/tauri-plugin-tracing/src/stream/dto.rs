@@ -1,5 +1,5 @@
+pub use crate::collector::{LogFields, LogLevel};
 use serde::{Deserialize, Serialize};
-pub use yss_tracing::{LogFields, LogLevel};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

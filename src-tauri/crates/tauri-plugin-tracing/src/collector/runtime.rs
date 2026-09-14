@@ -1,15 +1,15 @@
 use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender, TrySendError};
-use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 
-use crate::{LogLayer, LogRecord, LogRecordSink};
+use crate::collector::{LogLayer, LogRecord, LogRecordSink};
 
 const OUTPUT_QUEUE_CAPACITY: usize = 1_024;
 const OUTPUT_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -18,7 +18,6 @@ const OUTPUT_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Owns the bounded output workers installed by the process-wide logging layer.
 pub struct LoggingRuntime {
-    record_sinks: Arc<RwLock<Vec<LogRecordSink>>>,
     _output_guards: Vec<OutputWorkerGuard>,
 }
 
@@ -34,21 +33,16 @@ impl LoggingRuntime {
             })?;
         let rust_log = std::env::var("RUST_LOG").ok();
         let filter = logging_filter(rust_log.as_deref());
-        let record_sinks = Arc::new(RwLock::new(vec![record_sink]));
-        let subscriber =
-            tracing_subscriber::registry()
-                .with(filter.targets)
-                .with(LogLayer::with_outputs(
-                    vec![console],
-                    Some(fanout(record_sinks.clone())),
-                ));
+        let subscriber = tracing_subscriber::registry()
+            .with(filter.targets)
+            .with(LogLayer::with_outputs(vec![console], Some(record_sink)));
         tracing::subscriber::set_global_default(subscriber)
             .map_err(LoggingInitializationError::TracingSubscriber)?;
         if let Err(error) = tracing_log::LogTracer::init() {
             tracing::warn!(
                 target: "tauri_plugin_tracing",
-                diagnostic_domain = "system",
-                diagnostic_event = "logTracingBridgeUnavailable",
+                log_domain = "system",
+                log_event = "logTracingBridgeUnavailable",
                 error = %error,
                 "Failed to install log-to-tracing bridge"
             );
@@ -56,39 +50,16 @@ impl LoggingRuntime {
         if let Some(error) = filter.parse_error {
             tracing::warn!(
                 target: "tauri_plugin_tracing",
-                diagnostic_domain = "system",
-                diagnostic_event = "rustLogFilterInvalid",
+                log_domain = "system",
+                log_event = "rustLogFilterInvalid",
                 error = %error,
                 "Invalid RUST_LOG; collecting all levels"
             );
         }
         Ok(Self {
-            record_sinks,
             _output_guards: vec![console_guard],
         })
     }
-
-    /// Attach an independent, non-blocking consumer of sanitized Rust records.
-    /// The consumer owns its queue, lifecycle and delivery failures.
-    pub fn add_record_sink(&self, sink: LogRecordSink) {
-        self.record_sinks
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(sink);
-    }
-}
-
-fn fanout(sinks: Arc<RwLock<Vec<LogRecordSink>>>) -> LogRecordSink {
-    Arc::new(move |record| {
-        let current = sinks
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone();
-        for sink in current {
-            // Consumer failures are isolated, and callbacks never run under the registry lock.
-            let _ = catch_unwind(AssertUnwindSafe(|| sink(record)));
-        }
-    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -248,15 +219,15 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
-    use crate::LogLevel;
+    use crate::collector::LogLevel;
 
     #[test]
     fn default_filter_collects_every_crate_and_rust_log_can_restrict_it() {
         let defaults = logging_filter(None).targets;
-        assert!(defaults.would_enable("any_crate::worker", &tracing::Level::TRACE));
+        assert!(defaults.would_enable("any_crate::collector::worker", &tracing::Level::TRACE));
         assert!(defaults.would_enable("dependency", &tracing::Level::ERROR));
         let explicit = logging_filter(Some("my_crate=debug")).targets;
-        assert!(explicit.would_enable("my_crate::worker", &tracing::Level::DEBUG));
+        assert!(explicit.would_enable("my_crate::collector::worker", &tracing::Level::DEBUG));
         assert!(!explicit.would_enable("other", &tracing::Level::INFO));
     }
 

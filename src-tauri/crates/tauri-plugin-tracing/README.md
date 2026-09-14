@@ -7,7 +7,7 @@
 
 收集前端日志和 Rust tracing 记录，脱敏后写入 `app_log_dir()/logs.sqlite`，通过 Channel 将已提交的新记录交付给 Logs 面板。运行诊断由 `yss-diagnostics` 独立管理，Graph Problems 和模型诊断保留各自的业务 owner。
 
-桌面入口在 Application setup 前注册 `.plugin(tauri_plugin_tracing::init())`，Webview capability 启用 `tracing:default`。任意 Rust crate 使用普通 `tracing::info!` 等宏，无需依赖插件；中立的 `yss-tracing` 负责全局 subscriber、脱敏、console 和 record sink，插件负责 SQLite 与日志 IPC。Application 向中立采集层注册独立的诊断 sink。
+桌面入口在 Application setup 前注册 `.plugin(tauri_plugin_tracing::init())`，Webview capability 启用 `tracing:default`。任意 Rust crate 使用普通 `tracing::info!` 等宏，无需依赖插件；插件内部的 [collector](src/collector/mod.rs) 负责全局 subscriber、脱敏、console 和日志记录采集，原 yss-tracing crate 已并入这里。诊断不使用此 collector；Application 不再注册诊断日志 sink。
 
 前端通过 [LogService](../../../src/services/log/logService.ts) 使用 `plugin:tracing|submit_frontend_logs`、`subscribe_logs`、`unsubscribe_logs`、`query_logs` 和 `log_statistics`。`DiagnosticsService` 仍使用 Application 原诊断命令，两者不共享 buffer 或 sequence。
 

@@ -124,8 +124,8 @@ fn cleanup_after_export_error(
         primary => {
             tracing::error!(
                 target: "yssbi::database",
-                diagnostic_domain = "application",
-                diagnostic_event = "databaseExportCleanupFailed",
+                log_domain = "application",
+                log_event = "databaseExportCleanupFailed",
                 error = ?cleanup,
                 "database export cleanup failed after a session transition"
             );

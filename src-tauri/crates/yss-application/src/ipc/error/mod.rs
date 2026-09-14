@@ -63,8 +63,8 @@ impl CommandError {
         let incident_id = uuid::Uuid::new_v4().to_string();
         tracing::error!(
             target: "yssbi::command_error",
-            diagnostic_domain = "application",
-            diagnostic_event = "commandError",
+            log_domain = "application",
+            log_event = "commandError",
             error_code = code,
             incident_id = incident_id.as_str(),
             error = %error,
@@ -145,13 +145,14 @@ fn value_kind(value: &Value) -> &'static str {
 mod tests {
     use serde::Serialize;
     use serde_json::json;
+    use std::sync::{Arc, Mutex};
     use tracing_subscriber::layer::SubscriberExt;
     use uuid::Uuid;
 
     use super::CommandError;
+    use tauri_plugin_tracing::{LogLayer, LogRecord};
     use yss_diagnostics::DiagnosticsRuntime;
     use yss_ipc_contract::error::GraphMutationErrorDetailsDto;
-    use yss_tracing::LogLayer;
 
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -189,25 +190,33 @@ mod tests {
     }
 
     #[test]
-    fn internal_error_logs_incident_and_full_diagnostic_fields() {
+    fn internal_error_logs_incident_without_publishing_runtime_diagnostics() {
         let diagnostics = DiagnosticsRuntime::initialize().expect("initialize diagnostics");
+        let captured = Arc::new(Mutex::new(Vec::<LogRecord>::new()));
+        let sink = captured.clone();
         let subscriber =
-            tracing_subscriber::registry().with(LogLayer::new(diagnostics.rust_log_sink()));
+            tracing_subscriber::registry().with(LogLayer::new(Arc::new(move |record| {
+                sink.lock().unwrap().push(record.clone());
+            })));
         let error = tracing::subscriber::with_default(subscriber, || {
             CommandError::internal("full internal diagnostic")
         });
 
-        let subscription = diagnostics.subscribe_batches(|_| true).unwrap();
-        let record = subscription.entries.last().unwrap();
+        let records = captured.lock().unwrap();
+        let record = records.last().unwrap();
         assert_eq!(record.target, "yssbi::command_error");
-        assert_eq!(record.event.as_deref(), Some("commandError"));
+        assert_eq!(record.fields["log_event"], "commandError");
         assert_eq!(record.fields["error_code"], "internal_error");
         assert_eq!(record.fields["incident_id"], error.incident_id().unwrap());
         assert_eq!(record.fields["error"], "full internal diagnostic");
         assert_eq!(record.fields["error_debug"], "\"full internal diagnostic\"");
-        diagnostics
-            .unsubscribe(subscription.subscription_id)
-            .unwrap();
+        assert!(
+            diagnostics
+                .subscribe_batches(|_| true)
+                .unwrap()
+                .entries
+                .is_empty()
+        );
     }
 
     #[test]

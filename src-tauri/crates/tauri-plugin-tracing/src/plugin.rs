@@ -1,7 +1,7 @@
 use tauri::Manager;
 
+use crate::collector::LoggingRuntime;
 use crate::{LOG_DATABASE_NAME, LogRuntime, commands};
-use yss_tracing::LoggingRuntime;
 
 pub(crate) struct PluginState {
     pub(crate) logs: Option<LogRuntime>,

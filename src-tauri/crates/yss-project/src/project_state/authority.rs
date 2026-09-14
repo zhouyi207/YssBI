@@ -218,8 +218,8 @@ impl ActivationGenerationTransition {
         {
             tracing::error!(
                 target: "yssbi::project::activation",
-                diagnostic_domain = "system",
-                diagnostic_event = "activationGenerationTransitionInvalid",
+                log_domain = "system",
+                log_event = "activationGenerationTransitionInvalid",
                 "Project activation generation transition could not be completed"
             );
         }

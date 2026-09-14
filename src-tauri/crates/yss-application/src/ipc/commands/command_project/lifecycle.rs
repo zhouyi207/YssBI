@@ -86,7 +86,7 @@ fn start_project_watcher(
     if let Err(error) = watcher.watch_project(path, sink) {
         tracing::warn!(
             target: "yssbi::project::watcher",
-            diagnostic_domain = "system",
+            log_domain = "system",
             error_kind = watcher_error_kind(&error),
             error = %error,
             "Failed to start project watcher"
@@ -112,8 +112,8 @@ impl ProjectChangeSink for ProjectEventWatcherSink {
             Err(ApplicationProjectWatchError::Reconciliation(error)) => {
                 tracing::warn!(
                     target: "yssbi::project::watcher",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectIndexRefreshFailed",
+                    log_domain = "system",
+                    log_event = "projectIndexRefreshFailed",
                     error_kind = "reconciliation_failed",
                     error = %error,
                     "Failed to reconcile watched project file change"
@@ -123,8 +123,8 @@ impl ProjectChangeSink for ProjectEventWatcherSink {
             Err(error) => {
                 tracing::warn!(
                     target: "yssbi::project::watcher",
-                    diagnostic_domain = "system",
-                    diagnostic_event = "projectIndexRefreshFailed",
+                    log_domain = "system",
+                    log_event = "projectIndexRefreshFailed",
                     error_kind = application_watch_error_kind(&error),
                     "Failed to reconcile watched project file"
                 );
@@ -136,8 +136,8 @@ impl ProjectChangeSink for ProjectEventWatcherSink {
         let Some(version) = next_watcher_version(&self.version) else {
             tracing::error!(
                 target: "yssbi::project::watcher",
-                diagnostic_domain = "system",
-                diagnostic_event = "watcherVersionExhausted",
+                log_domain = "system",
+                log_event = "watcherVersionExhausted",
                 "Project watcher event version is exhausted"
             );
             return;
@@ -152,8 +152,8 @@ impl ProjectChangeSink for ProjectEventWatcherSink {
         ) {
             tracing::warn!(
                 target: "yssbi::project::watcher",
-                diagnostic_domain = "system",
-                diagnostic_event = "projectEventEmitFailed",
+                log_domain = "system",
+                log_event = "projectEventEmitFailed",
                 error = %error,
                 "Failed to emit project index invalidation"
             );
@@ -195,8 +195,8 @@ pub fn load_project(
 ) -> Result<ProjectActivationResultDto, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "loadProject",
+        log_domain = "application",
+        log_event = "loadProject",
         path = path.as_str(),
         "Loading project"
     );
@@ -207,8 +207,8 @@ pub fn load_project(
 
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "projectLoaded",
+        log_domain = "application",
+        log_event = "projectLoaded",
         project_instance_id = result.project_instance_id.as_str(),
         "Project loaded"
     );
@@ -239,8 +239,8 @@ pub async fn save_project_as(
 ) -> Result<LifecycleMutationResultDto, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "saveProjectAs",
+        log_domain = "application",
+        log_event = "saveProjectAs",
         path = path.as_str(),
         "Saving project copy"
     );
@@ -306,8 +306,8 @@ pub(crate) fn publish_lifecycle_result(app: &AppHandle, result: &LifecycleMutati
         emit_project_event_result(app, event).inspect_err(|error| {
             tracing::error!(
                 target: "yssbi::project::events",
-                diagnostic_domain = "application",
-                diagnostic_event = "lifecycleEventEmitFailed",
+                log_domain = "application",
+                log_event = "lifecycleEventEmitFailed",
                 error = %error,
                 "Failed to emit project lifecycle event"
             );
@@ -341,8 +341,8 @@ pub fn flush_project(
 ) -> Result<ProjectSaveResultDto, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "flushProject",
+        log_domain = "application",
+        log_event = "flushProject",
         "Flushing project"
     );
     let result = application
@@ -367,8 +367,8 @@ pub fn new_project(
 ) -> Result<(), CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "newProject",
+        log_domain = "application",
+        log_event = "newProject",
         "Creating new project"
     );
 

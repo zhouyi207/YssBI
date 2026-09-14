@@ -60,7 +60,7 @@ pub fn run() {
             {
                 tracing::warn!(
                     target: "yssbi::window_state",
-                    diagnostic_domain = "ui",
+                    log_domain = "ui",
                     error = %error,
                     "Failed to persist window geometry"
                 );
@@ -68,8 +68,8 @@ pub fn run() {
         }),
         Err(error) => tracing::error!(
             target: "yssbi::application",
-            diagnostic_domain = "system",
-            diagnostic_event = "applicationRuntimeFailed",
+            log_domain = "system",
+            log_event = "applicationRuntimeFailed",
             error = %error,
             "Tauri application runtime failed"
         ),

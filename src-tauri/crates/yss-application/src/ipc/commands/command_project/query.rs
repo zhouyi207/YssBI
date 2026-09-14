@@ -27,8 +27,8 @@ pub fn get_project_databases(
 ) -> Result<ProjectDatabasesDTO, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "data",
-        diagnostic_event = "getProjectDataResources",
+        log_domain = "data",
+        log_event = "getProjectDataResources",
         "Loading project databases"
     );
 
@@ -87,8 +87,8 @@ pub fn get_project_path(
 
     tracing::info!(
         target: "yssbi::commands::project",
-        diagnostic_domain = "application",
-        diagnostic_event = "getProjectPath",
+        log_domain = "application",
+        log_event = "getProjectPath",
         path = ?path,
         "Read project path"
     );

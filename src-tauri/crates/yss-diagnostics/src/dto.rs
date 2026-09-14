@@ -33,18 +33,16 @@ pub enum DiagnosticDomain {
     Ui,
 }
 
-impl DiagnosticDomain {
-    pub(crate) fn parse(value: &str) -> Option<Self> {
-        match value {
-            "application" => Some(Self::Application),
-            "execution" => Some(Self::Execution),
-            "system" => Some(Self::System),
-            "graph" => Some(Self::Graph),
-            "data" => Some(Self::Data),
-            "ui" => Some(Self::Ui),
-            _ => None,
-        }
-    }
+/// An explicitly produced Rust diagnostic. The runtime assigns origin, time and stream metadata.
+#[derive(Debug, Clone)]
+pub struct DiagnosticEvent {
+    pub level: DiagnosticLevel,
+    pub domain: DiagnosticDomain,
+    pub target: String,
+    pub event: Option<String>,
+    pub message: String,
+    pub source: Option<String>,
+    pub fields: DiagnosticFields,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

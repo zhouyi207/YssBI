@@ -1,21 +1,18 @@
-use yss_tracing::LogRecordSink;
-
 use super::dispatcher::{
     DiagnosticsDispatcherGuard, DiagnosticsDispatcherStartError, DiagnosticsHub,
     DiagnosticsUnavailable, PendingDiagnostic,
 };
 use super::dto::{
-    DiagnosticBatchDto, DiagnosticOrigin, DiagnosticSubscriptionDto, FrontendDiagnosticEntryDto,
+    DiagnosticBatchDto, DiagnosticEvent, DiagnosticOrigin, DiagnosticSubscriptionDto,
+    FrontendDiagnosticEntryDto,
 };
-use super::rust_projection::log_record_sink;
 use super::validation::{
-    FrontendDiagnosticValidationError, ValidatedFrontendDiagnostic, validate_frontend_batch,
+    DiagnosticValidationError, ValidatedDiagnostic, validate_entry, validate_frontend_batch,
 };
 
 /// Owns the diagnostic recent ring and live subscriber dispatcher.
 ///
-/// Logging configuration and persistent outputs are intentionally owned by
-/// `yss-tracing`; this runtime only accepts its sanitized record projection.
+/// Accepts explicit diagnostic data without installing or reading any logging runtime.
 pub struct DiagnosticsRuntime {
     hub: DiagnosticsHub,
     _dispatcher_guard: DiagnosticsDispatcherGuard,
@@ -30,16 +27,23 @@ impl DiagnosticsRuntime {
         })
     }
 
-    pub fn rust_log_sink(&self) -> LogRecordSink {
-        log_record_sink(self.hub.clone())
+    /// Publish diagnostic data produced by a backend use case.
+    pub fn publish(&self, event: DiagnosticEvent) -> Result<(), DiagnosticSubmissionError> {
+        let entry = validate_entry(0, event)?;
+        self.hub
+            .publish(vec![pending(&entry, DiagnosticOrigin::Rust)])?;
+        Ok(())
     }
 
     pub fn submit_frontend(
         &self,
         entries: Vec<FrontendDiagnosticEntryDto>,
-    ) -> Result<(), SubmitFrontendDiagnosticsError> {
+    ) -> Result<(), DiagnosticSubmissionError> {
         let entries = validate_frontend_batch(entries)?;
-        let pending = entries.iter().map(frontend_pending).collect();
+        let pending = entries
+            .iter()
+            .map(|entry| pending(entry, DiagnosticOrigin::Frontend))
+            .collect();
         self.hub.publish(pending)?;
         Ok(())
     }
@@ -72,27 +76,18 @@ impl From<DiagnosticsDispatcherStartError> for DiagnosticsInitializationError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum SubmitFrontendDiagnosticsError {
+pub enum DiagnosticSubmissionError {
     #[error(transparent)]
-    Validation(#[from] FrontendDiagnosticValidationError),
+    Validation(#[from] DiagnosticValidationError),
     #[error(transparent)]
     Unavailable(#[from] DiagnosticsUnavailable),
 }
 
-impl SubmitFrontendDiagnosticsError {
-    pub const fn code(&self) -> &'static str {
-        match self {
-            Self::Validation(_) => "invalid_frontend_diagnostics",
-            Self::Unavailable(_) => "diagnostics_unavailable",
-        }
-    }
-}
-
-fn frontend_pending(entry: &ValidatedFrontendDiagnostic) -> PendingDiagnostic {
+fn pending(entry: &ValidatedDiagnostic, origin: DiagnosticOrigin) -> PendingDiagnostic {
     PendingDiagnostic {
         timestamp: super::local_timestamp_now(),
         level: entry.level,
-        origin: DiagnosticOrigin::Frontend,
+        origin,
         domain: entry.domain,
         target: entry.target.clone(),
         event: entry.event.clone(),
@@ -105,12 +100,63 @@ fn frontend_pending(entry: &ValidatedFrontendDiagnostic) -> PendingDiagnostic {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     use serde_json::json;
 
     use super::DiagnosticsRuntime;
     use crate::dispatcher::DiagnosticsHub;
-    use crate::{DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, FrontendDiagnosticEntryDto};
+    use crate::{
+        DiagnosticDomain, DiagnosticEvent, DiagnosticLevel, DiagnosticOrigin,
+        FrontendDiagnosticEntryDto,
+    };
+
+    #[test]
+    fn backend_data_reaches_snapshot_and_live_delivery_without_a_logging_runtime() {
+        let runtime = DiagnosticsRuntime::initialize().unwrap();
+        let event = DiagnosticEvent {
+            level: DiagnosticLevel::Warn,
+            domain: DiagnosticDomain::Data,
+            target: "dataset.validation".into(),
+            event: Some("missingValues".into()),
+            message: "Dataset contains missing values".into(),
+            source: None,
+            fields: BTreeMap::from([
+                ("missingCount".into(), json!(3)),
+                ("password".into(), json!("secret")),
+            ]),
+        };
+        runtime.publish(event.clone()).unwrap();
+        let (sender, receiver) = mpsc::channel();
+        let snapshot = runtime
+            .subscribe_batches(move |batch| sender.send(batch).is_ok())
+            .unwrap();
+        assert_eq!(snapshot.latest_sequence, 1);
+        let record = &snapshot.entries[0];
+        assert_eq!(record.origin, DiagnosticOrigin::Rust);
+        assert_eq!(record.fields["missingCount"], 3);
+        assert_eq!(record.fields["password"], "[REDACTED]");
+
+        runtime.publish(event.clone()).unwrap();
+        let batch = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(batch.stream_id, snapshot.stream_id);
+        assert_eq!(batch.entries[0].sequence, 2);
+        assert_eq!(batch.entries[0].event.as_deref(), Some("missingValues"));
+
+        let invalid = DiagnosticEvent {
+            target: String::new(),
+            ..event
+        };
+        assert!(matches!(
+            runtime.publish(invalid),
+            Err(super::DiagnosticSubmissionError::Validation(_))
+        ));
+        assert_eq!(
+            runtime.subscribe_batches(|_| true).unwrap().latest_sequence,
+            2
+        );
+    }
 
     #[test]
     fn frontend_submission_assigns_stream_metadata_and_frontend_origin() {
@@ -145,6 +191,9 @@ mod tests {
         runtime.unsubscribe(subscription.subscription_id).unwrap();
 
         let error = runtime.submit_frontend(Vec::new()).unwrap_err();
-        assert_eq!(error.code(), "invalid_frontend_diagnostics");
+        assert!(matches!(
+            error,
+            super::DiagnosticSubmissionError::Validation(_)
+        ));
     }
 }

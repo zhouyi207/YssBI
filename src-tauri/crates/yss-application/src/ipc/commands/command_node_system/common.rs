@@ -47,8 +47,8 @@ pub(super) fn mutation_conflict_to_command_error(
         ) => {
             tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",
-                diagnostic_domain = "graph",
-                diagnostic_event = "mutationRejected",
+                log_domain = "graph",
+                log_event = "mutationRejected",
                 error = %error,
                 "Graph mutation rejected"
             );
@@ -58,8 +58,8 @@ pub(super) fn mutation_conflict_to_command_error(
         yss_graph_editor::MutationConflict::Editor(error) => {
             tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",
-                diagnostic_domain = "graph",
-                diagnostic_event = "mutationRejected",
+                log_domain = "graph",
+                log_event = "mutationRejected",
                 error_code = error.code.as_str(),
                 detail = error.detail,
                 "Graph mutation rejected"

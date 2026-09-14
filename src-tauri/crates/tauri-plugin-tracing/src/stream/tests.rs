@@ -294,7 +294,11 @@ fn bounded_ingress_reports_exact_drop_count_on_recovery() {
     let recovery_started = std::time::Instant::now();
     let snapshot = loop {
         if let Ok(snapshot) = hub.subscribe(|_| true) {
-            break snapshot;
+            // A full ingress queue can defer its drop marker until after the first snapshot.
+            if snapshot.latest_sequence >= 3 {
+                break snapshot;
+            }
+            hub.unsubscribe(snapshot.subscription_id).unwrap();
         }
         assert!(recovery_started.elapsed() < Duration::from_secs(1));
         std::thread::sleep(Duration::from_millis(5));

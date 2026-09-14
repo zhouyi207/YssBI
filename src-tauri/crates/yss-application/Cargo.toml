@@ -22,7 +22,6 @@ yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 tokio = { workspace = true, features = ["sync", "time"] }
 tauri.workspace = true
-yss-tracing = { path = "../yss-tracing" }
 yss-statistical-harness-sqlite = { path = "../yss-statistical-harness-sqlite" }
 yss-project-watcher-notify = { path = "../yss-project-watcher-notify" }
 yss-project-watcher = { path = "../yss-project-watcher" }

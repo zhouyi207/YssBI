@@ -55,8 +55,8 @@ impl ProjectFileWatcherFactory for NotifyProjectFileWatcher {
                     let error = NotifyProjectFileWatcherError::Callback(source);
                     tracing::warn!(
                         target: "yssbi::project_watcher_notify",
-                        diagnostic_domain = "system",
-                        diagnostic_event = "watcherError",
+                        log_domain = "system",
+                        log_event = "watcherError",
                         error = %error,
                         "Project file watcher reported an error"
                     );
@@ -252,8 +252,8 @@ enum NotifyProjectFileWatcherError {
 fn report_start_error(error: NotifyProjectFileWatcherError) -> FileWatcherStartError {
     tracing::warn!(
         target: "yssbi::project_watcher_notify",
-        diagnostic_domain = "system",
-        diagnostic_event = "watcherStartFailed",
+        log_domain = "system",
+        log_event = "watcherStartFailed",
         error = %error,
         "Failed to start project file watcher"
     );

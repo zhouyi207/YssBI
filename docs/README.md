@@ -39,6 +39,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 - [Application 用例与会话](../src-tauri/crates/yss-application/README.md)：职责、依赖分组与跨子系统调用流程。
 - [Tauri / IPC transport](../src-tauri/crates/yss-application/src/ipc/README.md)
+- [运行诊断数据与交付](../src-tauri/crates/yss-diagnostics/README.md)
 - [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [Dataset snapshot store](../src-tauri/crates/yss-dataset-store/README.md)

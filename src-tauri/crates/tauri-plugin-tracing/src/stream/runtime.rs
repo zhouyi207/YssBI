@@ -1,6 +1,6 @@
+use crate::collector::LogRecordSink;
 use crate::store::{LogPage, LogQuery, LogStatistics, LogStoreError};
 use std::{path::PathBuf, sync::Arc};
-use yss_tracing::LogRecordSink;
 
 use super::dispatcher::{
     LogDispatcherGuard, LogDispatcherStartError, LogHub, LogsUnavailable, PendingLog,

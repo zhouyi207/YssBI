@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
+use crate::collector::{
+    LogRecord, LogRecordSink, sanitize_event, sanitize_source, sanitize_target,
+};
 use serde_json::Value;
-use yss_tracing::{LogRecord, LogRecordSink, sanitize_event, sanitize_source, sanitize_target};
 
 use super::dispatcher::{LogHub, PendingLog};
 use super::dto::{LogDomain, LogOrigin};
 
-const DOMAIN_FIELD: &str = "diagnostic_domain";
-const EVENT_FIELD: &str = "diagnostic_event";
-const SOURCE_FIELD: &str = "diagnostic_source";
-const TARGET_FIELD: &str = "diagnostic_target";
+const DOMAIN_FIELD: &str = "log_domain";
+const EVENT_FIELD: &str = "log_event";
+const SOURCE_FIELD: &str = "log_source";
+const TARGET_FIELD: &str = "log_target";
 
 pub(crate) fn log_record_sink(hub: LogHub) -> LogRecordSink {
     Arc::new(move |record| {
@@ -93,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_crate_events_are_collected_without_diagnostic_annotations() {
+    fn ordinary_crate_events_are_collected_without_log_annotations() {
         let pending = project_log_record(&record(BTreeMap::from([("count".into(), json!(1))])));
         assert_eq!(pending.domain, LogDomain::Data);
         assert_eq!(pending.message, "failed");

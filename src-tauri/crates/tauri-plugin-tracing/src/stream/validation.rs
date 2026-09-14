@@ -1,8 +1,8 @@
-use serde_json::Value;
-use thiserror::Error;
-use yss_tracing::{
+use crate::collector::{
     LogLimits, sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
 };
+use serde_json::Value;
+use thiserror::Error;
 
 use super::dto::{FrontendLogEntryDto, LogDomain, LogFields, LogLevel};
 
