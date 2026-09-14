@@ -14,7 +14,7 @@ import type {
   GraphDraftTransformDto,
   GraphDocumentDto,
 } from "@/shared/types/domain/editorMutation";
-import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
+import type { RunEvent } from "@/shared/types/domain/runEvent";
 
 const GRAPH_TOOLS = new Set([
   "inspect_graph",
@@ -136,9 +136,8 @@ export class HarnessGraphToolsService {
     draftGeneration: number,
     locale: string,
     onEvent: (event: RunEvent) => void,
-    onOutput: (event: RunOutputChannelEvent) => void,
   ): Promise<HarnessGraphUpdate> {
-    const drain = createExecutionStreamDrain(onEvent, onOutput);
+    const drain = createExecutionStreamDrain(onEvent);
     const channel = trackChannel(new Channel<unknown>(), drain.dispose);
     channel.onmessage = drain.onmessage;
     let timer: ReturnType<typeof setTimeout> | undefined;

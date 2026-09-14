@@ -8,6 +8,7 @@ import {
   resultReference,
   type ResultReference,
   type ResultLease,
+  type GraphResultState,
 } from "@/shared/types/domain/result";
 import { parseResultAnalysis } from "@/shared/types/report/parseOls";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -17,6 +18,7 @@ import {
   parseResultPage,
   parseResultValue,
   parseResultLease,
+  parseGraphResultState,
 } from "@/shared/types/dto/resultParser";
 
 function nullable<T>(value: unknown, parse: (input: unknown) => T): T | null {
@@ -24,6 +26,13 @@ function nullable<T>(value: unknown, parse: (input: unknown) => T): T | null {
 }
 
 export class ResultService {
+  static async getGraphState(graphPath: string, semanticInputHash: string): Promise<GraphResultState | null> {
+    const value = nullable(await invokeCommand<unknown>("get_graph_result_state", { graphPath, semanticInputHash }), parseGraphResultState);
+    if (value && (value.semanticInputHash !== semanticInputHash || value.outputs.some(({ output }) => output.graphPath !== graphPath)))
+      throw new Error("Mismatched graph result state");
+    return value;
+  }
+
   static async getDescriptor(reference: ResultReference): Promise<ResultDescriptor | null> {
     const value = await invokeCommand<unknown>("get_result_descriptor", {
       reference: resultReference(reference),

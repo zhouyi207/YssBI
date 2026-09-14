@@ -14,7 +14,6 @@ import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 import { cancelActiveGraphRun } from "./cancelActiveGraphRun";
 import {
   observeGraphRunEvent,
-  observeGraphRunOutput,
   type GraphRunOutcomeState,
 } from "./observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
@@ -314,10 +313,6 @@ export function useProjectOperations() {
                 t,
               );
             }
-          },
-          onOutput: (event) => {
-            if (!isCurrentProjectIdentity(project)) return;
-            observeGraphRunOutput(graphPath, event);
           },
         });
 

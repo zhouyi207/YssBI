@@ -6,8 +6,10 @@ import {
   parseResultDescriptor,
   parseResultPage,
   parseResultValue,
+  parseGraphResultState,
 } from "@/shared/types/dto/resultParser";
 import { ResultService } from "./resultService";
+import executionFixture from "@/tests/fixtures/node-system-contracts/execution-wire.json";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
@@ -96,6 +98,22 @@ describe("ResultService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(invoke).mockResolvedValue(null);
+  });
+
+  it("reads graph cache identities and rejects invalid, duplicate, or misrouted outputs", async () => {
+    const state = executionFixture.graphResultState;
+    const hash = state.semanticInputHash;
+    const graphPath = state.outputs[0].output.graphPath;
+    vi.mocked(invoke).mockResolvedValueOnce(state);
+    await expect(ResultService.getGraphState(graphPath, hash)).resolves.toEqual(state);
+    expect(invoke).toHaveBeenCalledWith("get_graph_result_state", { graphPath, semanticInputHash: hash });
+    expect(() => parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], resultId: null }] })).toThrow();
+    expect(() => parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], state: "stale" }] })).toThrow();
+    expect(() => parseGraphResultState({ ...state, outputs: [...state.outputs, {
+      ...state.outputs[0], output: { graphPath, port: { portKey: output.portKey, nodeId: output.nodeId, kind: output.kind } },
+    }] })).toThrow();
+    vi.mocked(invoke).mockResolvedValueOnce(state);
+    await expect(ResultService.getGraphState("events/other.yssbi-event", hash)).rejects.toThrow("Mismatched graph result state");
   });
 
   it("uses session-bound references for report tables and typed statistical analysis", async () => {

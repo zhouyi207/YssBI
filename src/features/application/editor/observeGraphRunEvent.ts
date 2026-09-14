@@ -5,7 +5,7 @@ import {
   type PinPreviewLease,
 } from "@/features/core/execution";
 import type { GraphOutputRefDto } from "@/shared/types/domain/executionDemand";
-import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
+import type { RunEvent } from "@/shared/types/domain/runEvent";
 
 export type GraphRunOutcomeState = {
   outcome: "success" | "cancelled" | "error";
@@ -74,10 +74,6 @@ function observePinPreviewEvent(
   }
 
   preview.lease.complete(event.kind.resultId);
-}
-
-export function observeGraphRunOutput(graphPath: string, event: RunOutputChannelEvent): void {
-  useExecutionStore.getState().recordRunOutput(graphPath, event);
 }
 
 export function observeGraphRunEvent(

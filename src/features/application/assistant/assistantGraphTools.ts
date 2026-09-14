@@ -24,7 +24,6 @@ import { markResourceDirty, useResourceStore } from "@/features/core/resource";
 import { useExecutionStore, ensureGraphExecutionTerminal } from "@/features/core/execution";
 import {
   observeGraphRunEvent,
-  observeGraphRunOutput,
 } from "@/features/application/editor/observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
@@ -87,9 +86,6 @@ export async function applyAssistantGraphTool(
                   }),
                   getI18n().t.bind(getI18n()),
                 );
-            },
-            (event) => {
-              if (current()) observeGraphRunOutput(request.graphPath, event);
             },
           );
           if (!current()) return false;

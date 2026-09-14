@@ -1,1 +1,1 @@
-export { RunOutputPanel } from "./internal/ui/RunOutputPanel";
+export { RunFailurePanel } from "./internal/ui/RunFailurePanel";

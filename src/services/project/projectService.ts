@@ -7,7 +7,7 @@ import type { ProjectIndexSnapshot } from "@/shared/types/domain/project";
 import { parseActivityPanelResponse } from "@/shared/types/dto/activityPanel";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 import { Channel } from "@tauri-apps/api/core";
-import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/dto/runEvent";
+import type { RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
 import { parseInternalCompilationErrorDetails } from "@/shared/types/dto/executionError";
 import { parseExecutionDemandDto } from "@/shared/types/dto/runEventParser";
@@ -53,7 +53,6 @@ export interface ExecuteGraphDocumentRequest {
   compiledArtifactId: string;
   demand: ExecutionDemandDto;
   onEvent?: (event: RunEvent) => void;
-  onOutput?: (event: RunOutputChannelEvent) => void;
 }
 
 export const PICKER_TASK_CANCELLED = "picker_task_cancelled";
@@ -476,10 +475,9 @@ export class ProjectService {
     compiledArtifactId,
     demand,
     onEvent,
-    onOutput,
   }: ExecuteGraphDocumentRequest): Promise<void> {
     const parsedDemand = parseExecutionDemandDto(demand);
-    const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent, onOutput);
+    const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
     try {
       try {
         await invokeCommand<void>("execute_compiled_graph", {

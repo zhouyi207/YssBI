@@ -16,10 +16,6 @@ export function graphHasClearableArtifacts(
     | {
         status: GraphExecutionState["status"];
         recording: { readonly length: number };
-        runOutput: {
-          readonly entries: { readonly length: number };
-          readonly projectionDropped: boolean;
-        };
         nodeStates: { readonly size: number };
         completedConnections: { readonly size: number };
         flowingConnections: { readonly size: number };
@@ -30,8 +26,6 @@ export function graphHasClearableArtifacts(
   if (graph.status === "running") return false;
   return (
     graph.recording.length > 0 ||
-    graph.runOutput.entries.length > 0 ||
-    graph.runOutput.projectionDropped ||
     graph.status === "completed" ||
     graph.status === "error" ||
     graph.nodeStates.size > 0 ||

@@ -28,7 +28,6 @@ describe("resolveResultRenderer", () => {
     expect(resolveResultRenderer(descriptor("sequence"))).toBe("sequence");
     expect(resolveResultRenderer(descriptor("dataSeries"))).toBe("dataseries");
     expect(resolveResultRenderer(descriptor("scalar"))).toBe("scalar");
-    expect(resolveResultRenderer(descriptor("unknown"))).toBe("json");
   });
 
   it("selects plot and report from presentation", () => {

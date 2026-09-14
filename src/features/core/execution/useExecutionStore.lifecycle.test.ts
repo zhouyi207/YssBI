@@ -112,69 +112,6 @@ describe("useExecutionStore pin result lifecycle", () => {
     expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
   });
 
-  it("keeps ordered run output bounded to the active run lifecycle", () => {
-    const graphPath = "events/Main.yssbi-event";
-    const store = useExecutionStore.getState();
-    store.startExecution(graphPath);
-    store.setActiveRunId(graphPath, "41");
-
-    store.recordRunOutput(graphPath, {
-      runId: "stale-run",
-      sequence: 1,
-      stream: "stdout",
-      text: "stale",
-      sourceGraphPath: "events/Main.yssbi-event",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    });
-    store.recordRunOutput(graphPath, {
-      runId: "41",
-      sequence: 1,
-      stream: "stdout",
-      text: "value",
-      sourceGraphPath: "functions/Nested.yssbi-function",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    });
-    store.completeExecution(graphPath);
-
-    expect(useExecutionStore.getState().getGraph(graphPath).runOutput).toMatchObject({
-      runId: "41",
-      projectionDropped: false,
-      entries: [
-        {
-          sequence: 1,
-          text: "value",
-          sourceGraphPath: "functions/Nested.yssbi-function",
-        },
-      ],
-    });
-
-    store.clearRunOutput(graphPath);
-    expect(useExecutionStore.getState().getGraph(graphPath).runOutput).toEqual({
-      runId: null,
-      entries: [],
-      projectionDropped: false,
-    });
-
-    store.clearRunOutput(graphPath);
-
-    store.clearGraphRunProjections(graphPath);
-    expect(useExecutionStore.getState().getGraph(graphPath).runOutput).toEqual({
-      runId: null,
-      entries: [],
-      projectionDropped: false,
-    });
-  });
-
   it("marks completed execution visuals dirty after a graph edit", () => {
     const graphPath = "events/Main.yssbi-event";
     const store = useExecutionStore.getState();

@@ -10,6 +10,19 @@ export interface ResultReference {
   readonly resultId: ResultId;
 }
 
+export type ResultCacheState = "missing" | "stale" | "valid";
+
+export interface GraphResultState {
+  readonly executionSessionId: string;
+  readonly semanticInputHash: string;
+  readonly compiledArtifactId: string | null;
+  readonly outputs: readonly {
+    readonly output: GraphOutputRefDto;
+    readonly state: ResultCacheState;
+    readonly resultId: string | null;
+  }[];
+}
+
 export function resultReference(value: ResultReference): ResultReference {
   return { executionSessionId: value.executionSessionId, resultId: value.resultId };
 }
@@ -80,7 +93,7 @@ export interface ResultProvenance {
   createdAtMs: string;
 }
 
-export type ResultValueKind = "scalar" | "sequence" | "dataSeries" | "unknown";
+export type ResultValueKind = "scalar" | "sequence" | "dataSeries";
 export type DataSeriesElementType =
   | "int64"
   | "float64"
@@ -126,7 +139,7 @@ export interface ResultPage {
   totalCount: number | null;
   hasMore: boolean;
   nextOffset: number | null;
-  valueKind: Exclude<ResultValueKind, "unknown">;
+  valueKind: ResultValueKind;
   metadata: ResultMetadata | null;
   values: unknown[];
 }

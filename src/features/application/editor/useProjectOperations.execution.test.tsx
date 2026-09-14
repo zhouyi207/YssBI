@@ -154,7 +154,6 @@ describe("useProjectOperations execution demand", () => {
       compiledArtifactId,
       demand: { type: "default" },
       onEvent: expect.any(Function),
-      onOutput: expect.any(Function),
     });
   });
 

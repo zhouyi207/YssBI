@@ -32,6 +32,7 @@ function createFixture() {
   const pages = new Map<string, DeepReadonly<ResultPage | null>>();
   const pinResults = new Map<string, DeepReadonly<ResultDescriptor | null>>();
   const service = {
+    getGraphState: vi.fn(async () => null),
     analyze: vi.fn(async () => {
       throw new Error("unexpected analysis");
     }),
@@ -52,6 +53,7 @@ function createFixture() {
   } satisfies ResultQueryDependencies["service"];
   const key = (value: object): string => JSON.stringify(value);
   const publication: ResultQueryPublication = {
+    publishGraphState: vi.fn(),
     publishAnalysis: vi.fn(),
     releasePayload: vi.fn(),
     publishDescriptor: (_projectId, resultId, value) =>

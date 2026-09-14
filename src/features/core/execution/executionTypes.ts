@@ -6,7 +6,6 @@
 
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type {
-  RunOutputChannelEvent,
   RunPhase,
   ResultInspectionSource,
 } from "@/shared/types/domain/runEvent";
@@ -40,12 +39,6 @@ export interface NodeExecutionState {
   durationMs?: number;
 }
 
-export interface RunOutputProjection {
-  runId: string | null;
-  entries: RunOutputChannelEvent[];
-  projectionDropped: boolean;
-}
-
 export interface RunFailureProjection {
   runId: string | null;
   code: string;
@@ -74,7 +67,6 @@ export interface GraphExecutionState {
   flowingConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
-  runOutput: RunOutputProjection;
   runFailure: RunFailureProjection | null;
 
   /** Stable `(graphPath, PortAddressDto)` preview projections. */

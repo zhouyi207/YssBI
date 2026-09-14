@@ -12,6 +12,7 @@ import {
   resultReference,
   resultReferenceKey,
   type ResultReference,
+  type GraphResultState,
 } from "@/shared/types/domain/result";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
@@ -55,11 +56,21 @@ export interface ResultPinRequest {
   readonly output: PortAddressDto;
 }
 
+export interface ResultGraphStateRequest {
+  readonly graphPath: string;
+  readonly semanticInputHash: string;
+  readonly sessionId: number;
+  readonly draftGeneration: number;
+  /** Local publication identity; never sent to Rust. */
+  readonly draftSession: object;
+}
+
 export type ResultQueryScope =
   | ({ readonly kind: "descriptor" | "value" } & ResultIdentityRequest)
   | ({ readonly kind: "page" } & ResultPageRequest)
   | ({ readonly kind: "analysis" } & ResultAnalysisQuery)
-  | ({ readonly kind: "pinResult" } & ResultPinRequest);
+  | ({ readonly kind: "pinResult" } & ResultPinRequest)
+  | ({ readonly kind: "graphState" } & ResultGraphStateRequest);
 
 export type ResultQueryOutcome =
   | { readonly status: "published" }
@@ -73,14 +84,17 @@ export interface ResultQueryCoordinator {
   loadPage(request: ResultPageRequest): Promise<ResultQueryOutcome>;
   loadAnalysis(request: ResultAnalysisQuery): Promise<ResultQueryOutcome>;
   loadPinResult(request: ResultPinRequest): Promise<ResultQueryOutcome>;
+  loadGraphState(request: ResultGraphStateRequest): Promise<ResultQueryOutcome>;
   retainPayload(reference: ResultReference): () => void;
   resetProject(): void;
   resetResult(reference: ResultReference): void;
   resetPinResult(request: ResultPinRequest): void;
+  resetGraphState(graphPath: string): void;
   isPayloadRetained(reference: ResultReference): boolean;
 }
 
 export interface ResultQueryServicePort {
+  readonly getGraphState: (graphPath: string, semanticInputHash: string) => Promise<GraphResultState | null>;
   readonly getDescriptor: (reference: ResultReference) => Promise<ResultDescriptor | null>;
   readonly getValue: (reference: ResultReference) => Promise<ResultValue | null>;
   readonly getPage: (
@@ -100,6 +114,7 @@ export interface ResultQueryServicePort {
 }
 
 export interface ResultQueryPublication {
+  readonly publishGraphState: (projectInstanceId: string | null, request: ResultGraphStateRequest, projection: DeepReadonly<GraphResultState | null>) => void;
   readonly releasePayload: (reference: ResultReference) => void;
   readonly publishDescriptor: (
     projectInstanceId: string | null,
@@ -160,7 +175,7 @@ interface RequestOwner {
   readonly scope: ResultQueryScope;
 }
 
-type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage | ResultAnalysis;
+type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage | ResultAnalysis | GraphResultState;
 
 function queryPart(value: string): string {
   return `${value.length}:${value}`;
@@ -168,6 +183,8 @@ function queryPart(value: string): string {
 
 function queryKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
+    case "graphState":
+      return `graphState:${queryPart(scope.graphPath)}`;
     case "descriptor":
     case "value":
       return `${scope.kind}:${queryPart(resultReferenceKey(scope))}`;
@@ -181,7 +198,7 @@ function queryKey(scope: ResultQueryScope): string {
 }
 
 function referenceFor(scope: ResultQueryScope): ResultReference | null {
-  return scope.kind === "analysis" ? scope.reference : scope.kind === "pinResult" ? null : scope;
+  return scope.kind === "analysis" ? scope.reference : scope.kind === "pinResult" || scope.kind === "graphState" ? null : scope;
 }
 
 function validIdentity(value: string | null): value is string {
@@ -375,6 +392,13 @@ export function createResultQueryCoordinator(
   };
 
   return {
+    loadGraphState: (request) => load(
+      { kind: "graphState", ...request },
+      () => dependencies.service.getGraphState(request.graphPath, request.semanticInputHash),
+      (projectInstanceId, value) => dependencies.publication.publishGraphState(projectInstanceId, request, value),
+      "result_source_read_failed",
+    ),
+    resetGraphState: (graphPath) => { requests.delete(`graphState:${queryPart(graphPath)}`); },
     loadDescriptor,
     loadValue,
     loadPage,

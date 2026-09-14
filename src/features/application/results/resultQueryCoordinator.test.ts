@@ -1,4 +1,4 @@
-import type { ResultReference } from "@/shared/types/domain/result";
+import type { GraphResultState, ResultReference } from "@/shared/types/domain/result";
 import { resultSessionFixture, resultReferenceFixture } from "@/tests/helpers/resultFixture";
 import { describe, expect, it } from "vitest";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -96,6 +96,7 @@ function setup(): {
     readonly pinResults: (ResultDescriptor | null)[];
     readonly failures: Array<{ readonly scopeKind: string; readonly issueCode: string }>;
   } = {
+    publishGraphState: () => undefined,
     descriptors,
     values,
     pages,
@@ -120,6 +121,7 @@ function setup(): {
     },
   };
   const service: TestService = {
+    getGraphState: async () => null,
     analyze: async () => {
       throw new Error("unexpected analysis");
     },
@@ -143,6 +145,33 @@ function setup(): {
 }
 
 describe("ResultQueryCoordinator", () => {
+  it("publishes only the newest graph state when an edit is undone before earlier reads finish", async () => {
+    const fixture = setup();
+    const old = deferred<GraphResultState | null>();
+    const edited = deferred<GraphResultState | null>();
+    const undone = deferred<GraphResultState | null>();
+    const replies = [old, edited, undone];
+    fixture.service.getGraphState = () => replies.shift()!.promise;
+    const published: Array<GraphResultState | null> = [];
+    const coordinator = createResultQueryCoordinator({ ...fixture.dependencies, publication: {
+      ...fixture.publication, publishGraphState: (_project, _request, value) => { published.push(value as GraphResultState | null); },
+    } });
+    const request = { graphPath: "events/contract.yssbi-event", semanticInputHash: "a".repeat(64),
+      sessionId: 1, draftGeneration: 0, draftSession: {} };
+    const first = coordinator.loadGraphState(request);
+    const second = coordinator.loadGraphState({ ...request, semanticInputHash: "b".repeat(64), draftGeneration: 1, draftSession: {} });
+    const third = coordinator.loadGraphState({ ...request, draftGeneration: 2, draftSession: {} });
+    const state: GraphResultState = { executionSessionId: resultSessionFixture, semanticInputHash: request.semanticInputHash,
+      compiledArtifactId: request.semanticInputHash, outputs: [{ output: { graphPath: request.graphPath, port: output }, state: "valid", resultId: "18" }] };
+    undone.resolve(state);
+    expect(await third).toEqual({ status: "published" });
+    old.resolve({ ...state, compiledArtifactId: null });
+    edited.resolve({ ...state, semanticInputHash: "b".repeat(64) });
+    expect(await first).toEqual({ status: "stale" });
+    expect(await second).toEqual({ status: "stale" });
+    expect(published).toEqual([state]);
+  });
+
   it("isolates report tables and discards analysis results after their result is invalidated", async () => {
     const fixture = setup();
     const reference = {

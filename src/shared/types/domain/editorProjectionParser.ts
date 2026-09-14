@@ -107,7 +107,7 @@ function validateNode(
   }
 }
 
-function portAddressKey(address: PortAddressDto): string {
+export function portAddressKey(address: PortAddressDto): string {
   return address.kind === "declared"
     ? JSON.stringify(["declared", address.nodeId, address.portKey])
     : JSON.stringify(["instance", address.nodeId, address.templateKey, address.instanceId]);

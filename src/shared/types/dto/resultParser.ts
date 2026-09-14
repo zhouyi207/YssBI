@@ -1,4 +1,5 @@
 import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectionGuards";
+import { portAddressKey } from "@/shared/types/domain/editorProjectionParser";
 import { isResultPlotKind } from "./result";
 import type {
   GraphOutputRefDto,
@@ -12,6 +13,8 @@ import type {
   ResultValue,
   ResultValueKind,
   ResultLease,
+  GraphResultState,
+  ResultCacheState,
 } from "./result";
 
 type UnknownRecord = Record<string, unknown>;
@@ -32,7 +35,7 @@ const REPORT_KINDS = new Set([
   "vecSummary",
   "vecRankSummary",
 ]);
-const VALUE_KINDS = new Set(["scalar", "sequence", "dataSeries", "unknown"]);
+const VALUE_KINDS = new Set(["scalar", "sequence", "dataSeries"]);
 const ELEMENT_TYPES = new Set([
   "int64",
   "float64",
@@ -75,6 +78,29 @@ function parseGraphOutput(value: unknown): GraphOutputRefDto {
   )
     return fail("result output");
   return { graphPath: value.graphPath, port: value.port };
+}
+
+export function parseGraphResultState(value: unknown): GraphResultState {
+  const isHash = (input: unknown): input is string =>
+    typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
+  if (!isRecord(value) || !hasExactKeys(value, ["executionSessionId", "semanticInputHash", "compiledArtifactId", "outputs"])
+    || !isUuid(value.executionSessionId) || !isHash(value.semanticInputHash)
+    || (value.compiledArtifactId !== null && !isHash(value.compiledArtifactId))
+    || !Array.isArray(value.outputs)) return fail("graph result state");
+  const keys = new Set<string>();
+  const outputs = value.outputs.map((entry) => {
+    if (!isRecord(entry) || !hasExactKeys(entry, ["output", "state", "resultId"])
+      || !["missing", "stale", "valid"].includes(entry.state as string)) return fail("output result state");
+    if (entry.state === "valid" ? !isDecimalId(entry.resultId) || entry.resultId === "0" : entry.resultId !== null)
+      return fail("output result identity");
+    const output = parseGraphOutput(entry.output);
+    const key = JSON.stringify([output.graphPath, portAddressKey(output.port)]);
+    if (keys.has(key)) return fail("duplicate output result state");
+    keys.add(key);
+    return { output, state: entry.state as ResultCacheState, resultId: entry.resultId as string | null };
+  });
+  return { executionSessionId: value.executionSessionId, semanticInputHash: value.semanticInputHash,
+    compiledArtifactId: value.compiledArtifactId, outputs };
 }
 
 export function parseResultPresentation(value: unknown): ResultPresentation {
@@ -154,11 +180,10 @@ function parseMetadata(value: unknown): ResultMetadata | null {
   return value as unknown as ResultDataSeriesMetadata;
 }
 
-function parseValueKind(value: unknown, allowUnknown = true): ResultValueKind {
+function parseValueKind(value: unknown): ResultValueKind {
   if (
     typeof value !== "string" ||
-    !VALUE_KINDS.has(value) ||
-    (!allowUnknown && value === "unknown")
+    !VALUE_KINDS.has(value)
   ) {
     return fail("result value kind");
   }
@@ -266,7 +291,7 @@ export function parseResultPage(value: unknown): ResultPage {
     totalCount: value.totalCount,
     hasMore: value.hasMore,
     nextOffset: value.nextOffset,
-    valueKind: parseValueKind(value.valueKind, false) as ResultPage["valueKind"],
+    valueKind: parseValueKind(value.valueKind),
     metadata,
     values: value.values,
   };

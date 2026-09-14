@@ -3,7 +3,6 @@ import executionWire from "@/tests/fixtures/node-system-contracts/execution-wire
 import { EXECUTION_DEMAND_TYPES } from "./executionDemand";
 import { RUN_EVENT_KIND_TYPES } from "./runEvent";
 import {
-  parseExecutionChannelEvent,
   parseExecutionDemandDto,
   parseRunEvent,
 } from "./runEventParser";
@@ -118,48 +117,6 @@ describe("execution wire parsers", () => {
         run: { ...valid.run, runId: null },
       }),
     ).toThrow("Invalid graph run identity");
-  });
-
-  it("parses run output separately from lifecycle events", () => {
-    expect(executionWire.runOutputEvents.map(parseExecutionChannelEvent)).toEqual(
-      executionWire.runOutputEvents,
-    );
-    const output = {
-      runId: "41",
-      sequence: 1,
-      stream: "stdout",
-      text: "user-visible value",
-      sourceGraphPath: "functions/output.yssbi-function",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    } as const;
-    const truncated = {
-      runId: "41",
-      sequence: 2,
-      stream: "stdout",
-      status: "truncated",
-      sourceGraphPath: "functions/output.yssbi-function",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    } as const;
-
-    expect(parseExecutionChannelEvent(output)).toEqual(output);
-    expect(parseExecutionChannelEvent(truncated)).toEqual(truncated);
-    expect(() => parseRunEvent(output)).toThrow("run event");
-    expect(() => parseExecutionChannelEvent({ ...output, sequence: -1 })).toThrow();
-    expect(() => parseExecutionChannelEvent({ ...output, runId: "0" })).toThrow();
-    expect(() => parseExecutionChannelEvent({ ...output, sourceGraphPath: "" })).toThrow();
-    expect(() => parseExecutionChannelEvent({ ...output, stream: "diagnostic" })).toThrow();
-    expect(() => parseExecutionChannelEvent({ ...output, extra: true })).toThrow();
-    expect(() => parseExecutionChannelEvent({ ...truncated, status: "warning" })).toThrow();
   });
 
   it.each([

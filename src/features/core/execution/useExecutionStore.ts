@@ -6,7 +6,6 @@ import type {
   RunFailureProjection,
 } from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import type { RunOutputChannelEvent } from "@/shared/types/domain/runEvent";
 import { flushLiveExecutionEventsNow } from "./executionLiveFeed";
 import {
   clearExecutionVisual,
@@ -16,7 +15,6 @@ import {
 } from "./executionVisualSession";
 import { clearedRunProjectionsPatch } from "./graphRunArtifacts";
 import { pinPreviewCacheKey } from "./pinResultIndex";
-import { appendRunOutput, emptyRunOutputProjection } from "./runOutputProjection";
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -26,7 +24,6 @@ const emptyGraphState = (): GraphExecutionState => ({
   flowingConnections: new Set(),
   recording: [],
   graphDirty: false,
-  runOutput: emptyRunOutputProjection(),
   runFailure: null,
   pinPreviews: new Map(),
 });
@@ -99,9 +96,8 @@ interface ExecutionStore extends ExecutionState {
   clearGraphRunProjections: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
-  recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
   recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
-  clearRunOutput: (graphPath: string) => void;
+  clearRunFailure: (graphPath: string) => void;
   beginPinPreview: (graphPath: string, port: PortAddressDto, generation: number) => PinPreviewLease;
   completePinPreview: (
     graphPath: string,
@@ -167,8 +163,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
-        runOutput: emptyRunOutputProjection(),
-        runFailure: null,
+              runFailure: null,
         status: "running",
       }),
     );
@@ -215,8 +210,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
-        runOutput: emptyRunOutputProjection(),
-        runFailure: null,
+              runFailure: null,
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
@@ -227,16 +221,6 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     commitVisualSnapshot(graphPath, set);
   },
 
-  recordRunOutput: (graphPath, event) =>
-    set((state) => {
-      const graph = state.graphs[graphPath];
-      if (!graph || graph.status !== "running") return state;
-      if (graph.runId !== null && graph.runId !== event.runId) return state;
-      const runOutput = appendRunOutput(graph.runOutput, event);
-      if (runOutput === graph.runOutput) return state;
-      return updateGraph(state, graphPath, { runOutput });
-    }),
-
   recordRunFailure: (graphPath, failure) =>
     set((state) => {
       const graph = state.graphs[graphPath];
@@ -244,12 +228,11 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       return updateGraph(state, graphPath, { runFailure: failure });
     }),
 
-  clearRunOutput: (graphPath) =>
+  clearRunFailure: (graphPath) =>
     set((state) => {
       if (!state.graphs[graphPath]) return state;
       return updateGraph(state, graphPath, {
-        runOutput: emptyRunOutputProjection(),
-        runFailure: null,
+              runFailure: null,
       });
     }),
 

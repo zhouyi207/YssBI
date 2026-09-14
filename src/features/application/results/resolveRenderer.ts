@@ -10,7 +10,5 @@ export function resolveResultRenderer(descriptor: ResultDescriptor): ResultRende
       return "dataseries";
     case "scalar":
       return "scalar";
-    case "unknown":
-      return "json";
   }
 }

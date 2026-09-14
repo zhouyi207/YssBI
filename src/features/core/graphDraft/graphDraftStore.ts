@@ -92,6 +92,7 @@ interface GraphDraftStore {
     request: GraphCompileRequest,
   ): void;
   failCompile(graphPath: string, request: GraphCompileRequest): void;
+  observeCompiledArtifact(graphPath: string, expected: GraphDraftSession, artifactId: string | null): void;
   beginSave(graphPath: string): boolean;
   completeSave(graphPath: string, saved: GraphDraftSaveDto): void;
   failSave(graphPath: string): void;
@@ -264,6 +265,20 @@ export const useGraphDraftStore = create<GraphDraftStore>((set, get) => ({
         },
       };
     }),
+
+  observeCompiledArtifact: (graphPath, expected, artifactId) => set((state) => {
+    const current = state.sessions[graphPath];
+    if (current !== expected || current.compileRequest || current.compileStatus === "compiling"
+      || current.compiledArtifactId === artifactId) return state;
+    return { sessions: { ...state.sessions, [graphPath]: {
+      ...current,
+      compiledArtifactId: artifactId,
+      compiledInputHash: artifactId ? current.semanticInputHash : null,
+      compileDirty: artifactId === null,
+      compileStatus: artifactId ? "compiled" : "uncompiled",
+      compileCacheHit: artifactId !== null,
+    } } };
+  }),
 
   beginSave: (graphPath) => {
     const current = get().sessions[graphPath];

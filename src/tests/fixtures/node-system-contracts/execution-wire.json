@@ -204,58 +204,47 @@
       }
     }
   ],
-  "runOutputEvents": [
-    {
-      "runId": "9007199254740993",
-      "sequence": 1,
-      "sourceGraphPath": "functions/contract-output.yssbi-function",
-      "sourceNodeId": "00000000-0000-0000-0000-000000000002",
-      "sourcePort": {
-        "kind": "declared",
-        "nodeId": "00000000-0000-0000-0000-000000000002",
-        "portKey": "message"
+  "graphResultState": {
+    "executionSessionId": "00000000-0000-0000-0000-000000000001",
+    "semanticInputHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "compiledArtifactId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "outputs": [
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        "state": "valid",
+        "resultId": "17"
       },
-      "stream": "stdout",
-      "text": "stdout value"
-    },
-    {
-      "runId": "9007199254740993",
-      "sequence": 2,
-      "sourceGraphPath": "functions/contract-output.yssbi-function",
-      "sourceNodeId": "00000000-0000-0000-0000-000000000002",
-      "sourcePort": {
-        "kind": "declared",
-        "nodeId": "00000000-0000-0000-0000-000000000002",
-        "portKey": "message"
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "stale"
+          }
+        },
+        "state": "stale",
+        "resultId": null
       },
-      "stream": "stderr",
-      "text": "stderr value"
-    },
-    {
-      "runId": "9007199254740993",
-      "sequence": 3,
-      "sourceGraphPath": "functions/contract-output.yssbi-function",
-      "sourceNodeId": "00000000-0000-0000-0000-000000000002",
-      "sourcePort": {
-        "kind": "declared",
-        "nodeId": "00000000-0000-0000-0000-000000000002",
-        "portKey": "message"
-      },
-      "status": "truncated",
-      "stream": "stdout"
-    },
-    {
-      "runId": "9007199254740993",
-      "sequence": 4,
-      "sourceGraphPath": "functions/contract-output.yssbi-function",
-      "sourceNodeId": "00000000-0000-0000-0000-000000000002",
-      "sourcePort": {
-        "kind": "declared",
-        "nodeId": "00000000-0000-0000-0000-000000000002",
-        "portKey": "message"
-      },
-      "status": "dropped",
-      "stream": "stdout"
-    }
-  ]
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "unavailable"
+          }
+        },
+        "state": "missing",
+        "resultId": null
+      }
+    ]
+  }
 }

@@ -44,6 +44,8 @@ function pageKey(request: ResultPageRequest): string {
 
 function scopeKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
+    case "graphState":
+      return `graphState:${scope.graphPath}`;
     case "analysis":
       return `analysis:${scope.reference.resultId}:${scope.analysis.kind}`;
     case "descriptor":
@@ -65,6 +67,7 @@ function createTestRuntime(): TestRuntime {
   const notify = () => listeners.forEach((listener) => listener());
 
   const service = {
+    getGraphState: vi.fn(async () => null),
     analyze: vi.fn(async () => {
       throw new Error("unexpected analysis");
     }),
@@ -97,6 +100,7 @@ function createTestRuntime(): TestRuntime {
     readCurrentProjectInstanceId: () => projectInstanceId,
     service,
     publication: {
+      publishGraphState: () => undefined,
       publishAnalysis: () => undefined,
       releasePayload: (resultId) => {
         values.delete(resultReferenceKey(resultId));

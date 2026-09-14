@@ -11,7 +11,6 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     flowingConnections: new Set(),
     recording: [],
     graphDirty: false,
-    runOutput: { runId: null, entries: [], projectionDropped: false },
     runFailure: null,
     pinPreviews: new Map(),
     ...partial,
@@ -32,35 +31,10 @@ describe("graphHasClearableArtifacts", () => {
     ).toBe(false);
   });
 
-  it("returns true when recording or run output projections exist", () => {
+  it("returns true when recording exists", () => {
     expect(
       graphHasClearableArtifacts(
         graph({ recording: [{ event: { event: "executionStart" }, timestamp: 0 }] }),
-      ),
-    ).toBe(true);
-    expect(
-      graphHasClearableArtifacts(
-        graph({
-          runOutput: {
-            runId: "41",
-            entries: [
-              {
-                runId: "41",
-                sequence: 1,
-                stream: "stdout",
-                text: "value",
-                sourceGraphPath: "events/Main.yssbi-event",
-                sourceNodeId: "00000000-0000-0000-0000-000000000002",
-                sourcePort: {
-                  kind: "declared",
-                  nodeId: "00000000-0000-0000-0000-000000000002",
-                  portKey: "message",
-                },
-              },
-            ],
-            projectionDropped: false,
-          },
-        }),
       ),
     ).toBe(true);
   });

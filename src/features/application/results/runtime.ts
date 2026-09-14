@@ -1,6 +1,7 @@
 import { publishResultSessionEnd } from "@/services/result/resultSessionChannel";
 import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import { useGraphDraftStore } from "@/features/core/graphDraft";
 import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution";
 import { graphOutputKey } from "@/features/domain/editorProjection";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
@@ -22,10 +23,19 @@ import {
   type ResultPinRequest,
   type ResultQueryReadCapability,
   type ResultQueryScope,
+  type ResultGraphStateRequest,
 } from "./resultQueryCoordinator";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
+import type { GraphResultState, ResultCacheState } from "@/shared/types/domain/result";
+
+export interface GraphResultCacheProjection {
+  readonly executionSessionId: string;
+  readonly semanticInputHash: string;
+  readonly outputs: Readonly<Record<string, { readonly state: ResultCacheState; readonly resultId: string | null }>>;
+}
 
 interface ResultProjectionState {
+  readonly graphCaches: Readonly<Record<string, GraphResultCacheProjection>>;
   readonly projectInstanceId: string | null;
   readonly descriptors: Record<string, DeepReadonly<ResultDescriptor | null>>;
   readonly values: Record<string, DeepReadonly<ResultValue | null>>;
@@ -40,6 +50,7 @@ interface ResultProjectionState {
 }
 
 const emptyState: ResultProjectionState = {
+  graphCaches: {},
   projectInstanceId: null,
   descriptors: {},
   values: {},
@@ -56,12 +67,18 @@ export function useCurrentResultDescriptors() {
   return resultProjection((state) => state.pinResults);
 }
 
+export function useGraphResultCache(graphPath: string): GraphResultCacheProjection | undefined {
+  return resultProjection((state) => state.graphCaches[graphPath]);
+}
+
 function pinResultKey(request: ResultPinRequest): string {
   return graphOutputKey({ graphPath: request.graphPath, port: request.output });
 }
 
 function scopeKey(scope: ResultQueryScope): string {
   switch (scope.kind) {
+    case "graphState":
+      return `graphState:${scope.graphPath}`;
     case "descriptor":
     case "value":
       return `${scope.kind}:${resultReferenceKey(scope)}`;
@@ -75,6 +92,7 @@ function scopeKey(scope: ResultQueryScope): string {
 }
 
 const resultQueryPublication = {
+  publishGraphState,
   releasePayload(reference: ResultReference) {
     const key = resultReferenceKey(reference);
     resultProjection.setState((state) => {
@@ -177,6 +195,7 @@ const resultQueryPublication = {
     publishCurrentResult(projectInstanceId, request, result);
   },
   publishFailure(projectInstanceId: string | null, scope: ResultQueryScope, issue: ErrorReference) {
+    if (scope.kind === "graphState" && !currentGraphStateRequest(scope)) return;
     resultProjection.setState((state) => ({
       ...state,
       projectInstanceId,
@@ -209,6 +228,7 @@ export const resultQueryRead: ResultQueryReadCapability = {
 export const resultQueryCoordinator = createResultQueryCoordinator({
   readCurrentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
   service: {
+    getGraphState: (graphPath, hash) => ResultService.getGraphState(graphPath, hash),
     getDescriptor: (reference) => ResultService.getDescriptor(reference),
     getValue: (reference) => ResultService.getValue(reference),
     getPage: (reference, offset, limit, table) =>
@@ -224,6 +244,7 @@ export function resetResultQueryProject(): void {
   publishResultSessionEnd(resultExecutionSessionId);
   resultQueryCoordinator.resetProject();
   outputRuns.clear();
+  pendingGraphRefreshes.clear();
   resultExecutionSessionId = null;
   resultProjection.setState(emptyState);
 }
@@ -263,6 +284,66 @@ let resultExecutionSessionId: string | null = null;
 
 // Each output retains one run owner so delayed run events cannot invalidate a newer value.
 const outputRuns = new Map<string, { runId: string; request: ResultPinRequest; active: boolean }>();
+const pendingGraphRefreshes = new Set<string>();
+
+function currentGraphStateRequest(request: ResultGraphStateRequest): boolean {
+  const current = useGraphDraftStore.getState().sessions[request.graphPath];
+  return Boolean(current && current.sessionId === request.sessionId && current.draftGeneration === request.draftGeneration
+    && current.semanticInputHash === request.semanticInputHash);
+}
+
+function scheduleGraphStateRefresh(graphPath: string): void {
+  const alreadyQueued = pendingGraphRefreshes.size > 0;
+  pendingGraphRefreshes.add(graphPath);
+  if (alreadyQueued) return;
+  queueMicrotask(() => {
+    const graphs = [...pendingGraphRefreshes];
+    pendingGraphRefreshes.clear();
+    if (!captureProjectLifecycleState().projectInstanceId) return;
+    for (const graphPath of graphs) {
+      const session = useGraphDraftStore.getState().sessions[graphPath];
+      if (!session) continue;
+      void resultQueryCoordinator.loadGraphState({ graphPath, semanticInputHash: session.semanticInputHash,
+        sessionId: session.sessionId, draftGeneration: session.draftGeneration, draftSession: session });
+    }
+  });
+}
+
+function publishGraphState(
+  projectInstanceId: string | null,
+  request: ResultGraphStateRequest,
+  projection: DeepReadonly<GraphResultState | null>,
+): void {
+  if (!currentGraphStateRequest(request)) return;
+  const graphPath = request.graphPath;
+  if (projection && resultExecutionSessionId && resultExecutionSessionId !== projection.executionSessionId)
+    resetResultQueryProject();
+  if (projection) resultExecutionSessionId = projection.executionSessionId;
+  const outputs = Object.fromEntries((projection?.outputs ?? []).map(({ output, state, resultId }) => [graphOutputKey(output), { state, resultId }]));
+  const previous = Object.values(resultProjection.getState().pinResults).filter((value) => value?.provenance.output?.graphPath === graphPath);
+  invalidateOutputs(previous.flatMap((value) => {
+    if (!value?.provenance.output) return [];
+    const output = value.provenance.output;
+    const current = outputs[graphOutputKey(output)];
+    return current?.state === "valid" && current.resultId === value.resultId ? [] : [{ graphPath, output: output.port }];
+  }));
+  resultProjection.setState((state) => ({
+    ...state,
+    projectInstanceId,
+    graphCaches: projection ? { ...state.graphCaches, [graphPath]: {
+      executionSessionId: projection.executionSessionId, semanticInputHash: projection.semanticInputHash, outputs,
+    } } : Object.fromEntries(Object.entries(state.graphCaches).filter(([key]) => key !== graphPath)),
+    failures: Object.fromEntries(Object.entries(state.failures).filter(([key]) => key !== `graphState:${graphPath}`)),
+  }));
+  for (const { output, state, resultId } of projection?.outputs ?? []) {
+    const key = graphOutputKey(output);
+    if (state === "valid" && resultProjection.getState().pinResults[key]?.resultId !== resultId)
+      void resultQueryCoordinator.loadPinResult({ graphPath, output: output.port });
+  }
+  const session = useGraphDraftStore.getState().sessions[graphPath];
+  if (session === request.draftSession)
+    useGraphDraftStore.getState().observeCompiledArtifact(graphPath, session, projection?.compiledArtifactId ?? null);
+}
 
 function publishCurrentResult(
   projectInstanceId: string | null,
@@ -311,6 +392,7 @@ function invalidateOutputs(requests: readonly ResultPinRequest[]): void {
 }
 
 export function invalidateGraphResults(graphPath: string): void {
+  resultQueryCoordinator.resetGraphState(graphPath);
   const requests = new Map<string, ResultPinRequest>();
   for (const [key, pending] of outputRuns) {
     if (pending.request.graphPath === graphPath) {
@@ -328,6 +410,7 @@ export function invalidateGraphResults(graphPath: string): void {
   invalidateOutputs([...requests.values()]);
   resultProjection.setState((state) => ({
     ...state,
+    graphCaches: Object.fromEntries(Object.entries(state.graphCaches).filter(([key]) => key !== graphPath)),
     pinResults: Object.fromEntries(
       Object.entries(state.pinResults).filter(([key]) => !requests.has(key)),
     ),
@@ -379,10 +462,11 @@ export function observeResultRunEvent(event: RunEvent): void {
         ...state,
         pinStatuses: { ...state.pinStatuses, [key]: status },
       }));
-      if (event.kind.type === "runCompleted")
+      if (event.kind.type === "runCompleted" && !useGraphDraftStore.getState().sessions[event.run.graphPath])
         void resultQueryCoordinator.loadPinResult(pending.request);
     }
   }
+  scheduleGraphStateRefresh(event.run.graphPath);
 }
 
 export function readPinResultStatus(
@@ -396,5 +480,17 @@ useGraphProjectionStore.subscribe((state, previous) => {
     const current = state.graphEntities[graphPath];
     if (!current || JSON.stringify(current.basis) !== JSON.stringify(graph.basis))
       invalidateGraphResults(graphPath);
+  }
+  for (const [graphPath, graph] of Object.entries(state.graphEntities)) {
+    if (graph !== previous.graphEntities[graphPath]) scheduleGraphStateRefresh(graphPath);
+  }
+});
+
+useGraphDraftStore.subscribe((state, previous) => {
+  for (const [graphPath, session] of Object.entries(state.sessions)) {
+    if (session.projection !== previous.sessions[graphPath]?.projection) scheduleGraphStateRefresh(graphPath);
+  }
+  for (const graphPath of Object.keys(previous.sessions)) {
+    if (!state.sessions[graphPath]) invalidateGraphResults(graphPath);
   }
 });

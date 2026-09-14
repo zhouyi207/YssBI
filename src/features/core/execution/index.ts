@@ -28,11 +28,6 @@ export {
 export { lookupPinPreview, pinPreviewCacheKey } from "./pinResultIndex";
 
 export {
-  RUN_OUTPUT_PROJECTION_MAX_ENTRIES,
-  appendRunOutput,
-  emptyRunOutputProjection,
-} from "./runOutputProjection";
-export {
   executionRead,
   getExecutionSnapshot,
   subscribeExecutionRead,
@@ -41,4 +36,4 @@ export {
   type ExecutionReadSnapshot,
   type GraphExecutionProjection,
 } from "./read";
-export { runOutputActions, executionUi, type RunOutputActions, type ExecutionUi } from "./ui";
+export { runFailureActions, executionUi, type RunFailureActions, type ExecutionUi } from "./ui";

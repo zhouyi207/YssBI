@@ -45,6 +45,8 @@ it("loads unknown-length relations and stops at the backend's final page", async
     return { status: "published" as const };
   });
   const coordinator: ResultQueryCoordinator = {
+    loadGraphState: async () => ({ status: "notReady" }),
+    resetGraphState: () => {},
     resetPinResult: () => {},
     isPayloadRetained: () => false,
     loadAnalysis: async () => ({ status: "notReady" }),

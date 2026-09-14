@@ -1,6 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RunEvent, RunOutputChannelEvent } from "@/shared/types/dto/runEvent";
+import type { RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
 import { disposeTrackedChannelsForHmr } from "@/services/devHmrIpc";
 import { IpcError } from "@/services/ipc";
@@ -17,7 +17,6 @@ const compiledArtifactId = "3".repeat(64);
 function executeGraph(
   demand: ExecutionDemandDto,
   onEvent?: (event: RunEvent) => void,
-  onOutput?: (event: RunOutputChannelEvent) => void,
 ): Promise<void> {
   return ProjectService.executeCompiledGraph({
     projectInstanceId,
@@ -25,7 +24,6 @@ function executeGraph(
     compiledArtifactId,
     demand,
     onEvent,
-    onOutput,
   });
 }
 
@@ -232,53 +230,6 @@ describe("ProjectService execution contract", () => {
 
     await expect(execution).resolves.toBeUndefined();
     expect(received).toEqual([completed]);
-  });
-
-  it("routes ordered user output through a callback separate from RunEvent consumers", async () => {
-    vi.mocked(invoke).mockResolvedValue(undefined);
-    const receivedRunEvents: RunEvent[] = [];
-    const receivedOutput: RunOutputChannelEvent[] = [];
-    const execution = executeGraph(
-      { type: "default" },
-      (event) => receivedRunEvents.push(event),
-      (event) => receivedOutput.push(event),
-    );
-    const [, args] = vi.mocked(invoke).mock.calls[0] as [string, { onEvent: Channel<unknown> }];
-    const output: RunOutputChannelEvent = {
-      runId: "41",
-      sequence: 1,
-      stream: "stdout",
-      text: "user-visible value",
-      sourceGraphPath: "functions/output.yssbi-function",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    };
-    const status: RunOutputChannelEvent = {
-      runId: "41",
-      sequence: 2,
-      stream: "stdout",
-      status: "truncated",
-      sourceGraphPath: "functions/output.yssbi-function",
-      sourceNodeId: "00000000-0000-0000-0000-000000000002",
-      sourcePort: {
-        kind: "declared",
-        nodeId: "00000000-0000-0000-0000-000000000002",
-        portKey: "message",
-      },
-    };
-    const completed = runEvent({ type: "runCompleted" });
-
-    args.onEvent.onmessage?.(output);
-    args.onEvent.onmessage?.(status);
-    args.onEvent.onmessage?.(completed);
-
-    await expect(execution).resolves.toBeUndefined();
-    expect(receivedOutput).toEqual([output, status]);
-    expect(receivedRunEvents).toEqual([completed]);
   });
 
   it("surfaces a throwing runCompleted consumer after a successful invoke settles", async () => {

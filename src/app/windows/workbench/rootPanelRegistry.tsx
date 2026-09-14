@@ -8,7 +8,7 @@ import { nodeCatalogActivityPanelContribution } from "@/modules/node-catalog/pub
 import { projectActivityPanelContribution } from "@/modules/project-explorer/public";
 import { ResultPanel } from "@/modules/results/public";
 import { GraphProblemsPanel } from "@/modules/problems/public";
-import { RunOutputPanel } from "@/modules/output/public";
+import { RunFailurePanel } from "@/modules/output/public";
 import {
   EditorResourceDockPanel,
   type RootDockviewPanelComponent,
@@ -87,6 +87,6 @@ export const rootPanelRegistry = {
   Inspect: InspectPane,
   Result: ResultDockPanel,
   Logs: MainLogsDockPanel,
-  Output: RunOutputPanel,
+  Output: RunFailurePanel,
   Problems: GraphProblemsPanel,
 } satisfies RootPanelRegistry;

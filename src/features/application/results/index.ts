@@ -27,6 +27,8 @@ export {
   invalidateGraphResults,
   observeResultRunEvent,
   readPinResultStatus,
+  useGraphResultCache,
+  type GraphResultCacheProjection,
 } from "./runtime";
 export { useResultValue } from "./useResultValue";
 export { usePagedResultRows } from "./usePagedResultRows";

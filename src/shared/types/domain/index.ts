@@ -46,8 +46,6 @@ export type * from "./runEvent";
 export {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
-  RUN_OUTPUT_STATUSES,
-  RUN_OUTPUT_STREAMS,
   RUN_PHASES,
 } from "./runEvent";
 export type { ErrorReference } from "./errorReference";

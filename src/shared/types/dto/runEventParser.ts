@@ -7,16 +7,12 @@ import { isGraphResourcePath, isPortAddressDto, isUuid } from "./editorProjectio
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
-  RUN_OUTPUT_STATUSES,
-  RUN_OUTPUT_STREAMS,
   RUN_PHASES,
-  type ExecutionChannelEvent,
   type GraphRunIdentityDto,
   type RunErrorCode,
   type RunErrorOutcome,
   type RunEvent,
   type RunEventKind,
-  type RunOutputChannelEvent,
   type RunPhase,
   type ResultInspectionSource,
 } from "./runEvent";
@@ -213,73 +209,4 @@ export function parseRunEvent(value: unknown): RunEvent {
     run: parseGraphRunIdentityDto(value.run),
     kind: parseRunEventKind(value.kind),
   };
-}
-
-export function parseRunOutputChannelEvent(value: unknown): RunOutputChannelEvent {
-  if (
-    !isRecord(value) ||
-    !isPositiveDecimalId(value.runId) ||
-    !Number.isSafeInteger(value.sequence) ||
-    (value.sequence as number) < 1 ||
-    !isGraphResourcePath(value.sourceGraphPath) ||
-    !isUuid(value.sourceNodeId) ||
-    !isPortAddressDto(value.sourcePort) ||
-    value.sourcePort.nodeId !== value.sourceNodeId
-  ) {
-    return fail("run output event");
-  }
-  const stream = parseDiscriminant(value.stream, RUN_OUTPUT_STREAMS, "run output stream");
-  if (Object.prototype.hasOwnProperty.call(value, "text")) {
-    if (
-      !hasExactKeys(value, [
-        "runId",
-        "sequence",
-        "stream",
-        "text",
-        "sourceGraphPath",
-        "sourceNodeId",
-        "sourcePort",
-      ]) ||
-      typeof value.text !== "string"
-    )
-      return fail("run output event");
-    return {
-      runId: value.runId,
-      sequence: value.sequence as number,
-      stream,
-      text: value.text,
-      sourceGraphPath: value.sourceGraphPath,
-      sourceNodeId: value.sourceNodeId,
-      sourcePort: value.sourcePort,
-    };
-  }
-  if (
-    !hasExactKeys(value, [
-      "runId",
-      "sequence",
-      "stream",
-      "status",
-      "sourceGraphPath",
-      "sourceNodeId",
-      "sourcePort",
-    ])
-  ) {
-    return fail("run output status event");
-  }
-  return {
-    runId: value.runId,
-    sequence: value.sequence as number,
-    stream,
-    status: parseDiscriminant(value.status, RUN_OUTPUT_STATUSES, "run output status"),
-    sourceGraphPath: value.sourceGraphPath,
-    sourceNodeId: value.sourceNodeId,
-    sourcePort: value.sourcePort,
-  };
-}
-
-export function parseExecutionChannelEvent(value: unknown): ExecutionChannelEvent {
-  if (isRecord(value) && Object.prototype.hasOwnProperty.call(value, "kind")) {
-    return parseRunEvent(value);
-  }
-  return parseRunOutputChannelEvent(value);
 }
