@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress};
-use yss_graph_protocol::{PortDirection, TypeExpr, validate_typed_value};
-use yss_graph_registry::NodeRegistry;
+use yss_node_protocol::{PortDirection, TypeExpr, validate_typed_value};
+use yss_node_registry::NodeRegistry;
 
 use crate::{GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact, graph_problem};
 
@@ -133,7 +133,7 @@ pub(crate) fn validate(
             let TypeExpr::Concrete(type_id) = &parameter.value_type else {
                 continue;
             };
-            use yss_graph_protocol::dataframe::{
+            use yss_node_protocol::dataframe::{
                 FILTER_PREDICATE_TYPE_ID, PROJECT_COLUMNS_TYPE_ID, filter_comparison_is_compatible,
                 prepare_filter_predicate_json, prepare_project_columns_json,
             };
@@ -203,11 +203,11 @@ mod tests {
         ConnectionId, DocumentConnection, DocumentNode, InputState, NodeId, NodePosition, OrderKey,
         ParameterValues,
     };
-    use yss_graph_protocol::{PortKey, TypeId, TypedValue, Value};
     use yss_graph_resource_contract::{
         ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint,
         ResourceCatalogSnapshot,
     };
+    use yss_node_protocol::{PortKey, TypeId, TypedValue, Value};
 
     fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
         let id = NodeId::new();
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn imported_connection_and_literal_errors_are_canonical_and_locatable() {
-        let registry = yss_graph_catalog::build_builtin_node_system()
+        let registry = yss_node_catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         let mut document = GraphDocument::default();
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn nominal_parameters_are_revalidated_against_changed_input_schema() {
-        let registry = yss_graph_catalog::build_builtin_node_system()
+        let registry = yss_node_catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         for (kind, key, value) in [
@@ -384,7 +384,7 @@ mod tests {
             );
             assert!(ready.ready().is_some(), "{:?}", ready.diagnostics());
             use crate::{GraphFilterLiteralType, GraphParameterConfigurationFact};
-            use yss_graph_protocol::dataframe::FilterOperator;
+            use yss_node_protocol::dataframe::FilterOperator;
             match ready.node(consumer).unwrap().parameters[0]
                 .configuration
                 .as_ref()

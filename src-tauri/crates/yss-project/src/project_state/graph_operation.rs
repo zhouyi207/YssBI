@@ -492,7 +492,7 @@ fn capture_session_error(error: ProjectOperationError) -> ProjectGraphOperationE
 mod tests {
     use super::*;
     use yss_graph_document::{DocumentNode, NodeId, NodePosition};
-    use yss_graph_protocol::NodeTypeId;
+    use yss_node_protocol::NodeTypeId;
     use yss_project_model::{GraphResourceDocument, ProjectData};
 
     #[test]

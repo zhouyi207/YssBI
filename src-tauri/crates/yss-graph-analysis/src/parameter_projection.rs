@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact) {
-    use yss_graph_protocol::dataframe::{
+    use yss_node_protocol::dataframe::{
         FILTER_PREDICATE_TYPE_ID, FilterLiteral, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
         filter_comparison_is_compatible, prepare_filter_predicate_json,
         prepare_project_columns_json,
@@ -22,7 +22,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
         let value = match &parameter.effective_value {
             Some(GraphResolvedParameterValue::Literal(value)) => Some(value.clone()),
             Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
-                Some(yss_graph_protocol::protocol_value_to_json(value))
+                Some(yss_node_protocol::protocol_value_to_json(value))
             }
             _ => None,
         };
@@ -55,7 +55,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                     (
                         GraphFilterLiteralType::Decimal,
                         FilterLiteral::Decimal(
-                            yss_graph_protocol::CanonicalDecimal::new("0")
+                            yss_node_protocol::CanonicalDecimal::new("0")
                                 .expect("zero is a decimal"),
                         ),
                     ),
@@ -130,7 +130,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
 }
 
 pub(super) fn parameter_fact(
-    parameter: &yss_graph_protocol::ParameterSpec,
+    parameter: &yss_node_protocol::ParameterSpec,
     effective_value: Option<GraphResolvedParameterValue>,
 ) -> GraphParameterFact {
     let configuration = match &parameter.editor {
@@ -138,7 +138,7 @@ pub(super) fn parameter_fact(
             let raw = match &effective_value {
                 Some(GraphResolvedParameterValue::Literal(value)) => value.clone(),
                 Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
-                    yss_graph_protocol::protocol_value_to_json(value)
+                    yss_node_protocol::protocol_value_to_json(value)
                 }
                 _ => serde_json::Value::Null,
             };
@@ -164,14 +164,14 @@ pub(super) fn parameter_fact(
             .constraints
             .iter()
             .find_map(|constraint| match constraint {
-                yss_graph_protocol::ParameterConstraint::OneOf(options)
+                yss_node_protocol::ParameterConstraint::OneOf(options)
                     if matches!(parameter.editor, ParameterEditorSpec::Select) =>
                 {
                     Some(GraphParameterConfigurationFact::SelectOptions {
                         options: options
                             .iter()
                             .filter_map(|value| match value {
-                                yss_graph_protocol::Value::String(value) => Some(value.clone()),
+                                yss_node_protocol::Value::String(value) => Some(value.clone()),
                                 _ => None,
                             })
                             .collect(),
@@ -197,12 +197,12 @@ pub(super) fn parameter_fact(
 
 pub(crate) fn effective_parameter_value(
     node: &yss_graph_document::DocumentNode,
-    parameter: &yss_graph_protocol::ParameterSpec,
+    parameter: &yss_node_protocol::ParameterSpec,
 ) -> Option<serde_json::Value> {
     node.parameters.get(&parameter.key).cloned().or_else(|| {
         parameter
             .default_value
             .as_ref()
-            .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value))
+            .map(|value| yss_node_protocol::protocol_value_to_json(&value.value))
     })
 }

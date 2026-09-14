@@ -158,7 +158,7 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             )]),
             ResourceCatalogFingerprint::from_bytes([0; 32]),
         );
-        let builtin = yss_graph_catalog::build_builtin_node_system().unwrap();
+        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
         let semantic =
             yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &catalog);
         let package = compile(GraphCompilationInput::new(

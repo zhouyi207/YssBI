@@ -313,7 +313,7 @@ mod tests {
             GraphResourcePath::new("events/main.yssbi-event").expect("test graph path is valid");
         let address = PortAddress::declared(
             yss_graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
-            yss_graph_protocol::PortKey::new("result").expect("valid port key"),
+            yss_node_protocol::PortKey::new("result").expect("valid port key"),
         );
         let query = ResultPinQuery::new(graph, address.clone());
         let plan = PlanOutputRef::new(

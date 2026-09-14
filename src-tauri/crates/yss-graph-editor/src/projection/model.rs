@@ -2,7 +2,7 @@ use yss_data_contract::DataType;
 use yss_graph_analysis::GraphDiagnosticLocation;
 use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
 use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
-use yss_graph_protocol::{
+use yss_node_protocol::{
     ParameterKey, ParameterPresentation, PortDirection, PortKey, RelationalScalarType,
     TypeConflict, TypeUnknownReason,
 };
@@ -19,7 +19,7 @@ pub struct EditorProjectionBasis {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorNodeModel {
     pub node_id: NodeId,
-    pub node_type: yss_graph_protocol::NodeTypeId,
+    pub node_type: yss_node_protocol::NodeTypeId,
     pub position: NodePosition,
     pub display: EditorNodeDisplay,
     pub ports: Box<[EditorPortModel]>,
@@ -215,7 +215,7 @@ pub struct EditorColumnOption {
 pub struct EditorFilterColumnOption {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[yss_graph_protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[yss_node_protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[EditorFilterLiteralType]>,
 }
 

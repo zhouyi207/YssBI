@@ -2,8 +2,8 @@ use yss_graph_document::{
     DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, NodeId,
     PortAddress, PortInstanceId,
 };
-use yss_graph_protocol::{ResolvedSchemaFact, TypeExpr};
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
+use yss_node_protocol::{ResolvedSchemaFact, TypeExpr};
 
 use crate::schema_resolution::{DerivedSchemaPortMember, derived_schema_port_members};
 
@@ -113,7 +113,7 @@ fn function_port_members(
 pub(crate) fn derived_port_address(
     document: &GraphDocument,
     node_id: NodeId,
-    template: &yss_graph_protocol::PortKey,
+    template: &yss_node_protocol::PortKey,
     locator: &DynamicMemberLocator,
 ) -> PortAddress {
     for salt in 0_u32.. {

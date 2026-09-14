@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use yss_graph_document::{NodeId, PortAddress, PortInstanceId};
-use yss_graph_protocol::PortKey;
+use yss_node_protocol::PortKey;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(

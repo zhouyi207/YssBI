@@ -8,7 +8,7 @@ use yss_graph_analysis::{
 };
 use yss_graph_analysis_contract::DiagnosticLocation;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
-use yss_graph_protocol::{
+use yss_node_protocol::{
     ParameterEditorSpec, PortDirection, ResolvedType, TypeDomain, TypeExpr, TypeState,
 };
 
@@ -195,7 +195,7 @@ fn project_port(
             .input_states
             .get(&port.address)
             .and_then(|state| state.literal_override.as_ref())
-            .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value));
+            .map(|value| yss_node_protocol::protocol_value_to_json(&value.value));
         let effective = if has_connection(document, &port.address) {
             EditorEffectiveInputBinding::Connections
         } else if literal_override.is_some() {
@@ -210,7 +210,7 @@ fn project_port(
             protocol_default: port
                 .protocol_default
                 .as_ref()
-                .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value)),
+                .map(|value| yss_node_protocol::protocol_value_to_json(&value.value)),
             effective,
         }
     });
@@ -313,7 +313,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         value: fact.effective_value.as_ref().map(|value| match value {
             yss_graph_analysis::GraphResolvedParameterValue::Literal(value) => value.clone(),
             yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(value) => {
-                yss_graph_protocol::protocol_value_to_json(value)
+                yss_node_protocol::protocol_value_to_json(value)
             }
             yss_graph_analysis::GraphResolvedParameterValue::Resource(identity) => {
                 serde_json::Value::String(identity.as_str().to_owned())
@@ -457,16 +457,16 @@ fn resolved_type_display(value: &ResolvedType) -> String {
 }
 
 fn project_schema_summary(
-    expression: &yss_graph_protocol::SchemaExpr,
-    resolved: Option<&yss_graph_protocol::ResolvedSchemaFact>,
+    expression: &yss_node_protocol::SchemaExpr,
+    resolved: Option<&yss_node_protocol::ResolvedSchemaFact>,
 ) -> EditorSchemaSummary {
     let kind = match expression {
-        yss_graph_protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
-        yss_graph_protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
-        yss_graph_protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
-        yss_graph_protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
-        yss_graph_protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
-        yss_graph_protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
+        yss_node_protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
+        yss_node_protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
+        yss_node_protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
+        yss_node_protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
+        yss_node_protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
+        yss_node_protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
     };
     let fields = resolved
         .into_iter()

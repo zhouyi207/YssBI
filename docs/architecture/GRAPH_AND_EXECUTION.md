@@ -26,7 +26,8 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 
 | Owner                                                                     | 职责                                                                             |
 | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| yss-graph-document / protocol                                             | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                           |
+| yss-node-protocol / yss-node-registry / yss-node-catalog                  | 节点能力与接口声明、注册校验与指纹、内置定义及节点目录本地化                     |
+| yss-graph-document                                                        | 节点实例、连线、位置、文档意图、稳定地址和语义文档 fingerprint                   |
 | yss-graph-document-edit / editor                                          | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
 | yss-graph-analysis                                                        | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
 | yss-graph-resource-contract                                               | immutable resource facts 与一次 Resolve 的 dependency observations               |
@@ -38,6 +39,11 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 | yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
+
+Node 描述一种节点的端口、参数、类型约束及执行语义，不拥有某张图的节点实例或解析结果。
+三个 `yss-node-*` crate 均不依赖 Graph；`DocumentNode`、位置与连线属于图文档，连接后的类型、
+Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph-type-mapping` 留在 Graph。
+节点目录接收调用方提供的资源创建描述，不读取项目状态，也不解析图中连接。
 
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
@@ -321,6 +327,10 @@ OLS 报告按区域读取：概览与系数首页先加载，展开图形/观测
 Producer 覆盖 node/parameter/resource、binding/orphan、repeatable minimum、unbound、类型冲突、Schema 状态、连接方向/容量/顺序、literal/conflicting binding、value cycle 和函数依赖/ABI。Nominal 参数使用 registry validator，filter predicate/project columns 按当前输入 Schema 验证。无法构建内部 resolver 结果时使用 typed internal failure，不伪装成空 Schema。
 
 诊断 wire 为 code、messageKey、arguments、severity、blocking、location、related。Rust 定义词汇和模板，frontend 生成模板表并统一本地化，未知模板/缺参数安全回退。单条 blocking 与 severity 独立，aggregate 汇总 canonical blocking；内部 failure 通过 outcome 独立阻止运行。未绑定的必需输入可为 Warning，但明确 blocking=true。
+
+编译诊断定义与模板由 `yss-graph-compiler-diagnostics` 拥有，`GraphRuntimeState::from_components`
+在构造时校验定义并返回类型化初始化错误。`yss-node-catalog` 只保存节点、端口、参数和分类文本，
+不装配诊断词条，也不依赖诊断类型；Graph Runtime 查询节点文本来填充语义投影，诊断仍交给前端 Graph 模板渲染。
 
 Problems 不可手动清空。定位支持 Graph、Node、Pin、Connection、Details 参数字段和已知资源；缺失资源显示 identity，related locations 提供关联跳转。普通 Graph 问题不靠 tracing/Logs 表达。
 

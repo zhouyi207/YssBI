@@ -5,7 +5,7 @@ use yss_graph_editor::projection::{
     EditorProjectionModel, EditorResolutionOutcome, EditorSchemaSummary, EditorSchemaSummaryKind,
     ParameterEditorKind,
 };
-use yss_graph_registry::RegistryFingerprint;
+use yss_node_registry::RegistryFingerprint;
 
 use yss_ipc_contract::editor_projection::*;
 
@@ -157,32 +157,32 @@ fn map_type_state(value: &EditorPortTypeState) -> PortTypeStateDto {
         },
         EditorPortTypeState::Unknown { reason } => PortTypeStateDto::Unknown {
             reason_code: match reason {
-                yss_graph_protocol::TypeUnknownReason::UnconnectedInput => "unconnected_input",
-                yss_graph_protocol::TypeUnknownReason::UnresolvedUpstream => "unresolved_upstream",
-                yss_graph_protocol::TypeUnknownReason::MissingResource => "missing_resource",
-                yss_graph_protocol::TypeUnknownReason::UnsupportedDeclaration => {
+                yss_node_protocol::TypeUnknownReason::UnconnectedInput => "unconnected_input",
+                yss_node_protocol::TypeUnknownReason::UnresolvedUpstream => "unresolved_upstream",
+                yss_node_protocol::TypeUnknownReason::MissingResource => "missing_resource",
+                yss_node_protocol::TypeUnknownReason::UnsupportedDeclaration => {
                     "unsupported_declaration"
                 }
-                yss_graph_protocol::TypeUnknownReason::OrphanedPort => "orphaned_port",
+                yss_node_protocol::TypeUnknownReason::OrphanedPort => "orphaned_port",
             }
             .into(),
         },
         EditorPortTypeState::Conflict { conflict } => PortTypeStateDto::Conflict {
             diagnostic_code: match conflict {
-                yss_graph_protocol::TypeConflict::InputNotAccepted => "input_not_accepted",
-                yss_graph_protocol::TypeConflict::IncompatibleInputs => "incompatible_inputs",
-                yss_graph_protocol::TypeConflict::MissingParameter => "missing_parameter",
-                yss_graph_protocol::TypeConflict::UnsupportedParameter => "unsupported_parameter",
+                yss_node_protocol::TypeConflict::InputNotAccepted => "input_not_accepted",
+                yss_node_protocol::TypeConflict::IncompatibleInputs => "incompatible_inputs",
+                yss_node_protocol::TypeConflict::MissingParameter => "missing_parameter",
+                yss_node_protocol::TypeConflict::UnsupportedParameter => "unsupported_parameter",
             }
             .into(),
         },
     }
 }
 
-fn map_port_direction(direction: yss_graph_protocol::PortDirection) -> PortDirectionDto {
+fn map_port_direction(direction: yss_node_protocol::PortDirection) -> PortDirectionDto {
     match direction {
-        yss_graph_protocol::PortDirection::Input => PortDirectionDto::Input,
-        yss_graph_protocol::PortDirection::Output => PortDirectionDto::Output,
+        yss_node_protocol::PortDirection::Input => PortDirectionDto::Input,
+        yss_node_protocol::PortDirection::Output => PortDirectionDto::Output,
     }
 }
 
@@ -294,16 +294,16 @@ fn map_parameter_configuration(
 }
 
 fn map_relational_scalar_type(
-    scalar_type: yss_graph_protocol::RelationalScalarType,
+    scalar_type: yss_node_protocol::RelationalScalarType,
 ) -> RelationalScalarTypeDto {
     match scalar_type {
-        yss_graph_protocol::RelationalScalarType::Boolean => RelationalScalarTypeDto::Boolean,
-        yss_graph_protocol::RelationalScalarType::Int64 => RelationalScalarTypeDto::Int64,
-        yss_graph_protocol::RelationalScalarType::Float64 => RelationalScalarTypeDto::Float64,
-        yss_graph_protocol::RelationalScalarType::String => RelationalScalarTypeDto::String,
-        yss_graph_protocol::RelationalScalarType::Date => RelationalScalarTypeDto::Date,
-        yss_graph_protocol::RelationalScalarType::DateTime => RelationalScalarTypeDto::DateTime,
-        yss_graph_protocol::RelationalScalarType::Unknown => RelationalScalarTypeDto::Unknown,
+        yss_node_protocol::RelationalScalarType::Boolean => RelationalScalarTypeDto::Boolean,
+        yss_node_protocol::RelationalScalarType::Int64 => RelationalScalarTypeDto::Int64,
+        yss_node_protocol::RelationalScalarType::Float64 => RelationalScalarTypeDto::Float64,
+        yss_node_protocol::RelationalScalarType::String => RelationalScalarTypeDto::String,
+        yss_node_protocol::RelationalScalarType::Date => RelationalScalarTypeDto::Date,
+        yss_node_protocol::RelationalScalarType::DateTime => RelationalScalarTypeDto::DateTime,
+        yss_node_protocol::RelationalScalarType::Unknown => RelationalScalarTypeDto::Unknown,
     }
 }
 
@@ -399,7 +399,7 @@ mod tests {
         EditorPortDisplay, EditorPortModel, EditorPortStatus, EditorPortTypeState,
         EditorProjectionBasis, EditorSchemaField, EditorSchemaSummary, EditorSchemaSummaryKind,
     };
-    use yss_graph_protocol::{
+    use yss_node_protocol::{
         NodeTypeId, ParameterKey, ParameterPresentation, PortDirection, PortKey,
         RelationalScalarType,
     };

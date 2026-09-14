@@ -6,7 +6,7 @@
 #![deny(unused_must_use)]
 
 #[cfg(test)]
-use yss_graph_protocol::TypeId;
+use yss_node_protocol::TypeId;
 
 use yss_graph_analysis_contract::{
     CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
@@ -18,14 +18,14 @@ use yss_graph_document::{
     NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use yss_graph_document_edit::{port_member_group_state, user_created_port_instance_count};
-use yss_graph_protocol::{
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_protocol::{
     ConnectionsPerPort, InputCoercionKind, ParameterEditorSpec, ParameterIssueKind, ParameterKey,
     ParameterPresentation, PortCardinality, PortDirection, PortEditorSpec, PortKey,
     RelationalScalarType, ResolvedSchemaFact, ResolvedType, ResourceDisplayKind, SchemaExpr,
     TypeDomain, TypeExpr, TypeState, TypeUnknownReason, TypedValue, validate_parameter_values,
 };
-use yss_graph_registry::NodeRegistry;
-use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_registry::NodeRegistry;
 mod derived_ports;
 mod result_category;
 mod schema_resolution;
@@ -193,14 +193,14 @@ impl<'a> ReadyGraphSemanticSnapshot<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphResolvedParameterValue {
     Literal(serde_json::Value),
-    DefaultLiteral(yss_graph_protocol::Value),
+    DefaultLiteral(yss_node_protocol::Value),
     Resource(GraphResourceId),
 }
 
 fn referenced_constant<'a>(
     document: &'a GraphDocument,
     node: &yss_graph_document::DocumentNode,
-    parameter: &yss_graph_protocol::ParameterKey,
+    parameter: &yss_node_protocol::ParameterKey,
 ) -> Option<&'a yss_graph_document::GraphConstant> {
     let id = node.parameters.get(parameter)?.as_str()?.parse().ok()?;
     document.constants.get(&id)
@@ -210,7 +210,7 @@ fn referenced_constant<'a>(
 pub struct GraphNodeSemanticFact {
     pub constant: Option<std::sync::Arc<yss_graph_document::GraphConstant>>,
     pub node_id: NodeId,
-    pub node_type: yss_graph_protocol::NodeTypeId,
+    pub node_type: yss_node_protocol::NodeTypeId,
     pub instance_title: Option<Box<str>>,
     pub title: Box<str>,
     pub icon_id: Option<Box<str>>,
@@ -281,7 +281,7 @@ pub struct GraphColumnFact {
 pub struct GraphFilterColumnFact {
     pub name: Box<str>,
     pub data_type: RelationalScalarType,
-    pub operators: Box<[yss_graph_protocol::dataframe::FilterOperator]>,
+    pub operators: Box<[yss_node_protocol::dataframe::FilterOperator]>,
     pub literal_types: Box<[GraphFilterLiteralType]>,
 }
 
@@ -766,7 +766,7 @@ fn resolve_graph_semantics_inner(
 
             GraphNodeSemanticFact {
                 constant: match &protocol.typing {
-                    yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| {
+                    yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| {
                         constants.entry(constant.id).or_insert_with(|| std::sync::Arc::new(constant.clone())).clone()
                     }),
                     _ => None,
@@ -774,7 +774,7 @@ fn resolve_graph_semantics_inner(
                 node_id: node.id,
                 node_type: node.node_type.clone(),
                 instance_title: match &protocol.typing {
-                    yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| constant.name.clone().into_boxed_str()),
+                    yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => referenced_constant(document, node, parameter).map(|constant| constant.name.clone().into_boxed_str()),
                     _ => None,
                 },
                 title: protocol.catalog.title_key.as_str().into(),
@@ -955,11 +955,11 @@ mod tests {
     use std::collections::BTreeMap;
     use yss_data_contract::DataType;
     use yss_graph_analysis_contract::CompilationBasis;
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
-    use yss_graph_protocol::{NodeTypeId, ParameterConstraint};
-    use yss_graph_registry::RegistryFingerprint;
     use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_node_catalog::build_builtin_node_system;
+    use yss_node_protocol::{NodeTypeId, ParameterConstraint};
+    use yss_node_registry::RegistryFingerprint;
 
     fn empty_resources() -> ResourceCatalogSnapshot {
         ResourceCatalogSnapshot::new(
@@ -975,8 +975,8 @@ mod tests {
 
     fn resolved_series(element: &str) -> ResolvedType {
         ResolvedType::Applied {
-            constructor: yss_graph_protocol::TypeConstructorId::new(
-                yss_graph_protocol::DATA_SERIES_CONSTRUCTOR_ID,
+            constructor: yss_node_protocol::TypeConstructorId::new(
+                yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID,
             )
             .expect("fixture constructor ID is valid"),
             arguments: Box::new([resolved_scalar(element)]),

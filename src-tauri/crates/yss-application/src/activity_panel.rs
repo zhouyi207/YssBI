@@ -1,7 +1,7 @@
 //! Read-only Activity panel projections. UI expansion and draft history stay in the client.
 use std::collections::{BTreeMap, BTreeSet};
 
-use yss_graph_catalog::{LocalizedCatalog, NodeCreation};
+use yss_node_catalog::{LocalizedCatalog, NodeCreation};
 use yss_plugin_protocol::InstalledPlugin;
 use yss_project_identity::ProjectInstanceId;
 

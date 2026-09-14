@@ -299,7 +299,7 @@ mod tests {
         DocumentNode, DynamicPortBinding, GraphDocument, NodeId, NodePosition, OrderKey,
         ParameterValues, PortAddress,
     };
-    use yss_graph_protocol::{NodeTypeId, PortKey};
+    use yss_node_protocol::{NodeTypeId, PortKey};
 
     #[test]
     fn patch_commit_is_atomic() {

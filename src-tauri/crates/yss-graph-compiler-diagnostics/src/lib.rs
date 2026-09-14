@@ -1,7 +1,7 @@
 //! Authoritative compiler diagnostic codes, localization templates, and definition validation.
 //!
 //! Runtime diagnostic values live in `yss-graph-analysis-contract`; this crate owns only the
-//! stable compiler vocabulary consumed while assembling the built-in catalog.
+//! stable compiler vocabulary and the templates generated for frontend Graph diagnostics.
 
 use std::collections::BTreeSet;
 use std::error::Error;

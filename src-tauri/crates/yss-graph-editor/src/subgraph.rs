@@ -9,9 +9,6 @@ use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use yss_graph_catalog::{
-    CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
-};
 use yss_graph_document::{
     ConnectionId, ConstantId, DocumentConnection, DocumentNode, DynamicMemberLocator,
     DynamicPortBinding, FunctionParameterId, GraphConstant, GraphDocument, GraphResourcePath,
@@ -19,10 +16,13 @@ use yss_graph_document::{
     PortAddress, PortInstanceId, PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
 };
 use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
-use yss_graph_protocol::{
+use yss_node_catalog::{
+    CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
+};
+use yss_node_protocol::{
     NodeInstanceDisplaySpec, NodeTypeId, ParameterKey, PortCardinality, PortKey, TypeExpr,
 };
-use yss_graph_registry::NodeRegistry;
+use yss_node_registry::NodeRegistry;
 
 #[path = "subgraph/clipboard.rs"]
 mod clipboard;
@@ -307,7 +307,7 @@ fn authoritative_creation(
 
 fn matching_resource(
     node: &DocumentNode,
-    protocol: &yss_graph_protocol::NodeProtocol,
+    protocol: &yss_node_protocol::NodeProtocol,
     catalog: &CatalogMutationValidationSnapshot,
 ) -> Result<Option<(CatalogResourcePath, ResourceBoundCreateArgs)>, MutationConflict> {
     let Some((resource_path, resource)) =

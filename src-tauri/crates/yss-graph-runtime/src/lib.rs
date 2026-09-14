@@ -12,11 +12,13 @@ use yss_graph_analysis::{
     resolve_graph_semantics_with_cache,
 };
 use yss_graph_analysis_contract::{
-    CompilationBasis, CompileId, DiagnosticArguments, LocalizationLookup, ResourceKey,
-    ResourceObservedState, ResourceVersion,
+    CompilationBasis, CompileId, ResourceKey, ResourceObservedState, ResourceVersion,
 };
-use yss_graph_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_graph_compiler::{GraphCompilationInput, GraphCompileError, GraphCompiledPackage, compile};
+use yss_graph_compiler_diagnostics::{
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
+    validate_compiler_diagnostic_definitions,
+};
 use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId, OrderKey,
     PortAddress,
@@ -28,9 +30,10 @@ use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
     SourcePort, export_subgraph, filter_compatible_catalog,
 };
-use yss_graph_protocol::{PortDirection, ResolvedType, TypeExpr};
-use yss_graph_registry::{NodeRegistry, RegistryFingerprint};
 use yss_graph_resource_contract::ResourceCatalogSnapshot;
+use yss_node_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
+use yss_node_protocol::{PortDirection, ResolvedType, TypeExpr};
+use yss_node_registry::{NodeRegistry, RegistryFingerprint};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);
@@ -49,6 +52,10 @@ pub struct GraphRuntimeComponents {
     pub registry: Arc<NodeRegistry>,
     pub catalog: Arc<BuiltinCatalog>,
 }
+
+#[derive(Debug, Error)]
+#[error("graph compiler diagnostic definitions are invalid")]
+pub struct GraphRuntimeInitializationError(#[from] CompilerDiagnosticDefinitionError);
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,15 +219,19 @@ impl GraphDraftCompilation {
 }
 
 impl GraphRuntimeState {
-    pub fn from_components(epoch: GraphRuntimeEpoch, components: GraphRuntimeComponents) -> Self {
-        Self {
+    pub fn from_components(
+        epoch: GraphRuntimeEpoch,
+        components: GraphRuntimeComponents,
+    ) -> Result<Self, GraphRuntimeInitializationError> {
+        validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS)?;
+        Ok(Self {
             epoch,
             components,
             compiled_drafts: Mutex::new(BTreeMap::new()),
             semantic_caches: Mutex::new(BTreeMap::new()),
             #[cfg(any(test, feature = "test-support"))]
             test_control: None,
-        }
+        })
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -229,13 +240,10 @@ impl GraphRuntimeState {
         components: GraphRuntimeComponents,
         control: GraphRuntimeTestControl,
     ) -> Self {
-        Self {
-            epoch,
-            components,
-            compiled_drafts: Mutex::new(BTreeMap::new()),
-            semantic_caches: Mutex::new(BTreeMap::new()),
-            test_control: Some(Arc::new(control)),
-        }
+        let mut runtime = Self::from_components(epoch, components)
+            .expect("graph diagnostic definitions must be valid");
+        runtime.test_control = Some(Arc::new(control));
+        runtime
     }
 
     pub const fn epoch(&self) -> GraphRuntimeEpoch {
@@ -553,7 +561,8 @@ impl GraphRuntimeState {
             document,
             self.components.registry.as_ref(),
             resources,
-            &self.components.catalog.localization(locale),
+            self.components.catalog.as_ref(),
+            locale,
             analysis.semantic_snapshot().clone(),
         );
         analysis.with_semantic_snapshot(snapshot)
@@ -711,10 +720,10 @@ fn localize_semantic_snapshot(
     document: &GraphDocument,
     registry: &NodeRegistry,
     resources: &[CatalogResourceEntry],
-    localization: &dyn LocalizationLookup,
+    catalog: &BuiltinCatalog,
+    locale: &str,
     snapshot: GraphSemanticSnapshot,
 ) -> GraphSemanticSnapshot {
-    let arguments = DiagnosticArguments::new();
     let resource_names = resources
         .iter()
         .map(|entry| {
@@ -728,7 +737,7 @@ fn localize_semantic_snapshot(
         let Some(protocol) = registry.protocol(&node_facts.node_type) else {
             return node_facts;
         };
-        node_facts.title = localization.text(&protocol.catalog.title_key, &arguments);
+        node_facts.title = catalog.text(locale, &protocol.catalog.title_key);
         node_facts.instance_title = document
             .nodes
             .get(&node_facts.node_id)
@@ -753,19 +762,19 @@ fn localize_semantic_snapshot(
             else {
                 continue;
             };
-            parameter.title = localization.text(&spec.title_key, &arguments);
+            parameter.title = catalog.text(locale, &spec.title_key);
             parameter.description = spec
                 .description_key
                 .as_ref()
-                .map(|key| localization.text(key, &arguments));
+                .map(|key| catalog.text(locale, key));
             if let Some(
                 yss_graph_analysis::GraphParameterConfigurationFact::ProjectColumns { unavailable_reason, .. }
                 | yss_graph_analysis::GraphParameterConfigurationFact::FilterPredicate { unavailable_reason, .. }
             ) = &mut parameter.configuration
                 && let Some(key) = unavailable_reason.as_ref()
-                    .and_then(|key| yss_graph_protocol::I18nKey::new(key.clone()).ok())
+                    .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
             {
-                *unavailable_reason = Some(localization.text(&key, &arguments));
+                *unavailable_reason = Some(catalog.text(locale, &key));
             }
             let Some(yss_graph_analysis::GraphParameterConfigurationFact::Configuration { fields }) =
                 &mut parameter.configuration
@@ -773,15 +782,15 @@ fn localize_semantic_snapshot(
                 continue;
             };
             for field in fields.iter_mut() {
-                if let Ok(key) = yss_graph_protocol::I18nKey::new(field.title.clone()) {
-                    field.title = localization.text(&key, &arguments);
+                if let Ok(key) = yss_node_protocol::I18nKey::new(field.title.clone()) {
+                    field.title = catalog.text(locale, &key);
                 }
                 if let Some(key) = field
                     .description
                     .as_ref()
-                    .and_then(|key| yss_graph_protocol::I18nKey::new(key.clone()).ok())
+                    .and_then(|key| yss_node_protocol::I18nKey::new(key.clone()).ok())
                 {
-                    field.description = Some(localization.text(&key, &arguments));
+                    field.description = Some(catalog.text(locale, &key));
                 }
             }
         }
@@ -837,9 +846,9 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use yss_graph_analysis_contract::CompilationBasis;
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_document::{DocumentNode, NodePosition, ParameterValues};
-    use yss_graph_registry::RegistryFingerprint;
+    use yss_node_catalog::build_builtin_node_system;
+    use yss_node_registry::RegistryFingerprint;
 
     fn components() -> GraphRuntimeComponents {
         let builtin = build_builtin_node_system().expect("built-in graph system must be valid");
@@ -874,7 +883,8 @@ mod tests {
     #[test]
     fn materialization_validates_and_owns_the_candidate() {
         let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components())
+                .unwrap();
         let document = GraphDocument::default();
 
         let candidate = runtime
@@ -912,7 +922,8 @@ mod tests {
         };
 
         let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components())
+                .unwrap();
         let function = GraphResourcePath::new("functions/Forecast.yssbi-function")
             .expect("test function path is valid");
         let node_id = NodeId::new();
@@ -1008,7 +1019,8 @@ mod tests {
     #[test]
     fn draft_compilation_cache_tracks_semantics_not_layout() {
         let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components());
+            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components())
+                .unwrap();
         let graph =
             GraphResourcePath::new("events/Cache.yssbi-event").expect("test graph path is valid");
         let node_id = NodeId::new();

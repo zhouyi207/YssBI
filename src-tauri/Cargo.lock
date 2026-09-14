@@ -9269,14 +9269,11 @@ dependencies = [
  "yss-function-editor-projection",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
- "yss-graph-catalog",
  "yss-graph-compiler",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-editor",
  "yss-graph-execution",
- "yss-graph-protocol",
- "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-runtime",
  "yss-graph-type-mapping",
@@ -9284,6 +9281,9 @@ dependencies = [
  "yss-ipc-contract",
  "yss-ipc-event",
  "yss-math-expr",
+ "yss-node-catalog",
+ "yss-node-protocol",
+ "yss-node-registry",
  "yss-plugin-protocol",
  "yss-plugin-runtime",
  "yss-project",
@@ -9572,14 +9572,14 @@ dependencies = [
  "yss-canonical-hash",
  "yss-data-contract",
  "yss-graph-analysis-contract",
- "yss-graph-catalog",
  "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-document-edit",
- "yss-graph-protocol",
- "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-type-mapping",
+ "yss-node-catalog",
+ "yss-node-protocol",
+ "yss-node-registry",
  "yss-tabular-contract",
 ]
 
@@ -9592,20 +9592,8 @@ dependencies = [
  "uuid",
  "yss-canonical-hash",
  "yss-graph-document",
- "yss-graph-protocol",
- "yss-graph-registry",
-]
-
-[[package]]
-name = "yss-graph-catalog"
-version = "0.1.0"
-dependencies = [
- "serde",
- "yss-graph-analysis-contract",
- "yss-graph-compiler-diagnostics",
- "yss-graph-protocol",
- "yss-graph-registry",
- "yss-sci-contract",
+ "yss-node-protocol",
+ "yss-node-registry",
 ]
 
 [[package]]
@@ -9616,11 +9604,11 @@ dependencies = [
  "yss-data-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
- "yss-graph-catalog",
  "yss-graph-document",
- "yss-graph-protocol",
- "yss-graph-registry",
  "yss-graph-resource-contract",
+ "yss-node-catalog",
+ "yss-node-protocol",
+ "yss-node-registry",
 ]
 
 [[package]]
@@ -9640,7 +9628,7 @@ dependencies = [
  "uuid",
  "yss-canonical-hash",
  "yss-data-contract",
- "yss-graph-protocol",
+ "yss-node-protocol",
  "yss-project-layout",
  "yss-resource-naming",
  "yss-tabular-contract",
@@ -9652,7 +9640,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "yss-graph-document",
- "yss-graph-protocol",
+ "yss-node-protocol",
 ]
 
 [[package]]
@@ -9666,13 +9654,13 @@ dependencies = [
  "yss-data-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
- "yss-graph-catalog",
  "yss-graph-document",
  "yss-graph-document-edit",
- "yss-graph-protocol",
- "yss-graph-registry",
  "yss-graph-resource-contract",
  "yss-graph-type-mapping",
+ "yss-node-catalog",
+ "yss-node-protocol",
+ "yss-node-registry",
 ]
 
 [[package]]
@@ -9687,24 +9675,6 @@ dependencies = [
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",
-]
-
-[[package]]
-name = "yss-graph-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "yss-graph-registry"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "yss-canonical-hash",
- "yss-graph-protocol",
 ]
 
 [[package]]
@@ -9727,14 +9697,15 @@ dependencies = [
  "yss-data-contract",
  "yss-graph-analysis",
  "yss-graph-analysis-contract",
- "yss-graph-catalog",
  "yss-graph-compiler",
+ "yss-graph-compiler-diagnostics",
  "yss-graph-document",
  "yss-graph-document-edit",
  "yss-graph-editor",
- "yss-graph-protocol",
- "yss-graph-registry",
  "yss-graph-resource-contract",
+ "yss-node-catalog",
+ "yss-node-protocol",
+ "yss-node-registry",
 ]
 
 [[package]]
@@ -9743,7 +9714,7 @@ version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
  "yss-data-contract",
- "yss-graph-protocol",
+ "yss-node-protocol",
 ]
 
 [[package]]
@@ -9773,8 +9744,8 @@ dependencies = [
  "yss-function-editor-projection",
  "yss-graph-analysis-contract",
  "yss-graph-document",
- "yss-graph-protocol",
- "yss-graph-registry",
+ "yss-node-protocol",
+ "yss-node-registry",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-registry-contract",
@@ -9840,6 +9811,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-node-catalog"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "yss-node-protocol",
+ "yss-node-registry",
+ "yss-sci-contract",
+]
+
+[[package]]
+name = "yss-node-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "yss-node-registry"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "yss-canonical-hash",
+ "yss-node-protocol",
+]
+
+[[package]]
 name = "yss-plugin-protocol"
 version = "0.2.0"
 dependencies = [
@@ -9902,7 +9901,7 @@ dependencies = [
  "yss-function-editor-projection",
  "yss-graph-document",
  "yss-graph-document-edit",
- "yss-graph-protocol",
+ "yss-node-protocol",
  "yss-project-history",
  "yss-project-identity",
  "yss-project-layout",

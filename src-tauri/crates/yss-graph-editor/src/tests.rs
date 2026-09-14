@@ -1,15 +1,15 @@
 use crate::{CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode};
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
-use yss_graph_catalog::{authoritative_static_descriptor, build_builtin_node_system};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     FunctionParameterId, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId,
     NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
 };
 use yss_graph_document_edit::apply_graph_document_patch;
-use yss_graph_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
-use yss_graph_registry::NodeRegistry;
+use yss_node_catalog::{authoritative_static_descriptor, build_builtin_node_system};
+use yss_node_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
+use yss_node_registry::NodeRegistry;
 
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
@@ -38,7 +38,7 @@ fn insert_node(document: &mut GraphDocument, node: DocumentNode) -> NodeId {
     id
 }
 
-fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_graph_catalog::NodeCreation {
+fn static_descriptor(registry: &NodeRegistry, node_type: &str) -> yss_node_catalog::NodeCreation {
     let node_type = NodeTypeId::new(node_type).expect("fixture node type must be valid");
     let protocol = registry
         .protocol(&node_type)

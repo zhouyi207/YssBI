@@ -1,0 +1,329 @@
+use super::builtin::{
+    BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters,
+    configuration_parameter, leaf, sid,
+};
+use crate::Message;
+use yss_node_protocol::*;
+use yss_node_registry::CategoryRegistration;
+
+const CATEGORY: &str = "plot";
+
+#[derive(Clone, Copy)]
+enum PlotInputs {
+    Pair,
+    NumericSeries,
+    CorrelationSeries,
+    Correlogram,
+}
+
+#[derive(Clone, Copy)]
+struct PlotSpec {
+    id: &'static str,
+    kernel: &'static str,
+    en: &'static str,
+    zh: &'static str,
+    aliases: &'static [&'static str],
+    zh_aliases: &'static [&'static str],
+    inputs: PlotInputs,
+}
+
+const SPECS: &[PlotSpec] = &[
+    PlotSpec {
+        id: "yssbi.plot.scatter.view",
+        kernel: "yssbi.plot.scatter.view",
+        en: "Scatter Plot",
+        zh: "散点图",
+        aliases: &["scatterplot", "XY plot", "points"],
+        zh_aliases: &["散点图", "XY图", "点图"],
+        inputs: PlotInputs::Pair,
+    },
+    PlotSpec {
+        id: "yssbi.plot.line.view",
+        kernel: "yssbi.plot.line.view",
+        en: "Line Plot",
+        zh: "折线图",
+        aliases: &["line chart", "time series plot", "curve"],
+        zh_aliases: &["折线图", "时间序列图", "曲线图"],
+        inputs: PlotInputs::Pair,
+    },
+    PlotSpec {
+        id: "yssbi.plot.ecdf.view",
+        kernel: "yssbi.plot.ecdf.view",
+        en: "Empirical CDF",
+        zh: "经验累积分布图",
+        aliases: &["ECDF", "empirical cumulative distribution function", "CDF"],
+        zh_aliases: &["经验分布函数", "累积分布", "ECDF"],
+        inputs: PlotInputs::NumericSeries,
+    },
+    PlotSpec {
+        id: "yssbi.plot.kde.view",
+        kernel: "yssbi.plot.kde.view",
+        en: "Kernel Density Estimate",
+        zh: "核密度估计图",
+        aliases: &[
+            "KDE",
+            "kernel density estimation",
+            "density plot",
+            "Silverman bandwidth",
+        ],
+        zh_aliases: &["核密度估计", "密度图", "KDE"],
+        inputs: PlotInputs::NumericSeries,
+    },
+    PlotSpec {
+        id: "yssbi.plot.histogram.view",
+        kernel: "yssbi.plot.histogram.view",
+        en: "Histogram",
+        zh: "直方图",
+        aliases: &["frequency distribution", "bins", "Sturges rule"],
+        zh_aliases: &["频数分布", "分箱", "斯特吉斯规则"],
+        inputs: PlotInputs::NumericSeries,
+    },
+    PlotSpec {
+        id: "yssbi.plot.correlation.view",
+        kernel: "yssbi.plot.correlation.view",
+        en: "Correlation Plot",
+        zh: "相关性图",
+        aliases: &[
+            "correlation matrix",
+            "Pearson correlation",
+            "p-value",
+            "heatmap",
+        ],
+        zh_aliases: &["相关矩阵", "皮尔逊相关", "P值", "热力图"],
+        inputs: PlotInputs::CorrelationSeries,
+    },
+    PlotSpec {
+        id: "yssbi.plot.correlogram.view",
+        kernel: "yssbi.plot.correlogram.view",
+        en: "Correlogram (ACF & PACF)",
+        zh: "相关图（ACF 与 PACF）",
+        aliases: &["correlogram", "ACF", "PACF", "Ljung-Box", "autocorrelation"],
+        zh_aliases: &["相关图", "自相关", "偏自相关", "Ljung-Box检验"],
+        inputs: PlotInputs::Correlogram,
+    },
+];
+
+pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
+    let mut nodes = Vec::with_capacity(SPECS.len());
+    let mut messages = vec![
+        ("en-US", "categories.plot.title", Message::Text("Plots")),
+        ("zh-CN", "categories.plot.title", Message::Text("绘图")),
+        (
+            "en-US",
+            "parameters.plot.maximum_lag.title",
+            Message::Text("Maximum lag"),
+        ),
+        (
+            "zh-CN",
+            "parameters.plot.maximum_lag.title",
+            Message::Text("最大滞后阶数"),
+        ),
+    ];
+    let categories = vec![CategoryRegistration {
+        id: category_id(CATEGORY)?,
+        title_key: i18n_key("categories.plot.title")?,
+        parent: None,
+        order: 70,
+    }];
+    for spec in SPECS {
+        add_messages(&mut messages, spec);
+        nodes.push(leaf(protocol(spec)?, spec.kernel));
+    }
+    Ok(ProviderFragment {
+        categories,
+        nodes,
+        messages,
+        ..ProviderFragment::default()
+    })
+}
+
+fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let mut ports = Vec::new();
+    match spec.inputs {
+        PlotInputs::Pair => {
+            ports.push(data_port(
+                "x",
+                "X",
+                PortDirection::Input,
+                numeric_data_series_type(),
+                PortCardinality::Declared,
+                None,
+            )?);
+            ports.push(data_port(
+                "y",
+                "Y",
+                PortDirection::Input,
+                numeric_data_series_type(),
+                PortCardinality::Declared,
+                None,
+            )?);
+        }
+        PlotInputs::NumericSeries => ports.push(data_port(
+            "values",
+            "Values",
+            PortDirection::Input,
+            numeric_data_series_type(),
+            PortCardinality::Declared,
+            None,
+        )?),
+        PlotInputs::CorrelationSeries => ports.push(data_port(
+            "series",
+            "DataSeries",
+            PortDirection::Input,
+            numeric_data_series_type(),
+            PortCardinality::UserCreated { min: 2, max: None },
+            None,
+        )?),
+        PlotInputs::Correlogram => {
+            ports.push(data_port(
+                "values",
+                "DataSeries",
+                PortDirection::Input,
+                numeric_data_series_type(),
+                PortCardinality::Declared,
+                None,
+            )?);
+        }
+    }
+    ports.push(data_port(
+        "result",
+        "Result",
+        PortDirection::Output,
+        concrete("core.string")?,
+        PortCardinality::Declared,
+        None,
+    )?);
+    Ok(NodeProtocol {
+        type_id: node_id(spec.id)?,
+        catalog: NodeCatalogProtocol {
+            title_key: node_key(spec.id, "title")?,
+            documentation_key: Some(node_key(spec.id, "documentation")?),
+            aliases_key: Some(node_key(spec.id, "aliases")?),
+            category_id: category_id(CATEGORY)?,
+            icon_id: icon_id("builtin.plot")?,
+            style_id: style_id("builtin.plot")?,
+            hidden: false,
+        },
+        interface: assembled_interface(spec.id, ports, vec![], vec![])?,
+        parameters: assembled_parameters(
+            spec.id,
+            if matches!(spec.inputs, PlotInputs::Correlogram) {
+                vec![configuration_parameter(
+                    "parameters.configuration.title",
+                    ConfigurationSchema {
+                        fields: vec![ConfigurationFieldSpec {
+                            parameter: ParameterSpec {
+                                key: sid("maximum_lag", ParameterKey::new)?,
+                                title_key: i18n_key("parameters.plot.maximum_lag.title")?,
+                                description_key: None,
+                                value_type: concrete("core.int64")?,
+                                default_value: Some(ParameterValue {
+                                    value_type: concrete("core.int64")?,
+                                    value: Value::Integer(20),
+                                }),
+                                constraints: vec![ParameterConstraint::IntegerRange {
+                                    min: Some(1),
+                                    max: None,
+                                }],
+                                editor: ParameterEditorSpec::Number,
+                                presentation: ParameterPresentation::DetailPanel,
+                            },
+                            visible_when: None,
+                        }]
+                        .into_boxed_slice(),
+                    },
+                )?]
+            } else {
+                vec![]
+            },
+        )?,
+        instance_display: NodeInstanceDisplaySpec::Static,
+        execution: ExecutionSemantics {
+            determinism: Determinism::Deterministic,
+            cache: CachePolicy::PerRun,
+        },
+        typing: NodeTypingSpec::Fixed,
+        scope: NodeScope::Any,
+        managed_role: None,
+    })
+}
+
+fn data_port(
+    key: &'static str,
+    title: &'static str,
+    direction: PortDirection,
+    value_type: TypeExpr,
+    cardinality: PortCardinality,
+    default_value: Option<TypedValue>,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    Ok(PortSpec {
+        key: port_key(key)?,
+        title: title.into(),
+        direction,
+        value_type,
+        cardinality,
+        connections: if direction == PortDirection::Input {
+            ConnectionsPerPort::Single
+        } else {
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            }
+        },
+        input_binding: (direction == PortDirection::Input).then_some(InputBindingSpec {
+            literal_policy: LiteralPolicy::Allowed,
+            default_value,
+        }),
+        consumption: (direction == PortDirection::Input)
+            .then_some(InputConsumption::FullyMaterialized),
+        production: (direction == PortDirection::Output)
+            .then_some(OutputProduction::FullyMaterialized),
+        editor: PortEditorSpec::Default,
+        schema: None,
+    })
+}
+
+fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &PlotSpec) {
+    let title = key_text(spec.id, "title");
+    let documentation = key_text(spec.id, "documentation");
+    let aliases = key_text(spec.id, "aliases");
+    out.extend([
+        ("en-US", title, Message::Text(spec.en)),
+        ("zh-CN", title, Message::Text(spec.zh)),
+        ("en-US", documentation, Message::Text("This dataflow view node returns a presentation result that can be opened from the graph output.")),
+        ("zh-CN", documentation, Message::Text("此数据流视图节点返回可从图结果中打开的展示结果。")),
+        ("en-US", aliases, Message::Aliases(spec.aliases)),
+        ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
+    ]);
+}
+
+fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Concrete(type_id(value)?))
+}
+fn node_id(value: &'static str) -> Result<NodeTypeId, BuiltinAssemblyError> {
+    sid(value, NodeTypeId::new)
+}
+fn type_id(value: &'static str) -> Result<TypeId, BuiltinAssemblyError> {
+    sid(value, TypeId::new)
+}
+fn port_key(value: &'static str) -> Result<PortKey, BuiltinAssemblyError> {
+    sid(value, PortKey::new)
+}
+fn category_id(value: &'static str) -> Result<NodeCategoryId, BuiltinAssemblyError> {
+    sid(value, NodeCategoryId::new)
+}
+fn icon_id(value: &'static str) -> Result<IconId, BuiltinAssemblyError> {
+    sid(value, IconId::new)
+}
+fn style_id(value: &'static str) -> Result<NodeStyleId, BuiltinAssemblyError> {
+    sid(value, NodeStyleId::new)
+}
+fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    sid(value, I18nKey::new)
+}
+fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
+    i18n_key(key_text(id, suffix))
+}
+fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
+    Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
+}

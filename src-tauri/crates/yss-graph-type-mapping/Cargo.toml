@@ -8,4 +8,4 @@ publish = false
 [dependencies]
 thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
-yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-node-protocol = { path = "../yss-node-protocol" }

@@ -13,12 +13,12 @@ use yss_database_contract::{
 };
 use yss_database_runtime::runtime::DatabaseRuntimeSession;
 use yss_database_runtime::{DatabaseInstance, DatabaseState, bind_dataset_instance};
-use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_graph_execution::plan::PlanProjectSessionId;
 use yss_graph_execution::resource_preparation::ResourceProviderFactory;
 use yss_graph_execution::state::ExecutionRuntimeState;
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+use yss_node_catalog::build_builtin_node_system;
 use yss_project::ProjectOperationError;
 use yss_project::ProjectState;
 use yss_project_identity::ProjectInstanceId;
@@ -159,7 +159,9 @@ pub enum ProjectSessionCandidateError {
     #[error("application session generation is exhausted")]
     GenerationExhausted,
     #[error("graph runtime built-ins could not be constructed")]
-    GraphRuntime(#[source] yss_graph_catalog::BuiltinInitializationError),
+    GraphRuntime(#[source] yss_node_catalog::BuiltinInitializationError),
+    #[error("graph compiler diagnostic definitions are invalid")]
+    GraphDiagnosticDefinitions(#[source] yss_graph_runtime::GraphRuntimeInitializationError),
     #[error(transparent)]
     Candidate(#[from] InvalidSessionCandidateError),
 }
@@ -240,6 +242,16 @@ pub fn build_current_project_candidate(
     let project_session_id = project.project_session_id();
     let builtin =
         build_builtin_node_system().map_err(ProjectSessionCandidateError::GraphRuntime)?;
+    let graph = Arc::new(
+        GraphRuntimeState::from_components(
+            GraphRuntimeEpoch::from_existing(epoch.get()),
+            GraphRuntimeComponents {
+                registry: builtin.registry,
+                catalog: builtin.catalog,
+            },
+        )
+        .map_err(ProjectSessionCandidateError::GraphDiagnosticDefinitions)?,
+    );
     let (root, database_revisions) = match project.get_path() {
         Some(_) => {
             let session = project
@@ -319,13 +331,6 @@ pub fn build_current_project_candidate(
         database_instances,
     )
     .map_err(|source| ProjectSessionCandidateError::DatabaseSession(source.into()))?;
-    let graph = Arc::new(GraphRuntimeState::from_components(
-        GraphRuntimeEpoch::from_existing(epoch.get()),
-        GraphRuntimeComponents {
-            registry: builtin.registry,
-            catalog: builtin.catalog,
-        },
-    ));
     let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
     let runtime_generation = RuntimeGeneration::from_existing(epoch.get().saturating_add(1));
     let execution = Arc::new(ExecutionRuntimeState::new(
@@ -359,10 +364,10 @@ mod tests {
         DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_graph_execution::plan::PlanProjectSessionId;
     use yss_graph_execution::state::ExecutionRuntimeState;
+    use yss_node_catalog::build_builtin_node_system;
     use yss_project::ProjectState;
     use yss_project_identity::ProjectInstanceId;
     use yss_project_identity::ProjectSessionId;
@@ -370,13 +375,16 @@ mod tests {
     fn candidate_input() -> ReplacementCandidateInput {
         let project_session_id = ProjectSessionId::new("candidate-session");
         let graph_components = build_builtin_node_system().expect("test built-ins are valid");
-        let graph = Arc::new(GraphRuntimeState::from_components(
-            GraphRuntimeEpoch::from_existing(7),
-            GraphRuntimeComponents {
-                registry: graph_components.registry,
-                catalog: graph_components.catalog,
-            },
-        ));
+        let graph = Arc::new(
+            GraphRuntimeState::from_components(
+                GraphRuntimeEpoch::from_existing(7),
+                GraphRuntimeComponents {
+                    registry: graph_components.registry,
+                    catalog: graph_components.catalog,
+                },
+            )
+            .unwrap(),
+        );
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty())
             .expect("empty observation set is valid");
         let database = Arc::new(

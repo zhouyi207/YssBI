@@ -1183,22 +1183,25 @@ mod tests {
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_execution::identity::ExecutionSessionId;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch};
+    use yss_node_catalog::build_builtin_node_system;
 
     fn session(epoch: u64) -> Arc<ApplicationSession> {
         let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));
         let execution_session_id = ExecutionSessionId::new(uuid::Uuid::from_u128(epoch as u128));
         let project = Arc::new(ProjectState::new());
         let builtin = build_builtin_node_system().expect("test built-ins are valid");
-        let graph = Arc::new(GraphRuntimeState::from_components(
-            GraphRuntimeEpoch::from_existing(epoch),
-            GraphRuntimeComponents {
-                registry: builtin.registry,
-                catalog: builtin.catalog,
-            },
-        ));
+        let graph = Arc::new(
+            GraphRuntimeState::from_components(
+                GraphRuntimeEpoch::from_existing(epoch),
+                GraphRuntimeComponents {
+                    registry: builtin.registry,
+                    catalog: builtin.catalog,
+                },
+            )
+            .unwrap(),
+        );
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
             DatabaseId,
             DatabaseDeclarationObservation,

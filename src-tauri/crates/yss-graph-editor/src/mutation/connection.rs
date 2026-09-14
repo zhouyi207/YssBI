@@ -174,7 +174,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
     parameters: &ParameterValues,
     origin: &DynamicMemberLocator,
     catalog: &crate::compatibility::CatalogMutationValidationSnapshot,
-) -> Result<yss_graph_protocol::TypeExpr, MutationConflict> {
+) -> Result<yss_node_protocol::TypeExpr, MutationConflict> {
     let PortCardinality::Derived { resolver } = &spec.cardinality else {
         return Err(invalid_editor_mutation(
             "resolved dynamic binding requires a derived port template",
@@ -198,7 +198,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                 unreachable!("authoritative resource kind was checked before destructuring");
             };
             let resolver_id = resolver.as_str();
-            let type_name = if resolver_id == yss_graph_catalog::FUNCTION_CALL_ARGUMENTS_RESOLVER
+            let type_name = if resolver_id == yss_node_catalog::FUNCTION_CALL_ARGUMENTS_RESOLVER
                 && spec.direction == PortDirection::Input
             {
                 signature
@@ -206,7 +206,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     .iter()
                     .find(|candidate| candidate.id == *parameter)
                     .map(|parameter| parameter.type_name.as_str())
-            } else if resolver_id == yss_graph_catalog::FUNCTION_CALL_RESULTS_RESOLVER
+            } else if resolver_id == yss_node_catalog::FUNCTION_CALL_RESULTS_RESOLVER
                 && spec.direction == PortDirection::Output
                 && parameter.as_str() == "return"
             {
@@ -240,7 +240,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                 ResourceBoundCreateArgs::Database,
                 catalog,
             )?;
-            if resolver.as_str() != yss_graph_catalog::DATAFRAME_COLUMNS_RESOLVER {
+            if resolver.as_str() != yss_node_catalog::DATAFRAME_COLUMNS_RESOLVER {
                 return Err(invalid_editor_mutation(format!(
                     "schema member '{}:{}' is invalid for template '{}'",
                     source.as_str(),
@@ -544,11 +544,11 @@ pub(crate) fn validate_literal_target(
     document: &GraphDocument,
     registry: &NodeRegistry,
     address: &PortAddress,
-    literal: Option<&yss_graph_protocol::TypedValue>,
+    literal: Option<&yss_node_protocol::TypedValue>,
 ) -> Result<(), MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     if let Some(literal) = literal {
-        yss_graph_protocol::validate_typed_value(literal.clone(), &port.spec.value_type, registry)
+        yss_node_protocol::validate_typed_value(literal.clone(), &port.spec.value_type, registry)
             .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
@@ -559,11 +559,11 @@ pub(crate) fn normalize_editor_literal_target(
     registry: &NodeRegistry,
     address: &PortAddress,
     literal: Option<&JsonValue>,
-) -> Result<Option<yss_graph_protocol::TypedValue>, MutationConflict> {
+) -> Result<Option<yss_node_protocol::TypedValue>, MutationConflict> {
     let port = resolve_literal_target(document, registry, address)?;
     literal
         .map(|raw| {
-            yss_graph_protocol::normalize_json_literal(raw, &port.spec.value_type, registry)
+            yss_node_protocol::normalize_json_literal(raw, &port.spec.value_type, registry)
                 .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))
         })
         .transpose()

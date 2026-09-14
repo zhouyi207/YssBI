@@ -1,6 +1,6 @@
 use crate::catalog_query::CatalogQueryResult;
 use serde::Serialize;
-use yss_graph_catalog::{
+use yss_node_catalog::{
     LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
     LocalizedParameter as DomainParameter, LocalizedPort as DomainPort,
     NodeCreation as DomainCreationDescriptor, ResourceBoundCreateArgs as DomainCreateArgs,
@@ -104,8 +104,8 @@ pub enum ResourceBoundCreateArgsDto {
     Database,
 }
 
-impl From<yss_graph_catalog::LocalizedCatalog> for LocalizedCatalogDto {
-    fn from(catalog: yss_graph_catalog::LocalizedCatalog) -> Self {
+impl From<yss_node_catalog::LocalizedCatalog> for LocalizedCatalogDto {
+    fn from(catalog: yss_node_catalog::LocalizedCatalog) -> Self {
         Self {
             project_instance_id: Box::default(),
             registry_fingerprint: Box::default(),
@@ -137,7 +137,7 @@ impl From<CatalogQueryResult> for LocalizedCatalogDto {
     }
 }
 
-impl From<yss_graph_catalog::LocalizedCategory> for LocalizedCategoryDto {
+impl From<yss_node_catalog::LocalizedCategory> for LocalizedCategoryDto {
     fn from(category: DomainCategory) -> Self {
         Self {
             category_id: category.category_id,
@@ -149,7 +149,7 @@ impl From<yss_graph_catalog::LocalizedCategory> for LocalizedCategoryDto {
     }
 }
 
-impl From<yss_graph_catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
+impl From<yss_node_catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
     fn from(item: DomainCatalogItem) -> Self {
         Self {
             node_type_id: item.node_type_id,
@@ -170,7 +170,7 @@ impl From<yss_graph_catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
                 .collect(),
             resource_path: item
                 .resource_path
-                .map(|path: yss_graph_catalog::CatalogResourcePath| path.as_str().into()),
+                .map(|path: yss_node_catalog::CatalogResourcePath| path.as_str().into()),
             resource_revision: item.resource_revision,
             creation: item.creation.into(),
         }
@@ -210,7 +210,7 @@ impl From<DomainCreationDescriptor> for NodeCreationDescriptorDto {
                 node_type_id: node_type_id.as_str().into(),
                 required_parameters: required_parameters
                     .into_iter()
-                    .map(|parameter: yss_graph_protocol::ParameterKey| parameter.as_str().into())
+                    .map(|parameter: yss_node_protocol::ParameterKey| parameter.as_str().into())
                     .collect(),
             },
             DomainCreationDescriptor::ResourceBound {
@@ -245,28 +245,28 @@ pub enum NodeCreationMappingError {
     InvalidParameter,
 }
 
-impl TryFrom<NodeCreationDescriptorDto> for yss_graph_catalog::NodeCreation {
+impl TryFrom<NodeCreationDescriptorDto> for yss_node_catalog::NodeCreation {
     type Error = NodeCreationMappingError;
 
     fn try_from(value: NodeCreationDescriptorDto) -> Result<Self, Self::Error> {
         let node_type = |value: Box<str>| {
-            yss_graph_protocol::NodeTypeId::new(value)
+            yss_node_protocol::NodeTypeId::new(value)
                 .map_err(|_| NodeCreationMappingError::InvalidNodeType)
         };
         let parameter = |value: Box<str>| {
-            yss_graph_protocol::ParameterKey::new(value)
+            yss_node_protocol::ParameterKey::new(value)
                 .map_err(|_| NodeCreationMappingError::InvalidParameter)
         };
         Ok(match value {
             NodeCreationDescriptorDto::Static { node_type_id } => {
-                yss_graph_catalog::NodeCreation::Static {
+                yss_node_catalog::NodeCreation::Static {
                     node_type_id: node_type(node_type_id)?,
                 }
             }
             NodeCreationDescriptorDto::ParameterizedStatic {
                 node_type_id,
                 required_parameters,
-            } => yss_graph_catalog::NodeCreation::ParameterizedStatic {
+            } => yss_node_catalog::NodeCreation::ParameterizedStatic {
                 node_type_id: node_type(node_type_id)?,
                 required_parameters: required_parameters
                     .into_vec()
@@ -280,16 +280,16 @@ impl TryFrom<NodeCreationDescriptorDto> for yss_graph_catalog::NodeCreation {
                 resource_path,
                 resource_revision,
                 create_args,
-            } => yss_graph_catalog::NodeCreation::ResourceBound {
+            } => yss_node_catalog::NodeCreation::ResourceBound {
                 node_type_id: node_type(node_type_id)?,
-                resource_path: yss_graph_catalog::CatalogResourcePath::new(resource_path),
+                resource_path: yss_node_catalog::CatalogResourcePath::new(resource_path),
                 resource_revision,
                 create_args: match create_args {
                     ResourceBoundCreateArgsDto::Function => {
-                        yss_graph_catalog::ResourceBoundCreateArgs::Function
+                        yss_node_catalog::ResourceBoundCreateArgs::Function
                     }
                     ResourceBoundCreateArgsDto::Database => {
-                        yss_graph_catalog::ResourceBoundCreateArgs::Database
+                        yss_node_catalog::ResourceBoundCreateArgs::Database
                     }
                 },
             },
@@ -309,12 +309,12 @@ mod tests {
         DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
     use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_document::GraphResourceKind;
     use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
     use yss_graph_execution::resource_preparation::ResourceProviderFactory;
     use yss_graph_execution::state::ExecutionRuntimeState;
     use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+    use yss_node_catalog::build_builtin_node_system;
     use yss_project_identity::ProjectSessionId;
     use yss_project_model::ProjectData;
 
@@ -341,13 +341,16 @@ mod tests {
         let project_session_id = ProjectSessionId::new("catalog-schema-session");
         let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
         let builtin = build_builtin_node_system().unwrap();
-        let graph = Arc::new(GraphRuntimeState::from_components(
-            GraphRuntimeEpoch::from_existing(1),
-            GraphRuntimeComponents {
-                registry: builtin.registry,
-                catalog: builtin.catalog,
-            },
-        ));
+        let graph = Arc::new(
+            GraphRuntimeState::from_components(
+                GraphRuntimeEpoch::from_existing(1),
+                GraphRuntimeComponents {
+                    registry: builtin.registry,
+                    catalog: builtin.catalog,
+                },
+            )
+            .unwrap(),
+        );
         let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
             DatabaseId,
             DatabaseDeclarationObservation,

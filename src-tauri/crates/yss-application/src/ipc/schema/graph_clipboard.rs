@@ -12,7 +12,7 @@ use yss_graph_editor::{
     ClipboardInputState, ClipboardLastKnownPortMetadata, ClipboardNode, ClipboardNodeCreation,
     ClipboardPortAddress, ClipboardPortBinding, ClipboardPortRef, ClipboardSubgraph,
 };
-use yss_graph_protocol::{ParameterValues, TypeExpr, TypedValue};
+use yss_node_protocol::{ParameterValues, TypeExpr, TypedValue};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -226,11 +226,11 @@ impl From<ClipboardNodeCreation> for ClipboardNodeCreationDto {
     }
 }
 
-impl From<yss_graph_catalog::ResourceBoundCreateArgs> for ClipboardResourceBoundCreateArgsDto {
-    fn from(value: yss_graph_catalog::ResourceBoundCreateArgs) -> Self {
+impl From<yss_node_catalog::ResourceBoundCreateArgs> for ClipboardResourceBoundCreateArgsDto {
+    fn from(value: yss_node_catalog::ResourceBoundCreateArgs) -> Self {
         match value {
-            yss_graph_catalog::ResourceBoundCreateArgs::Function => Self::Function,
-            yss_graph_catalog::ResourceBoundCreateArgs::Database => Self::Database,
+            yss_node_catalog::ResourceBoundCreateArgs::Function => Self::Function,
+            yss_node_catalog::ResourceBoundCreateArgs::Database => Self::Database,
         }
     }
 }

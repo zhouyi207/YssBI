@@ -312,7 +312,7 @@ fn validate_node_creation(
 }
 
 fn validate_resource_creation(
-    protocol: &yss_graph_protocol::NodeProtocol,
+    protocol: &yss_node_protocol::NodeProtocol,
     resource_path: &CatalogResourcePath,
     create_args: ResourceBoundCreateArgs,
     catalog: &CatalogMutationValidationSnapshot,
@@ -440,7 +440,7 @@ fn portable_port_spec<'a>(
     address: &ClipboardPortAddress,
     node_types: &BTreeMap<ClipboardNodeId, NodeTypeId>,
     registry: &'a NodeRegistry,
-) -> Result<&'a yss_graph_protocol::PortSpec, MutationConflict> {
+) -> Result<&'a yss_node_protocol::PortSpec, MutationConflict> {
     let node_type = node_types.get(&address.node_id).ok_or_else(|| {
         invalid_clipboard(format!(
             "clipboard address references missing node '{}'",

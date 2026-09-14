@@ -1,20 +1,20 @@
 use crate::mutation::{EditorMutationError, EditorMutationErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
 use yss_data_contract::DataType;
-use yss_graph_catalog::{
-    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, NodeCreation,
-    ResourceBoundCreateArgs,
-};
 use yss_graph_document::{
     DocumentNode, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
     GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
 };
-use yss_graph_protocol::{
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_catalog::{
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, NodeCreation,
+    ResourceBoundCreateArgs,
+};
+use yss_node_protocol::{
     ConnectionsPerPort, NodeInstanceDisplaySpec, NodeProtocol, ParameterKey, PortCardinality,
     PortDirection, PortKey, PortSpec, ResourceDisplayKind, TypeExpr, TypeParameterId,
 };
-use yss_graph_registry::NodeRegistry;
-use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_registry::NodeRegistry;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Editor-facing catalog authority used to validate creation descriptors and dynamic ports.
@@ -239,12 +239,12 @@ pub(crate) fn validate_connection_types(
     if !type_pattern_is_exact(&output.value_type) {
         return Ok(());
     }
-    if yss_graph_protocol::type_exprs_compatibility(
+    if yss_node_protocol::type_exprs_compatibility(
         &output.value_type,
         &input.value_type,
         &output.type_parameters,
         &input.type_parameters,
-    ) != yss_graph_protocol::TypeCompatibility::Incompatible
+    ) != yss_node_protocol::TypeCompatibility::Incompatible
     {
         Ok(())
     } else {
@@ -444,7 +444,7 @@ pub fn filter_compatible_catalog(
     mut localized: LocalizedCatalog,
 ) -> LocalizedCatalog {
     localized.items.retain(|item| {
-        let Ok(node_type) = yss_graph_protocol::NodeTypeId::new(item.node_type_id.as_ref()) else {
+        let Ok(node_type) = yss_node_protocol::NodeTypeId::new(item.node_type_id.as_ref()) else {
             return false;
         };
         let resource = item.resource_path.as_ref().and_then(|path| {
@@ -476,7 +476,7 @@ fn refine_constant_type(
     document: &GraphDocument,
     protocol: &NodeProtocol,
 ) {
-    let yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, output } = &protocol.typing
+    let yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, output } = &protocol.typing
     else {
         return;
     };
@@ -499,7 +499,7 @@ fn refine_constant_type(
 
 fn catalog_query_candidate_ports(
     graph_path: &GraphResourcePath,
-    node_type: &yss_graph_protocol::NodeTypeId,
+    node_type: &yss_node_protocol::NodeTypeId,
     resource: Option<&CatalogResourceEntry>,
     registry: &NodeRegistry,
     catalog: &ResourceCatalogSnapshot,
@@ -734,7 +734,7 @@ fn candidate_ports(
     Ok(ports)
 }
 
-fn descriptor_node_type(descriptor: &NodeCreation) -> &yss_graph_protocol::NodeTypeId {
+fn descriptor_node_type(descriptor: &NodeCreation) -> &yss_node_protocol::NodeTypeId {
     match descriptor {
         NodeCreation::Static { node_type_id }
         | NodeCreation::ParameterizedStatic { node_type_id, .. }
@@ -791,8 +791,8 @@ fn editor_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
 
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {
     let allowed = match protocol.scope {
-        yss_graph_protocol::NodeScope::Any => true,
-        yss_graph_protocol::NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
+        yss_node_protocol::NodeScope::Any => true,
+        yss_node_protocol::NodeScope::Function => graph_path.kind() == GraphResourceKind::Function,
     };
     if !allowed {
         Err(format!(
@@ -809,20 +809,20 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
         return false;
     }
     let compatibility = match source.direction {
-        PortDirection::Output => yss_graph_protocol::type_exprs_compatibility(
+        PortDirection::Output => yss_node_protocol::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &source.type_parameters,
             &candidate.type_parameters,
         ),
-        PortDirection::Input => yss_graph_protocol::type_exprs_compatibility(
+        PortDirection::Input => yss_node_protocol::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &source.type_parameters,
         ),
     };
-    compatibility != yss_graph_protocol::TypeCompatibility::Incompatible
+    compatibility != yss_node_protocol::TypeCompatibility::Incompatible
         || match source.direction {
             PortDirection::Output => !type_pattern_is_exact(&source.value_type),
             PortDirection::Input => !type_pattern_is_exact(&candidate.value_type),

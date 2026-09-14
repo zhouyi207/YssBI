@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use yss_graph_protocol::PortKey;
 use yss_ipc_contract::graph::PortAddressDto;
+use yss_node_protocol::PortKey;
 
 use yss_graph_document::{
     ConnectionId, JsonValue, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress,
@@ -92,7 +92,7 @@ pub enum EditorGraphMutationDto {
     },
     SetConfiguration {
         node_id: NodeId,
-        key: yss_graph_protocol::ParameterKey,
+        key: yss_node_protocol::ParameterKey,
         values: yss_graph_document::ParameterValues,
     },
     AddPortInstance {

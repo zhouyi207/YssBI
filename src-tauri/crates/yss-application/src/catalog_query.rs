@@ -9,14 +9,14 @@ use yss_database_runtime::session_api::{
     catalog_snapshot, revalidate_catalog_snapshot, revalidate_declaration_observations,
 };
 use yss_function_editor_projection::parse_function_data_type;
-use yss_graph_catalog::{
-    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
-};
 use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
 use yss_graph_document_edit::{DocumentError, validate_graph_document};
-use yss_graph_registry::RegistryFingerprint;
 use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
 use yss_graph_runtime::GraphRuntimeCatalogError;
+use yss_node_catalog::{
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
+};
+use yss_node_registry::RegistryFingerprint;
 use yss_project::ProjectIndex;
 use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
@@ -667,8 +667,8 @@ fn graph_signature(
 
 fn node_type(
     value: &'static str,
-) -> Result<yss_graph_protocol::NodeTypeId, ProjectCatalogReadSource> {
-    yss_graph_protocol::NodeTypeId::new(value)
+) -> Result<yss_node_protocol::NodeTypeId, ProjectCatalogReadSource> {
+    yss_node_protocol::NodeTypeId::new(value)
         .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())
 }
 

@@ -34,7 +34,7 @@ fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into());
     let runtime = captured.execution();
     let graph = GraphResourcePath::new("events/report.yssbi-event").unwrap();
-    let builtins = yss_graph_catalog::build_builtin_node_system().unwrap();
+    let builtins = yss_node_catalog::build_builtin_node_system().unwrap();
     let mut document = GraphDocument::default();
     let [response, predictor, summary] = std::array::from_fn(|_| NodeId::new());
     for (id, node_type) in [

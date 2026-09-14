@@ -15,9 +15,4 @@ pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
 };
 
-/// Graph localization consumes a caller-provided lookup and does not own a
-/// locale, transport DTO, or catalog delivery policy.
-pub trait LocalizationLookup {
-    fn text(&self, key: &yss_graph_protocol::I18nKey, arguments: &DiagnosticArguments) -> Box<str>;
-}
 pub use provenance::{CompileProvenance, GraphSessionId};

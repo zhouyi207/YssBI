@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use yss_graph_analysis::{GraphKernelSpecialization, GraphResultCategory};
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{GraphResourcePath, NodeId, PortAddress, PortInstanceId};
-use yss_graph_protocol::{InputCoercionKind, NodeTypeId, ResolvedType};
+use yss_node_protocol::{InputCoercionKind, NodeTypeId, ResolvedType};
 
 /// Graph-owned value reference used while lowering a document.  Application
 /// maps it to the execution package only after the Graph compilation result
@@ -161,8 +161,8 @@ pub struct GraphOutputBinding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphOutputContract {
-    pub value_type: yss_graph_protocol::ResolvedType,
-    pub schema: Option<yss_graph_protocol::ResolvedSchemaFact>,
+    pub value_type: yss_node_protocol::ResolvedType,
+    pub schema: Option<yss_node_protocol::ResolvedSchemaFact>,
     pub category: GraphResultCategory,
     pub source: GraphSourceIdentity,
 }

@@ -9,9 +9,9 @@ use yss_graph_document::{
     DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
     GraphResourcePath, PortAddress,
 };
-use yss_graph_protocol::{PortDirection, ResolvedType};
-use yss_graph_registry::NodeRegistry;
 use yss_graph_resource_contract::{FunctionSignature, ResourceCatalogSnapshot};
+use yss_node_protocol::{PortDirection, ResolvedType};
+use yss_node_registry::NodeRegistry;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphFunctionParameter {
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn reachable_functions_share_one_snapshot_and_abi_uses_signature_identity_order() {
-        let registry = yss_graph_catalog::build_builtin_node_system()
+        let registry = yss_node_catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         let [a, b, c] = [path("A"), path("B"), path("C")];
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn recursion_and_entry_ownership_fail_with_canonical_function_problems() {
-        let registry = yss_graph_catalog::build_builtin_node_system()
+        let registry = yss_node_catalog::build_builtin_node_system()
             .unwrap()
             .registry;
         let [a, b] = [path("A"), path("B")];

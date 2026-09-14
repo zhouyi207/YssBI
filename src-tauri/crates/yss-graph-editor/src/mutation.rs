@@ -1,5 +1,3 @@
-use yss_graph_catalog::reroute_node_type;
-use yss_graph_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     GraphDocument, GraphResourceKind, GraphResourcePath, InputState, JsonValue, NodeId,
@@ -9,11 +7,13 @@ use yss_graph_document_edit::{
     DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
     port_member_group_state, user_created_port_instance_count,
 };
-use yss_graph_protocol::{
+use yss_node_catalog::reroute_node_type;
+use yss_node_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
+use yss_node_protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortCardinality,
     PortDirection, PortKey, PortMemberGroupSpec, PortSpec,
 };
-use yss_graph_registry::NodeRegistry;
+use yss_node_registry::NodeRegistry;
 
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -190,7 +190,7 @@ pub enum EditorGraphMutation {
     },
     SetConfiguration {
         node_id: NodeId,
-        key: yss_graph_protocol::ParameterKey,
+        key: yss_node_protocol::ParameterKey,
         values: ParameterValues,
     },
     AddPortInstance {
@@ -260,7 +260,7 @@ impl EditorGraphMutation {
                 if !document.constants.contains_key(&id) {
                     return Err(DocumentError::InvalidConstant(id).into());
                 }
-                let node_type = yss_graph_protocol::NodeTypeId::new("yssbi.constant.get")
+                let node_type = yss_node_protocol::NodeTypeId::new("yssbi.constant.get")
                     .expect("constant node type is valid");
                 let protocol = registry.protocol(&node_type).ok_or_else(|| {
                     MutationConflict::RegistryInvariant("constant protocol is missing".into())
@@ -326,7 +326,7 @@ impl EditorGraphMutation {
                                     "unknown node type '{node_type_id}'"
                                 ))
                             })?;
-                            let authoritative = yss_graph_catalog::authoritative_static_descriptor(
+                            let authoritative = yss_node_catalog::authoritative_static_descriptor(
                                 registry, protocol,
                             );
                             if authoritative.as_ref() != Some(&descriptor) {
@@ -510,7 +510,7 @@ impl EditorGraphMutation {
                     .iter()
                     .find(|parameter| parameter.key == key)
                     .ok_or_else(|| invalid_editor_mutation("unknown configuration parameter"))?;
-                let yss_graph_protocol::ParameterEditorSpec::Configuration(schema) =
+                let yss_node_protocol::ParameterEditorSpec::Configuration(schema) =
                     &parameter.editor
                 else {
                     return Err(invalid_editor_mutation(
@@ -521,7 +521,7 @@ impl EditorGraphMutation {
                     parameter
                         .default_value
                         .as_ref()
-                        .map(|value| yss_graph_protocol::protocol_value_to_json(&value.value))
+                        .map(|value| yss_node_protocol::protocol_value_to_json(&value.value))
                 });
                 let mut merged = raw
                     .and_then(|value| value.as_object().cloned())
@@ -842,7 +842,7 @@ fn insert_reroute_operations_with_allocators(
     let registered = registry.get(&reroute_type).ok_or_else(|| {
         invalid_editor_mutation(format!("unknown reroute node type '{reroute_type}'"))
     })?;
-    let contract = yss_graph_catalog::validate_reroute_protocol_contract(registered)
+    let contract = yss_node_catalog::validate_reroute_protocol_contract(registered)
         .map_err(|detail| MutationConflict::RegistryInvariant(detail.into()))?;
 
     let reroute_id = allocate_node_id();
@@ -1073,7 +1073,7 @@ pub(super) fn validate_parameters_with_registry(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
 ) -> Result<(), MutationConflict> {
-    let nominal = |type_id: &yss_graph_protocol::TypeId, value: &serde_json::Value| {
+    let nominal = |type_id: &yss_node_protocol::TypeId, value: &serde_json::Value| {
         registry.validate_nominal_parameter(type_id, value)
     };
     validate_shared_parameters(protocol, parameters, &nominal)
@@ -1082,25 +1082,25 @@ pub(super) fn validate_parameters_with_registry(
 fn validate_shared_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
-    nominal: &impl yss_graph_protocol::validation::TypeValidationContext,
+    nominal: &impl yss_node_protocol::validation::TypeValidationContext,
 ) -> Result<(), MutationConflict> {
-    let Some(issue) = yss_graph_protocol::validate_parameter_values(protocol, parameters, nominal)
+    let Some(issue) = yss_node_protocol::validate_parameter_values(protocol, parameters, nominal)
         .into_iter()
         .find(|issue| {
             // Constant selection may be incomplete in a draft; Compile still requires it.
-            !(matches!(issue.kind, yss_graph_protocol::ParameterIssueKind::Required)
+            !(matches!(issue.kind, yss_node_protocol::ParameterIssueKind::Required)
                 && protocol.parameters.parameters.iter().any(|spec| {
                     spec.key == issue.key
                         && matches!(
                             spec.editor,
-                            yss_graph_protocol::ParameterEditorSpec::GraphConstant
+                            yss_node_protocol::ParameterEditorSpec::GraphConstant
                         )
                 }))
         })
     else {
         return Ok(());
     };
-    use yss_graph_protocol::ParameterIssueKind;
+    use yss_node_protocol::ParameterIssueKind;
     let detail = match issue.kind {
         ParameterIssueKind::Unknown => format!(
             "unknown parameter '{}' for node type '{}'",

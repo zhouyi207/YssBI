@@ -16,7 +16,6 @@ use std::collections::BTreeMap;
 use yss_database_runtime::error::DatabaseError;
 use yss_database_runtime::session_api::catalog_snapshot;
 use yss_function_editor_projection::FunctionEditorProjection;
-use yss_graph_catalog::CatalogResourcePath;
 use yss_graph_document::{GraphDocument, GraphResourceKind, GraphResourcePath};
 use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::projection::{
@@ -29,6 +28,7 @@ use yss_graph_editor::{
 use yss_graph_execution::plan::{
     PlanCompilationBasis, PlanProjectSessionId, PlanRegistryFingerprint,
 };
+use yss_node_catalog::CatalogResourcePath;
 use yss_project::ProjectOperationError;
 use yss_project_history::{FunctionDocumentPatch, MutationRequest};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
@@ -152,7 +152,7 @@ fn build_graph_shell(
         let id = yss_graph_document::NodeId::new();
         let parameters = if kind == GraphResourceKind::Function {
             [(
-                yss_graph_protocol::ParameterKey::new("function").map_err(|error| {
+                yss_node_protocol::ParameterKey::new("function").map_err(|error| {
                     ResourceMutationApplicationError::Project(
                         ProjectOperationError::TransactionPrepareFailed {
                             message: error.to_string(),
@@ -170,7 +170,7 @@ fn build_graph_shell(
             id,
             yss_graph_document::DocumentNode {
                 id,
-                node_type: yss_graph_protocol::NodeTypeId::new(*node_type).map_err(|error| {
+                node_type: yss_node_protocol::NodeTypeId::new(*node_type).map_err(|error| {
                     ResourceMutationApplicationError::Project(
                         ProjectOperationError::TransactionPrepareFailed {
                             message: error.to_string(),

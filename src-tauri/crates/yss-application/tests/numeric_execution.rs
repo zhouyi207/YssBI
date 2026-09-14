@@ -25,7 +25,7 @@ fn execute(
     document: &GraphDocument,
     output_node_type: &str,
 ) -> Result<RuntimeValue, ExecutePreparedError> {
-    let builtin = yss_graph_catalog::build_builtin_node_system().unwrap();
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
     let resources = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
         BTreeMap::new(),
@@ -496,7 +496,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         )]),
         ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
-    let builtin = yss_graph_catalog::build_builtin_node_system().unwrap();
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
     let semantics =
         yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources)
             .with_execution_kernel_support(&yss_graph_execution::state::supports_kernel);

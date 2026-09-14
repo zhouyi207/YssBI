@@ -95,6 +95,7 @@ Tauri composition root
 - command 只解析和校验输入、映射 DTO/error、调用 use case，并在 commit 后交付事件或 channel；
 - Application 组合跨 owner 用例和 currentness gate，不重新实现 Project、Graph、Database 或 SCI 规则；
 - 图编辑器投影由 `yss-graph-editor::projection` 从语义快照生成；Application 负责调用与身份重验，IPC 负责 wire 映射；
+- Node 的协议、注册表和目录由 `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog` 拥有；Graph 消费这些节点定义并解析图中实例，Node 不依赖 Graph。详细边界见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md#2-module-ownership)；
 - domain crate 不依赖 Tauri、React、command schema 或具体基础设施；
 - adapter 实现窄 port，不反向拥有 session、approval、project 或 workflow authority。
 

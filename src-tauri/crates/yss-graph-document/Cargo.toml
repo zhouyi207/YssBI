@@ -13,6 +13,6 @@ thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
-yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-node-protocol = { path = "../yss-node-protocol" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-resource-naming = { path = "../yss-resource-naming" }

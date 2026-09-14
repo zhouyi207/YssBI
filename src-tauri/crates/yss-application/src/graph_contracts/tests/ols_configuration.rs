@@ -26,14 +26,15 @@ use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeS
 
 #[test]
 fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
-    let system = yss_graph_catalog::build_builtin_node_system().unwrap();
+    let system = yss_node_catalog::build_builtin_node_system().unwrap();
     let runtime = GraphRuntimeState::from_components(
         GraphRuntimeEpoch::from_existing(1),
         GraphRuntimeComponents {
             registry: system.registry.clone(),
             catalog: system.catalog,
         },
-    );
+    )
+    .unwrap();
     let graph = "events/ols.yssbi-event".parse().unwrap();
     let mut document = GraphDocument::default();
     let [response, predictor, fit, summary] = std::array::from_fn(|_| NodeId::new());
@@ -135,7 +136,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
         ResourceCatalogFingerprint::from_bytes([1; 32]),
     );
     let basis = CompilationBasis {
-        registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
+        registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
             runtime.registry_fingerprint(),
         ),
         resource_versions: BTreeMap::new(),
@@ -325,7 +326,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
             .parameters
             .get_mut(
                 &"configuration"
-                    .parse::<yss_graph_protocol::ParameterKey>()
+                    .parse::<yss_node_protocol::ParameterKey>()
                     .unwrap(),
             )
             .unwrap()["scale"] = "2".into();

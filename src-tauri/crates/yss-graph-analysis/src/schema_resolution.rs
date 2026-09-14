@@ -6,12 +6,12 @@ use yss_graph_document::{
     DynamicMemberLocator, GraphDocument, NodeId, PortAddress, PortRef, SchemaFieldIdentity,
     SchemaSourceIdentity,
 };
-use yss_graph_protocol::{
+use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_protocol::{
     ColumnSelectionExpr, ParameterKey, PortKey, RelationalScalarType, RenameExpr,
     ResolvedSchemaFact, SchemaColumnRef, SchemaExpr, SchemaField, SchemaFieldLineage, TypeExpr,
 };
-use yss_graph_registry::NodeRegistry;
-use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_node_registry::NodeRegistry;
 
 const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 const DATAFRAME_COLUMNS_INTERFACE_RESOLVER: &str = "yssbi.dataframe.interface.columns";
@@ -43,15 +43,15 @@ pub(crate) fn resolve_graph_schemas(
                         .ports
                         .iter()
                         .filter(|port| {
-                            port.direction == yss_graph_protocol::PortDirection::Output
+                            port.direction == yss_node_protocol::PortDirection::Output
                                 && (port.schema.is_some()
                                     || matches!(
                                         protocol.typing,
-                                        yss_graph_protocol::NodeTypingSpec::Identity { .. } | yss_graph_protocol::NodeTypingSpec::ConstantOutput { .. }
+                                        yss_node_protocol::NodeTypingSpec::Identity { .. } | yss_node_protocol::NodeTypingSpec::ConstantOutput { .. }
                                     ))
                                 && matches!(
                                     port.cardinality,
-                                    yss_graph_protocol::PortCardinality::Declared
+                                    yss_node_protocol::PortCardinality::Declared
                                 )
                         })
                         .map(move |port| PortAddress::declared(node.id, port.key.clone()))
@@ -236,10 +236,10 @@ impl EditorSchemaResolver<'_> {
             .schema
             .clone();
         declared.or_else(|| match &protocol.typing {
-            yss_graph_protocol::NodeTypingSpec::Identity { input, output } if output == key => {
+            yss_node_protocol::NodeTypingSpec::Identity { input, output } if output == key => {
                 Some(SchemaExpr::Input(input.clone()))
             }
-            yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, output }
+            yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, output }
                 if output == key =>
             {
                 let constant = super::referenced_constant(self.document, node, parameter)?;
@@ -385,7 +385,7 @@ impl EditorSchemaResolver<'_> {
             .registry
             .protocol(&node.node_type)
             .ok_or(GraphSchemaIssue::MissingResource)?;
-        let yss_graph_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing
+        let yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } = &protocol.typing
         else {
             return Err(GraphSchemaIssue::UnsupportedResolver);
         };

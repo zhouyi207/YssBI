@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
-use yss_graph_protocol::{
+use yss_node_protocol::{
     InputCoercionKind, NodeTypingSpec, NumericPromotionRule, PortDirection, PortKey, PortSelector,
     ResolvedType, ShapeRule, TypeConflict, TypeDomain, TypeExpr, TypeParameterId, TypeState,
     TypeUnknownReason,
 };
-use yss_graph_registry::{NodeRegistry, TypeRegistry};
+use yss_node_registry::{NodeRegistry, TypeRegistry};
 
 use super::{
     GraphDiagnosticFact, GraphDiagnosticLocation, GraphInputCoercion, GraphKernelSpecialization,
@@ -570,12 +570,12 @@ fn apply_node_rule(
                     .map(|field| field.scalar_type)
             });
             let nominal = match scalar {
-                Some(yss_graph_protocol::RelationalScalarType::Boolean) => Some("core.bool"),
-                Some(yss_graph_protocol::RelationalScalarType::Int64) => Some("core.int64"),
-                Some(yss_graph_protocol::RelationalScalarType::Float64) => Some("core.float64"),
-                Some(yss_graph_protocol::RelationalScalarType::String) => Some("core.string"),
-                Some(yss_graph_protocol::RelationalScalarType::Date) => Some("core.date"),
-                Some(yss_graph_protocol::RelationalScalarType::DateTime) => Some("core.datetime"),
+                Some(yss_node_protocol::RelationalScalarType::Boolean) => Some("core.bool"),
+                Some(yss_node_protocol::RelationalScalarType::Int64) => Some("core.int64"),
+                Some(yss_node_protocol::RelationalScalarType::Float64) => Some("core.float64"),
+                Some(yss_node_protocol::RelationalScalarType::String) => Some("core.string"),
+                Some(yss_node_protocol::RelationalScalarType::Date) => Some("core.date"),
+                Some(yss_node_protocol::RelationalScalarType::DateTime) => Some("core.datetime"),
                 _ => None,
             };
             let state = nominal
@@ -630,7 +630,7 @@ fn apply_node_rule(
                 None => TypeState::Conflict(TypeConflict::MissingParameter),
                 Some(value) => value
                     .as_str()
-                    .and_then(|value| yss_graph_protocol::TypeId::new(value).ok())
+                    .and_then(|value| yss_node_protocol::TypeId::new(value).ok())
                     .filter(|value| registry.types().get(value).is_some())
                     .map(|value| TypeState::Exact(ResolvedType::Nominal(value)))
                     .unwrap_or(TypeState::Conflict(TypeConflict::UnsupportedParameter)),
@@ -838,7 +838,7 @@ fn numeric_type(value: &ResolvedType) -> Option<NumericType> {
         ResolvedType::Applied {
             constructor,
             arguments,
-        } if constructor.as_str() == yss_graph_protocol::DATA_SERIES_CONSTRUCTOR_ID => {
+        } if constructor.as_str() == yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID => {
             let [ResolvedType::Nominal(element)] = arguments.as_ref() else {
                 return None;
             };
@@ -861,7 +861,7 @@ fn numeric_element(value: &str) -> Option<NumericElement> {
 
 fn resolved_numeric_type(value: NumericType) -> ResolvedType {
     let element = ResolvedType::Nominal(
-        yss_graph_protocol::TypeId::new(match value.element {
+        yss_node_protocol::TypeId::new(match value.element {
             NumericElement::Int64 => "core.int64",
             NumericElement::Float64 => "core.float64",
         })
@@ -870,8 +870,8 @@ fn resolved_numeric_type(value: NumericType) -> ResolvedType {
     match value.shape {
         NumericShape::Scalar => element,
         NumericShape::Series => ResolvedType::Applied {
-            constructor: yss_graph_protocol::TypeConstructorId::new(
-                yss_graph_protocol::DATA_SERIES_CONSTRUCTOR_ID,
+            constructor: yss_node_protocol::TypeConstructorId::new(
+                yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID,
             )
             .expect("built-in DataSeries constructor ID is valid"),
             arguments: Box::new([element]),
@@ -1013,7 +1013,7 @@ fn build_specialization(
 
 fn node_input_fingerprint(
     document_node: &yss_graph_document::DocumentNode,
-    protocol_fingerprint: Option<&yss_graph_registry::ProtocolFingerprint>,
+    protocol_fingerprint: Option<&yss_node_registry::ProtocolFingerprint>,
     ports: &[GraphPortSemanticFact],
     states: &BTreeMap<PortAddress, TypeState>,
     constant_type: Option<&yss_data_contract::DataType>,

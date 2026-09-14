@@ -204,7 +204,7 @@ pub fn graph_compilation_basis(
     basis: &yss_graph_execution::plan::PlanCompilationBasis,
 ) -> CompilationBasis {
     CompilationBasis {
-        registry_fingerprint: yss_graph_registry::RegistryFingerprint::from_bytes(
+        registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
             basis.registry_fingerprint().as_bytes(),
         ),
         resource_versions: basis
@@ -423,12 +423,12 @@ fn plan_specialization(
     ))
 }
 
-fn plan_coercion_kind(kind: yss_graph_protocol::InputCoercionKind) -> PlanInputCoercionKind {
+fn plan_coercion_kind(kind: yss_node_protocol::InputCoercionKind) -> PlanInputCoercionKind {
     match kind {
-        yss_graph_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
+        yss_node_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
             PlanInputCoercionKind::WidenInt64ToFloat64
         }
-        yss_graph_protocol::InputCoercionKind::BroadcastScalarToSeries => {
+        yss_node_protocol::InputCoercionKind::BroadcastScalarToSeries => {
             PlanInputCoercionKind::BroadcastScalarToSeries
         }
     }
@@ -438,7 +438,7 @@ fn map_output_contract(
     contract: &yss_graph_compiler::GraphOutputContract,
 ) -> Result<yss_graph_execution::plan::PlanOutputContract, GraphPackageMappingError> {
     use yss_data_contract::DataType;
-    use yss_graph_protocol::RelationalScalarType;
+    use yss_node_protocol::RelationalScalarType;
     Ok(yss_graph_execution::plan::PlanOutputContract {
         data_type: yss_graph_type_mapping::data_type_from_resolved_type(&contract.value_type)
             .ok_or(GraphPackageMappingError::UnsupportedResolvedType)?,
@@ -647,7 +647,7 @@ mod tests {
             GraphOutputContract, GraphParameterHandle, GraphParameterPayload, GraphValueRef,
         };
         use yss_graph_document::{NodeId, PortAddress, PortInstanceId};
-        use yss_graph_protocol::{PortKey, ResolvedType, TypeId};
+        use yss_node_protocol::{PortKey, ResolvedType, TypeId};
         let graph = GraphResourcePath::new("events/Contract.yssbi-event").unwrap();
         let node = NodeId::new();
         let integer = ResolvedType::Nominal(TypeId::new("core.int64").unwrap());

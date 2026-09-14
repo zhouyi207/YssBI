@@ -485,7 +485,7 @@ where
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Wire<'a> {
-        literal_override: &'a Option<yss_graph_protocol::TypedValue>,
+        literal_override: &'a Option<yss_node_protocol::TypedValue>,
     }
 
     Wire {

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use yss_graph_registry::RegistryFingerprint;
+use yss_node_registry::RegistryFingerprint;
 
 macro_rules! string_newtype {
     ($name:ident) => {

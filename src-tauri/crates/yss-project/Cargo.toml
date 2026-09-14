@@ -24,7 +24,7 @@ yss-dataset-store = { path = "../yss-dataset-store" }
 yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
-yss-graph-protocol = { path = "../yss-graph-protocol" }
+yss-node-protocol = { path = "../yss-node-protocol" }
 yss-filesystem = { path = "../yss-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }

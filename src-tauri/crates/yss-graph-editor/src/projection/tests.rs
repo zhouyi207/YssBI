@@ -12,11 +12,11 @@ use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, InputState,
     NodeId, NodePosition, ParameterValues, PortAddress,
 };
-use yss_graph_protocol::{
+use yss_node_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
     ResolvedType, TypeDomain, TypeExpr, TypeId, TypeState, TypedValue, Value,
 };
-use yss_graph_registry::RegistryFingerprint;
+use yss_node_registry::RegistryFingerprint;
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(uuid::Uuid::from_u128(value))

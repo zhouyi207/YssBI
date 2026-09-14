@@ -14,7 +14,6 @@ use crate::resource_mutation::{GraphDraftSave, GraphDraftTransform};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use yss_automation_contract::*;
-use yss_graph_catalog::LocalizedCatalogItem;
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
@@ -23,7 +22,8 @@ use yss_graph_document::{
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
-use yss_graph_protocol::PortKey;
+use yss_node_catalog::LocalizedCatalogItem;
+use yss_node_protocol::PortKey;
 use yss_project_identity::OperationId;
 
 pub enum AutomationGraphUpdate {
@@ -502,7 +502,7 @@ pub(super) fn editor_mutation(
                 .into_iter()
                 .map(|(key, value)| {
                     Ok((
-                        yss_graph_protocol::ParameterKey::new(key)
+                        yss_node_protocol::ParameterKey::new(key)
                             .map_err(|_| invalid_edit_identity("parameterKey"))?,
                         value,
                     ))
@@ -515,13 +515,13 @@ pub(super) fn editor_mutation(
             values,
         } => Ok(EditorGraphMutation::SetConfiguration {
             node_id: parse_node_id(&node_id)?,
-            key: yss_graph_protocol::ParameterKey::new(key)
+            key: yss_node_protocol::ParameterKey::new(key)
                 .map_err(|_| invalid_edit_identity("parameterKey"))?,
             values: values
                 .into_iter()
                 .map(|(key, value)| {
                     Ok((
-                        yss_graph_protocol::ParameterKey::new(key)
+                        yss_node_protocol::ParameterKey::new(key)
                             .map_err(|_| invalid_edit_identity("parameterKey"))?,
                         value,
                     ))

@@ -1,7 +1,7 @@
 use crate::DocumentError;
 use std::collections::{BTreeMap, BTreeSet};
 use yss_graph_document::{DynamicPortBinding, GraphDocument, NodeId, PortAddress, PortInstanceId};
-use yss_graph_protocol::{PortKey, PortMemberGroupSpec};
+use yss_node_protocol::{PortKey, PortMemberGroupSpec};
 
 pub struct PortMemberGroupState {
     required_templates: BTreeSet<PortKey>,

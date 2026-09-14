@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use yss_graph_document::{
     DynamicMemberLocator, DynamicPortBinding, GraphDocument, PortAddress, PortRef,
 };
-use yss_graph_protocol::{NodeProtocol, PortKey};
+use yss_node_protocol::{NodeProtocol, PortKey};
 
 /// A borrowed address index over the snapshot's sole concrete port facts.
 pub struct ConcreteGraphInterface<'a> {

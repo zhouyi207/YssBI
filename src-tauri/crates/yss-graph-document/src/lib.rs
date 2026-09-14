@@ -27,7 +27,7 @@ mod tests {
         JsonValue, NodeId, NodePosition, ParameterValues, PortAddress,
     };
     use serde_json::json;
-    use yss_graph_protocol::{
+    use yss_node_protocol::{
         NodeTypeId, ParameterKey, PortKey, TypeExpr, TypeId, TypedValue, Value,
     };
 

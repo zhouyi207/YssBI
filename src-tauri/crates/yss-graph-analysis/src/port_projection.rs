@@ -149,7 +149,7 @@ pub(super) fn port_cardinality_kind(cardinality: &PortCardinality) -> &'static s
 pub(super) fn project_declared_port(
     document: &GraphDocument,
     address: PortAddress,
-    spec: &yss_graph_protocol::PortSpec,
+    spec: &yss_node_protocol::PortSpec,
     resolved_schema: Option<&ResolvedSchemaFact>,
 ) -> GraphPortSemanticFact {
     debug_assert!(matches!(spec.cardinality, PortCardinality::Declared));
@@ -170,8 +170,8 @@ pub(super) fn project_declared_port(
 
 pub(super) fn project_bound_port(
     document: &GraphDocument,
-    protocol: &yss_graph_protocol::NodeProtocol,
-    spec: &yss_graph_protocol::PortSpec,
+    protocol: &yss_node_protocol::NodeProtocol,
+    spec: &yss_node_protocol::PortSpec,
     node_bindings: &[(&PortAddress, &DynamicPortBinding)],
     projection: BoundPortProjection<'_>,
 ) -> GraphPortSemanticFact {
@@ -248,7 +248,7 @@ pub(super) struct ConcretePortProjection {
 
 pub(super) fn project_concrete_port(
     document: &GraphDocument,
-    spec: &yss_graph_protocol::PortSpec,
+    spec: &yss_node_protocol::PortSpec,
     projection: ConcretePortProjection,
 ) -> GraphPortSemanticFact {
     let ConcretePortProjection {
@@ -293,7 +293,7 @@ pub(super) fn project_concrete_port(
             .as_ref()
             .and_then(|binding| binding.default_value.clone()),
         literal_allowed: spec.input_binding.as_ref().is_some_and(|binding| {
-            binding.literal_policy == yss_graph_protocol::LiteralPolicy::Allowed
+            binding.literal_policy == yss_node_protocol::LiteralPolicy::Allowed
         }),
         accepted_type: value_type,
         accepted_domain: None,
@@ -306,8 +306,8 @@ pub(super) fn project_concrete_port(
 
 fn can_remove_user_created_port(
     node_id: NodeId,
-    protocol: &yss_graph_protocol::NodeProtocol,
-    spec: &yss_graph_protocol::PortSpec,
+    protocol: &yss_node_protocol::NodeProtocol,
+    spec: &yss_node_protocol::PortSpec,
     address: &PortAddress,
     node_bindings: &[(&PortAddress, &DynamicPortBinding)],
 ) -> bool {
@@ -327,7 +327,7 @@ fn can_remove_user_created_port(
 
 pub(super) fn project_port_instance_additions(
     node_id: NodeId,
-    protocol: &yss_graph_protocol::NodeProtocol,
+    protocol: &yss_node_protocol::NodeProtocol,
     node_bindings: &[(&PortAddress, &DynamicPortBinding)],
 ) -> (Vec<GraphPortInstanceAdditionFact>, bool) {
     let mut minimum_instances_present = true;

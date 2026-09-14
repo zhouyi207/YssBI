@@ -1,5 +1,5 @@
 use serde::Serialize;
-use yss_graph_protocol::ResolvedSchemaFact;
+use yss_node_protocol::ResolvedSchemaFact;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum GraphSchemaIssue {

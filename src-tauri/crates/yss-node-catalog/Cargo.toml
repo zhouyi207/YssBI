@@ -1,0 +1,12 @@
+[package]
+name = "yss-node-catalog"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+yss-sci-contract = { path = "../yss-sci-contract" }
+serde.workspace = true
+yss-node-protocol = { path = "../yss-node-protocol" }
+yss-node-registry = { path = "../yss-node-registry" }

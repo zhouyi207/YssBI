@@ -5,7 +5,7 @@
 
 use thiserror::Error;
 use yss_data_contract::{DataType, DataTypeParseError};
-use yss_graph_protocol::{
+use yss_node_protocol::{
     InvalidSemanticId, RelationalScalarType, ResolvedType, TypeConstructorId, TypeExpr, TypeId,
 };
 
@@ -117,7 +117,7 @@ mod tests {
         type_expr_from_data_type_name,
     };
     use yss_data_contract::DataType;
-    use yss_graph_protocol::TypeExpr;
+    use yss_node_protocol::TypeExpr;
 
     #[test]
     fn maps_scalar_composite_union_and_unknown_types() {
@@ -197,11 +197,11 @@ mod tests {
     fn maps_persisted_types_to_relational_schema_scalars() {
         assert_eq!(
             relational_scalar_type_from_data_type(&DataType::Datetime),
-            yss_graph_protocol::RelationalScalarType::DateTime
+            yss_node_protocol::RelationalScalarType::DateTime
         );
         assert_eq!(
             relational_scalar_type_from_data_type(&DataType::DataFrame),
-            yss_graph_protocol::RelationalScalarType::Unknown
+            yss_node_protocol::RelationalScalarType::Unknown
         );
     }
 }

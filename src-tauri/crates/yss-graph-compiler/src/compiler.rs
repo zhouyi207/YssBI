@@ -13,7 +13,7 @@ use yss_graph_analysis::{
 };
 use yss_graph_analysis_contract::CompileId;
 use yss_graph_document::{GraphResourcePath, NodeId, PortAddress};
-use yss_graph_protocol::{PortDirection, TypedValue, Value};
+use yss_node_protocol::{PortDirection, TypedValue, Value};
 
 const DEBUG_VIEW_NODE_TYPE: &str = "yssbi.debug.view";
 
@@ -474,14 +474,14 @@ mod tests {
             compile_id,
         }
     }
-    use yss_graph_catalog::build_builtin_node_system;
     use yss_graph_document::{
         DocumentConnection, DocumentNode, DynamicPortBinding, InputState, NodePosition, OrderKey,
         ParameterValues, PortInstanceId,
     };
-    use yss_graph_protocol::{InputCoercionKind, PortKey, TypeState};
-    use yss_graph_registry::NodeRegistryBuilder;
     use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+    use yss_node_catalog::build_builtin_node_system;
+    use yss_node_protocol::{InputCoercionKind, PortKey, TypeState};
+    use yss_node_registry::NodeRegistryBuilder;
 
     fn graph_path() -> GraphResourcePath {
         GraphResourcePath::new("events/Main.yssbi-event").expect("fixture graph path must be valid")
@@ -489,7 +489,7 @@ mod tests {
 
     fn semantics(
         document: &GraphDocument,
-        registry: &yss_graph_registry::NodeRegistry,
+        registry: &yss_node_registry::NodeRegistry,
     ) -> GraphSemanticSnapshot {
         yss_graph_analysis::resolve_graph_semantics(
             document,
@@ -598,10 +598,10 @@ mod tests {
                     .is_none_or(|binding| binding.default_value.is_none())
         }) {
             let input = match spec.cardinality {
-                yss_graph_protocol::PortCardinality::Declared => {
+                yss_node_protocol::PortCardinality::Declared => {
                     PortAddress::declared(producer, spec.key.clone())
                 }
-                yss_graph_protocol::PortCardinality::UserCreated { .. } => {
+                yss_node_protocol::PortCardinality::UserCreated { .. } => {
                     let address =
                         PortAddress::instance(producer, spec.key.clone(), PortInstanceId::new());
                     document.port_bindings.insert(
@@ -809,7 +809,7 @@ mod tests {
     fn normalized_add_literals_resolve_and_lower_as_typed_scalars() {
         let builtin = build_builtin_node_system().expect("built-in graph system is valid");
         let add = NodeId::new();
-        let node_type = yss_graph_protocol::NodeTypeId::new("yssbi.numeric.add").unwrap();
+        let node_type = yss_node_protocol::NodeTypeId::new("yssbi.numeric.add").unwrap();
         let protocol = builtin.registry.protocol(&node_type).unwrap();
         let operand_pattern = &protocol
             .interface
@@ -851,7 +851,7 @@ mod tests {
                 address,
                 InputState {
                     literal_override: Some(
-                        yss_graph_protocol::normalize_json_literal(
+                        yss_node_protocol::normalize_json_literal(
                             &raw,
                             operand_pattern,
                             builtin.registry.as_ref(),
@@ -883,7 +883,7 @@ mod tests {
 
         assert!(matches!(
             output_type,
-            Some(yss_graph_protocol::ResolvedType::Nominal(id)) if id.as_str() == "core.float64"
+            Some(yss_node_protocol::ResolvedType::Nominal(id)) if id.as_str() == "core.float64"
         ));
         assert!(lowered_values.iter().any(|value| matches!(
             value,

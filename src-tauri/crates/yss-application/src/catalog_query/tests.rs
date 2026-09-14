@@ -10,7 +10,6 @@ use yss_database_contract::{
     DatabaseSessionIdentity, DatabaseSessionOpenRequest,
 };
 use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
-use yss_graph_catalog::build_builtin_node_system;
 use yss_graph_document::GraphResourceKind;
 use yss_graph_document::{
     DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
@@ -19,11 +18,12 @@ use yss_graph_document::{
 use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_graph_execution::resource_preparation::ResourceProviderFactory;
 use yss_graph_execution::state::ExecutionRuntimeState;
-use yss_graph_protocol::{NodeTypeId, PortKey};
 use yss_graph_runtime::{
     GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState, GraphRuntimeTestControl,
     GraphRuntimeTestEvent,
 };
+use yss_node_catalog::build_builtin_node_system;
+use yss_node_protocol::{NodeTypeId, PortKey};
 use yss_project::ProjectState;
 use yss_project_identity::ProjectSessionId;
 use yss_project_model::{GraphResourceDocument, ProjectData};
@@ -217,12 +217,12 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         resource
             .resource_path
             .as_ref()
-            .map(yss_graph_catalog::CatalogResourcePath::as_str),
+            .map(yss_node_catalog::CatalogResourcePath::as_str),
         Some(function_path.as_str())
     );
     assert!(matches!(
         resource.creation,
-        yss_graph_catalog::NodeCreation::ResourceBound { .. }
+        yss_node_catalog::NodeCreation::ResourceBound { .. }
     ));
     let snapshot = session
         .application
@@ -247,7 +247,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
         &row.content,
         crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
-            creation: yss_graph_catalog::NodeCreation::ResourceBound { resource_path, .. }, ..
+            creation: yss_node_catalog::NodeCreation::ResourceBound { resource_path, .. }, ..
         }) if resource_path.as_str() == function_path.as_str()
     )));
 }
