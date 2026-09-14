@@ -44,7 +44,6 @@ members = [
   "crates/yss-database-schema",
   "crates/yss-dataset-profile",
   "crates/yss-dataset-store",
-  "crates/yss-diagnostics",
   "crates/yss-display-naming",
   "crates/yss-graph-execution",
   "crates/yss-function-editor-projection",

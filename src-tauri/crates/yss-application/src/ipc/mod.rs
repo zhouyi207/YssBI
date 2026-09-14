@@ -138,8 +138,5 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         collect_plugin_garbage,
         get_plugin_diagnostics,
         grant_plugin_export,
-        submit_frontend_diagnostics,
-        subscribe_diagnostics,
-        unsubscribe_diagnostics,
     ]
 }

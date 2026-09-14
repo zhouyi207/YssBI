@@ -10,7 +10,7 @@ pub(crate) use layer::LogLayer;
 pub use limits::LogLimits;
 pub(crate) use record::{CapturedLog, CapturedLogSink};
 pub use record::{LogFields, LogLevel, LogRecord};
-pub use runtime::LoggingRuntime;
+pub(crate) use runtime::LoggingRuntime;
 pub(crate) use runtime::OutputHandle;
 #[cfg(test)]
 pub(crate) use runtime::spawn_output;

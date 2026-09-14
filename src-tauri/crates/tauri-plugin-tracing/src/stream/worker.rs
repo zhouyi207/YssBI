@@ -65,10 +65,6 @@ where
     pub(crate) fn is_active(&self) -> bool {
         self.active.load(Ordering::Acquire)
     }
-
-    pub(crate) fn deactivate(&self) {
-        self.active.store(false, Ordering::Release);
-    }
 }
 
 impl<T> Drop for BoundedWorker<T> {

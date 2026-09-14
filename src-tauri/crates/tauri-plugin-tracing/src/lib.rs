@@ -11,7 +11,7 @@ mod persistence_tests;
 
 pub use collector::{LogFields, LogLevel, LogRecord};
 pub use plugin::init;
-pub use store::{LOG_DATABASE_NAME, LogPage, LogQuery, LogStatistics, LogStore, LogStoreError};
+pub use store::{LOG_DATABASE_NAME, LogPage, LogQuery, LogStatistics, LogStoreError};
 pub use stream::{
     FrontendLogEntryDto, LogBatchDto, LogDomain, LogInitializationError, LogOrigin, LogRecordDto,
     LogRuntime, LogSubscriptionDto, LogsUnavailable, SubmitFrontendLogsError,

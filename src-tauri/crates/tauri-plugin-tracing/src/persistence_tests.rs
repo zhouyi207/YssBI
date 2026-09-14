@@ -31,10 +31,20 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
     let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
     let dispatch = tracing::Dispatch::new(subscriber);
     tracing::dispatcher::with_default(&dispatch, || {
-        tracing::info!(target: "arbitrary_crate::worker", count = 1, "Rust worker ready");
+        tracing::warn!(
+            target: "arbitrary_crate::worker",
+            log_domain = "data",
+            log_event = "missingValues",
+            missing_count = 3,
+            "Dataset contains missing values"
+        );
     });
-    logs.submit_frontend(vec![frontend("Frontend ready")])
-        .unwrap();
+    let mut view_issue = frontend("Drop was rejected");
+    view_issue.event = Some("dropRejected".into());
+    view_issue
+        .fields
+        .insert("nodeCount".into(), serde_json::json!(3));
+    logs.submit_frontend(vec![view_issue]).unwrap();
     let mut delivered = Vec::new();
     while delivered.len() < 2 {
         let batch = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -52,11 +62,12 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             .read_only(true)
             .disable_statement_logging();
         let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
-        let rows =
-            sqlx::query("SELECT sequence, origin, message, fields FROM logs ORDER BY sequence")
-                .fetch_all(&mut connection)
-                .await
-                .unwrap();
+        let rows = sqlx::query(
+            "SELECT sequence, origin, domain, event, message, fields FROM logs ORDER BY sequence",
+        )
+        .fetch_all(&mut connection)
+        .await
+        .unwrap();
         assert_eq!(
             rows.len(),
             delivered.len(),
@@ -64,10 +75,19 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
         );
         assert_eq!(rows[0].get::<String, _>("origin"), "rust");
         assert_eq!(rows[1].get::<String, _>("origin"), "frontend");
+        assert_eq!(rows[0].get::<String, _>("domain"), "data");
+        assert_eq!(rows[0].get::<String, _>("event"), "missingValues");
+        assert_eq!(rows[1].get::<String, _>("domain"), "ui");
+        assert_eq!(rows[1].get::<String, _>("event"), "dropRejected");
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&rows[0].get::<String, _>("fields")).unwrap()
-                ["count"],
-            1
+                ["missing_count"],
+            3
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&rows[1].get::<String, _>("fields")).unwrap()
+                ["nodeCount"],
+            3
         );
         connection.close().await.unwrap();
     });
@@ -77,10 +97,13 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
         tracing::info!("Last before exit");
     });
     logs.shutdown();
-    let reopened = LogRuntime::open(path).unwrap();
+    let reopened = LogRuntime::open(path.clone()).unwrap();
     let restored = reopened.subscribe_batches(|_| true).unwrap();
     assert_eq!(restored.stream_id, snapshot.stream_id);
     assert_eq!(restored.latest_sequence, 3);
+    assert_eq!(restored.entries[0].event.as_deref(), Some("missingValues"));
+    assert_eq!(restored.entries[0].fields["missing_count"], 3);
+    assert_eq!(restored.entries[1].event.as_deref(), Some("dropRejected"));
     assert_eq!(restored.entries[2].message, "Last before exit");
     let page = reopened
         .query(LogQuery {
@@ -114,6 +137,20 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
     assert_eq!(statistics.total, 3);
     assert_eq!(statistics.by_origin["frontend"], 1);
     reopened.shutdown();
+
+    let mut storage = crate::store::LogStore::open(path).unwrap();
+    let limited = storage.snapshot(2).unwrap();
+    assert!(limited.truncated);
+    assert_eq!(limited.latest_sequence, 3);
+    assert_eq!(
+        limited
+            .entries
+            .iter()
+            .map(|record| record.sequence)
+            .collect::<Vec<_>>(),
+        vec![2, 3]
+    );
+    assert!(!storage.snapshot(3).unwrap().truncated);
 }
 
 #[test]

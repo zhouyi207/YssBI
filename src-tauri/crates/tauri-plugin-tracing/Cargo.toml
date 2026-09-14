@@ -6,9 +6,6 @@ rust-version.workspace = true
 publish = false
 links = "tauri-plugin-tracing"
 
-[features]
-test-support = []
-
 [build-dependencies]
 tauri-plugin = { version = "2.4", features = ["build"] }
 

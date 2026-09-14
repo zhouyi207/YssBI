@@ -1,29 +1,28 @@
 # Runtime Signals 当前架构
 
 > Status: Current
-> Scope: logging、operational diagnostics、IPC error、user feedback 以及运行信号之间的语义边界
-> Canonical owners: `tauri-plugin-tracing`、`yss-diagnostics`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
-> Update when: 信号分类、logging/diagnostics 数据流、可靠性、安全或反馈边界改变时
+> Scope: structured logging、runtime observations、IPC error、user feedback 以及运行信号之间的语义边界
+> Canonical owners: `tauri-plugin-tracing`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
+> Update when: 信号分类、logging 数据流、可靠性、安全或反馈边界改变时
 
 YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 authority、可靠性和保留语义；选择错误的链路会造成第二事实源、隐私泄漏或无法恢复的 UI 状态。
 
 ## 1. Authority matrix
 
-| 信息                    | Authority                                                  | Delivery / retention                         | UI 用途                             | Canonical detail                                                                          |
-| ----------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| Graph Problems          | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影 | command response 原子替换                    | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
-| Results / 当前输出      | Rust `ResultStore`                                         | typed queries；event 只公告 identity         | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
-| Run Output              | Rust Execution output contract                             | channel 与 bounded UI 已有；producer 预留    | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
-| Logging                 | sanitized Rust `tracing` + frontend logs                   | SQLite history + bounded recent/live channel | Logs UI、本地技术排障               | 本文                                                                                      |
-| Operational diagnostics | explicit Rust/frontend diagnostic data                     | independent bounded recent/live channel      | 运行诊断消费者                      | 本文                                                                                      |
-| IPC error               | Rust `yss-application::ipc` transport error                | command rejection                            | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
-| User feedback           | React application/view                                     | UI state，按交互生命周期保留                 | Alert、Dialog、inline/status        | 本文                                                                                      |
-| Assistant text/events   | Rust Statistical Harness                                   | ordered persisted event stream               | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                             |
+| 信息                  | Authority                                                  | Delivery / retention                         | UI 用途                             | Canonical detail                                                                          |
+| --------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Graph Problems        | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影 | command response 原子替换                    | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
+| Results / 当前输出    | Rust `ResultStore`                                         | typed queries；event 只公告 identity         | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
+| Run Output            | Rust Execution output contract                             | channel 与 bounded UI 已有；producer 预留    | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
+| Logging               | sanitized Rust `tracing` + frontend logs                   | SQLite history + bounded recent/live channel | Logs UI、本地技术排障               | 本文                                                                                      |
+| IPC error             | Rust `yss-application::ipc` transport error                | command rejection                            | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
+| User feedback         | React application/view                                     | UI state，按交互生命周期保留                 | Alert、Dialog、inline/status        | 本文                                                                                      |
+| Assistant text/events | Rust Statistical Harness                                   | ordered persisted event stream               | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                             |
 
 直接规则：
 
-- logging 和 operational diagnostics 都是 lossy、non-authoritative observation；
-- Graph Problems 不是 diagnostics log；
+- 运行观测统一进入 structured logging，允许 loss，且不是业务 authority；
+- Graph Problems 来自完整语义快照，独立于运行日志；
 - Result event 不是 result authority；
 - Run Output 不是 log；
 - command error 不是 backend user message；
@@ -43,10 +42,6 @@ flowchart TD
   LOGPLUGIN --> SQLITE[logs.sqlite]
   SQLITE --> LOGCHANNEL[plugin log snapshot and channel]
   LOGCHANNEL --> LOGS[Logs UI]
-  RUSTDIAG[explicit backend DiagnosticEvent] --> DIAG[yss-diagnostics dispatcher]
-  FEDIAG[explicit frontend diagnostic] --> DIAG
-  DIAG --> RECENT[independent diagnostic snapshot]
-  DIAG --> LIVE[yss-ipc-channel diagnostics channel]
 
   GRAPH[Graph semantic snapshot] --> PROBLEMS[Graph Problems consumers]
   RESULT[Execution ResultStore] --> RESULTQUERY[typed result queries]
@@ -55,15 +50,15 @@ flowchart TD
   WIRE --> FEEDBACK[React localization and feedback]
 ```
 
-日志和运行诊断有独立的生产入口、identity、sequence、缓冲、订阅及生命周期。普通 tracing/console/logger 记录只进入日志流；运行诊断仅接收显式提交的数据，不从 LogRecord 派生，也不依赖日志过滤器或 subscriber。前端诊断提交不写入日志 SQLite。Graph、Result、Output 和 error 流继续由各自的业务 owner 管理。
+运行观测共用日志插件的输入校验、脱敏、identity、sequence、持久存储、缓冲和订阅。Rust tracing、前端 logger 和显式结构化日志都进入同一条链；Graph Problems、Result、Run Output 和错误响应由各自业务 owner 管理。
 
 Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [Compile](GRAPH_AND_EXECUTION.md#compile)。
 
-桌面入口先注册 `tauri-plugin-tracing`，由插件解析日志路径、打开 SQLite、安装全局 logging subscriber 并保留 guard。`yss-application::initialize(app)` 自行创建并管理 `DiagnosticsRuntime`，不读取或注册任何 LoggingRuntime、日志 sink 或 subscriber；诊断初始化无需日志插件存在。日志目录或 SQLite 不可用时保留 console，插件查询/订阅返回 `logs_unavailable`，不阻止诊断和业务初始化。Application 不安装第二个 tracing subscriber。
+桌面入口在 Application setup 前注册 `tauri-plugin-tracing`，由插件解析日志路径、打开 SQLite、安装全局 logging subscriber 并保留 guard。Application 组装业务服务；日志插件不可用时仍可完成业务初始化。日志目录或 SQLite 不可用时保留 console，插件查询/订阅返回 `logs_unavailable`。
 
 ## 3. Logging
 
-`src-tauri/crates/tauri-plugin-tracing/` 拥有日志 SQLite、日志 recent snapshot、前端日志接收、分页查询、统计和日志 Channel。插件不依赖 `yss-diagnostics`、Graph、SCI 或 Problems 的业务 owner。
+`src-tauri/crates/tauri-plugin-tracing/` 拥有日志 SQLite、日志 recent snapshot、前端日志接收、分页查询、统计和日志 Channel。插件不依赖 Graph、SCI 或 Problems 的业务 owner。
 
 原有日志采集实现已并入 `src-tauri/crates/tauri-plugin-tracing/src/collector/`，workspace 不再保留单独的 yss-tracing crate。collector 拥有 process-wide subscriber/filter、受限的事件捕获、脱敏工具与 bounded console worker。Rust 任意 crate 只需使用普通 `tracing` 宏；`log` facade 通过 LogTracer 接入。开发、排查与生产环境默认均接收全部 crate 的 INFO/WARN/ERROR；缺失、空或无效 `RUST_LOG` 回退到 INFO。有效 `RUST_LOG` 仍可显式覆盖 Rust 采集过滤器。`println!`/进程 stdout/stderr 不属于 tracing 采集入口。
 
@@ -75,7 +70,9 @@ Rust 调用线程只记录发生时的本机钟面时间、捕获有界字段并
 
 日志文件为 `app_log_dir()/logs.sqlite`。日志 dispatcher 的专用线程使用 SQLx 写入 SQLite WAL；数据库自身关闭 statement logging，避免记录自己的 INSERT 形成反馈循环。表结构由 [store.rs](../../src-tauri/crates/tauri-plugin-tracing/src/store.rs) 唯一维护：`logs` 包含 sequence、stream_id、timestamp、level、origin、domain、target、event、message、source 和 JSON 编码的 fields；`tracing_meta` 保留该库的 stream identity。
 
-同一批记录先完成 SQLite transaction，再更新 recent snapshot 并发送 Channel。退出时同步排空已接收记录；重启从同一数据库恢复 identity、sequence 和 recent snapshot。数据库预期由一个应用进程写入，其他 SQLx 连接可以只读查询。写入失败发送 `storage_unavailable` 终止信号，后续查询/订阅失败，不将未提交记录显示成持久历史；console 和独立诊断仍可继续。
+近期快照按容量多读取一条记录来判断截断；完整记录数量由显式统计查询提供。控制台线程空闲时阻塞等待消息，由关闭消息唤醒；满队列或已关闭的订阅移除后，由 worker 的析构统一停用。
+
+同一批记录先完成 SQLite transaction，再更新 recent snapshot 并发送 Channel。退出时同步排空已接收记录；重启从同一数据库恢复 identity、sequence 和 recent snapshot。数据库预期由一个应用进程写入，其他 SQLx 连接可以只读查询。写入失败发送 `storage_unavailable` 终止信号，后续查询/订阅失败，不将未提交记录显示成持久历史；console 输出仍可继续。
 
 插件 IPC 使用 `plugin:tracing|` 前缀：
 
@@ -96,30 +93,28 @@ Rust 调用线程只记录发生时的本机钟面时间、捕获有界字段并
 
 项目与日志新产生的日历时间使用本机钟面时间，序列化为不带时区的 `YYYY-MM-DDTHH:mm:ss.SSS`；不附加 `Z`、UTC 名称或偏移。已有项目元数据的带偏移时间在解析时保留原日期和钟面并移除偏移。Unix 秒/毫秒和单调时钟仍用于内部时间点、排序或耗时，不添加时区文本。图表日期/日期时间表示无时区日历字段，显示时不得通过浏览器时区移动它们。
 
-## 4. Operational diagnostics
+## 4. Structured runtime observations
 
-`src-tauri/crates/yss-diagnostics/` 只管理显式诊断数据及其交付：`DiagnosticEvent`/DTO、输入校验与脱敏、有界 recent ring、dispatcher、快照和订阅。它不依赖 tracing、日志插件、Tauri 或日志类型，不安装 subscriber、不订阅日志，也不拥有日志 SQLite。诊断校验由本 crate 自己维护，不再使用日志 collector 的工具。
+Application、Execution、System、Graph、Data 和 Ui 是日志的领域标签，共用 `LogRecordDto` 的 level、origin、domain、target、event、source 和 fields。领域标签不产生独立的业务状态或交付通道。
 
-Application 独立创建并管理 `DiagnosticsRuntime`。后端通过 `DiagnosticsRuntime::publish(DiagnosticEvent)` 显式提交诊断；运行时分配 Rust origin、时间、stream identity 和 sequence，再交付给订阅者。数据入口用法见 [yss-diagnostics](../../src-tauri/crates/yss-diagnostics/README.md)。
+Rust 使用普通 tracing 宏；显式 `log_domain`、`log_event`、`log_source` 和 `log_target` 字段由插件映射为日志元数据，其余安全字段保留在 fields 中。例如数据校验的缺失值数量、运行阶段、耗时和 incidentId 都可作为结构化技术观察。
 
-Application IPC 保留 `submit_frontend_diagnostics`、`subscribe_diagnostics`、`unsubscribe_diagnostics`；前端 DTO 及错误 wire 不变。`yss-ipc-channel::diagnostics` 负责 Tauri Channel 适配，前端使用 [DiagnosticsService](../../src/services/diagnostics/diagnosticsService.ts)。前后端输入都经过诊断自己的校验，客户端不能指定 origin、timestamp 或 sequence。
+前端通过已有 logger 或 `LogService.submitFrontendLogs` 提交记录，经同一有界批次链进入日志插件。显式结构化记录可包含 event 和 fields；客户端不指定 origin、timestamp 或 sequence。Logs 的订阅、历史查询和统计统一使用 `plugin:tracing|` 命令。Application 不注册另一套运行诊断命令、runtime 或 buffer。
 
-诊断 ingress、recent ring、batch 和 subscriber queue 保持有界，慢 subscriber 不阻塞业务 producer；snapshot/live handoff、丢弃标记和 gap 检测保持原有语义。诊断历史不跨进程恢复，也不读取日志 SQLite 补齐。前端仅复用通用 [Channel 订阅管理](../../src/services/ipc/recordSubscription.ts)，不复用日志 buffer、序号或命令注册表。
-
-普通日志（包括 CommandError 产生的 incident 技术日志）不自动产生运行诊断。业务需要显示诊断数据时显式调用诊断入口；命令错误仍独立返回安全 error wire，并可通过 incidentId 关联日志。Graph 诊断/Problems 继续来自 GraphSemanticSnapshot，模型诊断由 SCI/结果 owner 产生，不改变这些业务事实源。
+运行观测遵循日志级别过滤、SQLite 持久化及存储故障语义。字段仅保留排障所需的 ID、计数、阶段和安全错误代码。业务校验结果、Graph Problems、模型诊断、运行状态与 Results 仍从业务接口获取；用户反馈由 typed outcome 驱动。
 
 ## 5. Security and data minimization
 
-记录调用点优先使用 ID、count、kind、duration、digest、stable code 和 incident identity。以下内容不得进入 logging 或 operational diagnostics：
+记录调用点优先使用 ID、count、kind、duration、digest、stable code 和 incident identity。以下内容不得进入 logging：
 
 - DataFrame/table rows、cells 或原始用户数据；
 - document、clipboard、prompt、transcript、model response 或 tool payload；
 - SQL text、connection string、authorization/cookie header、token、API key 或 private key；
 - provider、parser、database 或 infrastructure 的未清理 payload。
 
-sanitizer 是最后防线，不是记录任意 `%error`、`?request` 或完整对象的许可。字段键和值、message、target/source/event、结构深度、集合长度和编码大小都必须受限。Frontend diagnostics 应遵守同一数据最小化规则。
+sanitizer 是最后防线，不是记录任意 `%error`、`?request` 或完整对象的许可。字段键和值、message、target/source/event、结构深度、集合长度和编码大小都必须受限。前端日志遵守同一数据最小化规则。
 
-Run Output 允许显示用户程序明确产生的文本，但它有自己的 source identity、容量和交互语义，不能因此写入 logs。Harness transcript 和 memory 属于持久业务数据，也不得伪装成 diagnostics。
+Run Output 允许显示用户程序明确产生的文本，但它有自己的 source identity、容量和交互语义，不能因此写入 logs。Harness transcript 和 memory 属于持久业务数据，也不得写入运行日志。
 
 ## 6. IPC errors and incidents
 
@@ -129,7 +124,7 @@ Transport failure 的 exact wire、DTO ownership 和 frontend invoke adapter 由
 - internal/infrastructure failure 可以生成 incident identity，并在 sanitized technical record 中保留关联信息；
 - wire 不携带 backend-owned user prose 或 raw error；
 - successful DTO 和 asynchronous status 不能用 `message`、`detail`、`hint` 等字段透传原始内部错误；Graph diagnostic 的安全模板契约由 Graph owner 维护；
-- diagnostic record 不能反过来成为 command response 或 UI 状态来源。
+- 日志记录不能反过来成为 command response 或 UI 状态来源。
 
 一个失败可以同时具有 stable domain/transport outcome 和 incident-linked technical observation，但两者的可靠性、受众和保留策略仍然独立。
 

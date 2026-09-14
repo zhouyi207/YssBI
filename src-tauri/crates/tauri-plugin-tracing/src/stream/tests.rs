@@ -243,6 +243,58 @@ fn subscription_snapshot_and_live_batches_have_one_ordered_boundary() {
 }
 
 #[test]
+fn overflowing_subscriber_stops_without_delivering_queued_batches() {
+    let (hub, _guard) = LogHub::start_for_test(16, 1);
+    let (healthy_sender, healthy_receiver) = mpsc::channel();
+    let healthy = hub
+        .subscribe(move |batch| healthy_sender.send(batch).is_ok())
+        .unwrap();
+    let (started_sender, started_receiver) = mpsc::channel();
+    let (release_sender, release_receiver) = mpsc::channel();
+    let (slow_sender, slow_receiver) = mpsc::channel();
+    let _slow = hub
+        .subscribe(move |batch| {
+            if batch.entries[0].message == "in-flight" {
+                let _ = started_sender.send(());
+                if release_receiver
+                    .recv_timeout(Duration::from_secs(2))
+                    .is_err()
+                {
+                    return false;
+                }
+            }
+            slow_sender.send(batch).is_ok()
+        })
+        .unwrap();
+
+    hub.publish(vec![pending("in-flight")]).unwrap();
+    started_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap();
+    healthy_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .unwrap();
+
+    for (sequence, message) in [(2, "queued"), (3, "overflow")] {
+        hub.publish(vec![pending(message)]).unwrap();
+        let batch = healthy_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(batch.entries[0].sequence, sequence);
+    }
+    // The acknowledgement comes after the dispatcher has handled the overflow.
+    hub.unsubscribe(healthy.subscription_id).unwrap();
+    release_sender.send(()).unwrap();
+
+    let first = slow_receiver.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert_eq!(first.entries[0].message, "in-flight");
+    assert!(matches!(
+        slow_receiver.recv_timeout(Duration::from_secs(1)),
+        Err(mpsc::RecvTimeoutError::Disconnected)
+    ));
+}
+
+#[test]
 fn live_batches_preserve_order_and_flush_by_size_or_time() {
     let (hub, _guard) = LogHub::start();
     let (batch_sender, batch_receiver) = mpsc::channel();

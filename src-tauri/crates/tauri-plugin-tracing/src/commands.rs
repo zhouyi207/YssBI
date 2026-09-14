@@ -15,10 +15,10 @@ pub struct PluginError {
     incident_id: Option<String>,
 }
 
-fn log_runtime(state: &PluginState) -> Result<LogRuntime, PluginError> {
+fn log_runtime(state: &PluginState) -> Result<&LogRuntime, PluginError> {
     state
         .logs
-        .clone()
+        .as_ref()
         .ok_or_else(|| PluginError::new("logs_unavailable"))
 }
 
@@ -55,7 +55,7 @@ pub async fn subscribe_logs(
     state: State<'_, PluginState>,
     on_records: Channel<LogBatchDto>,
 ) -> Result<LogSubscriptionDto, PluginError> {
-    let runtime = log_runtime(&state)?;
+    let runtime = log_runtime(&state)?.clone();
     tauri::async_runtime::spawn_blocking(move || {
         runtime.subscribe_batches(move |batch| on_records.send(batch).is_ok())
     })
@@ -69,7 +69,7 @@ pub async fn unsubscribe_logs(
     state: State<'_, PluginState>,
     subscription_id: String,
 ) -> Result<(), PluginError> {
-    let runtime = log_runtime(&state)?;
+    let runtime = log_runtime(&state)?.clone();
     tauri::async_runtime::spawn_blocking(move || runtime.unsubscribe(subscription_id))
         .await
         .map_err(|_| PluginError::new("logs_unavailable"))?
@@ -81,7 +81,7 @@ pub async fn query_logs(
     state: State<'_, PluginState>,
     query: LogQuery,
 ) -> Result<LogPage, PluginError> {
-    let runtime = log_runtime(&state)?;
+    let runtime = log_runtime(&state)?.clone();
     tauri::async_runtime::spawn_blocking(move || runtime.query(query))
         .await
         .map_err(|_| PluginError::new("logs_unavailable"))?
@@ -90,7 +90,7 @@ pub async fn query_logs(
 
 #[tauri::command]
 pub async fn log_statistics(state: State<'_, PluginState>) -> Result<LogStatistics, PluginError> {
-    let runtime = log_runtime(&state)?;
+    let runtime = log_runtime(&state)?.clone();
     tauri::async_runtime::spawn_blocking(move || runtime.statistics())
         .await
         .map_err(|_| PluginError::new("logs_unavailable"))?

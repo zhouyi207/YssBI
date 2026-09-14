@@ -150,8 +150,6 @@ mod tests {
     use uuid::Uuid;
 
     use super::CommandError;
-    use tauri_plugin_tracing::{LogLayer, LogRecord};
-    use yss_diagnostics::DiagnosticsRuntime;
     use yss_ipc_contract::error::GraphMutationErrorDetailsDto;
 
     #[derive(Serialize)]
@@ -190,33 +188,52 @@ mod tests {
     }
 
     #[test]
-    fn internal_error_logs_incident_without_publishing_runtime_diagnostics() {
-        let diagnostics = DiagnosticsRuntime::initialize().expect("initialize diagnostics");
-        let captured = Arc::new(Mutex::new(Vec::<LogRecord>::new()));
-        let sink = captured.clone();
-        let subscriber =
-            tracing_subscriber::registry().with(LogLayer::new(Arc::new(move |record| {
-                sink.lock().unwrap().push(record.clone());
-            })));
+    fn internal_error_logs_correlated_context_through_tracing() {
+        #[derive(Default)]
+        struct CapturedEvent {
+            target: String,
+            fields: std::collections::BTreeMap<String, String>,
+        }
+
+        impl tracing::field::Visit for CapturedEvent {
+            fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+                self.fields.insert(field.name().into(), value.into());
+            }
+
+            fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+                self.fields
+                    .insert(field.name().into(), format!("{value:?}"));
+            }
+        }
+
+        struct CaptureLayer(Arc<Mutex<CapturedEvent>>);
+
+        impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CaptureLayer {
+            fn on_event(
+                &self,
+                event: &tracing::Event<'_>,
+                _context: tracing_subscriber::layer::Context<'_, S>,
+            ) {
+                let mut captured = self.0.lock().unwrap();
+                captured.target = event.metadata().target().into();
+                event.record(&mut *captured);
+            }
+        }
+
+        let captured = Arc::new(Mutex::new(CapturedEvent::default()));
+        let subscriber = tracing_subscriber::registry().with(CaptureLayer(captured.clone()));
         let error = tracing::subscriber::with_default(subscriber, || {
             CommandError::internal("full internal diagnostic")
         });
 
-        let records = captured.lock().unwrap();
-        let record = records.last().unwrap();
+        let record = captured.lock().unwrap();
         assert_eq!(record.target, "yssbi::command_error");
-        assert_eq!(record.fields["log_event"], "commandError");
-        assert_eq!(record.fields["error_code"], "internal_error");
-        assert_eq!(record.fields["incident_id"], error.incident_id().unwrap());
-        assert_eq!(record.fields["error"], "full internal diagnostic");
-        assert_eq!(record.fields["error_debug"], "\"full internal diagnostic\"");
-        assert!(
-            diagnostics
-                .subscribe_batches(|_| true)
-                .unwrap()
-                .entries
-                .is_empty()
-        );
+        let fields = &record.fields;
+        assert_eq!(fields["log_event"], "commandError");
+        assert_eq!(fields["error_code"], "internal_error");
+        assert_eq!(fields["incident_id"], error.incident_id().unwrap());
+        assert_eq!(fields["error"], "full internal diagnostic");
+        assert_eq!(fields["error_debug"], "\"full internal diagnostic\"");
     }
 
     #[test]

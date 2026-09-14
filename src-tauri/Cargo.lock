@@ -9245,7 +9245,6 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tauri",
- "tauri-plugin-tracing",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -9263,7 +9262,6 @@ dependencies = [
  "yss-datafusion",
  "yss-dataset-profile",
  "yss-dataset-store",
- "yss-diagnostics",
  "yss-display-naming",
  "yss-filesystem",
  "yss-function-editor-projection",
@@ -9521,18 +9519,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-diagnostics"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
 name = "yss-display-naming"
 version = "0.1.0"
 
@@ -9726,7 +9712,6 @@ dependencies = [
  "thiserror 2.0.20",
  "uuid",
  "yss-automation-contract",
- "yss-diagnostics",
  "yss-ipc-contract",
  "yss-project-progress",
 ]

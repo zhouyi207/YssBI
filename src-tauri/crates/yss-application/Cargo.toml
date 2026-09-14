@@ -25,7 +25,6 @@ tauri.workspace = true
 yss-statistical-harness-sqlite = { path = "../yss-statistical-harness-sqlite" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
-yss-diagnostics = { path = "../yss-diagnostics" }
 yss-agent-rig = { path = "../yss-agent-rig" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 atomicwrites.workspace = true
@@ -79,7 +78,6 @@ yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
-tauri-plugin-tracing = { path = "../tauri-plugin-tracing", features = ["test-support"] }
 yss-statistical-harness = { path = "../yss-statistical-harness", features = ["test-support"] }
 yss-datafusion = { path = "../yss-datafusion" }
 yss-project-layout = { path = "../yss-project-layout" }

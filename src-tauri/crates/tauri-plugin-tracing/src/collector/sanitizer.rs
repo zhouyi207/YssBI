@@ -214,14 +214,9 @@ fn redact_sensitive_content(value: &str) -> Cow<'_, str> {
 }
 
 fn replace_if_matched<'a>(value: Cow<'a, str>, pattern: &Regex, replacement: &str) -> Cow<'a, str> {
-    if pattern.is_match(value.as_ref()) {
-        Cow::Owned(
-            pattern
-                .replace_all(value.as_ref(), replacement)
-                .into_owned(),
-        )
-    } else {
-        value
+    match pattern.replace_all(value.as_ref(), replacement) {
+        Cow::Owned(replaced) => Cow::Owned(replaced),
+        Cow::Borrowed(_) => value,
     }
 }
 

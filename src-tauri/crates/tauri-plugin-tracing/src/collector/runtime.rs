@@ -9,35 +9,29 @@ use std::time::Duration;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 
-use crate::LogRuntime;
-use crate::collector::{LogLayer, LogRecord};
+use crate::collector::{CapturedLogSink, LogLayer, LogRecord};
 
 const OUTPUT_QUEUE_CAPACITY: usize = 1_024;
-const OUTPUT_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const OUTPUT_SHUTDOWN_WAIT: Duration = Duration::from_millis(250);
 const OUTPUT_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
-/// Owns the bounded output workers installed by the process-wide logging layer.
-pub struct LoggingRuntime {
-    logs: LogRuntime,
-    _output_guards: Vec<OutputWorkerGuard>,
+/// Owns the bounded console worker installed by the process-wide logging layer.
+pub(crate) struct LoggingRuntime {
+    _console_guard: OutputWorkerGuard,
 }
 
 impl LoggingRuntime {
     /// Installs one subscriber for all crates and queues captures to the log dispatcher.
-    pub fn initialize(logs: LogRuntime) -> Result<Self, LoggingInitializationError> {
-        let (console, console_guard) =
-            spawn_output("console", create_console_sink()).map_err(|source| {
-                LoggingInitializationError::OutputWorker {
-                    name: "console".into(),
-                    source,
-                }
-            })?;
+    pub(crate) fn initialize(
+        connect: impl FnOnce(OutputHandle) -> CapturedLogSink,
+    ) -> Result<Self, LoggingInitializationError> {
+        let (console, console_guard) = spawn_output("console", create_console_sink())
+            .map_err(LoggingInitializationError::ConsoleOutput)?;
         let rust_log = std::env::var("RUST_LOG").ok();
         let filter = logging_filter(rust_log.as_deref());
         let subscriber = tracing_subscriber::registry()
             .with(filter.targets)
-            .with(LogLayer::new(logs.rust_log_sink(Some(console))));
+            .with(LogLayer::new(connect(console)));
         tracing::subscriber::set_global_default(subscriber)
             .map_err(LoggingInitializationError::TracingSubscriber)?;
         if let Err(error) = tracing_log::LogTracer::init() {
@@ -59,30 +53,15 @@ impl LoggingRuntime {
             );
         }
         Ok(Self {
-            logs,
-            _output_guards: vec![console_guard],
+            _console_guard: console_guard,
         })
-    }
-
-    pub(crate) fn shutdown(&self) {
-        self.logs.shutdown();
-    }
-}
-
-impl Drop for LoggingRuntime {
-    fn drop(&mut self) {
-        self.shutdown();
     }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoggingInitializationError {
-    #[error("failed to start {name} logging output worker")]
-    OutputWorker {
-        name: String,
-        #[source]
-        source: io::Error,
-    },
+    #[error("failed to start console logging output worker")]
+    ConsoleOutput(#[source] io::Error),
     #[error("failed to install the global logging subscriber")]
     TracingSubscriber(#[source] tracing::subscriber::SetGlobalDefaultError),
 }
@@ -115,22 +94,19 @@ impl OutputHandle {
 pub(crate) struct OutputWorkerGuard {
     sender: SyncSender<OutputCommand>,
     active: Arc<AtomicBool>,
-    finished: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
 
 impl Drop for OutputWorkerGuard {
     fn drop(&mut self) {
         self.active.store(false, Ordering::Release);
-        match self.sender.try_send(OutputCommand::Shutdown) {
-            Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
-        }
+        let _ = self.sender.try_send(OutputCommand::Shutdown);
         if let Some(worker) = self.worker.take() {
             let deadline = std::time::Instant::now() + OUTPUT_SHUTDOWN_WAIT;
-            while !self.finished.load(Ordering::Acquire) && std::time::Instant::now() < deadline {
+            while !worker.is_finished() && std::time::Instant::now() < deadline {
                 thread::sleep(OUTPUT_SHUTDOWN_POLL_INTERVAL);
             }
-            if self.finished.load(Ordering::Acquire) {
+            if worker.is_finished() {
                 // Sink panics are caught in the worker, so a join failure can only
                 // come from an unexpected worker invariant violation. Logging is
                 // already being torn down and cannot safely report recursively.
@@ -151,13 +127,11 @@ pub(crate) fn spawn_output(
     let (sender, receiver) = mpsc::sync_channel(OUTPUT_QUEUE_CAPACITY);
     let active = Arc::new(AtomicBool::new(true));
     let worker_active = Arc::clone(&active);
-    let finished = Arc::new(AtomicBool::new(false));
-    let worker_finished = Arc::clone(&finished);
     let worker = thread::Builder::new()
         .name(format!("yssbi-log-{name}"))
         .spawn(move || {
             while worker_active.load(Ordering::Acquire) {
-                match receiver.recv_timeout(OUTPUT_IDLE_POLL_INTERVAL) {
+                match receiver.recv() {
                     Ok(OutputCommand::Record(record)) => {
                         let succeeded = catch_unwind(AssertUnwindSafe(|| sink(record.as_ref())))
                             .unwrap_or(false);
@@ -165,14 +139,10 @@ pub(crate) fn spawn_output(
                             worker_active.store(false, Ordering::Release);
                         }
                     }
-                    Ok(OutputCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        break;
-                    }
-                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Ok(OutputCommand::Shutdown) | Err(_) => break,
                 }
             }
             worker_active.store(false, Ordering::Release);
-            worker_finished.store(true, Ordering::Release);
         })?;
     let handle = OutputHandle {
         sender: sender.clone(),
@@ -181,7 +151,6 @@ pub(crate) fn spawn_output(
     let guard = OutputWorkerGuard {
         sender,
         active,
-        finished,
         worker: Some(worker),
     };
     Ok((handle, guard))
@@ -269,6 +238,23 @@ mod tests {
         let explicit = logging_filter(Some("my_crate=debug")).targets;
         assert!(explicit.would_enable("my_crate::collector::worker", &tracing::Level::DEBUG));
         assert!(!explicit.would_enable("other", &tracing::Level::INFO));
+    }
+
+    #[test]
+    fn shutdown_releases_an_idle_sink_while_a_producer_handle_is_retained() {
+        let (sink_lifetime, released) = mpsc::channel::<()>();
+        let sink: OutputSink = Box::new(move |_| {
+            let _keep_alive = &sink_lifetime;
+            true
+        });
+        let (_output, guard) = spawn_output("idle-test", sink).unwrap();
+
+        drop(guard);
+
+        assert_eq!(
+            released.recv_timeout(Duration::from_secs(1)),
+            Err(mpsc::RecvTimeoutError::Disconnected)
+        );
     }
 
     #[test]

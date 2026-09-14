@@ -187,8 +187,7 @@ impl LogHub {
                     tracing::subscriber::NoSubscriber::default(),
                     || {
                         let prepared = (|| {
-                            let mut state = DispatcherState::new(&config);
-                            state.storage_failed = worker_storage_failed;
+                            let mut state = DispatcherState::new(&config, worker_storage_failed);
                             if let Some(path) = storage_path {
                                 let mut storage = LogStore::open(path)?;
                                 let snapshot = storage.snapshot(RECENT_LOG_CAPACITY)?;
@@ -421,10 +420,10 @@ impl Drop for LogDispatcherGuard {
 }
 
 impl DispatcherState {
-    fn new(config: &DispatcherConfig) -> Self {
+    fn new(config: &DispatcherConfig, storage_failed: Arc<AtomicBool>) -> Self {
         Self {
             storage: None,
-            storage_failed: Arc::new(AtomicBool::new(false)),
+            storage_failed,
             stream_id: Uuid::new_v4().to_string(),
             latest_sequence: 0,
             truncated: false,
@@ -540,16 +539,7 @@ impl DispatcherState {
             failure: None,
         });
         self.subscriptions.retain(|_, subscription| {
-            if !subscription.is_active() {
-                return false;
-            }
-            match subscription.try_enqueue(batch.clone()) {
-                EnqueueResult::Enqueued => true,
-                EnqueueResult::Full | EnqueueResult::Closed => {
-                    subscription.deactivate();
-                    false
-                }
-            }
+            subscription.try_enqueue(batch.clone()) == EnqueueResult::Enqueued
         });
         true
     }

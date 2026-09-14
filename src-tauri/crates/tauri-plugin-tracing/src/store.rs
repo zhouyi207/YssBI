@@ -1,7 +1,7 @@
 //! SQLite log history. The dispatcher owns this blocking adapter and its connection.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -72,17 +72,16 @@ pub(crate) struct StoredSnapshot {
     pub truncated: bool,
 }
 
-pub struct LogStore {
+pub(crate) struct LogStore {
     connection: Option<SqliteConnection>,
     runtime: tokio::runtime::Runtime,
-    path: PathBuf,
     stream_id: String,
 }
 
 impl LogStore {
     /// Open on a dedicated blocking thread, as the plugin dispatcher does.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LogStoreError> {
-        let path = path.as_ref().to_path_buf();
+        let path = path.as_ref();
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -91,7 +90,7 @@ impl LogStore {
             .build()?;
         // The log database must never generate statement logs into its own writer.
         let options = SqliteConnectOptions::new()
-            .filename(&path)
+            .filename(path)
             .create_if_missing(true)
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
             .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
@@ -119,27 +118,19 @@ impl LogStore {
         Ok(Self {
             connection: Some(connection),
             runtime,
-            path,
             stream_id,
         })
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
     pub(crate) fn snapshot(&mut self, capacity: usize) -> Result<StoredSnapshot, LogStoreError> {
         let connection = self.connection.as_mut().ok_or(LogStoreError::Unavailable)?;
-        let (count, rows) = self.runtime.block_on(async {
-            let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs")
-                .fetch_one(&mut *connection)
-                .await?;
-            let rows = sqlx::query("SELECT * FROM logs ORDER BY sequence DESC LIMIT ?")
-                .bind(capacity as i64)
-                .fetch_all(&mut *connection)
-                .await?;
-            Ok::<_, sqlx::Error>((count, rows))
-        })?;
+        let mut rows = self.runtime.block_on(
+            sqlx::query("SELECT * FROM logs ORDER BY sequence DESC LIMIT ?")
+                .bind((capacity + 1) as i64)
+                .fetch_all(connection),
+        )?;
+        let truncated = rows.len() > capacity;
+        rows.truncate(capacity);
         let mut entries = rows
             .into_iter()
             .map(decode_record)
@@ -150,7 +141,7 @@ impl LogStore {
             stream_id: self.stream_id.clone(),
             latest_sequence,
             entries,
-            truncated: count > capacity as i64,
+            truncated,
         })
     }
 

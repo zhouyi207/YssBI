@@ -11,7 +11,7 @@ YssBI's desktop IPC boundary has an Application-owned command module and three s
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `yss-application::ipc`                                    | Application commands and invoke registry, request/response mapping and diagnosed errors; application execution and graph-client channel adapters |
 | [`yss-ipc-event`](../../../yss-ipc-event/README.md)       | Event delivery after authoritative commits                                                                                                       |
-| [`yss-ipc-channel`](../../../yss-ipc-channel/README.md)   | Neutral Harness event subscriptions, project progress and diagnostics delivery                                                                   |
+| [`yss-ipc-channel`](../../../yss-ipc-channel/README.md)   | Neutral Harness event subscriptions and project progress delivery                                                                                |
 | [`yss-ipc-contract`](../../../yss-ipc-contract/README.md) | Shared wire DTOs, event envelopes and the exact error payload                                                                                    |
 
 Event and Channel depend on Contract and never depend on Application. Contract has no Tauri or runtime dependency. Execution encoding and graph-client handoff consume Application types, so they live in [channel/](channel/mod.rs) within this module. Business workflows and committed state remain in their use-case/domain owners.
@@ -22,11 +22,9 @@ Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initiali
 
 Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.
 
-`tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Application retains the separate `submit_frontend_diagnostics`, `subscribe_diagnostics` and `unsubscribe_diagnostics` commands backed by `yss-diagnostics`; diagnostic records do not use the plugin's storage or sequence. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
+`tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
 
-Diagnostics initialization requires no logging plugin, subscriber or LoggingRuntime. Backend diagnostic data is explicitly published through `DiagnosticsRuntime::publish(DiagnosticEvent)`; ordinary tracing events and CommandError incident logs do not automatically populate diagnostics. Command error wire and frontend diagnostic wire remain unchanged.
-
-`HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal capability calls and delegates draft delivery to the local graph-client adapter. Logging, diagnostics, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
+`HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal capability calls and delegates draft delivery to the local graph-client adapter. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
@@ -97,17 +95,17 @@ it does not substitute an empty identity array for an obsolete response shape.
 
 Choose the transport by semantics:
 
-| Primitive      | Use                                                                                       |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| Command        | bounded request/response work with one typed outcome                                      |
-| Event          | low-rate state-change notification that does not carry authority                          |
-| Channel/worker | ordered, streaming, high-frequency, progress, execution, diagnostics, or Harness delivery |
+| Primitive      | Use                                                                                |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Command        | bounded request/response work with one typed outcome                               |
+| Event          | low-rate state-change notification that does not carry authority                   |
+| Channel/worker | ordered, streaming, high-frequency, progress, execution, logs, or Harness delivery |
 
 Every ordered stream defines its source identity, ordering key, capacity/backpressure behavior, loss/gap handling, replay or snapshot recovery, cancellation, and terminal semantics in its domain owner. `yss-ipc-channel` maps application contracts to Tauri without inventing a second queue model. Application subscriptions and cancellation remain in this registry; plugin logs use the plugin registry.
 
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 
-Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Diagnostics and Execution channels are separate contracts; diagnostics live-gap recovery is documented in [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md#4-operational-diagnostics).
+Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Logs and Execution channels have separate contracts; log delivery and failure semantics are documented in [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md#3-logging).
 
 Project registration commands consume Application's process-wide `ProjectManagement`. Application owns registry construction from the injected store and picker-task cancellation admission/cleanup. Commands retain progress-channel binding, draining and wire/error mapping. Project activation and replacement continue to use the existing Application session slot; registry state is not replaced with that session.
 
@@ -188,9 +186,9 @@ Every command rejection serializes the Rust-owned `CommandError` with exactly th
 
 - `code` is a stable lower_snake_case machine category;
 - `details` is `null` or a safe structured object, never raw/internal prose;
-- `incidentId` is always present and is `null` unless diagnostic correlation is required.
+- `incidentId` is always present and is `null` unless technical-log correlation is required.
 
-The wire never contains a backend-owned `message`. Do not encode identity in string prefixes, return `Result<T, String>` from a command, or accept legacy error shapes. Expected failures map to stable code/details. Internal or infrastructure failures generate an incident identity and write technical context only through sanitized tracing/diagnostics.
+The wire never contains a backend-owned `message`. Do not encode identity in string prefixes, return `Result<T, String>` from a command, or accept legacy error shapes. Expected failures map to stable code/details. Internal or infrastructure failures generate an incident identity and write technical context only through sanitized tracing logs.
 
 Successful DTOs and asynchronous statuses may not bypass this rule with backend prose fields such as `message`, `detail`, `hint`, or `reason`. Domain diagnostics that are intentionally user-visible use a stable code, safe location/parameters, and their domain-owned deterministic template contract.
 
@@ -239,7 +237,7 @@ Channel adapters parse strict wire DTOs before publishing to application project
 ## Data and security boundary
 
 - Keep large datasets and computation in Rust; expose paging, projection, batching, handles, or result IDs.
-- Do not send raw infrastructure errors, SQL, connection strings, credentials, prompts, transcripts, document content, clipboard content, or table rows through error details or diagnostics fields.
+- Do not send raw infrastructure errors, SQL, connection strings, credentials, prompts, transcripts, document content, clipboard content, or table rows through error details or log fields.
 - Treat resource paths and IDs as opaque values; do not normalize domain identity in transport/UI code.
 - Credential configuration uses explicit injected/application paths and is never persisted in Harness/Project/logging by this crate.
 
