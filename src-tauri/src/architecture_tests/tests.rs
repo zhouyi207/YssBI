@@ -391,14 +391,6 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-diagnostics"
-                && root.target == "yss_diagnostics"
-                && root.kind == ProductionRootKind::Library)
-    );
-    assert!(
-        workspace
-            .roots
-            .iter()
             .any(|root| root.package == "yss-graph-execution"
                 && root.target == "yss_graph_execution"
                 && root.kind == ProductionRootKind::Library)
@@ -777,13 +769,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-database-contract/src/lib.rs"),
     };
-    let diagnostics_root = ProductionRoot {
-        package_id: "diagnostics-package".to_owned(),
-        package: "yss-diagnostics".to_owned(),
-        target: "yss_diagnostics".to_owned(),
-        kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-diagnostics/src/lib.rs"),
-    };
     let execution_root = ProductionRoot {
         package_id: "execution-package".to_owned(),
         package: "yss-graph-execution".to_owned(),
@@ -930,7 +915,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         canonical_hash_root.clone(),
         data_contract_root.clone(),
         database_contract_root.clone(),
-        diagnostics_root.clone(),
         execution_root.clone(),
         graph_analysis_root.clone(),
         graph_analysis_contract_root.clone(),
@@ -1002,11 +986,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 &database_contract_root,
                 "src-tauri/crates/yss-database-contract/src/lib.rs",
                 "yss_database_contract",
-            ),
-            module(
-                &diagnostics_root,
-                "src-tauri/crates/yss-diagnostics/src/lib.rs",
-                "yss_diagnostics",
             ),
             module(
                 &graph_analysis_root,
@@ -1138,10 +1117,6 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/crates/yss-database-contract/src/lib.rs"],
         RustLayer::PureLeaf
-    );
-    assert_eq!(
-        classified["src-tauri/crates/yss-diagnostics/src/lib.rs"],
-        RustLayer::Diagnostics
     );
     assert_eq!(
         classified["src-tauri/crates/yss-graph-analysis/src/lib.rs"],
@@ -1656,36 +1631,16 @@ fn database_schema_and_arrow_adapter_have_separate_owners() {
 }
 
 #[test]
-fn diagnostics_has_one_crate_owner_separate_from_logging() {
-    let root = repository_root();
-    for relative in [
-        "src-tauri/crates/yss-diagnostics/Cargo.toml",
-        "src-tauri/crates/yss-diagnostics/src/lib.rs",
-        "src-tauri/crates/yss-diagnostics/src/dispatcher.rs",
-        "src-tauri/crates/yss-diagnostics/src/dto.rs",
-        "src-tauri/crates/yss-diagnostics/src/runtime.rs",
-        "src-tauri/crates/yss-diagnostics/src/sanitizer.rs",
-        "src-tauri/crates/yss-diagnostics/src/tests.rs",
-        "src-tauri/crates/yss-diagnostics/src/validation.rs",
-        "src-tauri/crates/yss-diagnostics/src/worker.rs",
-        "src-tauri/crates/tauri-plugin-tracing/Cargo.toml",
-    ] {
-        assert!(
-            root.join(relative).is_file(),
-            "diagnostics/logging owner must exist at {relative}"
-        );
-    }
-    assert!(
-        !root.join("src-tauri/src/diagnostics").exists(),
-        "the root crate must not retain a diagnostics compatibility module"
-    );
+fn logging_collector_is_only_consumed_through_platform_adapter() {
     let plugin = "src-tauri/crates/tauri-plugin-tracing/src/plugin.rs";
-    let diagnostics = "src-tauri/crates/yss-diagnostics/src/runtime.rs";
     let logging = "src-tauri/crates/tauri-plugin-tracing/src/collector/runtime.rs";
+    let composition = "src-tauri/src/lib.rs";
+    let application = "src-tauri/crates/yss-application/src/database.rs";
     let classification = BTreeMap::from([
         (plugin.into(), RustLayer::PlatformAdapter),
-        (diagnostics.into(), RustLayer::Diagnostics),
         (logging.into(), RustLayer::Logging),
+        (composition.into(), RustLayer::CompositionRoot),
+        (application.into(), RustLayer::Application),
     ]);
     let dependency = |source: &str, declaration: &str| CanonicalDependency {
         owning_package: "fixture".into(),
@@ -1711,45 +1666,16 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
     assert_eq!(
         rust_dependency_findings(
             &[
-                dependency(plugin, diagnostics),
-                dependency(diagnostics, plugin),
+                dependency(composition, logging),
+                dependency(application, logging),
                 dependency(logging, plugin),
-                dependency(diagnostics, logging),
-                dependency(logging, diagnostics)
             ],
-            &classification
+            &classification,
         )
         .unwrap()
         .len(),
-        5
+        3
     );
-
-    let mut pending = vec!["yss-diagnostics".to_owned()];
-    let mut visited = BTreeSet::new();
-    while let Some(package) = pending.pop() {
-        if !visited.insert(package.clone()) {
-            continue;
-        }
-        for dependency in &workspace_facts().dependency_declarations {
-            if dependency.owning_package == package
-                && dependency.scope == CargoDependencyScope::Runtime
-            {
-                assert!(
-                    !matches!(
-                        dependency.package_name.as_str(),
-                        "tracing"
-                            | "tracing-core"
-                            | "tracing-subscriber"
-                            | "tracing-log"
-                            | "tauri"
-                            | "tauri-plugin-tracing"
-                    ),
-                    "diagnostics must not pull in logging or desktop runtime: {dependency:?}"
-                );
-                pending.push(dependency.package_name.clone());
-            }
-        }
-    }
 }
 
 #[test]

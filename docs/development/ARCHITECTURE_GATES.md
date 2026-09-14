@@ -63,7 +63,6 @@ Backend Adapter
 Node
 Transport
 Logging
-Diagnostics
 Pure Leaf
 ```
 
@@ -80,7 +79,7 @@ Domain
 Services
 Components / Shared UI
 Wire Schema
-Diagnostics
+Logging
 Pure Shared
 ```
 
@@ -88,7 +87,7 @@ Pure Shared
 
 一个 Cargo package 可能包含由 source-level policy 精确判断的不同 root；不要在 `MODULE_MAP.md` 手工复制分类。
 
-Application 内部 `ipc` 注册表及 `ipc/commands` 按 Commands 分类，`ipc/schema`、`ipc/error`、响应缓存与应用专属 `ipc/channel` 适配按 Transport 分类；`yss-ipc-event`、`yss-ipc-channel` 和 `yss-ipc-contract` 按 Transport 分类。跨层能力继续绑定确切 source 与 canonical symbol，不开放 Transport 对 Application 的通配访问。Contract 不声明 Tauri 或运行时依赖；Event/Channel 不反向依赖 Application。Diagnostics 仅暴露中立 batch sink，不再声明 Tauri 依赖或使用权限。
+Application 内部 `ipc` 注册表及 `ipc/commands` 按 Commands 分类，`ipc/schema`、`ipc/error`、响应缓存与应用专属 `ipc/channel` 适配按 Transport 分类；`yss-ipc-event`、`yss-ipc-channel` 和 `yss-ipc-contract` 按 Transport 分类。跨层能力继续绑定确切 source 与 canonical symbol，不开放 Transport 对 Application 的通配访问。Contract 不声明 Tauri 或运行时依赖；Event/Channel 不反向依赖 Application。运行观测的日志 IPC 和 Channel 由日志平台插件拥有。
 
 ## 4. Canonical origin resolution
 
@@ -157,7 +156,7 @@ Application 的 `serde` 直接依赖用于静态目录和离线源定义的反�
 
 `yss-filesystem` 的生产源码统一按 Filesystem 分类。Project、Application 和启动组装可使用 FS；FS 对任何其他内部 crate 的引用都触发 `rust.internal.filesystem-boundary`，即使提供普通 capability 也不能绕过。门禁同时核对 Cargo 的全部依赖 scope 均为外部依赖，并确认 notify 只在 `watcher/notify.rs` 中使用。项目入口解释、索引失效和业务错误按 Project 分类。原四 crate 的路径字符串检查改为真实依赖与隔离 fixture 检查。
 
-`tauri-plugin-tracing` 的 `collector/` 按 Logging 分类，插件的存储和 Tauri 适配按 Platform Adapter 分类；构建脚本仅获 `tauri-plugin` 的 build 权限。collector 包含原 yss-tracing 实现，不再有独立的日志核心 crate。Diagnostics 与 Logging/日志插件之间的依赖双向禁止，Composition Root 不能直接接入 collector；入口仅获插件 `init` 的精确调用权限。诊断只接收显式数据，由 Application 独立初始化。现有诊断 owner fixture 同时验证层级方向与诊断依赖闭包，禁止通过其他 workspace crate 间接引入 tracing 或日志插件。
+`tauri-plugin-tracing` 的 `collector/` 按 Logging 分类，插件的存储和 Tauri 适配按 Platform Adapter 分类；构建脚本仅获 `tauri-plugin` 的 build 权限。运行观测统一通过该插件的结构化日志链交付。Composition Root 和 Application 不能直接接入 collector；入口仅获插件 `init` 的精确调用权限，业务代码使用普通 tracing。现有边界 fixture 验证 Platform Adapter 可以组合 collector，collector 不反向依赖平台，Application 和桌面组装不能绕过插件访问 collector。前端 `src/utils/` 中的日志过滤、console 捕获和批处理按 Logging 分类。
 
 React Flow 的运行时、类型与基础样式依赖仅开放给 Views；Application、Core 和 Domain
 不导入该画布库。graph-editor 的局部样式按确切 consumer/asset 路径登记，视图只获

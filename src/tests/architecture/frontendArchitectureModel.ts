@@ -46,7 +46,7 @@ export type FrontendLayer =
   | "services"
   | "components-ui"
   | "wire-schema"
-  | "diagnostics"
+  | "logging"
   | "pure-shared";
 
 export type FrontendDependencyKind =

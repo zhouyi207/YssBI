@@ -791,7 +791,7 @@ describe("frontend architecture model", () => {
         "services",
         "components-ui",
         "wire-schema",
-        "diagnostics",
+        "logging",
         "pure-shared",
       ].map((layer) => [layer, []]),
     ) as unknown as Record<FrontendLayer, readonly string[]>;
@@ -799,7 +799,7 @@ describe("frontend architecture model", () => {
       ...emptyMembership,
       services: ["src/shared/platform/testAdapter.ts"],
       core: ["src/shared/overlap.ts"],
-      diagnostics: ["src/shared/overlap.ts"],
+      logging: ["src/shared/overlap.ts"],
     };
     const report = classifyFrontendSources(
       [
@@ -851,7 +851,7 @@ describe("frontend architecture model", () => {
       {
         kind: "multiply-classified-production-source",
         sourceFile: "src/shared/overlap.ts",
-        layers: ["core", "diagnostics"],
+        layers: ["core", "logging"],
       },
       {
         kind: "unclassified-production-source",
@@ -1803,7 +1803,7 @@ describe("frontend architecture model", () => {
       ["src/services/backend.ts", "export const backend = true;"],
       ["src/components/control.tsx", "export const control = null;"],
       ["src/shared/utils/kept.ts", "export const kept = true;"],
-      ["src/utils/diagnostic.ts", "export const diagnostic = true;"],
+      ["src/utils/logging.ts", "export const logging = true;"],
       ["src/tests/helper.ts", "export const testHelper = true;"],
       ["src/shared/behavior.test.ts", "export const test = true;"],
       ["src/shared/namedFixture.ts", "export const fixture = true;"],
@@ -1819,7 +1819,7 @@ describe("frontend architecture model", () => {
         "src/services/backend.ts",
         "src/shared/generated.generated.ts",
         "src/shared/utils/kept.ts",
-        "src/utils/diagnostic.ts",
+        "src/utils/logging.ts",
         "src/views/screen.tsx",
       ]);
       expect(

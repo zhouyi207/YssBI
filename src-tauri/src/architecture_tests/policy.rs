@@ -539,22 +539,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_diagnostics/mod.rs",
-        fully_qualified_owner: "yss_application::ipc::commands::command_diagnostics",
-        canonical_origin_targets: &[
-            "yss_diagnostics::dto::DiagnosticBatchDto",
-            "yss_diagnostics::dto::DiagnosticSubscriptionDto",
-            "yss_diagnostics::dto::FrontendDiagnosticEntryDto",
-            "yss_diagnostics::runtime::DiagnosticsRuntime",
-            "yss_diagnostics::runtime::DiagnosticSubmissionError",
-            "yss_diagnostics::runtime::DiagnosticSubmissionError::Validation",
-            "yss_diagnostics::runtime::DiagnosticSubmissionError::Unavailable",
-            "yss_application::ipc::error::CommandError",
-            "yss_ipc_channel::diagnostics::subscribe_diagnostics",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_hypothesis.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_hypothesis",
         canonical_origin_targets: &[
@@ -1432,17 +1416,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/crates/yss-ipc-channel/src/diagnostics.rs",
-        fully_qualified_owner: "yss_ipc_channel::diagnostics",
-        canonical_origin_targets: &[
-            "yss_diagnostics::runtime::DiagnosticsRuntime",
-            "yss_diagnostics::dispatcher::DiagnosticsUnavailable",
-            "yss_diagnostics::dto::DiagnosticBatchDto",
-            "yss_diagnostics::dto::DiagnosticSubscriptionDto",
-        ],
-    },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-ipc-contract/src/project.rs",
         fully_qualified_owner: "yss_ipc_contract::project",
         canonical_origin_targets: &[
@@ -1667,8 +1640,6 @@ fn non_build_memberships(
         "yss-ipc-contract" | "yss-ipc-event" | "yss-ipc-channel"
     ) {
         layers.insert(RustLayer::Transport);
-    } else if package == "yss-diagnostics" {
-        layers.insert(RustLayer::Diagnostics);
     } else if package == "yss-graph-execution" {
         layers.insert(RustLayer::Execution);
     } else if package == "tauri-plugin-tracing"
@@ -1882,10 +1853,7 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
         (source, target),
         (
             RustLayer::CompositionRoot,
-            RustLayer::Commands
-                | RustLayer::Filesystem
-                | RustLayer::Diagnostics
-                | RustLayer::PureLeaf
+            RustLayer::Commands | RustLayer::Filesystem | RustLayer::PureLeaf
         ) | (RustLayer::Commands, RustLayer::PureLeaf)
             | (
                 RustLayer::PlatformAdapter,
@@ -1899,7 +1867,6 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                     | RustLayer::Graph
                     | RustLayer::Execution
                     | RustLayer::DatabaseCore
-                    | RustLayer::Diagnostics
                     | RustLayer::PureLeaf
             )
             | (
@@ -1912,10 +1879,9 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
             | (RustLayer::DatabaseCore, RustLayer::PureLeaf)
             | (
                 RustLayer::BackendAdapter,
-                RustLayer::DatabaseCore | RustLayer::Diagnostics | RustLayer::PureLeaf
+                RustLayer::DatabaseCore | RustLayer::PureLeaf
             )
             | (RustLayer::Node, RustLayer::PureLeaf)
             | (RustLayer::Transport, RustLayer::PureLeaf)
-            | (RustLayer::Diagnostics, RustLayer::PureLeaf)
     )
 }

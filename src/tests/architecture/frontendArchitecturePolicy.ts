@@ -27,7 +27,7 @@ export const FRONTEND_LAYERS = [
   "services",
   "components-ui",
   "wire-schema",
-  "diagnostics",
+  "logging",
   "pure-shared",
 ] as const satisfies readonly FrontendLayer[];
 
@@ -40,7 +40,7 @@ export const FRONTEND_LITERAL_POLICY_MEMBERSHIP: FrontendLiteralPolicyMembership
   services: ["src/shared/platform/tauriWebview.ts", "src/shared/utils/openExternalUrl.ts"],
   "components-ui": ["src/shared/theme/dockviewTheme.ts"],
   "wire-schema": [],
-  diagnostics: [],
+  logging: [],
   "pure-shared": [],
 };
 
@@ -58,7 +58,7 @@ const LAYER_EDGES = [
   ["application", "services"],
   ["application", "components-ui"],
   ["application", "pure-shared"],
-  ["application", "diagnostics"],
+  ["application", "logging"],
   ["core", "domain"],
   ["core", "pure-shared"],
   ["domain", "pure-shared"],
@@ -68,8 +68,8 @@ const LAYER_EDGES = [
   ["components-ui", "pure-shared"],
   ["wire-schema", "domain"],
   ["wire-schema", "pure-shared"],
-  ["diagnostics", "wire-schema"],
-  ["diagnostics", "pure-shared"],
+  ["logging", "wire-schema"],
+  ["logging", "pure-shared"],
 ] as const satisfies readonly (readonly [FrontendLayer, FrontendLayer])[];
 
 const WORKBENCH_DOCKVIEW_READ_MEMBERS = [
@@ -599,7 +599,7 @@ export const FRONTEND_BASE_RULES: readonly FrontendBaseRule[] = [
     matches: (path) => path.startsWith("src/components/") || isSharedPresentationSource(path),
   },
   { layer: "wire-schema", matches: isSharedWireSource },
-  { layer: "diagnostics", matches: (path) => path.startsWith("src/utils/") },
+  { layer: "logging", matches: (path) => path.startsWith("src/utils/") },
   {
     layer: "pure-shared",
     matches: (path) =>

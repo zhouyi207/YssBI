@@ -43,12 +43,11 @@ pub(super) enum RustLayer {
     Node,
     Transport,
     Logging,
-    Diagnostics,
     PureLeaf,
 }
 
 impl RustLayer {
-    pub(super) const ALL: [Self; 17] = [
+    pub(super) const ALL: [Self; 16] = [
         Self::CompositionRoot,
         Self::BuildScript,
         Self::Commands,
@@ -64,7 +63,6 @@ impl RustLayer {
         Self::Node,
         Self::Transport,
         Self::Logging,
-        Self::Diagnostics,
         Self::PureLeaf,
     ];
 }

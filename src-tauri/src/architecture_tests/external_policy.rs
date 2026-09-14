@@ -89,12 +89,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "regex",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "tauri-plugin-tracing",
         mode: RustDependencyMode::Runtime,
         package_name: "tauri",
@@ -881,36 +875,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "chrono",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-diagnostics",
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-graph-execution",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1441,11 +1405,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "windows-sys",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "regex",
-    },
-    ExternalDependencyUseAllowance {
         source_layer: RustLayer::PlatformAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "tokio",
@@ -1906,11 +1865,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "chrono",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "chrono",
-    },
-    ExternalDependencyUseAllowance {
         source_layer: RustLayer::Logging,
         mode: RustDependencyMode::Runtime,
         package_name: "chrono",
@@ -2017,11 +1971,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Transport,
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
         mode: RustDependencyMode::Runtime,
         package_name: "serde_json",
     },
@@ -2101,11 +2050,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         package_name: "thiserror",
     },
     ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-    },
-    ExternalDependencyUseAllowance {
         source_layer: RustLayer::PureLeaf,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
@@ -2254,16 +2198,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::Commands,
         mode: RustDependencyMode::Runtime,
         package_name: "uuid",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "uuid",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Diagnostics,
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PlatformAdapter,
