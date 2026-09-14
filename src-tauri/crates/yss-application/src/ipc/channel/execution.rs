@@ -1,9 +1,7 @@
-//! Execution and Run Output encoding and channel delivery.
+//! Execution lifecycle/result encoding and channel delivery.
 use crate::execution::run_graph::{RunApplicationEvent, RunApplicationEventKind};
 use tauri::ipc::Channel;
-use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::plan::{PlanOutputRef, PlanPortAddress};
-use yss_graph_execution::run_output::{RunOutputMessage, RunOutputStatus, RunOutputStream};
 use yss_ipc_contract::execution::*;
 use yss_ipc_contract::graph::PortAddressDto;
 
@@ -11,7 +9,6 @@ use yss_ipc_contract::graph::PortAddressDto;
 pub enum RunEventDtoError {
     UnsafePreviewGeneration,
     InvalidOutput,
-    UnexpectedRunOutput,
 }
 
 pub fn output_dto(value: &PlanOutputRef) -> Result<GraphOutputRefDto, RunEventDtoError> {
@@ -41,58 +38,6 @@ fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEventD
         _ => return Err(RunEventDtoError::InvalidOutput),
     };
     Ok(port)
-}
-
-fn run_output_source(
-    source: &yss_graph_execution::plan::PlanSourceIdentity,
-) -> Result<(String, String, PortAddressDto), RunEventDtoError> {
-    GraphResourcePath::new(source.graph().as_str()).map_err(|_| RunEventDtoError::InvalidOutput)?;
-    let node = source.node().ok_or(RunEventDtoError::InvalidOutput)?;
-    uuid::Uuid::parse_str(node.as_str()).map_err(|_| RunEventDtoError::InvalidOutput)?;
-    let port = source.port().ok_or(RunEventDtoError::InvalidOutput)?;
-    if port.as_str().split(':').next() != Some(node.as_str()) {
-        return Err(RunEventDtoError::InvalidOutput);
-    }
-    Ok((
-        source.graph().as_str().to_owned(),
-        node.as_str().to_owned(),
-        port_address_dto(port)?,
-    ))
-}
-
-fn run_output_dto(
-    message: &RunOutputMessage,
-) -> Result<ExecutionChannelEventDto, RunEventDtoError> {
-    match message {
-        RunOutputMessage::Output(event) => {
-            let (source_graph_path, source_node_id, source_port) =
-                run_output_source(event.source())?;
-            Ok(ExecutionChannelEventDto::Output(RunOutputEventDto {
-                run_id: event.run_id().get().to_string(),
-                sequence: event.sequence(),
-                stream: run_output_stream_to_transport(event.stream()),
-                text: event.text().into(),
-                source_graph_path,
-                source_node_id,
-                source_port,
-            }))
-        }
-        RunOutputMessage::Status(event) => {
-            let (source_graph_path, source_node_id, source_port) =
-                run_output_source(event.source())?;
-            Ok(ExecutionChannelEventDto::OutputStatus(
-                RunOutputStatusEventDto {
-                    run_id: event.run_id().get().to_string(),
-                    sequence: event.sequence(),
-                    stream: run_output_stream_to_transport(event.stream()),
-                    status: run_output_status_to_transport(event.status()),
-                    source_graph_path,
-                    source_node_id,
-                    source_port,
-                },
-            ))
-        }
-    }
 }
 
 fn run_failure_to_transport(
@@ -128,7 +73,7 @@ fn run_failure_to_transport(
     }
 }
 
-fn run_event_to_transport(event: RunApplicationEvent) -> Result<RunEventDto, RunEventDtoError> {
+pub fn execution_event_to_transport(event: RunApplicationEvent) -> Result<RunEventDto, RunEventDtoError> {
     let identity = event.identity();
     let run = GraphRunIdentityDto {
         execution_session_id: identity.execution_session_id().as_uuid().to_string(),
@@ -168,44 +113,16 @@ fn run_event_to_transport(event: RunApplicationEvent) -> Result<RunEventDto, Run
                 },
             }
         }
-        RunApplicationEventKind::RunOutput(_) => {
-            return Err(RunEventDtoError::UnexpectedRunOutput);
-        }
     };
     Ok(RunEventDto { run, kind })
 }
 
-fn run_output_stream_to_transport(value: RunOutputStream) -> RunOutputStreamDto {
-    match value {
-        RunOutputStream::Stdout => RunOutputStreamDto::Stdout,
-        RunOutputStream::Stderr => RunOutputStreamDto::Stderr,
-    }
-}
-
-fn run_output_status_to_transport(value: RunOutputStatus) -> RunOutputStatusDto {
-    match value {
-        RunOutputStatus::Truncated => RunOutputStatusDto::Truncated,
-        RunOutputStatus::Dropped => RunOutputStatusDto::Dropped,
-    }
-}
-
-pub fn execution_event_to_transport(
-    event: RunApplicationEvent,
-) -> Result<ExecutionChannelEventDto, RunEventDtoError> {
-    if let RunApplicationEventKind::RunOutput(message) = event.kind() {
-        return run_output_dto(message);
-    }
-    Ok(ExecutionChannelEventDto::Event(run_event_to_transport(
-        event,
-    )?))
-}
-
 pub struct TauriExecutionChannelAdapter {
-    channel: Channel<ExecutionChannelEventDto>,
+    channel: Channel<RunEventDto>,
 }
 
 impl TauriExecutionChannelAdapter {
-    pub fn new(channel: Channel<ExecutionChannelEventDto>) -> Self {
+    pub fn new(channel: Channel<RunEventDto>) -> Self {
         Self { channel }
     }
     pub fn deliver(&self, event: RunApplicationEvent) -> bool {
@@ -217,8 +134,6 @@ impl TauriExecutionChannelAdapter {
 mod tests {
     use super::*;
     use yss_graph_execution::plan::{PlanGraphId, PlanNodeId, PlanSourceIdentity};
-    use yss_graph_execution::run_output::test_support;
-    use yss_graph_execution::run_registry::RunId;
 
     #[test]
     fn run_failure_wire_preserves_the_cause_phase_and_node() {
@@ -250,40 +165,4 @@ mod tests {
         assert_eq!(actual, expected["kind"]);
     }
 
-    #[test]
-    fn run_output_uses_the_existing_flat_channel_wire_with_source_port() {
-        let node_id = "00000000-0000-0000-0000-000000000002";
-        let message = test_support::output(
-            RunId::from_existing(1),
-            1,
-            RunOutputStream::Stdout,
-            "Hello, World!",
-            PlanSourceIdentity::new(
-                PlanGraphId::from_existing("events/Output.yssbi-event".into()),
-                Some(PlanNodeId::from_existing(node_id.into())),
-                Some(PlanPortAddress::from_existing(
-                    format!("{node_id}:message").into_boxed_str(),
-                )),
-            ),
-        );
-
-        let dto = run_output_dto(&message).expect("the runtime output source is valid");
-
-        assert_eq!(
-            serde_json::to_value(dto).expect("run output serializes"),
-            serde_json::json!({
-                "runId": "1",
-                "sequence": 1,
-                "stream": "stdout",
-                "text": "Hello, World!",
-                "sourceGraphPath": "events/Output.yssbi-event",
-                "sourceNodeId": node_id,
-                "sourcePort": {
-                    "kind": "declared",
-                    "nodeId": node_id,
-                    "portKey": "message"
-                }
-            })
-        );
-    }
 }

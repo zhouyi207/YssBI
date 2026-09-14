@@ -9,7 +9,7 @@ use serde::Deserialize;
 use tauri::{State, ipc::Channel};
 use yss_automation_contract::{CapabilityFailure, CapabilityFailureCode};
 use yss_graph_document::GraphDocument;
-use yss_ipc_contract::execution::ExecutionChannelEventDto;
+use yss_ipc_contract::execution::RunEventDto;
 use yss_ipc_contract::harness_graph::{HarnessGraphToolRequestDto, HarnessGraphUpdateDto};
 use yss_project_identity::ProjectInstanceId;
 
@@ -85,7 +85,7 @@ pub async fn prepare_harness_graph_tool(
     runtime: State<'_, HarnessRuntimeState>,
     application: State<'_, ApplicationState>,
     input: PrepareHarnessGraphToolDto,
-    on_execution_event: Channel<ExecutionChannelEventDto>,
+    on_execution_event: Channel<RunEventDto>,
 ) -> Result<HarnessGraphUpdateDto, CommandError> {
     let PrepareHarnessGraphToolDto {
         request_id,

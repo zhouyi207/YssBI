@@ -220,6 +220,7 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
                     Instant::now() + Duration::from_secs(10),
                 ),
                 &PlanExecutionDemand::Default,
+                None,
                 |_| {},
             )
             .unwrap();

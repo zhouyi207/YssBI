@@ -224,14 +224,24 @@ pub struct GraphNodeSemanticFact {
     pub semantic_fingerprint: [u8; 32],
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+impl GraphNodeSemanticFact {
+    /// Includes resolved bindings and coercions, but never localized labels or canvas layout.
+    pub fn execution_fingerprint(&self) -> [u8; 32] {
+        yss_canonical_hash::hash_canonical(
+            "yssbi.graph-node-execution-input.v1",
+            &(&self.semantic_fingerprint, &self.inputs, &self.specialization),
+        ).expect("resolved execution inputs are canonically serializable")
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct GraphResolvedInputBinding {
     pub address: PortAddress,
     pub group: Option<PortInstanceId>,
     pub source: GraphResolvedInputSource,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub enum GraphResolvedInputSource {
     Output(PortAddress),
     Literal(TypedValue),
@@ -314,7 +324,7 @@ pub struct GraphPortSemanticFact {
     pub schema_state: GraphSchemaState,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct GraphKernelSpecialization {
     pub implementation: Box<str>,
     pub input_types: Box<[GraphPortTypeBinding]>,
@@ -322,13 +332,13 @@ pub struct GraphKernelSpecialization {
     pub coercions: Box<[GraphInputCoercion]>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct GraphPortTypeBinding {
     pub address: PortAddress,
     pub value_type: ResolvedType,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct GraphInputCoercion {
     pub address: PortAddress,
     pub kind: InputCoercionKind,

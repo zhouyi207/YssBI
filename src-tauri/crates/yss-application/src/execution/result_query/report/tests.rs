@@ -154,6 +154,7 @@ fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
                 Instant::now() + Duration::from_secs(30),
             ),
             &PlanExecutionDemand::Default,
+            None,
             |_| {},
         )
         .unwrap();
@@ -164,7 +165,7 @@ fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
         .results()
         .iter()
         .filter_map(|entry| {
-            if let StoredResult::Runtime(RuntimeValue::Ols(result)) = entry.value().value() {
+            if let RuntimeValue::Ols(result) = entry.value().value() {
                 Some((entry.result_id(), result.clone()))
             } else {
                 None

@@ -14,7 +14,6 @@ use yss_graph_execution::plan::{
     PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_execution::resource_preparation::{ResourceProviderFactory, RunResourceBindings};
-use yss_graph_execution::result::StoredResult;
 use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionRuntimeState, RunExecutionControl,
 };
@@ -74,6 +73,7 @@ fn execute(
             Instant::now() + Duration::from_secs(10),
         ),
         &PlanExecutionDemand::Default,
+        None,
         |_| {},
     )?;
     let result = run
@@ -82,10 +82,7 @@ fn execute(
         .iter()
         .find(|result| result.output() == &requested_output)
         .unwrap();
-    let StoredResult::Runtime(value) = result.value().value() else {
-        panic!("the requested output must produce a runtime value");
-    };
-    Ok(value.clone())
+    Ok(result.value().value().clone())
 }
 
 fn division_graph(denominator: i64) -> (GraphDocument, NodeId) {
@@ -608,6 +605,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                     .collect(),
                 include_default_results: false,
             },
+            None,
             |_| {},
         )
         .unwrap();
@@ -624,7 +622,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                 .iter()
                 .find(|result| result.output() == output.output())
                 .unwrap();
-            let StoredResult::Runtime(RuntimeValue::Series(column)) = result.value().value() else {
+            let RuntimeValue::Series(column) = result.value().value() else {
                 panic!("lazy column output");
             };
             assert_eq!(column.relation(), &relation);
@@ -921,7 +919,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     };
     let result = app.query_pin_result(query(fit, "fitted")).unwrap().unwrap();
     assert_eq!(result.provenance().run_id(), run_id);
-    let StoredResult::Runtime(RuntimeValue::List(fitted)) = result.value().value() else {
+    let RuntimeValue::List(fitted) = result.value().value() else {
         panic!("fitted values");
     };
     assert_eq!(fitted.len(), 4);
@@ -932,7 +930,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .query_pin_result(query(fit, "residuals"))
         .unwrap()
         .unwrap();
-    let StoredResult::Runtime(RuntimeValue::List(residuals)) = result.value().value() else {
+    let RuntimeValue::List(residuals) = result.value().value() else {
         panic!("residuals");
     };
     assert!(
@@ -946,7 +944,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .unwrap();
     assert!(matches!(
         relation.value().value(),
-        StoredResult::Runtime(RuntimeValue::Relation(_))
+        RuntimeValue::Relation(_)
     ));
     let page = app
         .query_result_page(relation.provenance().reference(), 0, 2)
@@ -967,7 +965,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
             .query_pin_result(ResultPinQuery::new(path.clone(), output))
             .unwrap()
             .unwrap();
-        let StoredResult::Runtime(RuntimeValue::Series(column)) = result.value().value() else {
+        let RuntimeValue::Series(column) = result.value().value() else {
             panic!("Decompose must retain a lazy column handle");
         };
         assert_eq!(column.column(), name);
@@ -989,7 +987,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .query_pin_result(query(multiply, "result"))
         .unwrap()
         .unwrap();
-    let StoredResult::Runtime(RuntimeValue::Series(computed)) = result.value().value() else {
+    let RuntimeValue::Series(computed) = result.value().value() else {
         panic!("arithmetic must retain a lazy series")
     };
     assert_eq!(computed.relation(), series[0].relation());

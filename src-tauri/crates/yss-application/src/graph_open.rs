@@ -302,6 +302,10 @@ pub(crate) fn open_graph_in_session(
         analysis: &analysis,
         registry_fingerprint,
     })?;
+    captured.execution().observe_graph_result_inputs(
+        request.graph_path().as_str(),
+        crate::graph_contracts::graph_result_inputs(request.graph_path(), &analysis, &database, registry_fingerprint),
+    );
     Ok(OpenGraphApplicationReceipt::new(
         captured.project_instance_id().clone(),
         request.graph_path().clone(),

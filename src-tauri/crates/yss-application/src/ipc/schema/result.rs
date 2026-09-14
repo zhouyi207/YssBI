@@ -222,9 +222,54 @@ impl From<ResultAnalysisProjection> for ResultAnalysisResponseDto {
     }
 }
 
+
+pub fn graph_result_state_to_dto(projection: crate::execution::result_query::GraphResultState) -> Result<yss_ipc_contract::execution::GraphResultStateDto, CommandError> {
+    use yss_graph_execution::result::ResultCacheState;
+    use yss_ipc_contract::execution::{GraphResultStateDto, OutputResultStateDto, ResultCacheStateDto};
+    let outputs = projection.outputs.iter().map(|(output, state)| Ok(OutputResultStateDto {
+        output: crate::ipc::channel::execution::output_dto(output)
+            .map_err(|_| CommandError::diagnosed("result_source_read_failed", "invalid cached output identity"))?,
+        state: match state {
+            ResultCacheState::Missing => ResultCacheStateDto::Missing,
+            ResultCacheState::Stale => ResultCacheStateDto::Stale,
+            ResultCacheState::Valid { .. } => ResultCacheStateDto::Valid,
+        },
+        result_id: match state { ResultCacheState::Valid { result_id } => Some(result_id.get().to_string()), _ => None },
+    })).collect::<Result<_, CommandError>>()?;
+    Ok(GraphResultStateDto {
+        execution_session_id: projection.execution_session_id.as_uuid().to_string(),
+        semantic_input_hash: projection.semantic_input_hash.iter().map(|byte| format!("{byte:02x}")).collect(),
+        compiled_artifact_id: projection.compiled_artifact_id.map(|hash| hash.iter().map(|byte| format!("{byte:02x}")).collect()),
+        outputs,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graph_cache_wire_distinguishes_valid_identities_from_stale_and_missing_outputs() {
+        use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+        use yss_graph_execution::result::ResultCacheState;
+        let state = crate::execution::result_query::GraphResultState {
+            execution_session_id: ExecutionSessionId::new(uuid::Uuid::from_u128(1)),
+            semantic_input_hash: [0xaa; 32],
+            compiled_artifact_id: Some([0xaa; 32]),
+            outputs: [
+                ("result", ResultCacheState::Valid { result_id: ResultId::from_existing(17) }),
+                ("stale", ResultCacheState::Stale),
+                ("unavailable", ResultCacheState::Missing),
+            ].into_iter().map(|(port, state)| (PlanOutputRef::new(
+                PlanGraphId::from_existing("events/contract.yssbi-event".into()),
+                PlanPortAddress::from_existing(format!("00000000-0000-0000-0000-000000000002:{port}").into()),
+            ), state)).collect(),
+        };
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../../../src/tests/fixtures/node-system-contracts/execution-wire.json"
+        )).unwrap();
+        assert_eq!(serde_json::to_value(graph_result_state_to_dto(state).unwrap()).unwrap(), fixture["graphResultState"]);
+    }
 
     #[test]
     fn ols_overview_wire_matches_the_frontend_contract_and_stays_bounded() {

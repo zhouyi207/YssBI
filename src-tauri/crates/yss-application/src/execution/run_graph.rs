@@ -165,7 +165,6 @@ pub enum RunApplicationEventKind {
         result_id: yss_graph_execution::result::ResultId,
         source: yss_graph_execution::plan::PlanSourceIdentity,
     },
-    RunOutput(yss_graph_execution::run_output::RunOutputMessage),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -327,6 +326,12 @@ where
     {
         return Err(ExecutionApplicationError::CompiledDraftUnavailable);
     }
+    let result_basis = captured.execution().capture_result_run_basis(
+        request.graph_path.as_str(),
+        crate::graph_contracts::graph_result_inputs(
+            &request.graph_path, compiled_draft.analysis(), &database_facts, captured.graph().registry_fingerprint(),
+        ),
+    ).ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
     let basis = plan_basis(&captured, prepared_project.resources().grants())?;
     let graph_package = compiled_draft.package().clone();
     let package = execution_package_from_graph(graph_package, basis)
@@ -365,6 +370,7 @@ where
         captured.resource_provider_factory(),
         &control,
         &plan_demand,
+        Some(&result_basis),
         |event| match event {
             PreparedExecutionEvent::RunStarted { run_id, outputs } => {
                 let identity = RunIdentity::new(
@@ -376,17 +382,6 @@ where
                 let _ = deliver(RunApplicationEvent::new(
                     identity,
                     RunApplicationEventKind::RunStarted { outputs },
-                ));
-            }
-            PreparedExecutionEvent::RunOutput(message) => {
-                let identity = RunIdentity::new(
-                    captured.execution().session_id(),
-                    request.graph_path.clone(),
-                    message.run_id(),
-                );
-                let _ = deliver(RunApplicationEvent::new(
-                    identity,
-                    RunApplicationEventKind::RunOutput(message),
                 ));
             }
         },

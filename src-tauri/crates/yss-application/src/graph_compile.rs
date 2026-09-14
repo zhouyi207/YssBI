@@ -142,7 +142,9 @@ pub fn compile_graph_draft(
 
     captured
         .execution()
-        .observe_graph_result_inputs(graph_path.as_str(), projection.basis.semantic_input_hash);
+        .observe_graph_result_inputs(graph_path.as_str(), crate::graph_contracts::graph_result_inputs(
+            &graph_path, &analysis, &database, registry_fingerprint,
+        ));
 
     Ok(match compilation.artifact_id() {
         Some(artifact_id) => CompileGraphDraftReceipt::Ready {

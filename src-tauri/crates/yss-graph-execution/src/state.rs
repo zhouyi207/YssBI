@@ -16,9 +16,8 @@ use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
-use crate::result::{ResultId, ResultProvenance, StoredResult, StoredResultSnapshot};
+use crate::result::{GraphResultInputs, ResultCacheState, ResultId, ResultProvenance, ResultRunBasis, StoredResult, StoredResultSnapshot};
 use crate::result_store::ResultStore;
-use crate::run_output::RunOutputMessage;
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
 use crate::value::RuntimeValue;
@@ -203,6 +202,7 @@ struct PreparedPlanExecution<'a> {
 
 struct PreparedExecutionDispatch<'a> {
     demand: &'a crate::plan::PlanExecutionDemand,
+    result_basis: Option<&'a ResultRunBasis>,
     executor: &'a dyn PreparedPlanExecutor,
     on_event: Option<&'a mut dyn FnMut(PreparedExecutionEvent)>,
 }
@@ -211,7 +211,6 @@ trait PreparedPlanExecutor: Send + Sync {
     fn execute(
         &self,
         execution: PreparedPlanExecution<'_>,
-        _on_output: &mut dyn FnMut(RunOutputMessage),
     ) -> Result<SchedulerOutput, KernelExecutionError>;
 }
 
@@ -223,7 +222,6 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
     fn execute(
         &self,
         execution: PreparedPlanExecution<'_>,
-        _on_output: &mut dyn FnMut(RunOutputMessage),
     ) -> Result<SchedulerOutput, KernelExecutionError> {
         let PreparedPlanExecution {
             package,
@@ -338,7 +336,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     return Err(KernelExecutionError::Failed);
                 }
                 results.push(SchedulerResult {
-                    value: StoredResult::Runtime(value.clone()),
+                    value: StoredResult::new(value.clone()),
                     category: output.contract().category,
                     output: output.output().clone(),
                 });
@@ -880,7 +878,6 @@ pub enum PreparedExecutionEvent {
         run_id: crate::run_registry::RunId,
         outputs: Box<[crate::plan::PlanOutputRef]>,
     },
-    RunOutput(RunOutputMessage),
 }
 
 impl ExecutedPreparedRun {
@@ -1046,11 +1043,6 @@ impl ExecutionRuntimeState {
         state.lock().unwrap_or_else(PoisonError::into_inner).closed
     }
 
-    #[cfg(test)]
-    pub(crate) fn results(&self) -> &ResultStore {
-        &self.results
-    }
-
     pub fn query_result(&self, result_id: ResultId) -> Option<StoredResultSnapshot> {
         self.results.get(result_id)
     }
@@ -1085,6 +1077,7 @@ impl ExecutionRuntimeState {
             control,
             PreparedExecutionDispatch {
                 demand: &crate::plan::PlanExecutionDemand::Default,
+                result_basis: None,
                 executor: self.executor.as_ref(),
                 on_event: None,
             },
@@ -1101,6 +1094,7 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
         demand: &crate::plan::PlanExecutionDemand,
+        result_basis: Option<&ResultRunBasis>,
         mut on_event: impl FnMut(PreparedExecutionEvent),
     ) -> Result<ExecutedPreparedRun, ExecutePreparedError> {
         self.execute_prepared_inner(
@@ -1110,6 +1104,7 @@ impl ExecutionRuntimeState {
             control,
             PreparedExecutionDispatch {
                 demand,
+                result_basis,
                 executor: self.executor.as_ref(),
                 on_event: Some(&mut on_event),
             },
@@ -1127,6 +1122,7 @@ impl ExecutionRuntimeState {
     ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
         let PreparedExecutionDispatch {
             demand,
+            result_basis,
             executor,
             mut on_event,
         } = dispatch;
@@ -1177,7 +1173,7 @@ impl ExecutionRuntimeState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(run_id, Arc::clone(&control.cancellation));
-        if !self.results.begin_run(run_id, &outputs) {
+        if !self.results.begin_run(run_id, &outputs, result_basis) {
             let result = terminate_run(
                 &mut lifecycle,
                 run_id,
@@ -1210,11 +1206,6 @@ impl ExecutionRuntimeState {
             return result;
         }
 
-        let mut on_output = |message| {
-            if let Some(on_event) = on_event.as_mut() {
-                on_event(PreparedExecutionEvent::RunOutput(message));
-            }
-        };
         let output = match executor.execute(
             PreparedPlanExecution {
                 package: plan.package(),
@@ -1224,7 +1215,6 @@ impl ExecutionRuntimeState {
                 run_id,
                 demand,
             },
-            &mut on_output,
         ) {
             Ok(output) => output,
             Err(KernelExecutionError::Cancelled) => {
@@ -1330,6 +1320,7 @@ impl ExecutionRuntimeState {
             control,
             PreparedExecutionDispatch {
                 demand: &crate::plan::PlanExecutionDemand::Default,
+                result_basis: None,
                 executor,
                 on_event: None,
             },
@@ -1375,8 +1366,24 @@ impl ExecutionRuntimeState {
         }
     }
 
-    pub fn observe_graph_result_inputs(&self, graph: &str, inputs: [u8; 32]) {
+    pub fn observe_graph_result_inputs(&self, graph: &str, inputs: GraphResultInputs) {
         self.results.observe_graph_inputs(graph, inputs);
+    }
+
+    pub fn capture_result_run_basis(&self, graph: &str, inputs: GraphResultInputs) -> Option<ResultRunBasis> {
+        self.results.capture_run_basis(graph, inputs)
+    }
+
+    pub fn query_result_cache_states(&self, graph: &str, semantic_input_hash: &[u8; 32]) -> Option<BTreeMap<crate::plan::PlanOutputRef, ResultCacheState>> {
+        self.results.query_cache_states(graph, semantic_input_hash)
+    }
+
+    pub fn result_resource_keys(&self, graph: &str) -> std::collections::BTreeSet<Box<str>> {
+        self.results.resource_keys(graph)
+    }
+
+    pub fn observe_result_resource_versions(&self, versions: &BTreeMap<Box<str>, Option<[u8; 32]>>) {
+        self.results.observe_resource_versions(versions);
     }
 
     pub fn invalidate_graph_results(&self, graph: &str) {
@@ -1685,8 +1692,7 @@ mod tests {
         fn execute(
             &self,
             execution: PreparedPlanExecution<'_>,
-            _on_output: &mut dyn FnMut(RunOutputMessage),
-        ) -> Result<SchedulerOutput, KernelExecutionError> {
+            ) -> Result<SchedulerOutput, KernelExecutionError> {
             let bindings = execution.bindings;
             let resources = execution.resources;
             assert_eq!(bindings.len(), 1);
@@ -1696,7 +1702,7 @@ mod tests {
             );
             Ok(SchedulerOutput::new(
                 vec![SchedulerResult {
-                    value: StoredResult::Runtime(crate::value::RuntimeValue::Integer(5)),
+                    value: StoredResult::new(crate::value::RuntimeValue::Integer(5)),
                     category: crate::plan::ResultCategory::Value,
                     output: operation_output("test-executor", ValueRef::new(0))
                         .output()
@@ -1807,7 +1813,7 @@ mod tests {
 
         assert_eq!(candidate.results().len(), 2);
         assert!(candidate.results().iter().all(|result| {
-            result.value().value() == &StoredResult::Runtime(crate::value::RuntimeValue::Integer(7))
+            result.value().value() == &crate::value::RuntimeValue::Integer(7)
         }));
         let outputs = candidate
             .results()
@@ -1911,13 +1917,14 @@ mod tests {
                     outputs: vec![requested].into_boxed_slice(),
                     include_default_results: false,
                 },
+                None,
                 |_| {},
             )
             .expect("an unrelated unsupported component must not be scheduled");
 
         assert_eq!(
             executed.handoff().results()[0].value().value(),
-            &StoredResult::Runtime(crate::value::RuntimeValue::Integer(7))
+            &crate::value::RuntimeValue::Integer(7)
         );
     }
 
@@ -1940,7 +1947,7 @@ mod tests {
         assert_eq!(handoff.results()[0].result_id(), ResultId::from_existing(1));
         assert_eq!(
             handoff.results()[0].value().value(),
-            &StoredResult::Runtime(crate::value::RuntimeValue::Integer(5))
+            &crate::value::RuntimeValue::Integer(5)
         );
         assert_eq!(
             handoff.results()[0].category(),

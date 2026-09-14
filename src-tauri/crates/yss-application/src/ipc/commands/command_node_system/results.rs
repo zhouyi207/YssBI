@@ -7,7 +7,7 @@ use crate::ipc::error::CommandError;
 use crate::ipc::schema::result::ResultReferenceDto;
 use serde::Serialize;
 use tauri::State;
-use yss_graph_execution::result::{ResultId, ResultRetentionError, StoredResult};
+use yss_graph_execution::result::{ResultId, ResultRetentionError};
 use yss_graph_execution::value::RuntimeValue;
 
 pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
@@ -39,6 +39,9 @@ pub(super) fn result_query_command_error(error: ResultQueryApplicationError) -> 
         }
         ResultQueryApplicationError::Relation(error) => {
             CommandError::diagnosed("result_source_read_failed", format!("{error:?}"))
+        }
+        ResultQueryApplicationError::Resources(error) => {
+            super::common::resource_mutation_to_command_error(error, "stale_result_reference")
         }
     }
 }
@@ -88,29 +91,20 @@ pub fn get_result_value(
     };
     if matches!(
         result.value().value(),
-        StoredResult::Runtime(
-            RuntimeValue::List(_) | RuntimeValue::Relation(_) | RuntimeValue::Series(_)
-        )
+        RuntimeValue::List(_) | RuntimeValue::Relation(_) | RuntimeValue::Series(_)
     ) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
     let value = match result.value().value() {
-        StoredResult::Runtime(RuntimeValue::Ols(_)) => {
+        RuntimeValue::Ols(_) => {
             let report = state
                 .query_ols_report(reference)
                 .map_err(super::reports::report_query_error)?;
             serde_json::to_value(crate::ipc::schema::result::OlsReportDto::from(report))
                 .map_err(|_| CommandError::expected("result_value_not_json"))?
         }
-        StoredResult::Runtime(value) => runtime_value_to_json(value)
+        value => runtime_value_to_json(value)
             .map_err(|_| CommandError::expected("result_value_not_json"))?,
-        StoredResult::Scalar(value) => runtime_value_to_json(&RuntimeValue::Decimal(*value))
-            .map_err(|_| CommandError::expected("result_value_not_json"))?,
-        StoredResult::Text(value) => serde_json::Value::String(value.to_string()),
-        StoredResult::Empty => serde_json::Value::Null,
-        StoredResult::Categorized { .. } => {
-            return Err(CommandError::expected("result_value_not_json"));
-        }
     };
     let encoded_size = serde_json::to_vec(&value)
         .map_err(|_| CommandError::expected("result_value_not_json"))?
@@ -165,6 +159,19 @@ pub fn get_pin_result(
         })
         .transpose()
         .map_err(|error| CommandError::diagnosed("result_source_read_failed", format!("{error:?}")))
+}
+
+#[tauri::command]
+pub fn get_graph_result_state(
+    state: State<'_, ApplicationState>,
+    graph_path: String,
+    semantic_input_hash: String,
+) -> Result<Option<yss_ipc_contract::execution::GraphResultStateDto>, CommandError> {
+    let graph = yss_graph_document::GraphResourcePath::new(graph_path)
+        .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?;
+    let hash = super::common::parse_graph_fingerprint(&semantic_input_hash, "invalid_graph_projection_basis")?;
+    state.query_graph_result_state(graph, hash).map_err(result_query_command_error)?
+        .map(crate::ipc::schema::result::graph_result_state_to_dto).transpose()
 }
 
 fn result_requires_paging(result_id: ResultId, value_kind: &'static str) -> CommandError {

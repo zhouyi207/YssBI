@@ -47,7 +47,7 @@ impl ReadyResult {
     ) -> Self {
         Self {
             result_id,
-            value: StoredResult::with_category(value, category),
+            value: value.with_category(category),
             pin,
         }
     }
@@ -247,7 +247,7 @@ pub mod test_support {
         SuccessfulExecutionCandidate::from_scheduler(
             vec![ReadyResult::from_scheduler(
                 result_id,
-                StoredResult::Scalar(3.5),
+                StoredResult::new(crate::value::RuntimeValue::Decimal(3.5)),
                 crate::plan::ResultCategory::Value,
                 pin,
             )]

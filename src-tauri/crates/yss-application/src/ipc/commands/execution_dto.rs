@@ -4,7 +4,7 @@ use crate::ipc::channel::execution::{RunEventDtoError, output_dto};
 use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
-use yss_graph_execution::result::{ResultId, StoredResult, StoredResultSnapshot};
+use yss_graph_execution::result::{ResultId, StoredResultSnapshot};
 use yss_graph_execution::value::RuntimeValue;
 use yss_ipc_contract::execution::{
     ExecutionDemandDto, GraphOutputRefDto, MAX_SAFE_PREVIEW_GENERATION,
@@ -100,7 +100,6 @@ pub enum ResultReportKindDto {
 pub enum ResultValueKindDto {
     Scalar,
     Sequence,
-    Unknown,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,14 +122,12 @@ impl ResultDescriptorDto {
     ) -> Result<Self, RunEventDtoError> {
         let stored = result.value().value();
         let (value_kind, total_count) = match stored {
-            StoredResult::Categorized { .. } => return Err(RunEventDtoError::InvalidOutput),
-            StoredResult::Runtime(RuntimeValue::List(values)) => {
+            RuntimeValue::List(values) => {
                 (ResultValueKindDto::Sequence, Some(values.len()))
             }
-            StoredResult::Runtime(RuntimeValue::Relation(_) | RuntimeValue::Series(_)) => {
+            RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
                 (ResultValueKindDto::Sequence, None)
             }
-            StoredResult::Empty => (ResultValueKindDto::Unknown, Some(0)),
             _ => (ResultValueKindDto::Scalar, Some(1)),
         };
         let output = result.output();

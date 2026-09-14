@@ -17,7 +17,6 @@ use yss_graph_execution::{
         PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
     },
     resource_preparation::{ResourceProviderFactory, RunResourceBindings},
-    result::StoredResult,
     state::{ExecutionRuntimeState, RunExecutionControl},
     value::RuntimeValue,
 };
@@ -247,6 +246,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
                     Instant::now() + Duration::from_secs(30),
                 ),
                 &PlanExecutionDemand::Default,
+                None,
                 |_| {},
             )
             .unwrap();
@@ -282,7 +282,7 @@ fn node_owned_ols_configuration_compiles_and_changes_computed_results() {
     let local = execute(&document);
     let model_key = port(fit, "model").to_string();
     let report_key = port(summary, "report").to_string();
-    let StoredResult::Runtime(RuntimeValue::Record(model)) = &local[&model_key] else {
+    let RuntimeValue::Record(model) = &local[&model_key] else {
         panic!("model must be a record");
     };
     assert_eq!(model["constant"], RuntimeValue::Bool(false));

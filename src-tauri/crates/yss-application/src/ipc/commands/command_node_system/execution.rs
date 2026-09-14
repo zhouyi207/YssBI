@@ -6,7 +6,7 @@ use crate::ipc::channel::execution::TauriExecutionChannelAdapter;
 use crate::ipc::error::CommandError;
 use serde::Serialize;
 use tauri::{State, ipc::Channel};
-use yss_ipc_contract::execution::ExecutionChannelEventDto;
+use yss_ipc_contract::execution::RunEventDto;
 use yss_ipc_contract::execution::ExecutionDemandDto;
 use yss_project_identity::ProjectInstanceId;
 
@@ -188,12 +188,12 @@ pub async fn execute_compiled_graph(
     graph_path: String,
     compiled_artifact_id: String,
     demand: ExecutionDemandDto,
-    on_event: Channel<ExecutionChannelEventDto>,
+    on_event: Channel<RunEventDto>,
 ) -> Result<(), CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let demand = crate::ipc::commands::execution_dto::execution_demand_to_application(demand)
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
-    let compiled_artifact_id = parse_compiled_artifact_id(&compiled_artifact_id)?;
+    let compiled_artifact_id = super::common::parse_graph_fingerprint(&compiled_artifact_id, "invalid_compiled_artifact_id")?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let channel = TauriExecutionChannelAdapter::new(on_event);
@@ -233,16 +233,4 @@ pub async fn execute_compiled_graph(
     })
     .await
     .map_err(CommandError::internal)?
-}
-
-fn parse_compiled_artifact_id(value: &str) -> Result<[u8; 32], CommandError> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(CommandError::expected("invalid_compiled_artifact_id"));
-    }
-    let mut bytes = [0_u8; 32];
-    for (index, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
-            .map_err(|_| CommandError::expected("invalid_compiled_artifact_id"))?;
-    }
-    Ok(bytes)
 }

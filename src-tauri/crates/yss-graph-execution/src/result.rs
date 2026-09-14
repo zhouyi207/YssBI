@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::identity::ExecutionSessionId;
@@ -28,6 +29,36 @@ pub struct ResultReference {
     pub result_id: ResultId,
 }
 
+/// Application maps Graph semantics and resource versions into this neutral execution input.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutputResultInputs {
+    pub fingerprint: [u8; 32],
+    pub sources: BTreeSet<PlanOutputRef>,
+    pub resources: BTreeMap<Box<str>, Option<[u8; 32]>>,
+    pub available: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GraphResultInputs {
+    pub semantic_input_hash: [u8; 32],
+    pub outputs: BTreeMap<PlanOutputRef, OutputResultInputs>,
+}
+
+/// A run captures this before preparation. Undo cannot renew an obsolete admission.
+#[derive(Clone, Debug)]
+pub struct ResultRunBasis {
+    pub(crate) graph: Box<str>,
+    pub(crate) revision: uuid::Uuid,
+    pub(crate) inputs: GraphResultInputs,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResultCacheState {
+    Missing,
+    Stale,
+    Valid { result_id: ResultId },
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ResultRetentionError {
     #[error("result is no longer available")]
@@ -41,39 +72,30 @@ pub enum ResultRetentionError {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum StoredResult {
-    Runtime(RuntimeValue),
-    Scalar(f64),
-    Text(Box<str>),
-    Empty,
-    Categorized {
-        value: Box<StoredResult>,
-        category: ResultCategory,
-    },
+pub struct StoredResult {
+    value: RuntimeValue,
+    category: ResultCategory,
 }
 
 impl StoredResult {
-    pub(crate) fn with_category(value: StoredResult, category: ResultCategory) -> Self {
-        Self::Categorized {
-            value: Box::new(value),
-            category,
+    pub fn new(value: RuntimeValue) -> Self {
+        Self {
+            value,
+            category: ResultCategory::Value,
         }
     }
 
-    pub fn value(&self) -> &StoredResult {
-        match self {
-            Self::Categorized { value, .. } => value.value(),
-            value => value,
-        }
+    pub(crate) fn with_category(mut self, category: ResultCategory) -> Self {
+        self.category = category;
+        self
+    }
+
+    pub fn value(&self) -> &RuntimeValue {
+        &self.value
     }
 
     pub const fn category(&self) -> ResultCategory {
-        match self {
-            Self::Categorized { category, .. } => *category,
-            Self::Runtime(_) | Self::Scalar(_) | Self::Text(_) | Self::Empty => {
-                ResultCategory::Value
-            }
-        }
+        self.category
     }
 }
 
@@ -120,7 +142,7 @@ impl ResultProvenance {
     }
 }
 
-/// One coherent view of the current output value and its provenance.
+/// One immutable result read view, retained by its output or an explicit report lease.
 #[derive(Clone, Debug)]
 pub struct StoredResultSnapshot {
     value: Arc<StoredResult>,

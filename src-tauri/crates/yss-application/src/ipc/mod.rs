@@ -43,6 +43,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_result_table_page,
         analyze_result,
         get_pin_result,
+        get_graph_result_state,
         get_project_databases,
         get_current_project_activation,
         get_project_path,

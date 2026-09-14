@@ -5,12 +5,15 @@ use uuid::Uuid;
 use crate::finalization::ReadyResult;
 use crate::plan::PlanOutputRef;
 pub use crate::result::{ResultId, StoredResult};
-use crate::result::{ResultRetentionError, StoredResultSnapshot};
+use crate::result::{
+    GraphResultInputs, OutputResultInputs, ResultCacheState, ResultRetentionError, ResultRunBasis,
+    StoredResultSnapshot,
+};
 use crate::run_registry::RunId;
 
 struct ResultEntry {
     snapshot: StoredResultSnapshot,
-    current: bool,
+    cached: bool,
     leases: BTreeSet<Uuid>,
 }
 
@@ -21,10 +24,24 @@ struct ResultLease {
 }
 
 #[derive(Default)]
+struct CachedOutput {
+    run: Option<RunId>,
+    result: Option<ResultId>,
+    inputs: Option<OutputResultInputs>,
+    source_results: BTreeMap<PlanOutputRef, ResultId>,
+    valid: bool,
+}
+
+struct ObservedGraphInputs {
+    revision: Uuid,
+    inputs: GraphResultInputs,
+}
+
+#[derive(Default)]
 struct ResultStoreRegistry {
     values: BTreeMap<ResultId, ResultEntry>,
-    graph_inputs: BTreeMap<String, [u8; 32]>,
-    outputs: BTreeMap<PlanOutputRef, (RunId, Option<ResultId>)>,
+    graph_inputs: BTreeMap<String, ObservedGraphInputs>,
+    outputs: BTreeMap<PlanOutputRef, CachedOutput>,
     leases: BTreeMap<Uuid, ResultLease>,
     owner_leases: BTreeMap<Box<str>, BTreeSet<Uuid>>,
     closed_owners: BTreeSet<Box<str>>,
@@ -35,7 +52,7 @@ impl ResultStoreRegistry {
         if self
             .values
             .get(&id)
-            .is_some_and(|entry| !entry.current && entry.leases.is_empty())
+            .is_some_and(|entry| !entry.cached && entry.leases.is_empty())
         {
             self.values.remove(&id);
         }
@@ -43,7 +60,7 @@ impl ResultStoreRegistry {
 
     fn detach(&mut self, id: ResultId) {
         if let Some(entry) = self.values.get_mut(&id) {
-            entry.current = false;
+            entry.cached = false;
             self.collect(id);
         }
     }
@@ -73,17 +90,94 @@ impl ResultStoreRegistry {
 
     fn detach_graph(&mut self, graph: &str) {
         let mut detached = Vec::new();
-        self.outputs.retain(|output, (_, result)| {
+        self.outputs.retain(|output, cached| {
             if output.graph().as_str() != graph {
                 return true;
             }
-            if let Some(result) = result {
-                detached.push(*result);
+            if let Some(result) = cached.result {
+                detached.push(result);
             }
             false
         });
         for id in detached {
             self.detach(id);
+        }
+    }
+
+    fn observe_graph_inputs(&mut self, graph: &str, inputs: GraphResultInputs) {
+        if self.graph_inputs.get(graph).is_some_and(|current| current.inputs == inputs) {
+            return;
+        }
+        let mut detached = Vec::new();
+        self.outputs.retain(|output, cached| {
+            if output.graph().as_str() != graph {
+                return true;
+            }
+            // The cache may survive an edit; the old run's publication authority never does.
+            cached.run = None;
+            if inputs.outputs.contains_key(output) {
+                return true;
+            }
+            if let Some(id) = cached.result {
+                detached.push(id);
+            }
+            false
+        });
+        for id in detached {
+            self.detach(id);
+        }
+        self.graph_inputs.insert(graph.to_owned(), ObservedGraphInputs {
+            revision: Uuid::new_v4(),
+            inputs,
+        });
+        self.refresh_graph(graph);
+    }
+
+    fn refresh_graph(&mut self, graph: &str) {
+        let observed = self.graph_inputs.get(graph);
+        let mut pending = Vec::new();
+        let mut remaining = BTreeMap::new();
+        let mut dependents: BTreeMap<PlanOutputRef, Vec<PlanOutputRef>> = BTreeMap::new();
+        for (output, cached) in &self.outputs {
+            if output.graph().as_str() != graph || cached.result.is_none() {
+                continue;
+            }
+            match (&cached.inputs, observed.and_then(|current| current.inputs.outputs.get(output))) {
+                (Some(produced), Some(current)) if current.available && produced == current => {
+                    if !produced.sources.iter().all(|source| {
+                        let actual = self.outputs.get(source).and_then(|value| value.result);
+                        actual.is_some() && actual == cached.source_results.get(source).copied()
+                    }) {
+                        continue;
+                    }
+                    remaining.insert(output.clone(), produced.sources.len());
+                    for source in &produced.sources {
+                        dependents.entry(source.clone()).or_default().push(output.clone());
+                    }
+                    if produced.sources.is_empty() {
+                        pending.push(output.clone());
+                    }
+                }
+                // Standalone execution has no editor-provided semantic basis.
+                (None, None) if observed.is_none() => pending.push(output.clone()),
+                _ => {}
+            }
+        }
+        for (output, cached) in &mut self.outputs {
+            if output.graph().as_str() == graph {
+                cached.valid = false;
+            }
+        }
+        // One dependency pass also fails closed for cycles and missing upstream outputs.
+        while let Some(output) = pending.pop() {
+            self.outputs.get_mut(&output).expect("indexed cached output").valid = true;
+            for dependent in dependents.get(&output).into_iter().flatten() {
+                let count = remaining.get_mut(dependent).expect("indexed dependent");
+                *count -= 1;
+                if *count == 0 {
+                    pending.push(dependent.clone());
+                }
+            }
         }
     }
 }
@@ -121,7 +215,8 @@ impl ResultStore {
             .outputs
             .iter()
             .filter(|(output, _)| output.graph().as_str() == graph)
-            .filter_map(|(_, (_, id))| id.and_then(|id| registry.values.get(&id)))
+            .filter(|(_, cached)| cached.valid)
+            .filter_map(|(_, cached)| cached.result.and_then(|id| registry.values.get(&id)))
             .take(limit)
             .map(|entry| entry.snapshot.clone())
             .collect()
@@ -279,24 +374,40 @@ impl ResultStore {
         }
     }
 
-    pub(crate) fn begin_run(&self, run: RunId, outputs: &[PlanOutputRef]) -> bool {
+    pub(crate) fn begin_run(&self, run: RunId, outputs: &[PlanOutputRef], basis: Option<&ResultRunBasis>) -> bool {
         let mut registry = self
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
+        if let Some(basis) = basis {
+            if !registry.graph_inputs.get(basis.graph.as_ref()).is_some_and(|current| {
+                current.revision == basis.revision && current.inputs == basis.inputs
+            }) || outputs.iter().any(|output| !basis.inputs.outputs.contains_key(output)) {
+                return false;
+            }
+        } else if outputs.iter().any(|output| registry.graph_inputs.contains_key(output.graph().as_str())) {
+            return false;
+        }
         if outputs.iter().any(|output| {
             registry
                 .outputs
                 .get(output)
-                .is_some_and(|(owner, _)| *owner > run)
+                .is_some_and(|cached| cached.run.is_some_and(|owner| owner > run))
         }) {
             return false;
         }
         for output in outputs {
-            if let Some((_, Some(previous))) = registry.outputs.insert(output.clone(), (run, None))
-            {
+            let previous = registry.outputs.insert(output.clone(), CachedOutput {
+                run: Some(run),
+                inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
+                ..Default::default()
+            }).and_then(|cached| cached.result);
+            if let Some(previous) = previous {
                 registry.detach(previous);
             }
+        }
+        for graph in outputs.iter().map(|output| output.graph().as_str()).collect::<BTreeSet<_>>() {
+            registry.refresh_graph(graph);
         }
         true
     }
@@ -307,9 +418,15 @@ impl ResultStore {
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
+        let published = results.iter().map(|result| (result.output().clone(), result.result_id())).collect::<BTreeMap<_, _>>();
         if results.iter().any(|result| {
-            registry.outputs.get(result.output()).map(|(run, _)| *run)
+            registry.outputs.get(result.output()).and_then(|cached| cached.run)
                 != Some(result.pin().provenance().run_id())
+                || registry.outputs.get(result.output()).is_some_and(|cached| {
+                    cached.result.is_some() || cached.inputs.as_ref().is_some_and(|inputs| {
+                        inputs.sources.iter().any(|source| !published.contains_key(source))
+                    })
+                })
                 || registry
                     .values
                     .get(&result.result_id())
@@ -323,11 +440,14 @@ impl ResultStore {
         for result in results {
             let id = result.result_id();
             let provenance = result.pin().provenance();
-            if let Some((_, Some(previous))) = registry
-                .outputs
-                .insert(result.output().clone(), (provenance.run_id(), Some(id)))
-                && previous != id
-            {
+            let cached = registry.outputs.get(result.output()).expect("admitted output");
+            let source_results = cached.inputs.as_ref().into_iter().flat_map(|inputs| &inputs.sources)
+                .filter_map(|source| published.get(source).copied().map(|id| (source.clone(), id)))
+                .collect();
+            let cached = registry.outputs.get_mut(result.output()).expect("admitted output");
+            let previous = cached.result.replace(id);
+            cached.source_results = source_results;
+            if let Some(previous) = previous.filter(|previous| *previous != id) {
                 registry.detach(previous);
             }
             registry
@@ -339,10 +459,13 @@ impl ResultStore {
                         result.output().clone(),
                         provenance.clone(),
                     ),
-                    current: true,
+                    cached: true,
                     leases: BTreeSet::new(),
                 })
-                .current = true;
+                .cached = true;
+        }
+        for graph in results.iter().map(|result| result.output().graph().as_str()).collect::<BTreeSet<_>>() {
+            registry.refresh_graph(graph);
         }
         true
     }
@@ -352,24 +475,82 @@ impl ResultStore {
             .registry
             .read()
             .unwrap_or_else(|error| error.into_inner());
-        let (_, id) = registry.outputs.get(output)?;
+        let cached = registry.outputs.get(output)?;
+        if !cached.valid {
+            return None;
+        }
         registry
             .values
-            .get(&(*id)?)
+            .get(&cached.result?)
             .map(|entry| entry.snapshot.clone())
     }
 
-    pub(crate) fn observe_graph_inputs(&self, graph: &str, inputs: [u8; 32]) {
+    pub(crate) fn observe_graph_inputs(&self, graph: &str, inputs: GraphResultInputs) {
         let mut registry = self
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
-        if registry
-            .graph_inputs
-            .insert(graph.to_owned(), inputs)
-            .is_some_and(|previous| previous != inputs)
-        {
-            registry.detach_graph(graph);
+        registry.observe_graph_inputs(graph, inputs);
+    }
+
+    pub(crate) fn capture_run_basis(&self, graph: &str, inputs: GraphResultInputs) -> Option<ResultRunBasis> {
+        let mut registry = self.registry.write().unwrap_or_else(|error| error.into_inner());
+        if registry.graph_inputs.get(graph).is_some_and(|current| current.inputs.semantic_input_hash != inputs.semantic_input_hash)
+            || inputs.outputs.keys().any(|output| output.graph().as_str() != graph) {
+            return None;
+        }
+        registry.observe_graph_inputs(graph, inputs);
+        let current = &registry.graph_inputs[graph];
+        Some(ResultRunBasis { graph: graph.into(), revision: current.revision, inputs: current.inputs.clone() })
+    }
+
+    pub(crate) fn query_cache_states(&self, graph: &str, semantic_input_hash: &[u8; 32]) -> Option<BTreeMap<PlanOutputRef, ResultCacheState>> {
+        let registry = self.registry.read().unwrap_or_else(|error| error.into_inner());
+        let current = registry.graph_inputs.get(graph)?;
+        if &current.inputs.semantic_input_hash != semantic_input_hash {
+            return None;
+        }
+        Some(current.inputs.outputs.keys().map(|output| {
+            let state = match registry.outputs.get(output) {
+                Some(cached) if cached.valid => ResultCacheState::Valid { result_id: cached.result.expect("valid result") },
+                Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
+                _ => ResultCacheState::Missing,
+            };
+            (output.clone(), state)
+        }).collect())
+    }
+
+    pub(crate) fn resource_keys(&self, graph: &str) -> BTreeSet<Box<str>> {
+        let registry = self.registry.read().unwrap_or_else(|error| error.into_inner());
+        registry.graph_inputs.get(graph).into_iter().flat_map(|current| current.inputs.outputs.values())
+            .flat_map(|output| output.resources.keys().cloned()).collect()
+    }
+
+    pub(crate) fn observe_resource_versions(&self, versions: &BTreeMap<Box<str>, Option<[u8; 32]>>) {
+        let mut registry = self.registry.write().unwrap_or_else(|error| error.into_inner());
+        let mut changed = Vec::new();
+        for (graph, current) in &mut registry.graph_inputs {
+            let mut dirty = false;
+            for output in current.inputs.outputs.values_mut() {
+                for (resource, version) in &mut output.resources {
+                    if let Some(actual) = versions.get(resource) && actual != version {
+                        *version = *actual;
+                        dirty = true;
+                    }
+                }
+            }
+            if dirty {
+                current.revision = Uuid::new_v4();
+                changed.push(graph.clone());
+            }
+        }
+        for graph in changed {
+            for (output, cached) in &mut registry.outputs {
+                if output.graph().as_str() == graph {
+                    cached.run = None;
+                }
+            }
+            registry.refresh_graph(&graph);
         }
     }
 
@@ -404,11 +585,136 @@ mod tests {
         )
     }
 
+    fn named_output(port: &str) -> PlanOutputRef {
+        PlanOutputRef::new(output().graph().clone(), PlanPortAddress::from_existing(port.into()))
+    }
+
+    fn cache_inputs(hash: u8, nodes: &[(&str, u8, &[&str])]) -> GraphResultInputs {
+        GraphResultInputs {
+            semantic_input_hash: [hash; 32],
+            outputs: nodes.iter().map(|(port, fingerprint, sources)| (named_output(port), OutputResultInputs {
+                fingerprint: [*fingerprint; 32],
+                sources: sources.iter().map(|port| named_output(port)).collect(),
+                resources: BTreeMap::new(),
+                available: true,
+            })).collect(),
+        }
+    }
+
+    fn cached_result(id: u64, run: RunId, output: PlanOutputRef) -> ReadyResult {
+        let id = ResultId::from_existing(id);
+        ReadyResult::from_scheduler(
+            id, StoredResult::new(crate::value::RuntimeValue::Integer(id.get() as i64)),
+            ResultCategory::Value,
+            ReadyPinResult::new(output, ResultProvenance::produced(
+                crate::identity::ExecutionSessionId::new(Uuid::nil()), id, run, 10,
+            )),
+        )
+    }
+
+    fn publish_cached_graph(store: &ResultStore, inputs: &GraphResultInputs) {
+        let graph = output();
+        let basis = store.capture_run_basis(graph.graph().as_str(), inputs.clone()).unwrap();
+        let outputs = inputs.outputs.keys().cloned().collect::<Vec<_>>();
+        let run = RunId::from_existing(1);
+        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        assert!(store.publish(&outputs.into_iter().enumerate().map(|(index, output)| {
+            cached_result(index as u64 + 1, run, output)
+        }).collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outputs() {
+        let store = ResultStore::new();
+        let original = cache_inputs(1, &[("a", 1, &[]), ("b", 2, &["a"]), ("c", 3, &["b"]), ("d", 4, &["a"])]);
+        publish_cached_graph(&store, &original);
+        let b = store.query_pin_result(&named_output("b")).unwrap();
+        let weak = Arc::downgrade(b.value());
+        let b_id = b.provenance().result_id();
+        drop(b);
+        let graph = output();
+        let graph = graph.graph().as_str();
+        let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 8, &[]), ("c", 3, &["b"]), ("d", 4, &["a"]), ("e", 5, &["a"])]);
+        store.observe_graph_inputs(graph, edited.clone());
+        let states = store.query_cache_states(graph, &[2; 32]).unwrap();
+        for port in ["a", "d"] {
+            assert!(matches!(states[&named_output(port)], ResultCacheState::Valid { .. }));
+            assert!(store.query_pin_result(&named_output(port)).is_some());
+        }
+        for port in ["b", "c"] {
+            assert_eq!(states[&named_output(port)], ResultCacheState::Stale);
+            assert!(store.query_pin_result(&named_output(port)).is_none());
+        }
+        assert_eq!(states[&named_output("e")], ResultCacheState::Missing);
+        assert!(store.get(b_id).is_some());
+        assert!(store.query_cache_states(graph, &[1; 32]).is_none());
+        store.observe_graph_inputs(graph, original.clone());
+        assert_eq!(store.query_pin_result(&named_output("b")).unwrap().provenance().result_id(), b_id);
+        assert!(store.query_pin_result(&named_output("c")).is_some());
+        store.observe_graph_inputs(graph, edited);
+        assert!(store.query_pin_result(&named_output("c")).is_none());
+        let mut deleted = original.clone();
+        deleted.semantic_input_hash = [3; 32];
+        deleted.outputs.remove(&named_output("b"));
+        store.observe_graph_inputs(graph, deleted);
+        assert!(weak.upgrade().is_none());
+        store.observe_graph_inputs(graph, original);
+        assert!(store.query_pin_result(&named_output("b")).is_none());
+        assert!(store.query_pin_result(&named_output("c")).is_none());
+        assert!(store.query_pin_result(&named_output("d")).is_some());
+    }
+
+    #[test]
+    fn rerun_versions_and_edit_epochs_prevent_obsolete_cache_or_run_restoration() {
+        let store = ResultStore::new();
+        let original = cache_inputs(1, &[("a", 1, &[]), ("b", 2, &["a"])]);
+        publish_cached_graph(&store, &original);
+        let graph_output = output();
+        let graph = graph_output.graph().as_str();
+        let obsolete = store.capture_run_basis(graph, original.clone()).unwrap();
+        let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 3, &[])]);
+        store.observe_graph_inputs(graph, edited.clone());
+        store.observe_graph_inputs(graph, original.clone());
+        let outputs = [named_output("a")];
+        assert!(!store.begin_run(RunId::from_existing(2), &outputs, Some(&obsolete)));
+        let basis = store.capture_run_basis(graph, original.clone()).unwrap();
+        let run = RunId::from_existing(3);
+        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        assert!(store.query_pin_result(&named_output("b")).is_none());
+        assert!(store.publish(&[cached_result(3, run, named_output("a"))]));
+        assert!(store.query_pin_result(&named_output("a")).is_some());
+        assert!(store.query_pin_result(&named_output("b")).is_none());
+        store.observe_graph_inputs(graph, edited.clone());
+        store.observe_graph_inputs(graph, original.clone());
+        assert!(store.query_pin_result(&named_output("b")).is_none());
+        let run = RunId::from_existing(4);
+        let basis = store.capture_run_basis(graph, original.clone()).unwrap();
+        assert!(store.begin_run(run, &outputs, Some(&basis)));
+        store.observe_graph_inputs(graph, edited);
+        store.observe_graph_inputs(graph, original.clone());
+        assert!(!store.publish(&[cached_result(4, run, named_output("a"))]));
+        assert!(store.query_pin_result(&named_output("a")).is_none());
+        let resources = ResultStore::new();
+        let mut original = original;
+        original.outputs.get_mut(&named_output("a")).unwrap().resources.insert("database:source".into(), Some([1; 32]));
+        publish_cached_graph(&resources, &original);
+        let old_admission = resources.capture_run_basis(graph, original.clone()).unwrap();
+        resources.observe_resource_versions(&BTreeMap::from([("database:source".into(), Some([7; 32]))]));
+        assert!(resources.query_pin_result(&named_output("a")).is_none());
+        assert!(resources.query_pin_result(&named_output("b")).is_none());
+        assert!(!resources.begin_run(RunId::from_existing(2), &outputs, Some(&old_admission)));
+        // Undo restores graph semantics, while the independent data revision stays current.
+        original.outputs.get_mut(&named_output("a")).unwrap().resources.insert("database:source".into(), Some([7; 32]));
+        resources.observe_graph_inputs(graph, original);
+        assert!(resources.query_pin_result(&named_output("b")).is_none());
+        assert!(resources.get(ResultId::from_existing(1)).is_some());
+    }
+
     fn result(id: u64, run: RunId) -> ReadyResult {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
             id,
-            StoredResult::Scalar(id.get() as f64),
+            StoredResult::new(crate::value::RuntimeValue::Decimal(id.get() as f64)),
             ResultCategory::Value,
             ReadyPinResult::new(
                 output(),
@@ -426,7 +732,7 @@ mod tests {
     fn retained_snapshots_survive_output_changes_until_the_last_lease_is_released() {
         let store = ResultStore::new();
         let first = RunId::from_existing(1);
-        store.begin_run(first, &[output()]);
+        store.begin_run(first, &[output()], None);
         assert!(store.publish(&[result(1, first)]));
         let id = ResultId::from_existing(1);
         let weak = Arc::downgrade(store.get(id).unwrap().value());
@@ -445,7 +751,7 @@ mod tests {
         );
         assert!(store.get(id).is_some());
         let next = RunId::from_existing(2);
-        store.begin_run(next, &[output()]);
+        store.begin_run(next, &[output()], None);
         assert!(store.publish(&[result(2, next)]));
         assert_eq!(
             store
@@ -478,7 +784,7 @@ mod tests {
     fn window_handoffs_and_owner_reconciliation_do_not_leak_or_drop_claimed_results() {
         let store = ResultStore::new();
         let run = RunId::from_existing(1);
-        store.begin_run(run, &[output()]);
+        store.begin_run(run, &[output()], None);
         store.publish(&[result(1, run)]);
         let id = ResultId::from_existing(1);
         let lease = Uuid::new_v4();
@@ -505,7 +811,7 @@ mod tests {
         for closed in ["main", "plot"] {
             let store = ResultStore::new();
             let run = RunId::from_existing(2);
-            store.begin_run(run, &[output()]);
+            store.begin_run(run, &[output()], None);
             store.publish(&[result(2, run)]);
             let id = ResultId::from_existing(2);
             store
@@ -524,10 +830,10 @@ mod tests {
         let store = ResultStore::new();
         let first = RunId::from_existing(1);
         let second = RunId::from_existing(2);
-        store.begin_run(first, &[output()]);
+        store.begin_run(first, &[output()], None);
         assert!(store.publish(&[result(1, first)]));
         let previous = Arc::downgrade(store.get(ResultId::from_existing(1)).unwrap().value());
-        store.begin_run(second, &[output()]);
+        store.begin_run(second, &[output()], None);
         assert!(previous.upgrade().is_none());
         assert!(store.query_pin_result(&output()).is_none());
         assert!(!store.publish(&[result(2, first)]));
@@ -558,7 +864,7 @@ mod tests {
         let other_result = |id, run| {
             ReadyResult::from_scheduler(
                 ResultId::from_existing(id),
-                StoredResult::Scalar(1.0),
+                StoredResult::new(crate::value::RuntimeValue::Decimal(1.0)),
                 ResultCategory::Value,
                 ReadyPinResult::new(
                     other.clone(),
@@ -571,9 +877,9 @@ mod tests {
                 ),
             )
         };
-        assert!(store.begin_run(first, &[output(), other.clone()]));
+        assert!(store.begin_run(first, &[output(), other.clone()], None));
         assert!(store.publish(&[result(1, first), other_result(2, first)]));
-        assert!(store.begin_run(second, &[output()]));
+        assert!(store.begin_run(second, &[output()], None));
         assert_eq!(
             store
                 .query_pin_result(&other)
@@ -582,17 +888,17 @@ mod tests {
                 .result_id(),
             ResultId::from_existing(2)
         );
-        assert!(store.begin_run(second, std::slice::from_ref(&other)));
-        assert!(store.begin_run(third, &[output()]));
+        assert!(store.begin_run(second, std::slice::from_ref(&other), None));
+        assert!(store.begin_run(third, &[output()], None));
         assert!(!store.publish(&[result(3, second), other_result(4, second)]));
         assert!(store.query_pin_result(&other).is_none());
         assert!(store.publish(&[result(5, third)]));
-        assert!(!store.begin_run(second, &[output()]));
+        assert!(!store.begin_run(second, &[output()], None));
         assert!(store.get(ResultId::from_existing(5)).is_some());
-        store.observe_graph_inputs(output().graph().as_str(), [1; 32]);
-        store.observe_graph_inputs(output().graph().as_str(), [1; 32]);
+        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(1, &[("node:result", 1, &[])]));
+        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(1, &[("node:result", 1, &[])]));
         assert!(store.get(ResultId::from_existing(5)).is_some());
-        store.observe_graph_inputs(output().graph().as_str(), [2; 32]);
+        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(2, &[("node:result", 2, &[])]));
         assert!(store.query_pin_result(&output()).is_none());
         assert!(!store.publish(&[result(6, third)]));
     }

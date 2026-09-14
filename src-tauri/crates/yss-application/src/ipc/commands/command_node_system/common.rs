@@ -189,3 +189,15 @@ pub(super) fn resource_mutation_to_command_error(
         }
     }
 }
+
+pub(super) fn parse_graph_fingerprint(value: &str, error_code: &'static str) -> Result<[u8; 32], CommandError> {
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(CommandError::expected(error_code));
+    }
+    let mut bytes = [0_u8; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| CommandError::expected(error_code))?;
+    }
+    Ok(bytes)
+}

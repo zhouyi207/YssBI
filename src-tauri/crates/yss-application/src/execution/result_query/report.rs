@@ -1,5 +1,5 @@
 use thiserror::Error;
-use yss_graph_execution::result::{ResultReference, StoredResult};
+use yss_graph_execution::result::ResultReference;
 use yss_graph_execution::value::RuntimeValue;
 use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::report::OlsModelSummary;
@@ -153,7 +153,7 @@ impl ApplicationState {
             .execution()
             .query_result(reference.result_id)
             .ok_or(ReportQueryError::Unavailable)?;
-        let StoredResult::Runtime(RuntimeValue::Ols(result)) = snapshot.value().value() else {
+        let RuntimeValue::Ols(result) = snapshot.value().value() else {
             return Err(ReportQueryError::WrongKind);
         };
         // The snapshot retains shared native buffers. No store lock is held during analysis.

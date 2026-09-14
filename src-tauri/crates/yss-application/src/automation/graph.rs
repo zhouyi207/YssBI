@@ -904,9 +904,8 @@ pub(crate) fn list_graph_results(
     {
         return Err(graph_failure(CapabilityFailureCode::GraphUnavailable));
     }
-    let results = captured
-        .execution()
-        .query_graph_results(path.as_str(), 100)
+    let results = crate::execution::result_query::query_graph_results(captured, &path, 100)
+        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
         .into_iter()
         .map(|result| GraphResultReference {
             result_id: result.provenance().result_id().get(),

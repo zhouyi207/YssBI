@@ -183,7 +183,7 @@ impl ResourceCatalogSnapshot {
         }
     }
 
-    fn observed_fingerprint(&self, key: &GraphDependencyKey) -> Option<[u8; 32]> {
+    pub fn observed_fingerprint(&self, key: &GraphDependencyKey) -> Option<[u8; 32]> {
         let hash = match key {
             GraphDependencyKey::FunctionBody(identity) => {
                 let document = self

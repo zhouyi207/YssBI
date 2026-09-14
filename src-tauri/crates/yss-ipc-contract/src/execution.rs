@@ -10,6 +10,31 @@ pub struct GraphOutputRefDto {
     pub port: PortAddressDto,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphResultStateDto {
+    pub execution_session_id: String,
+    pub semantic_input_hash: String,
+    pub compiled_artifact_id: Option<String>,
+    pub outputs: Box<[OutputResultStateDto]>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputResultStateDto {
+    pub output: GraphOutputRefDto,
+    pub state: ResultCacheStateDto,
+    pub result_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultCacheStateDto {
+    Missing,
+    Stale,
+    Valid,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "type",
@@ -84,50 +109,4 @@ pub struct GraphRunIdentityDto {
 pub struct RunEventDto {
     pub run: GraphRunIdentityDto,
     pub kind: RunEventKindDto,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RunOutputStreamDto {
-    Stdout,
-    Stderr,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RunOutputStatusDto {
-    Truncated,
-    Dropped,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunOutputEventDto {
-    pub run_id: String,
-    pub sequence: u64,
-    pub stream: RunOutputStreamDto,
-    pub text: Box<str>,
-    pub source_graph_path: String,
-    pub source_node_id: String,
-    pub source_port: PortAddressDto,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunOutputStatusEventDto {
-    pub run_id: String,
-    pub sequence: u64,
-    pub stream: RunOutputStreamDto,
-    pub status: RunOutputStatusDto,
-    pub source_graph_path: String,
-    pub source_node_id: String,
-    pub source_port: PortAddressDto,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum ExecutionChannelEventDto {
-    Event(RunEventDto),
-    Output(RunOutputEventDto),
-    OutputStatus(RunOutputStatusEventDto),
 }

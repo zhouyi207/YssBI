@@ -2,7 +2,8 @@ use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-use super::session_slot::{ApplicationState, SessionCaptureError};
+use super::session_slot::{ApplicationSession, ApplicationState, SessionCaptureError};
+use crate::resource_mutation::{DraftResolutionContext, ResourceMutationApplicationError};
 use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{
@@ -40,6 +41,41 @@ pub enum ResultQueryApplicationError {
     PageTooLarge,
     #[error("result page query failed")]
     Relation(#[from] RelationError),
+    #[error("result dependency facts could not be verified")]
+    Resources(#[from] ResourceMutationApplicationError),
+}
+
+pub struct GraphResultState {
+    pub execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
+    pub semantic_input_hash: [u8; 32],
+    pub compiled_artifact_id: Option<[u8; 32]>,
+    pub outputs: std::collections::BTreeMap<PlanOutputRef, yss_graph_execution::result::ResultCacheState>,
+}
+
+fn with_current_graph_results<T>(
+    captured: &ApplicationSession,
+    graph: &GraphResourcePath,
+    read: impl FnOnce(Option<&mut DraftResolutionContext>) -> Result<T, ResultQueryApplicationError>,
+) -> Result<T, ResultQueryApplicationError> {
+    let keys = captured.execution().result_resource_keys(graph.as_str());
+    let mut context = if keys.is_empty() { None } else {
+        let context = DraftResolutionContext::capture_catalog(captured)?;
+        let versions = context.result_resource_versions(captured, &keys)?;
+        context.revalidate(captured)?;
+        captured.execution().observe_result_resource_versions(&versions);
+        Some(context)
+    };
+    let outcome = read(context.as_mut());
+    if let Some(context) = context { context.revalidate(captured)?; }
+    outcome
+}
+
+pub(crate) fn query_graph_results(
+    captured: &ApplicationSession,
+    graph: &GraphResourcePath,
+    limit: usize,
+) -> Result<Vec<StoredResultSnapshot>, ResultQueryApplicationError> {
+    with_current_graph_results(captured, graph, |_| Ok(captured.execution().query_graph_results(graph.as_str(), limit)))
 }
 
 pub const MAX_RESULT_PAGE_ROWS: usize = 1_000;
@@ -128,7 +164,30 @@ impl ApplicationState {
             PlanGraphId::from_existing(query.graph_path.as_str().to_owned().into_boxed_str()),
             PlanPortAddress::from_existing(query.output.to_string().into_boxed_str()),
         );
-        Ok(captured.execution().query_pin_result(&output))
+        let result = with_current_graph_results(&captured, &query.graph_path, |_| Ok(captured.execution().query_pin_result(&output)));
+        self.revalidate_captured_session(&captured).map_err(|_| ResultQueryApplicationError::SessionChanged)?;
+        result
+    }
+
+    pub fn query_graph_result_state(
+        &self,
+        graph: GraphResourcePath,
+        semantic_input_hash: [u8; 32],
+    ) -> Result<Option<GraphResultState>, ResultQueryApplicationError> {
+        let captured = self.capture_session()?;
+        let result = with_current_graph_results(&captured, &graph, |context| {
+            let Some(outputs) = captured.execution().query_result_cache_states(graph.as_str(), &semantic_input_hash) else { return Ok(None); };
+            let compiled_artifact_id = if let Some(context) = context {
+                context.matching_compiled_artifact(&captured, &graph, &semantic_input_hash)?
+            } else {
+                captured.graph().compiled_draft(&graph, &semantic_input_hash)
+                    .filter(|compiled| compiled.analysis().semantic_snapshot().dependencies().entries().is_empty())
+                    .map(|_| semantic_input_hash)
+            };
+            Ok(Some(GraphResultState { execution_session_id: captured.execution_session_id(), semantic_input_hash, compiled_artifact_id, outputs }))
+        });
+        self.revalidate_captured_session(&captured).map_err(|_| ResultQueryApplicationError::SessionChanged)?;
+        result
     }
 }
 
@@ -143,8 +202,8 @@ fn project_result_page(
     }
     let result = result.value();
     let relation = match result {
-        StoredResult::Runtime(RuntimeValue::Relation(relation)) => Some(relation.clone()),
-        StoredResult::Runtime(RuntimeValue::Series(series)) => Some(series.as_relation()?),
+        RuntimeValue::Relation(relation) => Some(relation.clone()),
+        RuntimeValue::Series(series) => Some(series.as_relation()?),
         _ => None,
     };
     let page = if let Some(relation) = relation {
@@ -193,34 +252,26 @@ fn project_result_page(
         }
     } else {
         let (count, kind) = match result {
-            StoredResult::Runtime(RuntimeValue::List(values)) => {
+            RuntimeValue::List(values) => {
                 (values.len(), ResultPageKind::Sequence)
             }
-            StoredResult::Empty => (0, ResultPageKind::Scalar),
             _ => (1, ResultPageKind::Scalar),
         };
         let mut budget = MAX_RESULT_PAGE_BYTES;
         match result {
-            StoredResult::Runtime(RuntimeValue::List(values)) => {
+            RuntimeValue::List(values) => {
                 for value in values.iter().skip(offset).take(limit) {
                     charge_value(value, &mut budget, 0)?;
                 }
             }
-            StoredResult::Runtime(value) if offset == 0 => charge_value(value, &mut budget, 0)?,
-            StoredResult::Text(value) if offset == 0 && value.len() > MAX_RESULT_PAGE_BYTES / 6 => {
-                return Err(ResultQueryApplicationError::PageTooLarge);
-            }
+            value if offset == 0 => charge_value(value, &mut budget, 0)?,
             _ => {}
         }
         let values: Box<[_]> = match result {
-            StoredResult::Runtime(RuntimeValue::List(values)) => {
+            RuntimeValue::List(values) => {
                 values.iter().skip(offset).take(limit).cloned().collect()
             }
-            StoredResult::Runtime(value) if offset == 0 => Box::new([value.clone()]),
-            StoredResult::Scalar(value) if offset == 0 => Box::new([RuntimeValue::Decimal(*value)]),
-            StoredResult::Text(value) if offset == 0 => {
-                Box::new([RuntimeValue::String(value.clone())])
-            }
+            value if offset == 0 => Box::new([value.clone()]),
             _ => Box::new([]),
         };
         ResultPageProjection {

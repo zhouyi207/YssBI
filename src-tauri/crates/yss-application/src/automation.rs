@@ -16,7 +16,7 @@ use yss_database_contract::DatabaseId;
 use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
-use yss_graph_execution::result::{ResultId, StoredResult};
+use yss_graph_execution::result::ResultId;
 use yss_graph_execution::value::RuntimeValue;
 use yss_node_catalog::LocalizedCatalogItem;
 
@@ -413,7 +413,7 @@ fn inspect_result(
     };
     let value = if matches!(
         result.value().value(),
-        StoredResult::Runtime(RuntimeValue::Relation(_) | RuntimeValue::Series(_))
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_)
     ) {
         let page = application
             .query_result_page_with_control(
@@ -459,35 +459,13 @@ fn inspect_result(
             has_more: page.has_more || count < page.values.len(),
         }
     } else {
-        inspect_stored_result(result.value(), &mut budget)?
+        inspect_runtime_value(result.value().value(), 0, &mut budget)?
     };
     Ok(ResultInspection {
         result_id: request.result_id,
         category: inspect_result_category(result.value().category()),
         value,
     })
-}
-
-fn inspect_stored_result(
-    result: &StoredResult,
-    budget: &mut ResultProjectionBudget,
-) -> Result<ResultValueInspection, CapabilityFailure> {
-    let projection = match result {
-        StoredResult::Runtime(value) => inspect_runtime_value(value, 0, budget)?,
-        StoredResult::Scalar(value) if value.is_finite() => ResultValueInspection::Decimal(*value),
-        StoredResult::Scalar(_) => {
-            return Err(CapabilityFailure::new(
-                CapabilityFailureCode::InternalFailure,
-            ));
-        }
-        StoredResult::Text(value) => {
-            let (value, truncated) = bounded_text(value, 4_096);
-            ResultValueInspection::String { value, truncated }
-        }
-        StoredResult::Empty => ResultValueInspection::Empty,
-        StoredResult::Categorized { value, .. } => return inspect_stored_result(value, budget),
-    };
-    Ok(projection)
 }
 
 struct ResultProjectionBudget {

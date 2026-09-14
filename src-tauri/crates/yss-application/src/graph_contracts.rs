@@ -166,6 +166,124 @@ pub fn build_resource_catalog(
     ))
 }
 
+pub(crate) fn graph_result_inputs(
+    graph: &GraphResourcePath,
+    analysis: &yss_graph_analysis::GraphAnalysis,
+    databases: &DatabaseCatalogSnapshot,
+    registry_fingerprint: [u8; 32],
+) -> yss_graph_execution::result::GraphResultInputs {
+    use yss_graph_analysis::{GraphDiagnosticLocation, GraphResolvedInputSource, GraphResolvedParameterValue};
+    use yss_graph_execution::result::{GraphResultInputs, OutputResultInputs};
+    use yss_graph_resource_contract::GraphDependencyKey;
+    use yss_node_protocol::PortDirection;
+
+    fn resources(
+        node: &yss_graph_analysis::GraphNodeSemanticFact,
+        semantics: &yss_graph_analysis::GraphSemanticSnapshot,
+        databases: &DatabaseCatalogSnapshot,
+        visited: &mut BTreeSet<GraphResourcePath>,
+        versions: &mut BTreeMap<Box<str>, Option<[u8; 32]>>,
+    ) {
+        for identity in node.parameters.iter().filter_map(|parameter| match &parameter.effective_value {
+            Some(GraphResolvedParameterValue::Resource(resource)) => Some(resource.as_str()),
+            _ => None,
+        }) {
+            for (key, observed) in semantics.dependencies().entries().iter().filter(|(key, _)| key.identity() == identity) {
+                let (key, version) = match key {
+                    GraphDependencyKey::Database(identity) => {
+                        (format!("database:{identity}"), database_result_version(identity, *observed, databases))
+                    }
+                    GraphDependencyKey::Function(identity) => (format!("function:{identity}"), *observed),
+                    GraphDependencyKey::FunctionBody(identity) => (format!("functionBody:{identity}"), *observed),
+                };
+                versions.insert(key.into(), version);
+            }
+            if let Ok(path) = GraphResourcePath::new(identity)
+                && visited.insert(path.clone())
+                && let Some(function) = semantics.functions().get(&path) {
+                for child in function.semantics.nodes() {
+                    resources(child, semantics, databases, visited, versions);
+                }
+            }
+        }
+    }
+
+    let semantics = analysis.semantic_snapshot();
+    let output_ref = |port: &yss_graph_document::PortAddress| PlanOutputRef::new(
+        PlanGraphId::from_existing(graph.as_str().into()),
+        PlanPortAddress::from_existing(port.to_string().into()),
+    );
+    let mut outputs = BTreeMap::new();
+    for node in semantics.nodes() {
+        let mut versions = BTreeMap::new();
+        resources(node, semantics, databases, &mut BTreeSet::new(), &mut versions);
+        let available = node.specialization.is_some()
+            && node.ports.iter().all(|port| !port.orphan && port.type_state.exact().is_some())
+            && !matches!(semantics.outcome(), yss_graph_analysis::GraphResolutionOutcome::InternalFailure { .. })
+            && !semantics.diagnostics().iter().any(|diagnostic| diagnostic.blocking && match &diagnostic.primary {
+                GraphDiagnosticLocation::Node(id) => id == &node.node_id,
+                GraphDiagnosticLocation::Port(port) => port.node_id == node.node_id,
+                _ => false,
+            });
+        let inputs = OutputResultInputs {
+            fingerprint: yss_canonical_hash::hash_canonical(
+                "yssbi.application-result-input.v1", &(node.execution_fingerprint(), registry_fingerprint),
+            ).expect("result semantic fingerprints are serializable"),
+            sources: node.inputs.iter().filter_map(|input| match &input.source {
+                GraphResolvedInputSource::Output(source) => Some(output_ref(source)),
+                GraphResolvedInputSource::Literal(_) => None,
+            }).collect(),
+            resources: versions,
+            available,
+        };
+        for port in node.ports.iter().filter(|port| port.direction == PortDirection::Output) {
+            outputs.insert(output_ref(&port.address), inputs.clone());
+        }
+    }
+    GraphResultInputs { semantic_input_hash: *analysis.semantic_input_hash(), outputs }
+}
+
+fn database_result_version(identity: &str, schema: Option<[u8; 32]>, databases: &DatabaseCatalogSnapshot) -> Option<[u8; 32]> {
+    let revision = databases.schemas().iter().find(|schema| {
+        identity.strip_prefix("databases/") == Some(schema.database().as_str())
+    })?.runtime_revision().get();
+    Some(yss_canonical_hash::hash_canonical("yssbi.database-result-version.v1", &(schema, revision))
+        .expect("database result versions are serializable"))
+}
+
+pub(crate) fn result_resource_versions(
+    captured: &crate::execution::ApplicationSession,
+    mut catalog: ResourceCatalogSnapshot,
+    databases: &DatabaseCatalogSnapshot,
+    keys: &BTreeSet<Box<str>>,
+) -> Result<BTreeMap<Box<str>, Option<[u8; 32]>>, GraphContractMappingError> {
+    use yss_graph_resource_contract::GraphDependencyKey;
+    let mut versions = BTreeMap::new();
+    for key in keys {
+        let dependency = match key.split_once(':') {
+            Some(("database", identity)) => GraphDependencyKey::Database(identity.into()),
+            Some(("function", identity)) => GraphDependencyKey::Function(identity.into()),
+            Some(("functionBody", identity)) => {
+                if let Ok(path) = GraphResourcePath::new(identity)
+                    && catalog.function_signature(&path).is_some() {
+                    let resource = captured.project().read_graph_resource_snapshot(captured.project_instance_id(), &path)
+                        .map_err(|source| GraphContractMappingError::FunctionDocument { graph: path.clone(), source })?;
+                    catalog = catalog.with_function_document(&path, resource.document);
+                }
+                GraphDependencyKey::FunctionBody(identity.into())
+            }
+            _ => { versions.insert(key.clone(), None); continue; }
+        };
+        let observed = catalog.observed_fingerprint(&dependency);
+        let version = match &dependency {
+            GraphDependencyKey::Database(identity) => database_result_version(identity, observed, databases),
+            _ => observed,
+        };
+        versions.insert(key.clone(), version);
+    }
+    Ok(versions)
+}
+
 fn catalog_fingerprint(
     project: &ProjectGraphResourceSnapshot,
     databases: &DatabaseCatalogSnapshot,
