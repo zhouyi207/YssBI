@@ -1,8 +1,8 @@
 import type { MouseEvent } from "react";
 import { LOG_ITEM_HEIGHT } from "@/shared/config-default";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import {
-  formatDiagnosticTime,
+  formatLogTime,
   getLogDomainColor,
   getLogLevelBackground,
   getLogLevelColor,
@@ -15,7 +15,7 @@ export function LogItemRow({
   isSelected,
   onClick,
 }: {
-  log: DiagnosticRecordDto;
+  log: LogRecordDto;
   isSelected: boolean;
   onClick: () => void;
 }) {
@@ -52,7 +52,7 @@ export function LogItemRow({
       style={{ minHeight: LOG_ITEM_HEIGHT }}
     >
       <span className="w-13 shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80">
-        {formatDiagnosticTime(log.timestamp)}
+        {formatLogTime(log.timestamp)}
       </span>
       <span
         className={`w-12 shrink-0 rounded px-1 py-0.5 text-center text-[9px] font-semibold uppercase tracking-wide ${levelBg} ${levelColor}`}

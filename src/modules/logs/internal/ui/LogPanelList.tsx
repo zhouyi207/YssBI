@@ -7,19 +7,19 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogPanelVirtualList } from "./LogPanelVirtualList";
 import type { LogPanelPresentation } from "./useLogPanelVirtualList";
 
 export interface LogPanelListProps {
-  readonly filteredLogs: readonly DiagnosticRecordDto[];
+  readonly filteredLogs: readonly LogRecordDto[];
   readonly totalLogCount: number;
   readonly isInitialLoad: boolean;
   readonly autoScroll: boolean;
   readonly refreshScrollToken: number;
   readonly presentation: LogPanelPresentation;
   readonly selectedIndex: number | null;
-  readonly onSelectLog: (log: DiagnosticRecordDto) => void;
+  readonly onSelectLog: (log: LogRecordDto) => void;
 }
 
 export function LogPanelList({

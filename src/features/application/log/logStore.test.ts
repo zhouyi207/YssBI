@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LOG_DOMAIN_ORDER } from "@/features/domain/log/logDomains";
-import { applyLogFilter, type DiagnosticLogFilter, useLogStore } from "./logStore";
+import { applyLogFilter, type LogLogFilter, useLogStore } from "./logStore";
 
 function record(
-  domain: DiagnosticRecordDto["domain"],
+  domain: LogRecordDto["domain"],
   sequence: number,
-  level: DiagnosticRecordDto["level"] = "info",
+  level: LogRecordDto["level"] = "info",
   message = `${domain} message`,
-): DiagnosticRecordDto {
+): LogRecordDto {
   return {
     streamId: "stream-1",
     sequence,
@@ -22,13 +22,7 @@ function record(
   };
 }
 
-const allLevels = new Set<DiagnosticRecordDto["level"]>([
-  "trace",
-  "debug",
-  "info",
-  "warn",
-  "error",
-]);
+const allLevels = new Set<LogRecordDto["level"]>(["trace", "debug", "info", "warn", "error"]);
 
 describe("diagnostic log domain filtering", () => {
   beforeEach(() => {
@@ -58,7 +52,7 @@ describe("diagnostic log domain filtering", () => {
       record("graph", 3, "warn", "graph ready with warning"),
       record("graph", 4, "info", "graph waiting"),
     ];
-    const filter: DiagnosticLogFilter = {
+    const filter: LogLogFilter = {
       levels: new Set(["info"]),
       searchText: "ready",
     };

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { FrontendDiagnosticEntryDto } from "@/shared/types/domain/diagnostics";
-import { createFrontendDiagnosticBatcher } from "./frontendDiagnosticBatcher";
+import type { FrontendLogEntryDto } from "@/shared/types/domain/log";
+import { createFrontendLogBatcher } from "./frontendLogBatcher";
 
-function entry(message: string): FrontendDiagnosticEntryDto {
+function entry(message: string): FrontendLogEntryDto {
   return {
     level: "info",
     domain: "application",
@@ -20,13 +20,13 @@ function deferred() {
   return { promise, resolve };
 }
 
-describe("createFrontendDiagnosticBatcher", () => {
+describe("createFrontendLogBatcher", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
   it("flushes one bounded batch after the maximum delay", async () => {
     const submit = vi.fn().mockResolvedValue(undefined);
-    const batcher = createFrontendDiagnosticBatcher({
+    const batcher = createFrontendLogBatcher({
       maxBatchEntries: 3,
       maxPendingEntries: 6,
       maxDelayMs: 50,
@@ -41,15 +41,16 @@ describe("createFrontendDiagnosticBatcher", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(submit).toHaveBeenCalledOnce();
-    expect(
-      submit.mock.calls[0]?.[0].map((item: FrontendDiagnosticEntryDto) => item.message),
-    ).toEqual(["one", "two"]);
+    expect(submit.mock.calls[0]?.[0].map((item: FrontendLogEntryDto) => item.message)).toEqual([
+      "one",
+      "two",
+    ]);
     batcher.dispose();
   });
 
   it("flushes at the batch limit and truncates oversized messages", async () => {
     const submit = vi.fn().mockResolvedValue(undefined);
-    const batcher = createFrontendDiagnosticBatcher({
+    const batcher = createFrontendLogBatcher({
       maxBatchEntries: 2,
       maxPendingEntries: 4,
       maxDelayMs: 100,
@@ -74,7 +75,7 @@ describe("createFrontendDiagnosticBatcher", () => {
       .fn()
       .mockImplementationOnce(() => first.promise)
       .mockResolvedValue(undefined);
-    const batcher = createFrontendDiagnosticBatcher({
+    const batcher = createFrontendLogBatcher({
       maxBatchEntries: 1,
       maxPendingEntries: 3,
       maxDelayMs: 100,

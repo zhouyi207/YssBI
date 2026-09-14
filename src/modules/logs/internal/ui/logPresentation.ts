@@ -1,5 +1,5 @@
 import type { LogDomainId } from "@/features/application/log";
-import type { DiagnosticLevel } from "@/shared/types/domain/diagnostics";
+import type { LogLevel } from "@/shared/types/domain/log";
 
 export const LOG_DOMAIN_TITLE_KEYS = {
   all: "log.domains.all",
@@ -29,7 +29,7 @@ export const LOG_DOMAIN_BACKGROUND: Record<string, string> = {
   ui: "bg-amber-500/10",
 };
 
-export function getLogLevelColor(level: DiagnosticLevel) {
+export function getLogLevelColor(level: LogLevel) {
   switch (level) {
     case "error":
       return "text-red-400";
@@ -44,7 +44,7 @@ export function getLogLevelColor(level: DiagnosticLevel) {
   }
 }
 
-export function getLogLevelBackground(level: DiagnosticLevel) {
+export function getLogLevelBackground(level: LogLevel) {
   switch (level) {
     case "error":
       return "bg-red-500/10";
@@ -59,7 +59,7 @@ export function getLogLevelBackground(level: DiagnosticLevel) {
   }
 }
 
-export function formatDiagnosticTime(timestamp: string): string {
+export function formatLogTime(timestamp: string): string {
   return timestamp.match(/(?:T|\s)(\d{2}:\d{2}:\d{2})/)?.[1] ?? timestamp;
 }
 

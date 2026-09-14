@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { resolveDetailTarget } from "./resolveDetailTarget";
 
 const logEntry = {
@@ -12,7 +12,7 @@ const logEntry = {
   target: "test",
   message: "test",
   fields: {},
-} satisfies DiagnosticRecordDto;
+} satisfies LogRecordDto;
 
 describe("resolveDetailTarget", () => {
   it("returns explicit detail focus when set", () => {

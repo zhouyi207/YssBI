@@ -1,26 +1,34 @@
-import type { DiagnosticBatchDto, DiagnosticSubscriptionDto } from "@/shared/types/dto/diagnostics";
-import { parseDiagnosticBatchDto } from "@/shared/types/dto/diagnosticsParser";
+export interface SequencedBatch {
+  streamId: string;
+  entries: readonly { sequence: number }[];
+  failure?: "storage_unavailable";
+}
 
+export interface StreamWatermark {
+  streamId: string;
+  latestSequence: number;
+}
 const MAX_PENDING_BATCHES = 64;
 
-export type DiagnosticStreamDiscontinuity =
+export type RecordStreamDiscontinuity =
   | "preactivation-overflow"
   | "sequence-gap"
+  | "storage-unavailable"
   | "invalid-batch";
 
-export class DiagnosticStreamDiscontinuityError extends Error {
-  readonly reason: DiagnosticStreamDiscontinuity;
+export class RecordStreamDiscontinuityError extends Error {
+  readonly reason: RecordStreamDiscontinuity;
 
-  constructor(reason: DiagnosticStreamDiscontinuity) {
-    super(`Diagnostic stream requires reconnect: ${reason}`);
-    this.name = "DiagnosticStreamDiscontinuityError";
+  constructor(reason: RecordStreamDiscontinuity) {
+    super(`Record stream requires reconnect: ${reason}`);
+    this.name = "RecordStreamDiscontinuityError";
     this.reason = reason;
   }
 }
 
-export interface DiagnosticBatchReceiver {
+export interface RecordBatchReceiver {
   onmessage: (value: unknown) => void;
-  prepare: (snapshot: DiagnosticSubscriptionDto) => DiagnosticStreamDiscontinuity | null;
+  prepare: (snapshot: StreamWatermark) => RecordStreamDiscontinuity | null;
   activate: () => void;
   dispose: () => void;
   isDisposed: () => boolean;
@@ -32,8 +40,8 @@ interface SequenceInspection {
   gap: boolean;
 }
 
-function inspectSequence(
-  batch: DiagnosticBatchDto,
+function inspectSequence<Batch extends SequencedBatch>(
+  batch: Batch,
   streamId: string,
   watermark: number,
 ): SequenceInspection {
@@ -51,26 +59,27 @@ function inspectSequence(
   return { streamId: batch.streamId, watermark: nextWatermark, gap };
 }
 
-export function createDiagnosticBatchReceiver(
-  onRecords: (batch: DiagnosticBatchDto) => void,
+export function createRecordBatchReceiver<Batch extends SequencedBatch>(
+  parseBatch: (value: unknown) => Batch,
+  onRecords: (batch: Batch) => void,
   onError: (error: unknown) => void = (error) => {
-    console.error("[Diagnostics] Invalid or discontinuous channel batch", error);
+    console.error("[Records] Invalid or discontinuous channel batch", error);
   },
   maxPendingBatches = MAX_PENDING_BATCHES,
-): DiagnosticBatchReceiver {
+): RecordBatchReceiver {
   if (!Number.isInteger(maxPendingBatches) || maxPendingBatches <= 0) {
-    throw new Error("Diagnostic pending batch capacity must be a positive integer");
+    throw new Error("Record pending batch capacity must be a positive integer");
   }
 
   let active = false;
   let disposed = false;
   let prepared = false;
-  let pending: DiagnosticBatchDto[] = [];
+  let pending: Batch[] = [];
   let streamId = "";
   let watermark = 0;
-  let discontinuity: DiagnosticStreamDiscontinuity | null = null;
+  let discontinuity: RecordStreamDiscontinuity | null = null;
 
-  const deliver = (batch: DiagnosticBatchDto) => {
+  const deliver = (batch: Batch) => {
     try {
       onRecords(batch);
     } catch (error) {
@@ -78,12 +87,12 @@ export function createDiagnosticBatchReceiver(
     }
   };
 
-  const acceptPreparedBatch = (batch: DiagnosticBatchDto) => {
+  const acceptPreparedBatch = (batch: Batch) => {
     const inspection = inspectSequence(batch, streamId, watermark);
     if (inspection.gap) {
       discontinuity = "sequence-gap";
       pending = [];
-      const error = new DiagnosticStreamDiscontinuityError("sequence-gap");
+      const error = new RecordStreamDiscontinuityError("sequence-gap");
       onError(error);
       return true;
     }
@@ -96,7 +105,13 @@ export function createDiagnosticBatchReceiver(
     onmessage: (value) => {
       if (disposed || discontinuity) return;
       try {
-        const batch = parseDiagnosticBatchDto(value);
+        const batch = parseBatch(value);
+        if (batch.failure) {
+          discontinuity = "storage-unavailable";
+          pending = [];
+          onError(new RecordStreamDiscontinuityError(discontinuity));
+          return;
+        }
         if (active) {
           if (!acceptPreparedBatch(batch)) deliver(batch);
           return;
@@ -116,9 +131,9 @@ export function createDiagnosticBatchReceiver(
         discontinuity = "invalid-batch";
         pending = [];
         onError(
-          error instanceof DiagnosticStreamDiscontinuityError
+          error instanceof RecordStreamDiscontinuityError
             ? error
-            : new DiagnosticStreamDiscontinuityError("invalid-batch"),
+            : new RecordStreamDiscontinuityError("invalid-batch"),
         );
       }
     },
@@ -140,10 +155,10 @@ export function createDiagnosticBatchReceiver(
     activate: () => {
       if (active || disposed) return;
       if (discontinuity) {
-        throw new DiagnosticStreamDiscontinuityError(discontinuity);
+        throw new RecordStreamDiscontinuityError(discontinuity);
       }
       if (!prepared) {
-        throw new Error("Diagnostic receiver must be prepared before activation");
+        throw new Error("Record receiver must be prepared before activation");
       }
       active = true;
       const queued = pending;

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
-import { createDiagnosticLogBuffer } from "./logBuffer";
+import type { LogRecordDto } from "@/shared/types/domain/log";
+import { createLogLogBuffer } from "./logBuffer";
 
 function record(
   sequence: number,
   streamId = "stream-1",
   message = `entry-${sequence}`,
-): DiagnosticRecordDto {
+): LogRecordDto {
   return {
     streamId,
     sequence,
@@ -22,7 +22,7 @@ function record(
 
 describe("diagnostic logBuffer", () => {
   it("sorts, deduplicates, and bounds an initial stream snapshot", () => {
-    const buffer = createDiagnosticLogBuffer(2);
+    const buffer = createLogLogBuffer(2);
     buffer.setSubscription({
       subscriptionId: "subscription-1",
       streamId: "stream-1",
@@ -43,7 +43,7 @@ describe("diagnostic logBuffer", () => {
   });
 
   it("appends only newer sequences and emits once per accepted batch", () => {
-    const buffer = createDiagnosticLogBuffer(3);
+    const buffer = createLogLogBuffer(3);
     const listener = vi.fn();
     buffer.subscribe(listener);
     buffer.setSubscription({
@@ -65,7 +65,7 @@ describe("diagnostic logBuffer", () => {
   });
 
   it("resets recent entries when the backend stream changes", () => {
-    const buffer = createDiagnosticLogBuffer(3);
+    const buffer = createLogLogBuffer(3);
     buffer.setSubscription({
       subscriptionId: "subscription-1",
       streamId: "stream-1",
@@ -84,7 +84,7 @@ describe("diagnostic logBuffer", () => {
   });
 
   it("marks sequence gaps as truncated instead of silently advancing", () => {
-    const buffer = createDiagnosticLogBuffer(10);
+    const buffer = createLogLogBuffer(10);
     buffer.setSubscription({
       subscriptionId: "subscription-1",
       streamId: "stream-1",
@@ -103,7 +103,7 @@ describe("diagnostic logBuffer", () => {
   });
 
   it("keeps the sequence watermark when the local recent view is cleared", () => {
-    const buffer = createDiagnosticLogBuffer(3);
+    const buffer = createLogLogBuffer(3);
     buffer.setSubscription({
       subscriptionId: "subscription-1",
       streamId: "stream-1",

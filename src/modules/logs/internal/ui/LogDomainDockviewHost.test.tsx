@@ -4,14 +4,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { DockviewApi } from "dockview-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 
 const mocks = vi.hoisted(() => ({
   dockviews: [] as unknown[],
-  entries: [] as DiagnosticRecordDto[],
-  subscribeDiagnostics: vi.fn(),
+  entries: [] as LogRecordDto[],
+  subscribeLogs: vi.fn(),
   activateSubscription: vi.fn(),
-  unsubscribeDiagnostics: vi.fn(async () => {}),
+  unsubscribeLogs: vi.fn(async () => {}),
 }));
 
 vi.mock("dockview-react", async (importOriginal) => {
@@ -345,7 +345,7 @@ vi.mock("dockview-react", async (importOriginal) => {
 
 vi.mock("@/services/log", () => ({
   LogService: {
-    subscribeDiagnostics: mocks.subscribeDiagnostics,
+    subscribeLogs: mocks.subscribeLogs,
   },
 }));
 
@@ -390,7 +390,7 @@ type FakeDockviewInstance = {
   readonly fromJSONInputs: Array<Record<string, any>>;
 };
 
-function diagnostic(domain: DiagnosticRecordDto["domain"], sequence: number): DiagnosticRecordDto {
+function diagnostic(domain: LogRecordDto["domain"], sequence: number): LogRecordDto {
   return {
     streamId: "stream-1",
     sequence,
@@ -433,7 +433,7 @@ describe("LogDomainDockviewHost", () => {
       selectedLog: null,
       autoScroll: true,
     });
-    mocks.subscribeDiagnostics.mockImplementation(async () => {
+    mocks.subscribeLogs.mockImplementation(async () => {
       const latestEntry = mocks.entries[mocks.entries.length - 1];
       return {
         snapshot: {
@@ -444,7 +444,7 @@ describe("LogDomainDockviewHost", () => {
           truncated: false,
         },
         activate: mocks.activateSubscription,
-        unsubscribe: mocks.unsubscribeDiagnostics,
+        unsubscribe: mocks.unsubscribeLogs,
       };
     });
     host = document.createElement("div");
@@ -479,7 +479,7 @@ describe("LogDomainDockviewHost", () => {
     renderWorkspace({ kind: "ephemeral" });
     await flushSubscription();
 
-    expect(mocks.subscribeDiagnostics).toHaveBeenCalledOnce();
+    expect(mocks.subscribeLogs).toHaveBeenCalledOnce();
     expect(host.querySelectorAll('[role="tab"]')).toHaveLength(7);
     expect(host.querySelector('[role="tab"]')?.textContent).toBe("log.domains.all");
     expect(host.querySelector("[data-yssbi-logs-dockview]")?.className).toBe(

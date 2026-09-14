@@ -1,132 +1,55 @@
-import { Channel } from "@tauri-apps/api/core";
 import { invokeCommand } from "@/services/ipc";
-import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
-import { clearChannelMessageHandler } from "@/shared/platform/tauriWebview";
-import type { DiagnosticBatchDto, DiagnosticSubscriptionDto } from "@/shared/types/dto/diagnostics";
-import { parseDiagnosticSubscriptionDto } from "@/shared/types/dto/diagnosticsParser";
+import { subscribeRecords, type RecordSubscription } from "@/services/ipc/recordSubscription";
+import type {
+  FrontendLogEntryDto,
+  LogBatchDto,
+  LogPage,
+  LogQuery,
+  LogStatistics,
+  LogSubscriptionDto,
+} from "@/shared/types/dto/log";
 import {
-  createDiagnosticBatchReceiver,
-  DiagnosticStreamDiscontinuityError,
-} from "./diagnosticBatchReceiver";
+  parseLogBatchDto,
+  parseLogPage,
+  parseLogStatistics,
+  parseLogSubscriptionDto,
+} from "@/shared/types/dto/logParser";
 
-export interface FrontendDiagnosticEntry {
-  readonly level: "trace" | "debug" | "info" | "warn" | "error";
-  readonly domain: "application" | "execution" | "system" | "graph" | "data" | "ui";
-  readonly target: string;
-  readonly event?: string;
-  readonly message: string;
-  readonly source?: string;
-  readonly fields: Record<string, unknown>;
-}
+export type LogSubscription = RecordSubscription<LogSubscriptionDto>;
+export type FrontendLogEntry = FrontendLogEntryDto;
 
-const MAX_SUBSCRIPTION_ATTEMPTS = 2;
-
-export interface DiagnosticSubscription {
-  snapshot: DiagnosticSubscriptionDto;
-  /** Delivers Channel batches queued while the initial snapshot was in flight. */
-  activate: () => void;
-  unsubscribe: () => Promise<void>;
-}
-
+/** Persisted logs use the plugin registry; runtime diagnostics have their own service. */
 export class LogService {
-  static async submitFrontendDiagnostics(
-    entries: readonly FrontendDiagnosticEntry[],
-  ): Promise<void> {
+  static async submitFrontendLogs(entries: readonly FrontendLogEntryDto[]): Promise<void> {
     if (entries.length === 0) return;
-    await invokeCommand("submit_frontend_diagnostics", { entries: [...entries] });
+    await invokeCommand("plugin:tracing|submit_frontend_logs", { entries: [...entries] });
   }
 
-  static async subscribeDiagnostics(
-    onRecords: (batch: DiagnosticBatchDto) => void,
-    onDiscontinuity: (error: unknown) => void = () => {},
-  ): Promise<DiagnosticSubscription> {
-    for (let attempt = 0; attempt < MAX_SUBSCRIPTION_ATTEMPTS; attempt += 1) {
-      let activated = false;
-      let unsubscribed = false;
-      const receiver = createDiagnosticBatchReceiver(onRecords, (error) => {
-        if (!activated) return;
-        cleanupChannel();
-        if (subscriptionId && !unsubscribed) {
-          unsubscribed = true;
-          void LogService.unsubscribeDiagnostics(subscriptionId).catch(() => {});
-        }
-        onDiscontinuity(error);
-      });
-      let subscriptionId: string | null = null;
-      let hmrDisposed = false;
-      let cleaned = false;
-      let channel: Channel<unknown> | null = null;
-      const cleanupChannel = () => {
-        if (cleaned) return;
-        cleaned = true;
-        receiver.dispose();
-        if (channel) {
-          untrackChannel(channel);
-          clearChannelMessageHandler(channel);
-        }
-      };
-      channel = trackChannel(new Channel<unknown>(), () => {
-        hmrDisposed = true;
-        cleanupChannel();
-        if (subscriptionId) {
-          void LogService.unsubscribeDiagnostics(subscriptionId).catch(() => {});
-        }
-      });
-      channel.onmessage = receiver.onmessage;
-
-      let snapshot: DiagnosticSubscriptionDto;
-      try {
-        snapshot = parseDiagnosticSubscriptionDto(
-          await invokeCommand("subscribe_diagnostics", { onRecords: channel }),
-        );
-        subscriptionId = snapshot.subscriptionId;
-      } catch (error) {
-        cleanupChannel();
-        throw error;
-      }
-
-      if (hmrDisposed || receiver.isDisposed()) {
-        await LogService.unsubscribeDiagnostics(snapshot.subscriptionId).catch(() => {});
-        throw new Error("Diagnostic subscription was disposed before activation");
-      }
-
-      const discontinuity = receiver.prepare(snapshot);
-      if (discontinuity) {
-        cleanupChannel();
-        await LogService.unsubscribeDiagnostics(snapshot.subscriptionId).catch(() => {});
-        if (attempt + 1 < MAX_SUBSCRIPTION_ATTEMPTS) continue;
-        throw new DiagnosticStreamDiscontinuityError(discontinuity);
-      }
-
-      const unsubscribe = async () => {
-        if (unsubscribed) return;
-        unsubscribed = true;
-        cleanupChannel();
-        await LogService.unsubscribeDiagnostics(snapshot.subscriptionId);
-      };
-      return {
-        snapshot,
-        activate: () => {
-          try {
-            activated = true;
-            receiver.activate();
-          } catch (error) {
-            cleanupChannel();
-            if (!unsubscribed) {
-              unsubscribed = true;
-              void LogService.unsubscribeDiagnostics(snapshot.subscriptionId).catch(() => {});
-            }
-            throw error;
-          }
-        },
-        unsubscribe,
-      };
-    }
-
-    throw new Error("Diagnostic subscription attempts exhausted");
+  static subscribeLogs(
+    onRecords: (batch: LogBatchDto) => void,
+    onDiscontinuity?: (error: unknown) => void,
+  ): Promise<LogSubscription> {
+    return subscribeRecords(
+      {
+        subscribeCommand: "plugin:tracing|subscribe_logs",
+        unsubscribeCommand: "plugin:tracing|unsubscribe_logs",
+        parseSnapshot: parseLogSubscriptionDto,
+        parseBatch: parseLogBatchDto,
+      },
+      onRecords,
+      onDiscontinuity,
+    );
   }
 
-  static async unsubscribeDiagnostics(subscriptionId: string): Promise<void> {
-    await invokeCommand("unsubscribe_diagnostics", { subscriptionId });
+  static async unsubscribeLogs(subscriptionId: string): Promise<void> {
+    await invokeCommand("plugin:tracing|unsubscribe_logs", { subscriptionId });
+  }
+
+  static async queryLogs(query: LogQuery = {}): Promise<LogPage> {
+    return parseLogPage(await invokeCommand("plugin:tracing|query_logs", { query }));
+  }
+
+  static async logStatistics(): Promise<LogStatistics> {
+    return parseLogStatistics(await invokeCommand("plugin:tracing|log_statistics"));
   }
 }

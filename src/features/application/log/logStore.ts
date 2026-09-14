@@ -1,30 +1,26 @@
 import { create } from "zustand";
-import {
-  DIAGNOSTIC_LEVELS,
-  type DiagnosticLevel,
-  type DiagnosticRecordDto,
-} from "@/shared/types/domain/diagnostics";
+import { LOG_LEVELS, type LogLevel, type LogRecordDto } from "@/shared/types/domain/log";
 import type { LogDomainId } from "@/features/domain/log/logDomains";
 
-export interface DiagnosticLogFilter {
-  levels: Set<DiagnosticLevel>;
+export interface LogLogFilter {
+  levels: Set<LogLevel>;
   searchText: string;
 }
 
 export interface LogStore {
-  filter: DiagnosticLogFilter;
-  selectedLog: DiagnosticRecordDto | null;
+  filter: LogLogFilter;
+  selectedLog: LogRecordDto | null;
   autoScroll: boolean;
 
-  setSelectedLog: (log: DiagnosticRecordDto | null) => void;
-  setFilter: (filter: Partial<DiagnosticLogFilter>) => void;
-  toggleLevel: (level: DiagnosticLevel) => void;
+  setSelectedLog: (log: LogRecordDto | null) => void;
+  setFilter: (filter: Partial<LogLogFilter>) => void;
+  toggleLevel: (level: LogLevel) => void;
   setSearchText: (text: string) => void;
   setAutoScroll: (autoScroll: boolean) => void;
 }
 
-const initialFilter: DiagnosticLogFilter = {
-  levels: new Set(DIAGNOSTIC_LEVELS),
+const initialFilter: LogLogFilter = {
+  levels: new Set(LOG_LEVELS),
   searchText: "",
 };
 
@@ -53,10 +49,10 @@ export const useLogStore = create<LogStore>((set) => ({
 }));
 
 export function applyLogFilter(
-  logs: readonly DiagnosticRecordDto[],
-  filter: DiagnosticLogFilter,
+  logs: readonly LogRecordDto[],
+  filter: LogLogFilter,
   domain: LogDomainId,
-): DiagnosticRecordDto[] {
+): LogRecordDto[] {
   const search = filter.searchText.trim().toLowerCase();
   return logs.filter((log) => {
     if (!filter.levels.has(log.level)) return false;

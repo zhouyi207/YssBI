@@ -1,8 +1,8 @@
-import { DIAGNOSTIC_DOMAINS, type DiagnosticDomain } from "@/shared/types/domain/diagnostics";
+import { LOG_DOMAINS, type LogDomain } from "@/shared/types/domain/log";
 
-export type LogDomainId = "all" | DiagnosticDomain;
+export type LogDomainId = "all" | LogDomain;
 
-export const LOG_DOMAIN_ORDER: readonly LogDomainId[] = ["all", ...DIAGNOSTIC_DOMAINS];
+export const LOG_DOMAIN_ORDER: readonly LogDomainId[] = ["all", ...LOG_DOMAINS];
 
 const LOG_DOMAIN_IDS = new Set<LogDomainId>(LOG_DOMAIN_ORDER);
 const LOG_DOMAIN_TITLES: Readonly<Record<LogDomainId, string>> = {

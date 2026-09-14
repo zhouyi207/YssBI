@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
-import { DIAGNOSTIC_LEVELS, type DiagnosticLevel } from "@/shared/types/domain/diagnostics";
+import { LOG_LEVELS, type LogLevel } from "@/shared/types/domain/log";
 import { getLogLevelBackground, getLogLevelColor } from "./logPresentation";
 import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
-const LOG_FILTER_LEVELS: readonly DiagnosticLevel[] = DIAGNOSTIC_LEVELS;
+const LOG_FILTER_LEVELS: readonly LogLevel[] = LOG_LEVELS;
 
 export function LogPanelToolbar() {
   const { t } = useTranslation();

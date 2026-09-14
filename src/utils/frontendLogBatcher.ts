@@ -1,23 +1,16 @@
-export interface FrontendDiagnosticEntry {
-  readonly level: "trace" | "debug" | "info" | "warn" | "error";
-  readonly domain: "application" | "execution" | "system" | "graph" | "data" | "ui";
-  readonly target: string;
-  readonly event?: string;
-  readonly message: string;
-  readonly source?: string;
-  readonly fields: Record<string, unknown>;
-}
+import type { FrontendLogEntryDto } from "@/shared/types/dto/log";
+export type FrontendLogEntry = FrontendLogEntryDto;
 
-export interface FrontendDiagnosticBatcherOptions {
+export interface FrontendLogBatcherOptions {
   maxBatchEntries: number;
   maxPendingEntries: number;
   maxDelayMs: number;
   maxMessageBytes: number;
-  submit: (entries: FrontendDiagnosticEntry[]) => Promise<void>;
+  submit: (entries: FrontendLogEntry[]) => Promise<void>;
 }
 
-export interface FrontendDiagnosticBatcher {
-  enqueue: (entry: FrontendDiagnosticEntry) => void;
+export interface FrontendLogBatcher {
+  enqueue: (entry: FrontendLogEntry) => void;
   flush: () => Promise<void>;
   dispose: () => void;
   pendingCount: () => number;
@@ -47,15 +40,13 @@ function truncateUtf8(message: string, maxBytes: number): string {
   return `${content}${suffix}`;
 }
 
-export function createFrontendDiagnosticBatcher(
-  options: FrontendDiagnosticBatcherOptions,
-): FrontendDiagnosticBatcher {
+export function createFrontendLogBatcher(options: FrontendLogBatcherOptions): FrontendLogBatcher {
   const maxBatchEntries = positiveInteger(options.maxBatchEntries, "maxBatchEntries");
   const maxPendingEntries = positiveInteger(options.maxPendingEntries, "maxPendingEntries");
   const maxDelayMs = positiveInteger(options.maxDelayMs, "maxDelayMs");
   const maxMessageBytes = positiveInteger(options.maxMessageBytes, "maxMessageBytes");
 
-  let pending: FrontendDiagnosticEntry[] = [];
+  let pending: FrontendLogEntry[] = [];
   let timer: ReturnType<typeof setTimeout> | null = null;
   let drain: Promise<void> | null = null;
   let disposed = false;
@@ -75,7 +66,7 @@ export function createFrontendDiagnosticBatcher(
         try {
           await options.submit(batch);
         } catch {
-          // Diagnostics transport failures must not enter the logger again.
+          // Logs transport failures must not enter the logger again.
         }
       }
     })().finally(() => {

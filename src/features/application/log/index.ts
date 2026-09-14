@@ -1,10 +1,10 @@
-export { useDiagnosticSubscription } from "./useDiagnosticSubscription";
-export type { DiagnosticSubscriptionStatus } from "./useDiagnosticSubscription";
+export { useLogSubscription } from "./useLogSubscription";
+export type { LogSubscriptionStatus } from "./useLogSubscription";
 export { logBuffer } from "./logBuffer";
-export type { DiagnosticLogBuffer, LogSnapshot } from "./logBuffer";
+export type { LogLogBuffer, LogSnapshot } from "./logBuffer";
 export { useLiveLogs } from "./useLiveLogs";
 export { applyLogFilter, useLogStore } from "./logStore";
-export type { DiagnosticLogFilter, LogStore } from "./logStore";
+export type { LogLogFilter, LogStore } from "./logStore";
 export {
   isLogDomainId,
   logDomainPanelId,

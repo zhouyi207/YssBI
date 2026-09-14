@@ -4,12 +4,12 @@ import type { IDockviewPanelProps } from "dockview-react";
 
 import type { LogsDockviewPanelParams } from "@/modules/workbench/public";
 import { isLogDomainId, applyLogFilter } from "@/features/application/log";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogPanelList } from "./LogPanelList";
 import { LOG_DOMAIN_TITLE_KEYS } from "./logPresentation";
 import { useLogWorkspaceContext } from "./logWorkspaceContext";
 
-function isSameDiagnostic(left: DiagnosticRecordDto, right: DiagnosticRecordDto): boolean {
+function isSameLog(left: LogRecordDto, right: LogRecordDto): boolean {
   return left.streamId === right.streamId && left.sequence === right.sequence;
 }
 
@@ -39,7 +39,7 @@ export function LogDomainPanel(props: IDockviewPanelProps<LogsDockviewPanelParam
   const filteredLogs = useMemo(() => applyLogFilter(logs, filter, domain), [domain, filter, logs]);
   const selectedIndex = useMemo(() => {
     if (!selectedLog) return null;
-    const index = filteredLogs.findIndex((log) => isSameDiagnostic(log, selectedLog));
+    const index = filteredLogs.findIndex((log) => isSameLog(log, selectedLog));
     return index >= 0 ? index : null;
   }, [filteredLogs, selectedLog]);
 

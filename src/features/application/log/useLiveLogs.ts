@@ -1,5 +1,5 @@
 /**
- * Bridges backend diagnostic batches from the external recent buffer into React.
+ * Bridges plugin log batches from the external recent buffer into React.
  * Each accepted Channel batch publishes one stable snapshot.
  */
 import { useSyncExternalStore } from "react";

@@ -1,16 +1,16 @@
 import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from "@/shared/config-default";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogItemRow } from "./LogItemRow";
 import { useLogPanelVirtualList, type LogPanelPresentation } from "./useLogPanelVirtualList";
 
 export interface LogPanelVirtualListProps {
-  readonly filteredLogs: readonly DiagnosticRecordDto[];
+  readonly filteredLogs: readonly LogRecordDto[];
   readonly autoScroll: boolean;
   readonly refreshScrollToken: number;
   readonly presentation: LogPanelPresentation;
   readonly selectedIndex: number | null;
-  readonly onSelectLog: (log: DiagnosticRecordDto) => void;
+  readonly onSelectLog: (log: LogRecordDto) => void;
 }
 
 export function LogPanelVirtualList({

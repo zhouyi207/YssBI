@@ -29,7 +29,7 @@ export function clearChannelMessageHandler(channel: object): void {
 
 const BENIGN_CALLBACK_WARNING = "Couldn't find callback id";
 
-function isBenignTauriCallbackWarning(args: unknown[]): boolean {
+export function isBenignTauriCallbackWarning(args: readonly unknown[]): boolean {
   return typeof args[0] === "string" && args[0].includes(BENIGN_CALLBACK_WARNING);
 }
 

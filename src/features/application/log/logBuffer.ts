@@ -1,38 +1,34 @@
 import { LOG_BUFFER_MAX } from "@/shared/config-default";
-import type {
-  DiagnosticBatchDto,
-  DiagnosticRecordDto,
-  DiagnosticSubscriptionDto,
-} from "@/shared/types/domain/diagnostics";
+import type { LogBatchDto, LogRecordDto, LogSubscriptionDto } from "@/shared/types/domain/log";
 
 export interface LogSnapshot {
   streamId: string | null;
-  entries: DiagnosticRecordDto[];
+  entries: LogRecordDto[];
   latestSequence: number | null;
   truncated: boolean;
 }
 
-export interface DiagnosticLogBuffer {
+export interface LogLogBuffer {
   subscribe: (listener: () => void) => () => void;
   getSnapshot: () => LogSnapshot;
-  setSubscription: (subscription: DiagnosticSubscriptionDto) => void;
-  appendBatch: (batch: DiagnosticBatchDto) => void;
+  setSubscription: (subscription: LogSubscriptionDto) => void;
+  appendBatch: (batch: LogBatchDto) => void;
   markTruncated: () => void;
   clear: () => void;
 }
 
 interface RecentEntries {
-  entries: DiagnosticRecordDto[];
+  entries: LogRecordDto[];
   allSequences: number[];
   truncated: boolean;
 }
 
 function recentDistinctEntries(
-  entries: readonly DiagnosticRecordDto[],
+  entries: readonly LogRecordDto[],
   streamId: string,
   maxEntries: number,
 ): RecentEntries {
-  const bySequence = new Map<number, DiagnosticRecordDto>();
+  const bySequence = new Map<number, LogRecordDto>();
   for (const entry of entries) {
     if (entry.streamId === streamId) bySequence.set(entry.sequence, entry);
   }
@@ -59,13 +55,13 @@ function hasSequenceGap(
   return expectedLast !== undefined && sequences[sequences.length - 1] !== expectedLast;
 }
 
-export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): DiagnosticLogBuffer {
+export function createLogLogBuffer(maxEntries = LOG_BUFFER_MAX): LogLogBuffer {
   if (!Number.isInteger(maxEntries) || maxEntries <= 0) {
-    throw new Error("Diagnostic log buffer capacity must be a positive integer");
+    throw new Error("Log log buffer capacity must be a positive integer");
   }
 
   let streamId: string | null = null;
-  let entries: DiagnosticRecordDto[] = [];
+  let entries: LogRecordDto[] = [];
   let latestSequence: number | null = null;
   let truncated = false;
   let replacedStream = false;
@@ -139,4 +135,4 @@ export function createDiagnosticLogBuffer(maxEntries = LOG_BUFFER_MAX): Diagnost
   };
 }
 
-export const logBuffer = createDiagnosticLogBuffer();
+export const logBuffer = createLogLogBuffer();

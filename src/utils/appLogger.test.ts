@@ -5,31 +5,36 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/services/log", () => ({
-  LogService: { submitFrontendDiagnostics: mocks.submit },
+  LogService: { submitFrontendLogs: mocks.submit },
 }));
 
-import { FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS } from "@/shared/config-default";
+import { FRONTEND_LOG_BATCH_MAX_DELAY_MS } from "@/shared/config-default";
 import { logger } from "@/features/application/observability/appLogger";
+import { installFrontendLogging } from "@/features/application/observability/frontendLogTransport";
 
 describe("appLogger", () => {
+  let stopCapture: (() => void) | undefined;
   beforeEach(() => {
     vi.useFakeTimers();
     mocks.submit.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    stopCapture?.();
+    stopCapture = undefined;
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
-  it("writes explicit logs once and never forwards raw console calls", async () => {
+  it("captures console and explicit logs once without feeding transport failures back into the logger", async () => {
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    stopCapture = installFrontendLogging();
 
     logger.app.info("application ready", "Bootstrap");
     expect(consoleLog).toHaveBeenCalledOnce();
     expect(consoleLog).toHaveBeenCalledWith("[APP][Bootstrap] application ready");
 
-    await vi.advanceTimersByTimeAsync(FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(FRONTEND_LOG_BATCH_MAX_DELAY_MS);
     expect(mocks.submit).toHaveBeenCalledOnce();
     expect(mocks.submit.mock.calls[0]?.[0]).toMatchObject([
       {
@@ -42,8 +47,15 @@ describe("appLogger", () => {
       },
     ]);
 
-    console.log("raw console only");
-    await vi.advanceTimersByTimeAsync(FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS);
-    expect(mocks.submit).toHaveBeenCalledOnce();
+    console.log("raw console message");
+    await vi.advanceTimersByTimeAsync(FRONTEND_LOG_BATCH_MAX_DELAY_MS);
+    expect(mocks.submit).toHaveBeenCalledTimes(2);
+    expect(mocks.submit.mock.calls[1]?.[0]).toMatchObject([
+      { level: "info", target: "frontend.console", message: "raw console message" },
+    ]);
+    mocks.submit.mockRejectedValue(new Error("transport unavailable"));
+    console.log("last message");
+    await vi.advanceTimersByTimeAsync(FRONTEND_LOG_BATCH_MAX_DELAY_MS * 10);
+    expect(mocks.submit).toHaveBeenCalledTimes(3);
   });
 });

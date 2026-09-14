@@ -4,7 +4,7 @@ import type { GraphResourceRecord } from "@/features/core/resource/resourceSelec
 import type { FunctionPinSpec } from "@/shared/types/domain/graph";
 import type { ChartDocument } from "@/shared/types/domain/chart";
 import type { DatabaseRecord } from "@/shared/types/domain/database";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 
 export interface DetailCatalogSnapshot {
   events: GraphResourceRecord;
@@ -15,7 +15,7 @@ export interface DetailCatalogSnapshot {
 
 export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
   target: DetailTarget | null;
-  selectedLog: DiagnosticRecordDto | null;
+  selectedLog: LogRecordDto | null;
   chartDocument: ChartDocument | null;
 }
 
@@ -27,7 +27,7 @@ export type FunctionDetailModel = {
 
 export type DetailPanelModel =
   | { kind: "empty" }
-  | { kind: "log"; log: DiagnosticRecordDto }
+  | { kind: "log"; log: LogRecordDto }
   | { kind: "node"; nodeId: string; graphPath: string }
   | { kind: "nodeDefinition"; nodeType: string }
   | { kind: "event"; path: string; event: { name: string } }

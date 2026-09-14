@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logBuffer } from "@/features/application/log/logBuffer";
-import { LogService, type DiagnosticSubscription } from "@/services/log";
+import { LogService, type LogSubscription } from "@/services/log";
 
-export type DiagnosticSubscriptionStatus = "connecting" | "live" | "error";
+export type LogSubscriptionStatus = "connecting" | "live" | "error";
 
-export function useDiagnosticSubscription() {
+export function useLogSubscription() {
   const recoveryAttempts = useRef(0);
   const [generation, setGeneration] = useState(0);
-  const [status, setStatus] = useState<DiagnosticSubscriptionStatus>("connecting");
+  const [status, setStatus] = useState<LogSubscriptionStatus>("connecting");
 
   useEffect(() => {
     let cancelled = false;
     let discontinued = false;
-    let subscription: DiagnosticSubscription | null = null;
+    let subscription: LogSubscription | null = null;
     setStatus("connecting");
 
-    void LogService.subscribeDiagnostics(
+    void LogService.subscribeLogs(
       (batch) => {
         if (!cancelled && !discontinued) {
           recoveryAttempts.current = 0;
@@ -47,7 +47,7 @@ export function useDiagnosticSubscription() {
       })
       .catch((error) => {
         if (cancelled) return;
-        console.error("[Diagnostics] Failed to subscribe", error);
+        console.error("[Logs] Failed to subscribe", error);
         setStatus("error");
       });
 

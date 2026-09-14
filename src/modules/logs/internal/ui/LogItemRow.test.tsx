@@ -2,12 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogItemRow } from "./LogItemRow";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const LOG: DiagnosticRecordDto = {
+const LOG: LogRecordDto = {
   streamId: "stream-1",
   sequence: 12,
   timestamp: "2026-08-11T12:34:56.000Z",

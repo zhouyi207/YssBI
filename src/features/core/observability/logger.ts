@@ -1,7 +1,7 @@
-type DiagnosticLevel = "trace" | "debug" | "info" | "warn" | "error";
-type DiagnosticDomain = "application" | "execution" | "system" | "graph" | "data" | "ui";
+type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+type LogDomain = "application" | "execution" | "system" | "graph" | "data" | "ui";
 
-const CONSOLE_METHOD: Record<DiagnosticLevel, "debug" | "log" | "warn" | "error"> = {
+const CONSOLE_METHOD: Record<LogLevel, "debug" | "log" | "warn" | "error"> = {
   trace: "debug",
   debug: "debug",
   info: "log",
@@ -9,8 +9,8 @@ const CONSOLE_METHOD: Record<DiagnosticLevel, "debug" | "log" | "warn" | "error"
   error: "error",
 };
 
-function createTypedLogger(domain: DiagnosticDomain, label: string) {
-  const emit = (level: DiagnosticLevel, message: string, source?: string) => {
+function createTypedLogger(domain: LogDomain, label: string) {
+  const emit = (level: LogLevel, message: string, source?: string) => {
     const normalizedSource = source?.trim();
     const prefix = normalizedSource ? `[${label}][${normalizedSource}]` : `[${label}]`;
     console[CONSOLE_METHOD[level]](`${prefix} ${message}`);

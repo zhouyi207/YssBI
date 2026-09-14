@@ -1,12 +1,12 @@
 import { useTranslation } from "react-i18next";
-import type { DiagnosticLevel, DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogLevel, LogRecordDto } from "@/shared/types/domain/log";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailForm, DetailReadonlyField } from "../shared/DetailForm";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
 import { DetailBadge, DetailText } from "../shared/DetailText";
 
-const getLevelColor = (level: DiagnosticLevel) => {
+const getLevelColor = (level: LogLevel) => {
   switch (level) {
     case "error":
       return "text-red-400";
@@ -40,7 +40,7 @@ const getDomainColor = (domain: string) => {
   }
 };
 
-export function LogDetailPanel({ log }: { log: DiagnosticRecordDto }) {
+export function LogDetailPanel({ log }: { log: LogRecordDto }) {
   const { t } = useTranslation();
   const domainLabel = t(`detail.log.types.${log.domain}`, {
     defaultValue: log.domain.toUpperCase(),

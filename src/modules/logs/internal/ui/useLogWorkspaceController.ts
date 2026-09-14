@@ -1,37 +1,34 @@
 import { useCallback, useMemo, useState } from "react";
 import { revealDetails } from "@/features/application/editor";
-import {
-  useDiagnosticSubscription,
-  type DiagnosticSubscriptionStatus,
-} from "@/features/application/log";
+import { useLogSubscription, type LogSubscriptionStatus } from "@/features/application/log";
 import { useEditorUi } from "@/features/core/editor/ui";
 import { editorUi } from "@/features/core/editor/ui";
 import { logBuffer, useLiveLogs } from "@/features/application/log";
 import { useLogStore } from "@/features/application/log";
-import type { DiagnosticLogFilter } from "@/features/application/log";
-import type { DiagnosticLevel, DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogLogFilter } from "@/features/application/log";
+import type { LogLevel, LogRecordDto } from "@/shared/types/domain/log";
 
 export interface LogWorkspaceController {
-  readonly logs: readonly DiagnosticRecordDto[];
-  readonly filter: DiagnosticLogFilter;
-  readonly selectedLog: DiagnosticRecordDto | null;
+  readonly logs: readonly LogRecordDto[];
+  readonly filter: LogLogFilter;
+  readonly selectedLog: LogRecordDto | null;
   readonly autoScroll: boolean;
   readonly loading: boolean;
   readonly isInitialLoad: boolean;
-  readonly subscriptionStatus: DiagnosticSubscriptionStatus;
+  readonly subscriptionStatus: LogSubscriptionStatus;
   readonly continuity: "complete" | "truncated" | "disconnected";
   readonly refreshScrollToken: number;
-  readonly toggleLevel: (level: DiagnosticLevel) => void;
+  readonly toggleLevel: (level: LogLevel) => void;
   readonly setSearchText: (text: string) => void;
   readonly setAutoScroll: (autoScroll: boolean) => void;
   readonly refreshLogs: () => void;
   readonly clearLogs: () => void;
-  readonly selectLog: (log: DiagnosticRecordDto | null) => void;
+  readonly selectLog: (log: LogRecordDto | null) => void;
 }
 
 export function useLogWorkspaceController(): LogWorkspaceController {
   const { entries: logs, streamId, truncated } = useLiveLogs();
-  const { status: subscriptionStatus, reconnect } = useDiagnosticSubscription();
+  const { status: subscriptionStatus, reconnect } = useLogSubscription();
   const filter = useLogStore((state) => state.filter);
   const selectedLog = useLogStore((state) => state.selectedLog);
   const autoScroll = useLogStore((state) => state.autoScroll);
@@ -44,7 +41,7 @@ export function useLogWorkspaceController(): LogWorkspaceController {
   const [refreshScrollToken, setRefreshScrollToken] = useState(0);
 
   const selectLog = useCallback(
-    (log: DiagnosticRecordDto | null) => {
+    (log: LogRecordDto | null) => {
       setSelectedLog(log);
       if (log) {
         void revealDetails({ kind: "log" });

@@ -1,19 +1,11 @@
-import { LogService } from "@/services/log";
-import {
-  createFrontendDiagnosticBatcher,
-  type FrontendDiagnosticEntry,
-} from "@/utils/frontendDiagnosticBatcher";
-import {
-  FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS,
-  FRONTEND_DIAGNOSTIC_BATCH_MAX_ENTRIES,
-  FRONTEND_DIAGNOSTIC_BATCH_MAX_PENDING,
-  FRONTEND_DIAGNOSTIC_MESSAGE_MAX_BYTES,
-} from "@/utils/logConfig";
+import type { FrontendLogEntry } from "@/utils/frontendLogBatcher";
+import { withoutConsoleCapture } from "@/utils/consoleLogCapture";
+import { frontendLogBatcher } from "./frontendLogTransport";
 
-type DiagnosticLevel = FrontendDiagnosticEntry["level"];
-type DiagnosticDomain = FrontendDiagnosticEntry["domain"];
+type LogLevel = FrontendLogEntry["level"];
+type LogDomain = FrontendLogEntry["domain"];
 
-const CONSOLE_METHOD: Record<DiagnosticLevel, "debug" | "log" | "warn" | "error"> = {
+const CONSOLE_METHOD: Record<LogLevel, "debug" | "log" | "warn" | "error"> = {
   trace: "debug",
   debug: "debug",
   info: "log",
@@ -21,20 +13,12 @@ const CONSOLE_METHOD: Record<DiagnosticLevel, "debug" | "log" | "warn" | "error"
   error: "error",
 };
 
-const batcher = createFrontendDiagnosticBatcher({
-  maxBatchEntries: FRONTEND_DIAGNOSTIC_BATCH_MAX_ENTRIES,
-  maxPendingEntries: FRONTEND_DIAGNOSTIC_BATCH_MAX_PENDING,
-  maxDelayMs: FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS,
-  maxMessageBytes: FRONTEND_DIAGNOSTIC_MESSAGE_MAX_BYTES,
-  submit: (entries) => LogService.submitFrontendDiagnostics(entries),
-});
-
 function createEntry(
-  level: DiagnosticLevel,
-  domain: DiagnosticDomain,
+  level: LogLevel,
+  domain: LogDomain,
   message: string,
   source?: string,
-): FrontendDiagnosticEntry {
+): FrontendLogEntry {
   const normalizedSource = source?.trim();
   return {
     level,
@@ -47,19 +31,19 @@ function createEntry(
 }
 
 function emit(
-  level: DiagnosticLevel,
-  domain: DiagnosticDomain,
+  level: LogLevel,
+  domain: LogDomain,
   label: string,
   message: string,
   source?: string,
 ): void {
   const normalizedSource = source?.trim();
   const prefix = normalizedSource ? `[${label}][${normalizedSource}]` : `[${label}]`;
-  console[CONSOLE_METHOD[level]](`${prefix} ${message}`);
-  batcher.enqueue(createEntry(level, domain, message, source));
+  withoutConsoleCapture(() => console[CONSOLE_METHOD[level]](`${prefix} ${message}`));
+  frontendLogBatcher.enqueue(createEntry(level, domain, message, source));
 }
 
-function createTypedLogger(domain: DiagnosticDomain, label: string) {
+function createTypedLogger(domain: LogDomain, label: string) {
   return {
     trace: (message: string, source?: string) => emit("trace", domain, label, message, source),
     debug: (message: string, source?: string) => emit("debug", domain, label, message, source),

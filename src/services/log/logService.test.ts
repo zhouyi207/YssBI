@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Channel } from "@tauri-apps/api/core";
-import type {
-  DiagnosticBatchDto,
-  DiagnosticRecordDto,
-  FrontendDiagnosticEntryDto,
-} from "@/shared/types/dto/diagnostics";
+import type { LogBatchDto, LogRecordDto, FrontendLogEntryDto } from "@/shared/types/dto/log";
 
 const core = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -37,8 +33,9 @@ vi.mock("@/shared/platform/tauriWebview", () => ({
 }));
 
 import { LogService } from "./logService";
+import { DiagnosticsService } from "@/services/diagnostics";
 
-function record(sequence: number): DiagnosticRecordDto {
+function record(sequence: number): LogRecordDto {
   return {
     streamId: "stream-1",
     sequence,
@@ -52,7 +49,7 @@ function record(sequence: number): DiagnosticRecordDto {
   };
 }
 
-const batch = (sequence: number): DiagnosticBatchDto => ({
+const batch = (sequence: number): LogBatchDto => ({
   streamId: "stream-1",
   entries: [record(sequence)],
 });
@@ -65,10 +62,74 @@ beforeEach(() => {
   channelTracking.clear.mockClear();
 });
 
-describe("LogService diagnostics contract", () => {
+describe("LogService plugin contract", () => {
+  it("validates paged history and statistics from the plugin", async () => {
+    core.invoke.mockResolvedValue({ entries: [record(3)], nextBeforeSequence: 3 });
+    expect(await LogService.queryLogs({ beforeSequence: 4, limit: 1 })).toEqual({
+      entries: [record(3)],
+      nextBeforeSequence: 3,
+    });
+    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|query_logs", {
+      query: { beforeSequence: 4, limit: 1 },
+    });
+    core.invoke.mockResolvedValue({
+      total: 3,
+      latestSequence: 3,
+      byLevel: { info: 3 },
+      byOrigin: { rust: 3 },
+    });
+    expect((await LogService.logStatistics()).total).toBe(3);
+    core.invoke.mockResolvedValue({ entries: [], next_before_sequence: null });
+    await expect(LogService.queryLogs()).rejects.toThrow("Invalid log page");
+    core.invoke.mockResolvedValue({
+      total: 3,
+      latestSequence: 3,
+      byLevel: { fatal: 3 },
+      byOrigin: {},
+    });
+    await expect(LogService.logStatistics()).rejects.toThrow("Invalid log counts");
+  });
+  it("keeps plugin log channels and Application diagnostic channels separate", async () => {
+    core.invoke.mockImplementation(async (command: string) => {
+      const streamId = command.startsWith("plugin:tracing|") ? "logs" : "diagnostics";
+      return {
+        subscriptionId: streamId,
+        streamId,
+        entries: [],
+        latestSequence: 0,
+        truncated: false,
+      };
+    });
+    const logRecords = vi.fn();
+    const diagnosticRecords = vi.fn();
+    const logs = await LogService.subscribeLogs(logRecords);
+    const diagnostics = await DiagnosticsService.subscribeDiagnostics(diagnosticRecords);
+    logs.activate();
+    diagnostics.activate();
+    core.channels[0]?.onmessage?.({
+      streamId: "logs",
+      entries: [{ ...record(1), streamId: "logs" }],
+    });
+    expect(logRecords).toHaveBeenCalledOnce();
+    expect(diagnosticRecords).not.toHaveBeenCalled();
+    core.channels[1]?.onmessage?.({
+      streamId: "diagnostics",
+      entries: [{ ...record(1), streamId: "diagnostics" }],
+    });
+    expect(diagnosticRecords).toHaveBeenCalledOnce();
+    await logs.unsubscribe();
+    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|unsubscribe_logs", {
+      subscriptionId: "logs",
+    });
+    expect(core.invoke).not.toHaveBeenCalledWith("unsubscribe_diagnostics", expect.anything());
+    await diagnostics.unsubscribe();
+    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
+      subscriptionId: "diagnostics",
+    });
+  });
   it("submits a frontend batch with the fixed command payload", async () => {
     core.invoke.mockResolvedValue(undefined);
-    const entries: FrontendDiagnosticEntryDto[] = [
+    const entries: FrontendLogEntryDto[] = [
       {
         level: "warn",
         domain: "graph",
@@ -78,15 +139,15 @@ describe("LogService diagnostics contract", () => {
       },
     ];
 
-    await LogService.submitFrontendDiagnostics(entries);
+    await LogService.submitFrontendLogs(entries);
 
-    expect(core.invoke).toHaveBeenCalledWith("submit_frontend_diagnostics", { entries });
+    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|submit_frontend_logs", { entries });
   });
 
   it("applies the initial snapshot before draining early Channel batches", async () => {
-    const received: DiagnosticBatchDto[] = [];
+    const received: LogBatchDto[] = [];
     core.invoke.mockImplementation(async (command: string, args?: unknown) => {
-      if (command !== "subscribe_diagnostics") return undefined;
+      if (command !== "plugin:tracing|subscribe_logs") return undefined;
       const channel = (args as { onRecords: Channel<unknown> }).onRecords;
       channel.onmessage?.(batch(2));
       return {
@@ -98,7 +159,7 @@ describe("LogService diagnostics contract", () => {
       };
     });
 
-    const subscription = await LogService.subscribeDiagnostics((next) => received.push(next));
+    const subscription = await LogService.subscribeLogs((next) => received.push(next));
     expect(subscription.snapshot.entries).toEqual([record(1)]);
     expect(received).toEqual([]);
 
@@ -111,8 +172,8 @@ describe("LogService diagnostics contract", () => {
   it("reconnects instead of silently dropping preactivation overflow", async () => {
     let subscribeAttempt = 0;
     core.invoke.mockImplementation(async (command: string, args?: unknown) => {
-      if (command === "unsubscribe_diagnostics") return undefined;
-      if (command !== "subscribe_diagnostics") return undefined;
+      if (command === "plugin:tracing|unsubscribe_logs") return undefined;
+      if (command !== "plugin:tracing|subscribe_logs") return undefined;
       subscribeAttempt += 1;
       const channel = (args as { onRecords: Channel<unknown> }).onRecords;
       if (subscribeAttempt === 1) {
@@ -136,13 +197,13 @@ describe("LogService diagnostics contract", () => {
       };
     });
 
-    const subscription = await LogService.subscribeDiagnostics(vi.fn());
+    const subscription = await LogService.subscribeLogs(vi.fn());
 
     expect(subscription.snapshot.subscriptionId).toBe("subscription-reconnected");
     expect(
-      core.invoke.mock.calls.filter(([command]) => command === "subscribe_diagnostics"),
+      core.invoke.mock.calls.filter(([command]) => command === "plugin:tracing|subscribe_logs"),
     ).toHaveLength(2);
-    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
+    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|unsubscribe_logs", {
       subscriptionId: "subscription-overflowed",
     });
   });
@@ -155,17 +216,17 @@ describe("LogService diagnostics contract", () => {
       latestSequence: 0,
       truncated: false,
     });
-    const subscription = await LogService.subscribeDiagnostics(vi.fn());
+    const subscription = await LogService.subscribeLogs(vi.fn());
 
     core.invoke.mockResolvedValue(undefined);
     await subscription.unsubscribe();
     await subscription.unsubscribe();
 
-    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
+    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|unsubscribe_logs", {
       subscriptionId: "subscription-1",
     });
     expect(
-      core.invoke.mock.calls.filter(([command]) => command === "unsubscribe_diagnostics"),
+      core.invoke.mock.calls.filter(([command]) => command === "plugin:tracing|unsubscribe_logs"),
     ).toHaveLength(1);
     expect(channelTracking.untrack).toHaveBeenCalledOnce();
     expect(channelTracking.clear).toHaveBeenCalledOnce();

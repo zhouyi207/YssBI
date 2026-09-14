@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDataSignaturePin } from "@/shared/types/domain/functionSignaturePin";
-import type { DiagnosticRecordDto } from "@/shared/types/domain/diagnostics";
+import type { LogRecordDto } from "@/shared/types/domain/log";
 import { resolveDetailPanelModel } from "./resolveDetailPanelModel";
 
 const logEntry = {
@@ -13,7 +13,7 @@ const logEntry = {
   target: "test",
   message: "hello",
   fields: {},
-} satisfies DiagnosticRecordDto;
+} satisfies LogRecordDto;
 
 const catalog = {
   events: { "evt-1": { id: "evt-1", name: "Main" } },
