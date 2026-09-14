@@ -1,4 +1,5 @@
 import type { FrontendLogEntryDto } from "@/shared/types/dto/log";
+import { isFrontendLogEnabled } from "./logConfig";
 export type FrontendLogEntry = FrontendLogEntryDto;
 
 export interface FrontendLogBatcherOptions {
@@ -88,7 +89,7 @@ export function createFrontendLogBatcher(options: FrontendLogBatcherOptions): Fr
 
   return {
     enqueue: (entry) => {
-      if (disposed) return;
+      if (disposed || !isFrontendLogEnabled(entry.level)) return;
       pending.push({ ...entry, message: truncateUtf8(entry.message, maxMessageBytes) });
       if (pending.length > maxPendingEntries) {
         pending.splice(0, pending.length - maxPendingEntries);

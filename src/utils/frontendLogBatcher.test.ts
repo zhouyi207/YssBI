@@ -34,6 +34,14 @@ describe("createFrontendLogBatcher", () => {
       submit,
     });
 
+    batcher.enqueue({
+      ...entry("disabled"),
+      level: "debug",
+      get message(): string {
+        throw new Error("disabled messages must not be read or formatted");
+      },
+    });
+    expect(batcher.pendingCount()).toBe(0);
     batcher.enqueue(entry("one"));
     batcher.enqueue(entry("two"));
     await vi.advanceTimersByTimeAsync(49);

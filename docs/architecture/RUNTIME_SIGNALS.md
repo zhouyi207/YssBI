@@ -33,10 +33,13 @@ YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 auth
 
 ```mermaid
 flowchart TD
-  TRACE[Rust tracing event] --> SANITIZE[plugin collector: sanitize and bound]
+  TRACE[Rust tracing event] --> CAPTURE[plugin collector: level filter and bounded capture]
+  CAPTURE --> INGRESS[bounded non-blocking ingress]
+  INGRESS --> SANITIZE[plugin dispatcher: sanitize once]
   SANITIZE --> CONSOLE[bounded console worker]
   SANITIZE --> LOGPLUGIN[plugin log dispatcher]
-  FELOG[frontend logger and console] --> LOGPLUGIN
+  FELOG[frontend logger and console: INFO and above] --> FEVALIDATE[plugin: level filter and validation]
+  FEVALIDATE --> INGRESS
   LOGPLUGIN --> SQLITE[logs.sqlite]
   SQLITE --> LOGCHANNEL[plugin log snapshot and channel]
   LOGCHANNEL --> LOGS[Logs UI]
@@ -62,9 +65,11 @@ Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projectio
 
 `src-tauri/crates/tauri-plugin-tracing/` 拥有日志 SQLite、日志 recent snapshot、前端日志接收、分页查询、统计和日志 Channel。插件不依赖 `yss-diagnostics`、Graph、SCI 或 Problems 的业务 owner。
 
-原有日志采集实现已并入 `src-tauri/crates/tauri-plugin-tracing/src/collector/`，workspace 不再保留单独的 yss-tracing crate。collector 拥有：process-wide subscriber/filter、`tracing::Event` 到 `LogRecord` 的转换、脱敏与单条记录限额、bounded console worker 和非阻塞 sanitized record sinks。Rust 任意 crate 只需使用普通 `tracing` 宏；`log` facade 通过 LogTracer 接入。默认接收全部 crate/level，`RUST_LOG` 可显式收窄范围。`println!`/进程 stdout/stderr 不属于 tracing 采集入口。
+原有日志采集实现已并入 `src-tauri/crates/tauri-plugin-tracing/src/collector/`，workspace 不再保留单独的 yss-tracing crate。collector 拥有 process-wide subscriber/filter、受限的事件捕获、脱敏工具与 bounded console worker。Rust 任意 crate 只需使用普通 `tracing` 宏；`log` facade 通过 LogTracer 接入。开发、排查与生产环境默认均接收全部 crate 的 INFO/WARN/ERROR；缺失、空或无效 `RUST_LOG` 回退到 INFO。有效 `RUST_LOG` 仍可显式覆盖 Rust 采集过滤器。`println!`/进程 stdout/stderr 不属于 tracing 采集入口。
 
-前端显式 logger 和 `console.log/info/debug/trace/warn/error` 共用日志批次队列，提交到插件。显式 logger 的 console 输出不会重复入库。console 中的任意对象、数组只记录类型/长度摘要，避免序列化用户文档或数据集；transport 失败不递归产生日志。采集从桌面前端入口安装后开始，超出有界队列或应用异常终止时允许丢失，不能承诺每条日志必达。
+Rust 调用线程只记录发生时的本机钟面时间、捕获有界字段并非阻塞入队。借用值所需的 Debug/Display 格式化仍在调用处完成；字段键、字段数、字符串长度和累计捕获字节均提前受限，明确被屏蔽的字段不执行值格式化，截断通过格式化错误提前终止后续写入。内部捕获记录由已有 dispatcher 专用线程完成时间字符串格式化、脱敏和记录规范化，控制台与 SQLite 使用同一份处理结果；不在 producer 上复制字段或重复脱敏。原始捕获记录不对外暴露，输出前仍执行结构和 JSON 编码大小限制。存储不可用时 dispatcher 继续处理控制台输出。
+
+前端显式 logger 和 console 共用日志批次队列，均在消息格式化与入队前过滤 DEBUG/TRACE；插件前端入口在记录校验前执行相同的 INFO 阈值，校验通过的记录由 dispatcher 单次脱敏。显式 logger 的 console 输出不会重复入库；原生 console 方法的浏览器输出保持原样，插件只采集 INFO/WARN/ERROR。console 中的任意对象、数组只记录类型/长度摘要，避免序列化用户文档或数据集；transport 失败不递归产生日志。采集从桌面前端入口安装后开始，超出有界队列或应用异常终止时允许丢失，不能承诺每条日志必达。
 
 ### SQLite 与交付顺序
 

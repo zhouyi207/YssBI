@@ -1,6 +1,4 @@
-use crate::collector::{
-    LogLimits, sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
-};
+use crate::collector::LogLimits;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -58,6 +56,7 @@ pub(crate) fn validate_frontend_batch(
     entries
         .into_iter()
         .enumerate()
+        .filter(|(_, entry)| entry.level.enabled_by_default())
         .map(|(index, entry)| validate_entry(index, entry))
         .collect()
 }
@@ -99,11 +98,11 @@ fn validate_entry(
     Ok(ValidatedFrontendLog {
         level: entry.level,
         domain: entry.domain,
-        target: sanitize_target(&entry.target),
-        event: entry.event.as_deref().map(sanitize_event),
-        message: sanitize_message(&entry.message),
-        source: entry.source.as_deref().map(sanitize_source),
-        fields: sanitize_fields(entry.fields),
+        target: entry.target,
+        event: entry.event,
+        message: entry.message,
+        source: entry.source,
+        fields: entry.fields,
     })
 }
 

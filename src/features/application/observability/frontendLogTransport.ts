@@ -7,6 +7,7 @@ import {
   FRONTEND_LOG_BATCH_MAX_ENTRIES,
   FRONTEND_LOG_BATCH_MAX_PENDING,
   FRONTEND_LOG_MESSAGE_MAX_BYTES,
+  isFrontendLogEnabled,
 } from "@/utils/logConfig";
 
 export const frontendLogBatcher = createFrontendLogBatcher({
@@ -22,6 +23,7 @@ let disposeCapture: (() => void) | undefined;
 export function installFrontendLogging(): () => void {
   if (disposeCapture) return disposeCapture;
   const stopCapture = installConsoleLogCapture((level, args) => {
+    if (!isFrontendLogEnabled(level)) return;
     if (import.meta.hot && isBenignTauriCallbackWarning(args)) return;
     frontendLogBatcher.enqueue({
       level,

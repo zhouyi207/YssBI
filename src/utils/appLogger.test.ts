@@ -26,6 +26,26 @@ describe("appLogger", () => {
     vi.useRealTimers();
   });
 
+  it("filters debug and trace before console capture formats messages or enqueues batches", async () => {
+    const consoleDebug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(console, "trace").mockImplementation(() => {});
+    stopCapture = installFrontendLogging();
+
+    logger.app.debug("disabled application log");
+    logger.exec.trace("disabled execution log");
+    expect(consoleDebug).not.toHaveBeenCalled();
+
+    const message = new Error("disabled");
+    const readMessage = vi.fn(() => "disabled");
+    Object.defineProperty(message, "message", { get: readMessage });
+    console.debug(message);
+    console.trace(message);
+    await vi.advanceTimersByTimeAsync(FRONTEND_LOG_BATCH_MAX_DELAY_MS);
+
+    expect(readMessage).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
   it("captures console and explicit logs once without feeding transport failures back into the logger", async () => {
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
     stopCapture = installFrontendLogging();

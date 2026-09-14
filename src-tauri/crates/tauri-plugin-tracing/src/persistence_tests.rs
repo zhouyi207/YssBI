@@ -28,9 +28,10 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
         .subscribe_batches(move |batch| sender.send(batch).is_ok())
         .unwrap();
     assert!(snapshot.entries.is_empty());
-    let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink()));
-    tracing::subscriber::with_default(subscriber, || {
-        tracing::debug!(target: "arbitrary_crate::worker", count = 1, "Rust worker ready");
+    let subscriber = tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
+    let dispatch = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::with_default(&dispatch, || {
+        tracing::info!(target: "arbitrary_crate::worker", count = 1, "Rust worker ready");
     });
     logs.submit_frontend(vec![frontend("Frontend ready")])
         .unwrap();
@@ -72,8 +73,9 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
     });
 
     // Shutdown must drain accepted entries even while a LogRuntime clone is retained by Tauri.
-    logs.submit_frontend(vec![frontend("Last before exit")])
-        .unwrap();
+    tracing::dispatcher::with_default(&dispatch, || {
+        tracing::info!("Last before exit");
+    });
     logs.shutdown();
     let reopened = LogRuntime::open(path).unwrap();
     let restored = reopened.subscribe_batches(|_| true).unwrap();
@@ -107,10 +109,10 @@ fn logs_commit_before_delivery_and_survive_restart_with_sqlx_readable_history() 
             ..Default::default()
         })
         .unwrap();
-    assert_eq!(rust_only.entries.len(), 1);
+    assert_eq!(rust_only.entries.len(), 2);
     let statistics = reopened.statistics().unwrap();
     assert_eq!(statistics.total, 3);
-    assert_eq!(statistics.by_origin["frontend"], 2);
+    assert_eq!(statistics.by_origin["frontend"], 1);
     reopened.shutdown();
 }
 
@@ -143,5 +145,21 @@ fn failed_sqlite_write_sends_a_terminal_failure_without_publishing_uncommitted_l
         logs.submit_frontend(vec![frontend("Rejected after failure")])
             .is_err()
     );
+    let (console_sender, console_receiver) = mpsc::channel();
+    let (console, _console_guard) = crate::collector::spawn_output(
+        "storage-failure-test",
+        Box::new(move |record| console_sender.send(record.clone()).is_ok()),
+    )
+    .unwrap();
+    let subscriber =
+        tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(Some(console))));
+    tracing::subscriber::with_default(subscriber, || {
+        tracing::warn!(password = "hidden", "Authorization: Bearer secret");
+    });
     logs.shutdown();
+    let record = console_receiver
+        .recv_timeout(Duration::from_secs(3))
+        .unwrap();
+    assert!(!record.message.contains("secret"));
+    assert_eq!(record.fields["password"], "[REDACTED]");
 }

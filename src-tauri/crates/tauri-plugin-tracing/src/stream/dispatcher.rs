@@ -14,9 +14,11 @@ use uuid::Uuid;
 use super::dto::{
     LogBatchDto, LogDomain, LogFields, LogLevel, LogOrigin, LogRecordDto, LogSubscriptionDto,
 };
+use super::rust_projection::project_log_record;
 use super::worker::{BoundedWorker, EnqueueResult};
 use crate::collector::{
-    sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
+    CapturedLog, OutputHandle, sanitize_event, sanitize_fields, sanitize_message, sanitize_source,
+    sanitize_target,
 };
 
 pub const RECENT_LOG_CAPACITY: usize = 5_000;
@@ -105,6 +107,10 @@ enum DispatcherCommand {
         response: mpsc::Sender<Result<LogStatistics, LogStoreError>>,
     },
     Publish(PendingLog),
+    PublishRust {
+        record: CapturedLog,
+        console: Option<OutputHandle>,
+    },
     ReportDropped(u64),
     Subscribe {
         sink: BatchSink,
@@ -157,7 +163,6 @@ impl LogHub {
         Self::start_with_config(DispatcherConfig::production(), None, Some(path))
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn start_memory() -> Result<(Self, LogDispatcherGuard), LogDispatcherStartError> {
         Self::start_with_config(DispatcherConfig::production(), None, None)
     }
@@ -276,14 +281,33 @@ impl LogHub {
 
         for record in records {
             self.try_enqueue_dropped_marker()?;
-            match self
-                .sender
-                .try_send(DispatcherCommand::Publish(record.sanitized()))
-            {
+            match self.sender.try_send(DispatcherCommand::Publish(record)) {
                 Ok(()) => {}
                 Err(TrySendError::Full(_)) => self.add_dropped(1),
                 Err(TrySendError::Disconnected(_)) => return Err(LogsUnavailable),
             }
+        }
+        self.try_enqueue_dropped_marker()
+    }
+
+    pub(crate) fn publish_rust(
+        &self,
+        record: CapturedLog,
+        console: Option<OutputHandle>,
+    ) -> Result<(), LogsUnavailable> {
+        // Console delivery continues after storage fails. Raw captures stay
+        // internal and are only sanitized if the bounded queue accepts them.
+        if self.shutdown.load(Ordering::Acquire) {
+            return Err(LogsUnavailable);
+        }
+        self.try_enqueue_dropped_marker()?;
+        match self
+            .sender
+            .try_send(DispatcherCommand::PublishRust { record, console })
+        {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => self.add_dropped(1),
+            Err(TrySendError::Disconnected(_)) => return Err(LogsUnavailable),
         }
         self.try_enqueue_dropped_marker()
     }
@@ -413,6 +437,20 @@ impl DispatcherState {
     }
 
     fn publish(&mut self, pending: PendingLog) {
+        self.publish_sanitized(pending.sanitized());
+    }
+
+    fn publish_rust(&mut self, captured: CapturedLog, console: Option<OutputHandle>) {
+        let record = captured.into_sanitized_record();
+        if let Some(console) = console {
+            // The console worker owns its copy; no fields are cloned or
+            // sanitized on the calculation thread.
+            console.try_enqueue(Arc::new(record.clone()));
+        }
+        self.publish_sanitized(project_log_record(record));
+    }
+
+    fn publish_sanitized(&mut self, pending: PendingLog) {
         if self.storage_failed.load(Ordering::Acquire) {
             return;
         }
@@ -628,6 +666,7 @@ fn process_command(command: DispatcherCommand, state: &mut DispatcherState) -> b
             let _ = response.send(result);
         }
         DispatcherCommand::Publish(record) => state.publish(record),
+        DispatcherCommand::PublishRust { record, console } => state.publish_rust(record, console),
         DispatcherCommand::ReportDropped(dropped_count) => state.publish_dropped(dropped_count),
         DispatcherCommand::Subscribe { sink, response } => {
             if state.flush_live() {
@@ -663,6 +702,9 @@ fn drain_for_shutdown(
                 let _ = response.send(Err(LogStoreError::Unavailable));
             }
             Ok(DispatcherCommand::Publish(record)) => state.publish(record),
+            Ok(DispatcherCommand::PublishRust { record, console }) => {
+                state.publish_rust(record, console);
+            }
             Ok(DispatcherCommand::ReportDropped(dropped_count)) => {
                 state.publish_dropped(dropped_count);
             }

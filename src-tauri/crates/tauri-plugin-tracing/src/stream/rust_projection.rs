@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::collector::{
-    LogRecord, LogRecordSink, sanitize_event, sanitize_source, sanitize_target,
+    CapturedLogSink, LogRecord, OutputHandle, sanitize_event, sanitize_source, sanitize_target,
 };
 use serde_json::Value;
 
@@ -13,32 +13,32 @@ const EVENT_FIELD: &str = "log_event";
 const SOURCE_FIELD: &str = "log_source";
 const TARGET_FIELD: &str = "log_target";
 
-pub(crate) fn log_record_sink(hub: LogHub) -> LogRecordSink {
+pub(crate) fn log_record_sink(hub: LogHub, console: Option<OutputHandle>) -> CapturedLogSink {
     Arc::new(move |record| {
         // Reporting a rejected log here would recursively enter this same sink.
-        drop(hub.publish(vec![project_log_record(record)]));
+        drop(hub.publish_rust(record, console.clone()));
     })
 }
 
-fn project_log_record(record: &LogRecord) -> PendingLog {
-    let mut fields = record.fields.clone();
+pub(super) fn project_log_record(record: LogRecord) -> PendingLog {
+    let mut fields = record.fields;
     let domain = take_string(&mut fields, DOMAIN_FIELD)
         .as_deref()
         .and_then(LogDomain::parse)
         .unwrap_or_else(|| infer_domain(&record.target));
     let target = take_string(&mut fields, TARGET_FIELD)
         .map(|value| sanitize_target(&value))
-        .unwrap_or_else(|| record.target.clone());
+        .unwrap_or(record.target);
     let event = take_string(&mut fields, EVENT_FIELD).map(|value| sanitize_event(&value));
     let source = take_string(&mut fields, SOURCE_FIELD).map(|value| sanitize_source(&value));
     PendingLog {
-        timestamp: record.timestamp.clone(),
+        timestamp: record.timestamp,
         level: record.level,
         origin: LogOrigin::Rust,
         domain,
         target,
         event,
-        message: record.message.clone(),
+        message: record.message,
         source,
         fields,
     }
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn ordinary_crate_events_are_collected_without_log_annotations() {
-        let pending = project_log_record(&record(BTreeMap::from([("count".into(), json!(1))])));
+        let pending = project_log_record(record(BTreeMap::from([("count".into(), json!(1))])));
         assert_eq!(pending.domain, LogDomain::Data);
         assert_eq!(pending.message, "failed");
         assert_eq!(pending.fields["count"], 1);

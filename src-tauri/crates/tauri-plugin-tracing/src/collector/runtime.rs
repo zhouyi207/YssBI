@@ -9,7 +9,8 @@ use std::time::Duration;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 
-use crate::collector::{LogLayer, LogRecord, LogRecordSink};
+use crate::LogRuntime;
+use crate::collector::{LogLayer, LogRecord};
 
 const OUTPUT_QUEUE_CAPACITY: usize = 1_024;
 const OUTPUT_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -18,12 +19,13 @@ const OUTPUT_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Owns the bounded output workers installed by the process-wide logging layer.
 pub struct LoggingRuntime {
+    logs: LogRuntime,
     _output_guards: Vec<OutputWorkerGuard>,
 }
 
 impl LoggingRuntime {
-    /// Installs one subscriber for all crates; SQLite delivery is owned by the record sink.
-    pub fn initialize(record_sink: LogRecordSink) -> Result<Self, LoggingInitializationError> {
+    /// Installs one subscriber for all crates and queues captures to the log dispatcher.
+    pub fn initialize(logs: LogRuntime) -> Result<Self, LoggingInitializationError> {
         let (console, console_guard) =
             spawn_output("console", create_console_sink()).map_err(|source| {
                 LoggingInitializationError::OutputWorker {
@@ -35,7 +37,7 @@ impl LoggingRuntime {
         let filter = logging_filter(rust_log.as_deref());
         let subscriber = tracing_subscriber::registry()
             .with(filter.targets)
-            .with(LogLayer::with_outputs(vec![console], Some(record_sink)));
+            .with(LogLayer::new(logs.rust_log_sink(Some(console))));
         tracing::subscriber::set_global_default(subscriber)
             .map_err(LoggingInitializationError::TracingSubscriber)?;
         if let Err(error) = tracing_log::LogTracer::init() {
@@ -53,12 +55,23 @@ impl LoggingRuntime {
                 log_domain = "system",
                 log_event = "rustLogFilterInvalid",
                 error = %error,
-                "Invalid RUST_LOG; collecting all levels"
+                "Invalid RUST_LOG; using INFO as the minimum log level"
             );
         }
         Ok(Self {
+            logs,
             _output_guards: vec![console_guard],
         })
+    }
+
+    pub(crate) fn shutdown(&self) {
+        self.logs.shutdown();
+    }
+}
+
+impl Drop for LoggingRuntime {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
@@ -99,7 +112,7 @@ impl OutputHandle {
     }
 }
 
-struct OutputWorkerGuard {
+pub(crate) struct OutputWorkerGuard {
     sender: SyncSender<OutputCommand>,
     active: Arc<AtomicBool>,
     finished: Arc<AtomicBool>,
@@ -131,7 +144,10 @@ impl Drop for OutputWorkerGuard {
 
 type OutputSink = Box<dyn FnMut(&LogRecord) -> bool + Send + 'static>;
 
-fn spawn_output(name: &str, mut sink: OutputSink) -> io::Result<(OutputHandle, OutputWorkerGuard)> {
+pub(crate) fn spawn_output(
+    name: &str,
+    mut sink: OutputSink,
+) -> io::Result<(OutputHandle, OutputWorkerGuard)> {
     let (sender, receiver) = mpsc::sync_channel(OUTPUT_QUEUE_CAPACITY);
     let active = Arc::new(AtomicBool::new(true));
     let worker_active = Arc::clone(&active);
@@ -193,7 +209,7 @@ struct LoggingFilter {
 }
 
 fn logging_filter(rust_log: Option<&str>) -> LoggingFilter {
-    let defaults = || Targets::new().with_default(LevelFilter::TRACE);
+    let defaults = || Targets::new().with_default(LevelFilter::INFO);
     let Some(directives) = rust_log.map(str::trim).filter(|value| !value.is_empty()) else {
         return LoggingFilter {
             targets: defaults(),
@@ -216,16 +232,40 @@ fn logging_filter(rust_log: Option<&str>) -> LoggingFilter {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::sync::atomic::AtomicUsize;
     use std::sync::mpsc;
 
     use super::*;
     use crate::collector::LogLevel;
 
     #[test]
-    fn default_filter_collects_every_crate_and_rust_log_can_restrict_it() {
-        let defaults = logging_filter(None).targets;
-        assert!(defaults.would_enable("any_crate::collector::worker", &tracing::Level::TRACE));
-        assert!(defaults.would_enable("dependency", &tracing::Level::ERROR));
+    fn default_and_invalid_filters_collect_info_and_above_from_every_crate() {
+        for directives in [None, Some(""), Some("dependency=invalid")] {
+            let defaults = logging_filter(directives).targets;
+            assert!(!defaults.would_enable("any_crate::worker", &tracing::Level::TRACE));
+            assert!(!defaults.would_enable("any_crate::worker", &tracing::Level::DEBUG));
+            assert!(defaults.would_enable("any_crate::worker", &tracing::Level::INFO));
+            assert!(defaults.would_enable("dependency", &tracing::Level::WARN));
+            assert!(defaults.would_enable("dependency", &tracing::Level::ERROR));
+            let captured = Arc::new(AtomicUsize::new(0));
+            let sink_capture = captured.clone();
+            let subscriber = tracing_subscriber::registry()
+                .with(defaults)
+                .with(LogLayer::new(Arc::new(move |_| {
+                    sink_capture.fetch_add(1, Ordering::Relaxed);
+                })));
+            struct MustNotFormat;
+            impl std::fmt::Debug for MustNotFormat {
+                fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    panic!("disabled event was formatted");
+                }
+            }
+            tracing::subscriber::with_default(subscriber, || {
+                tracing::debug!(value = ?MustNotFormat, "disabled debug");
+                tracing::trace!(value = ?MustNotFormat, "disabled trace");
+            });
+            assert_eq!(captured.load(Ordering::Relaxed), 0);
+        }
         let explicit = logging_filter(Some("my_crate=debug")).targets;
         assert!(explicit.would_enable("my_crate::collector::worker", &tracing::Level::DEBUG));
         assert!(!explicit.would_enable("other", &tracing::Level::INFO));

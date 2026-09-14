@@ -1,5 +1,6 @@
 import type { FrontendLogEntry } from "@/utils/frontendLogBatcher";
 import { withoutConsoleCapture } from "@/utils/consoleLogCapture";
+import { isFrontendLogEnabled } from "@/utils/logConfig";
 import { frontendLogBatcher } from "./frontendLogTransport";
 
 type LogLevel = FrontendLogEntry["level"];
@@ -37,6 +38,7 @@ function emit(
   message: string,
   source?: string,
 ): void {
+  if (!isFrontendLogEnabled(level)) return;
   const normalizedSource = source?.trim();
   const prefix = normalizedSource ? `[${label}][${normalizedSource}]` : `[${label}]`;
   withoutConsoleCapture(() => console[CONSOLE_METHOD[level]](`${prefix} ${message}`));

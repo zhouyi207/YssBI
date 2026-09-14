@@ -1,6 +1,5 @@
 use std::fmt::{self, Write as _};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::Arc;
 
 use chrono::Local;
 use serde_json::{Number, Value};
@@ -9,42 +8,22 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
-use crate::collector::runtime::OutputHandle;
-use crate::collector::{LogFields, LogLevel, LogLimits, LogRecord, LogRecordSink, sanitize_fields};
+use crate::collector::sanitizer::{redacted_json_value, should_redact_field};
+use crate::collector::{CapturedLog, CapturedLogSink, LogFields, LogLevel, LogLimits};
 
 const MESSAGE_FIELD: &str = "message";
 const TRUNCATED_SUFFIX: &str = "…[truncated]";
+const TRUNCATED_FIELD: &str = "_logTruncated";
+const TRUNCATION_FIELD_BUDGET: usize = 64;
 
-/// A tracing layer that turns events into bounded, sanitized [`LogRecord`]s.
-///
-/// Output workers use bounded non-blocking queues. The optional embedding sink
-/// is invoked after sanitization and must itself perform only non-blocking work.
-pub struct LogLayer {
-    outputs: Vec<OutputHandle>,
-    record_sink: Option<LogRecordSink>,
+/// Copies borrowed event data into a bounded record for non-blocking dispatch.
+pub(crate) struct LogLayer {
+    capture_sink: CapturedLogSink,
 }
 
 impl LogLayer {
-    /// Creates an embedding layer that forwards sanitized records to `sink`.
-    ///
-    /// This is useful when another subsystem wants a projection of Rust logs
-    /// without taking ownership of logging configuration or files. The sink
-    /// must return promptly; panics are isolated from the tracing call site.
-    pub fn new(sink: LogRecordSink) -> Self {
-        Self {
-            outputs: Vec::new(),
-            record_sink: Some(sink),
-        }
-    }
-
-    pub(crate) fn with_outputs(
-        outputs: Vec<OutputHandle>,
-        record_sink: Option<LogRecordSink>,
-    ) -> Self {
-        Self {
-            outputs,
-            record_sink,
-        }
+    pub(crate) fn new(capture_sink: CapturedLogSink) -> Self {
+        Self { capture_sink }
     }
 }
 
@@ -53,29 +32,25 @@ where
     S: Subscriber,
 {
     fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
+        let timestamp = Local::now().naive_local();
         let metadata = event.metadata();
         let mut visitor = LogVisitor::default();
         event.record(&mut visitor);
-
-        let record = Arc::new(LogRecord {
-            timestamp: Local::now()
-                .naive_local()
-                .format("%Y-%m-%dT%H:%M:%S%.3f")
-                .to_string(),
+        if visitor.truncated {
+            visitor
+                .fields
+                .insert(TRUNCATED_FIELD.into(), Value::Bool(true));
+        }
+        let record = CapturedLog {
+            timestamp,
             level: LogLevel::from(metadata.level()),
-            target: crate::collector::sanitize_target(metadata.target()),
+            target: bounded_text(metadata.target(), LogLimits::MAX_TARGET_BYTES),
             message: visitor
                 .message
-                .unwrap_or_else(|| crate::collector::sanitize_message(metadata.name())),
-            fields: sanitize_fields(visitor.fields),
-        });
-
-        for output in &self.outputs {
-            output.try_enqueue(Arc::clone(&record));
-        }
-        if let Some(sink) = &self.record_sink {
-            let _ = catch_unwind(AssertUnwindSafe(|| sink(record.as_ref())));
-        }
+                .unwrap_or_else(|| bounded_text(metadata.name(), LogLimits::MAX_MESSAGE_BYTES)),
+            fields: visitor.fields,
+        };
+        let _ = catch_unwind(AssertUnwindSafe(|| (self.capture_sink)(record)));
     }
 }
 
@@ -83,74 +58,96 @@ where
 struct LogVisitor {
     message: Option<String>,
     fields: LogFields,
+    field_bytes: usize,
+    truncated: bool,
 }
 
 impl LogVisitor {
-    fn record_value(&mut self, field: &Field, value: Value) {
+    fn record_with(&mut self, field: &Field, capture: impl FnOnce(usize) -> Value) {
         if field.name() == MESSAGE_FIELD {
-            self.message = Some(crate::collector::sanitize_message(&value_to_text(&value)));
-        } else {
-            self.fields.insert(field.name().to_owned(), value);
+            self.message = Some(value_to_text(capture(LogLimits::MAX_MESSAGE_BYTES)));
+            return;
         }
-    }
-
-    fn formatted_limit(field: &Field) -> usize {
-        if field.name() == MESSAGE_FIELD {
-            LogLimits::MAX_MESSAGE_BYTES
-        } else {
-            LogLimits::MAX_FIELD_STRING_BYTES
+        // Reserve space for the truncation marker. Encoded JSON limits are
+        // enforced by the dispatcher; this budget bounds capture allocations.
+        let remaining = LogLimits::MAX_FIELDS_BYTES
+            .saturating_sub(TRUNCATION_FIELD_BUDGET + self.field_bytes + field.name().len());
+        if self.fields.len() >= LogLimits::MAX_FIELD_COUNT - 1
+            || field.name().len() > LogLimits::MAX_FIELD_KEY_BYTES
+            || remaining < 32
+        {
+            self.truncated = true;
+            return;
         }
+        let value = if should_redact_field(field.name()) {
+            redacted_json_value()
+        } else {
+            capture(remaining.min(LogLimits::MAX_FIELD_STRING_BYTES))
+        };
+        self.field_bytes += field.name().len()
+            + match &value {
+                Value::String(value) => value.len(),
+                _ => 32,
+            };
+        self.fields.insert(field.name().into(), value);
     }
 }
 
 impl Visit for LogVisitor {
     fn record_f64(&mut self, field: &Field, value: f64) {
-        let value = Number::from_f64(value)
-            .map(Value::Number)
-            .unwrap_or_else(|| Value::String(value.to_string()));
-        self.record_value(field, value);
+        self.record_with(field, |_| {
+            Number::from_f64(value)
+                .map(Value::Number)
+                .unwrap_or_else(|| Value::String(value.to_string()))
+        });
     }
 
     fn record_i64(&mut self, field: &Field, value: i64) {
-        self.record_value(field, Value::Number(value.into()));
+        self.record_with(field, |_| Value::Number(value.into()));
     }
 
     fn record_u64(&mut self, field: &Field, value: u64) {
-        self.record_value(field, Value::Number(value.into()));
+        self.record_with(field, |_| Value::Number(value.into()));
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
-        self.record_value(field, Value::Bool(value));
+        self.record_with(field, |_| Value::Bool(value));
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
-        self.record_value(field, Value::String(value.to_owned()));
+        self.record_with(field, |limit| Value::String(bounded_text(value, limit)));
     }
 
     fn record_error(&mut self, field: &Field, value: &(dyn std::error::Error + 'static)) {
-        let value = format_bounded(Self::formatted_limit(field), |writer| {
-            write!(writer, "{value}")
+        self.record_with(field, |limit| {
+            Value::String(format_bounded(limit, |writer| write!(writer, "{value}")))
         });
-        self.record_value(field, Value::String(value));
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        let value = format_bounded(Self::formatted_limit(field), |writer| {
-            write!(writer, "{value:?}")
+        self.record_with(field, |limit| {
+            Value::String(format_bounded(limit, |writer| write!(writer, "{value:?}")))
         });
-        self.record_value(field, Value::String(value));
     }
 }
 
-fn value_to_text(value: &Value) -> String {
+fn value_to_text(value: Value) -> String {
     match value {
-        Value::String(value) => value.clone(),
+        Value::String(value) => value,
         value => value.to_string(),
     }
 }
 
+fn bounded_text(value: &str, limit: usize) -> String {
+    if value.len() <= limit {
+        return value.to_owned();
+    }
+    format_bounded(limit, |writer| writer.write_str(value))
+}
+
 struct BoundedFormatter {
     value: String,
+    limit: usize,
     prefix_limit: usize,
     truncated: bool,
 }
@@ -159,6 +156,7 @@ impl BoundedFormatter {
     fn new(limit: usize) -> Self {
         Self {
             value: String::with_capacity(limit.min(1024)),
+            limit,
             prefix_limit: limit.saturating_sub(TRUNCATED_SUFFIX.len()),
             truncated: false,
         }
@@ -166,7 +164,12 @@ impl BoundedFormatter {
 
     fn finish(mut self) -> String {
         if self.truncated {
-            self.value.push_str(TRUNCATED_SUFFIX);
+            for character in TRUNCATED_SUFFIX.chars() {
+                if self.value.len() + character.len_utf8() > self.limit {
+                    break;
+                }
+                self.value.push(character);
+            }
         }
         self.value
     }
@@ -175,7 +178,7 @@ impl BoundedFormatter {
 impl fmt::Write for BoundedFormatter {
     fn write_str(&mut self, value: &str) -> fmt::Result {
         if self.truncated {
-            return Ok(());
+            return Err(fmt::Error);
         }
         let remaining = self.prefix_limit.saturating_sub(self.value.len());
         if value.len() <= remaining {
@@ -189,7 +192,7 @@ impl fmt::Write for BoundedFormatter {
         }
         self.value.push_str(&value[..boundary]);
         self.truncated = true;
-        Ok(())
+        Err(fmt::Error)
     }
 }
 
@@ -204,6 +207,7 @@ fn format_bounded(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
     use tracing_subscriber::layer::SubscriberExt;
@@ -212,12 +216,9 @@ mod tests {
 
     #[test]
     fn emits_sanitized_structured_records() {
-        let captured = Arc::new(Mutex::new(Vec::new()));
-        let sink_capture = Arc::clone(&captured);
-        let sink: LogRecordSink = Arc::new(move |record| {
-            sink_capture.lock().unwrap().push(record.clone());
-        });
-        let subscriber = tracing_subscriber::registry().with(LogLayer::new(sink));
+        let logs = crate::LogRuntime::initialize().unwrap();
+        let subscriber =
+            tracing_subscriber::registry().with(LogLayer::new(logs.rust_log_sink(None)));
 
         tracing::subscriber::with_default(subscriber, || {
             tracing::warn!(
@@ -228,7 +229,8 @@ mod tests {
             );
         });
 
-        let records = captured.lock().unwrap();
+        let snapshot = logs.subscribe_batches(|_| true).unwrap();
+        let records = snapshot.entries;
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].target, "yssbi::test");
         assert_eq!(records[0].level, LogLevel::Warn);
@@ -242,22 +244,70 @@ mod tests {
 
     #[test]
     fn bounds_debug_values_before_allocating_an_unbounded_record() {
+        struct CountWrites<'a>(&'a AtomicUsize);
+        impl fmt::Debug for CountWrites<'_> {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                for _ in 0..LogLimits::MAX_FIELD_STRING_BYTES * 2 {
+                    self.0.fetch_add(1, Ordering::Relaxed);
+                    formatter.write_str("x")?;
+                }
+                Ok(())
+            }
+        }
         let captured = Arc::new(Mutex::new(Vec::new()));
         let sink_capture = Arc::clone(&captured);
-        let sink: LogRecordSink = Arc::new(move |record| {
-            sink_capture.lock().unwrap().push(record.clone());
+        let sink: CapturedLogSink = Arc::new(move |record| {
+            sink_capture.lock().unwrap().push(record);
         });
         let subscriber = tracing_subscriber::registry().with(LogLayer::new(sink));
-        let oversized = "x".repeat(LogLimits::MAX_FIELD_STRING_BYTES * 2);
+        let writes = AtomicUsize::new(0);
+        let oversized = CountWrites(&writes);
 
         tracing::subscriber::with_default(subscriber, || {
             tracing::info!(payload = ?oversized, "bounded");
         });
 
         let records = captured.lock().unwrap();
+        assert!(writes.load(Ordering::Relaxed) <= LogLimits::MAX_FIELD_STRING_BYTES);
         assert!(
             records[0].fields["payload"].as_str().unwrap().len()
                 <= LogLimits::MAX_FIELD_STRING_BYTES
         );
+    }
+
+    #[test]
+    fn capture_budget_skips_sensitive_and_excess_fields() {
+        struct MustNotFormat;
+        impl fmt::Debug for MustNotFormat {
+            fn fmt(&self, _: &mut fmt::Formatter<'_>) -> fmt::Result {
+                panic!("discarded fields must not be formatted");
+            }
+        }
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let sink_capture = captured.clone();
+        let subscriber =
+            tracing_subscriber::registry().with(LogLayer::new(Arc::new(move |record| {
+                sink_capture.lock().unwrap().push(record);
+            })));
+        let large = "界".repeat(LogLimits::MAX_FIELD_STRING_BYTES);
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(
+                password = ?MustNotFormat, rows = ?MustNotFormat,
+                a = large.as_str(), b = large.as_str(), c = large.as_str(),
+                d = large.as_str(), e = large.as_str(), f = large.as_str(),
+                g = large.as_str(), h = large.as_str(), excess = ?MustNotFormat,
+                "bounded fields"
+            );
+        });
+        let records = captured.lock().unwrap();
+        let fields = &records[0].fields;
+        assert!(!fields.contains_key("excess"));
+        assert_eq!(fields[TRUNCATED_FIELD], true);
+        assert_eq!(fields["password"], redacted_json_value());
+        let captured_bytes: usize = fields
+            .iter()
+            .map(|(key, value)| key.len() + value.as_str().map_or(32, str::len))
+            .sum();
+        assert!(captured_bytes <= LogLimits::MAX_FIELDS_BYTES);
     }
 }

@@ -20,9 +20,11 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .setup(|app, _| {
             let logs = app.path().app_log_dir().ok()
                 .and_then(|directory| LogRuntime::open(directory.join(LOG_DATABASE_NAME)).ok());
-            let sink = logs.as_ref().map(LogRuntime::rust_log_sink)
-                .unwrap_or_else(|| std::sync::Arc::new(|_| {}));
-            let logging = LoggingRuntime::initialize(sink)?;
+            let runtime = match &logs {
+                Some(logs) => logs.clone(),
+                None => LogRuntime::initialize()?,
+            };
+            let logging = LoggingRuntime::initialize(runtime)?;
             app.manage(logging);
             if logs.is_none() {
                 tracing::error!(target: "tauri_plugin_tracing", "Log history storage is unavailable; console logging remains enabled");
@@ -32,8 +34,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         })
         .on_event(|app, event| {
             if matches!(event, tauri::RunEvent::Exit)
-                && let Some(state) = app.try_state::<PluginState>()
-                && let Some(runtime) = &state.logs
+                && let Some(runtime) = app.try_state::<LoggingRuntime>()
             {
                 runtime.shutdown();
             }

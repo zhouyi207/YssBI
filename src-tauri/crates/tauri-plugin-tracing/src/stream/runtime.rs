@@ -1,4 +1,4 @@
-use crate::collector::LogRecordSink;
+use crate::collector::{CapturedLogSink, OutputHandle};
 use crate::store::{LogPage, LogQuery, LogStatistics, LogStoreError};
 use std::{path::PathBuf, sync::Arc};
 
@@ -27,7 +27,6 @@ impl LogRuntime {
         })
     }
 
-    #[cfg(any(test, feature = "test-support"))]
     pub fn initialize() -> Result<Self, LogInitializationError> {
         let (hub, guard) = LogHub::start_memory()?;
         Ok(Self {
@@ -46,8 +45,8 @@ impl LogRuntime {
         self._dispatcher_guard.shutdown();
     }
 
-    pub fn rust_log_sink(&self) -> LogRecordSink {
-        log_record_sink(self.hub.clone())
+    pub(crate) fn rust_log_sink(&self, console: Option<OutputHandle>) -> CapturedLogSink {
+        log_record_sink(self.hub.clone(), console)
     }
 
     pub fn submit_frontend(
@@ -55,7 +54,7 @@ impl LogRuntime {
         entries: Vec<FrontendLogEntryDto>,
     ) -> Result<(), SubmitFrontendLogsError> {
         let entries = validate_frontend_batch(entries)?;
-        let pending = entries.iter().map(frontend_pending).collect();
+        let pending = entries.into_iter().map(frontend_pending).collect();
         self.hub.publish(pending)?;
         Ok(())
     }
@@ -104,17 +103,17 @@ impl SubmitFrontendLogsError {
     }
 }
 
-fn frontend_pending(entry: &ValidatedFrontendLog) -> PendingLog {
+fn frontend_pending(entry: ValidatedFrontendLog) -> PendingLog {
     PendingLog {
         timestamp: super::local_timestamp_now(),
         level: entry.level,
         origin: LogOrigin::Frontend,
         domain: entry.domain,
-        target: entry.target.clone(),
-        event: entry.event.clone(),
-        message: entry.message.clone(),
-        source: entry.source.clone(),
-        fields: entry.fields.clone(),
+        target: entry.target,
+        event: entry.event,
+        message: entry.message,
+        source: entry.source,
+        fields: entry.fields,
     }
 }
 
@@ -160,6 +159,23 @@ mod tests {
                 .is_ok()
         );
         runtime.unsubscribe(subscription.subscription_id).unwrap();
+
+        runtime
+            .submit_frontend(vec![FrontendLogEntryDto {
+                level: LogLevel::Debug,
+                domain: LogDomain::Ui,
+                target: String::new(),
+                event: None,
+                message: "x".repeat(crate::collector::LogLimits::MAX_MESSAGE_BYTES + 1),
+                source: None,
+                fields: BTreeMap::new(),
+            }])
+            .unwrap();
+        assert_eq!(
+            runtime.subscribe_batches(|_| true).unwrap().latest_sequence,
+            1,
+            "disabled frontend records are filtered before validation and dispatch"
+        );
 
         let error = runtime.submit_frontend(Vec::new()).unwrap_err();
         assert_eq!(error.code(), "invalid_frontend_logs");
