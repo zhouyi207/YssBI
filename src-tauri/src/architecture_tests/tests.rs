@@ -2093,8 +2093,8 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
             RustLayer::Application,
         ),
         (
-            "src-tauri/crates/yss-sci/src/api/computation.rs".to_owned(),
-            RustLayer::SciCore,
+            "src-tauri/crates/yss-sci-contract/src/scientific.rs".to_owned(),
+            RustLayer::PureLeaf,
         ),
     ]);
 
@@ -2202,13 +2202,13 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         kind: RustDependencyKind::Use,
         mode: RustDependencyMode::Runtime,
         origin: CanonicalOrigin::Repository {
-            package_name: "yss-sci".to_owned(),
-            repository_relative_declaration_file: "src-tauri/crates/yss-sci/src/api/computation.rs"
-                .to_owned(),
-            fully_qualified_target: "yss_sci::api::computation::StatisticalInput".to_owned(),
-            symbol: "StatisticalInput".to_owned(),
+            package_name: "yss-sci-contract".to_owned(),
+            repository_relative_declaration_file:
+                "src-tauri/crates/yss-sci-contract/src/scientific.rs".to_owned(),
+            fully_qualified_target: "yss_sci_contract::scientific::AcfPacfRequest".to_owned(),
+            symbol: "AcfPacfRequest".to_owned(),
         },
-        canonical_origin_target: "yss_sci::api::computation::StatisticalInput".to_owned(),
+        canonical_origin_target: "yss_sci_contract::scientific::AcfPacfRequest".to_owned(),
         line: 1,
         column: 1,
     };

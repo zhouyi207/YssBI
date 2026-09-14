@@ -202,6 +202,12 @@
         "target": null
       },
       {
+        "name": "yss-project-progress",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-project-registry-contract",
         "kind": "normal",
         "optional": false,
@@ -239,6 +245,12 @@
       },
       {
         "name": "yss-sql-source",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-statistical-harness",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1334,12 +1346,6 @@
         "target": null
       },
       {
-        "name": "yss-project-progress",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-project-registry-contract",
         "kind": "normal",
         "optional": false,
@@ -2218,12 +2224,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-execution",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-ipc-channel",
         "kind": "normal",
         "optional": false,
@@ -2236,37 +2236,13 @@
         "target": null
       },
       {
-        "name": "yss-plugin-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-plugin-runtime",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-project-identity",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-progress",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-project-registry-sqlite",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -2279,12 +2255,6 @@
       },
       {
         "name": "yss-project-watcher",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project",
         "kind": "normal",
         "optional": false,
         "target": null
