@@ -81,7 +81,9 @@ Diagnostics
 Pure Shared
 ```
 
-这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。一个 Cargo package 可能包含由 source-level policy 精确判断的不同 root；不要在 `MODULE_MAP.md` 手工复制分类。
+这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。桌面 `src-tauri/src/lib.rs`、`harness.rs` 和 `projects.rs` 均按确切文件分类为 Composition Root；适配器构造能力只授权给实际组装模块。Application 的 Harness 和项目管理入口不获得 Tauri 或具体 provider/store 的访问权限。
+
+一个 Cargo package 可能包含由 source-level policy 精确判断的不同 root；不要在 `MODULE_MAP.md` 手工复制分类。
 
 IPC 拆分后，`yss-ipc-command` 的 handlers 按 Commands 分类，命令内的 schema、error 与响应缓存仍按 Transport 分类；`yss-ipc-event`、`yss-ipc-channel` 和 `yss-ipc-contract` 按 Transport 分类。跨层能力继续绑定确切 source 与 canonical symbol，不开放 Transport 对 Application 的通配访问。Contract 不声明 Tauri 或运行时依赖；Event/Channel 不反向依赖 Command。Diagnostics 仅暴露中立 batch sink，不再声明 Tauri 依赖或使用权限。
 

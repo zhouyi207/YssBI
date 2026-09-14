@@ -89,7 +89,7 @@ Framework types 不得进入 Core contract，adapter 不拥有 approval、workfl
 
 - 当前生产状态：[Statistical Harness](../architecture/STATISTICAL_HARNESS.md)
 - 尚未完成的 gated 能力：[Harness roadmap](../roadmap/STATISTICAL_HARNESS.md)
-- Transport contract：[`yss-api` README](../../src-tauri/crates/yss-api/README.md)
+- Transport contract：[`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md)
 - Runtime logging/security：[Runtime Signals](../architecture/RUNTIME_SIGNALS.md)
 
 本 decision 不维护当前 command 列表、crate 文件树、phase 完成百分比或未来 interface 草案。

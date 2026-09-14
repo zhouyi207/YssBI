@@ -25,7 +25,7 @@ The crate keeps handlers, command-specific schemas and diagnosed error construct
 
 The composition root constructs authorities and adapters, then injects them. It must not declare a second command registry, command schema module, or transport error type.
 
-`HarnessRuntimeState` is the command context containing the already constructed Host/provider and Channel-owned hubs. `ActivityPanelSyncState` remains a command response cache. `ApplicationCapabilityGateway` remains the desktop scheduling adapter for internal capability calls; it delegates graph-client delivery to Channel. These types do not transfer business ownership into IPC.
+`HarnessRuntimeState` is the command context containing the Application-initialized Host, injected provider and Channel-owned hubs. Application owns Harness startup and project-session coordination; the desktop Harness composition module selects the concrete adapters. `ActivityPanelSyncState` remains a command response cache. `ApplicationCapabilityGateway` remains the desktop scheduling adapter for internal capability calls; it delegates graph-client delivery to Channel. These types do not transfer business ownership into IPC.
 
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
@@ -107,6 +107,8 @@ Every ordered stream defines its source identity, ordering key, capacity/backpre
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 
 Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Diagnostics and Execution channels are separate contracts; diagnostics live-gap recovery is documented in [Runtime Signals](../../../docs/architecture/RUNTIME_SIGNALS.md#4-operational-diagnostics).
+
+Project registration commands consume Application's process-wide `ProjectManagement`. Application owns registry construction from the injected store and picker-task cancellation admission/cleanup. Commands retain progress-channel binding, draining and wire/error mapping. Project activation and replacement continue to use the existing Application session slot; registry state is not replaced with that session.
 
 ## Activity panel projection
 

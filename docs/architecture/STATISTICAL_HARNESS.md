@@ -29,7 +29,7 @@ yss-statistical-harness
     └─ persistence ports → yss-statistical-harness-sqlite
 ```
 
-`src-tauri/src/lib.rs` 构造 SQLite store、Application capability gateway 的调度适配器、configurable Rig driver、builtin knowledge 和 `HarnessHost`，从 `yss-ipc-channel` 创建 `HarnessChannelHub` 和 `HarnessGraphClientHub`，再把服务引用组成的 command context 注入 `yss-ipc-command`。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
+`src-tauri/src/harness.rs` 构造 SQLite store、Application capability gateway 的调度适配器、configurable Rig driver，以及 Channel-owned `HarnessChannelHub` 和 `HarnessGraphClientHub`，通过已有 `HarnessPorts` 注入 Application。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。桌面入口将初始化结果和同一组 Channel hubs 组成 command context 注入 `yss-ipc-command`。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
 
 ## 2. Authority
 

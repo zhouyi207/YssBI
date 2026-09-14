@@ -40,7 +40,7 @@ flowchart LR
   CHANNELS --> UI
 ```
 
-`src-tauri/src/lib.rs` 是桌面 composition root：构造 Project、Application、Execution、Diagnostics、Harness 和 platform adapters，并把它们注入 Tauri。`yss-ipc-command` 拥有唯一命令注册表与命令适配，`yss-ipc-event` 负责事件发送，`yss-ipc-channel` 负责流式交付和订阅，三者共享 `yss-ipc-contract` 的 wire 类型。组装入口注入业务服务与通信适配器；业务 workflow 不属于 IPC。
+`src-tauri/src/lib.rs` 是桌面 composition root：启动 Tauri、Diagnostics 和日志，调用 Application 初始化并注入服务。`src-tauri/src/harness.rs` 选择 Harness 的 SQLite、Rig、时钟、ID、gateway 和 Channel 实现；`src-tauri/src/projects.rs` 选择注册存储和文件监听器。Application 封装初始 Project/运行会话、进程级项目管理任务，以及通过中立端口执行的 Harness 初始化与会话协调。`yss-ipc-command` 拥有唯一命令注册表与命令适配，`yss-ipc-event` 负责事件发送，`yss-ipc-channel` 负责流式交付和订阅，三者共享 `yss-ipc-contract` 的 wire 类型。组装入口注入业务服务与通信适配器；业务 workflow 不属于 IPC。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
 窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。

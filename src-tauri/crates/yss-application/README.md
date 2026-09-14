@@ -5,7 +5,7 @@
 > Canonical owners: [Cargo.toml](Cargo.toml) 与 [src/](src/) 拥有依赖和实现事实；本文说明本 crate 的用途与调用关系；跨阶段契约由 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md) 维护
 > Update when: Application 的依赖、公开入口、会话组合或职责归属改变时
 
-`yss-application` 组织跨 Project、Graph、Database 和 Graph Execution 的业务用例，并协调它们的会话、资源版本和提交结果。它拥有应用会话替换、操作顺序、失败分类和应用事件事实；具体图编辑、编译、执行、存储和统计算法由对应子系统实现。
+`yss-application` 组织跨 Project、Graph、Database 和 Graph Execution 的业务用例，并协调它们的会话、资源版本和提交结果。它拥有应用初始会话、会话替换、项目管理任务、Harness 启动协调、操作顺序、失败分类和应用事件事实；具体图编辑、编译、执行、存储和统计算法由对应子系统实现。
 
 ## 调用方与依赖方向
 
@@ -13,7 +13,7 @@
 
 | 调用方                                            | 用途                                                      |
 | ------------------------------------------------- | --------------------------------------------------------- |
-| [`yssbi`](../../src/lib.rs)                       | 构造并注入应用状态、初始会话、示例目录和插件宿主服务      |
+| [`yssbi`](../../src/lib.rs)                       | 选择具体适配器，调用应用初始化并注入服务                  |
 | [`yss-ipc-command`](../yss-ipc-command/README.md) | 将 IPC 请求转换为业务参数，调用应用用例，再映射结果与错误 |
 | [`yss-ipc-channel`](../yss-ipc-channel/README.md) | 消费应用运行事件、自动化图动作和更新类型，完成通道交付    |
 
@@ -29,6 +29,7 @@ flowchart TD
     APP --> EXEC["yss-graph-execution"]
     APP --> DATA["Database：数据与存储"]
     APP --> CONTRACT["共享契约与通用类型"]
+    APP --> HARNESS["yss-statistical-harness"]
     EXEC --> SCI["yss-sci-runtime"]
 ```
 
@@ -36,16 +37,16 @@ Application 不依赖桌面根包、Tauri 或 IPC crates。插件运行时通过
 
 ## 直接依赖
 
-当前 [Cargo.toml](Cargo.toml) 声明 **41 个内部正式依赖、8 个外部正式依赖，以及 12 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
+当前 [Cargo.toml](Cargo.toml) 声明 **43 个内部正式依赖、8 个外部正式依赖，以及 13 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
 
 ### 内部正式依赖
 
 | 类别                  | Crates                                                                                                                                                                                                                                                                                                               | 使用目的                                                   |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Graph 与执行：13 个   | `yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-catalog`、`yss-graph-compiler`、`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`、`yss-graph-execution`、`yss-graph-protocol`、`yss-graph-registry`、`yss-graph-resource-contract`、`yss-graph-runtime`、`yss-graph-type-mapping` | 组织图编辑、解析、编译与执行，转换各阶段的类型和产物       |
-| Project 与资源：10 个 | `yss-project`、`yss-project-change`、`yss-project-filesystem`、`yss-project-history`、`yss-project-identity`、`yss-project-model`、`yss-project-registry`、`yss-project-registry-contract`、`yss-resource-naming`、`yss-function-editor-projection`                                                                  | 项目生命周期、资源操作、身份与版本、文件提交、函数签名展示 |
+| Project 与资源：11 个 | `yss-project`、`yss-project-change`、`yss-project-filesystem`、`yss-project-history`、`yss-project-identity`、`yss-project-model`、`yss-project-progress`、`yss-project-registry`、`yss-project-registry-contract`、`yss-resource-naming`、`yss-function-editor-projection`                                          | 项目生命周期、资源操作、身份与版本、文件提交、函数签名展示 |
 | 数据：12 个           | `yss-data-contract`、`yss-database-contract`、`yss-database-edit`、`yss-database-runtime`、`yss-database-schema`、`yss-dataset-profile`、`yss-dataset-store`、`yss-relational-contract`、`yss-sql-source`、`yss-tabular-arrow`、`yss-tabular-contract`、`yss-tabular-io`                                             | 数据导入导出、编辑、查询、快照和项目资源发布               |
-| 自动化与插件：2 个    | `yss-automation-contract`、`yss-plugin-protocol`                                                                                                                                                                                                                                                                     | 为 Assistant 和插件提供宿主业务能力                        |
+| 自动化与插件：3 个    | `yss-automation-contract`、`yss-plugin-protocol`、`yss-statistical-harness`                                                                                                                                                                                                                                          | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
 | 科学计算契约：1 个    | `yss-sci-contract`                                                                                                                                                                                                                                                                                                   | 使用统计结果、报告和错误类型                               |
 | 图表文档：1 个        | `yss-chart-document`                                                                                                                                                                                                                                                                                                 | 图表文档操作与查询                                         |
 | 通用能力：2 个        | `yss-canonical-hash`、`yss-display-naming`                                                                                                                                                                                                                                                                           | 稳定哈希与展示名称                                         |
@@ -66,10 +67,10 @@ Application 不依赖桌面根包、Tauri 或 IPC crates。插件运行时通过
 
 ### 开发依赖与示例
 
-| 声明方式                                | Crates                                                                                                                              | 用途                                                         |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite`、`sqlx`、`tokio`、`tracing-subscriber`                        | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
-| 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-project-filesystem`、`yss-project-identity` | 构造测试会话和验证跨 crate 契约，共六条声明                  |
+| 声明方式                                | Crates                                                                                                                                                         | 用途                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite`、`sqlx`、`tokio`、`tracing-subscriber`                                                   | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
+| 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-project-filesystem`、`yss-project-identity`、`yss-statistical-harness` | 构造测试会话和验证跨 crate 契约，共七条声明                  |
 
 Application 自身的 `test-support` feature 只开放跨 crate contract 测试所需的构造与 publication seam，转发范围以 manifest 为准。
 
@@ -90,6 +91,8 @@ Application 自身的 `test-support` feature 只开放跨 crate contract 测试�
 
 ### 应用会话
 
+`ApplicationState::initialize()` 在现有 [session_factory](src/execution/session_factory.rs) 中创建 Project、构造初始 candidate 并完成 slot 安装；失败通过 `ApplicationInitializationError` 返回。桌面入口无需逐步组装 Project 和应用会话。
+
 `ApplicationState` 持有 `ApplicationSessionSlot`，用作应用会话入口。一个 `ApplicationSession` 将以下运行时和身份绑定在一起：
 
 ```text
@@ -105,6 +108,12 @@ ApplicationSession
 Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子系统继续拥有各自的项目数据、编译缓存、数据库和结果；Application 管理它们在当前项目下的组合及生命周期。
 
 例如，项目 A 的计算尚未结束时用户切换到项目 B，Application 协调准入关闭、旧任务收尾与会话替换。相关用例在关键提交或返回位置重验捕获的会话、资源版本和结果身份，防止旧会话的迟到结果进入新项目。
+
+### 项目管理服务
+
+[ProjectManagement](src/project_lifecycle/registry.rs) 持有进程级 `ProjectRegistry` 和项目选择器任务取消注册表，接收注入的 `ProjectRegistryStore`。扫描和清理在应用层登记任务，完成或 future 被丢弃时释放登记；旧任务结束不能清除较新任务的取消入口。注册表规则仍由 `yss-project-registry` 实现，进度编码和通道排空仍由 IPC 负责。
+
+ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。项目切换不重建注册存储和模型 provider；Harness 在启动和创建会话时按当前项目绑定协调旧会话。SQLite、Rig、文件监听器和 Tauri Channel 的具体实现由桌面入口选择。
 
 ### 图编译与运行
 
@@ -133,7 +142,9 @@ Session slot 区分 `Inactive`、`Active`、`Replacing` 和 `Recovering`。子�
 
 [automation](src/automation.rs) 实现中性的自动化业务能力，并将图编辑、编译、运行和保存接入已有用例。[PluginHostServices](src/plugins.rs) 实现 `yss-plugin-protocol::HostServices`，提供项目绑定的数据列表、Arrow 快照租约、来源记录和宿主结果提交。
 
-插件安装、进程与任务生命周期由 Plugin Runtime 负责。Julia/Bayes 的专属编排属于插件内部的 `yss-bayes-runtime`。Application 通过通用协议向插件开放宿主能力，不依赖 Harness、Julia/Bayes 或插件运行时实现。
+[harness](src/harness.rs) 接收已有 `HarnessPorts`，安装内置知识、构造 Host，并依次恢复中断 turn、协调当前项目绑定、恢复 workflow。创建 Harness 会话也通过 Application 捕获项目绑定并协调旧会话；Harness Core 继续拥有具体状态和恢复规则。Application 不构造 SQLite、Rig、Channel 或桌面 capability gateway。
+
+插件安装、进程与任务生命周期由 Plugin Runtime 负责。Julia/Bayes 的专属编排属于插件内部的 `yss-bayes-runtime`。Application 通过通用协议向插件开放宿主能力，不依赖 Julia/Bayes 或插件运行时实现。
 
 ## 职责边界
 
