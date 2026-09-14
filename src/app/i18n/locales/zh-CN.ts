@@ -511,7 +511,7 @@ export const zhCN = {
           "Rust Plugin Manager 管理安装状态、进程与任务，前端消费相应投影。工作台管理插件面板位置，插件承担专属业务。宿主页面模板与插件自带页面遵守各自渲染边界，目标能力与当前接入范围分别说明。",
       },
       feedback: {
-        title: "运行诊断与反馈",
+        title: "日志与运行反馈",
         description: "查看有界日志、筛选定位与订阅状态，将稳定错误码转为本地化操作反馈。",
         parts: { logs: "Logs 查看", subscription: "订阅生命周期", localization: "错误本地化" },
         boundary:
@@ -542,7 +542,7 @@ export const zhCN = {
         request: "Application → service",
         adoption: "校验身份并采用",
         dataRequest: "分页与编辑请求",
-        diagnosticSubscription: "诊断订阅",
+        logSubscription: "日志订阅",
       },
     },
     breadcrumb: "架构导航",
@@ -618,8 +618,8 @@ export const zhCN = {
       },
       channel: {
         title: "Channel 有序消息流",
-        description: "后端通过绑定通道持续向前端交付进度、执行事件和诊断。",
-        parts: { progress: "进度", execution: "执行事件", diagnostics: "诊断" },
+        description: "后端通过绑定通道持续向前端交付进度、执行事件和日志。",
+        parts: { progress: "进度", execution: "执行事件", logs: "日志" },
         boundary:
           "yss-ipc-channel 负责中立通道适配；yss-application::ipc 负责执行消息和图草稿交接。前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
         lifecycle: { create: "创建", bind: "绑定", receive: "接收", end: "结束", cleanup: "清理" },
@@ -755,10 +755,10 @@ export const zhCN = {
       },
       support: {
         title: "基础支撑",
-        description: "提供桌面组装、日志诊断、平台操作和独立技术工具。",
+        description: "提供桌面组装、结构化日志、平台操作和独立技术工具。",
         parts: {
           composition: "启动与组装",
-          diagnostics: "日志与运行诊断",
+          logging: "结构化日志",
           platform: "平台与窗口状态",
           utilities: "哈希、命名与路径",
         },
@@ -844,8 +844,8 @@ export const zhCN = {
       },
       channel: {
         title: "Channel",
-        summary: "有序消息 · 进度、执行与诊断",
-        description: "持续交付任务进度、执行事件与诊断；结束时按契约清理订阅。",
+        summary: "有序消息 · 进度、执行与日志",
+        description: "持续交付任务进度、执行事件与日志；结束时按契约清理订阅。",
       },
       contract: {
         title: "DTO · 数据与错误契约",

@@ -87,12 +87,6 @@
         "target": null
       },
       {
-        "name": "yss-diagnostics",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-display-naming",
         "kind": "normal",
         "optional": false,
@@ -683,11 +677,6 @@
     ]
   },
   {
-    "name": "yss-diagnostics",
-    "manifest": "src-tauri/crates/yss-diagnostics/Cargo.toml",
-    "dependencies": []
-  },
-  {
     "name": "yss-display-naming",
     "manifest": "src-tauri/crates/yss-display-naming/Cargo.toml",
     "dependencies": []
@@ -1147,12 +1136,6 @@
     "dependencies": [
       {
         "name": "yss-automation-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-diagnostics",
         "kind": "normal",
         "optional": false,
         "target": null

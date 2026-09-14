@@ -139,8 +139,8 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       kind: "channel",
       color: "var(--chart-3)",
       icon: FiActivity,
-      parts: ["progress", "execution", "diagnostics"],
-      reference: "yss-ipc-channel",
+      parts: ["progress", "execution", "logs"],
+      reference: "yss-application::ipc / tauri-plugin-tracing",
     },
   },
 ];

@@ -551,7 +551,7 @@ export const enUS = {
           "Rust Plugin Manager owns installation state, processes and tasks; the frontend consumes projections. Workbench owns plugin panel placement while plugins own their business logic. Host templates and plugin-owned pages retain distinct rendering boundaries. Target capabilities and current integration scope are described separately.",
       },
       feedback: {
-        title: "Runtime diagnostics & feedback",
+        title: "Logs & runtime feedback",
         description:
           "Inspect bounded logs, filters and subscriptions; localize stable error codes for operation feedback.",
         parts: {
@@ -598,7 +598,7 @@ export const enUS = {
         request: "Application → service",
         adoption: "Validate & adopt",
         dataRequest: "Page & edit requests",
-        diagnosticSubscription: "Diagnostic subscription",
+        logSubscription: "Log subscription",
       },
     },
     breadcrumb: "Architecture navigation",
@@ -698,8 +698,8 @@ export const enUS = {
       channel: {
         title: "Channel ordered stream",
         description:
-          "The backend continuously delivers progress, execution events and diagnostics to the frontend.",
-        parts: { progress: "Progress", execution: "Execution events", diagnostics: "Diagnostics" },
+          "The backend continuously delivers progress, execution events and logs to the frontend.",
+        parts: { progress: "Progress", execution: "Execution events", logs: "Logs" },
         boundary:
           "yss-ipc-channel owns neutral stream adapters; yss-application::ipc handles execution messages and graph-draft handoff. The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
         lifecycle: {
@@ -850,10 +850,10 @@ export const enUS = {
       support: {
         title: "Infrastructure support",
         description:
-          "Provide desktop composition, diagnostics, platform operations and independent technical tools.",
+          "Provide desktop composition, structured logs, platform operations and independent technical tools.",
         parts: {
           composition: "Startup & composition",
-          diagnostics: "Logs & diagnostics",
+          logging: "Structured logs",
           platform: "Platform & windows",
           utilities: "Hash, names & paths",
         },
@@ -944,9 +944,9 @@ export const enUS = {
       },
       channel: {
         title: "Channel",
-        summary: "Ordered streams · Progress and diagnostics",
+        summary: "Ordered streams · Progress, execution and logs",
         description:
-          "Deliver progress, execution events and diagnostics; clean up subscriptions when finished.",
+          "Deliver progress, execution events and logs; clean up subscriptions when finished.",
       },
       contract: {
         title: "DTO · Data and error contracts",
@@ -995,7 +995,7 @@ export const enUS = {
         plugins: "Plugins",
       },
       boundary:
-        "Application & session, project & resources, graph analysis & execution, data, scientific computing, Assistant and plugins. Supported by startup composition, diagnostics and platform adapters.",
+        "Application & session, project & resources, graph analysis & execution, data, scientific computing, Assistant and plugins. Supported by startup composition, logging and platform adapters.",
     },
   },
   bayes: {

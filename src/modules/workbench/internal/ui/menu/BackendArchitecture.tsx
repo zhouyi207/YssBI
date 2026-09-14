@@ -45,11 +45,10 @@ export const backendNodes: BackendArchitectureNode[] = [
       kind: "support",
       color: "var(--muted-foreground)",
       icon: FiCpu,
-      parts: ["composition", "diagnostics", "platform", "utilities"],
+      parts: ["composition", "logging", "platform", "utilities"],
       crates: [
         "yssbi",
         "tauri-plugin-tracing",
-        "yss-diagnostics",
         "yss-filesystem",
         "yss-canonical-hash",
         "yss-display-naming",

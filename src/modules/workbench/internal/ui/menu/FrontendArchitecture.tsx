@@ -290,7 +290,7 @@ export const frontendEdges: Edge[] = [
     targetHandle: "top-in",
   },
   {
-    id: "diagnosticSubscription",
+    id: "logSubscription",
     source: "feedback",
     target: "communication",
     sourceHandle: "top-out",
