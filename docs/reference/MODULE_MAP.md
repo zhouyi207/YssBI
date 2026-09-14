@@ -42,15 +42,12 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | — |
 | `yss-graph-analysis-contract` | `src-tauri/crates/yss-graph-analysis-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis-contract/Cargo.toml) | — |
-| `yss-graph-catalog` | `src-tauri/crates/yss-graph-catalog` | [Cargo.toml](../../src-tauri/crates/yss-graph-catalog/Cargo.toml) | — |
 | `yss-graph-compiler` | `src-tauri/crates/yss-graph-compiler` | [Cargo.toml](../../src-tauri/crates/yss-graph-compiler/Cargo.toml) | — |
 | `yss-graph-compiler-diagnostics` | `src-tauri/crates/yss-graph-compiler-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-graph-compiler-diagnostics/Cargo.toml) | — |
 | `yss-graph-document` | `src-tauri/crates/yss-graph-document` | [Cargo.toml](../../src-tauri/crates/yss-graph-document/Cargo.toml) | — |
 | `yss-graph-document-edit` | `src-tauri/crates/yss-graph-document-edit` | [Cargo.toml](../../src-tauri/crates/yss-graph-document-edit/Cargo.toml) | — |
 | `yss-graph-editor` | `src-tauri/crates/yss-graph-editor` | [Cargo.toml](../../src-tauri/crates/yss-graph-editor/Cargo.toml) | — |
 | `yss-graph-execution` | `src-tauri/crates/yss-graph-execution` | [Cargo.toml](../../src-tauri/crates/yss-graph-execution/Cargo.toml) | — |
-| `yss-graph-protocol` | `src-tauri/crates/yss-graph-protocol` | [Cargo.toml](../../src-tauri/crates/yss-graph-protocol/Cargo.toml) | — |
-| `yss-graph-registry` | `src-tauri/crates/yss-graph-registry` | [Cargo.toml](../../src-tauri/crates/yss-graph-registry/Cargo.toml) | — |
 | `yss-graph-resource-contract` | `src-tauri/crates/yss-graph-resource-contract` | [Cargo.toml](../../src-tauri/crates/yss-graph-resource-contract/Cargo.toml) | — |
 | `yss-graph-runtime` | `src-tauri/crates/yss-graph-runtime` | [Cargo.toml](../../src-tauri/crates/yss-graph-runtime/Cargo.toml) | — |
 | `yss-graph-type-mapping` | `src-tauri/crates/yss-graph-type-mapping` | [Cargo.toml](../../src-tauri/crates/yss-graph-type-mapping/Cargo.toml) | — |
@@ -61,6 +58,9 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-julia-runtime` | `plugins/julia/native/crates/yss-julia-runtime` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-runtime/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `plugins/julia/native/crates/yss-julia-worker` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-worker/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-worker/README.md) |
 | `yss-math-expr` | `src-tauri/crates/yss-math-expr` | [Cargo.toml](../../src-tauri/crates/yss-math-expr/Cargo.toml) | — |
+| `yss-node-catalog` | `src-tauri/crates/yss-node-catalog` | [Cargo.toml](../../src-tauri/crates/yss-node-catalog/Cargo.toml) | [README](../../src-tauri/crates/yss-node-catalog/README.md) |
+| `yss-node-protocol` | `src-tauri/crates/yss-node-protocol` | [Cargo.toml](../../src-tauri/crates/yss-node-protocol/Cargo.toml) | — |
+| `yss-node-registry` | `src-tauri/crates/yss-node-registry` | [Cargo.toml](../../src-tauri/crates/yss-node-registry/Cargo.toml) | — |
 | `yss-plugin-protocol` | `src-tauri/crates/yss-plugin-protocol` | [Cargo.toml](../../src-tauri/crates/yss-plugin-protocol/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-protocol/README.md) |
 | `yss-plugin-runtime` | `src-tauri/crates/yss-plugin-runtime` | [Cargo.toml](../../src-tauri/crates/yss-plugin-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-runtime/README.md) |
 | `yss-plugin-sdk` | `src-tauri/crates/yss-plugin-sdk` | [Cargo.toml](../../src-tauri/crates/yss-plugin-sdk/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-sdk/README.md) |

@@ -58,7 +58,7 @@ OLS 先按 SVD 阈值确定秩和自由度，再对完整 `X'X` 进行 Cholesky 
 
 ### T04：节点声明与模型参数没有贯通
 
-[节点协议](../../src-tauri/crates/yss-graph-catalog/src/statistics/mod.rs) 为 Logit/Probit 声明 `max_iterations = 100` 和 `tolerance = 1e-6`；[Logit](../../src-tauri/crates/yss-sci/src/regression/discrete/logit.rs) 与 [Probit](../../src-tauri/crates/yss-sci/src/regression/discrete/probit.rs) 的算法配置只接受 `constant`，内部容差固定为 `1e-8`。
+[节点协议](../../src-tauri/crates/yss-node-catalog/src/statistics/mod.rs) 为 Logit/Probit 声明 `max_iterations = 100` 和 `tolerance = 1e-6`；[Logit](../../src-tauri/crates/yss-sci/src/regression/discrete/logit.rs) 与 [Probit](../../src-tauri/crates/yss-sci/src/regression/discrete/probit.rs) 的算法配置只接受 `constant`，内部容差固定为 `1e-8`。
 
 当前 Graph 的统计执行 kernel 只接入 OLS Fit/Summary，见[执行契约](../architecture/GRAPH_AND_EXECUTION.md)。因此不能把 Logit/Probit 参数可编辑视为其执行参数已经生效。
 
