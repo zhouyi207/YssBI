@@ -50,7 +50,7 @@ export {
   RUN_OUTPUT_STREAMS,
   RUN_PHASES,
 } from "./runEvent";
-export * from "./diagnostics";
+export type { ErrorReference } from "./errorReference";
 export type * from "./clipboardSubgraph";
 export type * from "./plotPayload";
 export {

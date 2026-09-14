@@ -1,4 +1,4 @@
-import type { ErrorReference } from "@/shared/types/domain/diagnostics";
+import type { ErrorReference } from "@/shared/types/domain/errorReference";
 
 export type {
   ResultPlotKind as PlotChart,

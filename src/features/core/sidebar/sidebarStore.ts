@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { ActivityPanelId, ActivityPanelSnapshot } from "@/shared/types/domain/activityPanel";
 
-import type { ErrorReference } from "@/shared/types/domain/diagnostics";
+import type { ErrorReference } from "@/shared/types/domain/errorReference";
 
 export interface ActivityPanelBinding {
   readonly panelId: ActivityPanelId;

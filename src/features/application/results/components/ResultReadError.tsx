@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import type { ErrorReference } from "@/shared/types/domain/diagnostics";
+import type { ErrorReference } from "@/shared/types/domain/errorReference";
 
 export function ResultReadError({
   error,

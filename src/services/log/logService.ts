@@ -18,7 +18,7 @@ import {
 export type LogSubscription = RecordSubscription<LogSubscriptionDto>;
 export type FrontendLogEntry = FrontendLogEntryDto;
 
-/** Persisted logs use the plugin registry; runtime diagnostics have their own service. */
+/** Structured runtime observations use the plugin log registry and persisted history. */
 export class LogService {
   static async submitFrontendLogs(entries: readonly FrontendLogEntryDto[]): Promise<void> {
     if (entries.length === 0) return;

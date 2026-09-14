@@ -33,7 +33,6 @@ vi.mock("@/shared/platform/tauriWebview", () => ({
 }));
 
 import { LogService } from "./logService";
-import { DiagnosticsService } from "@/services/diagnostics";
 
 function record(sequence: number): LogRecordDto {
   return {
@@ -88,44 +87,6 @@ describe("LogService plugin contract", () => {
       byOrigin: {},
     });
     await expect(LogService.logStatistics()).rejects.toThrow("Invalid log counts");
-  });
-  it("keeps plugin log channels and Application diagnostic channels separate", async () => {
-    core.invoke.mockImplementation(async (command: string) => {
-      const streamId = command.startsWith("plugin:tracing|") ? "logs" : "diagnostics";
-      return {
-        subscriptionId: streamId,
-        streamId,
-        entries: [],
-        latestSequence: 0,
-        truncated: false,
-      };
-    });
-    const logRecords = vi.fn();
-    const diagnosticRecords = vi.fn();
-    const logs = await LogService.subscribeLogs(logRecords);
-    const diagnostics = await DiagnosticsService.subscribeDiagnostics(diagnosticRecords);
-    logs.activate();
-    diagnostics.activate();
-    core.channels[0]?.onmessage?.({
-      streamId: "logs",
-      entries: [{ ...record(1), streamId: "logs" }],
-    });
-    expect(logRecords).toHaveBeenCalledOnce();
-    expect(diagnosticRecords).not.toHaveBeenCalled();
-    core.channels[1]?.onmessage?.({
-      streamId: "diagnostics",
-      entries: [{ ...record(1), streamId: "diagnostics" }],
-    });
-    expect(diagnosticRecords).toHaveBeenCalledOnce();
-    await logs.unsubscribe();
-    expect(core.invoke).toHaveBeenCalledWith("plugin:tracing|unsubscribe_logs", {
-      subscriptionId: "logs",
-    });
-    expect(core.invoke).not.toHaveBeenCalledWith("unsubscribe_diagnostics", expect.anything());
-    await diagnostics.unsubscribe();
-    expect(core.invoke).toHaveBeenCalledWith("unsubscribe_diagnostics", {
-      subscriptionId: "diagnostics",
-    });
   });
   it("submits a frontend batch with the fixed command payload", async () => {
     core.invoke.mockResolvedValue(undefined);

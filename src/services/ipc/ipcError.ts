@@ -1,12 +1,12 @@
 import { isIpcErrorDto, type IpcErrorDto } from "@/shared/types/dto/ipcError";
-import type { ErrorReference } from "@/shared/types/domain/diagnostics";
+import type { ErrorReference } from "@/shared/types/domain/errorReference";
 import {
   IPC_ERROR_BRAND,
   IPC_MALFORMED_ERROR_CODE,
   IPC_TRANSPORT_FAILURE_CODE,
 } from "@/shared/constants/ipcError";
 
-export type { ErrorReference } from "@/shared/types/domain/diagnostics";
+export type { ErrorReference } from "@/shared/types/domain/errorReference";
 export {
   IPC_ERROR_BRAND,
   IPC_MALFORMED_ERROR_CODE,
