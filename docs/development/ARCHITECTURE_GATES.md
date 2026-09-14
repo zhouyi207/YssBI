@@ -81,7 +81,7 @@ Diagnostics
 Pure Shared
 ```
 
-这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。桌面根入口、[Application runtime](../../src-tauri/crates/yss-application/src/runtime.rs)、[Harness 组装](../../src-tauri/crates/yss-application/src/runtime/harness.rs) 和 [Command runtime](../../src-tauri/crates/yss-application/src/ipc/runtime.rs) 按确切文件分类为 Composition Root。Application runtime 可以接收 Tauri app 并选择具体适配器；普通 Application 用例模块不获得 Tauri 或 provider/store 构造权限。内部 IPC runtime 直接组装共享通道和命令上下文。根包所有 scope 的内部依赖断言仅允许 `yss-application`。
+这些名称是 gate policy vocabulary，不是要求每个 crate 或目录各自写一份 README。桌面根入口、[Application runtime](../../src-tauri/crates/yss-application/src/runtime.rs)、[Harness 组装](../../src-tauri/crates/yss-application/src/runtime/harness.rs) 和 [Command runtime](../../src-tauri/crates/yss-application/src/ipc/runtime.rs) 按确切文件分类为 Composition Root。Application runtime 可以接收 Tauri app 并选择具体适配器；普通 Application 用例模块不获得 Tauri 或 provider/store 构造权限。内部 IPC runtime 直接组装共享通道和命令上下文。根包所有 scope 的内部依赖断言仅允许 `yss-application` 与 `tauri-plugin-tracing`。
 
 一个 Cargo package 可能包含由 source-level policy 精确判断的不同 root；不要在 `MODULE_MAP.md` 手工复制分类。
 
@@ -152,7 +152,7 @@ Application 的 `serde` 直接依赖用于静态目录和离线源定义的反�
 
 ## 6. Changing the architecture policy
 
-`tauri-plugin-tracing` 按 Platform Adapter 分类，依赖中立 Logging 基础设施并拥有 Tauri/SQLx 日志交付；构建脚本仅获 `tauri-plugin` 的 build 权限。Platform Adapter → Logging 的方向允许，插件与 Diagnostics 之间的相互依赖均不允许。桌面 Composition Root 仅获插件 `init` 的精确调用权限，诊断继续由 Application 组装。该边界复用现有诊断 owner fixture 与真实依赖审计验证。
+`tauri-plugin-tracing` 的 `collector/` 按 Logging 分类，插件的存储和 Tauri 适配按 Platform Adapter 分类；构建脚本仅获 `tauri-plugin` 的 build 权限。collector 包含原 yss-tracing 实现，不再有独立的日志核心 crate。Diagnostics 与 Logging/日志插件之间的依赖双向禁止，Composition Root 不能直接接入 collector；入口仅获插件 `init` 的精确调用权限。诊断只接收显式数据，由 Application 独立初始化。现有诊断 owner fixture 同时验证层级方向与诊断依赖闭包，禁止通过其他 workspace crate 间接引入 tracing 或日志插件。
 
 React Flow 的运行时、类型与基础样式依赖仅开放给 Views；Application、Core 和 Domain
 不导入该画布库。graph-editor 的局部样式按确切 consumer/asset 路径登记，视图只获

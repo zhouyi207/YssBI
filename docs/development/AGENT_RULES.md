@@ -75,6 +75,8 @@ add or commit them unless explicitly requested.
   `yss-ipc-contract`. Event/Channel never depend on Application; Contract has no
   Tauri or runtime dependency. Platform plugins own their namespaced commands;
   `tauri-plugin-tracing` owns logs, while `yss-diagnostics` remains independent.
+  Diagnostics accepts explicit data; it never consumes tracing events, log records,
+  or logging runtime state. Logging implementation belongs inside the plugin.
   Commands remain thin adapters; business workflows
   belong to application use cases or domain owners.
 - Command failures use the exact Rust-owned `{ code, details, incidentId }`

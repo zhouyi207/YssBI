@@ -550,6 +550,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_diagnostics::dto::DiagnosticSubscriptionDto",
             "yss_diagnostics::dto::FrontendDiagnosticEntryDto",
             "yss_diagnostics::runtime::DiagnosticsRuntime",
+            "yss_diagnostics::runtime::DiagnosticSubmissionError",
+            "yss_diagnostics::runtime::DiagnosticSubmissionError::Validation",
+            "yss_diagnostics::runtime::DiagnosticSubmissionError::Unavailable",
             "yss_application::ipc::error::CommandError",
             "yss_ipc_channel::diagnostics::subscribe_diagnostics",
         ],
@@ -1832,7 +1835,9 @@ fn non_build_memberships(
         layers.insert(RustLayer::Diagnostics);
     } else if package == "yss-graph-execution" {
         layers.insert(RustLayer::Execution);
-    } else if package == "yss-tracing" {
+    } else if package == "tauri-plugin-tracing"
+        && source_file.starts_with("src-tauri/crates/tauri-plugin-tracing/src/collector/")
+    {
         layers.insert(RustLayer::Logging);
     } else if package == "yss-project-watcher-notify"
         || (package == "tauri-plugin-tracing"
@@ -2028,7 +2033,6 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
         (
             RustLayer::CompositionRoot,
             RustLayer::Commands
-                | RustLayer::Logging
                 | RustLayer::Diagnostics
                 | RustLayer::PureLeaf
         ) | (RustLayer::Commands, RustLayer::PureLeaf)
@@ -2063,9 +2067,6 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::Graph | RustLayer::PureLeaf,
             )
             | (RustLayer::Transport, RustLayer::PureLeaf)
-            | (
-                RustLayer::Diagnostics,
-                RustLayer::Logging | RustLayer::PureLeaf
-            )
+            | (RustLayer::Diagnostics, RustLayer::PureLeaf)
     )
 }

@@ -520,8 +520,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-tracing"
-                && root.target == "yss_tracing"
+            .any(|root| root.package == "tauri-plugin-tracing"
+                && root.target == "tauri_plugin_tracing"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(workspace.dependency_declarations.iter().any(|dependency| {
@@ -1665,11 +1665,10 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
         "src-tauri/crates/yss-diagnostics/src/dispatcher.rs",
         "src-tauri/crates/yss-diagnostics/src/dto.rs",
         "src-tauri/crates/yss-diagnostics/src/runtime.rs",
-        "src-tauri/crates/yss-diagnostics/src/rust_projection.rs",
+        "src-tauri/crates/yss-diagnostics/src/sanitizer.rs",
         "src-tauri/crates/yss-diagnostics/src/tests.rs",
         "src-tauri/crates/yss-diagnostics/src/validation.rs",
         "src-tauri/crates/yss-diagnostics/src/worker.rs",
-        "src-tauri/crates/yss-tracing/Cargo.toml",
         "src-tauri/crates/tauri-plugin-tracing/Cargo.toml",
     ] {
         assert!(
@@ -1683,7 +1682,7 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
     );
     let plugin = "src-tauri/crates/tauri-plugin-tracing/src/plugin.rs";
     let diagnostics = "src-tauri/crates/yss-diagnostics/src/runtime.rs";
-    let logging = "src-tauri/crates/yss-tracing/src/runtime.rs";
+    let logging = "src-tauri/crates/tauri-plugin-tracing/src/collector/runtime.rs";
     let classification = BTreeMap::from([
         (plugin.into(), RustLayer::PlatformAdapter),
         (diagnostics.into(), RustLayer::Diagnostics),
@@ -1706,29 +1705,52 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
         column: 1,
     };
     assert!(
-        rust_dependency_findings(
-            &[
-                dependency(plugin, logging),
-                dependency(diagnostics, logging)
-            ],
-            &classification
-        )
-        .unwrap()
-        .is_empty()
+        rust_dependency_findings(&[dependency(plugin, logging)], &classification)
+            .unwrap()
+            .is_empty()
     );
     assert_eq!(
         rust_dependency_findings(
             &[
                 dependency(plugin, diagnostics),
                 dependency(diagnostics, plugin),
-                dependency(logging, plugin)
+                dependency(logging, plugin),
+                dependency(diagnostics, logging),
+                dependency(logging, diagnostics)
             ],
             &classification
         )
         .unwrap()
         .len(),
-        3
+        5
     );
+
+    let mut pending = vec!["yss-diagnostics".to_owned()];
+    let mut visited = BTreeSet::new();
+    while let Some(package) = pending.pop() {
+        if !visited.insert(package.clone()) {
+            continue;
+        }
+        for dependency in &workspace_facts().dependency_declarations {
+            if dependency.owning_package == package
+                && dependency.scope == CargoDependencyScope::Runtime
+            {
+                assert!(
+                    !matches!(
+                        dependency.package_name.as_str(),
+                        "tracing"
+                            | "tracing-core"
+                            | "tracing-subscriber"
+                            | "tracing-log"
+                            | "tauri"
+                            | "tauri-plugin-tracing"
+                    ),
+                    "diagnostics must not pull in logging or desktop runtime: {dependency:?}"
+                );
+                pending.push(dependency.package_name.clone());
+            }
+        }
+    }
 }
 
 #[test]

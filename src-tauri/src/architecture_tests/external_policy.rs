@@ -31,6 +31,30 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "tauri-plugin-tracing",
         mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing-log",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing-subscriber",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-diagnostics",
+        mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
         package_name: "tauri",
         target_condition: None,
     },
@@ -1391,54 +1415,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "chrono",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "regex",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde_json",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing-log",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
-        package_name: "tracing-subscriber",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-chart-document",
         mode: RustDependencyMode::Runtime,
         package_name: "serde",
@@ -1453,6 +1429,11 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::Diagnostics,
+        mode: RustDependencyMode::Runtime,
+        package_name: "regex",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::PlatformAdapter,
         mode: RustDependencyMode::Runtime,
