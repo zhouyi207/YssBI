@@ -36,7 +36,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-datafusion` | `src-tauri/crates/yss-datafusion` | [Cargo.toml](../../src-tauri/crates/yss-datafusion/Cargo.toml) | — |
 | `yss-dataset-profile` | `src-tauri/crates/yss-dataset-profile` | [Cargo.toml](../../src-tauri/crates/yss-dataset-profile/Cargo.toml) | — |
 | `yss-dataset-store` | `src-tauri/crates/yss-dataset-store` | [Cargo.toml](../../src-tauri/crates/yss-dataset-store/Cargo.toml) | [README](../../src-tauri/crates/yss-dataset-store/README.md) |
-| `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | — |
+| `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | [README](../../src-tauri/crates/yss-diagnostics/README.md) |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
 | `yss-graph-analysis` | `src-tauri/crates/yss-graph-analysis` | [Cargo.toml](../../src-tauri/crates/yss-graph-analysis/Cargo.toml) | — |
@@ -90,7 +90,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-tabular-arrow` | `src-tauri/crates/yss-tabular-arrow` | [Cargo.toml](../../src-tauri/crates/yss-tabular-arrow/Cargo.toml) | — |
 | `yss-tabular-contract` | `src-tauri/crates/yss-tabular-contract` | [Cargo.toml](../../src-tauri/crates/yss-tabular-contract/Cargo.toml) | — |
 | `yss-tabular-io` | `src-tauri/crates/yss-tabular-io` | [Cargo.toml](../../src-tauri/crates/yss-tabular-io/Cargo.toml) | — |
-| `yss-tracing` | `src-tauri/crates/yss-tracing` | [Cargo.toml](../../src-tauri/crates/yss-tracing/Cargo.toml) | — |
 | `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | — |
 
 ## Frontend modules

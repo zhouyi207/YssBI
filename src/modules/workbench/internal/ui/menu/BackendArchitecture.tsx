@@ -48,7 +48,6 @@ export const backendNodes: BackendArchitectureNode[] = [
       parts: ["composition", "diagnostics", "platform", "utilities"],
       crates: [
         "yssbi",
-        "yss-tracing",
         "tauri-plugin-tracing",
         "yss-diagnostics",
         "yss-canonical-hash",

@@ -2,14 +2,7 @@
   {
     "name": "tauri-plugin-tracing",
     "manifest": "src-tauri/crates/tauri-plugin-tracing/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-tracing",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
+    "dependencies": []
   },
   {
     "name": "yss-agent-rig",
@@ -353,12 +346,6 @@
       },
       {
         "name": "yss-tabular-io",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-tracing",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -716,14 +703,7 @@
   {
     "name": "yss-diagnostics",
     "manifest": "src-tauri/crates/yss-diagnostics/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-tracing",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
+    "dependencies": []
   },
   {
     "name": "yss-display-naming",
@@ -2051,11 +2031,6 @@
         "target": null
       }
     ]
-  },
-  {
-    "name": "yss-tracing",
-    "manifest": "src-tauri/crates/yss-tracing/Cargo.toml",
-    "dependencies": []
   },
   {
     "name": "yssbi",
