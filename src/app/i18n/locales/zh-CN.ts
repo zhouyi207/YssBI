@@ -670,6 +670,18 @@ export const zhCN = {
         boundary:
           "Project 拥有保存后的文档、资源版本及提交事务。图子系统提供图文档校验，数据子系统拥有表数据；前端草稿不构成第二份已提交状态。项目专属文件系统和监听属于本子系统。",
       },
+      node: {
+        title: "节点定义、注册与目录",
+        description: "声明节点能力、端口和参数，提供注册表与本地化目录。",
+        parts: {
+          protocol: "能力与接口",
+          registry: "注册与校验",
+          catalog: "内置定义与创建描述",
+          localization: "节点文档与本地化",
+        },
+        boundary:
+          "Node 描述一种节点的能力，不依赖 Graph。节点实例、位置和连线归图文档；连接后的类型、Schema、血缘和诊断由 GraphSemanticSnapshot 管理，编译诊断模板归 Graph。",
+      },
       graph: {
         title: "图分析与执行",
         description: "从图文档、语义分析到编译产物、执行运行与结果查询。",
@@ -762,6 +774,7 @@ export const zhCN = {
         hostCapabilities: "宿主能力",
         projectUseCase: "项目用例",
         graphUseCase: "图用例",
+        nodeDefinitions: "节点能力与目录",
         dataUseCase: "数据用例",
         inputData: "输入数据",
         computation: "计算能力",

@@ -123,12 +123,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-catalog",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-compiler",
         "kind": "normal",
         "optional": false,
@@ -154,18 +148,6 @@
       },
       {
         "name": "yss-graph-execution",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -208,6 +190,24 @@
       },
       {
         "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -762,18 +762,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-resource-contract",
         "kind": "normal",
         "optional": false,
@@ -781,6 +769,18 @@
       },
       {
         "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -804,49 +804,13 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-graph-catalog",
-    "manifest": "src-tauri/crates/yss-graph-catalog/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-graph-analysis-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-compiler-diagnostics",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -876,13 +840,13 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-graph-registry",
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -918,7 +882,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -954,7 +918,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -984,12 +948,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-catalog",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-document-edit",
         "kind": "normal",
         "optional": false,
@@ -1002,18 +960,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-resource-contract",
         "kind": "normal",
         "optional": false,
@@ -1021,6 +967,24 @@
       },
       {
         "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1051,29 +1015,6 @@
       },
       {
         "name": "yss-sci-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-graph-protocol",
-    "manifest": "src-tauri/crates/yss-graph-protocol/Cargo.toml",
-    "dependencies": []
-  },
-  {
-    "name": "yss-graph-registry",
-    "manifest": "src-tauri/crates/yss-graph-registry/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-canonical-hash",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1127,7 +1068,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-catalog",
+        "name": "yss-graph-compiler-diagnostics",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1157,19 +1098,25 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-resource-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-catalog",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1187,7 +1134,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1259,13 +1206,13 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-graph-registry",
+        "name": "yss-node-registry",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1397,6 +1344,53 @@
     "dependencies": []
   },
   {
+    "name": "yss-node-catalog",
+    "manifest": "src-tauri/crates/yss-node-catalog/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-node-protocol",
+    "manifest": "src-tauri/crates/yss-node-protocol/Cargo.toml",
+    "dependencies": []
+  },
+  {
+    "name": "yss-node-registry",
+    "manifest": "src-tauri/crates/yss-node-registry/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
     "name": "yss-plugin-protocol",
     "manifest": "src-tauri/crates/yss-plugin-protocol/Cargo.toml",
     "dependencies": []
@@ -1496,7 +1490,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-protocol",
+        "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
         "target": null

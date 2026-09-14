@@ -758,6 +758,19 @@ export const enUS = {
         boundary:
           "Project owns saved documents, resource versions and commit transactions. Graph provides document validation; Data owns tables. Frontend drafts are not a second committed state. Project-specific filesystem and watching belong here.",
       },
+      node: {
+        title: "Node definitions & catalog",
+        description:
+          "Declare node capabilities, ports and parameters, with registration and catalog localization.",
+        parts: {
+          protocol: "Capabilities & interfaces",
+          registry: "Registration & validation",
+          catalog: "Built-ins & creation descriptors",
+          localization: "Node documentation & localization",
+        },
+        boundary:
+          "Node describes a node type and does not depend on Graph. Graph documents own instances, positions and connections. GraphSemanticSnapshot owns resolved types, schema, lineage and diagnostics; compiler diagnostic templates belong to Graph.",
+      },
       graph: {
         title: "Graph analysis & execution",
         description:
@@ -856,6 +869,7 @@ export const enUS = {
         hostCapabilities: "Host capabilities",
         projectUseCase: "Project use cases",
         graphUseCase: "Graph use cases",
+        nodeDefinitions: "Node capabilities & catalog",
         dataUseCase: "Data use cases",
         inputData: "Input data",
         computation: "Computation",
