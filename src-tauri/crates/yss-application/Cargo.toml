@@ -55,10 +55,12 @@ yss-project-filesystem = { path = "../yss-project-filesystem" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
 yss-project-model = { path = "../yss-project-model" }
+yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry = { path = "../yss-project-registry" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-sci-contract = { path = "../yss-sci-contract" }
+yss-statistical-harness = { path = "../yss-statistical-harness" }
 yss-sql-source = { path = "../yss-sql-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }
@@ -66,6 +68,7 @@ yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+yss-statistical-harness = { path = "../yss-statistical-harness", features = ["test-support"] }
 yss-datafusion = { path = "../yss-datafusion" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }

@@ -161,7 +161,6 @@ tauri-plugin-fs = "2.5"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "=2.4.1"
 
-yss-plugin-protocol = { path = "./crates/yss-plugin-protocol" }
 yss-plugin-runtime = { path = "./crates/yss-plugin-runtime" }
 
 yss-ipc-command = { path = "./crates/yss-ipc-command" }
@@ -172,11 +171,6 @@ yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
 yss-automation-contract = { path = "./crates/yss-automation-contract" }
 yss-diagnostics = { path = "./crates/yss-diagnostics" }
-yss-graph-execution = { path = "./crates/yss-graph-execution" }
-yss-project = { path = "./crates/yss-project" }
-yss-project-identity = { path = "./crates/yss-project-identity" }
-yss-project-progress = { path = "./crates/yss-project-progress" }
-yss-project-registry = { path = "./crates/yss-project-registry" }
 yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
 yss-project-watcher = { path = "./crates/yss-project-watcher" }
 yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
@@ -189,6 +183,8 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+yss-project = { path = "./crates/yss-project" }
+yss-project-identity = { path = "./crates/yss-project-identity" }
 yss-dataset-store = { path = "./crates/yss-dataset-store" }
 yss-relational-contract = { path = "./crates/yss-relational-contract" }
 arrow.workspace = true

@@ -1,6 +1,7 @@
 use crate::error::CommandError;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
+use yss_application::project_lifecycle::ProjectManagement;
 use yss_ipc_channel::project_progress::ProgressAdapterShutdownControl;
 use yss_ipc_channel::project_progress::ProjectProgressAdapterSpawnError;
 use yss_ipc_channel::project_progress::ProjectProgressDrainOutcome;
@@ -10,8 +11,7 @@ use yss_ipc_contract::project::LifecycleMutationResultDto;
 use yss_ipc_contract::project_progress::ProjectProgressDto;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
-use yss_project_progress::ProjectTaskCancellationRegistry;
-use yss_project_registry::{CleanupInvalidProjectsResult, ProjectRegistry, ScanProjectsResult};
+use yss_project_registry::{CleanupInvalidProjectsResult, ScanProjectsResult};
 use yss_project_registry_contract::ProjectRecord;
 
 fn project_progress_adapter_spawn_error(error: ProjectProgressAdapterSpawnError) -> CommandError {
@@ -20,9 +20,9 @@ fn project_progress_adapter_spawn_error(error: ProjectProgressAdapterSpawnError)
 
 #[tauri::command]
 pub async fn list_registered_projects(
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
 ) -> Result<Vec<ProjectRecord>, CommandError> {
-    registry
+    projects
         .list_projects()
         .await
         .map_err(CommandError::internal)
@@ -30,16 +30,14 @@ pub async fn list_registered_projects(
 
 #[tauri::command]
 pub async fn scan_projects_in_directory(
-    registry: State<'_, ProjectRegistry>,
-    task_cancel: State<'_, ProjectTaskCancellationRegistry>,
+    projects: State<'_, ProjectManagement>,
     directory: String,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<ScanProjectsResult, CommandError> {
     let (publisher, worker) = bounded_project_progress_adapter(on_progress)
         .map_err(project_progress_adapter_spawn_error)?;
-    let cancel = task_cancel.begin();
-    let result = registry
-        .scan_directory(&directory, Some(publisher.as_ref()), cancel.clone())
+    let result = projects
+        .scan_directory(&directory, publisher.as_ref())
         .await;
     publisher.close();
     drop(publisher);
@@ -57,27 +55,22 @@ pub async fn scan_projects_in_directory(
             );
         }
     }
-    task_cancel.end(&cancel);
     result.map_err(CommandError::internal)
 }
 
 #[tauri::command]
-pub fn cancel_project_picker_task(task_cancel: State<'_, ProjectTaskCancellationRegistry>) {
-    task_cancel.cancel_active();
+pub fn cancel_project_picker_task(projects: State<'_, ProjectManagement>) {
+    projects.cancel_picker_task();
 }
 
 #[tauri::command]
 pub async fn cleanup_invalid_registered_projects(
-    registry: State<'_, ProjectRegistry>,
-    task_cancel: State<'_, ProjectTaskCancellationRegistry>,
+    projects: State<'_, ProjectManagement>,
     on_progress: Channel<ProjectProgressDto>,
 ) -> Result<CleanupInvalidProjectsResult, CommandError> {
     let (publisher, worker) = bounded_project_progress_adapter(on_progress)
         .map_err(project_progress_adapter_spawn_error)?;
-    let cancel = task_cancel.begin();
-    let result = registry
-        .cleanup_invalid_projects(Some(publisher.as_ref()), cancel.clone())
-        .await;
+    let result = projects.cleanup_invalid_projects(publisher.as_ref()).await;
     publisher.close();
     drop(publisher);
     match worker.finish(ProgressAdapterShutdownControl::new(
@@ -94,17 +87,16 @@ pub async fn cleanup_invalid_registered_projects(
             );
         }
     }
-    task_cancel.end(&cancel);
     result.map_err(CommandError::internal)
 }
 
 #[tauri::command]
 pub async fn register_project(
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     name: String,
     path: String,
 ) -> Result<ProjectRecord, CommandError> {
-    registry
+    projects
         .register_project(&name, &path)
         .await
         .map_err(CommandError::internal)
@@ -112,10 +104,10 @@ pub async fn register_project(
 
 #[tauri::command]
 pub async fn remove_registered_project(
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     id: String,
 ) -> Result<(), CommandError> {
-    registry
+    projects
         .remove_project(&id)
         .await
         .map_err(CommandError::internal)
@@ -125,14 +117,14 @@ pub async fn remove_registered_project(
 pub async fn delete_registered_project_files(
     app: tauri::AppHandle,
     application: State<'_, yss_application::execution::ApplicationState>,
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     id: String,
     expected_active_instance_id: Option<ProjectInstanceId>,
     operation_id: OperationId,
 ) -> Result<LifecycleMutationResultDto, CommandError> {
     let result = application
         .delete_registered_project_for_application(
-            registry.inner(),
+            projects.inner(),
             &id,
             expected_active_instance_id,
             operation_id,
@@ -146,18 +138,18 @@ pub async fn delete_registered_project_files(
 
 #[tauri::command]
 pub async fn toggle_registered_project_favorite(
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     id: String,
 ) -> Result<bool, CommandError> {
-    registry
+    projects
         .toggle_favorite(&id)
         .await
         .map_err(CommandError::internal)
 }
 
 #[tauri::command]
-pub fn get_project_registry_path(registry: State<ProjectRegistry>) -> String {
-    registry.path().to_string_lossy().into_owned()
+pub fn get_project_registry_path(projects: State<ProjectManagement>) -> String {
+    projects.path().to_string_lossy().into_owned()
 }
 
 #[cfg(test)]

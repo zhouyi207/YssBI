@@ -4,9 +4,10 @@ use yss_ipc_channel::{HarnessChannelHub, HarnessGraphClientHub};
 use tauri::State;
 use tauri::ipc::Channel;
 use yss_application::execution::ApplicationState;
+use yss_application::harness::HarnessSessionError;
 use yss_automation_contract::{
     AgentDriverConfigurationFailure, AgentDriverConfigurationPort, HarnessSessionId, HarnessTurnId,
-    MemoryRecordId, PrincipalId, ProjectSessionBinding, SecretCredential, WorkflowRunId,
+    MemoryRecordId, PrincipalId, SecretCredential, WorkflowRunId,
 };
 use yss_statistical_harness::{HarnessError, HarnessHost, dataset_quality_review_workflow};
 
@@ -84,27 +85,19 @@ pub async fn create_harness_session(
     application: State<'_, ApplicationState>,
     runtime: State<'_, HarnessRuntimeState>,
 ) -> Result<HarnessSessionDto, CommandError> {
-    let captured = application
-        .capture_session()
-        .map_err(|_| CommandError::expected("project_session_unavailable"))?;
-    let binding = ProjectSessionBinding::new(
-        captured.project_instance_id().clone(),
-        captured.project_session_id().clone(),
-    );
-    runtime
-        .host
-        .reconcile_project_session(&binding)
-        .await
-        .map_err(map_harness_error)?;
-    runtime
-        .host
-        .create_session(
+    application
+        .create_harness_session(
+            &runtime.host,
             PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?,
-            binding,
         )
         .await
         .map(HarnessSessionDto::from)
-        .map_err(map_harness_error)
+        .map_err(|error| match error {
+            HarnessSessionError::SessionCapture(_) => {
+                CommandError::expected("project_session_unavailable")
+            }
+            HarnessSessionError::Host(error) => map_harness_error(error),
+        })
 }
 
 #[tauri::command]

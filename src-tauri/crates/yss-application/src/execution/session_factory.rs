@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
+use super::session_slot::{
+    ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState,
+};
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
@@ -160,6 +162,29 @@ pub enum ProjectSessionCandidateError {
     GraphRuntime(#[source] yss_graph_catalog::BuiltinInitializationError),
     #[error(transparent)]
     Candidate(#[from] InvalidSessionCandidateError),
+}
+
+#[derive(Debug, Error)]
+pub enum ApplicationInitializationError {
+    #[error("initial application session composition could not be prepared")]
+    SessionComposition(#[from] ProjectSessionCandidateError),
+    #[error("initial application session candidate could not be installed")]
+    SessionInstallation,
+}
+
+impl ApplicationState {
+    pub fn initialize() -> Result<Self, ApplicationInitializationError> {
+        let candidate = build_current_project_candidate(
+            ApplicationSessionEpoch::INITIAL,
+            Arc::new(ProjectState::new()),
+            std::iter::empty(),
+        )?;
+        let application = Self::new(Arc::new(ApplicationSessionSlot::new()));
+        application
+            .install_candidate(candidate)
+            .map_err(|_| ApplicationInitializationError::SessionInstallation)?;
+        Ok(application)
+    }
 }
 
 impl UnpublishedApplicationSession {

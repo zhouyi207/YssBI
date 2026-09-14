@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 use yss_application::execution::{ApplicationState, SessionCaptureError};
 use yss_application::project_change::ApplicationProjectWatchError;
 use yss_application::project_lifecycle::ProjectLifecycleError;
+use yss_application::project_lifecycle::ProjectManagement;
 use yss_ipc_contract::event::Event;
 use yss_ipc_contract::event::EventProject;
 use yss_ipc_contract::event::EventResource;
@@ -19,7 +20,6 @@ use yss_ipc_event::emit_project_event_result;
 use yss_project::ProjectState;
 use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
-use yss_project_registry::ProjectRegistry;
 use yss_project_watcher::{
     ObservedProjectChange, ProjectChangeSink, ProjectWatcherError, ProjectWatcherState,
 };
@@ -230,7 +230,7 @@ pub async fn save_project_as(
     app: AppHandle,
     application: State<'_, ApplicationState>,
     watcher: State<'_, ProjectWatcherState>,
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     path: String,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
@@ -245,7 +245,7 @@ pub async fn save_project_as(
 
     let result = application
         .save_project_as_for_application(
-            registry.inner(),
+            projects.inner(),
             Path::new(&path),
             project_instance_id,
             operation_id,
@@ -275,13 +275,13 @@ pub async fn save_project_as(
 pub async fn create_project(
     app: AppHandle,
     application: State<'_, ApplicationState>,
-    registry: State<'_, ProjectRegistry>,
+    projects: State<'_, ProjectManagement>,
     name: String,
     path: String,
     operation_id: OperationId,
 ) -> Result<LifecycleMutationResultDto, CommandError> {
     let result = application
-        .create_project_for_application(registry.inner(), &name, Path::new(&path), operation_id)
+        .create_project_for_application(projects.inner(), &name, Path::new(&path), operation_id)
         .await
         .map_err(map_application_project_lifecycle_error)?;
     let result = crate::schema::application_event::project_lifecycle_to_transport(&result);

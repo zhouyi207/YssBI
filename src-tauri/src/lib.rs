@@ -12,9 +12,8 @@ mod architecture_tests;
 use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-use yss_automation_contract::{
-    AutomationIdKind, ClockPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
-};
+mod harness;
+mod projects;
 
 // ==================== 应用入口 ====================
 
@@ -24,127 +23,6 @@ const WINDOW_STATE_FLAGS: StateFlags = StateFlags::SIZE
 
 fn window_state_key(label: &str) -> &str {
     label.split_once('-').map_or(label, |(kind, _)| kind)
-}
-
-fn initialize_project_state() -> yss_project::ProjectState {
-    yss_project::ProjectState::new()
-}
-
-#[derive(Debug, thiserror::Error)]
-enum ApplicationInitializationError {
-    #[error("initial application session candidate could not be installed")]
-    SessionInstallation,
-    #[error("initial application session composition could not be prepared")]
-    SessionComposition(
-        #[source] yss_application::execution::session_factory::ProjectSessionCandidateError,
-    ),
-}
-
-#[derive(Debug, thiserror::Error)]
-enum HarnessInitializationError {
-    #[error("initial Harness project session could not be captured")]
-    SessionCapture(#[from] yss_application::execution::SessionCaptureError),
-    #[error("Harness SQLite persistence could not be initialized")]
-    Persistence(#[from] yss_automation_contract::PersistenceFailure),
-    #[error("Harness host could not be initialized")]
-    Host(#[from] yss_statistical_harness::HarnessError),
-    #[error("Harness builtin knowledge could not be initialized")]
-    Knowledge(#[from] yss_statistical_harness::KnowledgeError),
-}
-
-struct SystemHarnessClock;
-
-impl ClockPort for SystemHarnessClock {
-    fn now(&self) -> UnixMillis {
-        let milliseconds = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_millis());
-        UnixMillis::from_existing(u64::try_from(milliseconds).unwrap_or(u64::MAX))
-    }
-}
-
-struct HarnessIdGenerator;
-
-impl IdGeneratorPort for HarnessIdGenerator {
-    fn next_id(&self, kind: AutomationIdKind) -> Result<String, IdGenerationFailure> {
-        let prefix = match kind {
-            AutomationIdKind::HarnessSession => "session",
-            AutomationIdKind::HarnessTurn => "turn",
-            AutomationIdKind::WorkflowRun => "workflow",
-            AutomationIdKind::ToolInvocation => "tool",
-            AutomationIdKind::CapabilityInvocation => "capability",
-            AutomationIdKind::MemoryRecord => "memory",
-            AutomationIdKind::ApprovalGrant => "approval",
-        };
-        Ok(format!("{prefix}-{}", uuid::Uuid::new_v4()))
-    }
-}
-
-fn initialize_harness_state(
-    app_dir: std::path::PathBuf,
-    application: yss_application::execution::ApplicationState,
-) -> Result<yss_ipc_command::HarnessRuntimeState, HarnessInitializationError> {
-    let captured = application.capture_session()?;
-    let current_project = yss_automation_contract::ProjectSessionBinding::new(
-        captured.project_instance_id().clone(),
-        captured.project_session_id().clone(),
-    );
-    let store = Arc::new(tauri::async_runtime::block_on(
-        yss_statistical_harness_sqlite::SqliteHarnessStore::connect(app_dir),
-    )?);
-    let channels = Arc::new(yss_ipc_channel::HarnessChannelHub::new());
-    let graph_clients = Arc::new(yss_ipc_channel::HarnessGraphClientHub::new());
-    let agent_driver = Arc::new(yss_agent_rig::ConfigurableAgentDriver::new());
-    let clock = Arc::new(SystemHarnessClock);
-    tauri::async_runtime::block_on(
-        yss_statistical_harness::install_builtin_statistical_knowledge(store.clone(), clock.now()),
-    )?;
-    let host = Arc::new(yss_statistical_harness::HarnessHost::new(
-        yss_statistical_harness::HarnessPorts {
-            agent_driver: agent_driver.clone(),
-            capability_gateway: Arc::new(yss_ipc_command::ApplicationCapabilityGateway::new(
-                application,
-                graph_clients.clone(),
-            )),
-            sessions: store.clone(),
-            events: store.clone(),
-            event_sink: channels.clone(),
-            workflows: store.clone(),
-            tool_ledger: store.clone(),
-            knowledge: store.clone(),
-            memory: store.clone(),
-            approvals: store,
-            clock,
-            ids: Arc::new(HarnessIdGenerator),
-        },
-    )?);
-    tauri::async_runtime::block_on(host.recover_interrupted_turns())?;
-    tauri::async_runtime::block_on(host.reconcile_project_session(&current_project))?;
-    tauri::async_runtime::block_on(host.recover_workflows())?;
-    Ok(yss_ipc_command::HarnessRuntimeState::new(
-        host,
-        channels,
-        agent_driver,
-        graph_clients,
-    ))
-}
-
-fn initialize_application_state(
-    project_state: Arc<yss_project::ProjectState>,
-) -> Result<yss_application::execution::ApplicationState, ApplicationInitializationError> {
-    let candidate = yss_application::execution::session_factory::build_current_project_candidate(
-        yss_application::execution::ApplicationSessionEpoch::INITIAL,
-        Arc::clone(&project_state),
-        std::iter::empty(),
-    )
-    .map_err(ApplicationInitializationError::SessionComposition)?;
-    let application = yss_application::execution::ApplicationState::new(Arc::new(
-        yss_application::execution::ApplicationSessionSlot::new(),
-    ));
-    application
-        .install_candidate(candidate)
-        .map_err(|_| ApplicationInitializationError::SessionInstallation)?;
-    Ok(application)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -161,10 +39,7 @@ pub fn run() {
                 .build(),
         )
         // 注册全局状态管理器
-        .manage(yss_project_watcher::ProjectWatcherState::new(
-            std::sync::Arc::new(yss_project_watcher_notify::NotifyProjectFileWatcher::new()),
-        ))
-        .manage(yss_project_progress::ProjectTaskCancellationRegistry::new())
+        .manage(projects::watcher())
         .manage(yss_ipc_command::ActivityPanelSyncState::default())
         .setup(move |app| {
             let log_dir = app.path().app_log_dir();
@@ -187,8 +62,7 @@ pub fn run() {
                 );
             }
 
-            let project_state = Arc::new(initialize_project_state());
-            let application_state = initialize_application_state(Arc::clone(&project_state))
+            let application_state = yss_application::execution::ApplicationState::initialize()
                 .map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(application_state.clone());
             app.manage(yss_application::database::samples::SampleCatalog::new(
@@ -197,19 +71,14 @@ pub fn run() {
             ));
 
             let app_dir = app.path().app_data_dir()?;
-            let harness_state =
-                initialize_harness_state(app_dir.clone(), application_state.clone())
-                    .map_err(Box::<dyn std::error::Error>::from)?;
+            let harness_state = tauri::async_runtime::block_on(harness::initialize(
+                app_dir.clone(),
+                application_state.clone(),
+            ))?;
             app.manage(harness_state);
-            let registry_store = tauri::async_runtime::block_on(
-                yss_project_registry_sqlite::SqliteProjectRegistryStore::connect(app_dir.clone()),
-            )?;
-            let registry_path = registry_store.path().to_path_buf();
-            let project_registry = yss_project_registry::ProjectRegistry::new(
-                std::sync::Arc::new(registry_store),
-                registry_path,
-            );
-            app.manage(project_registry);
+            app.manage(tauri::async_runtime::block_on(
+                projects::initialize_registry(app_dir.clone()),
+            )?);
             let plugins = yss_plugin_runtime::PluginManager::initialize(
                 &app_dir,
                 Arc::new(yss_application::plugins::PluginHostServices::new(

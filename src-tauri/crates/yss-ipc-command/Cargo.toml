@@ -39,7 +39,6 @@ yss-math-expr = { path = "../yss-math-expr" }
 yss-project = { path = "../yss-project" }
 yss-project-history = { path = "../yss-project-history" }
 yss-project-identity = { path = "../yss-project-identity" }
-yss-project-progress = { path = "../yss-project-progress" }
 yss-project-registry = { path = "../yss-project-registry" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-project-watcher = { path = "../yss-project-watcher" }

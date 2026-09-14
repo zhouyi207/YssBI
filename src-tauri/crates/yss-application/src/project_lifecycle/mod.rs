@@ -20,6 +20,9 @@ use yss_project_identity::ProjectInstanceId;
 use yss_project_registry::{ProjectRegistry, normalize_existing_path};
 use yss_project_registry_contract::ProjectRecord;
 
+mod registry;
+pub use registry::ProjectManagement;
+
 #[derive(Debug, Error)]
 pub enum ProjectLifecycleError {
     #[error("project path is invalid")]
@@ -98,7 +101,7 @@ impl ApplicationState {
 
     pub async fn save_project_as_for_application(
         &self,
-        registry: &ProjectRegistry,
+        projects: &ProjectManagement,
         destination: &Path,
         project_instance_id: ProjectInstanceId,
         operation_id: OperationId,
@@ -106,7 +109,7 @@ impl ApplicationState {
         let captured = self.capture_session()?;
         let result = save_project_as(
             captured.project(),
-            registry,
+            &projects.registry,
             destination,
             project_instance_id,
             operation_id,
@@ -124,13 +127,20 @@ impl ApplicationState {
 
     pub async fn create_project_for_application(
         &self,
-        registry: &ProjectRegistry,
+        projects: &ProjectManagement,
         name: &str,
         path: &Path,
         operation_id: OperationId,
     ) -> Result<ProjectLifecycleApplicationEvent, ApplicationProjectLifecycleError> {
         let captured = self.capture_session()?;
-        let result = create_project(captured.project(), registry, name, path, operation_id).await?;
+        let result = create_project(
+            captured.project(),
+            &projects.registry,
+            name,
+            path,
+            operation_id,
+        )
+        .await?;
         if result.invalidation.project {
             self.rebuild_application_session()
                 .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
@@ -140,7 +150,7 @@ impl ApplicationState {
 
     pub async fn delete_registered_project_for_application(
         &self,
-        registry: &ProjectRegistry,
+        projects: &ProjectManagement,
         id: &str,
         expected_active_instance_id: Option<ProjectInstanceId>,
         operation_id: OperationId,
@@ -156,7 +166,7 @@ impl ApplicationState {
             .map_or_else(|| captured.project(), ProjectReplacement::project);
         let result = delete_registered_project(
             project,
-            registry,
+            &projects.registry,
             id,
             expected_active_instance_id,
             operation_id,
