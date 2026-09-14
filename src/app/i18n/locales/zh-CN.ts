@@ -581,7 +581,7 @@ export const zhCN = {
         description: "注册命令、校验输入、转换类型，调用业务用例并映射交付结果。",
         parts: { registry: "命令注册", validation: "输入校验", mapping: "DTO 映射" },
         boundary:
-          "yss-ipc-command 拥有唯一命令注册表，依赖 Event、Channel 适配和共享 Contract。命令保持轻薄：解析和校验 wire 输入、转换类型、调用业务用例，再映射 DTO 或 CommandError；按对应业务契约交付 Event 或 Channel 消息。文件事务、科学计算和完整业务流程由业务层负责。",
+          "yss-application::ipc 拥有唯一命令注册表，依赖 Event、Channel 适配和共享 Contract。命令保持轻薄：解析和校验 wire 输入、转换类型、调用业务用例，再映射 DTO 或 CommandError；按对应业务契约交付 Event 或 Channel 消息。文件事务、科学计算和完整业务流程由业务层负责。",
       },
       business: {
         title: "Rust 业务用例",
@@ -621,7 +621,7 @@ export const zhCN = {
         description: "后端通过绑定通道持续向前端交付进度、执行事件和诊断。",
         parts: { progress: "进度", execution: "执行事件", diagnostics: "诊断" },
         boundary:
-          "yss-ipc-channel 负责通道适配和订阅管理；前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
+          "yss-ipc-channel 负责中立通道适配；yss-application::ipc 负责执行消息和图草稿交接。前端创建 Channel 并通过 Command 绑定。每条业务流分别定义任务或会话身份、消息顺序、容量约束、丢失和缺口处理、取消及结束语义。恢复策略由对应业务流决定，不能统一假设所有流可重放。",
         lifecycle: { create: "创建", bind: "绑定", receive: "接收", end: "结束", cleanup: "清理" },
       },
       links: {
@@ -840,7 +840,7 @@ export const zhCN = {
       },
       boundaryTitle: "DTO 与统一错误契约",
       boundary:
-        "src/services → invokeCommand → yss-ipc-command。命令只做适配，业务交给 Rust 应用层或领域模块。",
+        "src/services → invokeCommand → yss-application::ipc。命令只做适配，业务交给 Rust 应用层或领域模块。",
     },
     backend: {
       title: "后端",

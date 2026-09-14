@@ -66,7 +66,7 @@ export const backendNodes: BackendArchitectureNode[] = [
       color: "var(--chart-4)",
       icon: FiShuffle,
       parts: ["commands", "mapping", "delivery"],
-      crates: ["yss-ipc-command", "yss-ipc-event", "yss-ipc-channel", "yss-ipc-contract"],
+      crates: ["yss-application", "yss-ipc-event", "yss-ipc-channel", "yss-ipc-contract"],
     },
   },
   {

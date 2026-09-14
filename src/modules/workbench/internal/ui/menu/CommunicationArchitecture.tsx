@@ -70,7 +70,7 @@ export const communicationNodes: CommunicationArchitectureNode[] = [
       color: "var(--chart-4)",
       icon: FiShuffle,
       parts: ["registry", "validation", "mapping"],
-      reference: "yss-ipc-command",
+      reference: "yss-application::ipc",
     },
   },
   {

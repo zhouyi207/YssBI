@@ -648,7 +648,7 @@ export const enUS = {
           mapping: "DTO mapping",
         },
         boundary:
-          "yss-ipc-command owns the sole command registry and uses Event, Channel and shared Contract crates. Thin commands parse and validate wire input, convert types, invoke a use case and map its outcome to a DTO or CommandError. Event and Channel delivery follow the corresponding business contract. Filesystem transactions, scientific computation and complete workflows belong to business owners.",
+          "yss-application::ipc owns the sole command registry and uses Event, Channel and shared Contract crates. Thin commands parse and validate wire input, convert types, invoke a use case and map its outcome to a DTO or CommandError. Event and Channel delivery follow the corresponding business contract. Filesystem transactions, scientific computation and complete workflows belong to business owners.",
       },
       business: {
         title: "Rust business use case",
@@ -701,7 +701,7 @@ export const enUS = {
           "The backend continuously delivers progress, execution events and diagnostics to the frontend.",
         parts: { progress: "Progress", execution: "Execution events", diagnostics: "Diagnostics" },
         boundary:
-          "yss-ipc-channel owns stream adapters and subscriptions. The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
+          "yss-ipc-channel owns neutral stream adapters; yss-application::ipc handles execution messages and graph-draft handoff. The frontend creates a Channel and binds it through a Command. Each business stream defines task or session identity, ordering, capacity, loss and gap handling, cancellation and termination. Recovery belongs to that stream's owner; not every stream supports replay.",
         lifecycle: {
           create: "Create",
           bind: "Bind",
@@ -941,7 +941,7 @@ export const enUS = {
       },
       boundaryTitle: "DTO and shared error contract",
       boundary:
-        "src/services → invokeCommand → yss-ipc-command. Commands adapt requests to Rust application or domain logic.",
+        "src/services → invokeCommand → yss-application::ipc. Commands adapt requests to Rust application or domain logic.",
     },
     backend: {
       title: "Backend",

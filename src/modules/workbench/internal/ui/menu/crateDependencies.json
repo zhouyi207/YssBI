@@ -16,6 +16,12 @@
     "manifest": "src-tauri/crates/yss-application/Cargo.toml",
     "dependencies": [
       {
+        "name": "yss-agent-rig",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-automation-contract",
         "kind": "normal",
         "optional": false,
@@ -71,6 +77,12 @@
       },
       {
         "name": "yss-dataset-store",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-diagnostics",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -166,7 +178,37 @@
         "target": null
       },
       {
+        "name": "yss-ipc-channel",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-ipc-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-ipc-event",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-math-expr",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-plugin-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-plugin-runtime",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -214,7 +256,25 @@
         "target": null
       },
       {
+        "name": "yss-project-registry-sqlite",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-project-registry",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher-notify",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-project-watcher",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -244,7 +304,19 @@
         "target": null
       },
       {
+        "name": "yss-sci-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-sql-source",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-statistical-harness-sqlite",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -269,6 +341,12 @@
       },
       {
         "name": "yss-tabular-io",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tracing",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1142,12 +1220,6 @@
     "manifest": "src-tauri/crates/yss-ipc-channel/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-application",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-automation-contract",
         "kind": "normal",
         "optional": false,
@@ -1160,235 +1232,13 @@
         "target": null
       },
       {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-execution",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-ipc-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-identity",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
         "name": "yss-project-progress",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-ipc-command",
-    "manifest": "src-tauri/crates/yss-ipc-command/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-application",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-automation-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-chart-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-database-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-database-edit",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-database-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-database-schema",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-diagnostics",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-analysis-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-analysis",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-catalog",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-document-edit",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-editor",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-execution",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-channel",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-event",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-math-expr",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-plugin-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-plugin-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-history",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-identity",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-registry-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-sci-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-statistical-harness",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-tabular-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -2200,79 +2050,7 @@
     "manifest": "src-tauri/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-agent-rig",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-application",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-automation-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-diagnostics",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-channel",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-ipc-command",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-plugin-runtime",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-registry-sqlite",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher-notify",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-project-watcher",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-statistical-harness-sqlite",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-statistical-harness",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-tracing",
         "kind": "normal",
         "optional": false,
         "target": null
