@@ -1,8 +1,8 @@
 //! Ordinary least squares: one configuration and one fitted result.
 mod fit;
 mod inference;
-use yss_linalg::{Col, Mat};
 use yss_sci_contract::regression::OlsOptions;
+use yss_sci_linalg::{Col, Mat};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OlsFitError {

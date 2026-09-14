@@ -3,8 +3,8 @@
 //! 参考 Stata: estat bgodfrey, wntestq, estat dwatson
 
 use statrs::distribution::{ChiSquared, ContinuousCDF};
-use yss_linalg::{Col, Mat};
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve};
 
 /// Durbin-Watson 统计量（Stata estat dwatson）
 /// d = Σ(e_t - e_{t-1})² / Σ(e_t)²

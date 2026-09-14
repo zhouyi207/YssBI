@@ -1,7 +1,7 @@
 //! OLS 协方差矩阵计算
 //! 支持 nonrobust, HC0, HC1, HC2, HC3, fixed scale, cluster, HAC 等
 
-use yss_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, Mat};
 
 use yss_sci_contract::regression::CovParams;
 
@@ -38,7 +38,7 @@ pub fn compute_cov_beta(
 
 fn cov_nonrobust(xtx_inv: &Mat<f64>, u: &Col<f64>, df_residual: usize) -> Result<Mat<f64>, String> {
     let sigma2 = (u.transpose() * u.as_ref()) / df_residual as f64;
-    Ok(yss_linalg::Scale(sigma2) * xtx_inv)
+    Ok(yss_sci_linalg::Scale(sigma2) * xtx_inv)
 }
 
 /// Fixed scale: scale * (X'X)⁻¹，scale 由用户通过 Config 指定
@@ -54,7 +54,7 @@ fn cov_fixed_scale(xtx_inv: &Mat<f64>, cov_params: Option<&CovParams>) -> Result
     if scale <= 0.0 {
         return Err("fixed scale: scale must be positive".to_string());
     }
-    Ok(yss_linalg::Scale(scale) * xtx_inv)
+    Ok(yss_sci_linalg::Scale(scale) * xtx_inv)
 }
 
 /// HC0: (X'X)⁻¹ X' diag(u²) X (X'X)⁻¹
@@ -90,7 +90,7 @@ fn cov_hc1(
 ) -> Result<Mat<f64>, String> {
     let hc0 = cov_hc0(x, xtx_inv, u, n, k)?;
     let scale = n as f64 / df_residual as f64;
-    Ok(yss_linalg::Scale(scale) * hc0)
+    Ok(yss_sci_linalg::Scale(scale) * hc0)
 }
 
 /// HC2: 权重 w_i = 1 / (1 - h_ii)
@@ -363,7 +363,7 @@ fn cov_newey(
     } else {
         1.0
     };
-    let meat_scaled = yss_linalg::Scale(scale) * meat;
+    let meat_scaled = yss_sci_linalg::Scale(scale) * meat;
     let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }
@@ -384,7 +384,7 @@ mod tests {
             exog_data.push((i as f64 * 0.1).sin());
             exog_data.push((i as f64 * 0.2).cos());
         }
-        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
         let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
 
         let ols_hc0 = OLS {
@@ -440,7 +440,7 @@ mod tests {
             exog_data.push((i as f64 * 0.1).sin());
             exog_data.push((i as f64 * 0.2).cos());
         }
-        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
         let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
 
         let ols_hc1 = OLS {
@@ -490,7 +490,7 @@ mod tests {
             exog_data.push(1.0);
             exog_data.push(i as f64 / n as f64);
         }
-        let exog = yss_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
         let endog = Col::from_fn(n, |i| {
             (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos()
         });
@@ -583,7 +583,7 @@ fn cov_cluster(
     } else {
         1.0
     };
-    let meat_scaled = yss_linalg::Scale(scale) * meat;
+    let meat_scaled = yss_sci_linalg::Scale(scale) * meat;
     let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
 }

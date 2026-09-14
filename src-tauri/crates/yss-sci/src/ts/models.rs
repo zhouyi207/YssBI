@@ -4,8 +4,8 @@ use crate::ts::var::{VAR, VARConfig, VARResult, VARSocResult, var_varsoc};
 use crate::ts::vec::{
     VECConfig, VECResult, VecRankResult, VecTrendSpec, vec_estimate, vec_vecrank_stats,
 };
-use yss_linalg::Mat;
 use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
+use yss_sci_linalg::Mat;
 pub fn augmented_dickey_fuller(
     series: &[f64],
     lags: usize,

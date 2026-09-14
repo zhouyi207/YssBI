@@ -1938,8 +1938,8 @@ fn scientific_computation_dependencies_follow_the_runtime_boundary() {
     let mut runtime_consumers = BTreeSet::new();
     for dependency in &workspace_facts().dependency_declarations {
         match dependency.package_name.as_str() {
-            "faer" => assert_eq!(dependency.owning_package, "yss-linalg"),
-            "yss-linalg" => assert_eq!(dependency.owning_package, "yss-sci"),
+            "faer" => assert_eq!(dependency.owning_package, "yss-sci-linalg"),
+            "yss-sci-linalg" => assert_eq!(dependency.owning_package, "yss-sci"),
             "yss-sci" => assert_eq!(dependency.owning_package, "yss-sci-runtime"),
             "yss-sci-runtime" => {
                 runtime_consumers.insert(dependency.owning_package.as_str());

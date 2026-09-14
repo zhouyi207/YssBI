@@ -1,4 +1,4 @@
-# yss-linalg
+# yss-sci-linalg
 
 Owns opaque `Mat`, `Col`, row and borrowed-view types, matrix arithmetic, checked
 factorizations, stable numerical errors and the rank/conditioning convention.
@@ -7,7 +7,7 @@ expose project types, with no native-type re-export, conversion escape hatch or
 `Deref` to faer. The faer version remains in shared workspace dependencies.
 
 ```rust
-use yss_linalg::{MatrixExt, Solve, col, mat};
+use yss_sci_linalg::{MatrixExt, Solve, col, mat};
 
 let a = mat![[4.0, 1.0], [1.0, 3.0]];
 let b = col![6.0, 7.0];

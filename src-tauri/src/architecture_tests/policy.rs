@@ -1752,7 +1752,7 @@ fn non_build_memberships(
             | "yss-graph-resource-contract"
             | "yss-graph-type-mapping"
             | "yss-math-expr"
-            | "yss-linalg"
+            | "yss-sci-linalg"
             | "yss-project-change"
             | "yss-project-identity"
             | "yss-project-layout"
@@ -1927,8 +1927,8 @@ pub(super) fn rust_dependency_findings_with_capabilities(
             let target_layer = classification
                 .get(repository_relative_declaration_file)
                 .copied();
-            let crosses_scientific_boundary = (package_name == "yss-linalg"
-                && !matches!(dependency.owning_package.as_str(), "yss-linalg" | "yss-sci"))
+            let crosses_scientific_boundary = (package_name == "yss-sci-linalg"
+                && !matches!(dependency.owning_package.as_str(), "yss-sci-linalg" | "yss-sci"))
                 || (package_name == "yss-sci"
                     && !matches!(
                         dependency.owning_package.as_str(),

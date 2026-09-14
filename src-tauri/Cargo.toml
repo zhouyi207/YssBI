@@ -61,7 +61,7 @@ members = [
   "crates/yss-graph-registry",
   "crates/yss-graph-runtime",
   "crates/yss-graph-type-mapping",
-  "crates/yss-linalg",
+  "crates/yss-sci-linalg",
   "crates/yss-math-expr",
   "crates/yss-project",
   "crates/yss-project-change",

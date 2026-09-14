@@ -6,8 +6,6 @@ use crate::regression::linear_model::{
 };
 use crate::regression::panel::fit_panel_fe_twoway;
 use statrs::distribution::{ContinuousCDF, Normal};
-use yss_linalg::matrix_rank;
-use yss_linalg::{Col, Mat};
 use yss_sci_contract::regression::OlsOptions;
 use yss_sci_contract::regression::fit::{
     BinaryRegressionLink, BinaryRegressionStatistics, InstrumentalVariableFit,
@@ -17,6 +15,8 @@ use yss_sci_contract::regression::fit::{
 use yss_sci_contract::{
     SciError, SciInputViolation, SciOperationCode, StatisticalObservationMetadata,
 };
+use yss_sci_linalg::matrix_rank;
+use yss_sci_linalg::{Col, Mat};
 
 pub fn fit_regression(
     kind: RegressionKind,
@@ -409,7 +409,7 @@ fn linear_fit(
     statistics: RegressionStatistics,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
-    let fitted = (x * yss_linalg::ColRef::from_slice(&coefficients))
+    let fitted = (x * yss_sci_linalg::ColRef::from_slice(&coefficients))
         .iter()
         .copied()
         .collect::<Vec<_>>();
@@ -616,7 +616,10 @@ mod tests {
             SciOperationCode::Regression,
         )
         .unwrap();
-        assert_eq!(design, yss_linalg::mat![[1.0, 2.0, 5.0], [1.0, 3.0, 7.0]]);
+        assert_eq!(
+            design,
+            yss_sci_linalg::mat![[1.0, 2.0, 5.0], [1.0, 3.0, 7.0]]
+        );
         let values = Mat::from_fn(2, 3, |row, column| (row * 3 + column) as f64);
         assert_eq!(
             covariance_rows(&values),

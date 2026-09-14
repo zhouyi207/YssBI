@@ -4,7 +4,7 @@
 
 /// 加权辅助回归的 R²（用于 Koenker：LM = n×R²）
 fn weighted_aux_r2(
-    z: &yss_linalg::Mat<f64>,
+    z: &yss_sci_linalg::Mat<f64>,
     y: &Col<f64>,
     w: &Col<f64>,
 ) -> Result<f64, String> {
@@ -23,7 +23,7 @@ fn weighted_aux_r2(
 
 /// 加权辅助回归：min Σ w_i*(y_i - Z_i*γ)²，返回 fitted
 fn weighted_aux_regression(
-    z: &yss_linalg::Mat<f64>,
+    z: &yss_sci_linalg::Mat<f64>,
     y: &Col<f64>,
     w: &Col<f64>,
 ) -> Result<Col<f64>, String> {
@@ -31,8 +31,8 @@ fn weighted_aux_regression(
     let m = z.ncols();
 
     // Z'WZ, Z'Wy (ztwy as m×1 matrix for solve)
-    let mut ztwz: yss_linalg::Mat<f64> = Mat::zeros(m, m);
-    let mut ztwy: yss_linalg::Mat<f64> = Mat::zeros(m, 1);
+    let mut ztwz: yss_sci_linalg::Mat<f64> = Mat::zeros(m, m);
+    let mut ztwy: yss_sci_linalg::Mat<f64> = Mat::zeros(m, 1);
     for i in 0..n {
         let wi = w[i];
         for c in 0..m {

@@ -4,7 +4,7 @@ Stateless scientific computation entry points over `yss-sci`, called directly
 only by `yss-graph-execution` and `yss-application::ipc::commands`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
-faer or `yss-linalg` dependency and does not construct numerical matrices or own
+faer or `yss-sci-linalg` dependency and does not construct numerical matrices or own
 estimators. Arrow remains the tabular exchange representation; SCI converts
 numeric inputs into Linalg matrices and returns computed results.
 

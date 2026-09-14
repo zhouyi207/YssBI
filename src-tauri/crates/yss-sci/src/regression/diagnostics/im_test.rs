@@ -17,7 +17,7 @@ pub struct ImTestResult {
 }
 
 /// 辅助回归 y 对 Z，LM = n×(1 - RSS/USS)，df = rank(Z) - 1
-fn lm_chi2_aux(y: &Col<f64>, z_matrix: &yss_linalg::Mat<f64>) -> Result<(f64, usize), String> {
+fn lm_chi2_aux(y: &Col<f64>, z_matrix: &yss_sci_linalg::Mat<f64>) -> Result<(f64, usize), String> {
     let n = y.nrows();
     let uss: f64 = y.iter().map(|v| v * v).sum();
     if uss <= 0.0 {
@@ -34,7 +34,7 @@ fn lm_chi2_aux(y: &Col<f64>, z_matrix: &yss_linalg::Mat<f64>) -> Result<(f64, us
     if df == 0 {
         return Ok((0.0, 0));
     }
-    let svd = yss_linalg::Svd::factor(z_matrix
+    let svd = yss_sci_linalg::Svd::factor(z_matrix
         .as_ref())
         .map_err(|e| format!("lm_chi2_aux: SVD failed: {:?}", e))?;
     let u = svd.left_vectors();

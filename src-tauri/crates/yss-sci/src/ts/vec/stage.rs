@@ -98,9 +98,9 @@ pub(crate) fn johansen_stage1(
     }
 
     let t_inv = 1.0 / (n as f64);
-    let m02 = (z0.transpose() * z2.as_ref()) * yss_linalg::Scale(t_inv);
-    let m12 = (z1.transpose() * z2.as_ref()) * yss_linalg::Scale(t_inv);
-    let m22 = (z2.transpose() * z2.as_ref()) * yss_linalg::Scale(t_inv);
+    let m02 = (z0.transpose() * z2.as_ref()) * yss_sci_linalg::Scale(t_inv);
+    let m12 = (z1.transpose() * z2.as_ref()) * yss_sci_linalg::Scale(t_inv);
+    let m22 = (z2.transpose() * z2.as_ref()) * yss_sci_linalg::Scale(t_inv);
 
     let m22_matrix = m22.as_ref().to_owned();
     let m22_inv = m22_matrix
@@ -131,10 +131,10 @@ pub(crate) fn johansen_stage1(
         }
     }
 
-    let s00 = (r0.transpose() * r0.as_ref()) * yss_linalg::Scale(t_inv);
-    let s01 = (r0.transpose() * r1.as_ref()) * yss_linalg::Scale(t_inv);
-    let s10 = (r1.transpose() * r0.as_ref()) * yss_linalg::Scale(t_inv);
-    let s11 = (r1.transpose() * r1.as_ref()) * yss_linalg::Scale(t_inv);
+    let s00 = (r0.transpose() * r0.as_ref()) * yss_sci_linalg::Scale(t_inv);
+    let s01 = (r0.transpose() * r1.as_ref()) * yss_sci_linalg::Scale(t_inv);
+    let s10 = (r1.transpose() * r0.as_ref()) * yss_sci_linalg::Scale(t_inv);
+    let s11 = (r1.transpose() * r1.as_ref()) * yss_sci_linalg::Scale(t_inv);
 
     let s00_matrix = s00.as_ref().to_owned();
     let s00_inv = s00_matrix
@@ -153,7 +153,7 @@ pub(crate) fn johansen_stage1(
     let s10_s00i_s01 = (s10.as_ref() * s00_inv.as_ref()).as_ref() * s01.as_ref();
     let e_mat = s11_inv.as_ref() * s10_s00i_s01.as_ref();
 
-    let evd = yss_linalg::Eigen::factor(e_mat.as_ref())
+    let evd = yss_sci_linalg::Eigen::factor(e_mat.as_ref())
         .map_err(|_| "VEC: eigenvalue decomposition failed".to_string())?;
 
     let s_diag = evd.values();

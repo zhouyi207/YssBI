@@ -66,7 +66,7 @@ add or commit them unless explicitly requested.
 - Only `yss-graph-execution` and Application's `ipc/commands` modules consume
   `yss-sci-runtime`. Other Application modules and desktop composition do not
   construct or inject a scientific backend. Runtime exposes stateless functions and calls `yss-sci`, which calls
-  `yss-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
+  `yss-sci-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
   runtime uses neutral inputs/results. Julia plugin crates own their Bayes
   input and cancellation contracts and do not depend on host SCI crates.
 - Desktop commands and application-specific channel adapters belong to

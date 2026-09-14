@@ -1307,7 +1307,7 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-linalg",
+        owning_package: "yss-sci-linalg",
         mode: RustDependencyMode::Runtime,
         package_name: "faer",
         target_condition: None,
@@ -2331,7 +2331,7 @@ pub(super) fn rust_external_dependency_findings(
                 && candidate.mode == dependency.mode
                 && candidate.package_name == origin.package_name
         });
-        if allowed && (origin.package_name != "faer" || dependency.owning_package == "yss-linalg") {
+        if allowed && (origin.package_name != "faer" || dependency.owning_package == "yss-sci-linalg") {
             continue;
         }
         findings.push(ArchitectureFinding {

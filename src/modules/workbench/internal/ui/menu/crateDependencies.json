@@ -1405,8 +1405,8 @@
     ]
   },
   {
-    "name": "yss-linalg",
-    "manifest": "src-tauri/crates/yss-linalg/Cargo.toml",
+    "name": "yss-sci-linalg",
+    "manifest": "src-tauri/crates/yss-sci-linalg/Cargo.toml",
     "dependencies": []
   },
   {
@@ -1889,7 +1889,7 @@
     "manifest": "src-tauri/crates/yss-sci/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-linalg",
+        "name": "yss-sci-linalg",
         "kind": "normal",
         "optional": false,
         "target": null

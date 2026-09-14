@@ -4,8 +4,8 @@
 //! IRLS uses weight w = φ(η)² / [Φ(η)(1-Φ(η))] and working response z = η + (y-p)/w.
 
 use statrs::distribution::{ChiSquared, Continuous, ContinuousCDF, Normal};
-use yss_linalg::{Col, Mat};
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve};
 
 const MAX_ITER: usize = 100;
 const TOL: f64 = 1e-8;
@@ -104,7 +104,7 @@ impl Probit {
 
             let mut xw = self.exog.clone();
             for (i, mut row) in xw.row_iter_mut().enumerate() {
-                row *= yss_linalg::Scale(sqrt_w[i]);
+                row *= yss_sci_linalg::Scale(sqrt_w[i]);
             }
             let zw: Col<f64> = z
                 .iter()
@@ -146,7 +146,7 @@ impl Probit {
 
                 let mut xw_final = self.exog.clone();
                 for (i, mut row) in xw_final.row_iter_mut().enumerate() {
-                    row *= yss_linalg::Scale(w_final[i].sqrt());
+                    row *= yss_sci_linalg::Scale(w_final[i].sqrt());
                 }
                 let xtx_final = xw_final.as_ref().to_owned();
                 let xtx_f = xtx_final.transpose() * xtx_final.as_ref();
@@ -168,8 +168,8 @@ impl Probit {
                     .map(|&z| 2.0 * (1.0 - normal.cdf(z.abs())))
                     .collect();
                 let z_crit = normal.inverse_cdf(0.975);
-                let ci_lower = beta.clone() - yss_linalg::Scale(z_crit) * std_err.clone();
-                let ci_upper = beta.clone() + yss_linalg::Scale(z_crit) * std_err.clone();
+                let ci_lower = beta.clone() - yss_sci_linalg::Scale(z_crit) * std_err.clone();
+                let ci_upper = beta.clone() + yss_sci_linalg::Scale(z_crit) * std_err.clone();
 
                 let ll: f64 = self
                     .endog

@@ -95,7 +95,7 @@ pub fn fit_panel_re_fgls(
         }
     }
     let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
-    let x_b = yss_linalg::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
+    let x_b = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
 
     let (x_b_use, _) = {
         let col_is_dummy = vec![false; k];
@@ -390,8 +390,8 @@ pub fn fit_panel_re_fgls(
         2.0 * (1.0 - std_normal.cdf(result.tvalues[i].abs()))
     });
     let z_crit = std_normal.inverse_cdf(0.975);
-    let conf_int_left_z = &result.betas - yss_linalg::Scale(z_crit) * &result.stds;
-    let conf_int_right_z = &result.betas + yss_linalg::Scale(z_crit) * &result.stds;
+    let conf_int_left_z = &result.betas - yss_sci_linalg::Scale(z_crit) * &result.stds;
+    let conf_int_right_z = &result.betas + yss_sci_linalg::Scale(z_crit) * &result.stds;
 
     Ok(super::PanelOLSResult {
         const_coef: None,

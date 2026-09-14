@@ -1,6 +1,6 @@
 use super::{OLS, OlsFit, OlsFitError};
-use yss_linalg::{Col, Mat};
-use yss_linalg::{MatrixExt, Solve, matrix_rank};
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve, matrix_rank};
 pub(super) struct OlsSolution {
     pub x: Mat<f64>,
     pub y: Col<f64>,

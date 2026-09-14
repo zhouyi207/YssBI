@@ -7,7 +7,7 @@ rust-version.workspace = true
 [dependencies]
 yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-contract = { path = "../yss-sci-contract" }
-yss-linalg = { path = "../yss-linalg" }
+yss-sci-linalg = { path = "../yss-sci-linalg" }
 num-traits.workspace = true
 serde.workspace = true
 statrs.workspace = true

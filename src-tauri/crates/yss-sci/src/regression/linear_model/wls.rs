@@ -5,9 +5,9 @@ use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
-use yss_linalg::matrix_rank;
-use yss_linalg::{Col, Mat};
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::matrix_rank;
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve};
 
 pub struct WLSConfig {
     pub constant: bool,
@@ -67,7 +67,7 @@ impl WLS {
         }
         for (i, mut row) in zz.row_iter_mut().enumerate() {
             let sw = sqrt_weights[i];
-            row *= yss_linalg::Scale(sw);
+            row *= yss_sci_linalg::Scale(sw);
         }
 
         let (rank, cond_no) = matrix_rank(zz.as_ref()).unwrap_or((0, f64::INFINITY));
@@ -147,8 +147,8 @@ impl WLS {
             .collect();
 
         let t_crit = t_dist.inverse_cdf(0.975);
-        let ci_lower = betas_nd.clone() - yss_linalg::Scale(t_crit) * std_err.clone();
-        let ci_upper = betas_nd.clone() + yss_linalg::Scale(t_crit) * std_err.clone();
+        let ci_lower = betas_nd.clone() - yss_sci_linalg::Scale(t_crit) * std_err.clone();
+        let ci_upper = betas_nd.clone() + yss_sci_linalg::Scale(t_crit) * std_err.clone();
 
         Ok(WLSResult {
             num_observation: n,

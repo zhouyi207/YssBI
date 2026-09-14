@@ -1,7 +1,7 @@
 //! Validated matrix inputs for linear hypothesis tests.
 use yss_sci_contract::hypothesis::{Alternative, TTestResult, WaldTestResult};
 
-use yss_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, Mat};
 
 pub(super) struct LinearHypothesisTestInput<'a> {
     pub betas: &'a Col<f64>,
@@ -95,7 +95,7 @@ fn invalid_input(operation: SciOperationCode, violation: SciInputViolation) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_linalg::{Col, Mat, col, mat};
+    use yss_sci_linalg::{Col, Mat, col, mat};
 
     fn input<'a>(
         betas: &'a Col<f64>,

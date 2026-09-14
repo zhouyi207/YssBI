@@ -3,7 +3,7 @@
 //! 仅支持 q=1，t = (Rβ - r) / se(Rβ - r) ~ t(df_residual)，支持单侧。
 
 use statrs::distribution::{ContinuousCDF, StudentsT};
-use yss_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, Mat};
 
 use yss_sci_contract::hypothesis::{Alternative, TTestResult};
 
@@ -71,7 +71,7 @@ pub fn t_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_linalg::{col, mat};
+    use yss_sci_linalg::{col, mat};
 
     #[test]
     fn test_t_single_constraint() {

@@ -217,7 +217,7 @@ export const backendNodes: BackendArchitectureNode[] = [
       color: "var(--chart-4)",
       icon: FiCode,
       parts: ["contracts", "runtime", "algorithms", "mathematics"],
-      crates: ["yss-sci-contract", "yss-sci-runtime", "yss-sci", "yss-linalg", "yss-math-expr"],
+      crates: ["yss-sci-contract", "yss-sci-runtime", "yss-sci", "yss-sci-linalg", "yss-math-expr"],
     },
   },
 ];

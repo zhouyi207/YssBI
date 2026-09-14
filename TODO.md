@@ -124,10 +124,10 @@ JSON 是不是合法？
                                            SciRuntimeBackend；还包含 Arrow 数据
                                            准备和部分算法
   ──────────────────────────────────────  ───────────────────────────────────────  ─────────────────────────────────────
-   yss-linalg (src-tauri/crates/yss-       线性代数公共约定：带检查的矩阵分解、     faer 等
-   linalg/src/lib.rs)                      求解、秩判定和统一数值错误
+   yss-sci-linalg (src-tauri/crates/        线性代数公共约定：带检查的矩阵分解、     faer 等
+   yss-sci-linalg/src/lib.rs)               求解、秩判定和统一数值错误
 
-  yss-linalg 并没有包办全部矩阵运算。SCI 也直接使用 faer，只有需要统一分解检查、秩和错误语义的地方才使用 yss-linalg。
+  yss-sci-linalg 并没有包办全部矩阵运算。SCI 也直接使用 faer，只有需要统一分解检查、秩和错误语义的地方才使用 yss-sci-linalg。
 
 
 

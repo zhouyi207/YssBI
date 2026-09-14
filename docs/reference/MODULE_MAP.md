@@ -59,7 +59,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-julia-extension` | `plugins/julia/native/crates/yss-julia-extension` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-extension/Cargo.toml) | — |
 | `yss-julia-runtime` | `plugins/julia/native/crates/yss-julia-runtime` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-runtime/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-runtime/README.md) |
 | `yss-julia-worker` | `plugins/julia/native/crates/yss-julia-worker` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-worker/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-worker/README.md) |
-| `yss-linalg` | `src-tauri/crates/yss-linalg` | [Cargo.toml](../../src-tauri/crates/yss-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-linalg/README.md) |
+| `yss-sci-linalg` | `src-tauri/crates/yss-sci-linalg` | [Cargo.toml](../../src-tauri/crates/yss-sci-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-linalg/README.md) |
 | `yss-math-expr` | `src-tauri/crates/yss-math-expr` | [Cargo.toml](../../src-tauri/crates/yss-math-expr/Cargo.toml) | — |
 | `yss-plugin-protocol` | `src-tauri/crates/yss-plugin-protocol` | [Cargo.toml](../../src-tauri/crates/yss-plugin-protocol/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-protocol/README.md) |
 | `yss-plugin-runtime` | `src-tauri/crates/yss-plugin-runtime` | [Cargo.toml](../../src-tauri/crates/yss-plugin-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-runtime/README.md) |

@@ -229,7 +229,7 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Execution 直接调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
-Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
+Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
 只有 `yss-graph-execution` 和 `yss-application::ipc` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 

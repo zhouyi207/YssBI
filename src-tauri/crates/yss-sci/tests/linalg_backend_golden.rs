@@ -1,6 +1,6 @@
-use yss_linalg::Mat;
 use yss_sci::ts::var::{VAR, VARConfig};
 use yss_sci::ts::vec::{VECConfig, VecTrendSpec, vec_estimate};
+use yss_sci_linalg::Mat;
 
 fn cointegrated_sample() -> Mat<f64> {
     let mut state = 17_u64;

@@ -8,9 +8,9 @@ use statrs::{
     distribution::{ChiSquared, ContinuousCDF, FisherSnedecor, Normal, StudentsT},
     statistics::Statistics,
 };
-use yss_linalg::matrix_rank;
-use yss_linalg::{Col, Mat};
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::matrix_rank;
+use yss_sci_linalg::{Col, Mat};
+use yss_sci_linalg::{MatrixExt, Solve};
 
 impl IV2SLS {
     pub fn fit(&self) -> Result<IV2SLSResult, String> {
@@ -44,7 +44,7 @@ impl IV2SLS {
                 z_raw.push(self.instruments[(i, j)]);
             }
         }
-        let z = yss_linalg::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
+        let z = yss_sci_linalg::MatRef::from_row_major_slice(&(z_raw), n, k_z).to_owned();
 
         // Stage 1: endog_hat = Z * (Z'Z)^{-1} Z' * endog for each endogenous
         let z_matrix = z.as_ref().to_owned();
@@ -99,7 +99,7 @@ impl IV2SLS {
             } else {
                 1e-300
             };
-            let cov_gamma = yss_linalg::Scale(sigma2) * &ztz_inv_nd;
+            let cov_gamma = yss_sci_linalg::Scale(sigma2) * &ztz_inv_nd;
             let stds: Vec<f64> = (0..k_z).map(|i| cov_gamma[(i, i)].sqrt()).collect();
             let gamma_nd = gamma.as_ref().to_owned();
             let t_dist = StudentsT::new(0.0, 1.0, df_z as f64)
@@ -159,7 +159,7 @@ impl IV2SLS {
                 x_raw.push(endog_hat[(i, j)]);
             }
         }
-        let x = yss_linalg::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
+        let x = yss_sci_linalg::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
 
         let (rank, cond_no) = matrix_rank(x.as_ref()).unwrap_or((0, f64::INFINITY));
         let df_residual = n - rank;
@@ -202,7 +202,8 @@ impl IV2SLS {
                 x_struct_raw.push(self.endog_reg[(i, j)]);
             }
         }
-        let x_struct = yss_linalg::MatRef::from_row_major_slice(&(x_struct_raw), n, k_x).to_owned();
+        let x_struct =
+            yss_sci_linalg::MatRef::from_row_major_slice(&(x_struct_raw), n, k_x).to_owned();
         let u_structural: Col<f64> = &self.endog - &(x_struct.as_ref() * betas_nd.as_ref());
 
         let y_mean = y_vector.iter().mean();
@@ -258,8 +259,8 @@ impl IV2SLS {
             .collect();
 
         let z_crit = std_normal.inverse_cdf(0.975);
-        let ci_lower = &betas_nd - yss_linalg::Scale(z_crit) * &std_err;
-        let ci_upper = &betas_nd + yss_linalg::Scale(z_crit) * &std_err;
+        let ci_lower = &betas_nd - yss_sci_linalg::Scale(z_crit) * &std_err;
+        let ci_upper = &betas_nd + yss_sci_linalg::Scale(z_crit) * &std_err;
 
         // Wald chi2 for joint significance (2SLS uses chi2, not F). Stata Methods: "If c=1 and small is not
         // specified, a Wald statistic W of the joint significance of the k−1 parameters of β except the
@@ -417,7 +418,7 @@ impl IV2SLS {
         let (hausman, endogenous) = if !is_robust_cov_type(&covariance_type) {
             // OLS on y ~ X_struct (treating endog as exogenous): β_ols, u_ols
             let x_struct_tx = x_struct.transpose() * x_struct.as_ref();
-            let x_struct_tx_inv: Option<yss_linalg::Mat<f64>> = x_struct_tx
+            let x_struct_tx_inv: Option<yss_sci_linalg::Mat<f64>> = x_struct_tx
                 .as_ref()
                 .to_owned()
                 .checked_cholesky()
@@ -443,12 +444,12 @@ impl IV2SLS {
             // Traditional Hausman (sigmamore): H = (β_iv - β_ols)'(V_iv - V_ols)^{-1}(β_iv - β_ols)
             // V_iv = σ²_ols * (X̂'X̂)^{-1}, V_ols = σ²_ols * (X_struct'X_struct)^{-1}
             let hausman = if sigma2_ols > 1e-300 {
-                let v_iv = yss_linalg::Scale(sigma2_ols) * &xtx_inv_nd; // X̂'X̂ from stage 2
+                let v_iv = yss_sci_linalg::Scale(sigma2_ols) * &xtx_inv_nd; // X̂'X̂ from stage 2
                 let v_ols = sigma2_ols * &xtx_struct_inv_nd;
                 let v_diff: Mat<f64> = &v_iv - &v_ols;
                 let diff_beta = &betas_nd - &beta_ols;
                 let v_diff_matrix = v_diff.as_ref().to_owned();
-                let svd = yss_linalg::Svd::factor(v_diff_matrix.as_ref()).ok();
+                let svd = yss_sci_linalg::Svd::factor(v_diff_matrix.as_ref()).ok();
                 let (h_stat, h_df) = if let Some(svd) = svd {
                     let s = svd.values();
                     let u = svd.left_vectors();
@@ -514,11 +515,12 @@ impl IV2SLS {
                         zy1_raw.push(self.endog_reg[(i, j)]);
                     }
                 }
-                let zy1 = yss_linalg::MatRef::from_row_major_slice(&(zy1_raw), n, k_z + k_endog)
-                    .to_owned();
+                let zy1 =
+                    yss_sci_linalg::MatRef::from_row_major_slice(&(zy1_raw), n, k_z + k_endog)
+                        .to_owned();
                 let zy1_matrix = zy1.as_ref().to_owned();
                 let zy1t_zy1 = zy1_matrix.transpose() * zy1_matrix.as_ref();
-                let zy1t_zy1_inv: Option<yss_linalg::Mat<f64>> = zy1t_zy1
+                let zy1t_zy1_inv: Option<yss_sci_linalg::Mat<f64>> = zy1t_zy1
                     .checked_cholesky()
                     .ok()
                     .map(|llt| llt.solve(&Mat::identity(zy1t_zy1.nrows(), zy1t_zy1.nrows())));

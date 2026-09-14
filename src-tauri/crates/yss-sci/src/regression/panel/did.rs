@@ -5,11 +5,11 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use std::collections::{BTreeSet, HashSet};
-use yss_linalg::{Col, Mat};
 use yss_sci_contract::panel::{
     DidFakeGroupEnginePayload, DidFakeGroupError, DidFakeGroupUnavailableCode,
     DidPlaceboFakeGroupBlock,
 };
+use yss_sci_linalg::{Col, Mat};
 
 const FAKE_GROUP_PERM_CAP: usize = 2000;
 const FAKE_GROUP_PERM_MIN_VALID: usize = 10;

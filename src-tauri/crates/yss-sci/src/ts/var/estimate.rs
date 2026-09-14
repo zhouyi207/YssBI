@@ -136,7 +136,7 @@ impl VAR {
             };
             let sigma2_eq = ss_r / sigma2_divisor;
             let xtx_inv_nd = ztz_inv.as_ref().to_owned();
-            let cov_eq = yss_linalg::Scale(sigma2_eq) * &xtx_inv_nd;
+            let cov_eq = yss_sci_linalg::Scale(sigma2_eq) * &xtx_inv_nd;
             cov_beta.push(cov_eq.clone());
             let se: Col<f64> = Col::from_fn(cov_eq.nrows().min(cov_eq.ncols()), |i| {
                 cov_eq[(i, i)].sqrt()
@@ -183,7 +183,7 @@ impl VAR {
         } else {
             n_obs as f64
         };
-        let sigma = (u_mat.transpose() * u_mat.as_ref()) / yss_linalg::Scale(te);
+        let sigma = (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(te);
         let df_r = n_obs - n_z;
 
         if self.config.skip_extras {
@@ -450,7 +450,7 @@ impl VAR {
         // varlmar: LM 残差自相关检验（Stata varlmar 命令，Johansen 1995）
         // LM_s = (T - d - 0.5) * ln(|Σ̂| / |Σ̃_s|)，df = K²
         // varlmar 始终使用 ML 估计 Σ（除数 T）
-        let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / yss_linalg::Scale(n_obs as f64);
+        let sigma_ml = (u_mat.transpose() * u_mat.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
         let mut det_sigma_ml_var = sigma_ml.clone();
         cholesky_lower_in_place(&mut det_sigma_ml_var)
             .map_err(|_| "VAR varlmar: Sigma_ml not positive definite".to_string())?;
@@ -495,7 +495,7 @@ impl VAR {
                 }
             }
 
-            let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_linalg::Scale(n_obs as f64);
+            let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
             let mut det_tilde = sigma_tilde.clone();
             cholesky_lower_in_place(&mut det_tilde)
                 .map_err(|_| "VAR varlmar: Sigma_tilde not positive definite".to_string())?;
@@ -532,7 +532,7 @@ impl VAR {
                 companion.as_mut()[(k + block * k + i, block * k + i)] = 1.0;
             }
         }
-        let evd = yss_linalg::Eigen::factor(companion.as_ref())
+        let evd = yss_sci_linalg::Eigen::factor(companion.as_ref())
             .map_err(|_| "VAR varstable: eigendecomposition failed".to_string())?;
         let s_diag = evd.values();
         let mut varstable = Vec::with_capacity(kp);

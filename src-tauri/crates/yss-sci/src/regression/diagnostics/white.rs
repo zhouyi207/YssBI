@@ -18,7 +18,7 @@ fn build_white_z_full(x: &Mat<f64>, k: usize, p: usize, n: usize) -> Vec<Vec<f64
 }
 
 /// 从列向量列表构建设计矩阵
-fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<yss_linalg::Mat<f64>> {
+fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<yss_sci_linalg::Mat<f64>> {
     let n_cols = z_cols.len();
     if n_cols == 0 {
         return None;
@@ -29,7 +29,7 @@ fn build_z_matrix(z_cols: &[Vec<f64>], n: usize) -> Option<yss_linalg::Mat<f64>>
             z_raw.push(col[i]);
         }
     }
-    let z_arr = yss_linalg::MatRef::from_row_major_slice(&(z_raw), n, n_cols).to_owned();
+    let z_arr = yss_sci_linalg::MatRef::from_row_major_slice(&(z_raw), n, n_cols).to_owned();
     Some(z_arr.as_ref().to_owned())
 }
 
@@ -86,7 +86,7 @@ pub fn white_test(x: &Mat<f64>, residuals: &Col<f64>) -> Result<BreuschPaganResu
     }
 
     // 秩不足时 QR 会除以近零对角元产生 NaN，改用 SVD 并截断小奇异值
-    let svd = yss_linalg::Svd::factor(z_matrix
+    let svd = yss_sci_linalg::Svd::factor(z_matrix
         .as_ref())
         .map_err(|e| format!("white_test: SVD failed: {:?}", e))?;
     let u = svd.left_vectors();
@@ -188,7 +188,7 @@ pub fn white_test_weighted(
         });
     }
 
-    let svd = yss_linalg::Svd::factor(z_matrix
+    let svd = yss_sci_linalg::Svd::factor(z_matrix
         .as_ref())
         .map_err(|e| format!("white_test_weighted: SVD failed: {:?}", e))?;
     let u = svd.left_vectors();

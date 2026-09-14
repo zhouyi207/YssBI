@@ -4,8 +4,8 @@
 //! until full rank. Removal priority: continuous > dummy > intercept.
 
 use std::collections::BTreeSet;
-use yss_linalg::Mat;
-use yss_linalg::matrix_rank;
+use yss_sci_linalg::Mat;
+use yss_sci_linalg::matrix_rank;
 
 /// Column type for removal priority: continuous (remove first), dummy, intercept (remove last).
 fn removal_priority(j: usize, col_is_dummy: &[bool], intercept_col: Option<usize>) -> u8 {
@@ -116,7 +116,7 @@ pub fn drop_collinear_columns(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_linalg::mat;
+    use yss_sci_linalg::mat;
 
     #[test]
     fn test_full_rank_no_drop() {

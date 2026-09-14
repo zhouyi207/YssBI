@@ -6,8 +6,8 @@ use statrs::{
     distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
     statistics::Statistics,
 };
-use yss_linalg::Col;
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::Col;
+use yss_sci_linalg::{MatrixExt, Solve};
 
 fn is_robust_cov_type(cov_type: &str) -> bool {
     matches!(
@@ -76,7 +76,7 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     )
     .map_err(OlsFitError::Covariance)?;
 
-    let cov_beta_nonrobust = yss_linalg::Scale(ms_residual) * &xtx_inv_nd;
+    let cov_beta_nonrobust = yss_sci_linalg::Scale(ms_residual) * &xtx_inv_nd;
 
     // F 统计量：robust VCE 时用 Wald，否则用经典 F
     let (f, f_p_value) = if df_model > 0 {
@@ -160,8 +160,8 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
         .collect();
 
     let t_critical = t_dist.inverse_cdf(0.975);
-    let ci_lower = betas_nd.clone() - yss_linalg::Scale(t_critical) * std_err.clone();
-    let ci_upper = betas_nd.clone() + yss_linalg::Scale(t_critical) * std_err.clone();
+    let ci_lower = betas_nd.clone() - yss_sci_linalg::Scale(t_critical) * std_err.clone();
+    let ci_upper = betas_nd.clone() + yss_sci_linalg::Scale(t_critical) * std_err.clone();
 
     Ok(OlsFit {
         num_observation: num_observations,

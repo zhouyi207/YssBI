@@ -2,7 +2,7 @@
 use yss_sci_contract::hypothesis::Alternative as SciAlternative;
 
 use std::collections::HashMap;
-use yss_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, Mat};
 
 use super::linear_test::{LinearHypothesisTestInput, t_test, wald_test};
 use yss_math_expr::{

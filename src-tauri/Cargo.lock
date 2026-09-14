@@ -9822,7 +9822,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-linalg"
+name = "yss-sci-linalg"
 version = "0.1.0"
 dependencies = [
  "faer",
@@ -10088,7 +10088,7 @@ dependencies = [
  "serde",
  "serde_json",
  "statrs",
- "yss-linalg",
+ "yss-sci-linalg",
  "yss-math-expr",
  "yss-sci-contract",
 ]

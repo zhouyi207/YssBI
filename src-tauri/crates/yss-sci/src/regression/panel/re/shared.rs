@@ -6,9 +6,9 @@
 use crate::regression::collinearity::drop_collinear_columns;
 use crate::regression::linear_model::OLS;
 
-use yss_linalg::{MatrixExt, Solve};
+use yss_sci_linalg::{MatrixExt, Solve};
 
-use yss_linalg::{Col, Mat};
+use yss_sci_linalg::{Col, Mat};
 use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
 use std::collections::HashMap;
 
