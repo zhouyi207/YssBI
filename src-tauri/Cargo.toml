@@ -26,7 +26,6 @@ members = [
   "../plugins/julia/native/crates/yss-julia-runtime",
   "../plugins/julia/native/crates/yss-julia-worker",
 
-  "crates/yss-ipc-command",
   "crates/yss-ipc-contract",
   "crates/yss-ipc-event",
   "crates/yss-ipc-channel",
@@ -160,39 +159,13 @@ tauri-plugin-dialog = "2.7"
 tauri-plugin-fs = "2.5"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-window-state = "=2.4.1"
-
-yss-plugin-runtime = { path = "./crates/yss-plugin-runtime" }
-
-yss-ipc-command = { path = "./crates/yss-ipc-command" }
-yss-ipc-channel = { path = "./crates/yss-ipc-channel" }
-
-
-yss-agent-rig = { path = "./crates/yss-agent-rig" }
 yss-application = { path = "./crates/yss-application" }
-yss-automation-contract = { path = "./crates/yss-automation-contract" }
-yss-diagnostics = { path = "./crates/yss-diagnostics" }
-yss-project-registry-sqlite = { path = "./crates/yss-project-registry-sqlite" }
-yss-project-watcher = { path = "./crates/yss-project-watcher" }
-yss-project-watcher-notify = { path = "./crates/yss-project-watcher-notify" }
-yss-statistical-harness = { path = "./crates/yss-statistical-harness" }
-yss-statistical-harness-sqlite = { path = "./crates/yss-statistical-harness-sqlite" }
-yss-tracing = { path = "./crates/yss-tracing" }
-
-thiserror.workspace = true
 tracing.workspace = true
-uuid.workspace = true
 
 [dev-dependencies]
-yss-project = { path = "./crates/yss-project" }
-yss-project-identity = { path = "./crates/yss-project-identity" }
-yss-dataset-store = { path = "./crates/yss-dataset-store" }
-yss-relational-contract = { path = "./crates/yss-relational-contract" }
-arrow.workspace = true
-yss-tabular-io = { path = "./crates/yss-tabular-io" }
+thiserror.workspace = true
+uuid.workspace = true
 proc-macro2 = "1"
 serde.workspace = true
 serde_json.workspace = true
 syn = { version = "3", features = ["full", "visit"] }
-yss-database-contract = { path = "./crates/yss-database-contract" }
-yss-database-edit = { path = "./crates/yss-database-edit" }
-yss-database-runtime = { path = "./crates/yss-database-runtime", features = ["test-support"] }

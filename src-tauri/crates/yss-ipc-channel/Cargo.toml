@@ -7,19 +7,12 @@ publish = false
 
 [dependencies]
 tauri.workspace = true
-tokio.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 yss-ipc-contract = { path = "../yss-ipc-contract" }
-yss-application = { path = "../yss-application" }
 yss-automation-contract = { path = "../yss-automation-contract" }
 yss-diagnostics = { path = "../yss-diagnostics" }
-yss-graph-execution = { path = "../yss-graph-execution" }
-yss-graph-document = { path = "../yss-graph-document" }
-yss-project-identity = { path = "../yss-project-identity" }
 yss-project-progress = { path = "../yss-project-progress" }
 
 [dev-dependencies]
 serde_json.workspace = true
-yss-graph-editor = { path = "../yss-graph-editor" }
-yss-graph-execution = { path = "../yss-graph-execution", features = ["test-support"] }
