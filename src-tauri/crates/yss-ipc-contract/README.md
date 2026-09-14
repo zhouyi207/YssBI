@@ -11,4 +11,4 @@ The crate has no Tauri, Application, database or execution runtime dependency. I
 
 Command-only request/response schemas may stay beside their handler. Shared types have one definition here, with no compatibility re-export from the former schema modules.
 
-The complete wire and delivery contract is maintained in [Desktop IPC](../yss-ipc-command/README.md).
+The complete wire and delivery contract is maintained in [Desktop IPC](../yss-application/src/ipc/README.md).

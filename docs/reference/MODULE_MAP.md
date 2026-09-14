@@ -53,7 +53,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-graph-runtime` | `src-tauri/crates/yss-graph-runtime` | [Cargo.toml](../../src-tauri/crates/yss-graph-runtime/Cargo.toml) | — |
 | `yss-graph-type-mapping` | `src-tauri/crates/yss-graph-type-mapping` | [Cargo.toml](../../src-tauri/crates/yss-graph-type-mapping/Cargo.toml) | — |
 | `yss-ipc-channel` | `src-tauri/crates/yss-ipc-channel` | [Cargo.toml](../../src-tauri/crates/yss-ipc-channel/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-channel/README.md) |
-| `yss-ipc-command` | `src-tauri/crates/yss-ipc-command` | [Cargo.toml](../../src-tauri/crates/yss-ipc-command/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-command/README.md) |
 | `yss-ipc-contract` | `src-tauri/crates/yss-ipc-contract` | [Cargo.toml](../../src-tauri/crates/yss-ipc-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-contract/README.md) |
 | `yss-ipc-event` | `src-tauri/crates/yss-ipc-event` | [Cargo.toml](../../src-tauri/crates/yss-ipc-event/Cargo.toml) | [README](../../src-tauri/crates/yss-ipc-event/README.md) |
 | `yss-julia-extension` | `plugins/julia/native/crates/yss-julia-extension` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-extension/Cargo.toml) | — |

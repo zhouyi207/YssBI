@@ -12,7 +12,7 @@ Statistical Harness 是 YssBI 的 Rust-authoritative statistical agent runtime�
 ```text
 Assistant UI
     ↓ strict frontend Harness contract
-yss-ipc-command commands + yss-ipc-channel ordered/replayable delivery
+yss-application::ipc commands + yss-ipc-channel ordered/replayable delivery
     ↓
 yss-statistical-harness
     ├─ session / turn
@@ -25,11 +25,11 @@ yss-statistical-harness
     └─ ordered event sequence
     ↓ typed ports
     ├─ AgentDriverPort → yss-agent-rig
-    ├─ CapabilityGatewayPort → yss-ipc-command blocking adapter → yss-application
+    ├─ CapabilityGatewayPort → yss-application::ipc blocking adapter → yss-application
     └─ persistence ports → yss-statistical-harness-sqlite
 ```
 
-`src-tauri/src/harness.rs` 构造 SQLite store、Application capability gateway 的调度适配器、configurable Rig driver，以及 Channel-owned `HarnessChannelHub` 和 `HarnessGraphClientHub`，通过已有 `HarnessPorts` 注入 Application。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。桌面入口将初始化结果和同一组 Channel hubs 组成 command context 注入 `yss-ipc-command`。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
+`yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、configurable Rig driver、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway、`HarnessChannelHub` 和本地 `HarnessGraphClientHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/provider 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
 
 ## 2. Authority
 
@@ -82,11 +82,11 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 Model-facing schema 来自 typed capability contract；Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再通过 Gateway 执行，最后持久化成功 result 或 structured failure。idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 
-Application 的 `invoke_automation_capability` 是同步业务入口。`yss-ipc-command` 的 `ApplicationCapabilityGateway` 使用 blocking worker 调用它，避免在 Tokio async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
+Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::ipc` 的 `ApplicationCapabilityGateway` 使用 blocking worker 调用它，避免在 Tokio async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
 
 工具生命周期事件由持有 ledger identity 的 Harness executor 产生：`ToolInvocationStarted` 后必须有 `ToolInvocationCompleted` 或带 `failureCode` 的 `ToolInvocationFailed`。失败码区分取消与超时；事件不携带数据行、结果或异常原文。Rig 只执行模型工具映射，不生成另一套工具完成状态。
 
-桌面图操作通过 `yss-ipc-channel::HarnessGraphClientHub` 与当前草稿 owner 协作。临时 channel 只传 request ID、session/project/graph identity 和 capability ID，不建立 Rust draft store。前端在既有 Graph FIFO 内捕获当前 document/generation，Rust Application 进行 Resolve、批量 mutation、Compile、Execute 或 Save。Rust 保留真实 capability result，前端仅领取和确认已验证的 projection，不能提交自行计算的 tool result。prepared update 必须匹配 capability 和图身份，迟到/过期 update 不能安装。
+桌面图操作通过 `yss-application::ipc::channel::HarnessGraphClientHub` 与当前草稿 owner 协作。临时 channel 只传 request ID、session/project/graph identity 和 capability ID，不建立 Rust draft store。前端在既有 Graph FIFO 内捕获当前 document/generation，Rust Application 进行 Resolve、批量 mutation、Compile、Execute 或 Save。Rust 保留真实 capability result，前端仅领取和确认已验证的 projection，不能提交自行计算的 tool result。prepared update 必须匹配 capability 和图身份，迟到/过期 update 不能安装。
 
 `apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（草稿 generation）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向既有草稿 history 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
@@ -158,7 +158,7 @@ Provider 请求有连接/总时限，完整 model turn 也有独立时限；模�
 
 ## 9. Tauri transport and frontend projection
 
-`yss-ipc-command` 当前暴露 Harness runtime status/provider configuration、session create/close、event subscribe/unsubscribe、turn submit/cancel、memory list/delete，以及 dataset-quality workflow plan/advance/pause/resume/cancel。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-ipc-command` 源码为准，不在本文复制。
+`yss-application::ipc` 当前暴露 Harness runtime status/provider configuration、session create/close、event subscribe/unsubscribe、turn submit/cancel、memory list/delete，以及 dataset-quality workflow plan/advance/pause/resume/cancel。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
 
 有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。`src/features/application/assistant/assistantHarnessRuntime.ts` 维护可重建的 projection、last sequence 和 reconnect；assistant-ui ExternalStore 只渲染 messages、plan、tool cards、memory 和 composer actions。
 
@@ -185,7 +185,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - external/provider payload 在 adapter 边界完成 schema、size、time 和 failure validation；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。
 
-通用 transport contract 见 [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md)，技术信号边界见 [Runtime Signals](RUNTIME_SIGNALS.md)。
+通用 transport contract 见 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md)，技术信号边界见 [Runtime Signals](RUNTIME_SIGNALS.md)。
 
 ## 12. Current limits
 

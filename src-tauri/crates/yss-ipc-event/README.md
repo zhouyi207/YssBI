@@ -9,4 +9,4 @@
 
 This crate depends on Contract and Tauri, registers no commands and owns no business state or event ledger. Event envelope definitions live in `yss-ipc-contract::event`.
 
-See [Desktop IPC](../yss-ipc-command/README.md) for shared wire and recovery semantics.
+See [Desktop IPC](../yss-application/src/ipc/README.md) for shared wire and recovery semantics.

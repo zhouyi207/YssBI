@@ -24,18 +24,18 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 
 ## 2. Module ownership
 
-| Owner                                                                | 职责                                                                             |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| yss-graph-document / protocol                                        | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                           |
-| yss-graph-document-edit / editor                                     | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
-| yss-graph-analysis                                                   | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
-| yss-graph-resource-contract                                          | immutable resource facts 与一次 Resolve 的 dependency observations               |
-| yss-graph-runtime                                                    | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                          |
-| yss-graph-compiler                                                   | Ready snapshot 驱动的 immutable package lowering                                 |
-| yss-project                                                          | committed authority、资源版本、文件事务与 publication                            |
-| yss-application                                                      | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
-| yss-graph-execution                                                  | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter          |
-| yss-ipc-command / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
+| Owner                                                                     | 职责                                                                             |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| yss-graph-document / protocol                                             | 文档意图、稳定地址、类型与值声明、语义文档 fingerprint                           |
+| yss-graph-document-edit / editor                                          | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
+| yss-graph-analysis                                                        | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
+| yss-graph-resource-contract                                               | immutable resource facts 与一次 Resolve 的 dependency observations               |
+| yss-graph-runtime                                                         | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                          |
+| yss-graph-compiler                                                        | Ready snapshot 驱动的 immutable package lowering                                 |
+| yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
+| yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
+| yss-graph-execution                                                       | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter          |
+| yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
 
@@ -231,7 +231,7 @@ OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`�
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
-只有 `yss-graph-execution` 和 `yss-ipc-command` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
+只有 `yss-graph-execution` 和 `yss-application::ipc` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
@@ -338,13 +338,13 @@ API 在成功交付 terminal event 后，用 command error details 的 `terminal
 
 ## 9. Cross-boundary routing
 
-| 信息                            | 去向                              |
-| ------------------------------- | --------------------------------- |
-| 普通 Graph validation / Blocked | Graph Projection / Problems       |
-| 计算结果                        | ResultStore + typed query         |
-| 用户程序 stdout/stderr          | Run Output                        |
-| 内部技术故障                    | sanitized tracing / incident      |
-| command rejection               | yss-ipc-command stable error wire |
-| 用户反馈                        | React localization / UI           |
+| 信息                            | 去向                                   |
+| ------------------------------- | -------------------------------------- |
+| 普通 Graph validation / Blocked | Graph Projection / Problems            |
+| 计算结果                        | ResultStore + typed query              |
+| 用户程序 stdout/stderr          | Run Output                             |
+| 内部技术故障                    | sanitized tracing / incident           |
+| command rejection               | yss-application::ipc stable error wire |
+| 用户反馈                        | React localization / UI                |
 
-详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-ipc-command/README.md)、[Workbench](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。
+详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-application/src/ipc/README.md)、[Workbench](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。

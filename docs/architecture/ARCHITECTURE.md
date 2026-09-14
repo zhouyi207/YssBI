@@ -15,7 +15,7 @@ YssBI 是基于 Tauri 2 的桌面数据分析 IDE。用户在 React 工作台中
 flowchart LR
   USER[User] --> UI[React workbench]
   UI --> SERVICES[Frontend services]
-  SERVICES --> API[yss-ipc-command transport]
+  SERVICES --> API[yss-application::ipc transport]
   API --> APP[yss-application use cases]
   APP --> PROJECT[Project authority]
   APP --> GRAPH[Graph semantics]
@@ -40,7 +40,7 @@ flowchart LR
   CHANNELS --> UI
 ```
 
-`src-tauri/src/lib.rs` 是桌面 composition root：启动 Tauri、Diagnostics 和日志，调用 Application 初始化并注入服务。`src-tauri/src/harness.rs` 选择 Harness 的 SQLite、Rig、时钟、ID、gateway 和 Channel 实现；`src-tauri/src/projects.rs` 选择注册存储和文件监听器。Application 封装初始 Project/运行会话、进程级项目管理任务，以及通过中立端口执行的 Harness 初始化与会话协调。`yss-ipc-command` 拥有唯一命令注册表与命令适配，`yss-ipc-event` 负责事件发送，`yss-ipc-channel` 负责流式交付和订阅，三者共享 `yss-ipc-contract` 的 wire 类型。组装入口注入业务服务与通信适配器；业务 workflow 不属于 IPC。
+`src-tauri/src/lib.rs` 只直接依赖一个内部 crate：`yss-application`。入口配置 Tauri 平台插件，并接入 `initialize(app)` 与 `invoke_handler()`。Application runtime 解析路径、安装日志和业务服务、显示主窗口，直接构造内部 `ipc::CommandRuntime`；命令注册表、schema、error、执行通道编码和图草稿交接都在 `yss-application::ipc`。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
 窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
@@ -82,7 +82,7 @@ Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑
 
 ```text
 Tauri composition root
-  → yss-ipc-command commands / invoke_handler
+  → yss-application::ipc commands / invoke_handler
       → yss-ipc-event → yss-ipc-contract
       → yss-ipc-channel → yss-ipc-contract
       → yss-ipc-contract
@@ -146,7 +146,7 @@ Project 文件、resource revision 和提交事务由 Project owner 管理。Gra
 ```mermaid
 sequenceDiagram
   participant UI as React
-  participant API as yss-ipc-command
+  participant API as yss-application::ipc
   participant APP as Application
   participant P as Project
   participant G as Graph runtime
@@ -217,7 +217,7 @@ SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随
 
 ```text
 Assistant UI projection
-  → yss-ipc-command Harness commands + yss-ipc-channel ordered delivery
+  → yss-application::ipc Harness commands + yss-ipc-channel ordered delivery
   → yss-statistical-harness
       → AgentDriverPort → yss-agent-rig
       → CapabilityGatewayPort → yss-application
@@ -230,29 +230,29 @@ Harness 拥有 session、turn、workflow、tool ledger、approval、memory、kno
 
 YssBI 不使用一条“万能日志”承载所有反馈：
 
-| 信号                    | 语义                                    | Canonical owner                                                                          |
-| ----------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Graph Problems          | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                             |
-| Results / 当前输出      | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                             |
-| Run Output              | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                             |
-| Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                                    |
-| Operational diagnostics | Logs UI 的有界 recent/live 观察投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                                    |
-| IPC error               | 稳定 machine-readable command rejection | [`yss-ipc-command` transport contract](../../src-tauri/crates/yss-ipc-command/README.md) |
-| User feedback           | 本地化交互反馈                          | React application/view                                                                   |
+| 信号                    | 语义                                    | Canonical owner                                                                                       |
+| ----------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Graph Problems          | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
+| Results / 当前输出      | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
+| Run Output              | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
+| Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
+| Operational diagnostics | Logs UI 的有界 recent/live 观察投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
+| IPC error               | 稳定 machine-readable command rejection | [`yss-application::ipc` transport contract](../../src-tauri/crates/yss-application/src/ipc/README.md) |
+| User feedback           | 本地化交互反馈                          | React application/view                                                                                |
 
 日志和 diagnostics 都是 sanitized、bounded、lossy、non-authoritative；不得驱动业务状态。具体容量和阈值由源码常量及测试拥有，不在总架构中复制。
 
 ## 9. Subsystem documentation index
 
-| 变更范围                         | 先阅读                                                                                                                |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Graph、编译、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                                          |
-| 工作台布局、面板身份或生命周期   | [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)                                                              |
-| 日志、diagnostics、错误或反馈    | [Runtime Signals](RUNTIME_SIGNALS.md) 与 [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md) |
-| Statistical Harness 或 Assistant | [Statistical Harness](STATISTICAL_HARNESS.md)                                                                         |
-| command、event、channel 或 DTO   | [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md)                                          |
-| Project、Database、SCI、Julia    | [文档入口](../README.md#focused-implementation-contracts)中的 owner README                                            |
-| 架构 policy 或 source 分类       | [Architecture Gates](../development/ARCHITECTURE_GATES.md)                                                            |
-| 本地命令和交付                   | [Local Workflow](../development/LOCAL_WORKFLOW.md) 与 [Change Process](../development/CHANGE_PROCESS.md)              |
+| 变更范围                         | 先阅读                                                                                                                             |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Graph、编译、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                                                       |
+| 工作台布局、面板身份或生命周期   | [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)                                                                           |
+| 日志、diagnostics、错误或反馈    | [Runtime Signals](RUNTIME_SIGNALS.md) 与 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
+| Statistical Harness 或 Assistant | [Statistical Harness](STATISTICAL_HARNESS.md)                                                                                      |
+| command、event、channel 或 DTO   | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md)                                          |
+| Project、Database、SCI、Julia    | [文档入口](../README.md#focused-implementation-contracts)中的 owner README                                                         |
+| 架构 policy 或 source 分类       | [Architecture Gates](../development/ARCHITECTURE_GATES.md)                                                                         |
+| 本地命令和交付                   | [Local Workflow](../development/LOCAL_WORKFLOW.md) 与 [Change Process](../development/CHANGE_PROCESS.md)                           |
 
 历史重构说明放入 decision 或 version 文档；尚未完成的能力放入 roadmap。本文不记录“旧 owner 已删除”之类的时间性描述。

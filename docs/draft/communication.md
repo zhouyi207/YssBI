@@ -2,7 +2,7 @@
 
 [返回整体架构](architecture.md)
 
-本文是通信架构的梳理草稿，按 Command、Event、Channel、DTO 与错误契约展开。前端入口位于 `src/services/`，Rust 传输边界由 `yss-ipc-command`、`yss-ipc-event`、`yss-ipc-channel` 与共享协议 `yss-ipc-contract` 组成。
+本文是通信架构的梳理草稿，按 Command、Event、Channel、DTO 与错误契约展开。前端入口位于 `src/services/`，Rust 传输边界由 `yss-application::ipc`、`yss-ipc-event`、`yss-ipc-channel` 与共享协议 `yss-ipc-contract` 组成。
 
 本文说明前后端完整通信链路；Rust 端的命令注册、DTO 映射、用例调用与消息交付组织在[后端通信适配子系统](backend.md#8-通信适配)中展开。两处描述同一条链路的不同范围。
 
@@ -11,7 +11,7 @@
 Command 用于表达一次明确请求，并返回处理结果，例如查询数据、保存文档、编译图或启动任务。
 
 ```text
-前端 service → invokeCommand → yss-ipc-command 命令
+前端 service → invokeCommand → yss-application::ipc 命令
   → Rust 业务用例 → 响应 DTO / CommandError → 前端
 ```
 

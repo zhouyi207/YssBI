@@ -2,23 +2,23 @@
 
 > Status: Current
 > Scope: logging、operational diagnostics、IPC error、user feedback 以及运行信号之间的语义边界
-> Canonical owners: `yss-tracing`、`yss-diagnostics`、`yss-ipc-command` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
+> Canonical owners: `yss-tracing`、`yss-diagnostics`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
 > Update when: 信号分类、logging/diagnostics 数据流、可靠性、安全或反馈边界改变时
 
 YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 authority、可靠性和保留语义；选择错误的链路会造成第二事实源、隐私泄漏或无法恢复的 UI 状态。
 
 ## 1. Authority matrix
 
-| 信息                    | Authority                                                     | Delivery / retention                      | UI 用途                             | Canonical detail                                                             |
-| ----------------------- | ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------- |
-| Graph Problems          | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影    | command response 原子替换                 | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                |
-| Results / 当前输出      | Rust `ResultStore`                                            | typed queries；event 只公告 identity      | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                       |
-| Run Output              | Rust Execution output contract                                | channel 与 bounded UI 已有；producer 预留 | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                    |
-| Logging                 | sanitized Rust `tracing` record                               | bounded console/rolling file workers      | 本地技术排障                        | 本文                                                                         |
-| Operational diagnostics | sanitized Rust log projection + explicit frontend diagnostics | bounded recent snapshot + live channel    | Logs UI                             | 本文                                                                         |
-| IPC error               | Rust `yss-ipc-command` transport error                        | command rejection                         | React 按 stable code 映射           | [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md) |
-| User feedback           | React application/view                                        | UI state，按交互生命周期保留              | Alert、Dialog、inline/status        | 本文                                                                         |
-| Assistant text/events   | Rust Statistical Harness                                      | ordered persisted event stream            | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                |
+| 信息                    | Authority                                                     | Delivery / retention                      | UI 用途                             | Canonical detail                                                                          |
+| ----------------------- | ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Graph Problems          | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影    | command response 原子替换                 | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
+| Results / 当前输出      | Rust `ResultStore`                                            | typed queries；event 只公告 identity      | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
+| Run Output              | Rust Execution output contract                                | channel 与 bounded UI 已有；producer 预留 | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
+| Logging                 | sanitized Rust `tracing` record                               | bounded console/rolling file workers      | 本地技术排障                        | 本文                                                                                      |
+| Operational diagnostics | sanitized Rust log projection + explicit frontend diagnostics | bounded recent snapshot + live channel    | Logs UI                             | 本文                                                                                      |
+| IPC error               | Rust `yss-application::ipc` transport error                   | command rejection                         | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
+| User feedback           | React application/view                                        | UI state，按交互生命周期保留              | Alert、Dialog、inline/status        | 本文                                                                                      |
+| Assistant text/events   | Rust Statistical Harness                                      | ordered persisted event stream            | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                             |
 
 直接规则：
 
@@ -53,6 +53,8 @@ flowchart TD
 只有第一条纵向链属于 operational logging/diagnostics。右侧的 Graph、Result、Output 和 error 流不能通过 Logs UI 聚合成 authority。
 
 Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [Compile](GRAPH_AND_EXECUTION.md#compile)。
+
+桌面启动由 `yss-application::initialize(app)` 先解析日志路径、连接 DiagnosticsRuntime 与 LoggingRuntime，并将两者的 guard 安装到 app；随后才初始化业务服务。日志目录不可用时仍保留 console logging。Command 只接入诊断通道，不拥有全局日志安装。
 
 ## 3. Logging
 
@@ -111,7 +113,7 @@ Run Output 允许显示用户程序明确产生的文本，但它有自己的 so
 
 ## 6. IPC errors and incidents
 
-Transport failure 的 exact wire、DTO ownership 和 frontend invoke adapter 由 [`yss-ipc-command` README](../../src-tauri/crates/yss-ipc-command/README.md#error-contract) 唯一维护。本文只规定跨信号关系：
+Transport failure 的 exact wire、DTO ownership 和 frontend invoke adapter 由 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md#error-contract) 唯一维护。本文只规定跨信号关系：
 
 - expected domain/application failure 映射为 stable machine code 和安全 details；
 - internal/infrastructure failure 可以生成 incident identity，并在 sanitized technical record 中保留关联信息；
