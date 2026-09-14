@@ -152,6 +152,8 @@ Application 的 `serde` 直接依赖用于静态目录和离线源定义的反�
 
 ## 6. Changing the architecture policy
 
+`tauri-plugin-tracing` 按 Platform Adapter 分类，依赖中立 Logging 基础设施并拥有 Tauri/SQLx 日志交付；构建脚本仅获 `tauri-plugin` 的 build 权限。Platform Adapter → Logging 的方向允许，插件与 Diagnostics 之间的相互依赖均不允许。桌面 Composition Root 仅获插件 `init` 的精确调用权限，诊断继续由 Application 组装。该边界复用现有诊断 owner fixture 与真实依赖审计验证。
+
 React Flow 的运行时、类型与基础样式依赖仅开放给 Views；Application、Core 和 Domain
 不导入该画布库。graph-editor 的局部样式按确切 consumer/asset 路径登记，视图只获
 Graph read snapshot 和既有 viewport 契约，不增加 projection 写权限。

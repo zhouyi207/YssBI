@@ -2,23 +2,23 @@
 
 > Status: Current
 > Scope: logging、operational diagnostics、IPC error、user feedback 以及运行信号之间的语义边界
-> Canonical owners: `yss-tracing`、`yss-diagnostics`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
+> Canonical owners: `tauri-plugin-tracing`、中立的 `yss-tracing`、独立的 `yss-diagnostics`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
 > Update when: 信号分类、logging/diagnostics 数据流、可靠性、安全或反馈边界改变时
 
 YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 authority、可靠性和保留语义；选择错误的链路会造成第二事实源、隐私泄漏或无法恢复的 UI 状态。
 
 ## 1. Authority matrix
 
-| 信息                    | Authority                                                     | Delivery / retention                      | UI 用途                             | Canonical detail                                                                          |
-| ----------------------- | ------------------------------------------------------------- | ----------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| Graph Problems          | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影    | command response 原子替换                 | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
-| Results / 当前输出      | Rust `ResultStore`                                            | typed queries；event 只公告 identity      | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
-| Run Output              | Rust Execution output contract                                | channel 与 bounded UI 已有；producer 预留 | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
-| Logging                 | sanitized Rust `tracing` record                               | bounded console/rolling file workers      | 本地技术排障                        | 本文                                                                                      |
-| Operational diagnostics | sanitized Rust log projection + explicit frontend diagnostics | bounded recent snapshot + live channel    | Logs UI                             | 本文                                                                                      |
-| IPC error               | Rust `yss-application::ipc` transport error                   | command rejection                         | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
-| User feedback           | React application/view                                        | UI state，按交互生命周期保留              | Alert、Dialog、inline/status        | 本文                                                                                      |
-| Assistant text/events   | Rust Statistical Harness                                      | ordered persisted event stream            | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                             |
+| 信息                    | Authority                                                  | Delivery / retention                         | UI 用途                             | Canonical detail                                                                          |
+| ----------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Graph Problems          | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影 | command response 原子替换                    | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
+| Results / 当前输出      | Rust `ResultStore`                                         | typed queries；event 只公告 identity         | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
+| Run Output              | Rust Execution output contract                             | channel 与 bounded UI 已有；producer 预留    | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
+| Logging                 | sanitized Rust `tracing` + frontend logs                   | SQLite history + bounded recent/live channel | Logs UI、本地技术排障               | 本文                                                                                      |
+| Operational diagnostics | sanitized Rust projection + explicit frontend diagnostics  | independent bounded recent/live channel      | 运行诊断消费者                      | 本文                                                                                      |
+| IPC error               | Rust `yss-application::ipc` transport error                | command rejection                            | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
+| User feedback           | React application/view                                     | UI state，按交互生命周期保留                 | Alert、Dialog、inline/status        | 本文                                                                                      |
+| Assistant text/events   | Rust Statistical Harness                                   | ordered persisted event stream               | Assistant projection                | [Statistical Harness](STATISTICAL_HARNESS.md)                                             |
 
 直接规则：
 
@@ -35,13 +35,16 @@ YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 auth
 flowchart TD
   TRACE[Rust tracing event] --> SANITIZE[yss-tracing sanitize and bound]
   SANITIZE --> CONSOLE[bounded console worker]
-  SANITIZE --> FILE[bounded rolling JSONL worker]
+  SANITIZE --> LOGPLUGIN[tauri-plugin-tracing]
+  FELOG[frontend logger and console] --> LOGPLUGIN
+  LOGPLUGIN --> SQLITE[logs.sqlite]
+  SQLITE --> LOGCHANNEL[plugin log snapshot and channel]
+  LOGCHANNEL --> LOGS[Logs UI]
   SANITIZE --> RUSTPROJ[sanitized LogRecord projection]
   RUSTPROJ --> DIAG[yss-diagnostics dispatcher]
   FEDIAG[explicit frontend diagnostic] --> DIAG
-  DIAG --> RECENT[recent snapshot]
-  DIAG --> LIVE[yss-ipc-channel diagnostics adapter]
-  LIVE --> LOGS[Logs UI]
+  DIAG --> RECENT[independent diagnostic snapshot]
+  DIAG --> LIVE[yss-ipc-channel diagnostics channel]
 
   GRAPH[Graph semantic snapshot] --> PROBLEMS[Graph Problems consumers]
   RESULT[Execution ResultStore] --> RESULTQUERY[typed result queries]
@@ -50,53 +53,54 @@ flowchart TD
   WIRE --> FEEDBACK[React localization and feedback]
 ```
 
-只有第一条纵向链属于 operational logging/diagnostics。右侧的 Graph、Result、Output 和 error 流不能通过 Logs UI 聚合成 authority。
+日志和运行诊断是两条独立的观察流，可以接收同一个已脱敏 Rust 事件，但各自拥有 identity、sequence、缓冲、订阅及生命周期。前端日志提交不写入诊断流，前端诊断提交也不写入日志 SQLite。Graph、Result、Output 和 error 流继续由各自的业务 owner 管理。
 
 Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [Compile](GRAPH_AND_EXECUTION.md#compile)。
 
-桌面启动由 `yss-application::initialize(app)` 先解析日志路径、连接 DiagnosticsRuntime 与 LoggingRuntime，并将两者的 guard 安装到 app；随后才初始化业务服务。日志目录不可用时仍保留 console logging。Command 只接入诊断通道，不拥有全局日志安装。
+桌面入口先注册 `tauri-plugin-tracing`，由插件解析日志路径、打开 SQLite、安装全局 logging subscriber 并保留 guard。随后 `yss-application::initialize(app)` 单独创建 `DiagnosticsRuntime`，向中立 `LoggingRuntime` 注册诊断投影 sink，并安装业务服务。日志目录或 SQLite 不可用时保留 console，插件查询/订阅返回 `logs_unavailable`，不阻止诊断和业务初始化。Application 不安装第二个 tracing subscriber。
 
 ## 3. Logging
 
-Rust logging 的唯一入口是 `tracing`。`src-tauri/crates/yss-tracing/` 负责：
+`src-tauri/crates/tauri-plugin-tracing/` 拥有日志 SQLite、日志 recent snapshot、前端日志接收、分页查询、统计和日志 Channel。插件只依赖中立的 `yss-tracing`，不依赖 `yss-diagnostics`、Graph、SCI 或 Problems 的业务 owner。
 
-- process-wide subscriber 和 filter；
-- `tracing::Event` 到 stable `LogRecord` 的映射；
-- 在任何 consumer 之前执行 sanitization 和 per-record bounds；
-- 独立的 bounded console 与 rolling JSONL delivery；
-- 向 operational diagnostics 提供 sanitized projection。
+`src-tauri/crates/yss-tracing/` 保留不依赖 Tauri/SQLx 的采集基础设施：process-wide subscriber/filter、`tracing::Event` 到 `LogRecord` 的转换、脱敏与单条记录限额、bounded console worker 和非阻塞 sanitized record sinks。Rust 任意 crate 只需使用普通 `tracing` 宏；`log` facade 通过 LogTracer 接入。默认接收全部 crate/level，`RUST_LOG` 可显式收窄范围。`println!`/进程 stdout/stderr 不属于 tracing 采集入口。
 
-console、file 和 diagnostics projection 只能消费同一个 sanitized record，不得增加 raw formatter 或绕过清理的旁路。生产者不等待慢日志 consumer；queue、文件或 UI 失败不得改变业务事务结果。
+前端显式 logger 和 `console.log/info/debug/trace/warn/error` 共用日志批次队列，提交到插件。显式 logger 的 console 输出不会重复入库。console 中的任意对象、数组只记录类型/长度摘要，避免序列化用户文档或数据集；transport 失败不递归产生日志。采集从桌面前端入口安装后开始，超出有界队列或应用异常终止时允许丢失，不能承诺每条日志必达。
 
-过滤配置、queue capacity、rotation size、retention count 和 record limits 是源码常量与测试事实。架构要求的是：默认过滤安全、第三方噪声受控、输出有界且允许丢弃、不同 sinks 故障隔离。具体数字不在本文建立第二份配置。
+### SQLite 与交付顺序
+
+日志文件为 `app_log_dir()/logs.sqlite`。日志 dispatcher 的专用线程使用 SQLx 写入 SQLite WAL；数据库自身关闭 statement logging，避免记录自己的 INSERT 形成反馈循环。表结构由 [store.rs](../../src-tauri/crates/tauri-plugin-tracing/src/store.rs) 唯一维护：`logs` 包含 sequence、stream_id、timestamp、level、origin、domain、target、event、message、source 和 JSON 编码的 fields；`tracing_meta` 保留该库的 stream identity。
+
+同一批记录先完成 SQLite transaction，再更新 recent snapshot 并发送 Channel。退出时同步排空已接收记录；重启从同一数据库恢复 identity、sequence 和 recent snapshot。数据库预期由一个应用进程写入，其他 SQLx 连接可以只读查询。写入失败发送 `storage_unavailable` 终止信号，后续查询/订阅失败，不将未提交记录显示成持久历史；console 和独立诊断仍可继续。
+
+插件 IPC 使用 `plugin:tracing|` 前缀：
+
+| 命令                                  | 职责                                              |
+| ------------------------------------- | ------------------------------------------------- |
+| `submit_frontend_logs`                | 接收显式前端日志和 console 日志批次               |
+| `subscribe_logs` / `unsubscribe_logs` | 日志 snapshot + live Channel 与释放订阅           |
+| `query_logs`                          | 按 sequence 游标、level/origin 过滤并分页查询历史 |
+| `log_statistics`                      | 查询持久日志总量与 level/origin 分组计数          |
+
+权限由插件的 `tracing:default` 声明。命令错误只返回 `{ code, details, incidentId }`，不传递底层数据库错误文本。SQLite 当前保留全部已提交记录，尚无自动历史清理。UI recent buffer 与后端 recent ring 均有界，不等于数据库的全部历史。
+
+### Logs UI
+
+[LogService](../../src/services/log/logService.ts) 只调用日志插件。[subscription](../../src/features/application/log/useLogSubscription.ts)、[buffer](../../src/features/application/log/logBuffer.ts) 和 `src/modules/logs/` 只投影 `Log*Dto`，不消费 `Diagnostic*Dto` 或 Graph Problems。
+
+实时 receiver 发现 gap、stream replacement、malformed batch 或存储失败后停止推进 watermark，释放旧 Channel 并进行有界重订阅。丢弃和截断可检测；“刷新”重新读取 recent snapshot，“清空”只修改当前前端 buffer，不删除 SQLite 或后端 ring。历史分页接口独立于当前面板的 recent/live 展示。
+
+项目与日志新产生的日历时间使用本机钟面时间，序列化为不带时区的 `YYYY-MM-DDTHH:mm:ss.SSS`；不附加 `Z`、UTC 名称或偏移。已有项目元数据的带偏移时间在解析时保留原日期和钟面并移除偏移。Unix 秒/毫秒和单调时钟仍用于内部时间点、排序或耗时，不添加时区文本。图表日期/日期时间表示无时区日历字段，显示时不得通过浏览器时区移动它们。
 
 ## 4. Operational diagnostics
 
-`src-tauri/crates/yss-diagnostics/` 拥有 Logs UI 的技术记录投影：recent snapshot、Rust 分配的 stream identity/sequence、frontend diagnostic ingestion、subscriber delivery 和 gap recovery 所需状态。它不安装 tracing subscriber，也不打开或分页读取日志文件。
+`src-tauri/crates/yss-diagnostics/` 独立管理运行诊断的 DTO、Rust projection、显式 frontend diagnostic ingestion、有界 recent ring、dispatcher 和订阅状态。它不依赖日志插件，不拥有 SQLite 日志文件，不计算图或统计模型的业务诊断。诊断 projection 可以筛选 Rust 记录（如 `diagnostic_skip_recent`）；这不影响该事件进入插件日志。
 
-Rust diagnostics 只来自 `yss-tracing` 已清理的 `LogRecord`。Frontend 可以通过显式 logger 提交技术诊断；这些记录只进入 diagnostics recent/live 流，不反向写入 console 或 rolling file。
+Application 拥有 `DiagnosticsRuntime` 的创建与生命周期。`yss-application::ipc` 保留 `submit_frontend_diagnostics`、`subscribe_diagnostics` 和 `unsubscribe_diagnostics`，通过中立的 `yss-ipc-channel::diagnostics` 交付；前端入口是 [DiagnosticsService](../../src/services/diagnostics/diagnosticsService.ts)，保留独立的 `Diagnostic*Dto` 和 parser。
 
-当前实现：
+诊断的 ingress、recent ring、batch 和 subscriber queue 均有界，慢 subscriber 不阻塞业务 producer；stream identity/sequence、snapshot/live handoff、丢弃标记和 gap 检测保持原有语义。诊断历史不跨进程恢复，不读取日志 SQLite 补齐。前端只复用通用的 [Channel 订阅管理](../../src/services/ipc/recordSubscription.ts)，不复用日志 buffer、序号或命令注册表。
 
-- ingress、recent ring、batch 和 subscriber queue 均有界；
-- slow subscriber 不得阻塞业务 producer；
-- 丢弃、sequence gap 和 stream replacement 必须可检测；
-- frontend 使用 snapshot + live handoff，激活前发现 pending overflow 或 sequence gap 时进行有界重试；
-- timestamp 用于显示，`streamId + sequence` 才用于 diagnostics 顺序和去重。
-
-项目与日志新产生的日历时间使用本机钟面时间，序列化为不带时区的
-`YYYY-MM-DDTHH:mm:ss.SSS`；不附加 `Z`、UTC 名称或偏移。已有项目元数据的带偏移
-时间在解析时保留原日期和钟面并移除偏移。Unix 秒/毫秒和单调时钟仍用于内部时间点、
-排序或耗时，不添加时区文本。图表中的日期/日期时间数值代表无时区日历字段，
-显示时不得通过浏览器的本地时区移动它们。
-
-`src/modules/logs/` 只展示 operational diagnostics。它不拥有 Graph Problems、Results 或 Run Output，关闭 Logs panel 也不影响任何 domain workflow。
-
-实时 receiver 发现 gap、stream replacement 或 malformed batch 后停止交付和推进 watermark。LogService 释放旧 channel/subscriber，Application 执行有界自动重订阅；过期回调不能写入当前 buffer。连续有效 batch 或手动刷新会重置恢复预算。
-
-Workspace controller 分别暴露 subscription 状态与 complete/truncated/disconnected 连续性。Snapshot 截断、不可恢复的 stream replacement、容量淘汰和 sequence gap 都显示不完整提示；重新连接不代表历史恢复完整，日志文件不是 channel replay source。
-
-“刷新”重新订阅 recent snapshot；“清空”只修改本地 buffer 和选中项，不删除 Rust recent ring 或 rolling file，之后的 snapshot 可能重新带回 recent records。实现入口为 [receiver](../../src/services/log/diagnosticBatchReceiver.ts)、[subscription](../../src/features/application/log/useDiagnosticSubscription.ts) 和 [buffer](../../src/features/application/log/logBuffer.ts)。
+Graph 诊断和 Problems 继续来自 `GraphSemanticSnapshot`；模型诊断继续由 SCI/结果 owner 产生；Run Output、IPC error 和 user feedback 也保持各自的契约。它们都不由日志插件重建。
 
 ## 5. Security and data minimization
 

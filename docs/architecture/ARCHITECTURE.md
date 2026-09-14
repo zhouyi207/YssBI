@@ -40,7 +40,7 @@ flowchart LR
   CHANNELS --> UI
 ```
 
-`src-tauri/src/lib.rs` 只直接依赖一个内部 crate：`yss-application`。入口配置 Tauri 平台插件，并接入 `initialize(app)` 与 `invoke_handler()`。Application runtime 解析路径、安装日志和业务服务、显示主窗口，直接构造内部 `ipc::CommandRuntime`；命令注册表、schema、error、执行通道编码和图草稿交接都在 `yss-application::ipc`。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
+`src-tauri/src/lib.rs` 的业务入口依赖为 `yss-application`，另注册本地平台插件 `tauri-plugin-tracing` 与官方 Tauri 插件。日志插件先安装采集、SQLite 和日志 Channel；Application runtime 单独安装运行诊断和业务服务、解析业务路径、显示主窗口，并直接构造内部 `ipc::CommandRuntime`。应用命令注册表、schema、error、执行通道编码和图草稿交接都在 `yss-application::ipc`，日志命令使用插件自己的命名空间。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
 窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
@@ -236,7 +236,7 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 | Results / 当前输出      | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
 | Run Output              | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
 | Logging                 | 持久/console 技术观察                   | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
-| Operational diagnostics | Logs UI 的有界 recent/live 观察投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
+| Operational diagnostics | 独立的有界 recent/live 运行诊断投影     | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
 | IPC error               | 稳定 machine-readable command rejection | [`yss-application::ipc` transport contract](../../src-tauri/crates/yss-application/src/ipc/README.md) |
 | User feedback           | 本地化交互反馈                          | React application/view                                                                                |
 

@@ -146,9 +146,9 @@
   ────────────────────  ────────────────────────────────────────────────────────────────────
    yss-display-naming    为数据库等展示对象分配不重复的名称。
   ────────────────────  ────────────────────────────────────────────────────────────────────
-   yss-tracing           负责结构化日志采集、过滤、脱敏、控制台输出和滚动 JSONL 落盘。
+   yss-tracing           提供不依赖 Tauri/SQLx 的日志采集、过滤、脱敏、控制台输出和记录 sink。
   ────────────────────  ────────────────────────────────────────────────────────────────────
-   yss-diagnostics       汇集 Rust 与前端诊断记录，提供诊断缓冲、查询和订阅。
+   yss-diagnostics       独立管理 Rust 与显式前端运行诊断，提供诊断缓冲和订阅，不写入插件日志 SQLite。
 
   外部基础库有 10 个，主要提供框架、异步执行、序列化和底层工具。
 
@@ -242,3 +242,5 @@
 
   从代码上看，还有一处需要处理：graph-catalog (/D:/Desktop/YssBI/src-tauri/crates/yss-graph-catalog/src/builtin.rs:3) 目
   前同时接入了编译诊断定义和本地化。如果进一步落实为独立 Node 模块，这部分职责应归回 Graph，让节点目录的边界更清楚。
+
+日志平台接入由入口注册的 `tauri-plugin-tracing` 负责：前后端日志写入 SQLite，并提供日志 Channel、历史分页及统计。它依赖中立的 `yss-tracing`，不依赖 `yss-diagnostics`；后者由 Application 单独管理。两条流的边界见 [Runtime Signals](../architecture/RUNTIME_SIGNALS.md)。

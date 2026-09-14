@@ -15,6 +15,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 
 | Package | Directory | Manifest | Owner README |
 | --- | --- | --- | --- |
+| `tauri-plugin-tracing` | `src-tauri/crates/tauri-plugin-tracing` | [Cargo.toml](../../src-tauri/crates/tauri-plugin-tracing/Cargo.toml) | [README](../../src-tauri/crates/tauri-plugin-tracing/README.md) |
 | `yss-agent-rig` | `src-tauri/crates/yss-agent-rig` | [Cargo.toml](../../src-tauri/crates/yss-agent-rig/Cargo.toml) | — |
 | `yss-application` | `src-tauri/crates/yss-application` | [Cargo.toml](../../src-tauri/crates/yss-application/Cargo.toml) | [README](../../src-tauri/crates/yss-application/README.md) |
 | `yss-automation-contract` | `src-tauri/crates/yss-automation-contract` | [Cargo.toml](../../src-tauri/crates/yss-automation-contract/Cargo.toml) | — |

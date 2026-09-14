@@ -70,10 +70,12 @@ add or commit them unless explicitly requested.
   runtime uses neutral inputs/results. Julia plugin crates own their Bayes
   input and cancellation contracts and do not depend on host SCI crates.
 - Desktop commands and application-specific channel adapters belong to
-  `yss-application::ipc`. Its command module owns the sole invoke registry and
+  `yss-application::ipc`. Its command module owns the application invoke registry and
   consumes `yss-ipc-event`, neutral `yss-ipc-channel` adapters, and shared
   `yss-ipc-contract`. Event/Channel never depend on Application; Contract has no
-  Tauri or runtime dependency. Commands remain thin adapters; business workflows
+  Tauri or runtime dependency. Platform plugins own their namespaced commands;
+  `tauri-plugin-tracing` owns logs, while `yss-diagnostics` remains independent.
+  Commands remain thin adapters; business workflows
   belong to application use cases or domain owners.
 - Command failures use the exact Rust-owned `{ code, details, incidentId }`
   wire. Rust does not send user-facing error prose; React localizes stable codes.
