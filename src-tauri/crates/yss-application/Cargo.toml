@@ -83,6 +83,7 @@ yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
+tauri-plugin-tracing = { path = "../tauri-plugin-tracing", features = ["test-support"] }
 yss-statistical-harness = { path = "../yss-statistical-harness", features = ["test-support"] }
 yss-datafusion = { path = "../yss-datafusion" }
 yss-project-layout = { path = "../yss-project-layout" }

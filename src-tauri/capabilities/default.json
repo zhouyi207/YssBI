@@ -4,6 +4,7 @@
   "description": "Capability for the main window",
   "windows": ["*"],
   "permissions": [
+    "tracing:default",
     "core:default",
     "core:window:allow-create",
     "core:window:allow-minimize",

@@ -7,12 +7,12 @@
 
 YssBI's desktop IPC boundary has an Application-owned command module and three supporting crates:
 
-| Owner                                                     | Responsibility                                                                                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `yss-application::ipc`                                    | Commands, the single invoke registry, request/response mapping and diagnosed errors; application execution and graph-client channel adapters |
-| [`yss-ipc-event`](../../../yss-ipc-event/README.md)       | Event delivery after authoritative commits                                                                                                   |
-| [`yss-ipc-channel`](../../../yss-ipc-channel/README.md)   | Neutral Harness event subscriptions, project progress and diagnostics delivery                                                               |
-| [`yss-ipc-contract`](../../../yss-ipc-contract/README.md) | Shared wire DTOs, event envelopes and the exact error payload                                                                                |
+| Owner                                                     | Responsibility                                                                                                                                   |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `yss-application::ipc`                                    | Application commands and invoke registry, request/response mapping and diagnosed errors; application execution and graph-client channel adapters |
+| [`yss-ipc-event`](../../../yss-ipc-event/README.md)       | Event delivery after authoritative commits                                                                                                       |
+| [`yss-ipc-channel`](../../../yss-ipc-channel/README.md)   | Neutral Harness event subscriptions, project progress and diagnostics delivery                                                                   |
+| [`yss-ipc-contract`](../../../yss-ipc-contract/README.md) | Shared wire DTOs, event envelopes and the exact error payload                                                                                    |
 
 Event and Channel depend on Contract and never depend on Application. Contract has no Tauri or runtime dependency. Execution encoding and graph-client handoff consume Application types, so they live in [channel/](channel/mod.rs) within this module. Business workflows and committed state remain in their use-case/domain owners.
 
@@ -20,7 +20,9 @@ Event and Channel depend on Contract and never depend on Application. Contract h
 
 Application exposes `invoke_handler()` from [mod.rs](mod.rs) alongside `initialize(app)`. The desktop entry connects these two functions directly to Tauri. Commands, schemas, response caches and diagnosed errors remain private to the IPC module.
 
-Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, startup plugin, binding registry or second invoke registry.
+Application initialization directly constructs the concrete `CommandRuntime`, obtains its Harness ports, builds the business services, and installs the command contexts using the same channel hubs. There is no separate Command crate, Application startup plugin or binding registry. Platform plugins own their namespaced command registries.
+
+`tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Application retains the separate `submit_frontend_diagnostics`, `subscribe_diagnostics` and `unsubscribe_diagnostics` commands backed by `yss-diagnostics`; diagnostic records do not use the plugin's storage or sequence. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
 
 `HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal capability calls and delegates draft delivery to the local graph-client adapter. Logging, diagnostics, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
@@ -99,7 +101,7 @@ Choose the transport by semantics:
 | Event          | low-rate state-change notification that does not carry authority                          |
 | Channel/worker | ordered, streaming, high-frequency, progress, execution, diagnostics, or Harness delivery |
 
-Every ordered stream defines its source identity, ordering key, capacity/backpressure behavior, loss/gap handling, replay or snapshot recovery, cancellation, and terminal semantics in its domain owner. `yss-ipc-channel` maps that contract to Tauri without inventing a second queue model. Subscription and cancellation commands remain in the single Command registry.
+Every ordered stream defines its source identity, ordering key, capacity/backpressure behavior, loss/gap handling, replay or snapshot recovery, cancellation, and terminal semantics in its domain owner. `yss-ipc-channel` maps application contracts to Tauri without inventing a second queue model. Application subscriptions and cancellation remain in this registry; plugin logs use the plugin registry.
 
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 

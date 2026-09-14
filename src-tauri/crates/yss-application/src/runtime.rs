@@ -79,24 +79,10 @@ impl ApplicationServices {
 }
 
 pub fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let log_dir = app.path().app_log_dir();
     let diagnostics = DiagnosticsRuntime::initialize()?;
-    let logging = LoggingRuntime::initialize(
-        log_dir.as_ref().ok().cloned(),
-        Some(diagnostics.rust_log_sink()),
-    )?;
-    // Retain logging before any later startup failure can leave this function.
-    app.manage(logging);
+    app.state::<LoggingRuntime>()
+        .add_record_sink(diagnostics.rust_log_sink());
     app.manage(diagnostics);
-    if let Err(error) = log_dir {
-        tracing::error!(
-            target: "yssbi::logging",
-            diagnostic_domain = "system",
-            diagnostic_event = "appLogDirectoryUnavailable",
-            error = %error,
-            "Failed to resolve application log directory; file logging is disabled"
-        );
-    }
 
     let ipc = CommandRuntime::default();
     let services = tauri::async_runtime::block_on(ApplicationServices::initialize(
@@ -141,6 +127,53 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn plugin_logs_and_runtime_diagnostics_have_independent_ingestion_and_lifetimes() {
+        use tauri_plugin_tracing::{FrontendLogEntryDto, LogDomain, LogLevel, LogRuntime};
+        use yss_diagnostics::{DiagnosticDomain, DiagnosticLevel, FrontendDiagnosticEntryDto};
+
+        let logs = LogRuntime::initialize().unwrap();
+        let diagnostics = DiagnosticsRuntime::initialize().unwrap();
+        let diagnostic_entry = FrontendDiagnosticEntryDto {
+            level: DiagnosticLevel::Warn,
+            domain: DiagnosticDomain::Ui,
+            target: "view.diagnostic".into(),
+            message: "Diagnostic only".into(),
+            event: None,
+            source: None,
+            fields: Default::default(),
+        };
+        diagnostics
+            .submit_frontend(vec![diagnostic_entry.clone()])
+            .unwrap();
+        logs.submit_frontend(vec![FrontendLogEntryDto {
+            level: LogLevel::Info,
+            domain: LogDomain::Ui,
+            target: "frontend.console".into(),
+            message: "Log only".into(),
+            event: None,
+            source: None,
+            fields: Default::default(),
+        }])
+        .unwrap();
+        let diagnostic_snapshot = diagnostics.subscribe_batches(|_| true).unwrap();
+        let log_snapshot = logs.subscribe_batches(|_| true).unwrap();
+        assert_ne!(diagnostic_snapshot.stream_id, log_snapshot.stream_id);
+        assert_eq!(diagnostic_snapshot.entries.len(), 1);
+        assert_eq!(diagnostic_snapshot.entries[0].message, "Diagnostic only");
+        assert_eq!(log_snapshot.entries.len(), 1);
+        assert_eq!(log_snapshot.entries[0].message, "Log only");
+        logs.shutdown();
+        diagnostics.submit_frontend(vec![diagnostic_entry]).unwrap();
+        assert_eq!(
+            diagnostics
+                .subscribe_batches(|_| true)
+                .unwrap()
+                .latest_sequence,
+            2
+        );
     }
 
     #[tokio::test]

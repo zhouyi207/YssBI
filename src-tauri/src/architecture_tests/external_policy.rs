@@ -29,6 +29,66 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tauri",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "uuid",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "serde_json",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Runtime,
+        package_name: "tracing",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "tauri-plugin-tracing",
+        mode: RustDependencyMode::Build,
+        package_name: "tauri-plugin",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-application",
         mode: RustDependencyMode::Runtime,
         package_name: "tauri",
@@ -1339,12 +1399,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-tracing",
         mode: RustDependencyMode::Runtime,
-        package_name: "file-rotate",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tracing",
-        mode: RustDependencyMode::Runtime,
         package_name: "regex",
         target_condition: None,
     },
@@ -1399,6 +1453,26 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
 ];
 
 const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "tokio",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "sqlx",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::PlatformAdapter,
+        mode: RustDependencyMode::Runtime,
+        package_name: "chrono",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::BuildScript,
+        mode: RustDependencyMode::Build,
+        package_name: "tauri-plugin",
+    },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Transport,
         mode: RustDependencyMode::Runtime,
@@ -1663,11 +1737,6 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::PlatformAdapter,
         mode: RustDependencyMode::Runtime,
         package_name: "windows-sys",
-    },
-    ExternalDependencyUseAllowance {
-        source_layer: RustLayer::Logging,
-        mode: RustDependencyMode::Runtime,
-        package_name: "file-rotate",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Logging,

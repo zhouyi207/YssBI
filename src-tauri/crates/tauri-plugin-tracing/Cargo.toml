@@ -1,0 +1,29 @@
+[package]
+name = "tauri-plugin-tracing"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+links = "tauri-plugin-tracing"
+
+[features]
+test-support = []
+
+[build-dependencies]
+tauri-plugin = { version = "2.4", features = ["build"] }
+
+[dependencies]
+yss-tracing = { path = "../yss-tracing" }
+tauri.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite"] }
+uuid.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tracing-subscriber.workspace = true

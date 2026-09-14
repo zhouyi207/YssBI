@@ -1,0 +1,9 @@
+[default]
+description = "Submit frontend logs, query the log database and subscribe to committed log batches."
+permissions = [
+  "allow-submit-frontend-logs",
+  "allow-subscribe-logs",
+  "allow-unsubscribe-logs",
+  "allow-query-logs",
+  "allow-log-statistics",
+]

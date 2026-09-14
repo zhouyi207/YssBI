@@ -33,7 +33,7 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 
 ## 直接依赖
 
-当前 [Cargo.toml](Cargo.toml) 声明 **56 个内部正式依赖、10 个外部正式依赖，以及 11 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
+当前 [Cargo.toml](Cargo.toml) 声明 **56 个内部正式依赖、10 个外部正式依赖，以及 12 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
 
 ### 内部正式依赖
 
@@ -44,7 +44,7 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 | 数据：12 个           | `yss-data-contract`、`yss-database-contract`、`yss-database-edit`、`yss-database-runtime`、`yss-database-schema`、`yss-dataset-profile`、`yss-dataset-store`、`yss-relational-contract`、`yss-sql-source`、`yss-tabular-arrow`、`yss-tabular-contract`、`yss-tabular-io`                                                                                        | 数据导入导出、编辑、查询、快照和项目资源发布               |
 | 自动化与插件：6 个    | `yss-automation-contract`、`yss-plugin-protocol`、`yss-statistical-harness`、`yss-statistical-harness-sqlite`、`yss-agent-rig`、`yss-plugin-runtime`                                                                                                                                                                                                            | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
 | IPC 支持：3 个        | `yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract`                                                                                                                                                                                                                                                                                                          | 命令事件、通道交付及共享 wire 类型                         |
-| 运行观测：2 个        | `yss-diagnostics`、`yss-tracing`                                                                                                                                                                                                                                                                                                                                | 在桌面初始化中连接诊断和日志，并保留进程级 guard           |
+| 运行观测：2 个        | `yss-diagnostics`、`yss-tracing`                                                                                                                                                                                                                                                                                                                                | 管理独立诊断 runtime，并注册到中立 logging sink            |
 | 科学计算：2 个        | `yss-sci-contract`、`yss-sci-runtime`                                                                                                                                                                                                                                                                                                                           | 使用统计结果、报告和错误类型                               |
 | 图表文档：1 个        | `yss-chart-document`                                                                                                                                                                                                                                                                                                                                            | 图表文档操作与查询                                         |
 | 通用能力：3 个        | `yss-canonical-hash`、`yss-display-naming`、`yss-math-expr`                                                                                                                                                                                                                                                                                                     | 稳定哈希与展示名称                                         |
@@ -69,7 +69,7 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 
 | 声明方式                                | Crates                                                                                                                                                         | 用途                                                         |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`sqlx`、`tracing-subscriber`                                                                                           | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
+| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`sqlx`、`tracing-subscriber`、`tauri-plugin-tracing`                                                                   | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
 | 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-project-filesystem`、`yss-project-identity`、`yss-statistical-harness` | 构造测试会话和验证跨 crate 契约，共七条声明                  |
 
 Application 自身的 `test-support` feature 只开放跨 crate contract 测试所需的构造与 publication seam，转发范围以 manifest 为准。
@@ -91,11 +91,11 @@ Application 自身的 `test-support` feature 只开放跨 crate contract 测试�
 
 ### 桌面初始化
 
-[initialize(app)](src/runtime.rs) 接收 `&mut tauri::App`。它解析日志目录并先安装诊断与日志 guard，然后直接构造内部 `CommandRuntime` 与业务服务，通过 `app.manage()` 注册状态，最后显示主窗口。日志目录不可用时保留 console logging；后续启动失败仍通过已安装的日志链路记录。
+[initialize(app)](src/runtime.rs) 接收 `&mut tauri::App`，在桌面日志插件安装之后运行。它单独创建并保留 `yss-diagnostics::DiagnosticsRuntime`，将诊断投影注册到中立的 `yss-tracing::LoggingRuntime`，随后构造内部 `CommandRuntime` 和业务服务，通过 `app.manage()` 注册状态，最后显示主窗口。日志 SQLite 与日志 Channel 属于 `tauri-plugin-tracing`；诊断仍使用 Application 的原命令和独立 recent/live 流。
 
-[默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 也在 runtime 内构造。内部 `ipc::CommandRuntime` 提供 Harness 通道端口并安装命令专属上下文，初始化直接调用它。路径解析、日志、项目与插件等业务服务的安装均属于 Application。
+[默认 Harness 组装](src/runtime/harness.rs) 选择 SQLite、Rig、系统时钟与 ID 实现；项目注册 SQLite、notify 文件监听器和 Plugin Manager 也在 runtime 内构造。内部 `ipc::CommandRuntime` 提供 Harness 通道端口并安装命令专属上下文，初始化直接调用它。业务路径解析、诊断、项目与通用业务插件等服务的安装属于 Application；桌面日志插件单独安装。
 
-`runtime.rs`、`runtime/harness.rs` 和 IPC runtime 按具体文件划分为 Composition Root；IPC 命令与 wire 适配分别按 Commands 和 Transport 检查。普通用例模块没有 Tauri 或具体 provider 构造权限。桌面入口的内部依赖仅为 Application；[数据库集成测试](tests/database_test.rs) 归 Application。
+`runtime.rs`、`runtime/harness.rs` 和 IPC runtime 按具体文件划分为 Composition Root；IPC 命令与 wire 适配分别按 Commands 和 Transport 检查。普通用例模块没有 Tauri 或具体 provider 构造权限。桌面入口注册 Application 与本地日志平台插件；[数据库集成测试](tests/database_test.rs) 归 Application。
 
 ### 应用会话
 

@@ -1,24 +1,16 @@
-use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, SyncSender, TrySendError};
+use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use file_rotate::compression::Compression;
-use file_rotate::suffix::AppendCount;
-use file_rotate::{ContentLimit, FileRotate};
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 
 use crate::{LogLayer, LogRecord, LogRecordSink};
 
-pub const LOG_FILE_NAME: &str = "yssbi.log.jsonl";
-const LOG_ROTATION_BYTES: usize = 10 * 1024 * 1024;
-const LOG_ROTATION_FILES: usize = 5;
 const OUTPUT_QUEUE_CAPACITY: usize = 1_024;
 const OUTPUT_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const OUTPUT_SHUTDOWN_WAIT: Duration = Duration::from_millis(250);
@@ -26,18 +18,13 @@ const OUTPUT_SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 /// Owns the bounded output workers installed by the process-wide logging layer.
 pub struct LoggingRuntime {
+    record_sinks: Arc<RwLock<Vec<LogRecordSink>>>,
     _output_guards: Vec<OutputWorkerGuard>,
 }
 
 impl LoggingRuntime {
-    /// Installs the process-wide tracing subscriber and optional log projection.
-    ///
-    /// Console logging is mandatory. File logging is best-effort and emits a
-    /// structured warning when its directory or worker cannot be initialized.
-    pub fn initialize(
-        log_dir: Option<PathBuf>,
-        record_sink: Option<LogRecordSink>,
-    ) -> Result<Self, LoggingInitializationError> {
+    /// Installs one subscriber for all crates; SQLite delivery is owned by the record sink.
+    pub fn initialize(record_sink: LogRecordSink) -> Result<Self, LoggingInitializationError> {
         let (console, console_guard) =
             spawn_output("console", create_console_sink()).map_err(|source| {
                 LoggingInitializationError::OutputWorker {
@@ -45,36 +32,21 @@ impl LoggingRuntime {
                     source,
                 }
             })?;
-        let mut outputs = vec![console];
-        let mut guards = vec![console_guard];
-        let mut file_warning = None;
-
-        if let Some(log_dir) = log_dir {
-            match create_file_sink(&log_dir).and_then(|sink| {
-                spawn_output("file", sink).map_err(|source| FileLogSinkError::Worker {
-                    path: log_dir.join(LOG_FILE_NAME),
-                    source,
-                })
-            }) {
-                Ok((file, file_guard)) => {
-                    outputs.push(file);
-                    guards.push(file_guard);
-                }
-                Err(error) => file_warning = Some(error),
-            }
-        }
-
         let rust_log = std::env::var("RUST_LOG").ok();
-        let filter = logging_filter(rust_log.as_deref(), cfg!(debug_assertions));
-        let subscriber = tracing_subscriber::registry()
-            .with(filter.targets)
-            .with(LogLayer::with_outputs(outputs, record_sink));
+        let filter = logging_filter(rust_log.as_deref());
+        let record_sinks = Arc::new(RwLock::new(vec![record_sink]));
+        let subscriber =
+            tracing_subscriber::registry()
+                .with(filter.targets)
+                .with(LogLayer::with_outputs(
+                    vec![console],
+                    Some(fanout(record_sinks.clone())),
+                ));
         tracing::subscriber::set_global_default(subscriber)
             .map_err(LoggingInitializationError::TracingSubscriber)?;
-
         if let Err(error) = tracing_log::LogTracer::init() {
             tracing::warn!(
-                target: "yssbi::logging",
+                target: "tauri_plugin_tracing",
                 diagnostic_domain = "system",
                 diagnostic_event = "logTracingBridgeUnavailable",
                 error = %error,
@@ -83,29 +55,40 @@ impl LoggingRuntime {
         }
         if let Some(error) = filter.parse_error {
             tracing::warn!(
-                target: "yssbi::logging",
+                target: "tauri_plugin_tracing",
                 diagnostic_domain = "system",
                 diagnostic_event = "rustLogFilterInvalid",
                 error = %error,
-                "Failed to parse RUST_LOG target filter; using defaults"
+                "Invalid RUST_LOG; collecting all levels"
             );
         }
-        if let Some(error) = file_warning {
-            tracing::warn!(
-                target: "yssbi::logging",
-                diagnostic_domain = "system",
-                diagnostic_event = "logFileSinkUnavailable",
-                failure_stage = error.stage(),
-                path = %error.path().display(),
-                error = %error,
-                "File logging is disabled"
-            );
-        }
-
         Ok(Self {
-            _output_guards: guards,
+            record_sinks,
+            _output_guards: vec![console_guard],
         })
     }
+
+    /// Attach an independent, non-blocking consumer of sanitized Rust records.
+    /// The consumer owns its queue, lifecycle and delivery failures.
+    pub fn add_record_sink(&self, sink: LogRecordSink) {
+        self.record_sinks
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(sink);
+    }
+}
+
+fn fanout(sinks: Arc<RwLock<Vec<LogRecordSink>>>) -> LogRecordSink {
+    Arc::new(move |record| {
+        let current = sinks
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        for sink in current {
+            // Consumer failures are isolated, and callbacks never run under the registry lock.
+            let _ = catch_unwind(AssertUnwindSafe(|| sink(record)));
+        }
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -118,50 +101,6 @@ pub enum LoggingInitializationError {
     },
     #[error("failed to install the global logging subscriber")]
     TracingSubscriber(#[source] tracing::subscriber::SetGlobalDefaultError),
-}
-
-#[derive(Debug, thiserror::Error)]
-enum FileLogSinkError {
-    #[error("failed to create log directory '{}': {source}", path.display())]
-    CreateDirectory {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("failed to open log file '{}': {source}", path.display())]
-    OpenFile {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("log file rotation initialization panicked for '{}'", path.display())]
-    InitializationPanicked { path: PathBuf },
-    #[error("failed to start log file worker for '{}': {source}", path.display())]
-    Worker {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-}
-
-impl FileLogSinkError {
-    const fn stage(&self) -> &'static str {
-        match self {
-            Self::CreateDirectory { .. } => "create_directory",
-            Self::OpenFile { .. } => "open_file",
-            Self::InitializationPanicked { .. } => "initialize_rotation",
-            Self::Worker { .. } => "start_worker",
-        }
-    }
-
-    fn path(&self) -> &Path {
-        match self {
-            Self::CreateDirectory { path, .. }
-            | Self::OpenFile { path, .. }
-            | Self::InitializationPanicked { path }
-            | Self::Worker { path, .. } => path,
-        }
-    }
 }
 
 enum OutputCommand {
@@ -269,38 +208,6 @@ fn create_console_sink() -> OutputSink {
     })
 }
 
-fn create_file_sink(log_dir: &Path) -> Result<OutputSink, FileLogSinkError> {
-    std::fs::create_dir_all(log_dir).map_err(|source| FileLogSinkError::CreateDirectory {
-        path: log_dir.to_path_buf(),
-        source,
-    })?;
-
-    let log_path = log_dir.join(LOG_FILE_NAME);
-    OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|source| FileLogSinkError::OpenFile {
-            path: log_path.clone(),
-            source,
-        })?;
-
-    let writer = catch_unwind(AssertUnwindSafe(|| {
-        FileRotate::new(
-            log_path.clone(),
-            AppendCount::new(LOG_ROTATION_FILES),
-            ContentLimit::BytesSurpassed(LOG_ROTATION_BYTES),
-            Compression::None,
-            None,
-        )
-    }))
-    .map_err(|_| FileLogSinkError::InitializationPanicked { path: log_path })?;
-    let mut writer = writer;
-    Ok(Box::new(move |record| {
-        write_json_record(&mut writer, record)
-    }))
-}
-
 fn write_json_record(writer: &mut impl Write, record: &LogRecord) -> bool {
     let Ok(mut line) = serde_json::to_vec(record) else {
         return false;
@@ -314,19 +221,8 @@ struct LoggingFilter {
     parse_error: Option<String>,
 }
 
-fn logging_filter(rust_log: Option<&str>, debug_build: bool) -> LoggingFilter {
-    let first_party = if debug_build {
-        LevelFilter::DEBUG
-    } else {
-        LevelFilter::INFO
-    };
-    let defaults = || {
-        Targets::new()
-            .with_default(LevelFilter::OFF)
-            .with_target("yssbi", first_party)
-            .with_target("yssbi_lib", first_party)
-            .with_target("yss_tracing", first_party)
-    };
+fn logging_filter(rust_log: Option<&str>) -> LoggingFilter {
+    let defaults = || Targets::new().with_default(LevelFilter::TRACE);
     let Some(directives) = rust_log.map(str::trim).filter(|value| !value.is_empty()) else {
         return LoggingFilter {
             targets: defaults(),
@@ -355,56 +251,13 @@ mod tests {
     use crate::LogLevel;
 
     #[test]
-    fn file_sink_initialization_failure_is_structured() {
-        let directory = unique_temp_directory();
-        std::fs::create_dir_all(&directory).unwrap();
-        let file_path = directory.join("not-a-directory");
-        std::fs::write(&file_path, b"occupied").unwrap();
-
-        let error = match create_file_sink(&file_path) {
-            Ok(_) => panic!("invalid log directory unexpectedly succeeded"),
-            Err(error) => error,
-        };
-        assert_eq!(error.stage(), "create_directory");
-
-        std::fs::remove_file(file_path).unwrap();
-        std::fs::remove_dir(directory).unwrap();
-    }
-
-    #[test]
-    fn rolling_file_serializes_log_contract() {
-        let directory = unique_temp_directory();
-        let mut sink = create_file_sink(&directory).unwrap();
-        let record = LogRecord {
-            timestamp: "2026-01-01".into(),
-            level: LogLevel::Info,
-            target: "yssbi::test".into(),
-            message: "hello".into(),
-            fields: BTreeMap::from([("count".into(), serde_json::json!(1))]),
-        };
-        assert!(sink(&record));
-        drop(sink);
-
-        let encoded = std::fs::read_to_string(directory.join(LOG_FILE_NAME)).unwrap();
-        let decoded: LogRecord = serde_json::from_str(encoded.trim()).unwrap();
-        assert_eq!(decoded, record);
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn default_filter_is_first_party_and_trace_requires_explicit_rust_log() {
-        let release = logging_filter(None, false).targets;
-        assert!(release.would_enable("yssbi", &tracing::Level::INFO));
-        assert!(!release.would_enable("yssbi", &tracing::Level::DEBUG));
-        assert!(!release.would_enable("dependency", &tracing::Level::ERROR));
-
-        let debug = logging_filter(None, true).targets;
-        assert!(debug.would_enable("yssbi_lib::runtime", &tracing::Level::DEBUG));
-        assert!(!debug.would_enable("yss_tracing", &tracing::Level::TRACE));
-
-        let explicit = logging_filter(Some("yssbi=trace"), false).targets;
-        assert!(explicit.would_enable("yssbi::runtime", &tracing::Level::TRACE));
-        assert!(!explicit.would_enable("other", &tracing::Level::TRACE));
+    fn default_filter_collects_every_crate_and_rust_log_can_restrict_it() {
+        let defaults = logging_filter(None).targets;
+        assert!(defaults.would_enable("any_crate::worker", &tracing::Level::TRACE));
+        assert!(defaults.would_enable("dependency", &tracing::Level::ERROR));
+        let explicit = logging_filter(Some("my_crate=debug")).targets;
+        assert!(explicit.would_enable("my_crate::worker", &tracing::Level::DEBUG));
+        assert!(!explicit.would_enable("other", &tracing::Level::INFO));
     }
 
     #[test]
@@ -444,13 +297,5 @@ mod tests {
             message: "hello".into(),
             fields: BTreeMap::new(),
         }
-    }
-
-    fn unique_temp_directory() -> PathBuf {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!("yssbi-log-test-{}-{nonce}", std::process::id()))
     }
 }

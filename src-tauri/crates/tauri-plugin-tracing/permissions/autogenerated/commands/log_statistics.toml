@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-log-statistics"
+description = "Enables the log_statistics command without any pre-configured scope."
+commands.allow = ["log_statistics"]
+
+[[permission]]
+identifier = "deny-log-statistics"
+description = "Denies the log_statistics command without any pre-configured scope."
+commands.deny = ["log_statistics"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-query-logs"
+description = "Enables the query_logs command without any pre-configured scope."
+commands.allow = ["query_logs"]
+
+[[permission]]
+identifier = "deny-query-logs"
+description = "Denies the query_logs command without any pre-configured scope."
+commands.deny = ["query_logs"]

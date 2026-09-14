@@ -2615,16 +2615,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "file-rotate"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e8e2fa049328a1f3295991407a88585805d126dfaadf74b9fe8c194c730aafc"
-dependencies = [
- "chrono",
- "flate2",
-]
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7309,6 +7299,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-tracing"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tauri",
+ "tauri-plugin",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "yss-tracing",
+]
+
+[[package]]
 name = "tauri-plugin-window-state"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9235,6 +9244,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tauri",
+ "tauri-plugin-tracing",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -10186,7 +10196,6 @@ name = "yss-tracing"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "file-rotate",
  "regex",
  "serde",
  "serde_json",
@@ -10210,6 +10219,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-opener",
+ "tauri-plugin-tracing",
  "tauri-plugin-window-state",
  "thiserror 2.0.20",
  "tracing",

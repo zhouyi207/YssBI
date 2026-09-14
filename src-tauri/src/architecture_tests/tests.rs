@@ -342,7 +342,10 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         })
         .map(|dependency| dependency.package_name.as_str())
         .collect::<BTreeSet<_>>();
-    assert_eq!(entry_dependencies, BTreeSet::from(["yss-application"]));
+    assert_eq!(
+        entry_dependencies,
+        BTreeSet::from(["yss-application", "tauri-plugin-tracing"])
+    );
 
     assert!(workspace.roots.iter().any(|root| root.package == "yssbi"
         && root.target == "yssbi_lib"
@@ -1667,6 +1670,7 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
         "src-tauri/crates/yss-diagnostics/src/validation.rs",
         "src-tauri/crates/yss-diagnostics/src/worker.rs",
         "src-tauri/crates/yss-tracing/Cargo.toml",
+        "src-tauri/crates/tauri-plugin-tracing/Cargo.toml",
     ] {
         assert!(
             root.join(relative).is_file(),
@@ -1676,6 +1680,54 @@ fn diagnostics_has_one_crate_owner_separate_from_logging() {
     assert!(
         !root.join("src-tauri/src/diagnostics").exists(),
         "the root crate must not retain a diagnostics compatibility module"
+    );
+    let plugin = "src-tauri/crates/tauri-plugin-tracing/src/plugin.rs";
+    let diagnostics = "src-tauri/crates/yss-diagnostics/src/runtime.rs";
+    let logging = "src-tauri/crates/yss-tracing/src/runtime.rs";
+    let classification = BTreeMap::from([
+        (plugin.into(), RustLayer::PlatformAdapter),
+        (diagnostics.into(), RustLayer::Diagnostics),
+        (logging.into(), RustLayer::Logging),
+    ]);
+    let dependency = |source: &str, declaration: &str| CanonicalDependency {
+        owning_package: "fixture".into(),
+        source_file: source.into(),
+        owner: "fixture".into(),
+        kind: RustDependencyKind::Use,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: "fixture".into(),
+            repository_relative_declaration_file: declaration.into(),
+            fully_qualified_target: "fixture::runtime".into(),
+            symbol: "runtime".into(),
+        },
+        canonical_origin_target: "fixture::runtime".into(),
+        line: 1,
+        column: 1,
+    };
+    assert!(
+        rust_dependency_findings(
+            &[
+                dependency(plugin, logging),
+                dependency(diagnostics, logging)
+            ],
+            &classification
+        )
+        .unwrap()
+        .is_empty()
+    );
+    assert_eq!(
+        rust_dependency_findings(
+            &[
+                dependency(plugin, diagnostics),
+                dependency(diagnostics, plugin),
+                dependency(logging, plugin)
+            ],
+            &classification
+        )
+        .unwrap()
+        .len(),
+        3
     );
 }
 

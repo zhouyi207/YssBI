@@ -1,7 +1,7 @@
 //! Structured, bounded logging infrastructure for YssBI.
 //!
-//! This crate owns tracing collection, filtering, sanitization, console output,
-//! and rolling JSONL persistence. Application diagnostics remain a separate
+//! This platform-neutral crate owns collection, filtering, sanitization and console output.
+//! SQLite persistence and Tauri transport belong to `tauri-plugin-tracing`. Diagnostics remain a separate
 //! projection and may consume sanitized [`LogRecord`] values through a
 //! [`LogRecordSink`].
 
@@ -14,7 +14,7 @@ mod sanitizer;
 pub use layer::LogLayer;
 pub use limits::LogLimits;
 pub use record::{LogFields, LogLevel, LogRecord, LogRecordSink};
-pub use runtime::{LOG_FILE_NAME, LoggingInitializationError, LoggingRuntime};
+pub use runtime::{LoggingInitializationError, LoggingRuntime};
 pub use sanitizer::{
     REDACTED_VALUE, sanitize_event, sanitize_fields, sanitize_message, sanitize_source,
     sanitize_target,

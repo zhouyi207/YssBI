@@ -156,6 +156,12 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::CompositionRoot,
+        repository_relative_source_file: "src-tauri/src/lib.rs",
+        fully_qualified_owner: "yssbi_lib",
+        canonical_origin_targets: &["tauri_plugin_tracing::plugin::init"],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::Application,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/lib.rs",
         fully_qualified_owner: "yss_application",
@@ -1828,7 +1834,10 @@ fn non_build_memberships(
         layers.insert(RustLayer::Execution);
     } else if package == "yss-tracing" {
         layers.insert(RustLayer::Logging);
-    } else if package == "yss-project-watcher-notify" {
+    } else if package == "yss-project-watcher-notify"
+        || (package == "tauri-plugin-tracing"
+            && source_file.starts_with("src-tauri/crates/tauri-plugin-tracing/src/"))
+    {
         layers.insert(RustLayer::PlatformAdapter);
     } else if matches!(
         package,
@@ -2025,7 +2034,7 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
         ) | (RustLayer::Commands, RustLayer::PureLeaf)
             | (
                 RustLayer::PlatformAdapter,
-                RustLayer::Diagnostics | RustLayer::PureLeaf
+                RustLayer::Logging | RustLayer::PureLeaf
             )
             | (
                 RustLayer::Application,
