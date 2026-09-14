@@ -175,10 +175,10 @@ Open → Frontend Draft ──→ Compile complete draft ──→ immutable cac
 - Save 校验并原子覆盖完整 document，不隐式 Compile；
 - Execute 使用 `compiledArtifactId` 精确匹配缓存 artifact，并重验 session 与实际依赖；
 - Projection 与 Compiler 消费同一个 `GraphSemanticSnapshot`；
-- execution result 进入 Rust `ResultStore`；Run Output 已有独立通道与 UI，生产 producer 尚未接入；
+- execution result 进入 Rust `ResultStore`；运行失败经 typed channel 投影到 Output panel；
 - Graph Problems 由完整 projection 交付，Compile 通过 Ready/Blocked 区分语义阻断与内部 command failure。
 
-完整的 Draft、Projection、Compile、Save、Execute、Problems、Results 和 Run Output contract 只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
+完整的 Draft、Projection、Compile、Save、Execute、Problems、Results 和运行失败契约只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
 
 ## 6. Database and scientific computation
 
@@ -237,7 +237,7 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 | ------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Graph Problems     | 当前 draft 的 resolved domain facts     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
 | Results / 当前输出 | 可查询的执行产物                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
-| Run Output         | 用户程序 stdout/stderr 通道预留能力     | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
+| Graph 运行失败     | 当前图的失败摘要与节点定位              | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                          |
 | Logging            | 结构化运行观测、持久历史与 console      | [Runtime Signals](RUNTIME_SIGNALS.md)                                                                 |
 | IPC error          | 稳定 machine-readable command rejection | [`yss-application::ipc` transport contract](../../src-tauri/crates/yss-application/src/ipc/README.md) |
 | User feedback      | 本地化交互反馈                          | React application/view                                                                                |

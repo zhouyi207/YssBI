@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: structured logging、runtime observations、IPC error、user feedback 以及运行信号之间的语义边界
-> Canonical owners: `tauri-plugin-tracing`、`yss-application::ipc` 和 React feedback owners；Graph/Results/Run Output 由 Graph 文档拥有
+> Canonical owners: `tauri-plugin-tracing`、`yss-application::ipc` 和 React feedback owners；Graph/Results/运行失败由 Graph 文档拥有
 > Update when: 信号分类、logging 数据流、可靠性、安全或反馈边界改变时
 
 YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 authority、可靠性和保留语义；选择错误的链路会造成第二事实源、隐私泄漏或无法恢复的 UI 状态。
@@ -13,7 +13,7 @@ YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 auth
 | --------------------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
 | Graph Problems        | Rust `GraphSemanticSnapshot` 经完整 editor projection 投影 | command response 原子替换                    | Canvas、Details、Problems、Run Gate | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#7-graph-problems)                             |
 | Results / 当前输出    | Rust `ResultStore`                                         | typed queries；event 只公告 identity         | Result、Inspect、Preview            | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#6-results)                                    |
-| Run Output            | Rust Execution output contract                             | channel 与 bounded UI 已有；producer 预留    | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-run-output)                                 |
+| Graph 运行失败        | Rust Execution RunErrored / command rejection              | typed channel 与当前图失败摘要              | Output panel                        | [Graph 与 Execution](GRAPH_AND_EXECUTION.md#8-运行失败反馈)                               |
 | Logging               | sanitized Rust `tracing` + frontend logs                   | SQLite history + bounded recent/live channel | Logs UI、本地技术排障               | 本文                                                                                      |
 | IPC error             | Rust `yss-application::ipc` transport error                | command rejection                            | React 按 stable code 映射           | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
 | User feedback         | React application/view                                     | UI state，按交互生命周期保留                 | Alert、Dialog、inline/status        | 本文                                                                                      |
@@ -24,9 +24,9 @@ YssBI 不把所有信息汇入一条“日志”。不同信号具有不同 auth
 - 运行观测统一进入 structured logging，允许 loss，且不是业务 authority；
 - Graph Problems 来自完整语义快照，独立于运行日志；
 - Result event 不是 result authority；
-- Run Output 不是 log；
+- 运行失败摘要来自业务事件或命令失败，不从 log 重建；
 - command error 不是 backend user message；
-- Assistant transcript 不进入 logs、Run Output 或 Graph Problems。
+- Assistant transcript 不进入 logs、Output 或 Graph Problems。
 
 ## 2. Signal flow
 
@@ -45,12 +45,13 @@ flowchart TD
 
   GRAPH[Graph semantic snapshot] --> PROBLEMS[Graph Problems consumers]
   RESULT[Execution ResultStore] --> RESULTQUERY[typed result queries]
-  PROGRAM[Workflow/tool producer: planned] -.-> OUTPUT[Run Output channel contract]
+  RUN[Execution lifecycle] --> RUNCHANNEL[RunEvent channel]
+  RUNCHANNEL --> OUTPUT[Output failure summary]
   FAILURE[Command failure] --> WIRE[yss-ipc-contract error wire]
   WIRE --> FEEDBACK[React localization and feedback]
 ```
 
-运行观测共用日志插件的输入校验、脱敏、identity、sequence、持久存储、缓冲和订阅。Rust tracing、前端 logger 和显式结构化日志都进入同一条链；Graph Problems、Result、Run Output 和错误响应由各自业务 owner 管理。
+运行观测共用日志插件的输入校验、脱敏、identity、sequence、持久存储、缓冲和订阅。Rust tracing、前端 logger 和显式结构化日志都进入同一条链；Graph Problems、Result、运行状态和错误响应由各自业务 owner 管理。
 
 Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [Compile](GRAPH_AND_EXECUTION.md#compile)。
 
@@ -114,7 +115,7 @@ Rust 使用普通 tracing 宏；显式 `log_domain`、`log_event`、`log_source`
 
 sanitizer 是最后防线，不是记录任意 `%error`、`?request` 或完整对象的许可。字段键和值、message、target/source/event、结构深度、集合长度和编码大小都必须受限。前端日志遵守同一数据最小化规则。
 
-Run Output 允许显示用户程序明确产生的文本，但它有自己的 source identity、容量和交互语义，不能因此写入 logs。Harness transcript 和 memory 属于持久业务数据，也不得写入运行日志。
+Graph 执行通道传递安全的运行与结果身份，不传递用户程序文本。Harness transcript 和 memory 属于持久业务数据，也不得写入运行日志；插件进程的 stdout/stderr 仍按插件通信协议处理。
 
 ## 6. IPC errors and incidents
 
@@ -142,7 +143,7 @@ React application/view 根据 use case 将 stable code 和安全 details 映射�
 
 用户反馈应由应用动作与 typed outcome 驱动，不使用日志触发通知，也不把 `IpcError.message`、Rust error 或 parser reason 当作用户文案。Logs panel 展示 sanitized operational record 是其自身职责；Graph diagnostic 按 Rust-owned 模板键与安全参数在 React 本地化，具体契约见 [Graph Problems](GRAPH_AND_EXECUTION.md#7-graph-problems)。路径选择等桌面 capability dialog 不等同于应用错误反馈。
 
-Graph 运行失败由 Output panel 的失败摘要反馈：React 本地化 Rust RunErrored 的原因和阶段，保留节点定位及可用的 incidentId。该 UI 摘要不属于用户程序 stdout/stderr，也不由 Logs 重建；具体生命周期和 terminal channel 排空契约见 [Run Output](GRAPH_AND_EXECUTION.md#8-run-output)。
+Graph 运行失败由 Output panel 的失败摘要反馈：React 本地化 Rust RunErrored 的原因和阶段，保留节点定位及可用的 incidentId。该 UI 摘要不由 Logs 重建；具体生命周期和 terminal channel 排空契约见 [运行失败反馈](GRAPH_AND_EXECUTION.md#8-运行失败反馈)。
 
 ## 8. Routing decisions
 

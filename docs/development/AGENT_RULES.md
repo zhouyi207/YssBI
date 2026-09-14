@@ -96,7 +96,7 @@ add or commit them unless explicitly requested.
   compiled artifact.
 - The root Dockview instance is the sole authority for workbench topology,
   placement, ordering, active panels/groups, edge sizes, and collapse state.
-- Graph Problems, operational Logs, Results, and Run Output are distinct data
+- Graph Problems, operational Logs, Results, and run state/failures are distinct data
   flows. None may be used to reconstruct or substitute for another.
 
 ## Testing and validation
@@ -139,7 +139,7 @@ add or commit them unless explicitly requested.
 
 Before changing a subsystem, read its canonical owner:
 
-- Graph, projection, compile, execution, Results, and Run Output:
+- Graph, projection, compile, execution, Results, and run state/failures:
   `docs/architecture/GRAPH_AND_EXECUTION.md`
 - Workbench layout and panel lifecycle:
   `docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md`

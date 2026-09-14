@@ -70,7 +70,7 @@ React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路�
 只接收 typed registries、tab renderer、activation/DnD capabilities 与 chrome slots，不导入具体业务模块。
 当前 registry 分别从 `src/modules/logs/public.ts`、`src/modules/output/public.ts` 和
 `src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
-生命周期。Problems、Results 与 Run Output 的业务语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)，
+生命周期。Problems、Results 与运行失败的业务语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)，
 Logs 的业务语义见 [Runtime Signals](RUNTIME_SIGNALS.md)。
 
 root Dockview 是以下物理事实的唯一 authority：
@@ -198,7 +198,7 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 | `view:inspect`   | contextual Inspect                        | right edge                          |
 | `result`         | 一个可检查结果                            | right edge                          |
 | `view:logs`      | Logs workspace                            | bottom edge                         |
-| `view:output`    | Run Output                                | bottom edge                         |
+| `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
 | `view:problems`  | Graph Problems                            | bottom edge                         |
 
 默认空布局建立 central grid group，并放置：

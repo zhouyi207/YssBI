@@ -29,7 +29,7 @@
 专项 owner：
 
 - [系统总览](../architecture/ARCHITECTURE.md)
-- [Graph / Execution / Results / Run Output](../architecture/GRAPH_AND_EXECUTION.md)
+- [Graph / Execution / Results / Run failures](../architecture/GRAPH_AND_EXECUTION.md)
 - [Workbench layout](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Runtime signals / feedback](../architecture/RUNTIME_SIGNALS.md)
 - [Statistical Harness](../architecture/STATISTICAL_HARNESS.md)

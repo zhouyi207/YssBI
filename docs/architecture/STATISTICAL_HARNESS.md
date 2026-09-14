@@ -180,7 +180,7 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 
 - Core、Gateway 和 adapters 使用 typed failures；Tauri seam 再映射为 stable error wire；
 - prompt、transcript、Memory、tool request/result、数据行、SQL、credential 和 model output 不写入 logging/diagnostics；
-- Assistant text 只进入 Harness event stream，不进入 Run Output；
+- Assistant text 只进入 Harness event stream，不进入 Graph 执行事件或 Output 失败摘要；
 - capability result、knowledge hit 和 model text都有明确 size/depth budget；
 - external/provider payload 在 adapter 边界完成 schema、size、time 和 failure validation；
 - operational ledger 是 durable业务记录，不等同于 lossy diagnostics log。

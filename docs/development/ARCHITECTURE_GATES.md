@@ -130,6 +130,8 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 执行 command 的精确 capability 包含识别 terminal event 和映射安全错误码所需的 enum variants；execution DTO 的 capability 包含映射结构化运行失败所需的类型。权限绑定到对应 source、owner 和 canonical target，wire 契约由 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md#error-contract) 维护。
 
+结果缓存状态由 Application 用例查询，已有 result schema 负责转换 wire。该 schema 的精确 capability 只增加 `GraphResultState` 和 `ResultCacheState` 等只读投影类型；应用状态访问权限仍不向 Transport 开放。
+
 Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConstantReference`。`yss-graph-document` 按 Pure Leaf 分类，常量定义及只读校验归属该层；Project 可校验持久化数据，不依赖 Graph 编辑或分析层。JSON 门禁仅允许 `model.rs` 的值类型别名，以及 `constant_value.rs` 解析常量字面量所需的精确 `serde_json` 操作，不开放其他 JSON 业务逻辑。
 
 科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Execution 的统计节点和结果分析、Application 内 `ipc/commands` 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition Root 和其他 Application 模块不能直接访问 SCI runtime；结果用例通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。

@@ -1,7 +1,7 @@
 # Graph 与 Execution 当前架构
 
 > Status: Current
-> Scope: Graph Draft、Resolve、Projection、Compile、Save、Execute、Problems、Results 与 Run Output
+> Scope: Graph Draft、Resolve、Projection、Compile、Save、Execute、Problems、Results 与运行失败反馈
 > Canonical owners: Graph/Execution/Project 源码与测试拥有可执行事实；本文拥有阶段之间的稳定 contract
 > Update when: Graph authority、阶段语义、projection、execution result 或 output 边界改变时
 
@@ -16,7 +16,7 @@
 | 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection        |
 | 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId             |
 | run、当前 output result                | Rust Execution / ResultStore         | typed query 与 UI projection  |
-| 程序文本输出                           | Execution RunOutputEmitter / channel | bounded Run Output projection |
+| 运行失败                               | Execution RunErrored / command error | Output panel 失败摘要         |
 
 `graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
 
@@ -50,7 +50,7 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
 
 `yss-graph-runtime` 负责解析与编译产物缓存；`yss-graph-execution` 负责执行计划、节点 kernel、
-run、Results 和 Run Output。两者通过 Application 的执行包转换连接，执行端不依赖编辑器投影。
+run、Results 和运行失败。两者通过 Application 的执行包转换连接，执行端不依赖编辑器投影。
 
 ## 3. Open and Draft lifecycle
 
@@ -264,8 +264,19 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 
 `ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
 结果以 `{ executionSessionId, resultId }` 标识，保留 type/presentation、payload 与生成时的 provenance。
+`StoredResult` 直接保存 `RuntimeValue` 和输出类别，不再维护平行标量/文本/空值分支或递归类别包装。
+`StoredResultSnapshot` 表示共享结果的一致性读取视图；这一机制称为结果缓存与持有租约，不提供历次运行归档。
 当前输出和显式报告租约是结果的持有者；输出不再指向结果且最后一个租约释放后，移除结果索引。
 计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。
+
+每个现存输出最多持有一份结果缓存。缓存持有与有效性分开：语义编辑保留旧值，但只让依据仍匹配的输出参与当前查询。
+Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；Application 映射资源版本，Execution 记录实际消费的上游结果身份。
+依赖检查沿数据关系传播，不因整图 hash 改变而统一释放结果。撤销重新 Resolve 后仅恢复仍存在且依据匹配的缓存；
+已删除输出、重算准入或显式清理释放的结果不会被撤销重新创建。
+
+`get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
+同一查询检查已有编译产物和资源依赖，允许前端重新关联仍匹配的产物。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
+当前连线/Pin/Node 视觉迁移及录制器删除仍在[组件化计划](../draft/component-plan.md#p0确认范围清理执行遗留并建立图状态契约)中实施，不据此声称已完成人工验收。
 
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前解除这些输出的旧结果绑定。
 一个 operation 的所有当前 outputs 同时失效；未参与本次 demand 的输出保留当前结果。已打开报告的租约保留旧快照，
@@ -296,10 +307,12 @@ Dockview 的真实面板集合驱动窗口内租约对账，移动、隐藏和 R
 异步创建失败进入租约释放流程。几何插件按种类分组不会合并实例 label 或结果租约身份。
 所有权操作按窗口串行协调，查询与统计计算不进入该队列；每次对账只遍历该窗口的租约。
 
-语义输入改变、删除、重命名或卸载图解除其当前输出绑定，有租约的结果继续可读。
-移动节点等不改变语义输入的操作保留当前输出。执行会话结束（包括项目关闭、切换或会话重建）撤销所属租约并释放 ResultStore，
+删除、重命名或卸载图解除其缓存绑定，有租约的结果继续可读。语义编辑使受影响缓存过期，移动节点等布局操作保留有效缓存。
+Pin 查询与当前结果搜索重新验证数据库内容及函数依赖；报告仍按打开时的完整引用读取。
+编辑及资源版本变化撤销旧运行的发布资格，撤销恢复相同语义也不会恢复旧运行的资格。
+执行会话结束（包括项目关闭、切换或会话重建）撤销所属租约并释放 ResultStore，
 前端清理 project-scoped 面板并通知独立报告窗口关闭。跨窗口通道只通知会话结束，不再把输出失效广播成结果销毁。
-旧会话引用不能读取新会话中的同号结果。Run Output 与 Results 的生命周期仍独立，清除 Output 不清除 Results。
+旧会话引用不能读取新会话中的同号结果。运行失败摘要与 Results 的生命周期独立，清除 Output 中的错误不清除 Results。
 
 统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
 
@@ -334,17 +347,15 @@ Producer 覆盖 node/parameter/resource、binding/orphan、repeatable minimum、
 
 Problems 不可手动清空。定位支持 Graph、Node、Pin、Connection、Details 参数字段和已知资源；缺失资源显示 identity，related locations 提供关联跳转。普通 Graph 问题不靠 tracing/Logs 表达。
 
-## 8. Run Output
+## 8. 运行失败反馈
 
-Execution 保留 typed message/channel、strict parser、bounded projection 和 Output panel。stdout/stderr 的生产 adapter 尚未接入，当前没有通用 emitter。具体前端容量限制由源码常量拥有。
+Execution channel 直接交付 `RunEventDto`，传递运行生命周期与结果通知；前端严格解析事件并以执行会话和运行身份隔离迟到消息。Analysis Graph 没有 Print/Effect，不提供 stdout/stderr 消息、缓存或订阅。
 
-Frontend 检测跨 run、重复/缺失 sequence 和容量淘汰，显示丢失状态。清空只影响当前 Graph 的 Output。日志、Assistant text 和 Graph Problems 不进入此流。
-
-Output panel 同时展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。该摘要与 stdout/stderr entries 分开存储，不伪造 Run Output 文本或 sequence。失败时 Application 打开 Output；清空 Output 或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。
+Output panel 展示当前图的运行失败摘要：从 RunErrored 投影原因、阶段和节点，可定位失败节点；运行开始前的 command rejection 使用安全错误代码回退。失败时 Application 打开 Output；清除错误或开始下一次运行清除本地摘要，不改变 Rust 的运行结果。日志、Assistant text 和 Graph Problems 各自保持原有职责与生命周期。
 
 API 在成功交付 terminal event 后，用 command error details 的 `terminalRunEventSent: true` 标识拒绝路径；ProjectService 等待 channel 排空后才结束失败调用，确保原因投影先于错误收尾。incidentId 只用于关联技术诊断，前端不把 IpcError.message 作为用户文案。
 
-当前 Analysis Graph 没有 Print/Effect，Workflow/tool stdout/stderr 生产 adapter 尚未实现。生产接入时需要实现有界发送、UTF-8 截断、慢 consumer 与最终 delivery/loss 状态。
+Harness 事件及其恢复、插件进程通信由各自协议拥有，不通过 Graph 执行通道转发。
 
 ## 9. Cross-boundary routing
 
@@ -352,7 +363,7 @@ API 在成功交付 terminal event 后，用 command error details 的 `terminal
 | ------------------------------- | -------------------------------------- |
 | 普通 Graph validation / Blocked | Graph Projection / Problems            |
 | 计算结果                        | ResultStore + typed query              |
-| 用户程序 stdout/stderr          | Run Output                             |
+| 图运行失败                      | RunErrored + Output panel 失败摘要      |
 | 内部技术故障                    | sanitized tracing / incident           |
 | command rejection               | yss-application::ipc stable error wire |
 | 用户反馈                        | React localization / UI                |
