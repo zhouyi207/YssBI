@@ -22,7 +22,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 ## Current architecture
 
 - [系统架构总览](architecture/ARCHITECTURE.md)：系统上下文、authority、依赖方向和主要运行链路。
-- [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：Draft、Projection、Compile、Save、Execute、Problems、Results 与 Run Output。
+- [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：Draft、Projection、Compile、Save、Execute、Problems、Results 与运行失败反馈。
 - [Workbench Dockview](architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
 - [Runtime Signals](architecture/RUNTIME_SIGNALS.md)：logging、operational diagnostics、错误、反馈和各类运行信号的语义边界。
 - [Statistical Harness](architecture/STATISTICAL_HARNESS.md)：当前 Harness、Gateway、Rig、SQLite、Tauri 和 Assistant 投影。
@@ -64,6 +64,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [v0.3 roadmap](roadmap/v0_3.md)
 - [v1.0 roadmap](roadmap/v1_0.md)
 - [Graph Compile / Execute follow-up](roadmap/v0_3.md)：条件性后续项按 release backlog 维护。
+- [组件化架构重构计划（实施中）](draft/component-plan.md)：组件边界、七类代码审计、执行遗留清理、结果缓存与租约，以及编译/缓存驱动的图状态和撤销恢复；按阶段记录剩余工作。
 - [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
 - [Generated module map](reference/MODULE_MAP.md)
 - [数据引擎测量记录](benchmark/DATA_ENGINE_BENCHMARK.md)：百万行查询、编辑、压实与 OLS 的本地观察。
