@@ -143,7 +143,6 @@ const VIEW_CORE_CAPABILITIES = [
   }),
   viewCoreCapability("src/features/core/editor/ui.ts", ["useEditorUi"]),
   viewCoreCapability("src/features/core/editor/detail/detailTypes.ts", ["DetailTarget"]),
-  viewCoreCapability("src/features/core/execution/executionTypes.ts", ["RunOutputProjection"]),
   viewCoreCapability("src/features/core/execution/executionVisualSession.ts", [
     "connectionKey",
     "getExecutionVisual",
@@ -159,8 +158,8 @@ const VIEW_CORE_CAPABILITIES = [
     "pinViewDisabledTitle",
   ]),
   viewCoreCapability("src/features/core/execution/read.ts", ["useExecutionRead"]),
-  viewCoreCapability("src/features/core/execution/ui.ts", ["runOutputActions"], {
-    runOutputActions: ["clearRunOutput"],
+  viewCoreCapability("src/features/core/execution/ui.ts", ["runFailureActions"], {
+    runFailureActions: ["clearRunFailure"],
   }),
   viewCoreCapability("src/features/core/execution/useExecutionPlayback.ts", [
     "useExecutionPlayback",
@@ -349,7 +348,7 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     {
       sourceLayer: "application",
       canonicalModule: "src/shared/types/dto/runEvent.ts",
-      exportedSymbols: ["RunEvent", "RunOutputChannelEvent"],
+      exportedSymbols: ["RunEvent"],
       exactConsumers: null,
       memberCapabilities: null,
     },
