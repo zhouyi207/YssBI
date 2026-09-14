@@ -36,7 +36,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-datafusion` | `src-tauri/crates/yss-datafusion` | [Cargo.toml](../../src-tauri/crates/yss-datafusion/Cargo.toml) | — |
 | `yss-dataset-profile` | `src-tauri/crates/yss-dataset-profile` | [Cargo.toml](../../src-tauri/crates/yss-dataset-profile/Cargo.toml) | — |
 | `yss-dataset-store` | `src-tauri/crates/yss-dataset-store` | [Cargo.toml](../../src-tauri/crates/yss-dataset-store/Cargo.toml) | [README](../../src-tauri/crates/yss-dataset-store/README.md) |
-| `yss-diagnostics` | `src-tauri/crates/yss-diagnostics` | [Cargo.toml](../../src-tauri/crates/yss-diagnostics/Cargo.toml) | [README](../../src-tauri/crates/yss-diagnostics/README.md) |
 | `yss-display-naming` | `src-tauri/crates/yss-display-naming` | [Cargo.toml](../../src-tauri/crates/yss-display-naming/Cargo.toml) | — |
 | `yss-filesystem` | `src-tauri/crates/yss-filesystem` | [Cargo.toml](../../src-tauri/crates/yss-filesystem/Cargo.toml) | [README](../../src-tauri/crates/yss-filesystem/README.md) |
 | `yss-function-editor-projection` | `src-tauri/crates/yss-function-editor-projection` | [Cargo.toml](../../src-tauri/crates/yss-function-editor-projection/Cargo.toml) | — |
@@ -96,12 +95,14 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | Module | Directory | Public entry |
 | --- | --- | --- |
 | `assistant` | `src/modules/assistant` | [public.ts](../../src/modules/assistant/public.ts) |
+| `bayes` | `src/modules/bayes` | — |
 | `chart` | `src/modules/chart` | [public.ts](../../src/modules/chart/public.ts) |
 | `commands` | `src/modules/commands` | [public.ts](../../src/modules/commands/public.ts) |
 | `data-explorer` | `src/modules/data-explorer` | [public.ts](../../src/modules/data-explorer/public.ts) |
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
+| `julia` | `src/modules/julia` | — |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |

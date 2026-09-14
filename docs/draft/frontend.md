@@ -33,7 +33,7 @@
 | 图表编辑与展示       | 图表文档、配置、数据绑定与渲染                             | `src/modules/chart/`、`src/features/application/chart/`、`src/features/core/chart/`                                                                  |
 | Assistant            | 对话与工具状态展示、输入与审批、业务操作衔接               | `src/modules/assistant/`、`src/features/application/assistant/`                                                                                      |
 | 插件交互与接入       | 插件管理入口、状态展示与界面贡献接入                       | `src/modules/plugins/`、`src/features/application/plugins/`、`src/features/core/plugins/`                                                            |
-| 运行诊断与反馈       | Logs 查看、过滤定位、错误本地化与操作反馈                  | `src/modules/logs/`、`src/features/application/log/`、`src/features/application/observability/`                                                      |
+| 日志与运行反馈       | Logs 查看、过滤定位、错误本地化与操作反馈                  | `src/modules/logs/`、`src/features/application/log/`、`src/features/application/observability/`                                                      |
 | 通信适配             | IPC 请求、响应解析、通知与数据流订阅                       | `src/services/`，普通 Command 共用 `src/services/ipc/invokeCommand.ts`                                                                               |
 | 客户端设置与通用支撑 | 本地偏好、主题、国际化、通用组件与平台能力                 | `src/modules/settings/`、`src/features/core/settings/`、`src/features/core/theme/`、`src/app/i18n/`、`src/components/ui/`                            |
 
@@ -201,7 +201,7 @@ Rust Harness 拥有 session、turn、工具流程、审批与事件顺序，Reac
 
 安装状态、进程与任务由 Rust Plugin Manager 管理；前端使用相应投影。插件面板的位置由工作台管理，插件专属业务由插件承担。宿主页面布局模板与插件自带页面的渲染边界分别遵守[插件契约](../architecture/PLUGIN.md)，目标能力与当前接入范围需明确区分。
 
-## 8. 运行诊断与反馈
+## 8. 日志与运行反馈
 
 负责技术运行信息的查看，以及用户操作结果的本地化反馈。
 
@@ -210,7 +210,7 @@ Rust Harness 拥有 session、turn、工具流程、审批与事件顺序，Reac
 | 部分       | 职责                                               |
 | ---------- | -------------------------------------------------- |
 | Logs 查看  | 展示有界日志投影，管理筛选、选择、自动滚动与定位   |
-| 诊断订阅   | 协调订阅、暂停、恢复和释放                         |
+| 日志订阅   | 协调订阅、暂停、恢复和释放                         |
 | 错误与反馈 | 将稳定错误码转为本地化提示，由对应操作决定呈现时机 |
 
 ### 状态与边界

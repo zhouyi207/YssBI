@@ -123,7 +123,7 @@
   ──────────────────  ───────────────────────────────────────────────────────────
    yss-ipc-event       在业务提交后，通过 Tauri Event 发送项目变更通知。
   ──────────────────  ───────────────────────────────────────────────────────────
-   yss-ipc-channel     当前提供 Harness 事件、项目进度和运行诊断的流式通道适配。
+   yss-ipc-channel     提供 Harness 事件和项目进度的流式通道适配；日志由平台插件交付。
 
   当前唯一命令注册表已经位于 Application 的 /D:/Desktop/YssBI/src-tauri/crates/yss-application/src/ipc/mod.rs:13，执行流
   和 Harness 图交互的部分通道实现也在这个内部模块中。
@@ -134,15 +134,13 @@
   ━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    yss-chart-document    定义图表文档、关联数据库、图表类型、X/Y 字段映射、文档版本和资源路径。
 
-  第九类：通用能力与运行观测，共 3 个。
+  第九类：通用能力，共 2 个。
 
    Crate                 作用
   ━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    yss-canonical-hash    提供规范化内容哈希和 SHA-256，用于文档指纹、快照及文件完整性校验。
   ────────────────────  ────────────────────────────────────────────────────────────────────
    yss-display-naming    为数据库等展示对象分配不重复的名称。
-  ────────────────────  ────────────────────────────────────────────────────────────────────
-   yss-diagnostics       独立管理 Rust 与显式前端运行诊断，提供诊断缓冲和订阅，不写入插件日志 SQLite。
 
   外部基础库有 10 个，主要提供框架、异步执行、序列化和底层工具。
 
@@ -216,4 +214,4 @@ Node 描述 OLS 等节点类型的能力和接口，不依赖任何 Graph crate�
 编译诊断定义和模板由 `yss-graph-compiler-diagnostics` 拥有，Graph Runtime 初始化时独立校验定义，前端 Graph 通过生成模板统一渲染。节点目录已移除编译诊断装配及其 Graph 依赖，只提供节点元数据文本查询。
 
 Application 的 11 个 Graph 直接依赖不包含 `yss-graph-compiler-diagnostics`；后者由 Graph Runtime 等 Graph crate 使用。全 workspace 的 Graph 类别还包含这一诊断 crate，因此不能将直接依赖数量作为全 workspace 数量。
-日志平台接入由入口注册的 `tauri-plugin-tracing` 负责：前后端日志写入 SQLite，并提供日志 Channel、历史分页及统计。原 `yss-tracing` 已合并到插件内部；`yss-diagnostics` 独立接收并交付诊断数据，不依赖 tracing 或日志插件，由 Application 单独初始化。两条流的边界见 [Runtime Signals](../architecture/RUNTIME_SIGNALS.md)。
+日志平台接入由入口注册的 `tauri-plugin-tracing` 负责：前后端运行观测统一进入结构化日志，写入 SQLite，并通过日志 Channel、历史分页及统计查询交付。业务代码使用 tracing 或已有前端日志服务；Graph Problems、模型诊断、结果和程序输出保持各自业务事实源。边界见 [Runtime Signals](../architecture/RUNTIME_SIGNALS.md)。
