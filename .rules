@@ -35,3 +35,8 @@ changes or validation.
   documents relevant to the requested work. Do not bulk-read unrelated docs.
 - Tool-specific instruction files must reference the corresponding `.rules`
   file instead of duplicating its contents.
+
+
+## Addition
+
+- 禁止给 ui 写单元测试，涉及验收请使用人工验收
