@@ -14,16 +14,19 @@ WorkbenchWindow
 ├─ WorkbenchMenuBar
 ├─ RootLayoutHost：一个 FlexLayout Layout + Model
 │  ├─ left border：Project、Nodes、Commands、Plugins 和插件 sidebar
-│  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
+│  ├─ central column
+│  │  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
+│  │  └─ bottom content：Problems、Output、Logs 的内容面板
 │  ├─ right border：Details、Assistant、Inspect 和 Result 的默认位置
-│  └─ bottom border：Problems、Output、Logs
-├─ StatusBar
+│  └─ bottom bar：贯穿窗口，最左侧设置、对齐中央区左边的原生 tab、对齐右边的状态信息
 └─ WorkbenchOverlayHost
 ```
 
 Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。浮动窗口、浏览器 popout 和标签分组禁用。
 
 FlexLayout 分别记录中央 tabset 的活动状态和各 border 的选择。宿主将物理焦点标记保存在 TabNode.config.focused，与 config.metadata 一起属于同一个原生 Model；它用于工具面板和编辑器之间的快捷键焦点裁决。Zustand 不保存第二份布局树。
+
+中央 group 的最后一个 tab 关闭或移走后，由 FlexLayout 删除空组并回收分屏空间；空 border 自动隐藏，底部仅保留承载状态信息的条带，空的内容面板仍消失。只有中央工作区没有非空 group 时才显示一份 watermark，侧栏和底部工具面板不影响该判断。FlexLayout 内部保留的最后一个空投放容器用于接收新 tab，不计入 Workbench 的 group 查询，也不显示分组标签栏。恢复旧布局时移除阻止空组删除的节点配置，由原生模型清理空组；不逐帧扫描或重建布局。
 
 Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，内容与分类来自 Rust 生成的 ActivityPanelDocument，展开状态由前端保存。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
 
@@ -174,11 +177,11 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 | `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
 | `view:problems`  | Graph Problems                            | bottom edge                         |
 
-默认空布局建立 central grid group，并放置：
+默认空布局保留原生中央投放容器，并放置：
 
 - Project、Nodes、Commands、Plugins：同一个 left Activity edge group，使用 `WORKBENCH_EDGE_SIZES.left`，默认顺序为 Project → Nodes → Commands → Plugins；
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
-- bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
+- bottom bar 使用原生 tab 切换、折叠和关闭面板，右侧承载状态信息；不保留另一套图标切换入口。
 
 right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
 
@@ -190,6 +193,8 @@ exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternat
 ## 3. Logs 内部布局
 
 Logs 内部使用一个受限的 FlexLayout Model，承载七个 domain tabs。标签可以在同一 tabset 内排序，不能关闭、跨工作台拖放、分屏、浮动或 popout。
+
+工作台内的 Logs 复用外层面板边框，移除内层日志 tab 内容的主题边框与圆角，避免内容比 Output、Problems 多缩进一层。分类 tab、工具栏和日志行自身的内距仍由对应组件负责；独立 Logs 窗口保留原生主题边框。
 
 main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保存只读快照，作为 nested.logs 随工作台持久化。独立 Logs 窗口使用自己的临时 Model。日志内容、过滤、选择和运行观测继续属于 Logs owner。
 
@@ -258,6 +263,8 @@ PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化�
 
 所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 FlexLayout close。
 
+Problems、Output、Logs 的原生 tab 使用 `enableClose: false` 隐藏关闭按钮；新建和恢复布局应用同一规则。点击底部 tab 仍可切换、展开和折叠内容，中键、右键菜单及应用关闭命令继续由上述 coordinator 处理。
+
 Coordinator 按顺序执行：
 
 1. 捕获 `panelInstanceId + groupId + metadata` commit tokens；project-scoped panel 同时捕获 project identity。
@@ -292,7 +299,7 @@ Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
 文件菜单提供事件图、函数和图表的新建入口；创建后打开对应编辑器。“保存”与 `Ctrl+S`
 共用当前物理激活 editor 的保存命令，仅保存该文件；无项目或非文件 panel 激活时禁用。
 “项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity、Assistant 的切换和
-布局重置；Problems、Output、Logs 通过 Status Bar 图标访问。
+布局重置；Problems、Output、Logs 可由底部原生 tab 切换，关闭后从视图菜单重新打开。
 
 ## 7. Reveal、reset 与 project replacement
 
@@ -307,7 +314,7 @@ Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提�
 - Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到第一个 central tabset；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
-- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；重置完成时不显示其中任何 panel，用户通过 Status Bar 再次打开；
+- Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
 - main Logs nested FlexLayout 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
@@ -367,9 +374,11 @@ root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前�
 
 直接加载 flexlayout-react/style/combined.css，使用 alpha_light / alpha_dark 原生主题，随应用主题切换。标签选中、关闭按钮、边栏、分隔条、拖放指示和最大化按钮均使用库的设计。
 
-src/app/workbench-layout.css 只设置宿主尺寸、字体尺度和标题图标/dirty 标记；不保留 Dockview 样式覆盖。RootPanelTabRenderer 只贡献标题内容和业务右键菜单。关闭按钮、中键和原生关闭动作进入既有关闭协调者。
+工作台横向标签栏移除首部 spacer 和叠加的左侧 padding，使首个 tab button 与 tab content 的外边缘对齐；按钮自身内距和标签之间的间隔保留原生样式。该规则不作用于侧栏或底部 border 的标签，底栏与中央区的列对齐保持独立。
 
-Status Bar 保留 Settings、Problems、Output、Logs、Details 和 Assistant 入口；不再测量布局库的内部 DOM 或隐藏原生底部标签栏。
+src/app/workbench-layout.css 设置宿主尺寸、字体尺度、标题图标/dirty 标记与边框区域的排列。根布局将原生 border 元素排入 CSS Grid：左右侧栏延伸到底部栏上方，top/bottom border 的内容和分隔条与中央 tabsets 共用一列，bottom bar 横跨整个窗口。保留原生 Model、尺寸、测量与拖放能力，不增加布局模型或挪动组件 DOM。RootPanelTabRenderer 只贡献标题内容和业务右键菜单。关闭按钮、中键和原生关闭动作进入既有关闭协调者。
+
+底部直接使用 FlexLayout 原生 tab，取消独立 footer 和重复的面板 icon。StatusBar 只呈现状态条目，通过 onRenderTabSet 放进 bottom border 的原生 toolbar；Settings 使用同一底栏的 leading 插槽。整条栏贯穿窗口，通过 CSS subgrid 共用工作台列宽：设置位于窗口最左侧，三个 tab 对齐中央区左边，节点、连接、选中等状态对齐中央区右边。侧栏缩放和折叠时由 CSS 自动保持对齐，不测量边界、不维护偏移 CSS 变量。日志等内容仍只位于中央工作区下方。底部 tab 关闭后可从“视图”菜单重新打开。底部所有 tab 都关闭时不显示内容面板，条带仍承载状态信息。Details 和 Assistant 使用右侧原生 tab。
 
 ## 10. Verification
 
