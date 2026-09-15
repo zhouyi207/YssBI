@@ -188,7 +188,6 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yss-relational-contract",
         "yss-database-contract",
         "yss-database-runtime",
-        "yss-database-edit",
         "yss-database-schema",
         "yss-dataset-store",
         "yss-dataset-profile",

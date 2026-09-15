@@ -1,16 +1,14 @@
 use super::{
     enforce_result_bound, ensure_project_binding, inspect_port, inspect_result_category,
-    invalid_request, map_catalog_error, map_session_capture_error, map_session_revalidation_error,
+    invalid_request, map_session_capture_error, map_session_revalidation_error,
 };
-use crate::catalog_query::{LocalizedCatalogRequest, localized_node_catalog_in_session};
-use crate::events::GraphProjectionReplacement;
-use crate::execution::run_graph::{
+use crate::graph::compile::{CompileGraphDraftReceipt, compile_graph_draft};
+use crate::graph::edit::GraphDraftEditor;
+use crate::graph::edit::{GraphDraftSave, GraphDraftTransform};
+use crate::graph::run::{
     RunApplicationEvent, RunApplicationEventKind, RunGraphRequest, run_graph_with_sink,
 };
-use crate::execution::{ApplicationSession, ApplicationState};
-use crate::graph_compile::{CompileGraphDraftReceipt, compile_graph_draft};
-use crate::resource_mutation::build_catalog_mutation_validation_snapshot;
-use crate::resource_mutation::{GraphDraftSave, GraphDraftTransform};
+use crate::session::{ApplicationSession, ApplicationState};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use yss_automation_contract::*;
@@ -19,7 +17,6 @@ use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
     PortRef,
 };
-use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
 use yss_node_catalog::LocalizedCatalogItem;
@@ -290,23 +287,9 @@ fn transform_graph_edit(
 ) -> Result<(GraphDraftTransform, GraphEditReceipt), CapabilityFailure> {
     let graph_path = GraphResourcePath::new(&request.graph_path)
         .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    let localized = localized_node_catalog_in_session(
-        application,
-        captured,
-        LocalizedCatalogRequest::new(
-            captured.project_instance_id().clone(),
-            request.locale.clone(),
-        ),
-    )
-    .map_err(map_catalog_error)?
-    .into_transport_parts()
-    .into_fields()
-    .3;
-    let catalog = build_catalog_mutation_validation_snapshot(captured).map_err(map_graph_error)?;
-    let mut resolution =
-        crate::resource_mutation::DraftResolutionContext::capture(captured, &original)
-            .map_err(map_graph_error)?;
-    let mut staged = original.clone();
+    let mut editor = GraphDraftEditor::new(captured, &graph_path, &request.locale, original)
+        .map_err(map_graph_error)?;
+    let localized = editor.localized_catalog();
     let mut created_nodes = BTreeMap::new();
     let mut created_ports = BTreeMap::new();
     for mut operation in request.operations {
@@ -359,22 +342,7 @@ fn transform_graph_edit(
                     tags: Vec::new(),
                 }),
             };
-            let analysis = resolution.resolve(captured, &graph_path, &staged, &request.locale);
-            let patch = captured
-                .graph()
-                .plan_editor_mutation(
-                    &graph_path,
-                    &staged,
-                    mutation,
-                    &catalog,
-                    analysis.semantic_snapshot(),
-                )
-                .map_err(|error| {
-                    graph_failure(CapabilityFailureCode::MutationRejected)
-                        .with_detail("reason", error.code())
-                })?;
-            apply_graph_document_patch(&mut staged, &patch)
-                .map_err(|_| graph_failure(CapabilityFailureCode::MutationRejected))?;
+            editor.apply(mutation).map_err(map_graph_error)?;
             operation = GraphEditOperation::InsertConstantReference {
                 id: id.to_string(),
                 x,
@@ -387,7 +355,8 @@ fn transform_graph_edit(
             parameters,
         } = &mut operation
         {
-            let existing = staged
+            let existing = editor
+                .document()
                 .nodes
                 .get(&parse_node_id(node_id)?)
                 .ok_or_else(|| invalid_edit_identity("nodeId"))?;
@@ -401,38 +370,31 @@ fn transform_graph_edit(
         }
         let adds_port = matches!(operation, GraphEditOperation::AddPortInstance { .. });
         let mutation = editor_mutation(operation, &localized.items)?;
-        let before_nodes = staged.nodes.keys().copied().collect::<BTreeSet<_>>();
-        let before_ports = staged
+        let before_nodes = editor
+            .document()
+            .nodes
+            .keys()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let before_ports = editor
+            .document()
             .port_bindings
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>();
-        let analysis = resolution.resolve(captured, &graph_path, &staged, &request.locale);
-        let patch = captured
-            .graph()
-            .plan_editor_mutation(
-                &graph_path,
-                &staged,
-                mutation,
-                &catalog,
-                analysis.semantic_snapshot(),
-            )
-            .map_err(|error| {
-                graph_failure(CapabilityFailureCode::MutationRejected)
-                    .with_detail("reason", error.code())
-            })?;
-        apply_graph_document_patch(&mut staged, &patch)
-            .map_err(|_| graph_failure(CapabilityFailureCode::MutationRejected))?;
+        editor.apply(mutation).map_err(map_graph_error)?;
         if let Some(alias) = alias {
             if adds_port {
-                let address = staged
+                let address = editor
+                    .document()
                     .port_bindings
                     .keys()
                     .find(|address| !before_ports.contains(*address))
                     .ok_or_else(|| graph_failure(CapabilityFailureCode::MutationRejected))?;
                 created_ports.insert(alias, edit_port(address));
             } else {
-                let id = staged
+                let id = editor
+                    .document()
                     .nodes
                     .keys()
                     .find(|id| !before_nodes.contains(id))
@@ -440,27 +402,16 @@ fn transform_graph_edit(
                 created_nodes.insert(alias, id.to_string());
             }
         }
-        // A newly inserted function node may introduce additional resource dependencies.
-        resolution
-            .include_functions(captured, &staged)
-            .map_err(map_graph_error)?;
     }
-    resolution.revalidate(captured).map_err(map_graph_error)?;
-    let changed = staged != original;
+    control.check()?;
+    let transformed = editor.finish(application).map_err(map_graph_error)?;
+    let staged = &transformed.document;
     created_nodes.retain(|_, id| parse_node_id(id).is_ok_and(|id| staged.nodes.contains_key(&id)));
     created_ports.retain(|_, port| {
         parse_edit_port(port.clone())
             .is_ok_and(|address| staged.port_bindings.contains_key(&address))
     });
-    let projection = application
-        .resolve_graph_draft(
-            captured.project_instance_id().clone(),
-            graph_path.clone(),
-            staged.clone(),
-            request.locale,
-        )
-        .map_err(map_graph_error)?;
-    let graph_hash = graph_hash(&staged)?;
+    let graph_hash = graph_hash(staged)?;
     let receipt = GraphEditReceipt {
         graph_path: request.graph_path,
         from_revision: request.base_revision,
@@ -473,18 +424,7 @@ fn transform_graph_edit(
         created_nodes,
         created_ports,
     };
-    Ok((
-        GraphDraftTransform {
-            changed,
-            document: staged,
-            projection_replacement: GraphProjectionReplacement {
-                graph_path: graph_path.as_str().into(),
-                projection,
-                function_editor_projection: None,
-            },
-        },
-        receipt,
-    ))
+    Ok((transformed, receipt))
 }
 
 pub(super) fn editor_mutation(
@@ -904,7 +844,7 @@ pub(crate) fn list_graph_results(
     {
         return Err(graph_failure(CapabilityFailureCode::GraphUnavailable));
     }
-    let results = crate::execution::result_query::query_graph_results(captured, &path, 100)
+    let results = crate::graph::results::query_graph_results(captured, &path, 100)
         .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
         .into_iter()
         .map(|result| GraphResultReference {
@@ -944,10 +884,10 @@ fn graph_failure(code: CapabilityFailureCode) -> CapabilityFailure {
     CapabilityFailure::new(code)
 }
 fn map_graph_error(
-    error: crate::resource_mutation::ResourceMutationApplicationError,
+    error: impl Into<crate::graph::resources::ResourceMutationApplicationError>,
 ) -> CapabilityFailure {
-    match error {
-        crate::resource_mutation::ResourceMutationApplicationError::Mutation(error) => {
+    match error.into() {
+        crate::graph::resources::ResourceMutationApplicationError::Mutation(error) => {
             graph_failure(CapabilityFailureCode::MutationRejected)
                 .with_detail("reason", error.code())
         }

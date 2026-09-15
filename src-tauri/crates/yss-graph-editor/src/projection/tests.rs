@@ -112,6 +112,7 @@ fn analysis_with_facts(
     facts: GraphSemanticSnapshot,
 ) -> yss_graph_analysis::GraphAnalysis {
     let basis = CompilationBasis {
+        kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
         resource_versions: BTreeMap::from([(
             ResourceKey::new("resource/source"),
@@ -395,6 +396,7 @@ fn editor_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     let path = GraphResourcePath::new("events/missing-facts.yssbi-event")
         .expect("test graph path is valid");
     let basis = CompilationBasis {
+        kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),

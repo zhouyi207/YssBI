@@ -9,8 +9,8 @@ use yss_dataset_store::{DatasetPublication, DatasetStoreError};
 use crate::DatabaseInstance;
 use crate::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
 use crate::session_api::DatabaseMutationOperation;
+use yss_database_contract::EditState;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat, DatabaseId};
-use yss_database_edit::EditState;
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularSnapshot};
 

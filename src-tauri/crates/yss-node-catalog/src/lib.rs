@@ -27,6 +27,7 @@ pub(crate) const fn data_connections(
 
 pub use builtin::{
     BuiltinAssemblyError, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
+    register_builtin_nodes,
 };
 pub(crate) const REROUTE_NODE_TYPE: &str = "yssbi.core.reroute";
 pub(crate) const REROUTE_INPUT_PORT: &str = "input";

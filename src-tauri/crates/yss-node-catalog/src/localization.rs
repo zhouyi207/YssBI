@@ -138,7 +138,7 @@ impl<'de> Deserialize<'de> for ResourceBoundCreateArgs {
             "database" => Ok(Self::Database),
             kind => Err(serde::de::Error::unknown_variant(
                 kind,
-                &["function", "variable", "database"],
+                &["function", "database"],
             )),
         }
     }

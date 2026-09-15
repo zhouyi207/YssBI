@@ -72,19 +72,19 @@ pub(super) fn mutation_conflict_to_command_error(
 }
 
 pub(super) fn resource_mutation_to_command_error(
-    error: crate::resource_mutation::ResourceMutationApplicationError,
+    error: crate::graph::resources::ResourceMutationApplicationError,
     revision_conflict_code: &'static str,
 ) -> CommandError {
-    use crate::resource_mutation::ResourceMutationApplicationError;
+    use crate::graph::resources::ResourceMutationApplicationError;
     match error {
         ResourceMutationApplicationError::SessionCapture(error) => match error {
-            crate::execution::SessionCaptureError::Inactive => {
+            crate::session::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
             }
-            crate::execution::SessionCaptureError::Replacing => {
+            crate::session::SessionCaptureError::Replacing => {
                 CommandError::expected("project_lifecycle_admission_closed")
             }
-            crate::execution::SessionCaptureError::Recovering => CommandError::expected(
+            crate::session::SessionCaptureError::Recovering => CommandError::expected(
                 "project_recovery_required",
             )
             .with_details(RecoveryRequiredDetails {
@@ -190,7 +190,10 @@ pub(super) fn resource_mutation_to_command_error(
     }
 }
 
-pub(super) fn parse_graph_fingerprint(value: &str, error_code: &'static str) -> Result<[u8; 32], CommandError> {
+pub(super) fn parse_graph_fingerprint(
+    value: &str,
+    error_code: &'static str,
+) -> Result<[u8; 32], CommandError> {
     if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(CommandError::expected(error_code));
     }

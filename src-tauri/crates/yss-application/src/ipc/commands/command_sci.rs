@@ -2,9 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use crate::execution::{ApplicationState, SessionCaptureError};
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::statistics::{AcfPacfRequestDto, AcfPacfResponseDto};
+use crate::session::{ApplicationState, SessionCaptureError};
 use tauri::State;
 use yss_sci_contract::scientific::{
     AcfPacfRequest, AcfPacfResult, ScientificCancellationToken, ScientificComputationError,

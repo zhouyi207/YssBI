@@ -25,6 +25,7 @@ pub struct GraphCompilationInput<'a> {
     semantics: &'a GraphSemanticSnapshot,
     graph: GraphResourcePath,
     compile_id: CompileId,
+    kernel_fingerprint: [u8; 32],
 }
 
 impl<'a> GraphCompilationInput<'a> {
@@ -32,11 +33,13 @@ impl<'a> GraphCompilationInput<'a> {
         semantics: ReadyGraphSemanticSnapshot<'a>,
         graph: GraphResourcePath,
         compile_id: CompileId,
+        kernel_fingerprint: [u8; 32],
     ) -> Self {
         Self {
             semantics: semantics.snapshot(),
             graph,
             compile_id,
+            kernel_fingerprint,
         }
     }
 }
@@ -47,13 +50,19 @@ pub fn compile(
     if input.semantics.ready().is_none() {
         return Err(lowering_error(&input.graph));
     }
-    lower_package(input.semantics, input.graph, input.compile_id)
+    lower_package(
+        input.semantics,
+        input.graph,
+        input.compile_id,
+        input.kernel_fingerprint,
+    )
 }
 
 fn lower_package(
     semantics: &GraphSemanticSnapshot,
     graph: GraphResourcePath,
     compile_id: CompileId,
+    kernel_fingerprint: [u8; 32],
 ) -> Result<GraphCompiledPackage, GraphCompileError> {
     let input_values = semantics
         .nodes()
@@ -162,6 +171,7 @@ fn lower_package(
     Ok(GraphCompiledPackage::new(
         graph,
         compile_id,
+        kernel_fingerprint,
         operations.into_boxed_slice(),
         parameters,
     ))
@@ -469,6 +479,7 @@ mod tests {
         compile_id: CompileId,
     ) -> GraphCompilationInput<'a> {
         GraphCompilationInput {
+            kernel_fingerprint: [0; 32],
             semantics,
             graph,
             compile_id,

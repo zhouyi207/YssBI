@@ -1,10 +1,10 @@
-use crate::execution::result_query::{ResultPinQuery, ResultQueryApplicationError};
-use crate::execution::{ApplicationState, SessionCaptureError};
+use crate::graph::results::{ResultPinQuery, ResultQueryApplicationError};
 use crate::ipc::commands::execution_dto::{
     ResultDescriptorDto, ResultPageDto, ResultValueDto, runtime_value_to_json,
 };
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::result::ResultReferenceDto;
+use crate::session::{ApplicationState, SessionCaptureError};
 use serde::Serialize;
 use tauri::State;
 use yss_graph_execution::result::{ResultId, ResultRetentionError};
@@ -41,7 +41,10 @@ pub(super) fn result_query_command_error(error: ResultQueryApplicationError) -> 
             CommandError::diagnosed("result_source_read_failed", format!("{error:?}"))
         }
         ResultQueryApplicationError::Resources(error) => {
-            super::common::resource_mutation_to_command_error(error, "stale_result_reference")
+            super::common::resource_mutation_to_command_error(
+                error.into(),
+                "stale_result_reference",
+            )
         }
     }
 }
@@ -169,9 +172,15 @@ pub fn get_graph_result_state(
 ) -> Result<Option<yss_ipc_contract::execution::GraphResultStateDto>, CommandError> {
     let graph = yss_graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?;
-    let hash = super::common::parse_graph_fingerprint(&semantic_input_hash, "invalid_graph_projection_basis")?;
-    state.query_graph_result_state(graph, hash).map_err(result_query_command_error)?
-        .map(crate::ipc::schema::result::graph_result_state_to_dto).transpose()
+    let hash = super::common::parse_graph_fingerprint(
+        &semantic_input_hash,
+        "invalid_graph_projection_basis",
+    )?;
+    state
+        .query_graph_result_state(graph, hash)
+        .map_err(result_query_command_error)?
+        .map(crate::ipc::schema::result::graph_result_state_to_dto)
+        .transpose()
 }
 
 fn result_requires_paging(result_id: ResultId, value_kind: &'static str) -> CommandError {

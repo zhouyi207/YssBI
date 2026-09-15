@@ -1,8 +1,8 @@
 //! Construct shared IPC channels and install their command contexts.
 
-use crate::execution::ApplicationState;
 use crate::ipc::channel::HarnessGraphClientHub;
 use crate::runtime::{HarnessServices, HarnessTransportPorts};
+use crate::session::ApplicationState;
 use std::sync::Arc;
 use tauri::Manager;
 use yss_ipc_channel::HarnessChannelHub;

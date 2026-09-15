@@ -1,0 +1,913 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
+
+use thiserror::Error;
+
+use super::execution_mapping::execution_package_from_graph;
+use super::finalization::{FinalizationError, finalize_successful_run};
+use super::inputs::build_resource_catalog;
+use crate::graph::catalog::capture_localized_project_facts;
+use crate::session::{
+    ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
+use yss_database_runtime::error::DatabaseError;
+use yss_database_runtime::session_api::catalog_snapshot;
+use yss_graph_document::GraphResourcePath;
+use yss_graph_execution::error::RunPhase;
+use yss_graph_execution::package_preparation::PackagePreparationError;
+use yss_graph_execution::plan::{
+    InvalidPlanIdentity, PlanExecutionDemand, PlanOutputRef, PlanProjectSessionId,
+    PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState, PlanResourceVersion,
+};
+use yss_graph_execution::run_registry::RunId;
+use yss_graph_execution::state::{
+    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, PreparedExecutionEvent,
+    RunExecutionControl,
+};
+use yss_project::ProjectOperationError;
+use yss_project::execution_authority::{
+    CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
+    ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
+    ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
+    ProjectResourceRequirement,
+};
+use yss_project_identity::ProjectInstanceId;
+use yss_project_model::ProjectData;
+
+/// A run demand is an Application-owned interpretation of the graph execution
+/// request. It contains only Pure Leaf graph/plan identities, never transport
+/// DTOs or a delivery target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RunDemand {
+    Default,
+    Outputs {
+        outputs: Box<[PlanOutputRef]>,
+        include_default_results: bool,
+    },
+    PinPreview {
+        output: PlanOutputRef,
+        generation: u64,
+    },
+}
+
+/// A run request is intentionally owned by the Application seam. It carries
+/// no transport data and no public RunId before execution has been admitted.
+#[derive(Debug)]
+pub struct RunGraphRequest {
+    project_instance_id: ProjectInstanceId,
+    graph_path: GraphResourcePath,
+    demand: RunDemand,
+    required_resources: Box<[ProjectResourceRequirement]>,
+    cancellation: Arc<AtomicBool>,
+    deadline: Instant,
+    compiled_artifact_id: [u8; 32],
+}
+
+impl RunGraphRequest {
+    pub fn new(
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        compiled_artifact_id: [u8; 32],
+    ) -> Self {
+        Self {
+            project_instance_id,
+            graph_path,
+            demand: RunDemand::Default,
+            required_resources: Box::new([]),
+            cancellation: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + std::time::Duration::from_secs(60),
+            compiled_artifact_id,
+        }
+    }
+
+    pub fn with_demand(mut self, demand: RunDemand) -> Self {
+        self.demand = demand;
+        self
+    }
+
+    pub fn with_required_resources(
+        mut self,
+        resources: impl IntoIterator<Item = ProjectResourceRequirement>,
+    ) -> Self {
+        self.required_resources = resources.into_iter().collect();
+        self
+    }
+
+    pub fn with_cancellation(mut self, cancellation: Arc<AtomicBool>) -> Self {
+        self.cancellation = cancellation;
+        self
+    }
+
+    pub fn with_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = deadline;
+        self
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancellation.load(Ordering::Acquire)
+    }
+
+    fn is_expired(&self) -> bool {
+        Instant::now() >= self.deadline
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunIdentity {
+    execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
+    graph_path: GraphResourcePath,
+    run_id: RunId,
+}
+
+impl RunIdentity {
+    fn new(
+        execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
+        graph_path: GraphResourcePath,
+        run_id: RunId,
+    ) -> Self {
+        Self {
+            execution_session_id,
+            graph_path,
+            run_id,
+        }
+    }
+
+    pub fn execution_session_id(&self) -> &yss_graph_execution::identity::ExecutionSessionId {
+        &self.execution_session_id
+    }
+
+    pub fn graph_path(&self) -> &GraphResourcePath {
+        &self.graph_path
+    }
+
+    pub const fn run_id(&self) -> RunId {
+        self.run_id
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RunApplicationEventKind {
+    RunStarted {
+        outputs: Box<[PlanOutputRef]>,
+    },
+    RunCompleted,
+    RunCancelled,
+    RunErrored {
+        failure: yss_graph_execution::error::RunFailure,
+    },
+    PinPreviewResultReady {
+        output: PlanOutputRef,
+        generation: u64,
+        result_id: yss_graph_execution::result::ResultId,
+    },
+    ResultInspectionRequested {
+        result_id: yss_graph_execution::result::ResultId,
+        source: yss_graph_execution::plan::PlanSourceIdentity,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RunApplicationEvent {
+    identity: RunIdentity,
+    kind: RunApplicationEventKind,
+}
+
+impl RunApplicationEvent {
+    fn new(identity: RunIdentity, kind: RunApplicationEventKind) -> Self {
+        Self { identity, kind }
+    }
+
+    pub fn identity(&self) -> &RunIdentity {
+        &self.identity
+    }
+
+    pub fn kind(&self) -> &RunApplicationEventKind {
+        &self.kind
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ExecutionApplicationError {
+    #[error("application session capture failed")]
+    SessionCapture(#[source] SessionCaptureError),
+    #[error("execution admission failed")]
+    Admission(#[source] ExecutionAdmissionError),
+    #[error("execution run was cancelled before the public RunId was published")]
+    Cancelled,
+    #[error("execution run deadline elapsed before the public RunId was published")]
+    DeadlineExceeded,
+    #[error("project execution preparation failed")]
+    ProjectPreparation(#[source] ProjectExecutionPreparationError),
+    #[error("project snapshot failed")]
+    ProjectSnapshot(#[source] ProjectOperationError),
+    #[error("project resource binding failed")]
+    ResourceBindings(#[source] ResourceBindingError),
+    #[error("project facts could not be captured for execution")]
+    ProjectFacts(#[source] crate::graph::catalog::ProjectCatalogReadError),
+    #[error("database catalog snapshot failed")]
+    DatabaseCatalog(#[source] DatabaseError),
+    #[error("compiled graph draft is unavailable or stale")]
+    CompiledDraftUnavailable,
+    #[error("graph contract mapping failed")]
+    GraphContract(#[source] crate::graph::inputs::GraphContractMappingError),
+    #[error("graph execution package mapping failed")]
+    GraphPackage(#[source] crate::graph::execution_mapping::GraphPackageMappingError),
+    #[error("execution package preparation failed")]
+    PackagePreparation(#[source] PackagePreparationError),
+    #[error("prepared execution failed")]
+    PreparedExecution(#[source] ExecutePreparedError),
+    #[error("project effect preparation failed")]
+    ProjectEffectPreparation(#[source] ProjectEffectCommitError),
+    #[error("project effect finalization failed")]
+    ProjectEffectFinalization(#[source] ProjectEffectCommitError),
+    #[error("execution finalization failed")]
+    Finalization(#[source] FinalizationError),
+    #[error("execution run terminal publication failed")]
+    RunFinalization(#[source] yss_graph_execution::run_registry::RunRegistryError),
+    #[error("captured application session is stale")]
+    StaleSession(#[source] SessionRevalidationError),
+}
+
+#[derive(Debug, Error)]
+pub enum ResourceBindingError {
+    #[error("project dataset snapshot is unavailable")]
+    Dataset(#[source] yss_database_runtime::error::DatabaseError),
+    #[error("present resource has no version")]
+    MissingVersion { resource: ProjectResourceId },
+    #[error("project value contains an invalid Execution identity")]
+    Identity(#[source] InvalidPlanIdentity),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CancelRunOutcome {
+    NotFound,
+    AlreadyCancelled,
+    AlreadyTerminal,
+    Requested,
+}
+
+/// Execute one graph through the session-bound Application/Graph/Execution
+/// owners. The no-sink overload is kept for non-transport callers; commands
+/// use `run_graph_with_sink` to attach the ordered run channel.
+pub fn run_graph(
+    state: &ApplicationState,
+    request: RunGraphRequest,
+) -> Result<RunId, ExecutionApplicationError> {
+    run_graph_with_sink(state, request, |_| true)
+}
+
+pub fn run_graph_with_sink<D>(
+    state: &ApplicationState,
+    request: RunGraphRequest,
+    mut deliver: D,
+) -> Result<RunId, ExecutionApplicationError>
+where
+    D: FnMut(RunApplicationEvent) -> bool + Send,
+{
+    let captured = state
+        .capture_session()
+        .map_err(ExecutionApplicationError::SessionCapture)?;
+    let _execution_admission = captured
+        .execution()
+        .admit()
+        .map_err(ExecutionApplicationError::Admission)?;
+
+    check_control(&request)?;
+
+    let initial_data = captured
+        .project()
+        .get_data()
+        .map_err(ExecutionApplicationError::ProjectSnapshot)?;
+    let compiled_draft = captured
+        .graph()
+        .compiled_draft(&request.graph_path, &request.compiled_artifact_id)
+        .ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
+    if compiled_draft.analysis().kernel_fingerprint()
+        != &captured.execution().kernels().fingerprint().as_bytes()
+    {
+        return Err(ExecutionApplicationError::CompiledDraftUnavailable);
+    }
+    let required_resources = merge_resource_requirements(
+        request.required_resources.iter().cloned(),
+        graph_resource_requirements(
+            &initial_data,
+            &request.graph_path,
+            Some(compiled_draft.document()),
+        )?,
+    );
+
+    let project_request = ProjectExecutionRequest::new(
+        request.project_instance_id.clone(),
+        request.graph_path.clone(),
+    )
+    .with_required_resources(required_resources.iter().cloned());
+    let prepared_project = captured
+        .project()
+        .prepare_execution(project_request)
+        .map_err(ExecutionApplicationError::ProjectPreparation)?;
+
+    check_control(&request)?;
+
+    let project_facts = capture_localized_project_facts(&captured)
+        .map_err(ExecutionApplicationError::ProjectFacts)?;
+    let database_facts = catalog_snapshot(captured.database())
+        .map_err(ExecutionApplicationError::DatabaseCatalog)?;
+    let validated_graph_catalog =
+        build_resource_catalog(project_facts.resources().graph(), &database_facts)
+            .map_err(ExecutionApplicationError::GraphContract)?;
+    let validated_graph_catalog = crate::graph::inputs::capture_function_dependencies(
+        &captured,
+        compiled_draft.document(),
+        validated_graph_catalog,
+    )
+    .map_err(ExecutionApplicationError::GraphContract)?;
+    if !validated_graph_catalog
+        .matches_dependencies(compiled_draft.analysis().semantic_snapshot().dependencies())
+    {
+        return Err(ExecutionApplicationError::CompiledDraftUnavailable);
+    }
+    let result_basis = captured
+        .execution()
+        .capture_result_run_basis(
+            request.graph_path.as_str(),
+            crate::graph::inputs::graph_result_inputs(
+                &request.graph_path,
+                compiled_draft.analysis(),
+                &database_facts,
+                captured.graph().registry_fingerprint(),
+            ),
+        )
+        .ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
+    let basis = plan_basis(&captured, prepared_project.resources().grants())?;
+    let graph_package = compiled_draft.package().clone();
+    let package = execution_package_from_graph(graph_package, basis)
+        .map_err(ExecutionApplicationError::GraphPackage)?;
+    let prepared_plan = captured
+        .execution()
+        .prepare_compiled_package(package, captured.runtime_generation())
+        .map_err(ExecutionApplicationError::PackagePreparation)?;
+    let bindings = map_project_resource_facts(&captured, prepared_project.resources().grants())
+        .map_err(ExecutionApplicationError::ResourceBindings)?;
+
+    check_control(&request)?;
+    revalidate_final_session(state, &captured)?;
+
+    let control =
+        RunExecutionControl::with_cancellation(Arc::clone(&request.cancellation), request.deadline);
+    let plan_demand = match &request.demand {
+        RunDemand::Default => PlanExecutionDemand::Default,
+        RunDemand::Outputs {
+            outputs,
+            include_default_results,
+        } => PlanExecutionDemand::Outputs {
+            outputs: outputs.clone(),
+            include_default_results: *include_default_results,
+        },
+        RunDemand::PinPreview { output, .. } => PlanExecutionDemand::Outputs {
+            outputs: vec![output.clone()].into_boxed_slice(),
+            include_default_results: false,
+        },
+    };
+    let mut started_identity = None;
+    let executed = match captured.execution().execute_prepared_handoff(
+        &prepared_plan,
+        bindings,
+        captured.resource_provider_factory(),
+        &control,
+        &plan_demand,
+        Some(&result_basis),
+        |event| match event {
+            PreparedExecutionEvent::RunStarted { run_id, outputs } => {
+                let identity = RunIdentity::new(
+                    captured.execution().session_id(),
+                    request.graph_path.clone(),
+                    run_id,
+                );
+                started_identity = Some(identity.clone());
+                let _ = deliver(RunApplicationEvent::new(
+                    identity,
+                    RunApplicationEventKind::RunStarted { outputs },
+                ));
+            }
+        },
+    ) {
+        Ok(executed) => executed,
+        Err(error) => {
+            if let Some(identity) = started_identity {
+                let kind = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
+                    RunApplicationEventKind::RunCancelled
+                } else {
+                    RunApplicationEventKind::RunErrored {
+                        failure: error.failure(),
+                    }
+                };
+                let _ = deliver(RunApplicationEvent::new(identity, kind));
+            }
+            return Err(ExecutionApplicationError::PreparedExecution(error));
+        }
+    };
+    let run_id = executed.run_id();
+    let identity = started_identity.unwrap_or_else(|| {
+        RunIdentity::new(
+            captured.execution().session_id(),
+            request.graph_path.clone(),
+            run_id,
+        )
+    });
+
+    let prepared_effects = match captured.project().prepare_execution_effects(
+        prepared_project.authority(),
+        CandidateProjectEffects::new(prepared_project.resources().grants().iter().cloned()),
+    ) {
+        Ok(effects) => effects,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                terminal_kind_for_effect_error(&error),
+            );
+            return Err(ExecutionApplicationError::ProjectEffectPreparation(error));
+        }
+    };
+    let committed_effects = match captured.project().finalize_execution_effects(
+        prepared_effects,
+        &ProjectEffectCommitControl::new(Arc::clone(&request.cancellation), request.deadline),
+    ) {
+        Ok(effects) => effects,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                terminal_kind_for_effect_error(&error),
+            );
+            return Err(ExecutionApplicationError::ProjectEffectFinalization(error));
+        }
+    };
+    let outcome = match finalize_successful_run(executed.into_handoff()) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            publish_run_failure(
+                captured.execution(),
+                run_id,
+                &identity,
+                &mut deliver,
+                RunApplicationEventKind::RunErrored {
+                    failure: finalization_failure(),
+                },
+            );
+            return Err(ExecutionApplicationError::Finalization(error));
+        }
+    };
+    if !captured
+        .execution()
+        .publish_committed_results(outcome.handoff())
+    {
+        publish_run_failure(
+            captured.execution(),
+            run_id,
+            &identity,
+            &mut deliver,
+            RunApplicationEventKind::RunCancelled,
+        );
+        return Err(ExecutionApplicationError::Cancelled);
+    }
+    if let Err(error) = captured.execution().finalize_run_success(run_id) {
+        publish_run_failure(
+            captured.execution(),
+            run_id,
+            &identity,
+            &mut deliver,
+            RunApplicationEventKind::RunErrored {
+                failure: finalization_failure(),
+            },
+        );
+        return Err(ExecutionApplicationError::RunFinalization(error));
+    }
+
+    for inspection in outcome.inspection_requests() {
+        let _ = deliver(RunApplicationEvent::new(
+            identity.clone(),
+            RunApplicationEventKind::ResultInspectionRequested {
+                result_id: inspection.result_id(),
+                source: inspection.requester().clone(),
+            },
+        ));
+    }
+    if let RunDemand::PinPreview { output, generation } = &request.demand
+        && let Some(result) = outcome
+            .results()
+            .iter()
+            .find(|result| result.output() == output)
+    {
+        let _ = deliver(RunApplicationEvent::new(
+            identity.clone(),
+            RunApplicationEventKind::PinPreviewResultReady {
+                output: output.clone(),
+                generation: *generation,
+                result_id: result.result_id(),
+            },
+        ));
+    }
+    let _ = deliver(RunApplicationEvent::new(
+        identity,
+        RunApplicationEventKind::RunCompleted,
+    ));
+    drop(committed_effects);
+    Ok(run_id)
+}
+
+pub fn cancel_run(
+    state: &ApplicationState,
+    run_id: RunId,
+) -> Result<CancelRunOutcome, ExecutionApplicationError> {
+    let captured = state
+        .capture_session()
+        .map_err(ExecutionApplicationError::SessionCapture)?;
+    Ok(match captured.execution().cancel_run(run_id) {
+        ExecutionCancelOutcome::NotFound => CancelRunOutcome::NotFound,
+        ExecutionCancelOutcome::AlreadyCancelled => CancelRunOutcome::AlreadyCancelled,
+        ExecutionCancelOutcome::AlreadyTerminal => CancelRunOutcome::AlreadyTerminal,
+        ExecutionCancelOutcome::Requested => CancelRunOutcome::Requested,
+    })
+}
+
+fn check_control(request: &RunGraphRequest) -> Result<(), ExecutionApplicationError> {
+    if request.is_cancelled() {
+        return Err(ExecutionApplicationError::Cancelled);
+    }
+    if request.is_expired() {
+        return Err(ExecutionApplicationError::DeadlineExceeded);
+    }
+    Ok(())
+}
+
+fn terminal_kind_for_effect_error(error: &ProjectEffectCommitError) -> RunApplicationEventKind {
+    match error {
+        ProjectEffectCommitError::Cancelled => RunApplicationEventKind::RunCancelled,
+        _ => RunApplicationEventKind::RunErrored {
+            failure: finalization_failure(),
+        },
+    }
+}
+
+fn finalization_failure() -> yss_graph_execution::error::RunFailure {
+    yss_graph_execution::error::RunFailure {
+        code: yss_graph_execution::error::RunFailureCode::FinalizationFailed,
+        phase: RunPhase::Finalization,
+        source: None,
+    }
+}
+
+fn publish_run_failure<D>(
+    execution: &yss_graph_execution::state::ExecutionRuntimeState,
+    run_id: RunId,
+    identity: &RunIdentity,
+    deliver: &mut D,
+    terminal: RunApplicationEventKind,
+) where
+    D: FnMut(RunApplicationEvent) -> bool + Send,
+{
+    if matches!(&terminal, RunApplicationEventKind::RunCancelled) {
+        let _ = execution.finalize_run_cancelled(run_id);
+    } else {
+        let _ = execution.finalize_run_failure(run_id);
+    }
+    let _ = deliver(RunApplicationEvent::new(identity.clone(), terminal));
+}
+
+fn revalidate_final_session(
+    state: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+) -> Result<(), ExecutionApplicationError> {
+    state
+        .revalidate_captured_session(captured)
+        .map_err(ExecutionApplicationError::StaleSession)
+}
+
+fn merge_resource_requirements(
+    first: impl IntoIterator<Item = ProjectResourceRequirement>,
+    second: impl IntoIterator<Item = ProjectResourceRequirement>,
+) -> Vec<ProjectResourceRequirement> {
+    let mut resources = BTreeMap::new();
+    for requirement in first.into_iter().chain(second) {
+        resources.insert(requirement.resource().as_str().to_owned(), requirement);
+    }
+    resources.into_values().collect()
+}
+
+fn graph_resource_requirements(
+    data: &ProjectData,
+    graph_path: &GraphResourcePath,
+    draft: Option<&yss_graph_document::GraphDocument>,
+) -> Result<Vec<ProjectResourceRequirement>, ExecutionApplicationError> {
+    let document = match draft {
+        Some(document) => document,
+        None => {
+            let Some(graph) = data.graphs.get(graph_path) else {
+                return Ok(Vec::new());
+            };
+            &graph.document
+        }
+    };
+    let mut requirements = Vec::new();
+    for value in document
+        .nodes
+        .values()
+        .flat_map(|node| node.parameters.values())
+    {
+        collect_resource_requirements(value, &mut requirements)?;
+    }
+    Ok(requirements)
+}
+
+fn collect_resource_requirements(
+    value: &serde_json::Value,
+    requirements: &mut Vec<ProjectResourceRequirement>,
+) -> Result<(), ExecutionApplicationError> {
+    match value {
+        serde_json::Value::String(value) => {
+            let kind = if value.starts_with("databases/") {
+                ProjectResourceKind::DataFrame
+            } else if value.starts_with("events/") || value.starts_with("functions/") {
+                ProjectResourceKind::File
+            } else {
+                return Ok(());
+            };
+            let resource =
+                ProjectResourceId::new(value.clone().into_boxed_str()).map_err(|_| {
+                    ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
+                        InvalidPlanIdentity::Empty,
+                    ))
+                })?;
+            requirements.push(ProjectResourceRequirement::new(
+                resource,
+                kind,
+                ProjectResourceAccess::Shared,
+                false,
+            ));
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_resource_requirements(value, requirements)?;
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                collect_resource_requirements(value, requirements)?;
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
+    Ok(())
+}
+
+fn plan_basis(
+    captured: &ApplicationSession,
+    grants: &[ProjectResourceGrant],
+) -> Result<yss_graph_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
+    let mut versions = BTreeMap::new();
+    let mut observations = BTreeMap::new();
+    for grant in grants {
+        let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
+            .map_err(|_| {
+            ExecutionApplicationError::ResourceBindings(ResourceBindingError::Identity(
+                InvalidPlanIdentity::Empty,
+            ))
+        })?;
+        let version = grant
+            .version()
+            .map(|version| PlanResourceVersion::from_existing(version.get().to_string().into()));
+        if let Some(version) = version.clone() {
+            versions.insert(resource.clone(), version.clone());
+        }
+        observations.insert(
+            resource,
+            match grant.presence() {
+                ProjectResourcePresence::Present => {
+                    PlanResourceObservedState::Present(version.ok_or_else(|| {
+                        ExecutionApplicationError::ResourceBindings(
+                            ResourceBindingError::MissingVersion {
+                                resource: grant.resource().clone(),
+                            },
+                        )
+                    })?)
+                }
+                ProjectResourcePresence::Absent => PlanResourceObservedState::Absent(version),
+            },
+        );
+    }
+    Ok(yss_graph_execution::plan::PlanCompilationBasis::new(
+        PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+        PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
+        captured.execution().kernels().fingerprint(),
+        versions,
+        observations,
+    ))
+}
+
+fn map_project_resource_facts(
+    captured: &ApplicationSession,
+    grants: &[ProjectResourceGrant],
+) -> Result<yss_graph_execution::resource_preparation::RunResourceBindings, ResourceBindingError> {
+    let mut requirements = Vec::new();
+    let mut bindings = Vec::new();
+    for grant in grants {
+        let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
+            .map_err(|_| ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
+        let kind = match grant.kind() {
+            ProjectResourceKind::DatabaseConnection => {
+                yss_graph_execution::plan::ResourceKind::DatabaseConnection
+            }
+            ProjectResourceKind::DataFrame => yss_graph_execution::plan::ResourceKind::DataFrame,
+            ProjectResourceKind::File => yss_graph_execution::plan::ResourceKind::File,
+            ProjectResourceKind::Plot => yss_graph_execution::plan::ResourceKind::Plot,
+        };
+        let access = match grant.access() {
+            ProjectResourceAccess::Shared => yss_graph_execution::plan::ResourceAccess::Shared,
+            ProjectResourceAccess::Exclusive => {
+                yss_graph_execution::plan::ResourceAccess::Exclusive
+            }
+        };
+        let requirement = yss_graph_execution::plan::PlanResourceRequirement::new(
+            resource.clone(),
+            kind,
+            access,
+            grant.optional(),
+        );
+        requirements.push(requirement.clone());
+        if grant.presence() != ProjectResourcePresence::Present {
+            continue;
+        }
+        let version = grant
+            .version()
+            .ok_or_else(|| ResourceBindingError::MissingVersion {
+                resource: grant.resource().clone(),
+            })?;
+        let value = if grant.kind() == ProjectResourceKind::DataFrame {
+            let id = resource
+                .as_str()
+                .strip_prefix("databases/")
+                .filter(|id| !id.is_empty())
+                .ok_or(ResourceBindingError::Identity(InvalidPlanIdentity::Empty))?;
+            let relation = captured
+                .database()
+                .capture_relation(
+                    &yss_database_contract::DatabaseId::from_existing(id.into()),
+                    version.get(),
+                )
+                .map_err(ResourceBindingError::Dataset)?;
+            yss_graph_execution::value::RuntimeValue::Relation(relation)
+        } else {
+            yss_graph_execution::value::RuntimeValue::Resource(resource.as_str().into())
+        };
+        bindings.push(
+            yss_graph_execution::resource_preparation::RunResourceBinding::new(
+                requirement,
+                PlanResourceVersion::from_existing(version.get().to_string().into()),
+                value,
+            ),
+        );
+    }
+    Ok(
+        yss_graph_execution::resource_preparation::RunResourceBindings::new(
+            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+            requirements,
+            bindings,
+        ),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::ApplicationSessionEpoch;
+    use std::num::NonZeroU64;
+    use yss_database_contract::{
+        DatabaseDecl, DatabaseDeclarationObservation, DatabaseDeclarationObservationSet,
+        DatabaseId, DatabaseSessionIdentity, DatabaseSessionOpenRequest,
+    };
+    use yss_database_runtime::runtime::DatabaseRuntimeRegistry;
+    use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
+    use yss_graph_execution::resource_preparation::ResourceProviderFactory;
+    use yss_graph_execution::state::ExecutionRuntimeState;
+    use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+    use yss_node_catalog::build_builtin_node_system;
+    use yss_project::ProjectState;
+    use yss_project_identity::ProjectSessionId;
+
+    fn session(epoch: u64) -> Arc<ApplicationSession> {
+        let project_session_id = ProjectSessionId::new(format!("session-{epoch}"));
+        let execution_session_id = ExecutionSessionId::new(uuid::Uuid::from_u128(epoch as u128));
+        let project = Arc::new(ProjectState::new());
+        let builtin = build_builtin_node_system().expect("test built-ins are valid");
+        let graph = Arc::new(
+            GraphRuntimeState::from_components(
+                GraphRuntimeEpoch::from_existing(epoch),
+                GraphRuntimeComponents {
+                    registry: builtin.registry,
+                    catalog: builtin.catalog,
+                },
+            )
+            .unwrap(),
+        );
+        let observations = DatabaseDeclarationObservationSet::try_from_iter(std::iter::empty::<(
+            DatabaseId,
+            DatabaseDeclarationObservation,
+        )>())
+        .expect("empty observation set is valid");
+        let database = Arc::new(
+            DatabaseRuntimeRegistry::new()
+                .open_session(DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing(project_session_id.as_str().into()),
+                    NonZeroU64::new(1).expect("non-zero test generation"),
+                    None,
+                    Vec::<DatabaseDecl>::new().into(),
+                    observations,
+                ))
+                .expect("empty database session is valid"),
+        );
+        let execution = Arc::new(ExecutionRuntimeState::new(
+            execution_session_id,
+            RuntimeGeneration::from_existing(epoch),
+            yss_graph_execution::kernels::KernelRegistry::default().into(),
+        ));
+        let resource_provider_factory = Arc::new(ResourceProviderFactory::new(
+            project_session_id.as_str().into(),
+        ));
+        Arc::new(ApplicationSession::new_for_test(
+            ApplicationSessionEpoch::from_existing(epoch),
+            ProjectInstanceId::from_existing(format!("project-{epoch}")),
+            project_session_id,
+            execution_session_id,
+            RuntimeGeneration::from_existing(epoch),
+            project,
+            graph,
+            execution,
+            database,
+            resource_provider_factory,
+        ))
+    }
+
+    #[test]
+    fn stale_captured_session_is_rejected_at_the_final_gate() {
+        let slot = Arc::new(crate::session::ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        ));
+        let first = session(1);
+        slot.publish_for_test(Arc::clone(&first));
+        let state = ApplicationState::new(Arc::clone(&slot));
+        let captured = state.capture_session().expect("session is active");
+        slot.publish_for_test(session(2));
+
+        assert!(matches!(
+            revalidate_final_session(&state, &captured),
+            Err(ExecutionApplicationError::StaleSession(
+                SessionRevalidationError::Changed
+            ))
+        ));
+    }
+
+    #[test]
+    fn anonymous_admission_and_cancellation_leave_no_public_run() {
+        let slot = Arc::new(crate::session::ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        ));
+        let active = session(1);
+        slot.publish_for_test(Arc::clone(&active));
+        let state = ApplicationState::new(slot);
+        let run_id = RunId::from_existing(41);
+        let cancellation = Arc::new(AtomicBool::new(true));
+        let request = RunGraphRequest::new(
+            active.project_instance_id().clone(),
+            GraphResourcePath::new("events/cancel.yssbi-event").expect("valid graph path"),
+            [1; 32],
+        )
+        .with_cancellation(cancellation);
+
+        assert!(matches!(
+            run_graph(&state, request),
+            Err(ExecutionApplicationError::Cancelled)
+        ));
+        assert_eq!(active.execution().runs().state(run_id), None);
+
+        active.execution().close_admission();
+        let request = RunGraphRequest::new(
+            active.project_instance_id().clone(),
+            GraphResourcePath::new("events/admission.yssbi-event").expect("valid graph path"),
+            [1; 32],
+        );
+        assert!(matches!(
+            run_graph(&state, request),
+            Err(ExecutionApplicationError::Admission(
+                ExecutionAdmissionError::Closed
+            ))
+        ));
+        assert_eq!(active.execution().runs().state(run_id), None);
+    }
+}

@@ -17,6 +17,23 @@ pub struct GraphResultStateDto {
     pub semantic_input_hash: String,
     pub compiled_artifact_id: Option<String>,
     pub outputs: Box<[OutputResultStateDto]>,
+    pub connections: Box<[ConnectionResultStateDto]>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionResultStateDto {
+    pub output: GraphOutputRefDto,
+    pub input: PortAddressDto,
+    pub state: ConnectionCacheStateDto,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectionCacheStateDto {
+    New,
+    Stale,
+    Valid,
 }
 
 #[derive(Debug, Serialize)]

@@ -5,8 +5,8 @@ use yss_node_catalog::{LocalizedCatalog, NodeCreation};
 use yss_plugin_protocol::InstalledPlugin;
 use yss_project_identity::ProjectInstanceId;
 
-use crate::catalog_query::{CatalogQueryApplicationError, LocalizedCatalogRequest};
-use crate::execution::ApplicationState;
+use crate::graph::catalog::{CatalogQueryApplicationError, LocalizedCatalogRequest};
+use crate::session::ApplicationState;
 
 #[derive(Debug)]
 pub enum ActivityText {
@@ -219,7 +219,7 @@ pub fn project_activity_panel(index: Option<&yss_project::ProjectIndex>) -> Acti
 }
 
 pub(crate) fn nodes_activity_panel_from_catalog(
-    result: crate::catalog_query::CatalogQueryResult,
+    result: crate::graph::catalog::CatalogQueryResult,
 ) -> ActivityPanelDocument {
     let (project, _, revision, catalog) = result.into_transport_parts().into_fields();
     let mut document = ActivityPanelDocument::new("nodes", "activityBar.nodes");

@@ -11,12 +11,16 @@ use crate::finalization::{
     SuccessfulExecutionCandidate,
 };
 use crate::identity::{ExecutionSessionId, RuntimeGeneration};
+use crate::kernels::{KernelInvocation, KernelRegistry};
 use crate::package_preparation::PreparedExecutionPlan;
 use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
-use crate::result::{GraphResultInputs, ResultCacheState, ResultId, ResultProvenance, ResultRunBasis, StoredResult, StoredResultSnapshot};
+use crate::result::{
+    GraphResultCacheState, GraphResultInputs, ResultId, ResultProvenance, ResultRunBasis,
+    StoredResult, StoredResultSnapshot,
+};
 use crate::result_store::ResultStore;
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
@@ -58,6 +62,8 @@ impl RunExecutionControl {
 
 #[derive(Debug, Error)]
 pub enum ExecutePreparedError {
+    #[error("prepared execution belongs to another kernel capability version")]
+    KernelCapabilitiesChanged,
     #[error("prepared execution belongs to another runtime generation")]
     RuntimeGenerationMismatch {
         expected: RuntimeGeneration,
@@ -215,7 +221,7 @@ trait PreparedPlanExecutor: Send + Sync {
 }
 
 struct NeutralPlanExecutor {
-    kernels: KernelRegistry,
+    kernels: Arc<KernelRegistry>,
 }
 
 impl PreparedPlanExecutor for NeutralPlanExecutor {
@@ -302,7 +308,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .kernels
                 .execute(
                     operation.kernel_id(),
-                    &PreparedKernelInvocation {
+                    &KernelInvocation {
                         inputs: &inputs,
                         input_slots: operation.inputs(),
                         parameters: operation
@@ -610,26 +616,6 @@ fn apply_input_coercions(
     Ok(value)
 }
 
-pub(crate) struct PreparedKernelInvocation<'a> {
-    pub inputs: &'a [RuntimeValue],
-    pub input_slots: &'a [crate::plan::PlanInputBinding],
-    pub parameters:
-        BTreeMap<crate::plan::PlanParameterFieldId, &'a crate::plan::PlanParameterValue>,
-    pub resources: &'a PreparedRunResources,
-    pub outputs: &'a [crate::plan::PlanOutputBinding],
-    pub specialization: &'a crate::plan::PlanKernelSpecialization,
-    pub control: &'a RunExecutionControl,
-}
-
-impl PreparedKernelInvocation<'_> {
-    pub fn parameter(&self, key: &str) -> Option<&crate::plan::PlanParameterValue> {
-        self.parameters
-            .iter()
-            .find(|(field, _)| field.as_str() == key)
-            .map(|(_, value)| *value)
-    }
-}
-
 #[derive(Clone, Copy)]
 enum BuiltinKernel {
     Statistical(crate::statistics::StatisticalKernel),
@@ -650,108 +636,115 @@ enum BuiltinKernel {
     Identity,
 }
 
-struct KernelRegistry {
-    kernels: BTreeMap<crate::plan::KernelId, BuiltinKernel>,
-}
-
-/// Compile admission uses the same registry that dispatches execution.
-pub fn supports_kernel(id: &str) -> bool {
-    KernelRegistry::default()
-        .kernels
-        .contains_key(&crate::plan::KernelId::from_existing(id.into()))
-}
-
-impl Default for KernelRegistry {
-    fn default() -> Self {
-        use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
-        use BuiltinKernel::*;
-        use NumericOperation::{Add, Divide, Multiply, Subtract};
-        Self {
-            kernels: [
-                ("yssbi.statistics.ols.fit", Statistical(OlsFit)),
-                ("yssbi.statistics.ols.summary", Statistical(OlsSummary)),
-                (
-                    "yssbi.dataframe.source.get",
-                    Relational(crate::relational::RelationalKernel::Source),
-                ),
-                (
-                    "yssbi.dataframe.project",
-                    Relational(crate::relational::RelationalKernel::Project),
-                ),
-                (
-                    "yssbi.dataframe.filter.rows",
-                    Relational(crate::relational::RelationalKernel::Filter),
-                ),
-                (
-                    "yssbi.dataframe.series.select",
-                    Relational(crate::relational::RelationalKernel::Series),
-                ),
-                ("yssbi.dataframe.decompose", Decompose),
-                (
-                    "yssbi.dataframe.limit",
-                    Relational(crate::relational::RelationalKernel::Limit),
-                ),
-                (
-                    "yssbi.dataframe.rename",
-                    Relational(crate::relational::RelationalKernel::Rename),
-                ),
-                ("yssbi.constant.get", Constant),
-                ("yssbi.numeric.add", Numeric(Add)),
-                ("yssbi.numeric.subtract", Numeric(Subtract)),
-                ("yssbi.numeric.multiply", Numeric(Multiply)),
-                ("yssbi.numeric.divide", Numeric(Divide)),
-                ("yssbi.logic.and", And),
-                ("yssbi.logic.or", Or),
-                ("yssbi.logic.not", Not),
-                ("yssbi.compare.equal", Equal),
-                ("yssbi.compare.not_equal", NotEqual),
-                ("yssbi.compare.less", Less),
-                ("yssbi.compare.less_equal", LessEqual),
-                ("yssbi.compare.greater", Greater),
-                ("yssbi.compare.greater_equal", GreaterEqual),
-                ("yssbi.value.convert", Convert),
-                ("yssbi.debug.view", Identity),
-                ("yssbi.core.reroute", Identity),
-            ]
-            .into_iter()
-            .map(|(id, kernel)| (crate::plan::KernelId::from_existing(id.into()), kernel))
-            .collect(),
-        }
-    }
-}
-
-impl KernelRegistry {
-    fn execute(
-        &self,
-        id: &crate::plan::KernelId,
-        invocation: &PreparedKernelInvocation<'_>,
-    ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
-        execute_kernel(
-            *self
-                .kernels
-                .get(id)
-                .ok_or(KernelExecutionError::KernelNotFound)?,
-            invocation,
+pub(crate) fn register_builtin_kernels(builder: &mut crate::kernels::KernelRegistryBuilder) {
+    use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
+    use BuiltinKernel::*;
+    use NumericOperation::{Add, Divide, Multiply, Subtract};
+    let entries: &[(
+        &str,
+        BuiltinKernel,
+        &[&str],
+        std::ops::RangeInclusive<usize>,
+    )] = &[
+        (
+            "yssbi.statistics.ols.fit",
+            Statistical(OlsFit),
+            &["configuration"],
+            3..=3,
+        ),
+        (
+            "yssbi.statistics.ols.summary",
+            Statistical(OlsSummary),
+            &["configuration"],
+            2..=2,
+        ),
+        (
+            "yssbi.dataframe.source.get",
+            Relational(crate::relational::RelationalKernel::Source),
+            &["dataframe"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.project",
+            Relational(crate::relational::RelationalKernel::Project),
+            &["columns"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.filter.rows",
+            Relational(crate::relational::RelationalKernel::Filter),
+            &["predicate"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.select",
+            Relational(crate::relational::RelationalKernel::Series),
+            &["column"],
+            1..=1,
+        ),
+        ("yssbi.dataframe.decompose", Decompose, &[], 0..=usize::MAX),
+        (
+            "yssbi.dataframe.limit",
+            Relational(crate::relational::RelationalKernel::Limit),
+            &["rows"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.rename",
+            Relational(crate::relational::RelationalKernel::Rename),
+            &["from", "to"],
+            1..=1,
+        ),
+        ("yssbi.constant.get", Constant, &["value"], 1..=1),
+        ("yssbi.numeric.add", Numeric(Add), &[], 1..=1),
+        ("yssbi.numeric.subtract", Numeric(Subtract), &[], 1..=1),
+        ("yssbi.numeric.multiply", Numeric(Multiply), &[], 1..=1),
+        ("yssbi.numeric.divide", Numeric(Divide), &[], 1..=1),
+        ("yssbi.logic.and", And, &[], 1..=1),
+        ("yssbi.logic.or", Or, &[], 1..=1),
+        ("yssbi.logic.not", Not, &[], 1..=1),
+        ("yssbi.compare.equal", Equal, &[], 1..=1),
+        ("yssbi.compare.not_equal", NotEqual, &[], 1..=1),
+        ("yssbi.compare.less", Less, &[], 1..=1),
+        ("yssbi.compare.less_equal", LessEqual, &[], 1..=1),
+        ("yssbi.compare.greater", Greater, &[], 1..=1),
+        ("yssbi.compare.greater_equal", GreaterEqual, &[], 1..=1),
+        ("yssbi.value.convert", Convert, &["target_type"], 1..=1),
+        ("yssbi.debug.view", Identity, &[], 0..=0),
+        ("yssbi.core.reroute", Identity, &[], 1..=1),
+    ];
+    for (id, kind, parameters, outputs) in entries {
+        let kind = *kind;
+        let contract = crate::kernels::KernelContract::new(
+            parameters.iter().map(|field| {
+                crate::plan::PlanParameterFieldId::new((*field).into())
+                    .expect("built-in parameter identity")
+            }),
+            outputs.clone(),
         )
+        .expect("built-in kernel contract");
+        builder
+            .register(
+                crate::plan::KernelId::new((*id).into()).expect("built-in kernel identity"),
+                std::num::NonZeroU32::new(1).expect("built-in implementation revision"),
+                contract,
+                move |invocation| execute_kernel(kind, invocation),
+            )
+            .expect("built-in kernels have distinct identities");
     }
 }
 
 fn execute_kernel(
     kind: BuiltinKernel,
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
-    let PreparedKernelInvocation {
+    let KernelInvocation {
         inputs,
         resources,
         outputs,
         specialization,
-        control,
         ..
     } = invocation;
-    check_kernel_control(control)?;
-    if inputs.len() != invocation.input_slots.len() {
-        return Err(KernelExecutionError::Failed);
-    }
     let value = match kind {
         BuiltinKernel::Statistical(kind) => {
             return crate::statistics::execute(kind, invocation);
@@ -786,6 +779,7 @@ fn execute_kernel(
                 .coerce_to(target)
                 .map_err(|_| KernelExecutionError::Failed)
         }
+        BuiltinKernel::Identity if outputs.is_empty() => return Ok(BTreeMap::new()),
         BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelExecutionError::Failed),
     }?;
     let [output] = outputs else {
@@ -1004,25 +998,31 @@ pub struct ExecutionRuntimeState {
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
     results: ResultStore,
     runs: RunRegistry,
-    executor: Arc<dyn PreparedPlanExecutor>,
+    executor: NeutralPlanExecutor,
     active_controls: Mutex<BTreeMap<crate::run_registry::RunId, Arc<AtomicBool>>>,
     next_result_id: AtomicU64,
 }
 
 impl ExecutionRuntimeState {
-    pub fn new(session_id: ExecutionSessionId, generation: RuntimeGeneration) -> Self {
+    pub fn new(
+        session_id: ExecutionSessionId,
+        generation: RuntimeGeneration,
+        kernels: Arc<KernelRegistry>,
+    ) -> Self {
         Self {
             session_id,
             generation,
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
             results: ResultStore::new(),
             runs: RunRegistry::new(),
-            executor: Arc::new(NeutralPlanExecutor {
-                kernels: KernelRegistry::default(),
-            }),
+            executor: NeutralPlanExecutor { kernels },
             active_controls: Mutex::new(BTreeMap::new()),
             next_result_id: AtomicU64::new(1),
         }
+    }
+
+    pub fn kernels(&self) -> &KernelRegistry {
+        &self.executor.kernels
     }
 
     pub fn session_id(&self) -> ExecutionSessionId {
@@ -1078,7 +1078,7 @@ impl ExecutionRuntimeState {
             PreparedExecutionDispatch {
                 demand: &crate::plan::PlanExecutionDemand::Default,
                 result_basis: None,
-                executor: self.executor.as_ref(),
+                executor: &self.executor,
                 on_event: None,
             },
         )?;
@@ -1105,7 +1105,7 @@ impl ExecutionRuntimeState {
             PreparedExecutionDispatch {
                 demand,
                 result_basis,
-                executor: self.executor.as_ref(),
+                executor: &self.executor,
                 on_event: Some(&mut on_event),
             },
         )
@@ -1127,6 +1127,10 @@ impl ExecutionRuntimeState {
             mut on_event,
         } = dispatch;
         let actual_generation = self.generation();
+        if plan.package().provenance().basis().kernel_fingerprint() != self.kernels().fingerprint()
+        {
+            return Err(ExecutePreparedError::KernelCapabilitiesChanged);
+        }
         let plan_generation = plan.generation();
         if actual_generation != plan_generation {
             return Err(ExecutePreparedError::RuntimeGenerationMismatch {
@@ -1206,16 +1210,14 @@ impl ExecutionRuntimeState {
             return result;
         }
 
-        let output = match executor.execute(
-            PreparedPlanExecution {
-                package: plan.package(),
-                bindings: bindings.bindings(),
-                resources: &prepared_resources,
-                control,
-                run_id,
-                demand,
-            },
-        ) {
+        let output = match executor.execute(PreparedPlanExecution {
+            package: plan.package(),
+            bindings: bindings.bindings(),
+            resources: &prepared_resources,
+            control,
+            run_id,
+            demand,
+        }) {
             Ok(output) => output,
             Err(KernelExecutionError::Cancelled) => {
                 let result = terminate_run(
@@ -1370,11 +1372,19 @@ impl ExecutionRuntimeState {
         self.results.observe_graph_inputs(graph, inputs);
     }
 
-    pub fn capture_result_run_basis(&self, graph: &str, inputs: GraphResultInputs) -> Option<ResultRunBasis> {
+    pub fn capture_result_run_basis(
+        &self,
+        graph: &str,
+        inputs: GraphResultInputs,
+    ) -> Option<ResultRunBasis> {
         self.results.capture_run_basis(graph, inputs)
     }
 
-    pub fn query_result_cache_states(&self, graph: &str, semantic_input_hash: &[u8; 32]) -> Option<BTreeMap<crate::plan::PlanOutputRef, ResultCacheState>> {
+    pub fn query_result_cache_states(
+        &self,
+        graph: &str,
+        semantic_input_hash: &[u8; 32],
+    ) -> Option<GraphResultCacheState> {
         self.results.query_cache_states(graph, semantic_input_hash)
     }
 
@@ -1382,7 +1392,10 @@ impl ExecutionRuntimeState {
         self.results.resource_keys(graph)
     }
 
-    pub fn observe_result_resource_versions(&self, versions: &BTreeMap<Box<str>, Option<[u8; 32]>>) {
+    pub fn observe_result_resource_versions(
+        &self,
+        versions: &BTreeMap<Box<str>, Option<[u8; 32]>>,
+    ) {
         self.results.observe_resource_versions(versions);
     }
 
@@ -1532,12 +1545,12 @@ mod tests {
     use crate::identity::ExecutionSessionId;
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
-        CompiledParameterHandle, ExecutionPlan, KernelId, PlanCompilationBasis, PlanCompileId,
-        PlanExecutionDemand, PlanGraphId, PlanInputBinding, PlanInputSource, PlanOperation,
-        PlanOutputBinding, PlanOutputRef, PlanParameterPayload, PlanParameterScalar,
-        PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProjectSessionId,
-        PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+        CompiledExecutionPackage, CompiledParameterBundleBuilder, CompiledParameterHandle,
+        ExecutionPlan, KernelId, PlanCompilationBasis, PlanCompileId, PlanExecutionDemand,
+        PlanGraphId, PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding,
+        PlanOutputRef, PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId,
+        PlanParameterValue, PlanPortAddress, PlanProjectSessionId, PlanProvenance,
+        PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
         PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
         ResourceKind, ValueRef,
     };
@@ -1553,14 +1566,13 @@ mod tests {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
+            crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource.clone(), version.clone())]),
             BTreeMap::from([(resource, PlanResourceObservedState::Present(version))]),
         );
         let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        let functions = Arc::new(CompiledFunctionBundle::new(basis.clone(), Box::new([]), 0));
         let package = CompiledExecutionPackage::new(
             Arc::new(ExecutionPlan::empty()),
-            functions,
             parameters,
             PlanProvenance::new(
                 PlanSourceIdentity::new(
@@ -1611,6 +1623,7 @@ mod tests {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
+            crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
@@ -1627,7 +1640,6 @@ mod tests {
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
             )),
-            Arc::new(CompiledFunctionBundle::new(basis.clone(), Box::new([]), 0)),
             Arc::new(parameters.freeze()),
             PlanProvenance::new(
                 PlanSourceIdentity::new(
@@ -1692,7 +1704,7 @@ mod tests {
         fn execute(
             &self,
             execution: PreparedPlanExecution<'_>,
-            ) -> Result<SchedulerOutput, KernelExecutionError> {
+        ) -> Result<SchedulerOutput, KernelExecutionError> {
             let bindings = execution.bindings;
             let resources = execution.resources;
             assert_eq!(bindings.len(), 1);
@@ -1718,6 +1730,7 @@ mod tests {
         ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             crate::identity::RuntimeGeneration::INITIAL,
+            crate::kernels::KernelRegistry::default().into(),
         )
     }
 
@@ -1753,7 +1766,7 @@ mod tests {
         let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
-            crate::plan::PlanNodeTypeId::from_existing("yssbi.value.convert".into()),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.core.reroute".into()),
             BTreeMap::new(),
             Box::new([PlanInputBinding::new(
                 PlanPortAddress::from_existing("consumer:value".into()),
@@ -1767,12 +1780,12 @@ mod tests {
             Box::new([]),
             Box::new([operation_output("consumer", ValueRef::new(0))]),
             crate::plan::PlanKernelSpecialization::new(
-                KernelId::from_existing("yssbi.value.convert".into()),
+                KernelId::from_existing("yssbi.core.reroute".into()),
                 Box::new([crate::plan::PlanTypeBinding::new(
                     PlanPortAddress::from_existing("consumer:value".into()),
                     yss_data_contract::DataType::Int64,
                 )]),
-                operation_specialization("yssbi.value.convert", "consumer")
+                operation_specialization("yssbi.core.reroute", "consumer")
                     .output_types()
                     .into(),
                 Box::new([]),
@@ -1812,9 +1825,11 @@ mod tests {
             .expect("the executor must wait for the producer instead of reading by plan order");
 
         assert_eq!(candidate.results().len(), 2);
-        assert!(candidate.results().iter().all(|result| {
-            result.value().value() == &crate::value::RuntimeValue::Integer(7)
-        }));
+        assert!(
+            candidate.results().iter().all(|result| {
+                result.value().value() == &crate::value::RuntimeValue::Integer(7)
+            })
+        );
         let outputs = candidate
             .results()
             .iter()

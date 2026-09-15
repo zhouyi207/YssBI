@@ -13,19 +13,18 @@ pub use basis::{
     PlanResourceRequirement, PlanResourceVersionSet, ResourceAccess, ResourceKind,
 };
 pub use identity::{
-    InvalidPlanIdentity, KernelId, PlanCompileId, PlanFunctionParameterId, PlanGraphId,
-    PlanInputGroupId, PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress,
-    PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanResourceId,
-    PlanResourceVersion, PlanSourceIdentity,
+    InvalidPlanIdentity, KernelFingerprint, KernelId, PlanCompileId, PlanGraphId, PlanInputGroupId,
+    PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanProjectSessionId,
+    PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
+    PlanSourceIdentity,
 };
 pub use model::{
-    ExecutionPlan, FunctionPlanAbi, FunctionPlanParameter, FunctionPlanResult, PlanExecutionDemand,
-    PlanFieldLineage, PlanInputBinding, PlanInputCoercion, PlanInputCoercionKind,
-    PlanInputContract, PlanInputSource, PlanKernelSpecialization, PlanOperation, PlanOutputBinding,
-    PlanOutputContract, PlanOutputField, PlanTypeBinding,
+    ExecutionPlan, PlanExecutionDemand, PlanFieldLineage, PlanInputBinding, PlanInputCoercion,
+    PlanInputCoercionKind, PlanInputContract, PlanInputSource, PlanKernelSpecialization,
+    PlanOperation, PlanOutputBinding, PlanOutputContract, PlanOutputField, PlanTypeBinding,
 };
 pub use observation::{PlanObservationIntent, ValueRef};
-pub use package::{CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan};
+pub use package::CompiledExecutionPackage;
 pub use parameter::{
     CanonicalDecimal, CanonicalDecimalError, CompiledParameterBundle,
     CompiledParameterBundleBuilder, CompiledParameterBundleError, CompiledParameterHandle,
@@ -33,7 +32,7 @@ pub use parameter::{
     PlanParameterSchemaId, PlanParameterValue,
 };
 pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
-pub use validation::{PlanValidationError, PlanValidationErrors};
+pub use validation::PlanValidationError;
 
 #[cfg(test)]
 mod tests {
@@ -44,6 +43,7 @@ mod tests {
         PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
+            crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         )

@@ -1,7 +1,7 @@
+use crate::edit_history::EditHistory;
 use crate::{DatabaseInstance, DatabaseState};
 use std::sync::{Arc, OnceLock};
 use yss_database_contract::DatabaseDecl;
-use yss_database_edit::EditHistory;
 use yss_datafusion::DataFusionRuntime;
 use yss_dataset_store::{DatasetStore, DatasetStoreError};
 use yss_relational_contract::RelationError;
@@ -24,9 +24,7 @@ pub fn bind_dataset_instance(decl: &DatabaseDecl, store: &Arc<DatasetStore>) -> 
             engine,
             history: EditHistory::new(),
         },
-        Err(error) => DatabaseState::Failed {
-            error: error.to_string(),
-        },
+        Err(_) => DatabaseState::Failed,
     };
     DatabaseInstance {
         decl: decl.clone(),

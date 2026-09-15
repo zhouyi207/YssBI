@@ -38,7 +38,10 @@ Graph authority.
 
 ## Editing and publication
 
-The existing generic EditHistory owns before/after snapshot references. Cell edits, inserts,
+The private `edit_history::EditHistory` owns before/after snapshot references. Its public
+projection, `EditState`, belongs to `yss-database-contract`; Application and IPC consume that
+contract without accessing the history container. `DatabaseInstance` keeps its runtime state
+private to this crate. Cell edits, inserts,
 deletes, column operations and undo/redo prepare new immutable views. Row IDs are never reused;
 order keys determine display position. Edit targets parse directly into Arrow types, independently
 of Graph's coarse vocabulary. Casts preserve the original generation for exact undo.

@@ -37,7 +37,6 @@ uuid.workspace = true
 yss-automation-contract = { path = "../yss-automation-contract" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
-yss-database-edit = { path = "../yss-database-edit" }
 yss-database-runtime = { path = "../yss-database-runtime" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }

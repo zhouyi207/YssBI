@@ -1,5 +1,5 @@
 use super::*;
-use crate::execution::{ApplicationSessionEpoch, ApplicationSessionSlot};
+use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use yss_relational_contract::RelationControl;
 
 struct Directory(PathBuf);
@@ -18,13 +18,16 @@ impl Drop for Directory {
 }
 
 fn application(project: Arc<ProjectState>) -> ApplicationState {
-    let candidate = crate::execution::session_factory::build_current_project_candidate(
+    let candidate = crate::session::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         project,
         [],
+        &crate::session::NodeComponents::builtins().unwrap(),
     )
     .unwrap();
-    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
+    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
+        crate::session::NodeComponents::builtins().unwrap(),
+    )));
     app.install_candidate(candidate).unwrap();
     app
 }
@@ -440,8 +443,8 @@ fn opening_a_version_four_project_does_not_create_a_catalog_or_change_its_files(
         .unwrap_err();
     assert!(matches!(
         error,
-        crate::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(
-            crate::project_lifecycle::ProjectLifecycleError::LoadFailed(
+        crate::project::lifecycle::ApplicationProjectLifecycleError::Lifecycle(
+            crate::project::lifecycle::ProjectLifecycleError::LoadFailed(
                 ProjectOperationError::TransactionPrepareFailed { .. }
             )
         )
@@ -466,8 +469,7 @@ fn opening_a_version_four_project_does_not_create_a_catalog_or_change_its_files(
         .await
         .unwrap();
         let registry_path = store.path().to_owned();
-        let registry =
-            crate::project_lifecycle::ProjectManagement::new(Arc::new(store), registry_path);
+        let registry = crate::project::ProjectManagement::new(Arc::new(store), registry_path);
         app.create_project_for_application(
             &registry,
             "New project after rejected load",
@@ -526,8 +528,8 @@ fn failed_final_project_activation_rebuilds_the_previous_database_session() {
     assert!(matches!(
         app.load_project_for_application(&target.metadata_path.to_string_lossy()),
         Err(
-            crate::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(
-                crate::project_lifecycle::ProjectLifecycleError::LoadFailed(_)
+            crate::project::lifecycle::ApplicationProjectLifecycleError::Lifecycle(
+                crate::project::lifecycle::ProjectLifecycleError::LoadFailed(_)
             )
         )
     ));

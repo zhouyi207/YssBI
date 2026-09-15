@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 
 use arrow::array::Int64Array;
 use arrow::record_batch::RecordBatch;
+use yss_database_contract::EditState;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat};
-use yss_database_edit::EditState;
 use yss_database_schema::DatabaseSchemaFact;
 use yss_dataset_store::{
     DatasetCellEdit, DatasetColumnCast, DatasetPublication, DatasetSnapshot, DatasetStoreError,
@@ -30,15 +30,21 @@ pub(crate) fn query_control(bytes: usize) -> RelationControl {
 #[derive(Clone)]
 pub struct DatabaseInstance {
     pub decl: DatabaseDecl,
-    pub state: DatabaseState,
+    pub(crate) state: DatabaseState,
 }
 
 impl DatabaseInstance {
+    pub fn unavailable(decl: DatabaseDecl) -> Self {
+        Self {
+            decl,
+            state: DatabaseState::Failed,
+        }
+    }
     pub fn snapshot(&self) -> Result<&Arc<DatasetSnapshot>, DatasetStoreError> {
         match &self.state {
             DatabaseState::Dataset { snapshot, .. } if !snapshot.metadata().deleted => Ok(snapshot),
             DatabaseState::Dataset { .. } => Err(DatasetStoreError::NotFound),
-            DatabaseState::Failed { .. } => Err(DatasetStoreError::NotFound),
+            DatabaseState::Failed => Err(DatasetStoreError::NotFound),
         }
     }
     pub(crate) fn engine(
@@ -46,7 +52,7 @@ impl DatabaseInstance {
     ) -> Result<&Arc<yss_datafusion::DataFusionRuntime>, DatasetStoreError> {
         match &self.state {
             DatabaseState::Dataset { engine, .. } => Ok(engine),
-            DatabaseState::Failed { .. } => Err(DatasetStoreError::NotFound),
+            DatabaseState::Failed => Err(DatasetStoreError::NotFound),
         }
     }
     pub fn data_schema(&self) -> Result<DatabaseSchemaFact, DatasetStoreError> {
@@ -156,7 +162,7 @@ impl DatabaseInstance {
     pub fn edit_state(&self) -> EditState {
         match &self.state {
             DatabaseState::Dataset { history, .. } => history.state(),
-            DatabaseState::Failed { .. } => EditState {
+            DatabaseState::Failed => EditState {
                 can_undo: false,
                 can_redo: false,
                 is_modified: false,
@@ -312,7 +318,7 @@ impl DatabaseInstance {
 pub(crate) struct PreparedInstanceMutation {
     before: DatabaseInstance,
     prepared: PreparedDataset,
-    history: yss_database_edit::EditHistory<DatasetEdit>,
+    history: crate::edit_history::EditHistory<DatasetEdit>,
     push_history: bool,
 }
 impl PreparedInstanceMutation {

@@ -373,30 +373,25 @@ const LOGIC: &[FamilySpec] = &[
 ];
 
 pub fn build_builtin_node_system() -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
-    let (provider, catalog, alias_keys) = assemble_builtin_parts()?;
-    validate_builtin_bundle(provider, catalog, alias_keys)
+    let mut builder = NodeRegistryBuilder::new();
+    let catalog = register_builtin_nodes(&mut builder)?;
+    Ok(BuiltinNodeSystem {
+        registry: Arc::new(builder.freeze()?),
+        catalog: Arc::new(catalog),
+    })
 }
 
-fn validate_builtin_bundle(
-    provider: ProviderRegistration,
-    catalog: BuiltinCatalog,
-    alias_keys: BTreeSet<I18nKey>,
-) -> Result<BuiltinNodeSystem, BuiltinInitializationError> {
-    let mut builder = NodeRegistryBuilder::new();
-    register_builtin_nominal_validators(&mut builder)?;
+/// Add the built-ins to the same builder used for application extensions.
+pub fn register_builtin_nodes(
+    builder: &mut NodeRegistryBuilder,
+) -> Result<BuiltinCatalog, BuiltinInitializationError> {
+    let (provider, catalog, alias_keys) = assemble_builtin_parts()?;
+    catalog.validate(&provider.i18n, &alias_keys)?;
+    register_builtin_nominal_validators(builder)?;
     builder
         .register_provider(provider)
         .map_err(BuiltinAssemblyError::Registration)?;
-    let registry = Arc::new(
-        builder
-            .freeze()
-            .map_err(BuiltinAssemblyError::Registration)?,
-    );
-    catalog.validate(&registry.catalog_manifest().i18n, &alias_keys)?;
-    Ok(BuiltinNodeSystem {
-        registry,
-        catalog: Arc::new(catalog),
-    })
+    Ok(catalog)
 }
 
 fn register_builtin_nominal_validators(

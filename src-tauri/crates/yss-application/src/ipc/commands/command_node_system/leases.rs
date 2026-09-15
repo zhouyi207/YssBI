@@ -1,8 +1,8 @@
 use super::results::result_query_command_error;
-use crate::execution::ApplicationState;
 use crate::ipc::commands::execution_dto::ResultDescriptorDto;
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::result::ResultReferenceDto;
+use crate::session::ApplicationState;
 use serde::Serialize;
 use tauri::{State, WebviewWindow};
 use yss_graph_execution::result::StoredResultSnapshot;

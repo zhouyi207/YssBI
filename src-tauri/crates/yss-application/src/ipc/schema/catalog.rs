@@ -1,4 +1,4 @@
-use crate::catalog_query::CatalogQueryResult;
+use crate::graph::catalog::CatalogQueryResult;
 use serde::Serialize;
 use yss_node_catalog::{
     LocalizedCatalogItem as DomainCatalogItem, LocalizedCategory as DomainCategory,
@@ -300,8 +300,8 @@ impl TryFrom<NodeCreationDescriptorDto> for yss_node_catalog::NodeCreation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog_query::LocalizedCatalogRequest;
-    use crate::execution::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
+    use crate::graph::catalog::LocalizedCatalogRequest;
+    use crate::session::{ApplicationSession, ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::num::NonZeroU64;
     use std::sync::Arc;
     use yss_database_contract::{
@@ -320,7 +320,7 @@ mod tests {
 
     fn application_with_function() -> (
         yss_project::fixtures::TempProject,
-        crate::execution::ApplicationState,
+        crate::session::ApplicationState,
     ) {
         let path =
             yss_graph_document::GraphResourcePath::new("functions/Opaque.yssbi-function").unwrap();
@@ -370,6 +370,7 @@ mod tests {
         let execution = Arc::new(ExecutionRuntimeState::new(
             execution_session_id,
             RuntimeGeneration::from_existing(1),
+            yss_graph_execution::kernels::KernelRegistry::default().into(),
         ));
         let session = Arc::new(ApplicationSession::new_for_test(
             ApplicationSessionEpoch::from_existing(1),
@@ -385,9 +386,11 @@ mod tests {
                 project_session_id.as_str().into(),
             )),
         ));
-        let slot = Arc::new(ApplicationSessionSlot::new());
+        let slot = Arc::new(ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        ));
         slot.publish_for_test(session);
-        (fixture, crate::execution::ApplicationState::new(slot))
+        (fixture, crate::session::ApplicationState::new(slot))
     }
 
     #[test]

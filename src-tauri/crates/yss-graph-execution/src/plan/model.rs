@@ -1,6 +1,5 @@
 use super::identity::{
-    KernelId, PlanFunctionParameterId, PlanInputGroupId, PlanNodeTypeId, PlanOutputRef,
-    PlanPortAddress, PlanSourceIdentity,
+    KernelId, PlanInputGroupId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
 };
 use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::{CompiledParameterHandle, PlanParameterFieldId};
@@ -282,42 +281,5 @@ impl ExecutionPlan {
 
     pub fn operations(&self) -> &[PlanOperation] {
         &self.operations
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FunctionPlanAbi {
-    parameters: Box<[FunctionPlanParameter]>,
-    result: Option<FunctionPlanResult>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FunctionPlanParameter {
-    pub id: PlanFunctionParameterId,
-    pub entry_output: PlanOutputRef,
-    pub data_type: DataType,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FunctionPlanResult {
-    pub id: PlanFunctionParameterId,
-    pub return_input: PlanPortAddress,
-    pub data_type: DataType,
-}
-
-impl FunctionPlanAbi {
-    pub fn new(
-        parameters: Box<[FunctionPlanParameter]>,
-        result: Option<FunctionPlanResult>,
-    ) -> Self {
-        Self { parameters, result }
-    }
-
-    pub fn parameters(&self) -> &[FunctionPlanParameter] {
-        &self.parameters
-    }
-
-    pub fn result(&self) -> Option<&FunctionPlanResult> {
-        self.result.as_ref()
     }
 }

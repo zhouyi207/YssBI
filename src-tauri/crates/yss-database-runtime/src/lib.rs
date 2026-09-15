@@ -6,6 +6,7 @@
 
 mod database_instance;
 mod database_state;
+mod edit_history;
 pub mod error;
 pub mod plot_query;
 mod project_storage;
@@ -20,7 +21,7 @@ use yss_database_contract::{
 };
 
 pub use database_instance::{DatabaseInstance, MAX_GET_DATAFRAME_ROWS};
-pub use database_state::{DatabaseState, DatasetEdit};
+pub(crate) use database_state::{DatabaseState, DatasetEdit};
 pub use project_storage::{bind_dataset_instance, dataset_query_engine};
 
 fn declaration_observation_for<'a>(

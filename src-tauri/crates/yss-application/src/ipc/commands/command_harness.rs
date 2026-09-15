@@ -2,8 +2,8 @@ use crate::ipc::channel::HarnessGraphClientHub;
 use std::sync::Arc;
 use yss_ipc_channel::HarnessChannelHub;
 
-use crate::execution::ApplicationState;
 use crate::harness::HarnessSessionError;
+use crate::session::ApplicationState;
 use tauri::State;
 use tauri::ipc::Channel;
 use yss_automation_contract::{

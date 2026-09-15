@@ -259,6 +259,7 @@ impl GraphRuntimeState {
         semantics: &GraphSemanticSnapshot,
         graph: GraphResourcePath,
         compile_id: CompileId,
+        kernel_fingerprint: [u8; 32],
     ) -> Result<GraphCompiledPackage, GraphCompileError> {
         compile(GraphCompilationInput::new(
             semantics
@@ -269,6 +270,7 @@ impl GraphRuntimeState {
                 })?,
             graph,
             compile_id,
+            kernel_fingerprint,
         ))
     }
 
@@ -326,7 +328,12 @@ impl GraphRuntimeState {
                 .expect("SHA-256 prefix has exactly eight bytes"),
         ));
         let package = self
-            .compile_graph(semantics, graph.clone(), compile_id)
+            .compile_graph(
+                semantics,
+                graph.clone(),
+                compile_id,
+                basis.kernel_fingerprint,
+            )
             .map_err(GraphDraftCompilationError::Compile)?;
         self.compiled_drafts
             .lock()
@@ -543,6 +550,7 @@ impl GraphRuntimeState {
         let hash = graph_semantic_input_hash(
             document,
             &self.registry_fingerprint(),
+            &basis.kernel_fingerprint,
             &dependencies.fingerprint(),
         )
         .expect("validated graph semantic input is canonically serializable");
@@ -610,6 +618,7 @@ impl GraphRuntimeState {
         locale: &str,
     ) -> Result<LocalizedCatalog, GraphRuntimeCatalogError> {
         let basis = CompilationBasis {
+            kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(self.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
@@ -701,15 +710,17 @@ pub enum GraphDraftCompilationError {
 fn graph_semantic_input_hash(
     document: &GraphDocument,
     registry_fingerprint: &[u8; 32],
+    kernel_fingerprint: &[u8; 32],
     resource_catalog_fingerprint: &[u8; 32],
 ) -> Result<[u8; 32], GraphDraftCompilationError> {
     let document_hash = yss_graph_document::semantic_document_fingerprint(document)
         .map_err(GraphDraftCompilationError::SourceHash)?;
     yss_canonical_hash::hash_canonical(
-        "yssbi.graph-artifact-input.v2",
+        "yssbi.graph-artifact-input.v3",
         &(
             document_hash,
             registry_fingerprint,
+            kernel_fingerprint,
             resource_catalog_fingerprint,
         ),
     )
@@ -868,6 +879,7 @@ mod tests {
 
     fn basis(runtime: &GraphRuntimeState) -> CompilationBasis {
         CompilationBasis {
+            kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),

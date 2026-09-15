@@ -1,9 +1,9 @@
 use super::common::parse_graph_path;
-use crate::execution::{ApplicationState, SessionCaptureError};
-use crate::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
+use crate::graph::open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::graph_clipboard::ClipboardSubgraphDto;
 use crate::ipc::schema::graph_mutation::EditorGraphMutationDto;
+use crate::session::{ApplicationState, SessionCaptureError};
 use tauri::State;
 use yss_graph_document::NodeId;
 use yss_graph_editor::EditorGraphMutation;
@@ -63,7 +63,7 @@ pub fn compile_graph_draft(
     locale: String,
     document: yss_graph_document::GraphDocument,
 ) -> Result<CompileGraphDraftDto, CommandError> {
-    let receipt = crate::graph_compile::compile_graph_draft(
+    let receipt = crate::graph::compile::compile_graph_draft(
         &application,
         project_instance_id,
         parse_graph_path(graph_path)?,
@@ -74,8 +74,8 @@ pub fn compile_graph_draft(
     Ok(crate::ipc::schema::graph_draft::compile_graph_draft_to_transport(&receipt))
 }
 
-fn compile_graph_draft_error(error: crate::graph_compile::CompileGraphDraftError) -> CommandError {
-    use crate::graph_compile::CompileGraphDraftError;
+fn compile_graph_draft_error(error: crate::graph::compile::CompileGraphDraftError) -> CommandError {
+    use crate::graph::compile::CompileGraphDraftError;
     match error {
         CompileGraphDraftError::SessionCapture(error) => session_capture_command_error(error),
         CompileGraphDraftError::ProjectIdentityMismatch => {
@@ -222,7 +222,7 @@ pub fn transform_graph_draft(
 }
 
 fn map_editor_resource_error(
-    error: crate::resource_mutation::ResourceMutationApplicationError,
+    error: crate::graph::resources::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_draft_rejected")
 }

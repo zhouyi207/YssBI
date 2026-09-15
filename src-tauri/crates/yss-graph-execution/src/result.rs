@@ -1,8 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::identity::ExecutionSessionId;
-use crate::plan::{PlanOutputRef, ResultCategory};
+use crate::plan::{PlanOutputRef, PlanPortAddress, ResultCategory};
 use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
@@ -33,9 +33,15 @@ pub struct ResultReference {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputResultInputs {
     pub fingerprint: [u8; 32],
-    pub sources: BTreeSet<PlanOutputRef>,
+    pub bindings: BTreeMap<PlanPortAddress, Box<[PlanOutputRef]>>,
     pub resources: BTreeMap<Box<str>, Option<[u8; 32]>>,
     pub available: bool,
+}
+
+impl OutputResultInputs {
+    pub(crate) fn sources(&self) -> impl Iterator<Item = &PlanOutputRef> {
+        self.bindings.values().flat_map(|sources| sources.iter())
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +63,24 @@ pub enum ResultCacheState {
     Missing,
     Stale,
     Valid { result_id: ResultId },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ConnectionCacheState {
+    New,
+    Stale,
+    Valid,
+}
+
+pub struct ConnectionResultState {
+    pub output: PlanOutputRef,
+    pub input: PlanPortAddress,
+    pub state: ConnectionCacheState,
+}
+
+pub struct GraphResultCacheState {
+    pub outputs: BTreeMap<PlanOutputRef, ResultCacheState>,
+    pub connections: Vec<ConnectionResultState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]

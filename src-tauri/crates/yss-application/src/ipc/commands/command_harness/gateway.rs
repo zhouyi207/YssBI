@@ -1,4 +1,4 @@
-use crate::execution::ApplicationState;
+use crate::session::ApplicationState;
 use yss_automation_contract::{
     AutomationCapabilityRequest, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
     CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext, ToolEffect,
@@ -90,7 +90,7 @@ async fn run_on_blocking_pool<T: Send + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::execution::{ApplicationSessionEpoch, ApplicationSessionSlot};
+    use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::{sync::Arc, time::Duration};
     use yss_automation_contract::{
         AutomationCapabilityResult, CancellationToken, CapabilityInvocationId, HarnessSessionId,
@@ -170,13 +170,16 @@ mod tests {
             .activate_project_from_path(&created.metadata_path)
             .unwrap();
 
-        let candidate = crate::execution::session_factory::build_current_project_candidate(
+        let candidate = crate::session::build_current_project_candidate(
             ApplicationSessionEpoch::INITIAL,
             project,
             [],
+            &crate::session::NodeComponents::builtins().unwrap(),
         )
         .unwrap();
-        let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
+        let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        )));
         application.install_candidate(candidate).unwrap();
         let session = application.capture_session().unwrap();
         let path = directory.0.join("source.csv");

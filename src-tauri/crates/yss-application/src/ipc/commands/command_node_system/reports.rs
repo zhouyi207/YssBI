@@ -1,10 +1,10 @@
-use crate::execution::ApplicationState;
-use crate::execution::result_query::report::ReportQueryError;
+use crate::graph::results::report::ReportQueryError;
 use crate::ipc::commands::execution_dto::ResultPageDto;
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::result::{
     ResultAnalysisRequestDto, ResultAnalysisResponseDto, ResultReferenceDto, ResultTablePartDto,
 };
+use crate::session::ApplicationState;
 use tauri::State;
 
 pub(super) fn report_query_error(error: ReportQueryError) -> CommandError {

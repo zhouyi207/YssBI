@@ -1,34 +1,15 @@
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use crate::identity::RuntimeGeneration;
 use crate::plan::{
-    CompiledExecutionPackage, CompiledFunctionPlan, CompiledParameterHandle, PlanParameterFieldId,
-    PlanParameterPayload, PlanParameterValue, PlanResourceId, PlanResourceVersion,
-    PlanValidationError,
+    CompiledExecutionPackage, CompiledParameterHandle, PlanParameterFieldId, PlanParameterPayload,
+    PlanParameterValue, PlanResourceId, PlanValidationError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackagePart {
     RootPlan,
-    FunctionBundle,
     ParameterBundle,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum FunctionPlanPreparationError {
-    #[error("compiled function resource identity is invalid")]
-    InvalidResourceIdentity { resource: PlanResourceId },
-    #[error("compiled function resource version identity is invalid")]
-    InvalidResourceVersion {
-        resource: PlanResourceId,
-        version: PlanResourceVersion,
-    },
-    #[error("compiled function plan is invalid")]
-    InvalidPlan {
-        resource: PlanResourceId,
-        source: PlanValidationError,
-    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -51,6 +32,11 @@ pub enum CompiledParameterPreparationError {
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PackagePreparationError {
+    #[error("execution kernel capabilities changed")]
+    KernelCapabilitiesChanged {
+        expected: crate::plan::KernelFingerprint,
+        actual: crate::plan::KernelFingerprint,
+    },
     #[error("execution runtime generation changed")]
     RuntimeGenerationChanged {
         expected: RuntimeGeneration,
@@ -62,13 +48,6 @@ pub enum PackagePreparationError {
     ProvenanceMismatch { part: PackagePart },
     #[error("execution package basis does not match its {part:?} part")]
     BasisMismatch { part: PackagePart },
-    #[error("compiled function resource/version is duplicated")]
-    DuplicateFunction {
-        resource: PlanResourceId,
-        version: PlanResourceVersion,
-    },
-    #[error("compiled function preparation failed")]
-    FunctionPlan(#[source] FunctionPlanPreparationError),
     #[error("compiled parameter preparation failed")]
     Parameters(#[source] CompiledParameterPreparationError),
 }
@@ -104,6 +83,14 @@ impl crate::state::ExecutionRuntimeState {
                 actual,
             });
         }
+        let expected_capabilities = package.provenance().basis().kernel_fingerprint();
+        let actual_capabilities = self.kernels().fingerprint();
+        if expected_capabilities != actual_capabilities {
+            return Err(PackagePreparationError::KernelCapabilitiesChanged {
+                expected: expected_capabilities,
+                actual: actual_capabilities,
+            });
+        }
         validate_package(&package)?;
         Ok(PreparedExecutionPlan(Arc::new(
             PreparedExecutionPlanInner {
@@ -134,63 +121,13 @@ fn validate_package(package: &CompiledExecutionPackage) -> Result<(), PackagePre
     }
 
     let basis = provenance.basis();
-    if package.functions().basis() != basis {
-        return Err(PackagePreparationError::BasisMismatch {
-            part: PackagePart::FunctionBundle,
-        });
-    }
     if package.parameters().basis() != basis {
         return Err(PackagePreparationError::BasisMismatch {
             part: PackagePart::ParameterBundle,
         });
     }
 
-    validate_functions(package.functions().plans())?;
     validate_parameters(package.parameters().entries())
-}
-
-fn validate_functions(functions: &[CompiledFunctionPlan]) -> Result<(), PackagePreparationError> {
-    let mut resources = BTreeSet::new();
-    for function in functions {
-        if function.resource().as_str().is_empty() {
-            return Err(PackagePreparationError::FunctionPlan(
-                FunctionPlanPreparationError::InvalidResourceIdentity {
-                    resource: function.resource().clone(),
-                },
-            ));
-        }
-        if function.version().as_str().is_empty() {
-            return Err(PackagePreparationError::FunctionPlan(
-                FunctionPlanPreparationError::InvalidResourceVersion {
-                    resource: function.resource().clone(),
-                    version: function.version().clone(),
-                },
-            ));
-        }
-        if !resources.insert((function.resource().clone(), function.version().clone())) {
-            return Err(PackagePreparationError::DuplicateFunction {
-                resource: function.resource().clone(),
-                version: function.version().clone(),
-            });
-        }
-        function
-            .plan()
-            .validate_against_source_graph(&crate::plan::PlanGraphId::from_existing(
-                function.resource().as_str().into(),
-            ))
-            .and_then(|()| {
-                function
-                    .abi()
-                    .validate(function.plan(), function.resource())
-            })
-            .map_err(|source| {
-                PackagePreparationError::FunctionPlan(FunctionPlanPreparationError::InvalidPlan {
-                    resource: function.resource().clone(),
-                    source,
-                })
-            })?;
-    }
-    Ok(())
 }
 
 fn validate_parameters(
@@ -259,10 +196,9 @@ mod tests {
     use super::*;
     use crate::identity::ExecutionSessionId;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan,
-        CompiledParameterBundleBuilder, ExecutionPlan, FunctionPlanAbi, PlanCompilationBasis,
-        PlanCompileId, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
-        PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+        CompiledExecutionPackage, CompiledParameterBundleBuilder, ExecutionPlan,
+        PlanCompilationBasis, PlanCompileId, PlanProjectSessionId, PlanProvenance,
+        PlanRegistryFingerprint, PlanSourceIdentity,
     };
     use std::collections::BTreeMap;
 
@@ -270,14 +206,13 @@ mod tests {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
+            crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
         let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        let functions = Arc::new(CompiledFunctionBundle::new(basis.clone(), Box::new([]), 8));
         CompiledExecutionPackage::new(
             Arc::new(ExecutionPlan::empty()),
-            functions,
             parameters,
             PlanProvenance::new(
                 PlanSourceIdentity::new(
@@ -296,6 +231,7 @@ mod tests {
         let state = crate::state::ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::from_existing(3),
+            crate::kernels::KernelRegistry::default().into(),
         );
         let prepared = state
             .prepare_compiled_package(package(), RuntimeGeneration::from_existing(3))
@@ -310,45 +246,5 @@ mod tests {
                         if expected.get() == 4 && actual.get() == 3
                 ))
         );
-    }
-
-    #[test]
-    fn rejects_duplicate_function_resource_version_before_minting() {
-        let state = crate::state::ExecutionRuntimeState::new(
-            ExecutionSessionId::new(uuid::Uuid::nil()),
-            RuntimeGeneration::from_existing(3),
-        );
-        let valid = package();
-        let resource = PlanResourceId::from_existing("functions/example".into());
-        let version = PlanResourceVersion::from_existing("v1".into());
-        let function = CompiledFunctionPlan::new(
-            resource.clone(),
-            version.clone(),
-            Arc::new(ExecutionPlan::empty()),
-            Arc::new(FunctionPlanAbi::new(Box::new([]), None)),
-        );
-        let duplicate = CompiledExecutionPackage::new(
-            Arc::new(ExecutionPlan::empty()),
-            Arc::new(CompiledFunctionBundle::new(
-                valid.provenance().basis().clone(),
-                Box::new([function.clone(), function]),
-                8,
-            )),
-            Arc::clone(valid.parameters()),
-            valid.provenance().clone(),
-        );
-
-        let result = state.prepare_compiled_package(duplicate, RuntimeGeneration::from_existing(3));
-        match result {
-            Err(PackagePreparationError::DuplicateFunction {
-                resource: actual_resource,
-                version: actual_version,
-            }) => {
-                assert_eq!(actual_resource, resource);
-                assert_eq!(actual_version, version);
-            }
-            Err(error) => panic!("unexpected preparation error: {error:?}"),
-            Ok(_) => panic!("duplicate function package was prepared"),
-        }
     }
 }

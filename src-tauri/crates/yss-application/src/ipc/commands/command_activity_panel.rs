@@ -1,4 +1,4 @@
-use crate::{activity_panel, execution::ApplicationState};
+use crate::{activity_panel, session::ApplicationState};
 use tauri::{Manager, State, WebviewWindow};
 use yss_plugin_runtime::PluginManager;
 use yss_project_identity::ProjectInstanceId;

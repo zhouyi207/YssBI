@@ -20,10 +20,10 @@ use yss_graph_execution::result::ResultId;
 use yss_graph_execution::value::RuntimeValue;
 use yss_node_catalog::LocalizedCatalogItem;
 
-use crate::catalog_query::{
+use crate::graph::catalog::{
     CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,
 };
-use crate::execution::{
+use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 mod graph;

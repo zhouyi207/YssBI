@@ -9256,7 +9256,6 @@ dependencies = [
  "yss-chart-document",
  "yss-data-contract",
  "yss-database-contract",
- "yss-database-edit",
  "yss-database-runtime",
  "yss-database-schema",
  "yss-datafusion",
@@ -9435,14 +9434,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-database-edit"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "yss-database-runtime"
 version = "0.1.0"
 dependencies = [
@@ -9452,7 +9443,6 @@ dependencies = [
  "uuid",
  "yss-data-contract",
  "yss-database-contract",
- "yss-database-edit",
  "yss-database-schema",
  "yss-datafusion",
  "yss-dataset-profile",
@@ -9657,6 +9647,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "uuid",
+ "yss-canonical-hash",
  "yss-data-contract",
  "yss-relational-contract",
  "yss-sci-contract",

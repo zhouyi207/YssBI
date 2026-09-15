@@ -69,10 +69,13 @@ impl RunRegistry {
             .states
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if states.insert(run, RunState::Admitted).is_some() {
-            return Err(RunRegistryError::Duplicate);
+        match states.entry(run) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(RunState::Admitted);
+                Ok(())
+            }
+            std::collections::btree_map::Entry::Occupied(_) => Err(RunRegistryError::Duplicate),
         }
-        Ok(())
     }
 
     pub fn state(&self, run: RunId) -> Option<RunState> {
@@ -127,5 +130,11 @@ mod tests {
 
         assert_eq!(run_id.get(), 1);
         assert_eq!(registry.state(run_id), Some(RunState::Admitted));
+        registry.transition(run_id, RunState::Running).unwrap();
+        assert!(matches!(
+            registry.admit(run_id),
+            Err(RunRegistryError::Duplicate)
+        ));
+        assert_eq!(registry.state(run_id), Some(RunState::Running));
     }
 }

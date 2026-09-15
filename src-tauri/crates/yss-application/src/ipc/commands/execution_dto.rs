@@ -1,5 +1,5 @@
-use crate::execution::result_query::{ResultPageKind, ResultPageProjection};
-use crate::execution::run_graph::RunDemand;
+use crate::graph::results::{ResultPageKind, ResultPageProjection};
+use crate::graph::run::RunDemand;
 use crate::ipc::channel::execution::{RunEventDtoError, output_dto};
 use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
@@ -122,9 +122,7 @@ impl ResultDescriptorDto {
     ) -> Result<Self, RunEventDtoError> {
         let stored = result.value().value();
         let (value_kind, total_count) = match stored {
-            RuntimeValue::List(values) => {
-                (ResultValueKindDto::Sequence, Some(values.len()))
-            }
+            RuntimeValue::List(values) => (ResultValueKindDto::Sequence, Some(values.len())),
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
                 (ResultValueKindDto::Sequence, None)
             }

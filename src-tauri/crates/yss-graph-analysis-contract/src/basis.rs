@@ -57,6 +57,7 @@ impl CompileId {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompilationBasis {
     pub registry_fingerprint: RegistryFingerprint,
+    pub kernel_fingerprint: [u8; 32],
     pub resource_versions: ResourceVersionSet,
     #[serde(default)]
     pub resource_observations: ResourceObservationSet,

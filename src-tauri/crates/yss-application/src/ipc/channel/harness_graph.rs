@@ -353,7 +353,7 @@ mod tests {
     use super::*;
     use crate::{
         events::GraphProjectionReplacement,
-        resource_mutation::{GraphDraftSave, GraphDraftTransform},
+        graph::edit::{GraphDraftSave, GraphDraftTransform},
     };
     use std::{sync::Arc, time::Duration};
     use yss_automation_contract::{

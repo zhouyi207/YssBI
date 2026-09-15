@@ -1,8 +1,8 @@
-use crate::execution::{ApplicationState, SessionCaptureError};
 use crate::ipc::error::CommandError;
-use crate::project_change::ApplicationProjectWatchError;
-use crate::project_lifecycle::ProjectLifecycleError;
-use crate::project_lifecycle::ProjectManagement;
+use crate::project::ProjectManagement;
+use crate::project::change::ApplicationProjectWatchError;
+use crate::project::lifecycle::ProjectLifecycleError;
+use crate::session::{ApplicationState, SessionCaptureError};
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
@@ -41,10 +41,10 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
 }
 
 pub(super) fn map_application_project_lifecycle_error(
-    error: crate::project_lifecycle::ApplicationProjectLifecycleError,
+    error: crate::project::lifecycle::ApplicationProjectLifecycleError,
 ) -> CommandError {
     match error {
-        crate::project_lifecycle::ApplicationProjectLifecycleError::SessionCapture(error) => {
+        crate::project::lifecycle::ApplicationProjectLifecycleError::SessionCapture(error) => {
             match error {
                 SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
                 SessionCaptureError::Replacing => {
@@ -56,13 +56,13 @@ pub(super) fn map_application_project_lifecycle_error(
                 }
             }
         }
-        crate::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(error) => {
+        crate::project::lifecycle::ApplicationProjectLifecycleError::Lifecycle(error) => {
             map_project_lifecycle_error(error)
         }
-        crate::project_lifecycle::ApplicationProjectLifecycleError::SessionChanged(error) => {
+        crate::project::lifecycle::ApplicationProjectLifecycleError::SessionChanged(error) => {
             CommandError::diagnosed("project_lifecycle_session_changed", error)
         }
-        crate::project_lifecycle::ApplicationProjectLifecycleError::SessionRefresh(error) => {
+        crate::project::lifecycle::ApplicationProjectLifecycleError::SessionRefresh(error) => {
             CommandError::diagnosed("project_session_refresh_failed", error)
         }
     }

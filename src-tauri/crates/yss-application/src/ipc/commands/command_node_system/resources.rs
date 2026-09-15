@@ -13,7 +13,7 @@ use yss_project_identity::{OperationId, ResourceRevision};
 #[tauri::command]
 pub fn create_event(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
@@ -34,7 +34,7 @@ pub fn create_event(
 #[tauri::command]
 pub fn create_function(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
@@ -54,7 +54,7 @@ pub fn create_function(
 
 #[tauri::command]
 pub fn unload_project_graph(
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: String,
     graph_path: String,
     lifecycle_token: u64,
@@ -73,7 +73,7 @@ pub fn unload_project_graph(
 
 #[tauri::command]
 pub fn save_project_graph(
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
@@ -95,7 +95,7 @@ pub fn save_project_graph(
 #[tauri::command]
 pub fn duplicate_graph(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -117,7 +117,7 @@ pub fn duplicate_graph(
 #[tauri::command]
 pub fn remove_graph(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -139,7 +139,7 @@ pub fn remove_graph(
 #[tauri::command]
 pub fn rename_graph_resource(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     expected_revision: ResourceRevision,
@@ -165,7 +165,7 @@ pub fn rename_graph_resource(
 #[tauri::command]
 pub fn update_function_signature(
     app: AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     function_path: String,
     locale: String,
@@ -198,13 +198,13 @@ fn emit_application_resource_result(
 }
 
 fn map_resource_mutation_error(
-    error: crate::resource_mutation::ResourceMutationApplicationError,
+    error: crate::graph::resources::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "resource_revision_conflict")
 }
 
 fn map_graph_draft_save_error(
-    error: crate::resource_mutation::ResourceMutationApplicationError,
+    error: crate::graph::resources::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_save_rejected")
 }

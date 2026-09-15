@@ -57,12 +57,6 @@
         "target": null
       },
       {
-        "name": "yss-database-edit",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-database-runtime",
         "kind": "normal",
         "optional": false,
@@ -499,11 +493,6 @@
     "dependencies": []
   },
   {
-    "name": "yss-database-edit",
-    "manifest": "src-tauri/crates/yss-database-edit/Cargo.toml",
-    "dependencies": []
-  },
-  {
     "name": "yss-database-runtime",
     "manifest": "src-tauri/crates/yss-database-runtime/Cargo.toml",
     "dependencies": [
@@ -515,12 +504,6 @@
       },
       {
         "name": "yss-database-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-database-edit",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -984,6 +967,12 @@
     "name": "yss-graph-execution",
     "manifest": "src-tauri/crates/yss-graph-execution/Cargo.toml",
     "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
       {
         "name": "yss-data-contract",
         "kind": "normal",

@@ -1,0 +1,655 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use yss_database_contract::{
+    DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
+use yss_function_editor_projection::parse_function_data_type;
+use yss_graph_document::{GraphDocument, GraphResourcePath, PortAddress};
+use yss_graph_document_edit::{DocumentError, validate_graph_document};
+use yss_graph_resource_contract::{FunctionParameterContract, FunctionSignature, GraphResourceId};
+use yss_graph_runtime::GraphRuntimeCatalogError;
+use yss_node_catalog::{
+    CatalogResourceEntry, CatalogResourcePath, LocalizedCatalog, ResourceBoundCreateArgs,
+};
+use yss_node_registry::RegistryFingerprint;
+use yss_project::ProjectIndex;
+use yss_project::ProjectOperationError;
+use yss_project_identity::ProjectInstanceId;
+
+use super::inputs::{
+    DraftResolutionContext, GraphContractMappingError, GraphInputError,
+    ProjectGraphResourceSnapshot,
+};
+use crate::session::{
+    ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalizedCatalogRequest {
+    project_instance_id: ProjectInstanceId,
+    locale: Box<str>,
+}
+
+impl LocalizedCatalogRequest {
+    pub fn new(project_instance_id: ProjectInstanceId, locale: impl Into<Box<str>>) -> Self {
+        Self {
+            project_instance_id,
+            locale: locale.into(),
+        }
+    }
+
+    pub fn project_instance_id(&self) -> &ProjectInstanceId {
+        &self.project_instance_id
+    }
+
+    pub fn locale(&self) -> &str {
+        &self.locale
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompatibleCatalogRequest {
+    project_instance_id: ProjectInstanceId,
+    graph_path: GraphResourcePath,
+    document: GraphDocument,
+    source_port: PortAddress,
+    locale: Box<str>,
+}
+
+impl CompatibleCatalogRequest {
+    pub fn new(
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        document: GraphDocument,
+        source_port: PortAddress,
+        locale: impl Into<Box<str>>,
+    ) -> Self {
+        Self {
+            project_instance_id,
+            graph_path,
+            document,
+            source_port,
+            locale: locale.into(),
+        }
+    }
+
+    pub fn project_instance_id(&self) -> &ProjectInstanceId {
+        &self.project_instance_id
+    }
+
+    pub fn graph_path(&self) -> &GraphResourcePath {
+        &self.graph_path
+    }
+
+    pub fn document(&self) -> &GraphDocument {
+        &self.document
+    }
+
+    pub fn source_port(&self) -> &PortAddress {
+        &self.source_port
+    }
+
+    pub fn locale(&self) -> &str {
+        &self.locale
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("project catalog read failed")]
+pub struct ProjectCatalogReadSource {
+    #[source]
+    reason: ProjectCatalogReadSourceKind,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum ProjectCatalogReadSourceKind {
+    #[error("project filesystem read failed")]
+    Filesystem(#[source] ProjectOperationError),
+    #[error("project graph declaration path is invalid")]
+    InvalidGraphPath(#[source] yss_graph_document::GraphResourcePathError),
+    #[error("project function declaration type is invalid")]
+    InvalidFunctionType,
+    #[error("project catalog declaration facts are invalid")]
+    InvalidDeclarationFacts,
+}
+
+impl ProjectCatalogReadSource {
+    fn filesystem(error: ProjectOperationError) -> Self {
+        Self {
+            reason: ProjectCatalogReadSourceKind::Filesystem(error),
+        }
+    }
+
+    fn invalid_graph_path(error: yss_graph_document::GraphResourcePathError) -> Self {
+        Self {
+            reason: ProjectCatalogReadSourceKind::InvalidGraphPath(error),
+        }
+    }
+
+    fn invalid_function_type() -> Self {
+        Self {
+            reason: ProjectCatalogReadSourceKind::InvalidFunctionType,
+        }
+    }
+
+    fn invalid_declaration_facts() -> Self {
+        Self {
+            reason: ProjectCatalogReadSourceKind::InvalidDeclarationFacts,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ProjectCatalogReadError {
+    #[error("project lifecycle changed during catalog query")]
+    ProjectLifecycleChanged,
+    #[error("catalog resource changed during catalog query")]
+    CatalogResourceStale { resource: GraphResourceId },
+    #[error("project lifecycle admission is closed")]
+    AdmissionClosed,
+    #[error("project recovery is required")]
+    RecoveryRequired,
+    #[error("project filesystem transaction is busy")]
+    FilesystemBusy,
+    #[error("project catalog facts could not be read")]
+    ReadFailed(#[source] ProjectCatalogReadSource),
+    #[error("project catalog invariant failed")]
+    Internal(#[source] ProjectCatalogReadSource),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum GraphCatalogQueryError {
+    #[error("graph is not loaded")]
+    GraphNotLoaded { graph: GraphResourcePath },
+    #[error("compatible-catalog graph draft is invalid")]
+    InvalidDraft(#[source] DocumentError),
+    #[error("compatible-catalog source port is invalid")]
+    CompatibleSourceInvalid,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CatalogQueryApplicationError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("captured catalog-query session changed")]
+    SessionChanged,
+    #[error("catalog project authority is stale")]
+    CatalogProjectStale,
+    #[error(transparent)]
+    Project(#[from] ProjectCatalogReadError),
+    #[error(transparent)]
+    Database(#[from] yss_database_runtime::error::DatabaseError),
+    #[error(transparent)]
+    Contract(#[from] GraphContractMappingError),
+    #[error(transparent)]
+    Graph(#[from] GraphCatalogQueryError),
+}
+
+impl From<GraphInputError> for CatalogQueryApplicationError {
+    fn from(error: GraphInputError) -> Self {
+        match error {
+            GraphInputError::Catalog(error) => Self::Project(error),
+            GraphInputError::Database(error) => Self::Database(error),
+            GraphInputError::Contract(error) => Self::Contract(error),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CatalogQueryResult {
+    project_instance_id: ProjectInstanceId,
+    registry_fingerprint: RegistryFingerprint,
+    resource_publication_revision: u64,
+    catalog: LocalizedCatalog,
+}
+
+impl CatalogQueryResult {
+    fn new(
+        project_instance_id: ProjectInstanceId,
+        registry_fingerprint: RegistryFingerprint,
+        resource_publication_revision: u64,
+        catalog: LocalizedCatalog,
+    ) -> Self {
+        Self {
+            project_instance_id,
+            registry_fingerprint,
+            resource_publication_revision,
+            catalog,
+        }
+    }
+
+    pub fn into_transport_parts(self) -> CatalogQueryResultParts {
+        CatalogQueryResultParts {
+            project_instance_id: self.project_instance_id,
+            registry_fingerprint: self.registry_fingerprint,
+            resource_publication_revision: self.resource_publication_revision,
+            catalog: self.catalog,
+        }
+    }
+}
+
+pub struct CatalogQueryResultParts {
+    project_instance_id: ProjectInstanceId,
+    registry_fingerprint: RegistryFingerprint,
+    resource_publication_revision: u64,
+    catalog: LocalizedCatalog,
+}
+
+impl CatalogQueryResultParts {
+    pub fn into_fields(
+        self,
+    ) -> (
+        ProjectInstanceId,
+        RegistryFingerprint,
+        u64,
+        LocalizedCatalog,
+    ) {
+        (
+            self.project_instance_id,
+            self.registry_fingerprint,
+            self.resource_publication_revision,
+            self.catalog,
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ProjectCatalogResources {
+    graph: ProjectGraphResourceSnapshot,
+    entries: Box<[CatalogResourceEntry]>,
+    database_observations: DatabaseDeclarationObservationSet,
+}
+
+impl ProjectCatalogResources {
+    fn from_index(index: ProjectIndex) -> Result<Self, ProjectCatalogReadSource> {
+        let authority_generation = index.authority_generation();
+        let mut functions = BTreeMap::new();
+        let mut databases = BTreeMap::new();
+        let mut entries = Vec::new();
+
+        for graph in index.graphs {
+            let Some(signature) = graph.function_signature else {
+                continue;
+            };
+            let path = GraphResourcePath::new(graph.path.clone())
+                .map_err(ProjectCatalogReadSource::invalid_graph_path)?;
+            let signature = graph_signature(signature)
+                .map_err(|_| ProjectCatalogReadSource::invalid_function_type())?;
+            if functions.insert(path.clone(), signature).is_some() {
+                return Err(ProjectCatalogReadSource::invalid_declaration_facts());
+            }
+            entries.push(CatalogResourceEntry {
+                name: graph.name.into_boxed_str(),
+                node_type_id: node_type("yssbi.project.function.call")?,
+                resource_path: CatalogResourcePath::new(graph.path),
+                resource_revision: graph.function_revision.unwrap_or(graph.revision).get(),
+                create_args: ResourceBoundCreateArgs::Function,
+                technical_terms: vec!["call".into(), "function".into()],
+            });
+        }
+
+        let mut declaration_observations = Vec::new();
+        for database in index.databases {
+            let id = DatabaseId::from_existing(database.id.clone().into());
+            let declaration = DatabaseDecl {
+                id: id.clone(),
+                engine: database.engine,
+                schema_version: database.schema_version,
+                required: database.required,
+                name: database
+                    .name
+                    .unwrap_or_else(|| database.id.clone())
+                    .into_boxed_str(),
+            };
+            if databases.insert(id.clone(), declaration.clone()).is_some() {
+                return Err(ProjectCatalogReadSource::invalid_declaration_facts());
+            }
+            declaration_observations.push((
+                id,
+                DatabaseDeclarationObservation::new(
+                    DatabaseDeclarationRevision::from_existing(database.revision.get()),
+                    DatabaseDeclarationFingerprint::from_decl(&declaration),
+                ),
+            ));
+            entries.push(CatalogResourceEntry {
+                name: declaration.name.clone(),
+                node_type_id: node_type("yssbi.dataframe.source.get")?,
+                resource_path: CatalogResourcePath::new(format!("databases/{}", database.id)),
+                resource_revision: database.revision.get(),
+                create_args: ResourceBoundCreateArgs::Database,
+                technical_terms: vec!["dataframe".into(), "database".into()],
+            });
+        }
+
+        let database_observations =
+            DatabaseDeclarationObservationSet::try_from_iter(declaration_observations)
+                .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())?;
+        let graph = ProjectGraphResourceSnapshot::new(
+            ProjectInstanceId::from_existing(index.project_instance_id),
+            authority_generation,
+            functions,
+            databases,
+        );
+        Ok(Self {
+            graph,
+            entries: entries.into_boxed_slice(),
+            database_observations,
+        })
+    }
+
+    pub(crate) fn graph(&self) -> &ProjectGraphResourceSnapshot {
+        &self.graph
+    }
+
+    pub(crate) fn entries(&self) -> &[CatalogResourceEntry] {
+        &self.entries
+    }
+
+    pub(crate) fn database_observations(&self) -> &DatabaseDeclarationObservationSet {
+        &self.database_observations
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LocalizedCatalogProjectFacts {
+    project_instance_id: ProjectInstanceId,
+    authority_basis: ProjectAuthorityBasis,
+    resource_publication_revision: u64,
+    resources: ProjectCatalogResources,
+}
+
+#[derive(Clone, Debug)]
+struct ProjectAuthorityBasis {
+    project_instance_id: ProjectInstanceId,
+    resource_publication_revision: u64,
+    authority_generation: u64,
+}
+
+impl LocalizedCatalogProjectFacts {
+    pub(crate) fn project_instance_id(&self) -> &ProjectInstanceId {
+        &self.project_instance_id
+    }
+
+    pub(crate) fn resource_publication_revision(&self) -> u64 {
+        self.resource_publication_revision
+    }
+
+    pub(crate) fn resources(&self) -> &ProjectCatalogResources {
+        &self.resources
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CompatibleCatalogProjectFacts {
+    localized: LocalizedCatalogProjectFacts,
+    graph: DraftGraphCatalogFacts,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DraftGraphCatalogFacts {
+    path: GraphResourcePath,
+    document: Arc<GraphDocument>,
+}
+
+impl DraftGraphCatalogFacts {
+    pub(crate) fn path(&self) -> &GraphResourcePath {
+        &self.path
+    }
+
+    pub(crate) fn document(&self) -> &GraphDocument {
+        &self.document
+    }
+}
+
+pub(crate) fn capture_localized_project_facts(
+    session: &ApplicationSession,
+) -> Result<LocalizedCatalogProjectFacts, ProjectCatalogReadError> {
+    let index = session
+        .project()
+        .read_project_index(session.project_instance_id())
+        .map_err(map_project_catalog_error)?;
+    localized_project_facts_from_index(session, index)
+}
+
+pub(crate) fn localized_project_facts_from_index(
+    session: &ApplicationSession,
+    index: ProjectIndex,
+) -> Result<LocalizedCatalogProjectFacts, ProjectCatalogReadError> {
+    if index.project_instance_id != session.project_instance_id().as_str() {
+        return Err(ProjectCatalogReadError::ProjectLifecycleChanged);
+    }
+    let resource_publication_revision = index.publication_revision;
+    let authority_generation = index.authority_generation();
+    let project_instance_id = session.project_instance_id().clone();
+    let resources =
+        ProjectCatalogResources::from_index(index).map_err(ProjectCatalogReadError::Internal)?;
+    Ok(LocalizedCatalogProjectFacts {
+        project_instance_id: project_instance_id.clone(),
+        authority_basis: ProjectAuthorityBasis {
+            project_instance_id,
+            resource_publication_revision,
+            authority_generation,
+        },
+        resource_publication_revision,
+        resources,
+    })
+}
+
+pub(crate) fn capture_compatible_project_facts(
+    session: &ApplicationSession,
+    path: &GraphResourcePath,
+    document: &GraphDocument,
+) -> Result<CompatibleCatalogProjectFacts, CatalogQueryApplicationError> {
+    let localized = capture_localized_project_facts(session)?;
+    let resident = session
+        .project()
+        .has_resident_graph(path)
+        .map_err(map_project_catalog_error)
+        .map_err(CatalogQueryApplicationError::Project)?;
+    revalidate_project_catalog_facts(session, &localized)?;
+    if !resident {
+        return Err(GraphCatalogQueryError::GraphNotLoaded {
+            graph: path.clone(),
+        }
+        .into());
+    }
+    validate_graph_document(document).map_err(GraphCatalogQueryError::InvalidDraft)?;
+    Ok(CompatibleCatalogProjectFacts {
+        localized,
+        graph: DraftGraphCatalogFacts {
+            path: path.clone(),
+            document: Arc::new(document.clone()),
+        },
+    })
+}
+
+impl ApplicationState {
+    pub fn localized_node_catalog(
+        &self,
+        request: LocalizedCatalogRequest,
+    ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
+        let captured = self.capture_session()?;
+        localized_node_catalog_in_session(self, &captured, request)
+    }
+
+    pub fn compatible_node_catalog(
+        &self,
+        request: CompatibleCatalogRequest,
+    ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
+        let captured = self.capture_session()?;
+        compatible_node_catalog_in_session(self, &captured, request)
+    }
+}
+
+pub(crate) fn localized_node_catalog_in_session(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    request: LocalizedCatalogRequest,
+) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
+    ensure_requested_project(captured, request.project_instance_id())?;
+    let project = capture_localized_project_facts(captured)?;
+    localized_node_catalog_from_facts(application, captured, project, request.locale())
+}
+
+pub(crate) fn localized_node_catalog_from_facts(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    project: LocalizedCatalogProjectFacts,
+    locale: &str,
+) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
+    let context = DraftResolutionContext::from_project_facts(captured, project)?;
+    let localized = captured
+        .graph()
+        .localized_catalog_with_resources(context.project.resources().entries(), locale);
+
+    context.revalidate(captured)?;
+    revalidate_application_session(application, captured)?;
+
+    Ok(CatalogQueryResult::new(
+        context.project.project_instance_id().clone(),
+        RegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
+        context.project.resource_publication_revision(),
+        localized,
+    ))
+}
+
+pub(crate) fn compatible_node_catalog_in_session(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+    request: CompatibleCatalogRequest,
+) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
+    ensure_requested_project(captured, request.project_instance_id())?;
+    let CompatibleCatalogProjectFacts { localized, graph } =
+        capture_compatible_project_facts(captured, request.graph_path(), request.document())?;
+    let mut context = DraftResolutionContext::from_project_facts(captured, localized)?;
+    context.include_functions(captured, graph.document())?;
+    let localized = captured
+        .graph()
+        .compatible_catalog_with_resources(
+            graph.path(),
+            graph.document(),
+            request.source_port(),
+            &context.graph_catalog,
+            context.project.resources().entries(),
+            request.locale(),
+        )
+        .map_err(map_graph_catalog_error)?;
+
+    context.revalidate(captured)?;
+    revalidate_application_session(application, captured)?;
+
+    Ok(CatalogQueryResult::new(
+        context.project.project_instance_id().clone(),
+        RegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
+        context.project.resource_publication_revision(),
+        localized,
+    ))
+}
+
+fn ensure_requested_project(
+    captured: &ApplicationSession,
+    requested: &ProjectInstanceId,
+) -> Result<(), CatalogQueryApplicationError> {
+    if requested != captured.project_instance_id() {
+        return Err(CatalogQueryApplicationError::CatalogProjectStale);
+    }
+    Ok(())
+}
+
+fn revalidate_application_session(
+    application: &ApplicationState,
+    captured: &Arc<ApplicationSession>,
+) -> Result<(), CatalogQueryApplicationError> {
+    application
+        .revalidate_captured_session(captured)
+        .map_err(|error| match error {
+            SessionRevalidationError::Unavailable(error) => {
+                CatalogQueryApplicationError::SessionCapture(error)
+            }
+            SessionRevalidationError::Changed => CatalogQueryApplicationError::SessionChanged,
+        })
+}
+
+pub(crate) fn revalidate_project_catalog_facts(
+    session: &ApplicationSession,
+    facts: &LocalizedCatalogProjectFacts,
+) -> Result<(), ProjectCatalogReadError> {
+    session
+        .project()
+        .validate_project_index_version(
+            &facts.authority_basis.project_instance_id,
+            facts.authority_basis.resource_publication_revision,
+            facts.authority_basis.authority_generation,
+        )
+        .map_err(map_project_catalog_error)
+}
+
+fn map_project_catalog_error(error: ProjectOperationError) -> ProjectCatalogReadError {
+    match error {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
+            ProjectCatalogReadError::ProjectLifecycleChanged
+        }
+        ProjectOperationError::CatalogResourceStale { .. } => {
+            ProjectCatalogReadError::CatalogResourceStale {
+                resource: GraphResourceId::new("project/catalog"),
+            }
+        }
+        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. } => {
+            ProjectCatalogReadError::AdmissionClosed
+        }
+        ProjectOperationError::ProjectRecoveryRequired { .. } => {
+            ProjectCatalogReadError::RecoveryRequired
+        }
+        ProjectOperationError::FilesystemTransactionBusy { .. } => {
+            ProjectCatalogReadError::FilesystemBusy
+        }
+        error => ProjectCatalogReadError::ReadFailed(ProjectCatalogReadSource::filesystem(error)),
+    }
+}
+
+fn map_graph_catalog_error(error: GraphRuntimeCatalogError) -> CatalogQueryApplicationError {
+    match error {
+        GraphRuntimeCatalogError::SourceInvalid => {
+            GraphCatalogQueryError::CompatibleSourceInvalid.into()
+        }
+    }
+}
+
+fn graph_signature(
+    signature: yss_project_history::FunctionSignature,
+) -> Result<FunctionSignature, ()> {
+    let parameters = signature
+        .parameters
+        .iter()
+        .map(|parameter| {
+            parse_function_data_type(&parameter.type_name)
+                .map(|data_type| {
+                    FunctionParameterContract::new(
+                        parameter.id.clone(),
+                        parameter.name.clone(),
+                        data_type,
+                    )
+                })
+                .map_err(|_| ())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let result = signature
+        .return_type
+        .as_deref()
+        .map(parse_function_data_type)
+        .transpose()
+        .map_err(|_| ())?;
+    Ok(FunctionSignature::new(parameters, result))
+}
+
+fn node_type(
+    value: &'static str,
+) -> Result<yss_node_protocol::NodeTypeId, ProjectCatalogReadSource> {
+    yss_node_protocol::NodeTypeId::new(value)
+        .map_err(|_| ProjectCatalogReadSource::invalid_declaration_facts())
+}
+
+#[cfg(test)]
+mod tests;

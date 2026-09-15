@@ -3,7 +3,7 @@ use crate::ipc::channel::execution::execution_event_to_transport;
 use crate::ipc::error::CommandError;
 use crate::{
     automation::{AutomationGraphDraft, AutomationGraphUpdate, prepare_automation_graph_action},
-    execution::ApplicationState,
+    session::ApplicationState,
 };
 use serde::Deserialize;
 use tauri::{State, ipc::Channel};

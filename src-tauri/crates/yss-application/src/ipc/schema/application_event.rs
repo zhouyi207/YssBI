@@ -5,7 +5,7 @@ use crate::events::{
 use yss_ipc_contract::project::*;
 
 pub(crate) fn project_activation_to_transport(
-    activation: &crate::project_query::ProjectActivation,
+    activation: &crate::project::query::ProjectActivation,
 ) -> ProjectActivationResultDto {
     ProjectActivationResultDto {
         path: activation.path.clone(),

@@ -1,5 +1,5 @@
 use crate::ipc::error::CommandError;
-use crate::project_failure::ApplicationProjectFailure;
+use crate::project::failure::ApplicationProjectFailure;
 
 pub(crate) fn application_project_command_error(
     error: impl Into<ApplicationProjectFailure>,

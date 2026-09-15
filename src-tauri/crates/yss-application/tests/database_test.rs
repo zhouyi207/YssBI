@@ -5,9 +5,7 @@ use arrow::record_batch::RecordBatch;
 use std::path::PathBuf;
 use std::sync::Arc;
 use yss_application::database::{DatabaseMutation, DatabaseRowsResult};
-use yss_application::execution::{
-    ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState,
-};
+use yss_application::session::{ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState};
 use yss_database_contract::DatabaseImportSource;
 
 use yss_project::ProjectState;
@@ -82,7 +80,8 @@ impl Project {
         &self,
         id: &str,
         operation: DatabaseMutation,
-    ) -> Result<yss_database_edit::EditState, yss_application::database::DatabaseUseCaseError> {
+    ) -> Result<yss_database_contract::EditState, yss_application::database::DatabaseUseCaseError>
+    {
         self.app
             .mutate_database_for_application(
                 self.app
@@ -135,13 +134,16 @@ impl Drop for Project {
     }
 }
 fn application(project: Arc<ProjectState>) -> ApplicationState {
-    let candidate = yss_application::execution::session_factory::build_current_project_candidate(
+    let candidate = yss_application::session::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         project,
         [],
+        &yss_application::session::NodeComponents::builtins().unwrap(),
     )
     .unwrap();
-    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
+    let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
+        yss_application::session::NodeComponents::builtins().unwrap(),
+    )));
     app.install_candidate(candidate).unwrap();
     app
 }

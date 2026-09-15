@@ -4,11 +4,12 @@ use uuid::Uuid;
 
 use crate::finalization::ReadyResult;
 use crate::plan::PlanOutputRef;
-pub use crate::result::{ResultId, StoredResult};
 use crate::result::{
-    GraphResultInputs, OutputResultInputs, ResultCacheState, ResultRetentionError, ResultRunBasis,
+    ConnectionCacheState, ConnectionResultState, GraphResultCacheState, GraphResultInputs,
+    OutputResultInputs, ResultCacheState, ResultRetentionError, ResultRunBasis,
     StoredResultSnapshot,
 };
+pub use crate::result::{ResultId, StoredResult};
 use crate::run_registry::RunId;
 
 struct ResultEntry {
@@ -105,7 +106,11 @@ impl ResultStoreRegistry {
     }
 
     fn observe_graph_inputs(&mut self, graph: &str, inputs: GraphResultInputs) {
-        if self.graph_inputs.get(graph).is_some_and(|current| current.inputs == inputs) {
+        if self
+            .graph_inputs
+            .get(graph)
+            .is_some_and(|current| current.inputs == inputs)
+        {
             return;
         }
         let mut detached = Vec::new();
@@ -126,10 +131,13 @@ impl ResultStoreRegistry {
         for id in detached {
             self.detach(id);
         }
-        self.graph_inputs.insert(graph.to_owned(), ObservedGraphInputs {
-            revision: Uuid::new_v4(),
-            inputs,
-        });
+        self.graph_inputs.insert(
+            graph.to_owned(),
+            ObservedGraphInputs {
+                revision: Uuid::new_v4(),
+                inputs,
+            },
+        );
         self.refresh_graph(graph);
     }
 
@@ -142,19 +150,26 @@ impl ResultStoreRegistry {
             if output.graph().as_str() != graph || cached.result.is_none() {
                 continue;
             }
-            match (&cached.inputs, observed.and_then(|current| current.inputs.outputs.get(output))) {
+            match (
+                &cached.inputs,
+                observed.and_then(|current| current.inputs.outputs.get(output)),
+            ) {
                 (Some(produced), Some(current)) if current.available && produced == current => {
-                    if !produced.sources.iter().all(|source| {
-                        let actual = self.outputs.get(source).and_then(|value| value.result);
-                        actual.is_some() && actual == cached.source_results.get(source).copied()
+                    let sources = produced.sources().collect::<BTreeSet<_>>();
+                    if !sources.iter().all(|source| {
+                        let actual = self.outputs.get(*source).and_then(|value| value.result);
+                        actual.is_some() && actual == cached.source_results.get(*source).copied()
                     }) {
                         continue;
                     }
-                    remaining.insert(output.clone(), produced.sources.len());
-                    for source in &produced.sources {
-                        dependents.entry(source.clone()).or_default().push(output.clone());
+                    remaining.insert(output.clone(), sources.len());
+                    for source in &sources {
+                        dependents
+                            .entry((*source).clone())
+                            .or_default()
+                            .push(output.clone());
                     }
-                    if produced.sources.is_empty() {
+                    if sources.is_empty() {
                         pending.push(output.clone());
                     }
                 }
@@ -170,7 +185,10 @@ impl ResultStoreRegistry {
         }
         // One dependency pass also fails closed for cycles and missing upstream outputs.
         while let Some(output) = pending.pop() {
-            self.outputs.get_mut(&output).expect("indexed cached output").valid = true;
+            self.outputs
+                .get_mut(&output)
+                .expect("indexed cached output")
+                .valid = true;
             for dependent in dependents.get(&output).into_iter().flatten() {
                 let count = remaining.get_mut(dependent).expect("indexed dependent");
                 *count -= 1;
@@ -374,18 +392,33 @@ impl ResultStore {
         }
     }
 
-    pub(crate) fn begin_run(&self, run: RunId, outputs: &[PlanOutputRef], basis: Option<&ResultRunBasis>) -> bool {
+    pub(crate) fn begin_run(
+        &self,
+        run: RunId,
+        outputs: &[PlanOutputRef],
+        basis: Option<&ResultRunBasis>,
+    ) -> bool {
         let mut registry = self
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
         if let Some(basis) = basis {
-            if !registry.graph_inputs.get(basis.graph.as_ref()).is_some_and(|current| {
-                current.revision == basis.revision && current.inputs == basis.inputs
-            }) || outputs.iter().any(|output| !basis.inputs.outputs.contains_key(output)) {
+            if !registry
+                .graph_inputs
+                .get(basis.graph.as_ref())
+                .is_some_and(|current| {
+                    current.revision == basis.revision && current.inputs == basis.inputs
+                })
+                || outputs
+                    .iter()
+                    .any(|output| !basis.inputs.outputs.contains_key(output))
+            {
                 return false;
             }
-        } else if outputs.iter().any(|output| registry.graph_inputs.contains_key(output.graph().as_str())) {
+        } else if outputs
+            .iter()
+            .any(|output| registry.graph_inputs.contains_key(output.graph().as_str()))
+        {
             return false;
         }
         if outputs.iter().any(|output| {
@@ -397,16 +430,26 @@ impl ResultStore {
             return false;
         }
         for output in outputs {
-            let previous = registry.outputs.insert(output.clone(), CachedOutput {
-                run: Some(run),
-                inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
-                ..Default::default()
-            }).and_then(|cached| cached.result);
+            let previous = registry
+                .outputs
+                .insert(
+                    output.clone(),
+                    CachedOutput {
+                        run: Some(run),
+                        inputs: basis.and_then(|basis| basis.inputs.outputs.get(output).cloned()),
+                        ..Default::default()
+                    },
+                )
+                .and_then(|cached| cached.result);
             if let Some(previous) = previous {
                 registry.detach(previous);
             }
         }
-        for graph in outputs.iter().map(|output| output.graph().as_str()).collect::<BTreeSet<_>>() {
+        for graph in outputs
+            .iter()
+            .map(|output| output.graph().as_str())
+            .collect::<BTreeSet<_>>()
+        {
             registry.refresh_graph(graph);
         }
         true
@@ -418,14 +461,23 @@ impl ResultStore {
             .registry
             .write()
             .unwrap_or_else(|error| error.into_inner());
-        let published = results.iter().map(|result| (result.output().clone(), result.result_id())).collect::<BTreeMap<_, _>>();
+        let published = results
+            .iter()
+            .map(|result| (result.output().clone(), result.result_id()))
+            .collect::<BTreeMap<_, _>>();
         if results.iter().any(|result| {
-            registry.outputs.get(result.output()).and_then(|cached| cached.run)
+            registry
+                .outputs
+                .get(result.output())
+                .and_then(|cached| cached.run)
                 != Some(result.pin().provenance().run_id())
                 || registry.outputs.get(result.output()).is_some_and(|cached| {
-                    cached.result.is_some() || cached.inputs.as_ref().is_some_and(|inputs| {
-                        inputs.sources.iter().any(|source| !published.contains_key(source))
-                    })
+                    cached.result.is_some()
+                        || cached.inputs.as_ref().is_some_and(|inputs| {
+                            inputs
+                                .sources()
+                                .any(|source| !published.contains_key(source))
+                        })
                 })
                 || registry
                     .values
@@ -440,11 +492,26 @@ impl ResultStore {
         for result in results {
             let id = result.result_id();
             let provenance = result.pin().provenance();
-            let cached = registry.outputs.get(result.output()).expect("admitted output");
-            let source_results = cached.inputs.as_ref().into_iter().flat_map(|inputs| &inputs.sources)
-                .filter_map(|source| published.get(source).copied().map(|id| (source.clone(), id)))
+            let cached = registry
+                .outputs
+                .get(result.output())
+                .expect("admitted output");
+            let source_results = cached
+                .inputs
+                .as_ref()
+                .into_iter()
+                .flat_map(|inputs| inputs.sources())
+                .filter_map(|source| {
+                    published
+                        .get(source)
+                        .copied()
+                        .map(|id| (source.clone(), id))
+                })
                 .collect();
-            let cached = registry.outputs.get_mut(result.output()).expect("admitted output");
+            let cached = registry
+                .outputs
+                .get_mut(result.output())
+                .expect("admitted output");
             let previous = cached.result.replace(id);
             cached.source_results = source_results;
             if let Some(previous) = previous.filter(|previous| *previous != id) {
@@ -464,7 +531,11 @@ impl ResultStore {
                 })
                 .cached = true;
         }
-        for graph in results.iter().map(|result| result.output().graph().as_str()).collect::<BTreeSet<_>>() {
+        for graph in results
+            .iter()
+            .map(|result| result.output().graph().as_str())
+            .collect::<BTreeSet<_>>()
+        {
             registry.refresh_graph(graph);
         }
         true
@@ -493,47 +564,137 @@ impl ResultStore {
         registry.observe_graph_inputs(graph, inputs);
     }
 
-    pub(crate) fn capture_run_basis(&self, graph: &str, inputs: GraphResultInputs) -> Option<ResultRunBasis> {
-        let mut registry = self.registry.write().unwrap_or_else(|error| error.into_inner());
-        if registry.graph_inputs.get(graph).is_some_and(|current| current.inputs.semantic_input_hash != inputs.semantic_input_hash)
-            || inputs.outputs.keys().any(|output| output.graph().as_str() != graph) {
+    pub(crate) fn capture_run_basis(
+        &self,
+        graph: &str,
+        inputs: GraphResultInputs,
+    ) -> Option<ResultRunBasis> {
+        let mut registry = self
+            .registry
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        if registry
+            .graph_inputs
+            .get(graph)
+            .is_some_and(|current| current.inputs.semantic_input_hash != inputs.semantic_input_hash)
+            || inputs
+                .outputs
+                .keys()
+                .any(|output| output.graph().as_str() != graph)
+        {
             return None;
         }
         registry.observe_graph_inputs(graph, inputs);
         let current = &registry.graph_inputs[graph];
-        Some(ResultRunBasis { graph: graph.into(), revision: current.revision, inputs: current.inputs.clone() })
+        Some(ResultRunBasis {
+            graph: graph.into(),
+            revision: current.revision,
+            inputs: current.inputs.clone(),
+        })
     }
 
-    pub(crate) fn query_cache_states(&self, graph: &str, semantic_input_hash: &[u8; 32]) -> Option<BTreeMap<PlanOutputRef, ResultCacheState>> {
-        let registry = self.registry.read().unwrap_or_else(|error| error.into_inner());
+    pub(crate) fn query_cache_states(
+        &self,
+        graph: &str,
+        semantic_input_hash: &[u8; 32],
+    ) -> Option<GraphResultCacheState> {
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
         let current = registry.graph_inputs.get(graph)?;
         if &current.inputs.semantic_input_hash != semantic_input_hash {
             return None;
         }
-        Some(current.inputs.outputs.keys().map(|output| {
-            let state = match registry.outputs.get(output) {
-                Some(cached) if cached.valid => ResultCacheState::Valid { result_id: cached.result.expect("valid result") },
-                Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
-                _ => ResultCacheState::Missing,
-            };
-            (output.clone(), state)
-        }).collect())
+        let outputs = current
+            .inputs
+            .outputs
+            .keys()
+            .map(|output| {
+                let state = match registry.outputs.get(output) {
+                    Some(cached) if cached.valid => ResultCacheState::Valid {
+                        result_id: cached.result.expect("valid result"),
+                    },
+                    Some(cached) if cached.result.is_some() => ResultCacheState::Stale,
+                    _ => ResultCacheState::Missing,
+                };
+                (output.clone(), state)
+            })
+            .collect();
+        let mut connections = BTreeMap::new();
+        for (output, inputs) in &current.inputs.outputs {
+            let cached = registry
+                .outputs
+                .get(output)
+                .filter(|cached| cached.result.is_some());
+            for (input, sources) in &inputs.bindings {
+                for source in sources {
+                    let state = match cached {
+                        Some(cached) if cached.valid => ConnectionCacheState::Valid,
+                        Some(cached)
+                            if cached
+                                .inputs
+                                .as_ref()
+                                .and_then(|inputs| inputs.bindings.get(input))
+                                .is_some_and(|consumed| consumed.contains(source)) =>
+                        {
+                            ConnectionCacheState::Stale
+                        }
+                        _ => ConnectionCacheState::New,
+                    };
+                    // Any matching output proves the binding was consumed; node completeness is separate.
+                    connections
+                        .entry((source.clone(), input.clone()))
+                        .and_modify(|current: &mut ConnectionCacheState| {
+                            *current = (*current).max(state)
+                        })
+                        .or_insert(state);
+                }
+            }
+        }
+        Some(GraphResultCacheState {
+            outputs,
+            connections: connections
+                .into_iter()
+                .map(|((output, input), state)| ConnectionResultState {
+                    output,
+                    input,
+                    state,
+                })
+                .collect(),
+        })
     }
 
     pub(crate) fn resource_keys(&self, graph: &str) -> BTreeSet<Box<str>> {
-        let registry = self.registry.read().unwrap_or_else(|error| error.into_inner());
-        registry.graph_inputs.get(graph).into_iter().flat_map(|current| current.inputs.outputs.values())
-            .flat_map(|output| output.resources.keys().cloned()).collect()
+        let registry = self
+            .registry
+            .read()
+            .unwrap_or_else(|error| error.into_inner());
+        registry
+            .graph_inputs
+            .get(graph)
+            .into_iter()
+            .flat_map(|current| current.inputs.outputs.values())
+            .flat_map(|output| output.resources.keys().cloned())
+            .collect()
     }
 
-    pub(crate) fn observe_resource_versions(&self, versions: &BTreeMap<Box<str>, Option<[u8; 32]>>) {
-        let mut registry = self.registry.write().unwrap_or_else(|error| error.into_inner());
+    pub(crate) fn observe_resource_versions(
+        &self,
+        versions: &BTreeMap<Box<str>, Option<[u8; 32]>>,
+    ) {
+        let mut registry = self
+            .registry
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
         let mut changed = Vec::new();
         for (graph, current) in &mut registry.graph_inputs {
             let mut dirty = false;
             for output in current.inputs.outputs.values_mut() {
                 for (resource, version) in &mut output.resources {
-                    if let Some(actual) = versions.get(resource) && actual != version {
+                    if let Some(actual) = versions.get(resource)
+                        && actual != version
+                    {
                         *version = *actual;
                         dirty = true;
                     }
@@ -586,47 +747,88 @@ mod tests {
     }
 
     fn named_output(port: &str) -> PlanOutputRef {
-        PlanOutputRef::new(output().graph().clone(), PlanPortAddress::from_existing(port.into()))
+        PlanOutputRef::new(
+            output().graph().clone(),
+            PlanPortAddress::from_existing(port.into()),
+        )
     }
 
     fn cache_inputs(hash: u8, nodes: &[(&str, u8, &[&str])]) -> GraphResultInputs {
         GraphResultInputs {
             semantic_input_hash: [hash; 32],
-            outputs: nodes.iter().map(|(port, fingerprint, sources)| (named_output(port), OutputResultInputs {
-                fingerprint: [*fingerprint; 32],
-                sources: sources.iter().map(|port| named_output(port)).collect(),
-                resources: BTreeMap::new(),
-                available: true,
-            })).collect(),
+            outputs: nodes
+                .iter()
+                .map(|(port, fingerprint, sources)| {
+                    (
+                        named_output(port),
+                        OutputResultInputs {
+                            fingerprint: [*fingerprint; 32],
+                            bindings: if sources.is_empty() {
+                                BTreeMap::new()
+                            } else {
+                                BTreeMap::from([(
+                                    PlanPortAddress::from_existing(format!("{port}:input").into()),
+                                    sources.iter().map(|port| named_output(port)).collect(),
+                                )])
+                            },
+                            resources: BTreeMap::new(),
+                            available: true,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 
     fn cached_result(id: u64, run: RunId, output: PlanOutputRef) -> ReadyResult {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
-            id, StoredResult::new(crate::value::RuntimeValue::Integer(id.get() as i64)),
+            id,
+            StoredResult::new(crate::value::RuntimeValue::Integer(id.get() as i64)),
             ResultCategory::Value,
-            ReadyPinResult::new(output, ResultProvenance::produced(
-                crate::identity::ExecutionSessionId::new(Uuid::nil()), id, run, 10,
-            )),
+            ReadyPinResult::new(
+                output,
+                ResultProvenance::produced(
+                    crate::identity::ExecutionSessionId::new(Uuid::nil()),
+                    id,
+                    run,
+                    10,
+                ),
+            ),
         )
     }
 
     fn publish_cached_graph(store: &ResultStore, inputs: &GraphResultInputs) {
         let graph = output();
-        let basis = store.capture_run_basis(graph.graph().as_str(), inputs.clone()).unwrap();
+        let basis = store
+            .capture_run_basis(graph.graph().as_str(), inputs.clone())
+            .unwrap();
         let outputs = inputs.outputs.keys().cloned().collect::<Vec<_>>();
         let run = RunId::from_existing(1);
         assert!(store.begin_run(run, &outputs, Some(&basis)));
-        assert!(store.publish(&outputs.into_iter().enumerate().map(|(index, output)| {
-            cached_result(index as u64 + 1, run, output)
-        }).collect::<Vec<_>>()));
+        assert!(
+            store.publish(
+                &outputs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, output)| { cached_result(index as u64 + 1, run, output) })
+                    .collect::<Vec<_>>()
+            )
+        );
     }
 
     #[test]
     fn edits_revalidate_only_dependent_caches_and_undo_cannot_resurrect_deleted_outputs() {
         let store = ResultStore::new();
-        let original = cache_inputs(1, &[("a", 1, &[]), ("b", 2, &["a"]), ("c", 3, &["b"]), ("d", 4, &["a"])]);
+        let original = cache_inputs(
+            1,
+            &[
+                ("a", 1, &[]),
+                ("b", 2, &["a"]),
+                ("c", 3, &["b"]),
+                ("d", 4, &["a"]),
+            ],
+        );
         publish_cached_graph(&store, &original);
         let b = store.query_pin_result(&named_output("b")).unwrap();
         let weak = Arc::downgrade(b.value());
@@ -634,22 +836,92 @@ mod tests {
         drop(b);
         let graph = output();
         let graph = graph.graph().as_str();
-        let edited = cache_inputs(2, &[("a", 1, &[]), ("b", 8, &[]), ("c", 3, &["b"]), ("d", 4, &["a"]), ("e", 5, &["a"])]);
+        let edited = cache_inputs(
+            2,
+            &[
+                ("a", 1, &[]),
+                ("b", 8, &[]),
+                ("c", 3, &["b"]),
+                ("d", 4, &["a"]),
+                ("e", 5, &["a"]),
+            ],
+        );
         store.observe_graph_inputs(graph, edited.clone());
         let states = store.query_cache_states(graph, &[2; 32]).unwrap();
         for port in ["a", "d"] {
-            assert!(matches!(states[&named_output(port)], ResultCacheState::Valid { .. }));
+            assert!(matches!(
+                states.outputs[&named_output(port)],
+                ResultCacheState::Valid { .. }
+            ));
             assert!(store.query_pin_result(&named_output(port)).is_some());
         }
         for port in ["b", "c"] {
-            assert_eq!(states[&named_output(port)], ResultCacheState::Stale);
+            assert_eq!(states.outputs[&named_output(port)], ResultCacheState::Stale);
             assert!(store.query_pin_result(&named_output(port)).is_none());
         }
-        assert_eq!(states[&named_output("e")], ResultCacheState::Missing);
+        assert_eq!(
+            states.outputs[&named_output("e")],
+            ResultCacheState::Missing
+        );
+        let connection = |state: &GraphResultCacheState, source: &str, input: &str| {
+            state
+                .connections
+                .iter()
+                .find(|connection| {
+                    connection.output == named_output(source) && connection.input.as_str() == input
+                })
+                .unwrap()
+                .state
+        };
+        assert_eq!(
+            connection(&states, "a", "d:input"),
+            ConnectionCacheState::Valid
+        );
+        assert_eq!(
+            connection(&states, "b", "c:input"),
+            ConnectionCacheState::Stale
+        );
+        assert_eq!(
+            connection(&states, "a", "e:input"),
+            ConnectionCacheState::New
+        );
+        let rewired = cache_inputs(
+            4,
+            &[
+                ("a", 1, &[]),
+                ("b", 8, &["d"]),
+                ("c", 3, &["b"]),
+                ("d", 4, &["a"]),
+            ],
+        );
+        store.observe_graph_inputs(graph, rewired);
+        let states = store.query_cache_states(graph, &[4; 32]).unwrap();
+        assert_eq!(
+            connection(&states, "d", "b:input"),
+            ConnectionCacheState::New
+        );
+        assert_eq!(
+            connection(&states, "b", "c:input"),
+            ConnectionCacheState::Stale
+        );
         assert!(store.get(b_id).is_some());
         assert!(store.query_cache_states(graph, &[1; 32]).is_none());
         store.observe_graph_inputs(graph, original.clone());
-        assert_eq!(store.query_pin_result(&named_output("b")).unwrap().provenance().result_id(), b_id);
+        let states = store.query_cache_states(graph, &[1; 32]).unwrap();
+        assert!(
+            states
+                .connections
+                .iter()
+                .all(|connection| connection.state == ConnectionCacheState::Valid)
+        );
+        assert_eq!(
+            store
+                .query_pin_result(&named_output("b"))
+                .unwrap()
+                .provenance()
+                .result_id(),
+            b_id
+        );
         assert!(store.query_pin_result(&named_output("c")).is_some());
         store.observe_graph_inputs(graph, edited);
         assert!(store.query_pin_result(&named_output("c")).is_none());
@@ -696,15 +968,30 @@ mod tests {
         assert!(store.query_pin_result(&named_output("a")).is_none());
         let resources = ResultStore::new();
         let mut original = original;
-        original.outputs.get_mut(&named_output("a")).unwrap().resources.insert("database:source".into(), Some([1; 32]));
+        original
+            .outputs
+            .get_mut(&named_output("a"))
+            .unwrap()
+            .resources
+            .insert("database:source".into(), Some([1; 32]));
         publish_cached_graph(&resources, &original);
-        let old_admission = resources.capture_run_basis(graph, original.clone()).unwrap();
-        resources.observe_resource_versions(&BTreeMap::from([("database:source".into(), Some([7; 32]))]));
+        let old_admission = resources
+            .capture_run_basis(graph, original.clone())
+            .unwrap();
+        resources.observe_resource_versions(&BTreeMap::from([(
+            "database:source".into(),
+            Some([7; 32]),
+        )]));
         assert!(resources.query_pin_result(&named_output("a")).is_none());
         assert!(resources.query_pin_result(&named_output("b")).is_none());
         assert!(!resources.begin_run(RunId::from_existing(2), &outputs, Some(&old_admission)));
         // Undo restores graph semantics, while the independent data revision stays current.
-        original.outputs.get_mut(&named_output("a")).unwrap().resources.insert("database:source".into(), Some([7; 32]));
+        original
+            .outputs
+            .get_mut(&named_output("a"))
+            .unwrap()
+            .resources
+            .insert("database:source".into(), Some([7; 32]));
         resources.observe_graph_inputs(graph, original);
         assert!(resources.query_pin_result(&named_output("b")).is_none());
         assert!(resources.get(ResultId::from_existing(1)).is_some());
@@ -895,10 +1182,19 @@ mod tests {
         assert!(store.publish(&[result(5, third)]));
         assert!(!store.begin_run(second, &[output()], None));
         assert!(store.get(ResultId::from_existing(5)).is_some());
-        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(1, &[("node:result", 1, &[])]));
-        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(1, &[("node:result", 1, &[])]));
+        store.observe_graph_inputs(
+            output().graph().as_str(),
+            cache_inputs(1, &[("node:result", 1, &[])]),
+        );
+        store.observe_graph_inputs(
+            output().graph().as_str(),
+            cache_inputs(1, &[("node:result", 1, &[])]),
+        );
         assert!(store.get(ResultId::from_existing(5)).is_some());
-        store.observe_graph_inputs(output().graph().as_str(), cache_inputs(2, &[("node:result", 2, &[])]));
+        store.observe_graph_inputs(
+            output().graph().as_str(),
+            cache_inputs(2, &[("node:result", 2, &[])]),
+        );
         assert!(store.query_pin_result(&output()).is_none());
         assert!(!store.publish(&[result(6, third)]));
     }

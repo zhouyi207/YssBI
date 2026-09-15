@@ -1,5 +1,5 @@
 use crate::ipc::error::CommandError;
-use crate::project_lifecycle::ProjectManagement;
+use crate::project::ProjectManagement;
 use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
 use yss_ipc_channel::project_progress::ProgressAdapterShutdownControl;
@@ -116,7 +116,7 @@ pub async fn remove_registered_project(
 #[tauri::command]
 pub async fn delete_registered_project_files(
     app: tauri::AppHandle,
-    application: State<'_, crate::execution::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     projects: State<'_, ProjectManagement>,
     id: String,
     expected_active_instance_id: Option<ProjectInstanceId>,

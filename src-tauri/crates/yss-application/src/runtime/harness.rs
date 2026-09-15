@@ -8,7 +8,7 @@ use yss_automation_contract::{
 };
 use yss_statistical_harness::{HarnessHost, HarnessPorts};
 
-use crate::execution::ApplicationState;
+use crate::session::ApplicationState;
 
 pub struct HarnessTransportPorts {
     pub capability_gateway: Arc<dyn CapabilityGatewayPort>,

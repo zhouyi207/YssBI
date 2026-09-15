@@ -1,3 +1,4 @@
+use crate::kernels::KernelInvocation;
 use std::collections::BTreeMap;
 
 use yss_relational_contract::{
@@ -5,11 +6,11 @@ use yss_relational_contract::{
     SeriesHandle,
 };
 
-use crate::state::{KernelExecutionError, PreparedKernelInvocation, parameter_value};
+use crate::state::{KernelExecutionError, parameter_value};
 use crate::value::RuntimeValue;
 
 pub(crate) fn decompose(
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let [input @ (RuntimeValue::Relation(_) | RuntimeValue::Record(_))] = invocation.inputs else {
         return Err(KernelExecutionError::Failed);
@@ -53,7 +54,7 @@ pub(crate) enum RelationalKernel {
 
 pub(crate) fn execute(
     kind: RelationalKernel,
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     let parameter = |key| {
         parameter_value(
@@ -166,7 +167,7 @@ pub(crate) const MAX_NUMERIC_INPUT_BYTES: usize = 128 * 1024 * 1024;
 
 pub(crate) fn numeric_columns(
     series: &[SeriesHandle],
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<Vec<f64>>, KernelExecutionError> {
     let relation = series
         .first()

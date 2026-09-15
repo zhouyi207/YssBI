@@ -1,11 +1,11 @@
-use crate::execution::{ApplicationState, SessionCaptureError};
-use crate::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
+use crate::graph::open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::ipc::activity_panel_sync::{ActivityPanelSyncState, ActivityPanelUpdateDto};
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::activity_panel::{
     ActivityPanelDocumentDto, ActivityPanelId, ActivityPanelRequest,
 };
 use crate::ipc::schema::{DatabaseDeclDTO, ProjectDatabasesDTO};
+use crate::session::{ApplicationState, SessionCaptureError};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use tauri::{Manager, State, WebviewWindow};
@@ -39,7 +39,7 @@ pub fn get_project_databases(
 }
 
 fn project_databases_to_transport(
-    snapshot: crate::project_query::ProjectDatabasesSnapshot,
+    snapshot: crate::project::query::ProjectDatabasesSnapshot,
 ) -> Result<ProjectDatabasesDTO, CommandError> {
     let databases = snapshot
         .databases()
@@ -67,7 +67,7 @@ pub fn get_current_project_activation(
 }
 
 fn project_activation_to_transport(
-    activation: crate::project_query::ProjectActivation,
+    activation: crate::project::query::ProjectActivation,
 ) -> ProjectActivationResultDto {
     ProjectActivationResultDto {
         path: activation.path,
@@ -237,9 +237,9 @@ pub fn get_project_resource_path(
 }
 
 pub(crate) fn map_project_query_error(
-    error: crate::project_query::ProjectQueryApplicationError,
+    error: crate::project::query::ProjectQueryApplicationError,
 ) -> CommandError {
-    use crate::project_query::ProjectQueryApplicationError;
+    use crate::project::query::ProjectQueryApplicationError;
     match error {
         ProjectQueryApplicationError::SessionCapture(error) => match error {
             SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),

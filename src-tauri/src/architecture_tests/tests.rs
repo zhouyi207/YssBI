@@ -107,18 +107,6 @@ fn declares_dependency(package: &str, declaration: &str) -> bool {
         })
 }
 
-fn workspace_declares(declaration: &str) -> bool {
-    if declaration.starts_with('"') {
-        let package = declaration.trim_matches('"').rsplit('/').next().unwrap();
-        workspace_facts()
-            .roots
-            .iter()
-            .any(|root| root.package == package)
-    } else {
-        declares_dependency("yssbi", declaration)
-    }
-}
-
 fn declares_dependency_family(package: &str, declaration: &str) -> bool {
     if declaration.contains('=') {
         return declares_dependency(package, declaration);
@@ -1215,8 +1203,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         &roots,
         &[module(
             &build_root,
-            "src-tauri/crates/yss-application/src/execution/session_factory.rs",
-            "yss_application::execution::session_factory",
+            "src-tauri/crates/yss-application/src/session/factory.rs",
+            "yss_application::session::factory",
         )],
     )
     .expect_err("BuildScript membership must not hide a second layer match");
@@ -1224,7 +1212,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         overlap,
         ArchitectureAuditError::MultiplyClassifiedProductionSource { source_files }
             if source_files
-                == vec!["src-tauri/crates/yss-application/src/execution/session_factory.rs"]
+                == vec!["src-tauri/crates/yss-application/src/session/factory.rs"]
     ));
 }
 
@@ -1254,7 +1242,6 @@ fn rust_production_sources_are_classified_once() {
 
 #[derive(Debug)]
 struct CanonicalOwnerExpectation {
-    symbol: &'static str,
     required_origin: &'static str,
     allowed_origins: &'static [&'static str],
 }
@@ -1635,7 +1622,7 @@ fn logging_collector_is_only_consumed_through_platform_adapter() {
     let plugin = "src-tauri/crates/tauri-plugin-tracing/src/plugin.rs";
     let logging = "src-tauri/crates/tauri-plugin-tracing/src/collector/runtime.rs";
     let composition = "src-tauri/src/lib.rs";
-    let application = "src-tauri/crates/yss-application/src/database.rs";
+    let application = "src-tauri/crates/yss-application/src/database/mod.rs";
     let classification = BTreeMap::from([
         (plugin.into(), RustLayer::PlatformAdapter),
         (logging.into(), RustLayer::Logging),
@@ -1847,7 +1834,6 @@ fn filesystem_has_no_internal_dependencies_and_project_policy_stays_above_it() {
 #[test]
 fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
     let expectation = CanonicalOwnerExpectation {
-        symbol: "CategoricalRole",
         required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
         allowed_origins: &[
             "src-tauri/crates/yss-data-contract/src/data_value.rs",
@@ -2419,8 +2405,8 @@ fn sample_catalog_composition_capability_does_not_grant_business_queries() {
 #[test]
 fn result_projection_capability_does_not_grant_application_state_access() {
     let source = "src-tauri/crates/yss-application/src/ipc/schema/result.rs";
-    let projection = "src-tauri/crates/yss-application/src/execution/result_query/report.rs";
-    let state = "src-tauri/crates/yss-application/src/execution/session_slot.rs";
+    let projection = "src-tauri/crates/yss-application/src/graph/results/report.rs";
+    let state = "src-tauri/crates/yss-application/src/session/slot.rs";
     let classification = BTreeMap::from([
         (source.to_owned(), RustLayer::Transport),
         (projection.to_owned(), RustLayer::Application),
@@ -2446,7 +2432,7 @@ fn result_projection_capability_does_not_grant_application_state_access() {
         rust_dependency_findings(
             &[dependency(
                 projection,
-                "yss_application::execution::result_query::report::OlsReportProjection",
+                "yss_application::graph::results::report::OlsReportProjection",
                 "OlsReportProjection"
             )],
             &classification
@@ -2458,7 +2444,7 @@ fn result_projection_capability_does_not_grant_application_state_access() {
         rust_dependency_findings(
             &[dependency(
                 state,
-                "yss_application::execution::session_slot::ApplicationState",
+                "yss_application::session::slot::ApplicationState",
                 "ApplicationState"
             )],
             &classification

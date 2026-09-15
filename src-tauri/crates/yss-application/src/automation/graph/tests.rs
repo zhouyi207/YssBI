@@ -1,5 +1,5 @@
 use super::*;
-use crate::execution::{ApplicationSessionEpoch, ApplicationSessionSlot};
+use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::time::Duration;
 
 struct Fixture {
@@ -30,13 +30,16 @@ impl Fixture {
             .activate_project_from_path(&created.metadata_path)
             .unwrap();
 
-        let candidate = crate::execution::session_factory::build_current_project_candidate(
+        let candidate = crate::session::build_current_project_candidate(
             ApplicationSessionEpoch::INITIAL,
             project,
             [],
+            &crate::session::NodeComponents::builtins().unwrap(),
         )
         .unwrap();
-        let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new()));
+        let application = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        )));
         application.install_candidate(candidate).unwrap();
         let session = application.capture_session().unwrap();
         let instance = session.project_instance_id().clone();

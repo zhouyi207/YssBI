@@ -72,6 +72,7 @@ pub type PlanResourceObservationSet = BTreeMap<PlanResourceId, PlanResourceObser
 pub struct PlanCompilationBasis {
     project_session: PlanProjectSessionId,
     registry_fingerprint: PlanRegistryFingerprint,
+    kernel_fingerprint: super::identity::KernelFingerprint,
     resource_versions: PlanResourceVersionSet,
     resource_observations: PlanResourceObservationSet,
 }
@@ -80,12 +81,14 @@ impl PlanCompilationBasis {
     pub fn new(
         project_session: PlanProjectSessionId,
         registry_fingerprint: PlanRegistryFingerprint,
+        kernel_fingerprint: super::identity::KernelFingerprint,
         resource_versions: PlanResourceVersionSet,
         resource_observations: PlanResourceObservationSet,
     ) -> Self {
         Self {
             project_session,
             registry_fingerprint,
+            kernel_fingerprint,
             resource_versions,
             resource_observations,
         }
@@ -101,6 +104,10 @@ impl PlanCompilationBasis {
 
     pub fn resource_versions(&self) -> &PlanResourceVersionSet {
         &self.resource_versions
+    }
+
+    pub const fn kernel_fingerprint(&self) -> super::identity::KernelFingerprint {
+        self.kernel_fingerprint
     }
 
     pub fn resource_observations(&self) -> &PlanResourceObservationSet {

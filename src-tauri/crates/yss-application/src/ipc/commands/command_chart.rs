@@ -1,7 +1,7 @@
 use crate::chart::ChartApplicationError;
-use crate::chart_plot::{ChartPlotApplicationError, ChartPlotQuery};
-use crate::execution::{ApplicationState, SessionCaptureError};
+use crate::chart::{ChartPlotApplicationError, ChartPlotQuery};
 use crate::ipc::error::CommandError;
+use crate::session::{ApplicationState, SessionCaptureError};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 use yss_chart_document::{ChartDocument, ChartResourcePath};
@@ -67,7 +67,7 @@ fn emit_chart_application_result(
 #[tauri::command]
 pub fn create_chart(
     app: AppHandle,
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     name: String,
@@ -84,7 +84,7 @@ pub fn create_chart(
 #[tauri::command]
 pub fn duplicate_chart(
     app: AppHandle,
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     chart_path: ChartResourcePath,
@@ -105,7 +105,7 @@ pub fn duplicate_chart(
 
 #[tauri::command]
 pub fn load_chart(
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: String,
     chart_path: ChartResourcePath,
     expected_publication_revision: Option<u64>,
@@ -124,7 +124,7 @@ pub fn load_chart(
 #[tauri::command]
 pub fn save_chart(
     app: AppHandle,
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     chart_path: ChartResourcePath,
@@ -141,7 +141,7 @@ pub fn save_chart(
 #[tauri::command]
 pub fn rename_chart_resource(
     app: AppHandle,
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     chart_path: ChartResourcePath,
@@ -167,7 +167,7 @@ pub fn rename_chart_resource(
 #[tauri::command]
 pub fn remove_chart(
     app: AppHandle,
-    application: State<crate::execution::ApplicationState>,
+    application: State<crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     chart_path: ChartResourcePath,
@@ -269,11 +269,11 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
     }
 }
 
-fn plot_axis_format(format: crate::chart_plot::PlotAxisFormat) -> String {
+fn plot_axis_format(format: crate::chart::PlotAxisFormat) -> String {
     match format {
-        crate::chart_plot::PlotAxisFormat::Number => "number",
-        crate::chart_plot::PlotAxisFormat::Date => "date",
-        crate::chart_plot::PlotAxisFormat::Datetime => "datetime",
+        crate::chart::PlotAxisFormat::Number => "number",
+        crate::chart::PlotAxisFormat::Date => "date",
+        crate::chart::PlotAxisFormat::Datetime => "datetime",
     }
     .to_owned()
 }

@@ -13,11 +13,11 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use yss_database_contract::EditState;
 use yss_database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseExportFormat, DatabaseId,
     DatabaseSessionIdentity, DatabaseSessionOpenRequest, DatabaseSessionOpenRequestParts,
 };
-use yss_database_edit::EditState;
 use yss_database_schema::DatabaseSchemaFact;
 
 pub(crate) use registry::{

@@ -39,7 +39,6 @@ members = [
   "crates/yss-datafusion",
   "crates/yss-relational-contract",
   "crates/yss-database-contract",
-  "crates/yss-database-edit",
   "crates/yss-database-runtime",
   "crates/yss-database-schema",
   "crates/yss-dataset-profile",

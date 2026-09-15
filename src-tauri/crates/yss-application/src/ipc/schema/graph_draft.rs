@@ -3,9 +3,9 @@ use yss_ipc_contract::graph_draft::*;
 use super::application_event::graph_projection_replacement_to_transport;
 
 pub(crate) fn compile_graph_draft_to_transport(
-    receipt: &crate::graph_compile::CompileGraphDraftReceipt,
+    receipt: &crate::graph::compile::CompileGraphDraftReceipt,
 ) -> CompileGraphDraftDto {
-    use crate::graph_compile::CompileGraphDraftReceipt;
+    use crate::graph::compile::CompileGraphDraftReceipt;
     match receipt {
         CompileGraphDraftReceipt::Ready {
             artifact_id,
@@ -37,7 +37,7 @@ pub(crate) fn graph_editor_session_to_transport(
 }
 
 pub(crate) fn graph_draft_transform_to_transport(
-    update: &crate::resource_mutation::GraphDraftTransform,
+    update: &crate::graph::edit::GraphDraftTransform,
 ) -> GraphDraftTransformDto {
     GraphDraftTransformDto {
         changed: update.changed,
@@ -49,7 +49,7 @@ pub(crate) fn graph_draft_transform_to_transport(
 }
 
 pub(crate) fn graph_draft_save_to_transport(
-    saved: &crate::resource_mutation::GraphDraftSave,
+    saved: &crate::graph::edit::GraphDraftSave,
 ) -> GraphDraftSaveDto {
     GraphDraftSaveDto {
         project_instance_id: saved.project_instance_id.to_string(),

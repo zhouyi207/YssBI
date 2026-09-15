@@ -327,9 +327,9 @@ mod tests {
     use crate::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledFunctionBundle, CompiledParameterBundleBuilder,
-        ExecutionPlan, PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanProjectSessionId,
-        PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+        CompiledExecutionPackage, CompiledParameterBundleBuilder, ExecutionPlan,
+        PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanProjectSessionId, PlanProvenance,
+        PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
         PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
         ResourceKind,
     };
@@ -343,6 +343,7 @@ mod tests {
         let basis = PlanCompilationBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([3; 32]),
+            crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource, version)]),
             BTreeMap::from([(
                 PlanResourceId::from_existing("databases/answer".into()),
@@ -350,10 +351,8 @@ mod tests {
             )]),
         );
         let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        let functions = Arc::new(CompiledFunctionBundle::new(basis.clone(), Box::new([]), 0));
         let package = CompiledExecutionPackage::new(
             Arc::new(ExecutionPlan::empty()),
-            functions,
             parameters,
             PlanProvenance::new(
                 PlanSourceIdentity::new(
@@ -368,6 +367,7 @@ mod tests {
         ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
+            crate::kernels::KernelRegistry::default().into(),
         )
         .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
         .expect("test package is valid")

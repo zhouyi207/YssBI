@@ -14,7 +14,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
-yss-database-edit = { path = "../yss-database-edit" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-datafusion = { path = "../yss-datafusion" }

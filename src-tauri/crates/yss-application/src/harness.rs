@@ -7,7 +7,7 @@ use yss_statistical_harness::{
     HarnessError, HarnessHost, HarnessPorts, KnowledgeError, install_builtin_statistical_knowledge,
 };
 
-use crate::execution::{ApplicationState, SessionCaptureError};
+use crate::session::{ApplicationState, SessionCaptureError};
 
 #[derive(Debug, Error)]
 pub enum HarnessInitializationError {

@@ -8,11 +8,11 @@ use yss_filesystem::watcher::WatcherState;
 use yss_plugin_runtime::PluginManager;
 
 use crate::database::samples::SampleCatalog;
-use crate::execution::ApplicationState;
-use crate::execution::session_factory::ApplicationInitializationError;
 use crate::ipc::CommandRuntime;
 use crate::plugins::PluginHostServices;
-use crate::project_lifecycle::ProjectManagement;
+use crate::project::ProjectManagement;
+use crate::session::ApplicationInitializationError;
+use crate::session::ApplicationState;
 
 mod harness;
 pub use harness::{HarnessServices, HarnessStartupError, HarnessTransportPorts};

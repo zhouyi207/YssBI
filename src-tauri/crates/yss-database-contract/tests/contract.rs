@@ -74,9 +74,19 @@ fn declaration_preserves_wire_bytes_and_requires_the_display_name() {
 
 #[test]
 fn persisted_storage_accepts_only_the_dataset_identity() {
-    assert_eq!(serde_json::to_value(DatabaseEngine::Dataset {}).unwrap(), json!({"dataset": {}}));
-    assert!(serde_json::from_value::<DatabaseEngine>(json!({"duckDb": {"path": "database/project.duckdb", "table": "sales"}})).is_err());
-    assert!(serde_json::from_value::<DatabaseEngine>(json!({"csv": {"path": "source.csv"}})).is_err());
+    assert_eq!(
+        serde_json::to_value(DatabaseEngine::Dataset {}).unwrap(),
+        json!({"dataset": {}})
+    );
+    assert!(
+        serde_json::from_value::<DatabaseEngine>(
+            json!({"duckDb": {"path": "database/project.duckdb", "table": "sales"}})
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<DatabaseEngine>(json!({"csv": {"path": "source.csv"}})).is_err()
+    );
 }
 
 #[test]

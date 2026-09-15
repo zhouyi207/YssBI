@@ -1,11 +1,11 @@
 use super::common::parse_graph_path;
-use crate::catalog_query::{
+use crate::graph::catalog::{
     CatalogQueryApplicationError, CompatibleCatalogRequest, LocalizedCatalogRequest,
     ProjectCatalogReadError,
 };
-use crate::execution::{ApplicationState, SessionCaptureError};
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::catalog::LocalizedCatalogDto;
+use crate::session::{ApplicationState, SessionCaptureError};
 use tauri::State;
 use yss_project_identity::ProjectInstanceId;
 
@@ -26,13 +26,13 @@ pub(crate) fn catalog_query_command_error(error: CatalogQueryApplicationError) -
             CommandError::diagnosed("graph_contract_failed", error)
         }
         CatalogQueryApplicationError::Graph(error) => match error {
-            crate::catalog_query::GraphCatalogQueryError::GraphNotLoaded { .. } => {
+            crate::graph::catalog::GraphCatalogQueryError::GraphNotLoaded { .. } => {
                 CommandError::expected("graph_not_loaded")
             }
-            crate::catalog_query::GraphCatalogQueryError::InvalidDraft(_) => {
+            crate::graph::catalog::GraphCatalogQueryError::InvalidDraft(_) => {
                 CommandError::expected("compatible_draft_invalid")
             }
-            crate::catalog_query::GraphCatalogQueryError::CompatibleSourceInvalid => {
+            crate::graph::catalog::GraphCatalogQueryError::CompatibleSourceInvalid => {
                 CommandError::expected("compatible_source_invalid")
             }
         },

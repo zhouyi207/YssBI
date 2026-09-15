@@ -38,8 +38,7 @@ pub fn run() {
         .setup(yss_application::initialize)
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed)
-                && let Some(application) =
-                    window.try_state::<yss_application::execution::ApplicationState>()
+                && let Some(application) = window.try_state::<yss_application::ApplicationState>()
             {
                 application.close_result_owner(window.label());
             }

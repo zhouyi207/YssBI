@@ -262,6 +262,7 @@ impl GraphOperation {
 pub struct GraphCompiledPackage {
     graph: GraphResourcePath,
     compile_id: CompileId,
+    kernel_fingerprint: [u8; 32],
     operations: Box<[GraphOperation]>,
     parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
 }
@@ -270,12 +271,14 @@ impl GraphCompiledPackage {
     pub fn new(
         graph: GraphResourcePath,
         compile_id: CompileId,
+        kernel_fingerprint: [u8; 32],
         operations: Box<[GraphOperation]>,
         parameters: BTreeMap<GraphParameterHandle, GraphParameterPayload>,
     ) -> Self {
         Self {
             graph,
             compile_id,
+            kernel_fingerprint,
             operations,
             parameters,
         }
@@ -283,6 +286,10 @@ impl GraphCompiledPackage {
 
     pub fn graph(&self) -> &GraphResourcePath {
         &self.graph
+    }
+
+    pub const fn kernel_fingerprint(&self) -> &[u8; 32] {
+        &self.kernel_fingerprint
     }
 
     pub const fn compile_id(&self) -> CompileId {

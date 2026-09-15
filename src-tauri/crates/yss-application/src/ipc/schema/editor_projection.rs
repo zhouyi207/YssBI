@@ -592,7 +592,7 @@ mod tests {
         model.diagnostics[0].blocking = true;
         model.nodes[0].diagnostics[0].blocking = true;
         let blocked = super::super::graph_draft::compile_graph_draft_to_transport(
-            &crate::graph_compile::CompileGraphDraftReceipt::Blocked { projection: model },
+            &crate::graph::compile::CompileGraphDraftReceipt::Blocked { projection: model },
         );
         let wire = serde_json::to_value(blocked).unwrap();
         assert_eq!(wire.as_object().unwrap().len(), 2);

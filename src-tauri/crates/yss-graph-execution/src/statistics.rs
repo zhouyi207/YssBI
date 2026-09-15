@@ -1,6 +1,5 @@
-use crate::state::{
-    KernelExecutionError, PreparedKernelInvocation, numeric_input, parameter_value,
-};
+use crate::kernels::KernelInvocation;
+use crate::state::{KernelExecutionError, numeric_input, parameter_value};
 use crate::value::RuntimeValue;
 use std::collections::BTreeMap;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
@@ -16,7 +15,7 @@ pub(crate) enum StatisticalKernel {
 
 pub(crate) fn execute(
     kind: StatisticalKernel,
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
     let values = match kind {
         StatisticalKernel::OlsFit | StatisticalKernel::OlsSummary => {

@@ -229,8 +229,13 @@ impl GraphNodeSemanticFact {
     pub fn execution_fingerprint(&self) -> [u8; 32] {
         yss_canonical_hash::hash_canonical(
             "yssbi.graph-node-execution-input.v1",
-            &(&self.semantic_fingerprint, &self.inputs, &self.specialization),
-        ).expect("resolved execution inputs are canonically serializable")
+            &(
+                &self.semantic_fingerprint,
+                &self.inputs,
+                &self.specialization,
+            ),
+        )
+        .expect("resolved execution inputs are canonically serializable")
     }
 }
 
@@ -427,6 +432,7 @@ pub enum GraphCompilationStage {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GraphAnalysis {
     registry_fingerprint: [u8; 32],
+    kernel_fingerprint: [u8; 32],
     resource_versions: ResourceVersionSet,
     resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
     semantic_snapshot: GraphSemanticSnapshot,
@@ -434,6 +440,9 @@ pub struct GraphAnalysis {
 }
 
 impl GraphAnalysis {
+    pub const fn kernel_fingerprint(&self) -> &[u8; 32] {
+        &self.kernel_fingerprint
+    }
     pub fn resource_observations(&self) -> &yss_graph_analysis_contract::ResourceObservationSet {
         &self.resource_observations
     }
@@ -469,6 +478,7 @@ pub fn analyze(
 ) -> GraphAnalysis {
     GraphAnalysis {
         registry_fingerprint: *basis.registry_fingerprint.as_bytes(),
+        kernel_fingerprint: basis.kernel_fingerprint,
         resource_versions: basis.resource_versions.clone(),
         resource_observations: basis.resource_observations.clone(),
         semantic_snapshot,
@@ -1460,6 +1470,7 @@ mod tests {
     #[test]
     fn analysis_accepts_neutral_document_and_basis() {
         let basis = CompilationBasis {
+            kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),

@@ -1,14 +1,13 @@
+use crate::kernels::KernelInvocation;
 use yss_data_contract::DataType;
 use yss_relational_contract::{NumericOperation, NumericType, RelationLiteral, SeriesOperand};
 
-use crate::state::{
-    KernelExecutionError, PreparedKernelInvocation, check_kernel_control, numeric_input,
-};
+use crate::state::{KernelExecutionError, check_kernel_control, numeric_input};
 use crate::value::RuntimeValue;
 
 pub(crate) fn execute(
     operation: NumericOperation,
-    invocation: &PreparedKernelInvocation<'_>,
+    invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelExecutionError> {
     let inputs = invocation.inputs;
     if inputs.len() < 2 || (operation != NumericOperation::Add && inputs.len() != 2) {

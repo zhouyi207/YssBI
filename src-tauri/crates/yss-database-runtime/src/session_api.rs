@@ -10,11 +10,11 @@ use crate::runtime::{
     DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
 use arrow::datatypes::DataType;
+use yss_database_contract::EditState;
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
-use yss_database_edit::EditState;
 use yss_database_schema::{
     DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
 };

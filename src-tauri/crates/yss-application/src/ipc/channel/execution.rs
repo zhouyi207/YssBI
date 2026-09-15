@@ -1,5 +1,5 @@
 //! Execution lifecycle/result encoding and channel delivery.
-use crate::execution::run_graph::{RunApplicationEvent, RunApplicationEventKind};
+use crate::graph::run::{RunApplicationEvent, RunApplicationEventKind};
 use tauri::ipc::Channel;
 use yss_graph_execution::plan::{PlanOutputRef, PlanPortAddress};
 use yss_ipc_contract::execution::*;
@@ -18,7 +18,7 @@ pub fn output_dto(value: &PlanOutputRef) -> Result<GraphOutputRefDto, RunEventDt
     })
 }
 
-fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEventDtoError> {
+pub fn port_address_dto(value: &PlanPortAddress) -> Result<PortAddressDto, RunEventDtoError> {
     let parts = value.as_str().split(':').collect::<Vec<_>>();
     let port = match parts.as_slice() {
         [node_id, port_key] if uuid::Uuid::parse_str(node_id).is_ok() => PortAddressDto::Declared {
@@ -73,7 +73,9 @@ fn run_failure_to_transport(
     }
 }
 
-pub fn execution_event_to_transport(event: RunApplicationEvent) -> Result<RunEventDto, RunEventDtoError> {
+pub fn execution_event_to_transport(
+    event: RunApplicationEvent,
+) -> Result<RunEventDto, RunEventDtoError> {
     let identity = event.identity();
     let run = GraphRunIdentityDto {
         execution_session_id: identity.execution_session_id().as_uuid().to_string(),
@@ -164,5 +166,4 @@ mod tests {
             .unwrap();
         assert_eq!(actual, expected["kind"]);
     }
-
 }

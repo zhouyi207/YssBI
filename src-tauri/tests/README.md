@@ -116,38 +116,10 @@ cargo test test_iris_lazy_filtering -- --nocapture
 ## Database runtime 使用示例
 
 Database 的 persisted contract 与 session runtime 已有独立 owner；集成测试应直接依赖
-`yss-database-contract`、`yss-database-edit` 与 `yss-database-runtime`，不经过根 crate facade。
-
-```rust
-use std::sync::Arc;
-
-use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yss_database_edit::EditHistory;
-use yss_database_runtime::{DatabaseInstance, DatabaseState};
-
-let dataframe = polars::df!("sepal_length" => &[5.1_f64, 6.2]).unwrap();
-let mut database = DatabaseInstance {
-    decl: DatabaseDecl {
-        id: DatabaseId::from_existing("iris_dataset".into()),
-        engine: DatabaseEngine::InMemory {
-            name: "Iris".into(),
-        },
-        schema_version: 1,
-        required: true,
-        name: "Iris".into(),
-    },
-    state: DatabaseState::Loaded {
-        dataframe: Arc::new(dataframe.clone()),
-        original: Arc::new(dataframe),
-        history: EditHistory::new(),
-    },
-};
-
-let schema = database.data_schema().unwrap();
-assert_eq!(schema.columns().len(), 1);
-```
+`yss-database-contract` 与 `yss-database-runtime`，不经过根 crate facade。
+`EditState` 由数据库契约导出；历史容器和运行态变体保持私有，测试通过实际导入、编辑和撤销入口验证。
 
 需要验证 session 一致性、分页、catalog snapshot 或 mutation handoff 时，应通过
 `DatabaseRuntimeRegistry`、`DatabaseRuntimeSession` 与 `session_api` 构造真实 runtime；完整示例见
-[`database_test.rs`](database_test.rs) 以及 crate 的
+[`database_test.rs`](../crates/yss-application/tests/database_test.rs) 以及 crate 的
 [`README.md`](../crates/yss-database-runtime/README.md)。
