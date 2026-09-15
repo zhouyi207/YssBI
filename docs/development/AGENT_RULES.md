@@ -98,7 +98,7 @@ add or commit them unless explicitly requested.
   current graph independently. Execute captures its document and semantic identity,
   prepares a matching immutable plan internally, and never implicitly saves.
   Plan caches are backend implementation details, not a separate frontend lifecycle.
-- The root Dockview instance is the sole authority for workbench topology,
+- The root FlexLayout Model instance is the sole authority for workbench topology,
   placement, ordering, active panels/groups, edge sizes, and collapse state.
 - Graph Problems, operational Logs, Results, and run state/failures are distinct data
   flows. None may be used to reconstruct or substitute for another.
@@ -146,7 +146,7 @@ Before changing a subsystem, read its canonical owner:
 - Graph, projection, plan preparation, execution, Results, and run state/failures:
   `docs/architecture/GRAPH_AND_EXECUTION.md`
 - Workbench layout and panel lifecycle:
-  `docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md`
+  `docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md`
 - Logging, operational diagnostics, feedback, and signal boundaries:
   `docs/architecture/RUNTIME_SIGNALS.md`
 - Statistical Harness current implementation:

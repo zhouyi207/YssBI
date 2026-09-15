@@ -28,7 +28,7 @@
 | -------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 应用与工作台         | 应用组装、窗口、页面布局模板、面板与命令接入、布局生命周期 | `src/app/`、`src/modules/workbench/`、`src/modules/commands/`                                                                                        |
 | 项目与资源交互       | 项目打开与切换、资源展示与操作、发布结果采用               | `src/modules/project-explorer/`、`src/features/application/project/`、`src/features/application/resource/`                                           |
-| 图编辑与运行交互     | 图草稿、画布、语义投影、计划准备与执行入口、结果查看           | `src/modules/graph-editor/`、`src/modules/node-catalog/`、`src/modules/problems/`、`src/modules/results/`、`src/modules/output/`                     |
+| 图编辑与运行交互     | 图草稿、画布、语义投影、计划准备与执行入口、结果查看       | `src/modules/graph-editor/`、`src/modules/node-catalog/`、`src/modules/problems/`、`src/modules/results/`、`src/modules/output/`                     |
 | 数据浏览与编辑       | 数据浏览、分页、编辑请求、导入导出                         | `src/modules/data-explorer/`、`src/modules/database-editor/`、`src/features/application/dataManagement/`、`src/features/application/databaseEditor/` |
 | 图表编辑与展示       | 图表文档、配置、数据绑定与渲染                             | `src/modules/chart/`、`src/features/application/chart/`、`src/features/core/chart/`                                                                  |
 | Assistant            | 对话与工具状态展示、输入与审批、业务操作衔接               | `src/modules/assistant/`、`src/features/application/assistant/`                                                                                      |
@@ -86,7 +86,7 @@ JSON 页面布局模板 + 已注册组件/面板
 
 根 Dockview 实例拥有工作台拓扑、面板位置与顺序、活动分组、尺寸和折叠状态。页面模板、Zustand 和业务面板不另建这些状态的镜像。
 
-Details 是跨业务展示宿主，节点、图表、数据和日志详情仍使用各自的数据和操作入口。布局管理不拥有图草稿、数据库内容或结果生命周期。当前契约见 [Workbench Dockview](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)。
+Details 是跨业务展示宿主，节点、图表、数据和日志详情仍使用各自的数据和操作入口。布局管理不拥有图草稿、数据库内容或结果生命周期。当前契约见 [Workbench Dockview](../architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)。
 
 ## 2. 项目与资源交互
 
@@ -113,15 +113,15 @@ React 保存后端资源索引和 Activity 文档的显示投影，Rust 拥有�
 
 ### 内部结构
 
-| 部分             | 职责                                                          | 当前代表位置                                                                           |
-| ---------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 文档草稿与历史   | 未保存文档、保存基线、dirty、撤销与重做                       | `src/features/core/graphEditing/`                                                        |
-| 编辑操作编排     | 组织草稿操作顺序，检查响应所属的项目、草稿与请求              | `src/features/application/graphEditing/`、`src/features/application/graphEditing/`       |
-| 语义投影采用     | 安装 Rust 返回的节点、端口、类型与诊断，供多个界面消费        | `src/features/application/graphProjection/`、`src/features/core/dataStore/` 中的图投影 |
-| 画布与节点交互   | 选择、视口、测量、拖动预览、连线手势和节点目录                | `src/modules/graph-editor/`、`src/modules/node-catalog/`                               |
-| 保存与执行       | 提交编辑版本并组织运行请求；计划准备及缓存由后端执行组件管理   | `src/features/application/graphEditing/`、`src/features/application/execution/`          |
-| 运行与结果查看   | 展示运行状态、查询结果与报告，分别呈现 Problems 和 Run Output | `src/modules/results/`、`src/modules/problems/`、`src/modules/output/`                 |
-| 编辑器生命周期   | 协调打开、关闭、重新打开及项目切换时的失效和清理              | `src/features/application/editor/`、`src/features/core/graphSession/`                  |
+| 部分           | 职责                                                          | 当前代表位置                                                                           |
+| -------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 文档草稿与历史 | 未保存文档、保存基线、dirty、撤销与重做                       | `src/features/core/graphEditing/`                                                      |
+| 编辑操作编排   | 组织草稿操作顺序，检查响应所属的项目、草稿与请求              | `src/features/application/graphEditing/`、`src/features/application/graphEditing/`     |
+| 语义投影采用   | 安装 Rust 返回的节点、端口、类型与诊断，供多个界面消费        | `src/features/application/graphProjection/`、`src/features/core/dataStore/` 中的图投影 |
+| 画布与节点交互 | 选择、视口、测量、拖动预览、连线手势和节点目录                | `src/modules/graph-editor/`、`src/modules/node-catalog/`                               |
+| 保存与执行     | 提交编辑版本并组织运行请求；计划准备及缓存由后端执行组件管理  | `src/features/application/graphEditing/`、`src/features/application/execution/`        |
+| 运行与结果查看 | 展示运行状态、查询结果与报告，分别呈现 Problems 和 Run Output | `src/modules/results/`、`src/modules/problems/`、`src/modules/output/`                 |
+| 编辑器生命周期 | 协调打开、关闭、重新打开及项目切换时的失效和清理              | `src/features/application/editor/`、`src/features/core/graphSession/`                  |
 
 ### 状态与边界
 

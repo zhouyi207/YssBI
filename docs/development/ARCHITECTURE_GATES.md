@@ -111,7 +111,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 - Application/Project/Graph/Execution/SCI/Database/adapter purpose limits；
 - frontend raw invoke/dialog consumers；
 - projection write ownership 和 View-to-Core read capability；
-- root/nested Dockview constructor ownership；
+- root/nested FlexLayout constructor ownership；
 - stable symbol/variant/field contract。
 
 优先使用 AST、type resolution 和可执行 behavior seam。只有无法在该层表达的窄 contract 才使用 source-token guard；不要用大范围字符串扫描永久证明一次历史删除。
@@ -142,7 +142,7 @@ Activity DTO，以及按游标返回增量的传输缓存。Composition root 只
 不增加 Commands → Application 或 Transport → Application 的通配依赖。
 Project query 的精确 capability 还允许返回与同次 ProjectIndex 对应的面板增量；Project 文档由后端纯投影生成。
 前端资源与面板共用已有发布入口，不从 ResourceStore 再次生成或查询 Project 文档。
-文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 维护。
+文档与 UI 状态边界由 [Workbench](../architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md) 维护。
 
 示例目录沿用 database Application owner。Composition root 仅获 `SampleCatalog::new`
 的构造权限；DataFrame commands 只获目录、导入失败类型和示例 DTO 的明确映射权限；

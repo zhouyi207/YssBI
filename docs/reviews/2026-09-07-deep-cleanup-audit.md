@@ -113,11 +113,11 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 
 **F09：模块应按具体职责收口，而非按行数机械切割。**
 
-| 文件                                                                                                       | 当前规模与职责                                                                             | 建议优先检查的边界                                                                |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| [workbenchDockviewInternal.ts](../../src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts) | 2,083 行；元数据转换、shadow transaction、序列化布局、live Dockview 操作、排队和 hydration | 纯元数据/布局转换、临时事务执行与 live runtime；保留 root Dockview 唯一 authority |
-| [database.rs](../../src-tauri/crates/yss-application/src/database/mod.rs)                                      | 1,493 行；会话校验、导入导出、SQL/Excel 枚举、物理 ingest、临时文件与 Windows FFI          | 用例顺序和会话校验留在 Application，具体 I/O 交给相应 adapter                     |
-| [graph-analysis/lib.rs](../../src-tauri/crates/yss-graph-analysis/src/lib.rs)                              | 2,150 行，最终测试模块之前约 1,498 行；语义事实类型、组装与分析逻辑                        | 在当前 crate 内区分事实类型与解析组装，避免再引入第二份 semantic model            |
+| 文件                                                                                                 | 当前规模与职责                                                                             | 建议优先检查的边界                                                                |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| [workbenchLayoutInternal.ts](../../src/modules/workbench/internal/layout/workbenchLayoutInternal.ts) | 2,083 行；元数据转换、shadow transaction、序列化布局、live Dockview 操作、排队和 hydration | 纯元数据/布局转换、临时事务执行与 live runtime；保留 root Dockview 唯一 authority |
+| [database.rs](../../src-tauri/crates/yss-application/src/database/mod.rs)                            | 1,493 行；会话校验、导入导出、SQL/Excel 枚举、物理 ingest、临时文件与 Windows FFI          | 用例顺序和会话校验留在 Application，具体 I/O 交给相应 adapter                     |
+| [graph-analysis/lib.rs](../../src-tauri/crates/yss-graph-analysis/src/lib.rs)                        | 2,150 行，最终测试模块之前约 1,498 行；语义事实类型、组装与分析逻辑                        | 在当前 crate 内区分事实类型与解析组装，避免再引入第二份 semantic model            |
 
 行数包含空行/注释；Rust 总行数也包含测试，不作为纯生产逻辑行数。`bayes.rs` 的 1,755 行也有约 611 行最终测试模块，不能全部计为单体业务逻辑。
 
@@ -151,7 +151,7 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 
 最小复现使用真实 hook 和 coordinator，publication 模拟 runtime 相同的删除/通知语义：两个消费者读取同一 scalar 42，卸载 A 后，仍挂载的 B 变成 `empty`。该问题已经在接口级证明。
 
-但 [upsertResult](../../src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts#L1741) 当前按 resultKey 去重，独立窗口也有自己的前端运行环境；本次没有证明常规 UI 操作能同时挂载两个同 resultId 的读取者。因此将其列为需确认的不变量风险，不宣称“关闭任意结果窗口会清空另一个窗口”。若允许共享消费，应引入消费者生命周期/引用计数或局部 payload；若只允许单消费者，应明确并验证该限制。
+但 [upsertResult](../../src/modules/workbench/internal/layout/workbenchLayoutInternal.ts#L1741) 当前按 resultKey 去重，独立窗口也有自己的前端运行环境；本次没有证明常规 UI 操作能同时挂载两个同 resultId 的读取者。因此将其列为需确认的不变量风险，不宣称“关闭任意结果窗口会清空另一个窗口”。若允许共享消费，应引入消费者生命周期/引用计数或局部 payload；若只允许单消费者，应明确并验证该限制。
 
 **清理顺序与验收目标**
 

@@ -46,7 +46,7 @@ flowchart LR
 Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用例。图运行准备、执行交接和 Results 用例收入 `graph`；底层 Graph 与 Execution crates 继续独立。`session` 负责应用会话装配和替换；不可变 `NodeComponents` 组合节点定义与实际 kernel registry，校验绑定后供新会话复用。Chart 使用数据库查询及纯投影，共享图表呈现组件，不另建执行器或结果仓库。实际入口见 [Application 说明](../../src-tauri/crates/yss-application/README.md)。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
-窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
+窗口关闭与 FlexLayout 布局的分工见 [Workbench 窗口契约](WORKBENCH_LAYOUT_ARCHITECTURE.md#81-原生窗口几何与关闭)。
 
 ## 2. Authority model
 
@@ -60,7 +60,7 @@ Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用
 | Statistical algorithms 与插件计算                                            | SCI / 独立插件进程；项目结果由 Core 提交         | report/chart presentation models            |
 | 插件安装、启用、任务账本                                                     | Rust Plugin Manager                              | 插件列表与隔离页面                          |
 | Harness session、turn、workflow、ledger、memory 和 ordered events            | Rust Statistical Harness + persistence ports     | assistant-ui ExternalStore projection       |
-| Root workbench topology、placement、active group/panel 和 edge state         | live root Dockview instance                      | pane-local metadata keyed by panel identity |
+| Root workbench topology、placement、active group/panel 和 edge state         | live root FlexLayout Model instance              | pane-local metadata keyed by panel identity |
 | 本地偏好和临时交互状态                                                       | React `localStorage`、Zustand 或 component state | —                                           |
 
 Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第二份 committed model，也不与 Rust 进行双向 merge/reconcile。Save 成功后采用 Rust 返回的 canonical state；失败时本地 draft 保持 dirty。
@@ -77,7 +77,7 @@ Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑
 
 节点编辑由 Application 的 graphEditing 发送 typed 命令，Rust Project 直接更新当前文档与可逆历史。前端消费统一 GraphEditOutcome 及只读投影；显式保存通过文件事务写入正文。
 
-身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
+身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、FlexLayout panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
 ## 3. Layer and dependency direction
 
@@ -253,7 +253,7 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 | 变更范围                         | 先阅读                                                                                                                             |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Graph、校验、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                                                       |
-| 工作台布局、面板身份或生命周期   | [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)                                                                           |
+| 工作台布局、面板身份或生命周期   | [Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md)                                                                           |
 | 日志、运行观测、错误或反馈       | [Runtime Signals](RUNTIME_SIGNALS.md) 与 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
 | Statistical Harness 或 Assistant | [Statistical Harness](STATISTICAL_HARNESS.md)                                                                                      |
 | command、event、channel 或 DTO   | [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md)                                          |

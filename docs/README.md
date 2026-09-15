@@ -24,7 +24,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [架构文档入口](architecture/README.md)：专项架构的阅读方式与状态说明。
 - [系统架构总览](architecture/ARCHITECTURE.md)：系统上下文、authority、依赖方向和主要运行链路。
 - [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：Draft、Projection、Save、运行准备、Execute、Problems、Results 与运行失败反馈。
-- [Workbench Dockview](architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
+- [Workbench FlexLayout](architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
 - [Runtime Signals](architecture/RUNTIME_SIGNALS.md)：logging、operational diagnostics、错误、反馈和各类运行信号的语义边界。
 - [Statistical Harness](architecture/STATISTICAL_HARNESS.md)：当前 Harness、Gateway、Rig、SQLite、Tauri 和 Assistant 投影。
 

@@ -99,7 +99,7 @@ Project watcher 保留未保存的当前文档。资源重命名和函数签名�
 
 ### Canvas presentation and input
 
-节点画布使用 React Flow，每个 Dockview panel/group/resource 挂载独立 provider。
+节点画布使用 React Flow，每个 FlexLayout panel/group/resource 挂载独立 provider。
 节点、连线及稳定 handle ID 单向派生自现有 editor projection；React Flow 的测量、
 临时坐标和连接手势只是 UI 状态，不参与 Graph document 序列化，不创建第二套草稿或历史。
 节点标题、端口、参数输入、执行状态和诊断仍由项目自己的 React 组件展示。
@@ -311,7 +311,7 @@ Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话�
 显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
 Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，
 便于丢失响应后清理；Rust 确认结果和窗口身份，同 token 的重复申请/释放不会重复计数。
-Dockview 的真实面板集合驱动窗口内租约对账，移动、隐藏和 React 重新挂载不代表面板关闭；打开失败会释放申请的租约。
+FlexLayout 的真实面板集合驱动窗口内租约对账，移动、隐藏和 React 重新挂载不代表面板关闭；打开失败会释放申请的租约。
 
 独立窗口使用指定接收窗口的租约交接：父窗口先保留结果，新窗口通过 `claim_result_lease` 原子接管，
 不存在创建窗口期间无人持有数据的间隙。窗口销毁时后端清理所属租约及尚未接管的交接，并拒绝该 owner 的迟到申请；
@@ -381,4 +381,4 @@ Harness 事件及其恢复、插件进程通信由各自协议拥有，不通过
 | command rejection               | yss-application::ipc stable error wire |
 | 用户反馈                        | React localization / UI                |
 
-详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-application/src/ipc/README.md)、[Workbench](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。
+详见 [Runtime Signals](RUNTIME_SIGNALS.md)、[API contract](../../src-tauri/crates/yss-application/src/ipc/README.md)、[Workbench](WORKBENCH_LAYOUT_ARCHITECTURE.md) 与 [Local Workflow](../development/LOCAL_WORKFLOW.md)。

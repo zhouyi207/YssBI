@@ -66,7 +66,7 @@ Plugin Host 指宿主的管理器、网关、进程监督和页面消息桥，�
 | 发现、信任、安装、启用、版本切换、贡献注册     | Rust Plugin Manager    | 插件算法、贝叶斯配置与内部调度 |
 | API 校验、身份、授权、限额和宿主用例调用       | Rust Extension Gateway | 绕过 Core 执行项目写入         |
 | 创建进程、管道、退出监测、进程树清理和 OS 限制 | 平台执行适配器         | 插件业务准入策略               |
-| 命令、菜单、标准视图、Dockview 面板与占位      | 宿主前端               | 执行插件业务脚本               |
+| 命令、菜单、标准视图、FlexLayout 面板与占位    | 宿主前端               | 执行插件业务脚本               |
 | 页面装载、资源授权、焦点和消息绑定             | Webview Host           | 插件页面业务模型               |
 | 算法、私有模型、依赖环境和计算子进程           | 插件后端               | 宿主项目与数据库 authority     |
 | 复杂表单、可视化和编辑器页面                   | 插件前端               | 直接访问宿主 Tauri 或内部状态  |
@@ -78,22 +78,22 @@ Plugin Host 指宿主的管理器、网关、进程监督和页面消息桥，�
 
 ### 3.1 身份
 
-| 标识                                 | 作用                             | 有效期                   |
-| ------------------------------------ | -------------------------------- | ------------------------ |
-| pluginId                             | 发布者命名空间下的稳定身份       | 跨版本稳定               |
-| packageDigest                        | 一个已验证包的内容身份           | 不可变                   |
-| installationGeneration               | 安装、替换与授权变更的宿主代际   | registry 提交后生效      |
-| instanceId                           | 宿主分配的插件进程身份           | 重启即改变               |
-| appSessionId                         | 宿主运行会话                     | 应用重启即改变           |
-| projectInstanceId / projectSessionId | Core 的项目及运行时身份          | 遵循 Project 生命周期    |
-| viewId / viewInstanceId              | 声明视图类型及宿主页面实例       | 类型稳定，实例可重建     |
-| panelInstanceId / groupId            | Dockview 的物理面板和 group      | root Dockview 管理       |
-| requestId                            | 一次 RPC 的关联身份              | 单连接、单发起方向内唯一 |
-| operationId                          | 一次逻辑写入或任务准入的幂等身份 | 跨重连保留               |
-| taskId                               | 宿主监督的执行身份               | 按任务及回执保留策略回收 |
-| snapshotId / leaseId                 | 不可变数据快照及授权使用权       | 有释放、撤销与到期语义   |
-| streamId / sequence                  | 事件流及其连续位置               | 流重建后重新分配         |
-| resourceRef / resultId               | Core 资源和已接收结果            | 对应 Core contract 管理  |
+| 标识                                 | 作用                             | 有效期                     |
+| ------------------------------------ | -------------------------------- | -------------------------- |
+| pluginId                             | 发布者命名空间下的稳定身份       | 跨版本稳定                 |
+| packageDigest                        | 一个已验证包的内容身份           | 不可变                     |
+| installationGeneration               | 安装、替换与授权变更的宿主代际   | registry 提交后生效        |
+| instanceId                           | 宿主分配的插件进程身份           | 重启即改变                 |
+| appSessionId                         | 宿主运行会话                     | 应用重启即改变             |
+| projectInstanceId / projectSessionId | Core 的项目及运行时身份          | 遵循 Project 生命周期      |
+| viewId / viewInstanceId              | 声明视图类型及宿主页面实例       | 类型稳定，实例可重建       |
+| panelInstanceId / groupId            | FlexLayout 的物理面板和 group    | root FlexLayout Model 管理 |
+| requestId                            | 一次 RPC 的关联身份              | 单连接、单发起方向内唯一   |
+| operationId                          | 一次逻辑写入或任务准入的幂等身份 | 跨重连保留                 |
+| taskId                               | 宿主监督的执行身份               | 按任务及回执保留策略回收   |
+| snapshotId / leaseId                 | 不可变数据快照及授权使用权       | 有释放、撤销与到期语义     |
+| streamId / sequence                  | 事件流及其连续位置               | 流重建后重新分配           |
+| resourceRef / resultId               | Core 资源和已接收结果            | 对应 Core contract 管理    |
 
 运行期 ID 都是 opaque value。PID、路径、显示名、requestId 与 taskId 不可互换。宿主从连接和页面绑定推导调用者，不接受自报 pluginId 或 projectId 作为授权依据。
 
@@ -411,13 +411,13 @@ Analysis Graph 仍只表达数据依赖。安装、联网、项目写入和控�
 
 ### 11.2 动态面板
 
-插件面板 metadata 包含结构化 pluginId、viewId 和需要时的 instanceKey，物理 panelInstanceId 由 Dockview 分配。业务 ID 不进入固定 WorkbenchViewId 枚举，不增加每插件专用 RootPanelRegistry entry。
+插件面板 metadata 包含结构化 pluginId、viewId 和需要时的 instanceKey，物理 panelInstanceId 由 FlexLayout 分配。业务 ID 不进入固定 WorkbenchViewId 枚举，不增加每插件专用 RootPanelRegistry entry。
 
 通用 PluginView renderer 根据验证后的贡献加载标准 UI 或插件页面。singleton 视图在声明 scope 中唯一；多实例编辑器按 resourceRef 或声明实例键区分。插件只请求 open/reveal/close，不修改 group、尺寸或排序。
 
-默认位置仅在首次创建时生效，之后使用 root Dockview 的用户布局。插件管理入口固定在 Activity Bar 底部。插件贡献入口由 installed、enabled 与兼容状态决定；外部依赖未就绪时仍可展示配置页，不通过隐藏标签伪造未安装。
+默认位置仅在首次创建时生效，之后使用 root FlexLayout Model 的用户布局。插件管理入口固定在 Activity Bar 底部。插件贡献入口由 installed、enabled 与兼容状态决定；外部依赖未就绪时仍可展示配置页，不通过隐藏标签伪造未安装。
 
-布局恢复在安装状态未确定时先保留通用插件 metadata 和占位，不因查询失败重置 layout。registry 确认未安装时移除该插件的贡献面板及 tab；已安装但禁用或暂不可用时可保留占位。项目资源的持久化内容不随贡献面板删除。dirty 关闭、项目替换、reset 继续使用 [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md) 的唯一协调者。
+布局恢复在安装状态未确定时先保留通用插件 metadata 和占位，不因查询失败重置 layout。registry 确认未安装时移除该插件的贡献面板及 tab；已安装但禁用或暂不可用时可保留占位。项目资源的持久化内容不随贡献面板删除。dirty 关闭、项目替换、reset 继续使用 [Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md) 的唯一协调者。
 
 ### 11.3 注册事务
 
@@ -457,7 +457,7 @@ SVG、HTML 报告等主动内容也需要净化或隔离，不能注入宿主 DO
 
 attach 创建绑定，hide 只改变可见性，不终止任务；suspend 可以释放页面资源，但先保存有界 UI state；detach 撤销端口与临时 UI grants。
 
-iframe 容器的普通显示切换不得销毁或重新挂载文档；Dockview 插件 panel 使用常驻 DOM 的渲染策略，仍按首次可见延迟激活。会话替换必须串行等待旧会话释放确认；失败时保留可重试的 lease 身份，不以反复 attach 或提高配额掩盖释放失败。非预期导航撤销绑定，不向新文档重新授予旧端口。错误保留稳定分类与当前阶段，不能把正常显示切换计入故障重试次数。
+iframe 容器的普通显示切换不得销毁或重新挂载文档；FlexLayout 插件 panel 使用常驻 DOM 的渲染策略，仍按首次可见延迟激活。会话替换必须串行等待旧会话释放确认；失败时保留可重试的 lease 身份，不以反复 attach 或提高配额掩盖释放失败。非预期导航撤销绑定，不向新文档重新授予旧端口。错误保留稳定分类与当前阶段，不能把正常显示切换计入故障重试次数。
 
 dirty draft 在 suspend/close 前可恢复，否则阻止卸载并请求用户决策。后台计算从 task snapshot 恢复，不从页面内存推导。
 
@@ -646,7 +646,7 @@ operationId 和 taskId 的命名空间、回执保留期限、snapshot/lease 到
 
 - 当前系统 authority 与链路：[系统架构](ARCHITECTURE.md)。
 - 宿主 Tauri wire：[yss-application::ipc](../../src-tauri/crates/yss-application/src/ipc/README.md)。
-- 布局、关闭、reset 和项目替换：[Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)。
+- 布局、关闭、reset 和项目替换：[Workbench FlexLayout](WORKBENCH_LAYOUT_ARCHITECTURE.md)。
 - Graph、执行和结果：[Graph 与 Execution](GRAPH_AND_EXECUTION.md)。
 - 日志、错误、反馈与运行信号：[Runtime Signals](RUNTIME_SIGNALS.md)。
 - Assistant 能力网关：[Statistical Harness](STATISTICAL_HARNESS.md)。

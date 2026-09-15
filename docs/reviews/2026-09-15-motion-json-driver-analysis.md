@@ -396,7 +396,7 @@ Rust 用例、补丁原子性、版本校验和传输解析可以做聚焦自动
 
 [^12]: Tauri，[Calling the Frontend from Rust](https://v2.tauri.app/develop/calling-frontend/)，Event 与 Channel 的用途、顺序及吞吐边界。
 
-[^13]: YssBI，[Workbench Dockview](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)，布局 authority 和语义操作接口；[Plugin 目标契约](../architecture/PLUGIN.md#11-声明式-ui-与-workbench)，声明式标准 UI 范围，属于目标设计而非全部已实现能力。
+[^13]: YssBI，[Workbench Dockview](../architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)，布局 authority 和语义操作接口；[Plugin 目标契约](../architecture/PLUGIN.md#11-声明式-ui-与-workbench)，声明式标准 UI 范围，属于目标设计而非全部已实现能力。
 
 [^14]: YssBI，[传输与复制探针](probes/graph-draft-transfer.mjs)、[原始测量结果](probes/graph-draft-transfer-results.json)，60 次采样；模板来自 [editor-projection.json](../../src/tests/fixtures/node-system-contracts/editor-projection.json)。
 

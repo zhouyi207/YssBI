@@ -30,7 +30,7 @@
 
 - [系统总览](../architecture/ARCHITECTURE.md)
 - [Graph / Execution / Results / Run failures](../architecture/GRAPH_AND_EXECUTION.md)
-- [Workbench layout](../architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
+- [Workbench layout](../architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)
 - [Runtime signals / feedback](../architecture/RUNTIME_SIGNALS.md)
 - [Statistical Harness](../architecture/STATISTICAL_HARNESS.md)
 - [Tauri / IPC transport](../../src-tauri/crates/yss-application/src/ipc/README.md)

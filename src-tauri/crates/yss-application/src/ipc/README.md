@@ -29,7 +29,7 @@ Application initialization directly constructs the concrete `CommandRuntime`, ob
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
 windows through the platform adapter and the Rust plugin owns restoration and persistence;
-see [Workbench window geometry](../../../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭).
+see [Workbench window geometry](../../../../../docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md#81-原生窗口几何与关闭).
 
 ## Command responsibilities
 
@@ -157,7 +157,7 @@ unique ids and final tree depth before publication. Malformed batches do not par
 the visible projection. A failed delta gets one explicit snapshot recovery; a repeated failure
 is surfaced. Requests within a binding are serialized and coalesced. Project/language/epoch
 replacement invalidates the binding; mounted consumers share the existing sidebarStore document cache. UI expansion creates no request and only expansion preferences are persisted.
-See [Workbench](../../../../../docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md) for UI ownership.
+See [Workbench](../../../../../docs/architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md) for UI ownership.
 
 Resource command replies and matching `ResourceMutationCommitted` events enter the same frontend
 publication coordinator. A committed mutation carries a positive monotonic publication revision and

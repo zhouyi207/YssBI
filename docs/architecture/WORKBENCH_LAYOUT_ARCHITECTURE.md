@@ -1,40 +1,29 @@
-# Workbench Dockview 当前架构
+# Workbench FlexLayout 当前架构
 
 > Status: Current
-> Scope: root/nested Dockview authority、panel identity、布局操作、生命周期和持久化
+> Scope: FlexLayout Model authority、panel identity、布局操作、生命周期和持久化
 > Canonical owners: Workbench 源码与测试拥有布局默认值；本文拥有稳定的布局和 identity contract
 > Update when: root topology、panel role、close/reset/replacement 或 persistence contract 改变时
 
-本文描述主编辑窗口当前的布局 authority、panel identity、应用 seam、生命周期与持久化 contract。Dockview live instance 保存物理布局事实；React application modules 只通过语义 interface 协调用例。
+工作台使用一个原生 FlexLayout Model 保存已提交的物理布局。React 的 Layout 和组件注册表呈现该模型，Application 通过语义操作协调面板生命周期。工作台布局、Graph 文档和统计结果具有独立的 owner。
 
 ## 1. 渲染层级与 authority
 
-`WorkbenchComposition` 组装的 chrome 层级固定为：
-
 ```text
 WorkbenchWindow
-├─ WorkbenchMenuBar slot
-├─ body
-│  └─ RootDockviewHost                 # 唯一 root DockviewReact
-│     ├─ native left Activity edge group
-│     │  ├─ Project
-│     │  ├─ Nodes
-│     │  ├─ Commands
-│     │  ├─ Plugins
-│     │  └─ 插件贡献的 sidebar views（包已安装且启用时）
-│     ├─ grid groups：editor、Result 与 tool panels 可混排和分割
-│     ├─ native right edge group：Details（fixed）、Assistant、Inspect、Result 的 home
-│     └─ native bottom edge group
-│        └─ content：Logs、Output 或 Problems
-├─ StatusBar slot
-│  ├─ 最左侧：Settings 图标，位于 Activity Bar 下方
-│  ├─ 左侧：Problems、Output、Logs 图标入口，与 central grid 左对齐
-│  ├─ 右侧：节点、连线、选择与视口信息，与 central grid 右对齐
-│  └─ 最右侧：Details、Assistant 图标入口
+├─ WorkbenchMenuBar
+├─ RootLayoutHost：一个 FlexLayout Layout + Model
+│  ├─ left border：Project、Nodes、Commands、Plugins 和插件 sidebar
+│  ├─ central tabsets：资源编辑器、Result 和可移动工具面板
+│  ├─ right border：Details、Assistant、Inspect 和 Result 的默认位置
+│  └─ bottom border：Problems、Output、Logs
+├─ StatusBar
 └─ WorkbenchOverlayHost
 ```
 
-Menu、StatusBar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Assistant、Inspect、Logs、Output 与 Problems。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
+Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。浮动窗口、浏览器 popout 和标签分组禁用。
+
+FlexLayout 分别记录中央 tabset 的活动状态和各 border 的选择。宿主将物理焦点标记保存在 TabNode.config.focused，与 config.metadata 一起属于同一个原生 Model；它用于工具面板和编辑器之间的快捷键焦点裁决。Zustand 不保存第二份布局树。
 
 Project sidebar 按 Events → Functions → Charts → Data 展示同级资源分类，内容与分类来自 Rust 生成的 ActivityPanelDocument，展开状态由前端保存。Project 与 Nodes 面板直接展示分类树，不提供顶部搜索输入区；分类可独立展开和收起，画布节点选择器保留自己的搜索入口。Data 分类提供导入入口；单击数据项在顶部主编辑区（central grid）打开只读数据标签，按 DatabaseId 复用已打开标签。行尾按钮与右键“打开”使用同一入口，双击不再创建外部窗口；拖拽与右键管理保留。数据来自既有数据库投影，不注册独立 Data Activity panel。
 
@@ -54,7 +43,7 @@ Event、Function、Chart、Data 打开后共用 `activateEditorPanelAndSyncSessi
 `/editor?architecture=backend` 展示后端子系统，
 `/editor?architecture=communication` 展示 Tauri IPC 的 Command、Event、Channel 与 DTO / 错误契约。
 React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路由切换视图，浏览器前进、后退同步更新内容；关闭弹窗移除该参数并保留其他查询参数。
-架构导航保持工作台路由与 Dockview 挂载，不保存第二份弹窗打开状态或视图历史。
+架构导航保持工作台路由与 FlexLayout 挂载，不保存第二份弹窗打开状态或视图历史。
 
 `architecture=dependencies` 在同一张图上展示全部 Cargo workspace crates 及其直接引用关系，按依赖层级从左向右排列，箭头从引用方指向被依赖方。不设置单独的 crate 下拉框；点击节点仅高亮引用关系，`crate` 参数同步高亮状态，始终保留全部节点和连线。条件、可选和构建依赖以虚线标示，不显示 dev 或第三方依赖，也不宣称这些声明在同一次构建中全部启用。数据为静态快照，Cargo 清单变化后运行 `pnpm docs:crate-dependencies` 更新，`pnpm docs:crate-dependencies:check` 校验快照。
 
@@ -72,22 +61,6 @@ React、Rust、Tauri IPC 节点、面包屑和工具栏视图下拉框通过路�
 `src/modules/problems/public.ts` 组合三个独立 panel contribution；Workbench 只拥有它们的位置和
 生命周期。Problems、Results 与运行失败的业务语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)，
 Logs 的业务语义见 [Runtime Signals](RUNTIME_SIGNALS.md)。
-
-root Dockview 是以下物理事实的唯一 authority：
-
-- grid/edge topology 与 group membership；
-- group 和 edge sizes；
-- panel 顺序与 split 方向；
-- active group 与 active panel；
-- edge group 的位置、可见性、尺寸和 collapsed state。
-
-实现按职责分开：`workbenchDockviewOperations.ts` 提供元数据与 live Dockview 操作，`workbenchDockviewTransaction.ts` 保存一次待提交事务的临时布局和命令，`workbenchDockviewInternal.ts` 负责绑定、串行执行、hydration 与事件观察。事务接口由 `workbenchTypes.ts` 定义，临时事务不构成独立的已提交布局 authority。
-
-`useWorkbenchUiStore` 只保存 Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、Activity active tab 或 edge collapse 的镜像。
-
-直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
-
-Activity 底部固定显示 Plugins 原生 tab，替代原 Julia 入口。仅通过 CSS 将该 tab 排在标签列最下方，样式、选中状态与点击逻辑均复用上方 Activity tabs：点击已展开的当前 tab 收起 left edge；折叠时点击展开对应面板，点击其他 tab 则切换面板。不另设入口按钮或选中状态订阅。
 
 ### 1.1 Activity 文档与模板
 
@@ -129,7 +102,7 @@ Event、Function、Chart、Data 的 mutation 回执与 watcher 索引失效共�
 回执提供相关性校验、受影响路径与 move 信息，不再先写一套 delta Store、随后又用索引覆盖。
 正常更新和恢复均由 `projectPublicationSnapshot` 安装同次响应中的权威 ProjectIndex 与 Activity 增量；Chart 文档和已加载的干净 Graph
 会话在提交前准备，UI 不预写入临时 Chart。快照可以覆盖较晚才到达的命令/事件回执，同一版本只结算一次。
-实际 Dockview 提交处再次检查项目身份和本地草稿，未保存内容不被磁盘快照覆盖。
+实际 FlexLayout 提交处再次检查项目身份和本地草稿，未保存内容不被磁盘快照覆盖。
 CRUD 调用方不保留独立的 post-commit refresh；数据删除不显示额外全屏进度蒙层。
 已应用的资源版本和已发布的索引版本共同约束后续查询；过期索引只重读一次，不得覆盖较新的资源状态。
 导入及数据来源读取仍保留进度提示。异步删除完成时只清理仍指向被删资源的详情焦点，
@@ -174,13 +147,13 @@ Commands 的可用性来自本地草稿历史，数据库运行状态和选中�
 后端文档上限由 transport/parser 约束，超限明确失败，不静默截断。折叠只改变本地可见行，
 不会产生 IPC。四个面板的运行期文档、游标和错误由现有 `sidebarStore` 缓存，并按面板/项目/语言/生命周期隔离；
 同作用域共享请求，过期作用域不能覆盖新文档。展开偏好按 panel/category 保存到
-`yssbi-activity-panel-expansion`；文档不落盘，Dockview placement 不进入该 store。
+`yssbi-activity-panel-expansion`；文档不落盘，FlexLayout placement 不进入该 store。
 旧 Project 分类偏好 key 不迁移，首次使用采用各文档定义的默认值。
 
 外部文件变化先在 watcher 中合并为有界 rescan 信号，再由 Project 同步磁盘与驻留资源并触发索引刷新。
 索引的文件成员关系以磁盘为准；驻留 revision 不得重新添加磁盘已删除的 chart。
 缺失但已加载的资源记录可保留为 `exists: false`，用于保留本地文档意图；它不表示文件仍存在。
-tab 清理检查 exists，并在 Dockview 提交前重验项目身份和资源仍然缺失，只释放面板状态，
+tab 清理检查 exists，并在 FlexLayout 提交前重验项目身份和资源仍然缺失，只释放面板状态，
 不因异步删除清理用户切换后的项目或重新出现的文件。
 
 ## 2. Root panel 角色与默认 home
@@ -207,33 +180,18 @@ root group 可以混合承载不同角色；唯一例外是 Activity group。角
 - Logs、Output、Problems：bottom edge，使用 `WORKBENCH_EDGE_SIZES.bottom`，顺序为 Problems → Output → Logs；
 - bottom edge 仅包含 Problems、Output、Logs 时隐藏原生 header，由 Status Bar 图标切换；混入 editor 或其他 panel 时恢复原生 header，保留混合 group 的完整操作入口。
 
-right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts` 维护。
+right edge 使用 `WORKBENCH_EDGE_SIZES.right`。Details 始终由默认/恢复/reset 流程安装在 canonical right edge index 0，并且是唯一 permanent/fixed panel；Assistant 默认紧邻 Details，但作为普通 singleton 可移动、split、关闭。Inspect 仍按有效 editor/node context 延迟创建；Result 允许多个实例，但每个结果引用只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。三个 edge 的具体当前像素默认值只由 `src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts` 维护。
 
 Problems 只使用 `viewId: "problems"` 与 registry component `Problems`。Layout parser 只接受当前
 exact envelope 与 canonical panel identity，不执行旧 ID 转换或 alternate read。
 
 旧 `Diagnostics` identity 没有迁移路径；含非 canonical identity 的 root snapshot 会回退默认布局。这是当前 0.x 的直接替换行为，已有本地布局可能因此重置。默认与 reset 的顺序统一由 WORKBENCH_BOTTOM_DEFAULT_ORDER 定义；有效已保存布局保留用户排序。
 
-## 3. 唯一有界 nested Dockview：Logs
+## 3. Logs 内部布局
 
-Logs panel 内包含工作台唯一的 bounded nested Dockview。它只拥有七个 operational log domain panels：
+Logs 内部使用一个受限的 FlexLayout Model，承载七个 domain tabs。标签可以在同一 tabset 内排序，不能关闭、跨工作台拖放、分屏、浮动或 popout。
 
-1. `all`
-2. `application`
-3. `execution`
-4. `system`
-5. `graph`
-6. `data`
-7. `ui`
-
-该 nested Dockview 不拥有 root editor、Result 或 tool panels，也不参与 root topology。它不桥接任何 drag/drop：root panel 不能进入 Logs nested Dockview，domain panel 也不能进入 root；domain panel 的分组、顺序和 split 始终限制在 Logs host 内。
-
-Logs layout 有两种明确生命周期：
-
-- **main**：主窗口 Logs 通过 `logsDockviewRootBinding` 绑定；Application
-  `workbenchLayoutController` 负责 hydration、project replacement 与 persistence，最新 nested
-  snapshot 作为 `nested.logs` 随工作台 payload 持久化；
-- **ephemeral**：独立 `LogWindow` 每次挂载都从七 domain 默认布局开始，不绑定 main controller，也不读写工作台 layout persistence。
+main Logs 的布局由 logsRuntime 在挂载时交给真实 Model，卸载时保存只读快照，作为 nested.logs 随工作台持久化。独立 Logs 窗口使用自己的临时 Model。日志内容、过滤、选择和运行观测继续属于 Logs owner。
 
 ## 4. Canonical metadata 与 identity
 
@@ -252,8 +210,8 @@ result → { role, reference, leaseId, title, presentation }
 | `resourceRef`     | editor 打开的 opaque backend resource key：图/图表使用路径，数据使用 DatabaseId；同一资源可有多个 editor panel |
 | `reference`       | `{ executionSessionId, resultId }`，标识 Rust ResultStore 中的不可变快照                                       |
 | `leaseId`         | 当前面板持有的后端租约 token，不随移动、隐藏或重新渲染改变                                                     |
-| `panelInstanceId` | 一个 root Dockview panel instance 的物理 identity                                                              |
-| `groupId`         | Dockview 当前物理 group 的 identity；panel 移动后可改变                                                        |
+| `panelInstanceId` | 一个 root FlexLayout Model panel instance 的物理 identity                                                      |
+| `groupId`         | FlexLayout 当前物理 group 的 identity；panel 移动后可改变                                                      |
 
 不得从 `panelInstanceId` 或 `groupId` 推导 `resourceRef`、结果引用或 `leaseId`，也不得把这些 identity 合并为一个 tab id。
 
@@ -274,44 +232,31 @@ Application 的结果租约控制器订阅完成 hydration 后的真实面板集
 
 ## 5. Module seams 与布局 mutation
 
-### 5.1 Public seam
+布局实现位于 src/modules/workbench/internal/layout/：
 
-`src/modules/workbench/public.ts` 将能力拆成独立的 `workbenchDockviewRead`、
-`workbenchDockviewControl` 和 `workbenchDockviewRootBinding`。它们提供 role-aware semantic
-operations：
+- workbenchLayoutOperations.ts 在原生 Model 上执行 openEditor、ensureView、upsertResult、activate、reveal、move、split、边栏调整和资源重映射。
+- workbenchRead.ts 与 workbenchControl.ts 提供业务侧查询和语义命令；调用方不持有可写 Model。
+- workbenchRootBinding.ts 只为 RootLayoutHost 创建渲染绑定，并接收原生布局动作和物理焦点。
+- workbenchLayoutInternal.ts 拥有 FIFO、hydration gate、操作代际、关闭提交和复合事务。
+- workbenchLayoutController.ts 协调窗口绑定、恢复、项目资源就绪、持久化防抖和关闭时 flush。
 
-- `openEditor`；
-- `ensureView`、`upsertResult`；
-- `activate`、`reveal`、`move`、`split`；
-- `configureEdge`、`setEdgeCollapsed`、`setEdgeSize`；
-- canonical panel/group queries、resource remap 与 serialization。
+普通操作使用原生 Actions。复合操作通过 PendingWorkbenchTransaction 创建独立候选 Model，在候选上使用同一套语义操作；验证结构、metadata 和基线 revision 后，以 Model.fromJson(candidate, previousModel) 发布并移交既有标签的视图状态。候选准备期间不移交活动视图。没有另一份自制 panel/group/edge 模型，也不回放 Dockview 风格命令。
 
-Application 负责组合这些能力；调用方不持有 raw root `DockviewApi`，也不自行实现
-singleton、Result upsert、home edge 或 reveal 规则。
+publication transaction 可以在准备期间等待业务查询。提交前重验 binding、operation generation 和布局 revision；项目切换或用户布局操作会使过期候选失败。Actions.group 只提供原生动作的分组通知，不替代候选验证和业务提交边界。
 
-`getEdgeState` 只投影 edge identity、visibility 与 collapse，不为 UI 状态读取序列化布局。
-尺寸由 Dockview 持有，通过 `configureEdge` 的结果和显式 layout serialization 读取；临时布局
-事务从已捕获的 root snapshot 读取 edge size，避免为每个 edge 重复序列化。
-Root runtime 按实际 panel/edge instance 保留监听器，只在实例新增、移除或替换时重新绑定；
-普通布局变化仍同步发布 revision，事务的通知边界不变。
+### 5.1 拖动与订阅
 
-### 5.2 Internal seam
+Layout 只在 Model 实例被替换时通过宿主订阅更新；Model 内部动作由 FlexLayout 自己处理。连续调整尺寸时保留原生几何更新路径，不逐帧通知应用订阅者，松手后的最终动作发布应用通知。所有动作仍推进绑定 revision，避免尺寸拖动期间的旧候选覆盖新布局。
 
-`src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts` 保存 hydration、committed
-removal、layout transaction 与 publication transaction。它不从 Workbench root `public.ts`
-导出；这些能力不属于普通 module 或 application caller 的 public interface。
-`modules/workbench/internal/application/workbenchLayoutController.ts` 负责 window-scoped bind、
-startup hydration、persistence flush 与 project-generation invalidation。
+PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化时返回相同快照。父级回调和 drag overlay 保持稳定，减少画布、标签和无关面板的重渲染。查询面板集合时只计算一次活动面板。
 
-root `fromJSON` 只由 startup `workbenchLayoutController` 在空 root 上执行。运行时 reset、project cleanup、publication 和复合布局修改都使用 FIFO 中的 `ShadowWorkbenchModel` transaction：先从 live snapshot 构造 shadow、执行同步语义命令并验证 identity/topology/currentness，再把 buffered commands 应用到 live Dockview。运行时不使用 root `fromJSON` 重建布局。
-
-`workbenchLayoutController` 负责 window-scoped bind、hydration gate、project-resources readiness、debounced persistence 与 close-time flush。普通 semantic operations 可以在 ready 前进入 FIFO，但只会在当前 binding 完成 hydration 后执行。
+这些边界减少宿主附加开销，不保证大型 Graph、统计图表或表格的实际帧率；真实数据和桌面 WebView 下的交互需要单独验收。
 
 ## 6. Close、物理命令与 editor focus gate
 
 ### 6.1 Close coordinator
 
-所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 Dockview close。
+所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 FlexLayout close。
 
 Coordinator 按顺序执行：
 
@@ -326,18 +271,18 @@ Coordinator 按顺序执行：
 
 ### 6.2 物理命令
 
-命令以 root Dockview 的实时 group 为准：
+命令以 root FlexLayout Model 的实时 group 为准：
 
 - `Ctrl+Tab` 在 active physical group 的全部 canonical panels 间循环；
 - Close Group 关闭该 physical group 中 editor、Result 和 tool panels 的完整集合；若 group 同时包含 fixed Details，现有 close coordinator 拒绝整批关闭，Assistant 只能单独关闭；Assistant 移到不含 fixed panel 的普通 group 后沿用 Close Group；
 - editor tab 的 Close Others、Close All、Close Saved 只筛选该 group 中的 `editor` role；
-- split 作用于 active canonical editor，native Dockview drag/drop 继续拥有后续物理移动与顺序。
+- split 作用于 active canonical editor，native FlexLayout drag/drop 继续拥有后续物理移动与顺序。
 
 ### 6.3 Editor focus gate
 
 Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
 
-- 目标必须是 root Dockview 当前 physically active 的 `editor` panel；
+- 目标必须是 root FlexLayout Model 当前 physically active 的 `editor` panel；
 - 捕获并在执行前重验 `panelInstanceId`、`groupId`、`resourceRef`、`resourceKind` 与 project identity；
 - tool 或 Result 激活、panel/group 改变、project replacement 都使旧 target 失效；
 - application modal、dialog、menu、input、contenteditable、popover 等 shortcut consumer 会阻止 editor command。
@@ -357,14 +302,14 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 ### 7.2 Reset
 
-Reset 使用一个 `PendingWorkbenchTransaction` 临时布局事务，并保留既有 editor、Result 与 panel identities：
+Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提交，并保留既有 editor、Result 与 panel identities：
 
 - Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
-- editor panels 按 deterministic snapshot order 集中到 central grid group；
+- editor panels 按 deterministic snapshot order 集中到第一个 central tabset；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Inspect、Result 回到其后，reset 不凭空创建 Inspect/Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 顺序；Status Bar 图标顺序跟随该 group；重置完成时不显示其中任何 panel，用户通过 Status Bar 再次打开；
-- left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起并隐藏，不保留折叠标签条；
-- main Logs nested Dockview 恢复七 domain 默认布局；
+- left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
+- main Logs nested FlexLayout 恢复七 domain 默认布局；
 - 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
 
 ### 7.3 Project replacement
@@ -379,35 +324,26 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 
 ## 8. Persistence contract
 
-每个窗口的 Dockview 布局只使用以下 key：
+每个窗口使用新的存储键：
 
 ```text
-yssbi-workbench-layout:<window-label>
+yssbi-workbench-flexlayout:<window-label>
 ```
 
-value 是不含版本字段的 exact envelope：
+value 为：
 
 ```text
 {
-  root: SerializedDockview,
-  nested: {
-    logs: SerializedDockview
-  }
+  root: IJsonModel,
+  nested: { logs: IJsonModel }
 }
 ```
 
-Persistence invariant：
+root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。恢复时重新施加宿主的浮动、关闭和拖放约束。
 
-- payload 不包含 `version` field，storage key 保持 window-scoped semantic key；
-- top-level 只接受 `root` 与 `nested`，`nested` 只接受 `logs`；
-- root 与 `nested.logs` 独立验证；某一 snapshot 非法时只把该部分恢复为默认布局；
-- 任一 root 或 main Logs 变化都会调度完整 payload 写入；window close 在当前 hydration 与 FIFO idle 后直接 flush；
-- Result 与 Inspect 是 transient/project-scoped panels，写入前从 `root` snapshot 及其空 topology 中剔除；editor 也随 project-scoped scrub 移除；Details 与 Assistant 是持久化 root topology，Activity panels 作为固定 left edge 成员保留；用户关闭 Assistant 后，缺失状态会随 snapshot 保留，startup restore 不会自动重建；
-- main Logs nested snapshot 持久化，ephemeral standalone Logs 不持久化。
+窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 和 Inspect 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 
-非 canonical envelope 会被拒绝并回退默认布局；parser 不提供 alternate reader 或迁移路径。若未来需要 breaking persistence format，直接使用新的 semantic storage key。
-
-`view:data` 已移除；包含该旧 panel identity 的 root snapshot 按现有验证规则回退默认布局，不影响项目资源或有效的 Logs nested snapshot。包含旧 `params.metadata.pinned` 的 editor snapshot 同样不再是 canonical 格式，会回退默认布局。项目不再在 editor metadata 中镜像 Dockview 的 pinned 状态；Root Dockview 启用原生 `pinnedTabs`，新打开的 editor 通过 `panel.api.setPinned(true)` 设置原生状态，布局序列化保留 Dockview 自己的 `panels[id].pinned` 字段。
+旧 Dockview 存储不读取、不转换；第一次使用新键加载 FlexLayout 默认布局。此变化只影响工作台偏好，不迁移或修改项目资源。布局快照不保存后端结果本体和 Graph 撤销历史。
 
 ### 8.1 原生窗口几何与关闭
 
@@ -427,59 +363,16 @@ Persistence invariant：
 同种窗口并存时共享插件缓存；保存时仍打开的同组窗口可能刷新缓存，不保证最后关闭实例的状态获胜。
 旧 `window_state.json` 不再读取，没有兼容读写或自动迁移；首次使用新存储按默认尺寸打开。
 
-## 9. 视觉尺寸层级
+## 9. 样式与标签
 
-root 水平标签使用蓝色圆角背景表示选中；Status Bar 面板图标使用强调色表示选中，不再增加背景。
-Problems、Output、Logs
-的图标位于窗口最底部的 Status Bar，提供悬停名称和无障碍标签；再次点击当前 bottom panel 图标
-收起底部区域，折叠时不预留旧标签行。缺失的 panel 可由图标重新打开，移到其他 group 的 panel
-则在其实际位置 reveal。
+直接加载 flexlayout-react/style/combined.css，使用 alpha_light / alpha_dark 原生主题，随应用主题切换。标签选中、关闭按钮、边栏、分隔条、拖放指示和最大化按钮均使用库的设计。
 
-Status Bar 最右侧提供 Details、Assistant 图标，沿用选中高亮、悬停名称和点击 reveal；再次点击
-当前 right panel 的图标可折叠右侧区域。右侧信息为这两个入口预留空间，避免侧栏折叠时重叠。
-Settings 图标位于状态栏最左侧、Activity Bar 正下方，通过独立的 Workbench UI state 打开设置弹窗。
-Plugins 通过 Activity Bar 最下方原生 tab 打开。`src/modules/plugins/` 仅渲染通用包投影：已安装行不可折叠，管理菜单提供打开、启用/禁用与卸载；本地 `.yssplugin` 安装入口仅在顶部工具栏提供。“已安装”分组直接展示全部已安装插件及总数，不提供搜索或过滤功能；无条目时不渲染空状态文案、安装引导或按钮，保留分组标题和计数。不伪造在线市场条目。
+src/app/workbench-layout.css 只设置宿主尺寸、字体尺度和标题图标/dirty 标记；不保留 Dockview 样式覆盖。RootPanelTabRenderer 只贡献标题内容和业务右键菜单。关闭按钮、中键和原生关闭动作进入既有关闭协调者。
 
-`PluginProvider` 从 Rust registry 获取投影，按清单中的 sidebar 贡献补入可选面板，不抢占焦点。面板使用 `{ role: "plugin", pluginId, viewId, title, location }` 元数据；`pluginId + viewId` 决定 singleton，而不是固定的 Julia 组件名。安装状态独立于 Julia 等外部运行时是否存在。
-
-页面内容来自校验后的不可变包，通过只允许脚本的 sandbox iframe 和绑定安装代际的 MessagePort 与宿主交互，不导入宿主 React/Tauri。第一次可见时才激活插件页面。禁用、卸载、重启或项目切换使旧 context 失效；禁用或安装状态尚未确定时保留布局位置并显示占位。页面关闭不取消独立的后台任务。Julia 运行时页贡献 sidebar，贝叶斯编辑器贡献 editor，宿主不含对应业务页面。
-
-插件 panel 的渲染策略固定为 `renderer: "always"`，新建与布局恢复都由 Workbench 归一化；其他 panel 保持原渲染策略。未激活的插件仍只保留占位组件，首次可见才创建 iframe 与会话。普通显隐或同窗口移动不移除 iframe 文档，不触发解绑和重新加载；可见性通过页面 context 单独通知。
-
-每个已激活页面由 `PluginViewSession` 持有一个后端 lease。替换、重试与释放串行执行：等待旧 attach 返回并释放，确认旧 detach 成功后才允许新 attach。失败释放保留原 lease 身份供显式重试，不继续占用名额。非预期 iframe 导航立即撤销端口，显示明确错误并等待用户重新连接；不使用按切换频率计数的自动重载循环。错误投影保留阶段、稳定代码与 incidentId，不展示内部错误 prose 或输入内容。
-
-后端确认卸载成功后，`PluginProvider` 立即撤销该插件的投影，即使后续列表刷新失败也不恢复已卸载项。`syncPluginWorkbenchViews` 在 root Dockview FIFO 事务中按 `pluginId` 移除全部 `role: "plugin"` 面板，包含 sidebar、editor 及用户移动过的位置；tab 随面板物理删除，随后由 layout controller 立即 flush 持久化布局。确认取消或后端失败不执行卸载清理，插件管理入口、其他插件、普通编辑器与项目结果保留。
-
-完整 registry 查询成功后也会清理旧布局中确认未安装的插件贡献面板；查询失败不等于插件不存在，不据此删除布局。并发查询与排队的 open/register 操作都验证投影当前性，不能由迟到响应重新创建已卸载的 tab。
-
-已有布局缺少 Plugins 时，hydration 补入插件浏览面板并保留已有面板 identity。插件的协议、信任边界与持久化职责见 [Plugin 契约](PLUGIN.md)。
-
-Status Bar 通过 Workbench application hook 订阅 root Dockview 的 group 顺序、active panel、visibility
-与 collapsed state，不保存独立的选中或布局状态。订阅投影只在图标顺序、选中或可操作状态改变时
-触发 React 更新；编辑器的 active 判定同样只订阅自身布尔结果，不因无关的 layout revision 重绘画布。
-节点、连接、选中数量与 X/Y/缩放仅在当前激活的 editor 为 Event 或 Function 时显示，
-切换到 Chart、Data、其他 panel 或没有激活 editor 时整组隐藏，不显示默认零值占位。
-显示条件复用状态项注册的 `visible`，不保存另一份激活 tab 状态。
-图统计从当前 Graph projection 的节点数量和 connection 集合派生，仅 connection 集合替换时重新计数；
-视口文字更新按动画帧合并，只写入变化后的显示文本，切换 editor 时取消旧帧并刷新文字。
-
-图标入口随 main grid 的实时左边缘对齐，右侧信息随其右边缘对齐；Root host 通过 application layout
-binding 测量 Dockview 的 middle column 来设置 chrome 偏移，侧栏缩放、折叠和恢复均会更新。
-偏移 CSS variables 只写在 Status Bar footer 上，数值不变时不重复写入，避免向整个 editor 子树传播
-继承样式失效。Bottom header 调整与几何测量分帧执行。Logs 内部的 domain tabs 继续使用自己的样式。
-
-工作台 chrome 使用以下 token 层级。下表像素值只是 `src/app/App.css` 中的 current default，CSS token 才是调用方 contract：
-
-| Token                    | Current default | 用途                                                 |
-| ------------------------ | --------------: | ---------------------------------------------------- |
-| `--titlebar-height`      |          `36px` | Menubar/titlebar chrome                              |
-| `--workbench-tab-height` |          `32px` | root tabs；collapsed edge 同步由 Dockview theme 配置 |
-| `--logs-tab-height`      |          `30px` | Logs nested domain tabs                              |
-| `--panel-toolbar-height` |          `28px` | panel toolbar                                        |
-| `--statusbar-height`     |          `26px` | Status Bar                                           |
+Status Bar 保留 Settings、Problems、Output、Logs、Details 和 Assistant 入口；不再测量布局库的内部 DOM 或隐藏原生底部标签栏。
 
 ## 10. Verification
 
-验证命令以 [本地开发工作流](../development/LOCAL_WORKFLOW.md) 为准。工作台改动期间运行
-受影响的 `pnpm test:ts <path>`；交付前按改动范围运行 TypeScript check、完整 Frontend
-tests 与 Frontend architecture gate，不在本文维护易漂移的测试文件库存。
+检查入口见 [本地开发工作流](../development/LOCAL_WORKFLOW.md)。布局库替换需验证所有公共查询和操作的消费者、架构依赖策略、类型和前端构建。保留应用层关闭、焦点、项目切换和 Result 生命周期的行为检查；移除依赖旧 Dockview 实例与 JSON 结构的专属测试夹具。
+
+遵守仓库规则，UI 不新增单元测试。交互验收覆盖原生拖动/分屏、折叠、主题切换、面板状态保留、取消关闭、结果租约和项目切换。浏览器中使用模拟平台边界的检查不能替代真实 Tauri 数据与窗口生命周期验收。

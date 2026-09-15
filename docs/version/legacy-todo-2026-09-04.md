@@ -452,7 +452,7 @@ zed 的 .rules 文件需要学习，同时还有根目录中的内容，有必�
 1. Oxfmt 检测到 1592 个文件尚未建立格式化基线。本次没有运行 `pnpm format`，避免产生全仓批量格式化改动。
 2. 严格 Clippy 在 `yss-sci` 中报告 84 个 library、86 个 library-test 既有 `-D warnings` 问题。
 3. 主工作区前端测试为 1830 通过、1 失败；失败测试
-   `src/features/core/dockview/workbenchDockviewDefaults.test.ts:115` 的期望值缺少现有的 `assistant: "right"`。
+   `src/features/core/dockview/workbenchLayoutDefaults.test.ts:115` 的期望值缺少现有的 `assistant: "right"`。
 4. 默认 Vitest 仍会扫描嵌套的 `.worktrees/`；本次完整主工作区验证通过 CLI 临时排除了该目录。
 
 绘图组件库需要重构
@@ -938,7 +938,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       的问题；保持 editor command focus gate 并恢复节点拖动与创建。
 - [ ] 在 GraphRuntime 生成 editor projection facts 时按请求 locale 解析节点与参数 i18n 文案，并恢复
       资源绑定节点的实例显示名。
-- [ ] 将主窗口壳收敛为 `WorkbenchWindow`、`RootDockviewHost` 与 `WorkbenchOverlayHost`，由
+- [ ] 将主窗口壳收敛为 `WorkbenchWindow`、`RootLayoutHost` 与 `WorkbenchOverlayHost`，由
       `WorkbenchComposition` 唯一组装 `RootPanelRegistry`，并统一使用 `EditorResource` Dockview component。
 - [ ] 将 Worksheet 资源协议全栈直接切换为 Chart：统一 Rust owner、Project 生命周期、Tauri wire、
       前端 service/state/UI、`charts/*.yssbi-chart` 与 i18n，并删除旧双路径。
@@ -953,11 +953,11 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       feature，把 `ChartModel` 收入 source-independent `shared/charts`，将数据导入业务弹窗迁入 View，
       并删除非 IPC DTO、废弃 store/state 类型及对应兼容入口。
 - [ ] 完成前端最终命名直接切换：使用 `GraphDocumentEditor`、`RootPanelTabRenderer`、
-      `LogDomainDockviewHost`、`StatusBar`、`WorkbenchUiStore` 与 `activeResourceRef`，并以 production
+      `LogDomainLayoutHost`、`StatusBar`、`WorkbenchUiStore` 与 `activeResourceRef`，并以 production
       architecture audit 禁止旧术语和旧文件路径回流。
 - [x] 将工作台组合根迁入 `app/windows/workbench`，由唯一 `rootPanelRegistry` 组合业务面板，并新增
       app-owned `editorRendererRegistry` 完成 event/function/chart 到具体编辑器的映射；通用
-      `EditorResourceDockPanel` 只向编辑器传递显式 panel scope，不再依赖具体业务编辑器或 Graph Dockview API。
+      `EditorResourcePanel` 只向编辑器传递显式 panel scope，不再依赖具体业务编辑器或 Graph Dockview API。
 - [x] 建立 `modules/chart` 与 `modules/workbench` 的根 `public.ts` 边界，将 Chart UI 直接迁入模块内部，
       并让 app 与其他业务代码只通过模块 public API 获取 `ChartEditor` 和 editor panel contract；新增
       production architecture gate，禁止模块外 deep import 并要求每个模块具备根 public API。
@@ -1015,7 +1015,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [x] 让 `WatermarkView` 声明自身三个按钮所需的最小 command props，不再从 application
       `WorkbenchCommandCapability` 反向 Pick；通过 Graph View architecture gate 保持该入口为纯 props。
 - [x] 同步维护文档中的最终前端实现地图：以 app composition、`modules/*/public.ts`、
-      `WorkbenchWindow`、`RootDockviewHost`、`StatusBar` 和当前 Workbench internal paths 替换旧
+      `WorkbenchWindow`、`RootLayoutHost`、`StatusBar` 和当前 Workbench internal paths 替换旧
       views/EditorWindow/Workspace/BottomBar 与 Core Dockview 描述。
 - [x] 完成 `frontend-refactor.md` 最终验收：production architecture audit 50/50 通过，TypeScript
       类型检查与 lint、Vite production build 通过；全量 Vitest 的唯一失败仍是既有
