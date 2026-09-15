@@ -60,8 +60,6 @@ export const zhCN = {
       saveAsFailed: "另存为失败：{{error}}",
       openResourceBeforeSaving: "请先打开一个图或图表",
       saveFailed: "保存失败：{{error}}",
-      compileFailed: "编译图失败：{{error}}",
-      compileRequired: "请先编译当前图再运行",
       problemsBlockExecution: "请先解决图中的阻断问题再运行",
       loadFailed: "加载项目失败",
     },
@@ -163,7 +161,7 @@ export const zhCN = {
     problems: "问题",
     problemsLocate: "定位问题",
     problemsRelated: "关联位置",
-    problemsBlocking: "阻止编译",
+    problemsBlocking: "阻止运行",
     outputNoGraph: "请打开图以查看程序输出",
     outputEmpty: "当前图暂无运行错误",
     outputClear: "清除运行错误",
@@ -191,8 +189,11 @@ export const zhCN = {
       deadlineExceeded: "运行超过了允许的时间。请缩小计算范围后重试。",
       resourceUnavailable: "运行所需的资源不可用。请检查数据源和项目资源。",
       finalizationFailed: "计算结果未能完成提交。请检查项目状态后重试。",
-      graph_compile_required: "图已修改或编译产物已失效。请重新编译后执行。",
-      stale_project_lifecycle: "项目状态已改变。请在当前项目中重新编译后执行。",
+      graph_draft_changed: "图或依赖资源已改变。请在当前图状态下重新运行。",
+      graph_not_ready: "请先解决图中的阻断问题再运行。",
+      graph_resolution_failed: "无法完成图检查。请使用诊断编号查看技术详情。",
+      graph_plan_failed: "无法准备执行计划。请使用诊断编号查看技术详情。",
+      stale_project_lifecycle: "项目状态已改变。请在当前项目中重新运行。",
       execution_channel_failed: "运行事件传输失败，无法确认完整结果。请重试并检查日志。",
       ipc_transport_failure: "无法完成与运行后端的通信。请检查应用状态后重试。",
     },
@@ -453,15 +454,15 @@ export const zhCN = {
       },
       graph: {
         title: "图编辑与运行交互",
-        description: "管理图草稿与画布交互，组织编译、保存、执行并展示语义投影和结果。",
+        description: "管理图草稿与画布交互，组织编辑解析、保存、运行并展示语义投影和结果。",
         parts: {
           draft: "草稿与历史",
           projection: "语义投影",
           canvas: "画布交互",
-          execution: "编译 / 保存 / 执行",
+          execution: "校验 / 保存 / 执行",
         },
         boundary:
-          "草稿、保存基线与画布临时状态分别管理。Application 协调操作顺序并校验项目、草稿和请求身份；Canvas、Details 与 Problems 消费同一份 Rust GraphSemanticSnapshot。Draft、Compile、Save、Execute 独立，保存失败保留草稿，执行使用匹配产物。Results 的生命周期由 Rust 管理；Problems、Results、Run Output 各有数据流，当前 Run Output 生产输出 producer 尚未接入。",
+          "草稿、保存基线与画布临时状态分别管理。Application 协调操作顺序并校验项目、草稿和请求身份；Canvas、Details 与 Problems 消费同一份 Rust GraphSemanticSnapshot。编辑时解析诊断，运行时内部准备计划，保存保持独立且失败后保留草稿。结果与租约由 Rust 管理；Problems、Results 和运行失败各有数据流。",
       },
       data: {
         title: "数据浏览与编辑",
@@ -570,7 +571,7 @@ export const zhCN = {
         description: "传递一次明确请求并接收处理结果；Channel 可作为请求参数传入。",
         parts: { request: "一次请求", result: "一个结果", channelArgument: "绑定 Channel" },
         boundary:
-          "Command 用于查询、保存、编译或启动任务。前端创建 Channel 后，将它作为 Command 参数传入，为后续消息建立交付通道。一次命令的处理结果与持续消息流分别遵守各自契约。",
+          "Command 用于查询、编辑、保存或启动任务。前端创建 Channel 后，将它作为 Command 参数传入，为后续消息建立交付通道。一次命令的处理结果与持续消息流分别遵守各自契约。",
       },
       transport: {
         title: "Command 命令适配",
@@ -581,7 +582,7 @@ export const zhCN = {
       },
       business: {
         title: "Rust 业务用例",
-        description: "执行查询、保存、编译与任务用例，拥有业务规则和已提交状态。",
+        description: "执行查询、编辑、保存与任务用例，拥有业务规则和已提交状态。",
         parts: { useCase: "业务调用", authority: "状态权威", blocking: "耗时任务边界" },
         boundary:
           "应用层与领域层承担业务编排、文件事务及计算，向通信适配层返回类型化结果。耗时工作进入既有 blocking 边界；Tauri 命令不复制这些职责。大表在后端查询、分页或生成摘要，控制传输规模。",
@@ -676,19 +677,19 @@ export const zhCN = {
           localization: "节点文档与本地化",
         },
         boundary:
-          "Node 描述一种节点的能力，不依赖 Graph。节点实例、位置和连线归图文档；连接后的类型、Schema、血缘和诊断由 GraphSemanticSnapshot 管理，编译诊断模板归 Graph。",
+          "Node 描述一种节点的能力，不依赖 Graph。节点实例、位置和连线归图文档；连接后的类型、Schema、血缘和诊断由 GraphSemanticSnapshot 管理，图诊断模板归 Graph。",
       },
       graph: {
         title: "图分析与执行",
-        description: "从图文档、语义分析到编译产物、执行运行与结果查询。",
+        description: "从图文档、语义分析到运行准备、执行与结果查询。",
         parts: {
           documents: "文档与编辑",
           semantics: "语义与投影",
-          compilation: "编译与产物",
+          preparation: "运行准备",
           execution: "执行与结果",
         },
         boundary:
-          "GraphSemanticSnapshot 是解析后图语义的唯一事实源。Graph Editor 生成编辑器投影，Graph Runtime 管理解析与编译缓存，Graph Execution 执行匹配产物并管理结果。Compile、Save、Execute 相互独立；Run Output 的生产输出 producer 尚未接入。",
+          "GraphSemanticSnapshot 是解析后图语义的唯一事实源。Graph Editor 生成编辑器投影，Graph Runtime 解析编辑并在运行前准备匹配计划，Graph Execution 执行计划并管理结果。保存独立于执行；Output 展示运行失败。",
       },
       data: {
         title: "数据管理与查询",
@@ -831,7 +832,7 @@ export const zhCN = {
       command: {
         title: "Command",
         summary: "请求 / 响应 · 查询、保存与执行",
-        description: "查询、提交编辑、保存、编译，以及启动或取消任务。",
+        description: "查询、提交编辑、保存，以及启动或取消任务。",
       },
       event: {
         title: "Event System",
@@ -861,13 +862,13 @@ export const zhCN = {
       },
       domain: {
         title: "领域逻辑",
-        summary: "图校验、编译与科学计算",
-        description: "校验业务规则、解析图类型与依赖，处理编译、执行和科学计算。",
+        summary: "图校验、执行与科学计算",
+        description: "校验业务规则、解析图类型与依赖，准备执行计划并完成科学计算。",
       },
       state: {
         title: "状态管理",
         summary: "已提交项目、版本与结果",
-        description: "管理已提交项目、资源版本、编译产物及结果，提供可查询投影。",
+        description: "管理项目编辑状态、资源版本、执行计划及结果，提供可查询投影。",
       },
       persistence: {
         title: "数据持久化",
@@ -1438,6 +1439,8 @@ export const zhCN = {
         graph_connection_order_required: "该连接需要指定顺序",
         graph_connection_order_forbidden: "该连接不允许指定顺序",
         graph_connection_already_exists: "这些端口已经连接",
+        graph_edit_changed: "图已发生变化，请重试。",
+        graph_edit_busy: "图正在处理其他编辑，请稍后重试。",
         graph_connection_move_source_empty: "源端口没有可移动的连接",
         graph_connection_move_same_port: "请选择其他目标端口",
         graph_mutation_empty_targets: "请至少选择一个图元素",
@@ -1456,11 +1459,9 @@ export const zhCN = {
     },
     graphState: {
       new: "尚无匹配结果",
-      uncompiled: "待编译",
-      compiling: "正在编译",
-      compiled: "已编译，尚无匹配结果",
+      unexecuted: "尚未运行",
       running: "参与本次运行",
-      error: "编译或运行失败",
+      error: "存在阻断问题或运行失败",
       valid: "结果可用",
       stale: "结果过期",
       partial: "部分结果可用",
@@ -1473,9 +1474,6 @@ export const zhCN = {
     executionArtifactsClearFailed: "清除运行提示失败：{{message}}",
     executionCancelled: "执行已中断",
     executing: "执行中...",
-    compileGraph: "编译图",
-    compilingGraph: "正在编译图…",
-    compileRequired: "请先编译图再运行",
     functionRunUnavailable: "函数图通过其调用方运行",
     problemsBlockExecution: "请先解决图中的阻断问题再运行",
     executeCurrentGraph: "运行当前图",

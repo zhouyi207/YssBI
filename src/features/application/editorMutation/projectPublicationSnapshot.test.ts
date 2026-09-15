@@ -1,8 +1,9 @@
+import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
 import { buildGraphResourceMeta } from "@/features/core/resource";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import {
   makeEditorProjectionFixture,
   makeGraphEditorSession,
@@ -92,7 +93,7 @@ describe("project snapshot projection replacement", () => {
     dockviewMocks.ready = true;
     dockviewMocks.panels.splice(0);
     useGraphProjectionStore.setState({ graphEntities: {} });
-    useGraphDraftStore.getState().clear();
+    useGraphEditingStore.getState().clear();
     const projection = makeEditorProjectionFixture({
       graphPath: caller,
       nodeId: "call-1",
@@ -104,9 +105,9 @@ describe("project snapshot projection replacement", () => {
 
   it("does not replace a dirty Graph draft, including edits made after snapshot preparation", async () => {
     const replacement = makeEditorProjectionFixture({ graphPath: caller });
-    useGraphDraftStore.getState().install(caller, makeGraphEditorSession(replacement.projection));
+    useGraphEditingStore.getState().install(caller, makeGraphEditorSession(replacement.projection));
     const setDirty = (saveDirty: boolean) =>
-      useGraphDraftStore.setState((state) => ({
+      useGraphEditingStore.setState((state) => ({
         sessions: { ...state.sessions, [caller]: { ...state.sessions[caller], saveDirty } },
       }));
     setDirty(true);
@@ -128,7 +129,8 @@ describe("project snapshot projection replacement", () => {
         [
           caller,
           {
-            document: useGraphDraftStore.getState().sessions[caller].savedDocument,
+            document: useGraphEditingStore.getState().sessions[caller].document,
+            editing: makeGraphEditingState(),
             projection: replacement.projection,
           },
         ],

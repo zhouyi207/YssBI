@@ -19,7 +19,7 @@ import type {
   CanvasGestureLease,
   CanvasInteractionHandlers,
 } from "@/features/core/canvas/canvasMutationContracts";
-import { isGraphDraftSaving } from "@/features/core/graphDraft";
+import { isGraphSaving } from "@/features/core/graphEditing";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
 import {
@@ -67,7 +67,7 @@ export function useCanvasInteraction({
       : null;
   });
   const captureTarget = useCallback(() => {
-    if (!enabledRef.current || isGraphDraftSaving(graphPath)) return null;
+    if (!enabledRef.current || isGraphSaving(graphPath)) return null;
     const target = captureActiveEditorCommandTarget();
     return target?.panelInstanceId === panelInstanceId &&
       target.groupId === groupId &&
@@ -108,7 +108,7 @@ export function useCanvasInteraction({
         isCurrent: () =>
           active &&
           enabledRef.current &&
-          !isGraphDraftSaving(graphPath) &&
+          !isGraphSaving(graphPath) &&
           isEditorCommandTargetCurrent(target) &&
           useGraphInteractionStore.getState().interactions[graphPath] === owner,
         finish: () => {

@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
-use yss_application::graph::execution_package_from_graph;
-use yss_graph_analysis_contract::CompileId;
-use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
@@ -11,7 +8,7 @@ use yss_graph_document::{
 use yss_graph_execution::error::RunFailureCode;
 use yss_graph_execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use yss_graph_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+    PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_execution::resource_preparation::{ResourceProviderFactory, RunResourceBindings};
 use yss_graph_execution::state::{
@@ -20,43 +17,66 @@ use yss_graph_execution::state::{
 use yss_graph_execution::value::RuntimeValue;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
+fn analyze_document(
+    document: &GraphDocument,
+    graph: &GraphResourcePath,
+    resources: &ResourceCatalogSnapshot,
+) -> yss_graph_analysis::GraphAnalysis {
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let graph_runtime = yss_graph_runtime::GraphRuntimeState::from_components(
+        yss_graph_runtime::GraphRuntimeEpoch::from_existing(1),
+        yss_graph_runtime::GraphRuntimeComponents {
+            registry: builtin.registry,
+            catalog: builtin.catalog,
+        },
+    )
+    .unwrap();
+    graph_runtime.resolve_graph_document(
+        graph,
+        document,
+        &yss_graph_analysis_contract::GraphAnalysisBasis {
+            registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
+                graph_runtime.registry_fingerprint(),
+            ),
+            kernel_fingerprint: yss_graph_execution::kernels::KernelRegistry::default()
+                .fingerprint()
+                .as_bytes(),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        },
+        resources,
+        &[],
+        "en-US",
+    )
+}
+
 fn execute(
     document: &GraphDocument,
     output_node_type: &str,
 ) -> Result<RuntimeValue, ExecutePreparedError> {
-    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
     let resources = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
         BTreeMap::new(),
         ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
-    let semantics =
-        yss_graph_analysis::resolve_graph_semantics(document, &builtin.registry, &resources);
-    let ready = semantics.ready().unwrap_or_else(|| {
-        panic!(
-            "the saved graph must pass semantic validation: {:?}",
-            semantics.diagnostics()
-        )
-    });
     let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
-    let package = compile(GraphCompilationInput::new(
-        ready,
-        graph,
-        CompileId::new(1),
-        yss_graph_execution::kernels::KernelRegistry::default()
-            .fingerprint()
-            .as_bytes(),
-    ))
-    .unwrap();
+    let analysis = analyze_document(document, &graph, &resources);
     let session = PlanProjectSessionId::from_existing("diagnostic-session".into());
-    let basis = PlanCompilationBasis::new(
+    let state = ExecutionRuntimeState::new(
+        ExecutionSessionId::new(uuid::Uuid::new_v4()),
+        RuntimeGeneration::INITIAL,
+        yss_graph_execution::kernels::KernelRegistry::default().into(),
+    );
+    let basis = PlanBasis::new(
         session.clone(),
         PlanRegistryFingerprint::from_bytes([0; 32]),
-        yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+        state.kernels().fingerprint(),
         BTreeMap::new(),
         BTreeMap::new(),
     );
-    let package = execution_package_from_graph(package, basis).unwrap();
+    let package = state
+        .prepare_graph_package(&graph, &analysis, basis)
+        .unwrap();
     let requested_output = package
         .plan()
         .operations()
@@ -66,13 +86,8 @@ fn execute(
         .outputs()[0]
         .output()
         .clone();
-    let state = ExecutionRuntimeState::new(
-        ExecutionSessionId::new(uuid::Uuid::new_v4()),
-        RuntimeGeneration::INITIAL,
-        yss_graph_execution::kernels::KernelRegistry::default().into(),
-    );
     let plan = state
-        .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+        .prepare_package(package, RuntimeGeneration::INITIAL)
         .unwrap();
     let run = state.execute_prepared_handoff(
         &plan,
@@ -144,7 +159,7 @@ fn division_graph(denominator: i64) -> (GraphDocument, NodeId) {
 }
 
 #[test]
-fn graph_constants_retain_numeric_types_through_compilation_and_execution() {
+fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
     let (mut document, divide) = division_graph(2);
     assert_eq!(
         execute(&document, "yssbi.numeric.divide").unwrap(),
@@ -503,40 +518,32 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         )]),
         ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
-    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
-    let semantics =
-        yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &resources)
-            .with_execution_kernel_support(&|id| {
-                yss_graph_execution::kernels::KernelRegistry::default().supports(id)
-            });
-    let package = compile(GraphCompilationInput::new(
-        semantics
-            .ready()
-            .unwrap_or_else(|| panic!("{:?}", semantics.diagnostics())),
-        GraphResourcePath::new("events/decompose.yssbi-event").unwrap(),
-        CompileId::new(1),
-        yss_graph_execution::kernels::KernelRegistry::default()
-            .fingerprint()
-            .as_bytes(),
-    ))
-    .unwrap();
+    let graph = GraphResourcePath::new("events/decompose.yssbi-event").unwrap();
+    let analysis = analyze_document(&document, &graph, &resources);
+    let runtime = ExecutionRuntimeState::new(
+        ExecutionSessionId::new(uuid::Uuid::new_v4()),
+        RuntimeGeneration::INITIAL,
+        yss_graph_execution::kernels::KernelRegistry::default().into(),
+    );
     let resource = PlanResourceId::from_existing("data".into());
     let version = PlanResourceVersion::from_existing("7".into());
     let session = PlanProjectSessionId::from_existing("decompose-session".into());
-    let package = execution_package_from_graph(
-        package,
-        PlanCompilationBasis::new(
-            session.clone(),
-            PlanRegistryFingerprint::from_bytes([0; 32]),
-            yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
-            BTreeMap::from([(resource.clone(), version.clone())]),
-            BTreeMap::from([(
-                resource.clone(),
-                PlanResourceObservedState::Present(version.clone()),
-            )]),
-        ),
-    )
-    .unwrap();
+    let package = runtime
+        .prepare_graph_package(
+            &graph,
+            &analysis,
+            PlanBasis::new(
+                session.clone(),
+                PlanRegistryFingerprint::from_bytes([0; 32]),
+                yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+                BTreeMap::from([(resource.clone(), version.clone())]),
+                BTreeMap::from([(
+                    resource.clone(),
+                    PlanResourceObservedState::Present(version.clone()),
+                )]),
+            ),
+        )
+        .unwrap();
     let outputs = package
         .plan()
         .operations()
@@ -546,13 +553,8 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         .outputs()
         .to_vec();
     assert_eq!(outputs.len(), 3);
-    let runtime = ExecutionRuntimeState::new(
-        ExecutionSessionId::new(uuid::Uuid::new_v4()),
-        RuntimeGeneration::INITIAL,
-        yss_graph_execution::kernels::KernelRegistry::default().into(),
-    );
     let plan = runtime
-        .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+        .prepare_package(package, RuntimeGeneration::INITIAL)
         .unwrap();
     struct DatasetLease(std::path::PathBuf);
     impl Drop for DatasetLease {
@@ -628,7 +630,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         .unwrap();
     assert!(
         !path.exists(),
-        "neither Compile nor Decompose may scan the source"
+        "neither plan preparation nor Decompose may scan the source"
     );
     let columns = outputs
         .iter()
@@ -687,7 +689,6 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
 
 #[test]
 fn project_dataset_graph_runs_through_application_authority_and_paged_results() {
-    use yss_application::graph::compile::{CompileGraphDraftReceipt, compile_graph_draft};
     use yss_application::graph::results::ResultPinQuery;
     use yss_application::graph::run::{RunGraphRequest, run_graph};
     use yss_application::session::{
@@ -808,7 +809,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     std::fs::write(root.join(path.as_str()), serde_json::to_vec(&file).unwrap()).unwrap();
     project.load_graph_document(&instance, &path, 1).unwrap();
     let projection = app
-        .resolve_graph_draft(
+        .resolve_graph_document(
             instance.clone(),
             path.clone(),
             document.clone(),
@@ -897,7 +898,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         ),
     ] {
         document = app
-            .transform_graph_draft(
+            .transform_graph_document(
                 instance.clone(),
                 path.clone(),
                 "en".into(),
@@ -920,15 +921,32 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .unwrap()
         .parameters
         .insert("to".parse().unwrap(), serde_json::json!("预测.value"));
-    let document = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
-    let compilation =
-        compile_graph_draft(&app, instance.clone(), path.clone(), document, "en").unwrap();
-    let CompileGraphDraftReceipt::Ready { artifact_id, .. } = compilation else {
-        panic!("project graph did not compile: {compilation:?}");
-    };
+    let document: GraphDocument =
+        serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+    let fixture_capture = project
+        .capture_graph_overwrite_operation(&instance, &path, OperationId::new())
+        .unwrap();
+    project
+        .commit_graph_candidate(fixture_capture.into_authority(), Arc::new(document.clone()))
+        .unwrap();
+    let ready = app
+        .open_graph(yss_application::graph::open::OpenGraphRequest::new(
+            instance.clone(),
+            path.clone(),
+            0,
+            "en",
+        ))
+        .unwrap()
+        .projection()
+        .clone();
     let run_id = run_graph(
         &app,
-        RunGraphRequest::new(instance, path.clone(), artifact_id),
+        RunGraphRequest::new(
+            instance,
+            path.clone(),
+            document,
+            ready.basis.semantic_input_hash,
+        ),
     )
     .unwrap();
     let query = |node, key: &str| {

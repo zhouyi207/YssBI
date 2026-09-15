@@ -42,14 +42,19 @@ fn map_application_execution_error(error: ExecutionApplicationError) -> CommandE
         ExecutionApplicationError::DatabaseCatalog(error) => {
             CommandError::diagnosed("execution_database_catalog_failed", error)
         }
-        ExecutionApplicationError::CompiledDraftUnavailable => {
-            CommandError::expected("graph_compile_required")
+        ExecutionApplicationError::InvalidDocument(_) => {
+            CommandError::expected("graph_draft_invalid")
+        }
+        ExecutionApplicationError::DraftChanged => CommandError::expected("graph_draft_changed"),
+        ExecutionApplicationError::GraphNotReady => CommandError::expected("graph_not_ready"),
+        error @ ExecutionApplicationError::GraphResolutionFailed { .. } => {
+            CommandError::diagnosed("graph_resolution_failed", error)
+        }
+        ExecutionApplicationError::GraphPlan(error) => {
+            CommandError::diagnosed("graph_plan_failed", error)
         }
         ExecutionApplicationError::GraphContract(error) => {
             CommandError::diagnosed("graph_contract_failed", error)
-        }
-        ExecutionApplicationError::GraphPackage(error) => {
-            CommandError::diagnosed("graph_package_mapping_failed", error)
         }
         ExecutionApplicationError::PackagePreparation(error) => {
             CommandError::diagnosed("invalid_execution_plan", error)
@@ -183,28 +188,38 @@ pub fn cancel_graph_run(
 }
 
 #[tauri::command]
-pub async fn execute_compiled_graph(
+pub async fn execute_graph(
     state: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    compiled_artifact_id: String,
+    version: yss_ipc_contract::graph_editing::GraphEditVersionDto,
+    semantic_input_hash: String,
     demand: ExecutionDemandDto,
     on_event: Channel<RunEventDto>,
 ) -> Result<(), CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let demand = crate::ipc::commands::execution_dto::execution_demand_to_application(demand)
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
-    let compiled_artifact_id = super::common::parse_graph_fingerprint(
-        &compiled_artifact_id,
-        "invalid_compiled_artifact_id",
-    )?;
+    let semantic_input_hash =
+        super::common::parse_graph_fingerprint(&semantic_input_hash, "invalid_graph_fingerprint")?;
     let state = state.inner().clone();
+    let version = crate::ipc::schema::graph_editing::graph_edit_version_from_transport(version)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let document = state
+            .current_graph_document(&project_instance_id, &graph_path, version)
+            .map_err(|error| {
+                super::common::resource_mutation_to_command_error(error, "graph_edit_changed")
+            })?;
         let channel = TauriExecutionChannelAdapter::new(on_event);
         let mut delivery_failed = false;
         let mut terminal_run_event_sent = false;
-        let request = RunGraphRequest::new(project_instance_id, graph_path, compiled_artifact_id)
-            .with_demand(demand);
+        let request = RunGraphRequest::new(
+            project_instance_id,
+            graph_path,
+            (*document).clone(),
+            semantic_input_hash,
+        )
+        .with_demand(demand);
         let execution = run_graph_with_sink(&state, request, |event| {
             let terminal = matches!(
                 event.kind(),

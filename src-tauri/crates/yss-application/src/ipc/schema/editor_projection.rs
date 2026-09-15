@@ -1,9 +1,8 @@
 use yss_graph_editor::projection::{
-    EditorCompilationStage, EditorDiagnosticModel, EditorDiagnosticSeverity,
-    EditorEffectiveInputBinding, EditorFilterLiteralType, EditorParameterConfiguration,
-    EditorParameterModel, EditorPortModel, EditorPortStatus, EditorPortTypeState,
-    EditorProjectionModel, EditorResolutionOutcome, EditorSchemaSummary, EditorSchemaSummaryKind,
-    ParameterEditorKind,
+    EditorDiagnosticModel, EditorDiagnosticSeverity, EditorEffectiveInputBinding,
+    EditorFilterLiteralType, EditorParameterConfiguration, EditorParameterModel, EditorPortModel,
+    EditorPortStatus, EditorPortTypeState, EditorProjectionModel, EditorResolutionOutcome,
+    EditorResolutionStage, EditorSchemaSummary, EditorSchemaSummaryKind, ParameterEditorKind,
 };
 use yss_node_registry::RegistryFingerprint;
 
@@ -364,18 +363,17 @@ fn map_location(location: &yss_graph_analysis::GraphDiagnosticLocation) -> Diagn
     }
 }
 
-fn map_outcome(outcome: &EditorResolutionOutcome) -> CompilationOutcomeDto {
+fn map_outcome(outcome: &EditorResolutionOutcome) -> ResolutionOutcomeDto {
     match outcome {
-        EditorResolutionOutcome::Complete => CompilationOutcomeDto::Success,
-        EditorResolutionOutcome::Incomplete => CompilationOutcomeDto::AnalysisBlocked,
+        EditorResolutionOutcome::Complete => ResolutionOutcomeDto::Success,
+        EditorResolutionOutcome::Incomplete => ResolutionOutcomeDto::AnalysisBlocked,
         EditorResolutionOutcome::InternalFailure {
             stage,
             code,
             node_id,
-        } => CompilationOutcomeDto::InternalFailure {
+        } => ResolutionOutcomeDto::InternalFailure {
             stage: match stage {
-                EditorCompilationStage::Analysis => CompilationStageDto::Analysis,
-                EditorCompilationStage::Lowering => CompilationStageDto::Lowering,
+                EditorResolutionStage::Analysis => ResolutionStageDto::Analysis,
             },
             code: code.clone(),
             node_id: node_id.map(|node_id| node_id.to_string().into()),
@@ -591,17 +589,9 @@ mod tests {
         model.outcome = EditorResolutionOutcome::Incomplete;
         model.diagnostics[0].blocking = true;
         model.nodes[0].diagnostics[0].blocking = true;
-        let blocked = super::super::graph_draft::compile_graph_draft_to_transport(
-            &crate::graph::compile::CompileGraphDraftReceipt::Blocked { projection: model },
-        );
-        let wire = serde_json::to_value(blocked).unwrap();
-        assert_eq!(wire.as_object().unwrap().len(), 2);
-        assert_eq!(wire["type"], "blocked");
-        assert_eq!(
-            wire["projection"]["outcome"],
-            json!({ "type": "analysisBlocked" })
-        );
-        assert_eq!(wire["projection"]["hasBlockingDiagnostics"], true);
-        assert_eq!(wire["projection"]["diagnostics"][0]["blocking"], true);
+        let wire = serde_json::to_value(map_editor_projection(&model)).unwrap();
+        assert_eq!(wire["outcome"], json!({ "type": "analysisBlocked" }));
+        assert_eq!(wire["hasBlockingDiagnostics"], true);
+        assert_eq!(wire["diagnostics"][0]["blocking"], true);
     }
 }

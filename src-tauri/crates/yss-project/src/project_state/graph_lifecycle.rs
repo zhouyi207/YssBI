@@ -101,6 +101,7 @@ impl ProjectState {
             &mutation_context,
             ProjectDataPatch::InsertGraph { path, resource },
             None,
+            Vec::new(),
         ) {
             Ok(result) => {
                 committed.finalize();
@@ -193,6 +194,7 @@ impl ProjectState {
                 revision,
             },
             None,
+            Vec::new(),
         ) {
             Ok(result) => {
                 committed.finalize();
@@ -246,6 +248,7 @@ impl ProjectState {
                 revision: expected_revision,
             },
             None,
+            Vec::new(),
         ) {
             Ok(result) => {
                 committed.finalize();
@@ -282,6 +285,18 @@ impl ProjectState {
             return Ok(document);
         }
 
+        let lifecycle_token = if lifecycle_token == 0 {
+            let guard = self.resource_lifecycle.allocate_and_register(
+                &session.instance_id,
+                graph_path,
+                ResourceLifecycleIntent::Load,
+            )?;
+            let token = guard.owner().token;
+            drop(guard);
+            token
+        } else {
+            lifecycle_token
+        };
         let mut lifecycle_guard = self.resource_lifecycle.register(
             &session.instance_id,
             graph_path,
@@ -386,6 +401,7 @@ impl ProjectState {
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let graph_removed = data.graphs.remove(graph_path).is_some();
+        self.graph_editing.lock().unwrap().remove(graph_path);
         let publication_advance = graph_removed
             .then(|| publication.prepare_authority_generation())
             .transpose()?;
@@ -611,15 +627,45 @@ impl ProjectState {
                 resource: graph_path.as_str().to_owned(),
                 retained: error.retained,
             })?;
+        let mut editing_updates = Vec::new();
         source.name = requested.as_str().to_owned();
+        remap_document_references(&mut source.document, graph_path.as_str(), target.as_str());
         if let Some(function) = source.function.as_mut() {
             function.revision = next_revision;
         }
 
-        let target_contents = crate::project_io::serialize_graph_resource_document(&source)
+        let mut persisted_source = source.clone();
+        if self.is_graph_modified(graph_path) {
+            persisted_source.document = crate::project_io::load_project_graph_document_from_file(
+                session.root.as_path().to_string_lossy().as_ref(),
+                graph_path,
+            )
             .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                 message: error.to_string(),
-            })?;
+            })?
+            .document;
+            remap_document_references(
+                &mut persisted_source.document,
+                graph_path.as_str(),
+                target.as_str(),
+            );
+        }
+        if let Some(update) = self.prepare_graph_editing_remap(
+            graph_path,
+            &target,
+            graph_path,
+            &target,
+            &source.document,
+            &persisted_source.document,
+        )? {
+            editing_updates.push(update);
+        }
+        let target_contents = crate::project_io::serialize_graph_resource_document(
+            &persisted_source,
+        )
+        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
+            message: error.to_string(),
+        })?;
 
         let mut referenced = Vec::new();
         for (path, resource) in &current_data.graphs {
@@ -639,11 +685,37 @@ impl ProjectState {
                 &mut changed,
                 snapshot.graph_resource_revisions.get(path).copied(),
             )?;
-            let contents = crate::project_io::serialize_graph_resource_document(&changed).map_err(
-                |error| ProjectOperationError::TransactionPrepareFailed {
+            let mut persisted_changed = changed.clone();
+            if self.is_graph_modified(path) {
+                persisted_changed.document =
+                    crate::project_io::load_project_graph_document_from_file(
+                        session.root.as_path().to_string_lossy().as_ref(),
+                        path,
+                    )
+                    .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
+                        message: error.to_string(),
+                    })?
+                    .document;
+                remap_document_references(
+                    &mut persisted_changed.document,
+                    graph_path.as_str(),
+                    target.as_str(),
+                );
+            }
+            if let Some(update) = self.prepare_graph_editing_remap(
+                path,
+                path,
+                graph_path,
+                &target,
+                &changed.document,
+                &persisted_changed.document,
+            )? {
+                editing_updates.push(update);
+            }
+            let contents = crate::project_io::serialize_graph_resource_document(&persisted_changed)
+                .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
-                },
-            )?;
+                })?;
             referenced.push((path.clone(), changed, contents));
         }
 
@@ -713,6 +785,7 @@ impl ProjectState {
                     .collect(),
             },
             Some(&mut ownership),
+            editing_updates,
         ) {
             Ok(result) => {
                 committed.finalize();

@@ -12,7 +12,7 @@ pub enum NumericOperation {
     Divide,
 }
 
-/// The resolved numeric element type is supplied by the compiled specialization.
+/// The resolved numeric element type is supplied by the resolved specialization.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericType {
     Int64,

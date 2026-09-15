@@ -53,7 +53,7 @@ remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
-Graph tools additionally use the ephemeral `HarnessGraphClientHub` channel because the webview owns unsaved drafts and their FIFO/history. The webview supplies that explicit draft to one Application action; Rust retains the capability receipt and sends an existing draft/compile/save projection for adoption. Claim and completion acknowledge adoption only, never accept model-authored results. Identity/hash checks reject stale or misrouted updates. This is a draft-owner boundary, not a generic command dispatcher.
+Graph tools call Application directly through the capability gateway. Application reads the Project-owned editing state and validates the current revision/hash before editing, validating, running or saving. Rust returns the capability result; Graph Activity carries editing and execution notifications to frontend consumers.
 
 ## DTO ownership
 
@@ -105,7 +105,7 @@ Every ordered stream defines its source identity, ordering key, capacity/backpre
 
 Events are notifications, not state stores. Consumers recover authoritative data through the domain’s snapshot/query command rather than rebuilding it from an assumed complete event history.
 
-Graph editor projections currently arrive in load/hydrate/mutation/Compile/Save command responses. There is no Graph Projection subscription channel or invalidation snapshot. Logs and Execution channels have separate contracts; log delivery and failure semantics are documented in [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md#3-logging).
+Graph editor projections arrive in load/hydrate/mutation/Resolve/Save command responses. Execution prepares plans internally. Graph Activity notifies consumers when editing or execution changes; Logs and Execution retain their own contracts. Log delivery and failure semantics are documented in [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md#3-logging).
 
 Project registration commands consume Application's process-wide `ProjectManagement`. Application owns registry construction from the injected store and picker-task cancellation admission/cleanup. Commands retain progress-channel binding, draining and wire/error mapping. Project activation and replacement continue to use the existing Application session slot; registry state is not replaced with that session.
 
@@ -194,7 +194,7 @@ Successful DTOs and asynchronous statuses may not bypass this rule with backend 
 
 Editor diagnostics carry code, messageKey, safe arguments, severity, explicit blocking, location and related locations. Rust owns definitions/templates; React uses the generated vocabulary for localization. This domain fact contract remains separate from CommandError.
 
-Compile returns Ready { artifactId, projection, cacheHit } or Blocked { projection }; neither branch returns a replacement document. Expected semantic failures remain Blocked without diagnostic incidents. Internal failures still reject with the error wire above. The read-only resolve_graph_draft command supplies current projections for dirty refresh and history validation; execute_compiled_graph accepts compiledArtifactId and explicit demand. See [Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md).
+The read-only `resolve_editor_graph` command supplies current projections for refresh, including execution capability diagnostics. `execute_graph` accepts the current editing `version`, `semanticInputHash` and explicit demand, reads the matching document and prepares its plan internally. A stale semantic identity returns `graph_draft_changed`; blocking diagnostics return `graph_not_ready`. Internal resolution/plan failures retain diagnostic incidents. Plan identities and caches stay inside Execution. See [Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md).
 
 Frontend application code localizes `code + safe details`; `IpcError.message` is a technical summary and must not be rendered directly.
 
@@ -222,7 +222,7 @@ clients supply query parameters only. Both commands dispatch Application work on
 session/result revalidation. Plot responses explicitly identify systematic sampling and population counts.
 The result reference wire and report projections are owned by `schema/result.rs`; the computational model remains Rust-owned.
 
-Project index, resource mutation, graph save and project save responses omit frontend undo status. Draft undo/redo belongs to the local draft; committed revisions, file transactions and failure recovery stay with the Project owner. Automation graph edit receipts carry draft revisions, graph hash, client correlation and created element identities, with no project undo capability or generated operation ID. These receipts describe unsaved draft edits. Graph Save returns the project instance, committed resource revision, document and projection replacement; its request operation ID stays within the commit path and is not echoed in the response.
+Project owns the current graph document, reversible history and saved-content fingerprint. Graph commands receive an editing version, not a client-authored document. Replies carry Rust-owned dirty/canUndo/canRedo facts. Save persists the matching current document and clears history only on success. Harness graph receipts retain their client correlation and created element identities; internal Project operation IDs are not exposed as a second history API.
 
 ## Frontend adapter
 
@@ -251,3 +251,11 @@ Channel adapters parse strict wire DTOs before publishing to application project
 - [Local Workflow](../../../../../docs/development/LOCAL_WORKFLOW.md)
 
 The exact command list is executable source in `mod.rs` and must not be copied into this README.
+
+## Graph projection synchronization
+
+Graph load/hydrate/edit/history/resolve/save replies use GraphEditorSyncResponseDto. Its immutable session payload contains document, projection and editing state; the envelope retains command outcome and optional save metadata. GraphEditorSyncState binds bounded baselines to window/project/graph/locale and editing session. Set/remove paths are read-projection delivery operations, independent of GraphDocumentPatch business edits.
+
+Initial reads, missing baselines and larger deltas use snapshots. Oversized cache entries remain readable as uncached snapshots. The client preserves untouched references, validates the complete candidate and uses one read-only hydration recovery after a bad delta; it never repeats a write to repair presentation. GraphActivity notifications are coalesced with GUI replies. Lag recovery reads current graph snapshots and known run states from Execution; detailed lost run events are not reconstructed from graph state.
+
+Graph write and projection encoding work runs on blocking workers. Window destruction, frontend cleanup and project session replacement release graph activity channels. The retired Harness graph-client prepare/claim/adopt commands and wire models are removed.

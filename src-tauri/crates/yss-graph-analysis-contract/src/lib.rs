@@ -1,18 +1,15 @@
-//! Pure, serializable identities shared across Graph analysis and compilation.
+//! Pure, serializable identities shared by graph editing and execution preparation.
 //!
-//! Executable semantic facts remain in `yss-graph-analysis`; this leaf crate owns only compilation
-//! basis, diagnostic identity/location, and provenance contracts.
+//! Executable semantic facts remain in `yss-graph-analysis`; this leaf crate owns only analysis
+//! basis, resource versions, and diagnostic identity/location contracts.
 
 mod basis;
 mod diagnostic;
-mod provenance;
 
 pub use basis::{
-    CompilationBasis, CompileId, ResourceKey, ResourceObservationSet, ResourceObservedState,
+    GraphAnalysisBasis, ResourceKey, ResourceObservationSet, ResourceObservedState,
     ResourceVersion, ResourceVersionSet,
 };
 pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
 };
-
-pub use provenance::{CompileProvenance, GraphSessionId};

@@ -9,7 +9,6 @@ import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
 import { Channel } from "@tauri-apps/api/core";
 import type { RunEvent } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
-import { parseInternalCompilationErrorDetails } from "@/shared/types/dto/executionError";
 import { parseExecutionDemandDto } from "@/shared/types/dto/runEventParser";
 
 import type {
@@ -20,7 +19,10 @@ import type {
   ProjectIndexRow,
   ProjectChartIndexRow,
 } from "@/shared/types/domain/project";
-import type { FunctionSignatureDto } from "@/shared/types/domain/editorMutation";
+import type {
+  FunctionSignatureDto,
+  GraphEditVersionDto,
+} from "@/shared/types/domain/editorMutation";
 import type { DatabaseEngineDTO } from "@/shared/types/domain/database";
 import type { ChartType } from "@/shared/types/domain/chart";
 import {
@@ -50,7 +52,8 @@ export type ProjectCleanupProgressEvent =
 export interface ExecuteGraphDocumentRequest {
   projectInstanceId: string;
   graphPath: string;
-  compiledArtifactId: string;
+  version: GraphEditVersionDto;
+  semanticInputHash: string;
   demand: ExecutionDemandDto;
   onEvent?: (event: RunEvent) => void;
 }
@@ -469,10 +472,11 @@ export class ProjectService {
     });
   }
   /** Execute one graph document and drain its streamed run events. */
-  static async executeCompiledGraph({
+  static async executeGraph({
     projectInstanceId,
     graphPath,
-    compiledArtifactId,
+    version,
+    semanticInputHash,
     demand,
     onEvent,
   }: ExecuteGraphDocumentRequest): Promise<void> {
@@ -480,18 +484,15 @@ export class ProjectService {
     const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
     try {
       try {
-        await invokeCommand<void>("execute_compiled_graph", {
+        await invokeCommand<void>("execute_graph", {
           projectInstanceId,
           graphPath,
-          compiledArtifactId,
+          version,
+          semanticInputHash,
           demand: parsedDemand,
           onEvent: channel,
         });
       } catch (error) {
-        if (isIpcErrorCode(error, "internal_compilation_failure")) {
-          parseInternalCompilationErrorDetails(error.details);
-          throw error;
-        }
         if (commandSentTerminalRunEvent(error)) {
           try {
             await waitForStreamEnd();

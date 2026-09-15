@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::identity::RuntimeGeneration;
 use crate::plan::{
-    CompiledExecutionPackage, CompiledParameterHandle, PlanParameterFieldId, PlanParameterPayload,
+    ExecutionPlanPackage, PlanParameterFieldId, PlanParameterHandle, PlanParameterPayload,
     PlanParameterValue, PlanResourceId, PlanValidationError,
 };
 
@@ -13,19 +13,19 @@ pub enum PackagePart {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum CompiledParameterPreparationError {
-    #[error("compiled parameter handle identity is invalid")]
-    InvalidHandle { handle: CompiledParameterHandle },
-    #[error("compiled parameter schema identity is invalid")]
-    InvalidSchema { handle: CompiledParameterHandle },
-    #[error("compiled parameter resource identity is invalid")]
+pub enum ParameterPreparationError {
+    #[error("prepared parameter handle identity is invalid")]
+    InvalidHandle { handle: PlanParameterHandle },
+    #[error("prepared parameter schema identity is invalid")]
+    InvalidSchema { handle: PlanParameterHandle },
+    #[error("prepared parameter resource identity is invalid")]
     InvalidResource {
-        handle: CompiledParameterHandle,
+        handle: PlanParameterHandle,
         resource: PlanResourceId,
     },
-    #[error("compiled parameter field identity is invalid")]
+    #[error("prepared parameter field identity is invalid")]
     InvalidField {
-        handle: CompiledParameterHandle,
+        handle: PlanParameterHandle,
         field: PlanParameterFieldId,
     },
 }
@@ -48,20 +48,20 @@ pub enum PackagePreparationError {
     ProvenanceMismatch { part: PackagePart },
     #[error("execution package basis does not match its {part:?} part")]
     BasisMismatch { part: PackagePart },
-    #[error("compiled parameter preparation failed")]
-    Parameters(#[source] CompiledParameterPreparationError),
+    #[error("prepared parameter preparation failed")]
+    Parameters(#[source] ParameterPreparationError),
 }
 
 #[derive(Clone)]
 pub struct PreparedExecutionPlan(Arc<PreparedExecutionPlanInner>);
 
 struct PreparedExecutionPlanInner {
-    package: CompiledExecutionPackage,
+    package: ExecutionPlanPackage,
     generation: RuntimeGeneration,
 }
 
 impl PreparedExecutionPlan {
-    pub(super) fn package(&self) -> &CompiledExecutionPackage {
+    pub(super) fn package(&self) -> &ExecutionPlanPackage {
         &self.0.package
     }
 
@@ -71,9 +71,9 @@ impl PreparedExecutionPlan {
 }
 
 impl crate::state::ExecutionRuntimeState {
-    pub fn prepare_compiled_package(
+    pub fn prepare_package(
         &self,
-        package: CompiledExecutionPackage,
+        package: ExecutionPlanPackage,
         expected_generation: RuntimeGeneration,
     ) -> Result<PreparedExecutionPlan, PackagePreparationError> {
         let actual = self.generation();
@@ -101,7 +101,7 @@ impl crate::state::ExecutionRuntimeState {
     }
 }
 
-fn validate_package(package: &CompiledExecutionPackage) -> Result<(), PackagePreparationError> {
+fn validate_package(package: &ExecutionPlanPackage) -> Result<(), PackagePreparationError> {
     let provenance = package.provenance();
     let source_graph = provenance.source().graph();
     if source_graph.as_str().is_empty() {
@@ -131,19 +131,19 @@ fn validate_package(package: &CompiledExecutionPackage) -> Result<(), PackagePre
 }
 
 fn validate_parameters(
-    parameters: &std::collections::BTreeMap<CompiledParameterHandle, PlanParameterPayload>,
+    parameters: &std::collections::BTreeMap<PlanParameterHandle, PlanParameterPayload>,
 ) -> Result<(), PackagePreparationError> {
     for (handle, payload) in parameters {
         if handle.as_str().is_empty() {
             return Err(PackagePreparationError::Parameters(
-                CompiledParameterPreparationError::InvalidHandle {
+                ParameterPreparationError::InvalidHandle {
                     handle: handle.clone(),
                 },
             ));
         }
         if payload.schema().as_str().is_empty() {
             return Err(PackagePreparationError::Parameters(
-                CompiledParameterPreparationError::InvalidSchema {
+                ParameterPreparationError::InvalidSchema {
                     handle: handle.clone(),
                 },
             ));
@@ -154,7 +154,7 @@ fn validate_parameters(
 }
 
 fn validate_parameter_value(
-    handle: &CompiledParameterHandle,
+    handle: &PlanParameterHandle,
     value: &PlanParameterValue,
 ) -> Result<(), PackagePreparationError> {
     match value {
@@ -162,7 +162,7 @@ fn validate_parameter_value(
         PlanParameterValue::Resource(resource) => {
             if resource.as_str().is_empty() {
                 Err(PackagePreparationError::Parameters(
-                    CompiledParameterPreparationError::InvalidResource {
+                    ParameterPreparationError::InvalidResource {
                         handle: handle.clone(),
                         resource: resource.clone(),
                     },
@@ -178,7 +178,7 @@ fn validate_parameter_value(
             for (field, value) in fields {
                 if field.as_str().is_empty() {
                     return Err(PackagePreparationError::Parameters(
-                        CompiledParameterPreparationError::InvalidField {
+                        ParameterPreparationError::InvalidField {
                             handle: handle.clone(),
                             field: field.clone(),
                         },
@@ -196,22 +196,21 @@ mod tests {
     use super::*;
     use crate::identity::ExecutionSessionId;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledParameterBundleBuilder, ExecutionPlan,
-        PlanCompilationBasis, PlanCompileId, PlanProjectSessionId, PlanProvenance,
-        PlanRegistryFingerprint, PlanSourceIdentity,
+        ExecutionPlan, ExecutionPlanPackage, PlanBasis, PlanId, PlanParameterBundleBuilder,
+        PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint, PlanSourceIdentity,
     };
     use std::collections::BTreeMap;
 
-    fn package() -> CompiledExecutionPackage {
-        let basis = PlanCompilationBasis::new(
+    fn package() -> ExecutionPlanPackage {
+        let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
             crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
-        let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        CompiledExecutionPackage::new(
+        let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
+        ExecutionPlanPackage::new(
             Arc::new(ExecutionPlan::empty()),
             parameters,
             PlanProvenance::new(
@@ -221,7 +220,7 @@ mod tests {
                     None,
                 ),
                 basis,
-                PlanCompileId::from_existing(1),
+                PlanId::from_existing(1),
             ),
         )
     }
@@ -234,12 +233,12 @@ mod tests {
             crate::kernels::KernelRegistry::default().into(),
         );
         let prepared = state
-            .prepare_compiled_package(package(), RuntimeGeneration::from_existing(3))
+            .prepare_package(package(), RuntimeGeneration::from_existing(3))
             .unwrap();
         assert_eq!(prepared.generation().get(), 3);
         assert!(
             state
-                .prepare_compiled_package(package(), RuntimeGeneration::from_existing(4))
+                .prepare_package(package(), RuntimeGeneration::from_existing(4))
                 .is_err_and(|error| matches!(
                     error,
                     PackagePreparationError::RuntimeGenerationChanged { expected, actual }

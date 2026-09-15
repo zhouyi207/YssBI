@@ -232,7 +232,7 @@ const VIEW_CORE_CAPABILITIES = [
   }),
   viewCoreCapability("src/modules/workbench/internal/state/ui.ts", ["useWorkbenchUi"]),
   viewCoreCapability("src/features/core/chart/read.ts", ["useChartRead"]),
-  viewCoreCapability("src/features/core/graphDraft/ui.ts", ["useGraphDraftUi"]),
+  viewCoreCapability("src/features/core/graphEditing/ui.ts", ["useGraphEditingUi"]),
   viewCoreCapability("src/features/core/chart/ui.ts", ["chartUi"], {
     chartUi: ["updateDraft"],
   }),

@@ -41,7 +41,7 @@ impl NodeComponents {
                 continue;
             };
             let kernel = implementation.implementation_identity();
-            // Definition-only nodes remain visible and are blocked explicitly by Compile.
+            // Definition-only nodes remain visible and are blocked explicitly by graph diagnostics.
             let Some(contract) = kernels.contract(kernel) else {
                 continue;
             };

@@ -68,7 +68,7 @@ do not implicitly auto-pan.
 
 `useCanvasViewport` connects the controlled React Flow viewport to the existing viewport
 session. Navigation commands, sidebar drops, and view-state persistence use that same
-coordinate system. React Flow does not own draft history, compile/save/execute, or Dockview layout.
+coordinate system. React Flow does not own draft history, save/execute, or Dockview layout.
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `execution` model from
 the controller and must not assemble application commands.

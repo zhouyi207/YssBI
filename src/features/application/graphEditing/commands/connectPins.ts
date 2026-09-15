@@ -1,6 +1,6 @@
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface ConnectPinsArgs {
   pinA: string;
@@ -18,7 +18,7 @@ export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphEditOutcom
     if (output.direction !== "output" || input.direction !== "input") {
       throw new Error("A connection requires one output port and one input port");
     }
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "connect",

@@ -77,6 +77,7 @@ pub(super) fn resource_mutation_to_command_error(
 ) -> CommandError {
     use crate::graph::resources::ResourceMutationApplicationError;
     match error {
+        ResourceMutationApplicationError::EditingBusy => CommandError::expected("graph_edit_busy"),
         ResourceMutationApplicationError::SessionCapture(error) => match error {
             crate::session::SessionCaptureError::Inactive => {
                 CommandError::expected("stale_project_lifecycle")
@@ -154,6 +155,9 @@ pub(super) fn resource_mutation_to_command_error(
             }
         },
         ResourceMutationApplicationError::GraphCommit(error) => match error {
+            yss_project::ProjectGraphCommitError::InvalidDocument(_) => {
+                CommandError::diagnosed("graph_contract_failed", error)
+            }
             yss_project::ProjectGraphCommitError::StaleAuthority { .. } => {
                 let command = CommandError::expected(revision_conflict_code);
                 if revision_conflict_code == "resource_revision_conflict" {

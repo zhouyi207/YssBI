@@ -30,7 +30,7 @@ import { deactivateGraphPanelSession } from "./graphPanelSession";
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
-import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
+import { saveGraph } from "@/features/application/graphEditing/saveGraph";
 
 type EditorDocument = {
   readonly key: string;
@@ -198,7 +198,7 @@ async function saveGraphDocument(
 ): Promise<boolean> {
   if (!isCurrentProjectIdentity(identity)) return false;
   try {
-    const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
+    const saved = await saveGraph(document.resourceRef, document.resourceKind);
     return saved && isCurrentProjectIdentity(identity);
   } catch (error) {
     if (!isCurrentProjectIdentity(identity)) return false;

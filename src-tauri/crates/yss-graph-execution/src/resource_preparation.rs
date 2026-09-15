@@ -146,13 +146,13 @@ struct SealedResourceGrant {
 
 #[derive(Debug)]
 pub(crate) struct PreparedRunResources {
-    compile_id: crate::plan::PlanCompileId,
+    plan_id: crate::plan::PlanId,
     grants: Box<[SealedResourceGrant]>,
 }
 
 impl PreparedRunResources {
-    fn new(compile_id: crate::plan::PlanCompileId, grants: Box<[SealedResourceGrant]>) -> Self {
-        Self { compile_id, grants }
+    fn new(plan_id: crate::plan::PlanId, grants: Box<[SealedResourceGrant]>) -> Self {
+        Self { plan_id, grants }
     }
 
     pub(crate) fn value(&self, resource: &PlanResourceId) -> Option<&RuntimeValue> {
@@ -163,13 +163,13 @@ impl PreparedRunResources {
     }
 
     pub(crate) fn finish(self) -> SealedCandidateGrantSet {
-        let Self { compile_id, grants } = self;
+        let Self { plan_id, grants } = self;
         let candidate_grants = grants
             .into_vec()
             .into_iter()
             .map(|grant| {
                 SealedCandidateGrant::new(
-                    compile_id,
+                    plan_id,
                     grant.resource,
                     grant.version,
                     grant.kind,
@@ -315,7 +315,7 @@ impl ResourceProviderFactory {
         }
 
         Ok(PreparedRunResources::new(
-            request.plan.package().provenance().compile_id(),
+            request.plan.package().provenance().plan_id(),
             grants.into_boxed_slice(),
         ))
     }
@@ -327,11 +327,10 @@ mod tests {
     use crate::identity::{ExecutionSessionId, RuntimeGeneration};
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledParameterBundleBuilder, ExecutionPlan,
-        PlanCompilationBasis, PlanCompileId, PlanGraphId, PlanProjectSessionId, PlanProvenance,
-        PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
-        PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
-        ResourceKind,
+        ExecutionPlan, ExecutionPlanPackage, PlanBasis, PlanGraphId, PlanId,
+        PlanParameterBundleBuilder, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
+        PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
+        PlanSourceIdentity, ResourceAccess, ResourceKind,
     };
     use crate::state::ExecutionRuntimeState;
     use std::collections::BTreeMap;
@@ -340,7 +339,7 @@ mod tests {
     fn prepared_plan() -> PreparedExecutionPlan {
         let resource = PlanResourceId::from_existing("databases/answer".into());
         let version = PlanResourceVersion::from_existing("v1".into());
-        let basis = PlanCompilationBasis::new(
+        let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([3; 32]),
             crate::kernels::KernelRegistry::default().fingerprint(),
@@ -350,8 +349,8 @@ mod tests {
                 PlanResourceObservedState::Present(PlanResourceVersion::from_existing("v1".into())),
             )]),
         );
-        let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        let package = CompiledExecutionPackage::new(
+        let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
+        let package = ExecutionPlanPackage::new(
             Arc::new(ExecutionPlan::empty()),
             parameters,
             PlanProvenance::new(
@@ -361,7 +360,7 @@ mod tests {
                     None,
                 ),
                 basis,
-                PlanCompileId::from_existing(9),
+                PlanId::from_existing(9),
             ),
         );
         ExecutionRuntimeState::new(
@@ -369,7 +368,7 @@ mod tests {
             RuntimeGeneration::INITIAL,
             crate::kernels::KernelRegistry::default().into(),
         )
-        .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+        .prepare_package(package, RuntimeGeneration::INITIAL)
         .expect("test package is valid")
     }
 

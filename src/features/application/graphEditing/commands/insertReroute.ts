@@ -1,5 +1,5 @@
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface InsertRerouteArgs {
   connectionId: string;
@@ -8,7 +8,7 @@ export interface InsertRerouteArgs {
 
 export const insertRerouteCommand: CommandHandler<InsertRerouteArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "insertReroute",

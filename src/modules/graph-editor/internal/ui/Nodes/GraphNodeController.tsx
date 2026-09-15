@@ -117,9 +117,7 @@ export const GraphNodeController = memo(function GraphNodeController({
       <span aria-hidden="true">
         {
           {
-            uncompiled: "○",
-            compiling: "↻",
-            compiled: "◇",
+            unexecuted: "○",
             running: "▶",
             error: "!",
             valid: "✓",

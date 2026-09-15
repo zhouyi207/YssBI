@@ -7,18 +7,11 @@ use yss_harness_contract::{
 /// Scheduling adapter for the synchronous Application capability boundary.
 pub struct ApplicationCapabilityGateway {
     application: ApplicationState,
-    graph_clients: std::sync::Arc<crate::ipc::channel::HarnessGraphClientHub>,
 }
 
 impl ApplicationCapabilityGateway {
-    pub fn new(
-        application: ApplicationState,
-        graph_clients: std::sync::Arc<crate::ipc::channel::HarnessGraphClientHub>,
-    ) -> Self {
-        Self {
-            application,
-            graph_clients,
-        }
+    pub fn new(application: ApplicationState) -> Self {
+        Self { application }
     }
 }
 
@@ -42,9 +35,6 @@ impl CapabilityGatewayPort for ApplicationCapabilityGateway {
         request: AutomationCapabilityRequest,
         control: CapabilityControl,
     ) -> CapabilityFuture<'a> {
-        if crate::ipc::channel::harness_graph::graph_path(&request).is_some() {
-            return Box::pin(self.graph_clients.invoke(context, request, control));
-        }
         let application = self.application.clone();
         let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
         Box::pin(run_on_blocking_pool(control, read_only, move |control| {
@@ -207,10 +197,7 @@ mod tests {
             ),
         );
         drop(session);
-        let gateway = ApplicationCapabilityGateway::new(
-            application,
-            Arc::new(crate::ipc::channel::HarnessGraphClientHub::default()),
-        );
+        let gateway = ApplicationCapabilityGateway::new(application);
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()

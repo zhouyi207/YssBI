@@ -16,6 +16,8 @@ use yss_project_model::GraphResourceDocument;
 
 #[derive(Debug, Error)]
 pub enum ResourceMutationApplicationError {
+    #[error("graph editing is busy")]
+    EditingBusy,
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error(transparent)]
@@ -232,6 +234,17 @@ impl ApplicationState {
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
         let result = committed_resource_mutation_from_project(result);
+        for path in result.projection_status.affected_graph_paths() {
+            if let Ok(snapshot) = captured
+                .project()
+                .read_graph_editing(&project_instance_id, path)
+            {
+                captured.publish_graph_activity(crate::graph::editing::GraphActivity::Changed {
+                    graph_path: path.as_str().into(),
+                    editing: snapshot.state,
+                });
+            }
+        }
         for graph in result.projection_status.affected_graph_paths() {
             captured
                 .execution()

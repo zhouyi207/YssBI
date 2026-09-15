@@ -17,10 +17,10 @@ Node 由三个 crate 组成：
 `BuiltinCatalog`。`localize_with_resources` 合并调用方提供的资源创建描述；`text` 查询节点元数据文本。
 扩展定义使用 `register_builtin_nodes(&mut NodeRegistryBuilder)` 将内置节点加入同一个 builder，
 再注册应用 provider 并冻结；不另建内置定义副本。应用的 `NodeComponents` 校验已安装 kernel 的
-参数字段与输出数量。缺少实现的定义保留在目录中，由 Compile 返回阻断诊断。
+参数字段与输出数量。缺少实现的定义保留在目录中，由编辑解析返回阻断诊断。
 目录不读取项目文件，不维护图中实例，也不推导连接后的类型、Schema 或血缘。
 
 三个 crate 均不依赖 Graph。Node Protocol 只依赖序列化基础库；Registry 另用规范化哈希；
 Catalog 消费 Protocol、Registry 和 SCI 的中立配置契约。
-图文档、语义快照与编译产物属于 Graph；编译诊断定义、校验和前端模板生成属于 Graph 诊断链路，
-不会装配进节点目录。
+图文档与语义快照属于 Graph，计划构建与缓存属于 Execution；图诊断定义、校验和前端模板生成
+属于 Graph 诊断链路，不会装配进节点目录。

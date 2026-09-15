@@ -6,7 +6,7 @@ use yss_graph_runtime::GraphMaterializationError;
 use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
-use super::inputs::{DraftResolutionContext, GraphContractMappingError, GraphInputError};
+use super::inputs::{GraphContractMappingError, GraphInputError, GraphResolutionContext};
 use crate::graph::catalog::ProjectCatalogReadError;
 use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
@@ -68,8 +68,6 @@ enum OpenGraphProjectSourceKind {
     Filesystem(#[source] ProjectOperationError),
     #[error("project catalog facts could not be captured")]
     Catalog(#[source] ProjectCatalogReadError),
-    #[error("graph-open project invariant failed")]
-    Invariant,
 }
 
 impl OpenGraphProjectSource {
@@ -82,12 +80,6 @@ impl OpenGraphProjectSource {
     fn catalog(error: ProjectCatalogReadError) -> Self {
         Self {
             reason: OpenGraphProjectSourceKind::Catalog(error),
-        }
-    }
-
-    fn invariant() -> Self {
-        Self {
-            reason: OpenGraphProjectSourceKind::Invariant,
         }
     }
 }
@@ -127,6 +119,8 @@ pub enum OpenGraphProjectError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum OpenGraphApplicationError {
+    #[error("graph editing is busy")]
+    EditingBusy,
     #[error(transparent)]
     SessionCapture(#[from] SessionCaptureError),
     #[error("captured graph-open session changed")]
@@ -150,6 +144,7 @@ pub struct OpenGraphApplicationReceipt {
     document: Arc<GraphDocument>,
     analysis: GraphAnalysis,
     projection: EditorProjectionModel,
+    editing: yss_project::GraphEditingState,
 }
 
 impl OpenGraphApplicationReceipt {
@@ -159,6 +154,7 @@ impl OpenGraphApplicationReceipt {
         document: Arc<GraphDocument>,
         analysis: GraphAnalysis,
         projection: EditorProjectionModel,
+        editing: yss_project::GraphEditingState,
     ) -> Self {
         Self {
             project_instance_id,
@@ -166,6 +162,7 @@ impl OpenGraphApplicationReceipt {
             document,
             analysis,
             projection,
+            editing,
         }
     }
 
@@ -188,6 +185,10 @@ impl OpenGraphApplicationReceipt {
     pub fn projection(&self) -> &EditorProjectionModel {
         &self.projection
     }
+
+    pub fn editing(&self) -> &yss_project::GraphEditingState {
+        &self.editing
+    }
 }
 
 impl ApplicationState {
@@ -196,6 +197,9 @@ impl ApplicationState {
         request: OpenGraphRequest,
     ) -> Result<OpenGraphApplicationReceipt, OpenGraphApplicationError> {
         let captured = self.capture_session()?;
+        let _editing = captured
+            .coordinate_graph_edit(request.graph_path())
+            .map_err(|_| OpenGraphApplicationError::EditingBusy)?;
         open_graph_in_session(self, &captured, request)
     }
 }
@@ -228,16 +232,11 @@ pub(crate) fn open_graph_in_session(
             .map_err(|error| map_project_open_error(request.graph_path(), error))?;
     }
 
-    let resource = captured
+    let editing = captured
         .project()
-        .read_resident_graph(request.graph_path())
-        .map_err(|error| map_project_open_error(request.graph_path(), error))?
-        .ok_or_else(|| {
-            OpenGraphApplicationError::Project(OpenGraphProjectError::PrepareFailed(
-                OpenGraphProjectSource::invariant(),
-            ))
-        })?;
-    let loaded_document = Arc::new(resource.document);
+        .read_graph_editing(request.project_instance_id(), request.graph_path())
+        .map_err(|error| map_project_open_error(request.graph_path(), error))?;
+    let loaded_document = editing.document;
 
     let input_error = |error| match error {
         GraphInputError::Catalog(error) => {
@@ -247,7 +246,7 @@ pub(crate) fn open_graph_in_session(
         GraphInputError::Contract(error) => OpenGraphApplicationError::Contract(error),
     };
     let context =
-        DraftResolutionContext::capture(captured, &loaded_document).map_err(input_error)?;
+        GraphResolutionContext::capture(captured, &loaded_document).map_err(input_error)?;
     let candidate_document = captured
         .graph()
         .materialize_open_candidate(&loaded_document)?;
@@ -287,6 +286,7 @@ pub(crate) fn open_graph_in_session(
         candidate_document,
         analysis,
         projection,
+        editing.state,
     ))
 }
 

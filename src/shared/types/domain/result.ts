@@ -17,7 +17,6 @@ export type ConnectionCacheState = "new" | "stale" | "valid";
 export interface GraphResultState {
   readonly executionSessionId: string;
   readonly semanticInputHash: string;
-  readonly compiledArtifactId: string | null;
   readonly outputs: readonly {
     readonly output: GraphOutputRefDto;
     readonly state: ResultCacheState;

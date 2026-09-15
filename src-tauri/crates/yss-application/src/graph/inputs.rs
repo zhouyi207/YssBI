@@ -6,7 +6,7 @@ use thiserror::Error;
 use yss_database_contract::{DatabaseDecl, DatabaseId};
 use yss_database_runtime::session_api::{DatabaseCatalogSnapshot, catalog_snapshot};
 use yss_graph_document::{GraphDocument, GraphResourcePath};
-use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+use yss_graph_execution::plan::{PlanGraphId, PlanNodeId, PlanOutputRef, PlanPortAddress};
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, FunctionCatalogEntry, FunctionSignature, GraphResourceId,
     ResourceCatalogFingerprint, ResourceCatalogSnapshot,
@@ -140,7 +140,7 @@ pub fn build_resource_catalog(
         }
     }
 
-    // The catalog fingerprint is a Graph compile fact. It is deliberately
+    // The catalog fingerprint is a Graph analysis fact. It is deliberately
     // computed from the already captured declarations/contracts and does not
     // expose Project/Database storage or a mutable map to Graph.
     let fingerprint =
@@ -221,6 +221,7 @@ pub(crate) fn graph_result_inputs(
         )
     };
     let mut outputs = BTreeMap::new();
+    let mut observers = BTreeMap::new();
     for node in semantics.nodes() {
         let mut versions = BTreeMap::new();
         resources(
@@ -282,10 +283,21 @@ pub(crate) fn graph_result_inputs(
         {
             outputs.insert(output_ref(&port.address), inputs.clone());
         }
+        if node
+            .ports
+            .iter()
+            .all(|port| port.direction != PortDirection::Output)
+        {
+            observers.insert(
+                PlanNodeId::from_existing(node.node_id.to_string().into()),
+                inputs,
+            );
+        }
     }
     GraphResultInputs {
         semantic_input_hash: *analysis.semantic_input_hash(),
         outputs,
+        observers,
     }
 }
 
@@ -381,15 +393,15 @@ fn catalog_fingerprint(
     fingerprint
 }
 
-pub(crate) struct DraftResolutionContext {
+pub(crate) struct GraphResolutionContext {
     pub(super) project: crate::graph::catalog::LocalizedCatalogProjectFacts,
     pub(super) database: yss_database_runtime::session_api::DatabaseCatalogSnapshot,
     pub(super) graph_catalog: yss_graph_resource_contract::ResourceCatalogSnapshot,
-    pub(super) basis: yss_graph_analysis_contract::CompilationBasis,
+    pub(super) basis: yss_graph_analysis_contract::GraphAnalysisBasis,
     pub(super) registry_fingerprint: [u8; 32],
 }
 
-impl DraftResolutionContext {
+impl GraphResolutionContext {
     pub(crate) fn capture(
         captured: &ApplicationSession,
         document: &GraphDocument,
@@ -418,7 +430,7 @@ impl DraftResolutionContext {
         let graph_catalog = build_resource_catalog(project.resources().graph(), &database)
             .map_err(GraphInputError::Contract)?;
         let registry_fingerprint = captured.graph().registry_fingerprint();
-        let basis = yss_graph_analysis_contract::CompilationBasis {
+        let basis = yss_graph_analysis_contract::GraphAnalysisBasis {
             kernel_fingerprint: captured.execution().kernels().fingerprint().as_bytes(),
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 registry_fingerprint,
@@ -449,27 +461,6 @@ impl DraftResolutionContext {
         .map_err(GraphInputError::Contract)
     }
 
-    pub(crate) fn matching_compiled_artifact(
-        &mut self,
-        captured: &ApplicationSession,
-        graph: &GraphResourcePath,
-        semantic_input_hash: &[u8; 32],
-    ) -> Result<Option<[u8; 32]>, GraphInputError> {
-        let Some(compiled) = captured.graph().compiled_draft(graph, semantic_input_hash) else {
-            return Ok(None);
-        };
-        if compiled.analysis().kernel_fingerprint()
-            != &captured.execution().kernels().fingerprint().as_bytes()
-        {
-            return Ok(None);
-        }
-        self.include_functions(captured, compiled.document())?;
-        Ok(self
-            .graph_catalog
-            .matches_dependencies(compiled.analysis().semantic_snapshot().dependencies())
-            .then_some(*semantic_input_hash))
-    }
-
     pub(crate) fn include_functions(
         &mut self,
         captured: &ApplicationSession,
@@ -491,14 +482,18 @@ impl DraftResolutionContext {
         document: &GraphDocument,
         locale: &str,
     ) -> yss_graph_analysis::GraphAnalysis {
-        captured.graph().resolve_graph_draft(
+        let analysis = captured.graph().resolve_graph_document(
             graph_path,
             document,
             &self.basis,
             &self.graph_catalog,
             self.project.resources().entries(),
             locale,
-        )
+        );
+        analysis.map_semantic_snapshot(|semantics| {
+            semantics
+                .with_execution_kernel_support(&|id| captured.execution().kernels().supports(id))
+        })
     }
 
     pub(crate) fn revalidate(&self, captured: &ApplicationSession) -> Result<(), GraphInputError> {
@@ -516,3 +511,6 @@ impl DraftResolutionContext {
         .map_err(GraphInputError::Database)
     }
 }
+
+#[cfg(test)]
+mod tests;

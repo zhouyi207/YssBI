@@ -35,7 +35,7 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from "@/features/core/resource";
-import { isGraphDraftDirty, isGraphDraftSaving } from "@/features/core/graphDraft";
+import { isGraphModified, isGraphSaving } from "@/features/core/graphEditing";
 import { toProjectionEntities } from "@/features/domain/editorProjection";
 import { ProjectService } from "@/services/project/projectService";
 import { ChartService } from "@/services/chart/chartService";
@@ -411,8 +411,8 @@ export class ProjectPublicationCoordinator {
                 [...pathRemaps].find(([, to]) => to === graph.path)?.[0] ?? graph.path;
               if (
                 !loaded.has(previousPath) ||
-                isGraphDraftDirty(previousPath) ||
-                isGraphDraftSaving(previousPath) ||
+                isGraphModified(previousPath) ||
+                isGraphSaving(previousPath) ||
                 graphSessions.has(graph.path)
               )
                 continue;

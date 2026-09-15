@@ -15,7 +15,6 @@ pub struct GraphOutputRefDto {
 pub struct GraphResultStateDto {
     pub execution_session_id: String,
     pub semantic_input_hash: String,
-    pub compiled_artifact_id: Option<String>,
     pub outputs: Box<[OutputResultStateDto]>,
     pub connections: Box<[ConnectionResultStateDto]>,
 }

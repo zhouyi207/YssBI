@@ -1,3 +1,4 @@
+import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -89,7 +90,7 @@ vi.mock("@/features/core/dataStore/graphNodeSelectors", () => ({
   canCutNode: (graphPath: string, nodeId: string) =>
     mocks.canCopyNode(graphPath, nodeId) && mocks.canDeleteNode(graphPath, nodeId),
 }));
-vi.mock("@/features/application/graphDraft/subgraphExportCoordinator", () => ({
+vi.mock("@/features/application/graphEditing/subgraphExportCoordinator", () => ({
   exportEditorSubgraph: mocks.exportEditorSubgraph,
 }));
 vi.mock("@/services/clipboard", () => ({
@@ -99,7 +100,7 @@ vi.mock("@/services/clipboard", () => ({
 vi.mock("@/features/application/graphEditing", () => ({
   executeGraphEdit: mocks.executeGraphEdit,
 }));
-vi.mock("@/features/application/graphDraft/historyCoordinator", () => ({
+vi.mock("@/features/application/graphEditing/historyCoordinator", () => ({
   undoEditorHistory: vi.fn(),
   redoEditorHistory: vi.fn(),
 }));
@@ -132,6 +133,7 @@ function appliedWithInserted(...nodeIds: string[]): GraphEditOutcome {
     insertedNodeIds: nodeIds,
     result: {
       changed: true,
+      editing: makeGraphEditingState({ dirty: true, canUndo: true }),
       document: {
         nodes: Object.fromEntries(
           nodeIds.map((id) => [

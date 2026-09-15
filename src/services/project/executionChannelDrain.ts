@@ -91,7 +91,7 @@ export type ExecutionChannelBinding = {
 };
 
 /**
- * `invokeCommand("execute_compiled_graph")` can resolve before the webview drains the
+ * `invokeCommand("execute_graph")` can resolve before the webview drains the
  * Channel queue. Wait for a terminal run event so callers observe every queued event.
  */
 export function bindExecutionEventChannel(

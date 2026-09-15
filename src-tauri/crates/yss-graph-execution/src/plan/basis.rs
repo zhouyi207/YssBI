@@ -69,7 +69,7 @@ pub enum PlanResourceObservedState {
 pub type PlanResourceObservationSet = BTreeMap<PlanResourceId, PlanResourceObservedState>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanCompilationBasis {
+pub struct PlanBasis {
     project_session: PlanProjectSessionId,
     registry_fingerprint: PlanRegistryFingerprint,
     kernel_fingerprint: super::identity::KernelFingerprint,
@@ -77,7 +77,7 @@ pub struct PlanCompilationBasis {
     resource_observations: PlanResourceObservationSet,
 }
 
-impl PlanCompilationBasis {
+impl PlanBasis {
     pub fn new(
         project_session: PlanProjectSessionId,
         registry_fingerprint: PlanRegistryFingerprint,

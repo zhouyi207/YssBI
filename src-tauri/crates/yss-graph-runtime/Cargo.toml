@@ -15,8 +15,7 @@ yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-node-catalog = { path = "../yss-node-catalog" }
-yss-graph-compiler = { path = "../yss-graph-compiler" }
-yss-graph-compiler-diagnostics = { path = "../yss-graph-compiler-diagnostics" }
+yss-graph-diagnostics = { path = "../yss-graph-diagnostics" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-document-edit = { path = "../yss-graph-document-edit" }
 yss-graph-editor = { path = "../yss-graph-editor" }

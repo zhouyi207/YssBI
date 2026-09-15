@@ -6,16 +6,15 @@ use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 
 use crate::ApplicationState;
-use crate::graph::execution_package_from_graph;
 use crate::session::{NodeComponents, NodeCompositionError};
-use yss_graph_analysis_contract::CompilationBasis;
+use yss_graph_analysis_contract::GraphAnalysisBasis;
 use yss_graph_document::{DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition};
 use yss_graph_execution::kernels::{
     KernelContract, KernelInvocation, KernelRegistrationError, KernelRegistryBuilder,
 };
 use yss_graph_execution::package_preparation::PackagePreparationError;
 use yss_graph_execution::plan::{
-    KernelId, PlanCompilationBasis, PlanExecutionDemand, PlanParameterScalar, PlanParameterValue,
+    KernelId, PlanBasis, PlanExecutionDemand, PlanParameterScalar, PlanParameterValue,
     PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
@@ -207,7 +206,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         BTreeMap::new(),
         ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
-    let basis = CompilationBasis {
+    let basis = GraphAnalysisBasis {
         registry_fingerprint: RegistryFingerprint::from_bytes(
             session.graph().registry_fingerprint(),
         ),
@@ -215,32 +214,41 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
-    let compiled = session
-        .graph()
-        .compile_draft(&document, graph.clone(), &resources, &basis, &|id| {
-            session.execution().kernels().supports(id)
-        })
-        .unwrap();
-    let artifact = *compiled
-        .artifact_id()
-        .expect("registered numeric extension must compile");
-    let cached = session.graph().compiled_draft(&graph, &artifact).unwrap();
+    let resolve = |basis: &GraphAnalysisBasis,
+                   kernels: &yss_graph_execution::kernels::KernelRegistry| {
+        let analysis = session.graph().resolve_graph_document(
+            &graph,
+            &document,
+            basis,
+            &resources,
+            &[],
+            "en-US",
+        );
+        let semantics = analysis
+            .semantic_snapshot()
+            .clone()
+            .with_execution_kernel_support(&|id| kernels.supports(id));
+        analysis.with_semantic_snapshot(semantics)
+    };
+    let analysis = resolve(&basis, session.execution().kernels());
     let plan_session =
         PlanProjectSessionId::from_existing(session.project_session_id().as_str().into());
-    let package = execution_package_from_graph(
-        cached.package().clone(),
-        PlanCompilationBasis::new(
+    let plan_basis = |fingerprint| {
+        PlanBasis::new(
             plan_session.clone(),
             PlanRegistryFingerprint::from_bytes(session.graph().registry_fingerprint()),
-            first_fingerprint,
+            fingerprint,
             BTreeMap::new(),
             BTreeMap::new(),
-        ),
-    )
-    .unwrap();
+        )
+    };
+    let package = session
+        .execution()
+        .prepare_graph_package(&graph, &analysis, plan_basis(first_fingerprint))
+        .unwrap();
     let prepared = session
         .execution()
-        .prepare_compiled_package(package.clone(), session.runtime_generation())
+        .prepare_package(package.clone(), session.runtime_generation())
         .unwrap();
     let control = RunExecutionControl::with_cancellation(
         Arc::new(AtomicBool::new(false)),
@@ -263,50 +271,44 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         &RuntimeValue::Integer(3)
     );
 
-    // Use one Graph cache to prove the capability version participates in its cache key.
     let updated = kernels(Some(2)).freeze();
     assert!(matches!(
-        execution_package_from_graph(
-            cached.package().clone(),
-            PlanCompilationBasis::new(
-                plan_session.clone(),
-                PlanRegistryFingerprint::from_bytes(session.graph().registry_fingerprint()),
-                updated.fingerprint(),
-                BTreeMap::new(),
-                BTreeMap::new(),
-            )
+        session.execution().prepare_graph_package(
+            &graph,
+            &analysis,
+            plan_basis(updated.fingerprint())
         ),
-        Err(crate::graph::GraphPackageMappingError::KernelCapabilitiesMismatch)
+        Err(yss_graph_execution::graph_preparation::GraphPlanError::KernelCapabilitiesMismatch)
     ));
     let mut updated_basis = basis.clone();
     updated_basis.kernel_fingerprint = updated.fingerprint().as_bytes();
-    let recompiled = session
-        .graph()
-        .compile_draft(
-            &document,
-            graph.clone(),
-            &resources,
-            &updated_basis,
-            &|id| updated.supports(id),
-        )
-        .unwrap();
-    assert_ne!(recompiled.artifact_id(), Some(&artifact));
-    assert!(!recompiled.cache_hit());
-    assert!(session.graph().compiled_draft(&graph, &artifact).is_none());
+    let revised = resolve(&updated_basis, &updated);
+    assert_ne!(
+        revised.semantic_input_hash(),
+        analysis.semantic_input_hash()
+    );
 
     let updated_runtime = yss_graph_execution::state::ExecutionRuntimeState::new(
         session.execution().session_id(),
         session.runtime_generation(),
         Arc::new(updated),
     );
+    let revised_package = updated_runtime
+        .prepare_graph_package(
+            &graph,
+            &revised,
+            plan_basis(updated_runtime.kernels().fingerprint()),
+        )
+        .unwrap();
+    assert!(!Arc::ptr_eq(package.plan(), revised_package.plan()));
     assert!(matches!(
-        updated_runtime.prepare_compiled_package(package, session.runtime_generation()),
+        updated_runtime.prepare_package(package, session.runtime_generation()),
         Err(PackagePreparationError::KernelCapabilitiesChanged { .. })
     ));
     assert!(matches!(
         updated_runtime.execute_prepared_handoff(
             &prepared,
-            RunResourceBindings::new(plan_session, [], []),
+            RunResourceBindings::new(plan_session.clone(), [], []),
             session.resource_provider_factory(),
             &control,
             &PlanExecutionDemand::Default,
@@ -319,20 +321,26 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
     let missing = kernels(None).freeze();
     let mut missing_basis = basis;
     missing_basis.kernel_fingerprint = missing.fingerprint().as_bytes();
-    let blocked = session
-        .graph()
-        .compile_draft(&document, graph, &resources, &missing_basis, &|id| {
-            missing.supports(id)
-        })
-        .unwrap();
-    assert!(blocked.artifact_id().is_none());
+    let blocked = resolve(&missing_basis, &missing);
+    let missing_runtime = yss_graph_execution::state::ExecutionRuntimeState::new(
+        session.execution().session_id(),
+        session.runtime_generation(),
+        Arc::new(missing),
+    );
+    assert!(matches!(
+        missing_runtime.prepare_graph_package(
+            &graph,
+            &blocked,
+            plan_basis(missing_runtime.kernels().fingerprint())
+        ),
+        Err(yss_graph_execution::graph_preparation::GraphPlanError::NotReady)
+    ));
     assert!(
         blocked
-            .analysis()
             .semantic_snapshot()
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code.as_str() == "compiler.node.kernel_unavailable")
+            .any(|diagnostic| diagnostic.code.as_str() == "graph.node.kernel_unavailable")
     );
 }
 

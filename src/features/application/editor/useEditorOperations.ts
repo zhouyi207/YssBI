@@ -17,8 +17,8 @@ import type { GraphEditOutcome } from "@/features/application/graphEditing/types
 import {
   redoEditorHistory,
   undoEditorHistory,
-} from "@/features/application/graphDraft/historyCoordinator";
-import { exportEditorSubgraph } from "@/features/application/graphDraft/subgraphExportCoordinator";
+} from "@/features/application/graphEditing/historyCoordinator";
+import { exportEditorSubgraph } from "@/features/application/graphEditing/subgraphExportCoordinator";
 import { readGraphClipboard, writeGraphClipboard } from "@/services/clipboard";
 import { disconnectConnectionsById } from "./edgeOperations";
 import {

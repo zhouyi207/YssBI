@@ -95,7 +95,7 @@ pub enum KernelExecutionError {
     DeadlineExceeded,
     #[error("prepared execution kernel failed")]
     Failed,
-    #[error("requested graph output is unavailable in the compiled plan")]
+    #[error("requested graph output is unavailable in the prepared plan")]
     DemandOutputUnavailable,
     #[error("numeric input has an incompatible runtime type")]
     InvalidNumericInput,
@@ -198,7 +198,7 @@ struct SchedulerObservation {
 }
 
 struct PreparedPlanExecution<'a> {
-    package: &'a crate::plan::CompiledExecutionPackage,
+    package: &'a crate::plan::ExecutionPlanPackage,
     bindings: &'a [crate::resource_preparation::RunResourceBinding],
     resources: &'a PreparedRunResources,
     control: &'a RunExecutionControl,
@@ -410,7 +410,7 @@ struct ExecutionSelection {
 }
 
 fn execution_producers(
-    package: &crate::plan::CompiledExecutionPackage,
+    package: &crate::plan::ExecutionPlanPackage,
 ) -> Result<Vec<Option<usize>>, KernelExecutionError> {
     let operations = package.plan().operations();
     let value_count = operations
@@ -434,7 +434,7 @@ fn execution_producers(
 }
 
 fn select_execution(
-    package: &crate::plan::CompiledExecutionPackage,
+    package: &crate::plan::ExecutionPlanPackage,
     demand: &crate::plan::PlanExecutionDemand,
     producers: &[Option<usize>],
 ) -> Result<ExecutionSelection, KernelExecutionError> {
@@ -993,6 +993,7 @@ pub struct ExecutionWorkLease {
 /// Session-local execution state. Composition installs one instance per
 /// Application session and replaces it atomically with that session.
 pub struct ExecutionRuntimeState {
+    pub(crate) graph_plans: crate::graph_preparation::GraphPlanCache,
     session_id: ExecutionSessionId,
     generation: RuntimeGeneration,
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
@@ -1010,6 +1011,7 @@ impl ExecutionRuntimeState {
         kernels: Arc<KernelRegistry>,
     ) -> Self {
         Self {
+            graph_plans: crate::graph_preparation::GraphPlanCache::default(),
             session_id,
             generation,
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
@@ -1400,6 +1402,7 @@ impl ExecutionRuntimeState {
     }
 
     pub fn invalidate_graph_results(&self, graph: &str) {
+        self.graph_plans.remove(graph);
         self.results.invalidate_graph(graph);
     }
 
@@ -1442,7 +1445,8 @@ impl ExecutionRuntimeState {
     }
 
     pub fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) -> bool {
-        self.results.publish(handoff.results())
+        self.results
+            .publish(handoff.results(), handoff.observation_intents())
     }
 
     pub fn finalize_run_success(
@@ -1545,12 +1549,11 @@ mod tests {
     use crate::identity::ExecutionSessionId;
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
-        CompiledExecutionPackage, CompiledParameterBundleBuilder, CompiledParameterHandle,
-        ExecutionPlan, KernelId, PlanCompilationBasis, PlanCompileId, PlanExecutionDemand,
-        PlanGraphId, PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding,
-        PlanOutputRef, PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId,
-        PlanParameterValue, PlanPortAddress, PlanProjectSessionId, PlanProvenance,
-        PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+        ExecutionPlan, ExecutionPlanPackage, KernelId, PlanBasis, PlanExecutionDemand, PlanGraphId,
+        PlanId, PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding, PlanOutputRef,
+        PlanParameterBundleBuilder, PlanParameterHandle, PlanParameterPayload, PlanParameterScalar,
+        PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProjectSessionId,
+        PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
         PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
         ResourceKind, ValueRef,
     };
@@ -1563,15 +1566,15 @@ mod tests {
     fn prepared_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
         let resource = PlanResourceId::from_existing("databases/answer".into());
         let version = PlanResourceVersion::from_existing("v1".into());
-        let basis = PlanCompilationBasis::new(
+        let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
             crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource.clone(), version.clone())]),
             BTreeMap::from([(resource, PlanResourceObservedState::Present(version))]),
         );
-        let parameters = Arc::new(CompiledParameterBundleBuilder::new(basis.clone()).freeze());
-        let package = CompiledExecutionPackage::new(
+        let parameters = Arc::new(PlanParameterBundleBuilder::new(basis.clone()).freeze());
+        let package = ExecutionPlanPackage::new(
             Arc::new(ExecutionPlan::empty()),
             parameters,
             PlanProvenance::new(
@@ -1581,11 +1584,11 @@ mod tests {
                     None,
                 ),
                 basis,
-                PlanCompileId::from_existing(11),
+                PlanId::from_existing(11),
             ),
         );
         state
-            .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+            .prepare_package(package, RuntimeGeneration::INITIAL)
             .expect("test package is valid")
     }
 
@@ -1618,22 +1621,22 @@ mod tests {
     fn prepared_operation_plan(
         state: &ExecutionRuntimeState,
         operations: impl IntoIterator<Item = PlanOperation>,
-        parameter_entries: impl IntoIterator<Item = (CompiledParameterHandle, PlanParameterPayload)>,
+        parameter_entries: impl IntoIterator<Item = (PlanParameterHandle, PlanParameterPayload)>,
     ) -> PreparedExecutionPlan {
-        let basis = PlanCompilationBasis::new(
+        let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
             crate::kernels::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
-        let mut parameters = CompiledParameterBundleBuilder::new(basis.clone());
+        let mut parameters = PlanParameterBundleBuilder::new(basis.clone());
         for (handle, payload) in parameter_entries {
             parameters
                 .insert(handle, payload)
                 .expect("test parameter handles are unique");
         }
-        let package = CompiledExecutionPackage::new(
+        let package = ExecutionPlanPackage::new(
             Arc::new(ExecutionPlan::new(
                 operations
                     .into_iter()
@@ -1648,11 +1651,11 @@ mod tests {
                     None,
                 ),
                 basis,
-                PlanCompileId::from_existing(12),
+                PlanId::from_existing(12),
             ),
         );
         state
-            .prepare_compiled_package(package, RuntimeGeneration::INITIAL)
+            .prepare_package(package, RuntimeGeneration::INITIAL)
             .expect("test package is valid")
     }
 
@@ -1763,7 +1766,7 @@ mod tests {
     #[test]
     fn neutral_executor_waits_for_an_upstream_value_later_in_the_plan() {
         let state = state();
-        let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
+        let parameter_handle = PlanParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
             crate::plan::PlanNodeTypeId::from_existing("yssbi.core.reroute".into()),
@@ -1886,7 +1889,7 @@ mod tests {
     #[test]
     fn explicit_output_demand_skips_unrelated_graph_components() {
         let state = state();
-        let parameter_handle = CompiledParameterHandle::from_existing("constant/value".into());
+        let parameter_handle = PlanParameterHandle::from_existing("constant/value".into());
         let selected_output = operation_output("selected", ValueRef::new(0));
         let requested = selected_output.output().clone();
         let selected = PlanOperation::new(

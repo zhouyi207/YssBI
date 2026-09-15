@@ -1,7 +1,7 @@
-//! Graph compilation resource identities, schemas, and immutable catalog snapshots.
+//! Graph analysis resource identities, schemas, and immutable catalog snapshots.
 //!
 //! The built-in node catalog remains owned by `yss-node-catalog`; this crate owns only the
-//! project-resource contract consumed by graph analysis, mutation, and compilation.
+//! project-resource contract consumed by graph analysis, mutation, and execution planning.
 
 #![deny(unused_must_use)]
 

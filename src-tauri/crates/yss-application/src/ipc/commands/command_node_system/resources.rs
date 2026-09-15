@@ -1,9 +1,10 @@
 use super::common::parse_graph_path;
 use crate::ipc::error::CommandError;
+use crate::ipc::graph_editor_sync::{Binding, GraphEditorSyncState};
 use tauri::{AppHandle, State};
 use yss_ipc_contract::event::Event;
 use yss_ipc_contract::event::EventProject;
-use yss_ipc_contract::graph_draft::GraphDraftSaveDto;
+use yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto;
 use yss_ipc_contract::project::ResourceMutationResultDto;
 use yss_ipc_event::emit_project_event_result;
 use yss_project_history::MutationRequest;
@@ -72,24 +73,52 @@ pub fn unload_project_graph(
 }
 
 #[tauri::command]
-pub fn save_project_graph(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri binds graph save identity and transport context"
+)]
+pub async fn save_project_graph(
+    window: tauri::WebviewWindow,
+    sync: State<'_, GraphEditorSyncState>,
+    cursor: Option<String>,
     application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
-    document: yss_graph_document::GraphDocument,
+    version: yss_ipc_contract::graph_editing::GraphEditVersionDto,
     operation_id: OperationId,
-) -> Result<GraphDraftSaveDto, CommandError> {
-    let result = application
-        .save_graph_draft(
-            project_instance_id,
-            parse_graph_path(graph_path)?,
-            locale,
-            operation_id,
-            document,
-        )
-        .map_err(map_graph_draft_save_error)?;
-    Ok(crate::ipc::schema::graph_draft::graph_draft_save_to_transport(&result))
+) -> Result<GraphEditorSyncResponseDto, CommandError> {
+    let binding = Binding {
+        window: window.label().into(),
+        project: project_instance_id.to_string(),
+        graph: graph_path.clone(),
+        locale: locale.clone(),
+    };
+    let application = application.inner().clone();
+    let sync = sync.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = application
+            .save_current_graph(crate::graph::editing::GraphEditRequest {
+                project_instance_id,
+                graph_path: parse_graph_path(graph_path)?,
+                locale,
+                operation_id,
+                version: crate::ipc::schema::graph_editing::graph_edit_version_from_transport(
+                    version,
+                )?,
+            })
+            .map_err(map_graph_draft_save_error)?;
+        let mut response = crate::ipc::schema::graph_editing::encode_graph_edit(
+            &sync,
+            binding,
+            cursor.as_deref(),
+            &result.graph,
+        )?;
+        response.resource_revision = Some(result.resource_revision);
+        Ok(response)
+    })
+    .await
+    .map_err(CommandError::internal)?
 }
 
 #[tauri::command]

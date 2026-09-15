@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
+use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress};
 use yss_node_protocol::{PortDirection, TypeExpr, validate_typed_value};
 use yss_node_registry::NodeRegistry;
@@ -9,6 +9,7 @@ use crate::{GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact,
 
 pub(crate) fn validate(
     document: &GraphDocument,
+    index: &crate::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     nodes: &[GraphNodeSemanticFact],
 ) -> Vec<GraphDiagnosticFact> {
@@ -94,11 +95,7 @@ pub(crate) fn validate(
                 address,
             ));
         }
-        if document
-            .connections
-            .values()
-            .any(|connection| &connection.input == address)
-        {
+        if !index.input_connections(address).is_empty() {
             diagnostics.push(port_problem(
                 GraphDiagnosticKind::InputConflictingBindings,
                 address,
@@ -194,6 +191,52 @@ fn port_problem(kind: GraphDiagnosticKind, address: &PortAddress) -> GraphDiagno
         GraphDiagnosticLocation::Port(address.clone()),
         [("port", address.to_string().into())],
     )
+}
+
+pub fn contains_value_dependency_cycle(document: &GraphDocument) -> bool {
+    let mut remaining = document
+        .nodes
+        .keys()
+        .map(|node_id| (*node_id, 0_usize))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut dependents = std::collections::BTreeMap::<NodeId, Vec<NodeId>>::new();
+    for connection in document.connections.values() {
+        let Some(input) = remaining.get_mut(&connection.input.node_id) else {
+            continue;
+        };
+        let Some(next) = input.checked_add(1) else {
+            return true;
+        };
+        *input = next;
+        dependents
+            .entry(connection.output.node_id)
+            .or_default()
+            .push(connection.input.node_id);
+    }
+    let mut ready = remaining
+        .iter()
+        .filter_map(|(node_id, count)| (*count == 0).then_some(*node_id))
+        .collect::<std::collections::VecDeque<_>>();
+    let mut visited = 0_usize;
+    while let Some(node_id) = ready.pop_front() {
+        let Some(next_visited) = visited.checked_add(1) else {
+            return true;
+        };
+        visited = next_visited;
+        for dependent in dependents.get(&node_id).into_iter().flatten() {
+            let Some(count) = remaining.get_mut(dependent) else {
+                continue;
+            };
+            let Some(next) = count.checked_sub(1) else {
+                return true;
+            };
+            *count = next;
+            if *count == 0 {
+                ready.push_back(*dependent);
+            }
+        }
+    }
+    visited != document.nodes.len()
 }
 
 #[cfg(test)]
@@ -487,50 +530,4 @@ mod tests {
             }
         }
     }
-}
-
-pub fn contains_value_dependency_cycle(document: &GraphDocument) -> bool {
-    let mut remaining = document
-        .nodes
-        .keys()
-        .map(|node_id| (*node_id, 0_usize))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let mut dependents = std::collections::BTreeMap::<NodeId, Vec<NodeId>>::new();
-    for connection in document.connections.values() {
-        let Some(input) = remaining.get_mut(&connection.input.node_id) else {
-            continue;
-        };
-        let Some(next) = input.checked_add(1) else {
-            return true;
-        };
-        *input = next;
-        dependents
-            .entry(connection.output.node_id)
-            .or_default()
-            .push(connection.input.node_id);
-    }
-    let mut ready = remaining
-        .iter()
-        .filter_map(|(node_id, count)| (*count == 0).then_some(*node_id))
-        .collect::<std::collections::VecDeque<_>>();
-    let mut visited = 0_usize;
-    while let Some(node_id) = ready.pop_front() {
-        let Some(next_visited) = visited.checked_add(1) else {
-            return true;
-        };
-        visited = next_visited;
-        for dependent in dependents.get(&node_id).into_iter().flatten() {
-            let Some(count) = remaining.get_mut(dependent) else {
-                continue;
-            };
-            let Some(next) = count.checked_sub(1) else {
-                return true;
-            };
-            *count = next;
-            if *count == 0 {
-                ready.push_back(*dependent);
-            }
-        }
-    }
-    visited != document.nodes.len()
 }

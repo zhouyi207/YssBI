@@ -55,7 +55,11 @@ export type AtomicProjectionApplyResult =
       error?: unknown;
     };
 
-function buildProjectionBucket(entities: EditorProjectionEntities): GraphEntityBucket {
+function sameIds(left: readonly string[] | undefined, right: readonly string[]): boolean {
+  return !!left && left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function buildProjectionBucket(entities: EditorProjectionEntities, previous?: GraphEntityBucket): GraphEntityBucket {
   const bucket: GraphEntityBucket = {
     basis: entities.basis,
     diagnostics: entities.diagnostics,
@@ -70,7 +74,12 @@ function buildProjectionBucket(entities: EditorProjectionEntities): GraphEntityB
 
   for (const node of Object.values(entities.nodes)) {
     const portIds = entities.portIdsByNodeId[node.nodeId];
-    bucket.nodes[node.nodeId] = {
+    const existing = previous?.nodes[node.nodeId];
+    const unchanged = existing && existing.nodeType === node.nodeTypeId && existing.position === node.position &&
+      existing.display === node.display && existing.parameterEditors === node.parameterEditors &&
+      existing.portInstanceAdditions === node.portInstanceAdditions && existing.capabilities === node.capabilities &&
+      existing.diagnostics === node.diagnostics && sameIds(existing.pinIds, portIds);
+    bucket.nodes[node.nodeId] = unchanged ? existing : {
       id: node.nodeId,
       graphPath: node.graphPath,
       nodeType: node.nodeTypeId,
@@ -86,7 +95,14 @@ function buildProjectionBucket(entities: EditorProjectionEntities): GraphEntityB
   }
 
   for (const [portId, port] of Object.entries(entities.ports)) {
-    bucket.pins[portId] = {
+    const existing = previous?.pins[portId];
+    const name = port.display.instanceLabel ?? port.display.label;
+    const unchanged = existing && existing.nodeId === port.address.nodeId && existing.name === name &&
+      existing.address === port.address && existing.display === port.display && existing.direction === port.direction &&
+      existing.orphan === port.orphan && existing.canRemove === port.canRemove && existing.connections === port.connections &&
+      existing.input === port.input && existing.acceptedType === port.acceptedType && existing.typeState === port.typeState &&
+      existing.resolvedSchema === port.resolvedSchema && existing.status === port.status;
+    bucket.pins[portId] = unchanged ? existing : {
       id: portId,
       nodeId: port.address.nodeId,
       name: port.display.instanceLabel ?? port.display.label,
@@ -102,11 +118,15 @@ function buildProjectionBucket(entities: EditorProjectionEntities): GraphEntityB
       resolvedSchema: port.resolvedSchema,
       status: port.status,
     };
-    bucket.pinConnections[portId] = entities.connectionIdsByPortId[portId];
+    const connections = entities.connectionIdsByPortId[portId];
+    bucket.pinConnections[portId] = sameIds(previous?.pinConnections[portId], connections) ? previous!.pinConnections[portId] : connections;
   }
 
   for (const connection of Object.values(entities.connections)) {
-    bucket.connections[connection.connectionId] = {
+    const existing = previous?.connections[connection.connectionId];
+    const from = portAddressKey(connection.output);
+    const to = portAddressKey(connection.input);
+    bucket.connections[connection.connectionId] = existing && existing.from === from && existing.to === to && existing.order === connection.order ? existing : {
       id: connection.connectionId,
       from: portAddressKey(connection.output),
       to: portAddressKey(connection.input),
@@ -116,12 +136,15 @@ function buildProjectionBucket(entities: EditorProjectionEntities): GraphEntityB
     };
   }
 
+  if (sameIds(previous?.graphNodes, bucket.graphNodes)) bucket.graphNodes = previous!.graphNodes;
+
   return bucket;
 }
 
 function buildProjectionCandidate(
   graphPath: string,
   projection: EditorGraphProjectionDto,
+  previous?: GraphEntityBucket,
 ): GraphEntityBucket {
   const entities = toProjectionEntities(projection);
   if (entities.graphPath !== graphPath) {
@@ -129,7 +152,7 @@ function buildProjectionCandidate(
       `projection graph path '${entities.graphPath}' does not match requested graph path '${graphPath}'`,
     );
   }
-  return buildProjectionBucket(entities);
+  return buildProjectionBucket(entities, previous);
 }
 
 export function prepareGraphProjectionReplacements(
@@ -149,7 +172,7 @@ export function prepareGraphProjectionReplacements(
     try {
       candidates.push([
         replacement.graphPath,
-        buildProjectionCandidate(replacement.graphPath, replacement.projection),
+        buildProjectionCandidate(replacement.graphPath, replacement.projection, baseGraphEntities[replacement.graphPath]),
       ]);
     } catch (error) {
       return { prepared: false, reason: "invalid", graphPath: replacement.graphPath, error };
@@ -224,7 +247,7 @@ export const useGraphProjectionStore = create<GraphProjectionStore>((set, get) =
   replaceProjection: (graphPath, projection) => {
     let candidate: GraphEntityBucket;
     try {
-      candidate = buildProjectionCandidate(graphPath, projection);
+      candidate = buildProjectionCandidate(graphPath, projection, get().graphEntities[graphPath]);
     } catch (error) {
       return { applied: false, reason: "invalid", error };
     }

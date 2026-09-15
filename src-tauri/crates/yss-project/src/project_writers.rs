@@ -298,6 +298,21 @@ impl ProjectState {
     ) -> Result<CommittedProjectSave, ProjectOperationError> {
         self.validate_writer_context(context, authority_generation)?;
         let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != context.session.instance_id.as_str()
+            || publication.authority_generation() != authority_generation
+        {
+            return Err(ProjectOperationError::StaleProjectLifecycle {
+                message: "project changed before save publication".into(),
+            });
+        }
+        let mut editing = self.graph_editing.lock().unwrap();
+        for resource in &context.affected_resources {
+            if let ResourceKey::Graph(path) = resource
+                && let Some(metadata) = editing.get_mut(path)
+            {
+                metadata.mark_saved();
+            }
+        }
         Ok(CommittedProjectSave {
             project_instance_id: ProjectInstanceId::from_existing(
                 publication.project_instance_id.clone(),

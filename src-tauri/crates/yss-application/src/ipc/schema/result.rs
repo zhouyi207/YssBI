@@ -283,9 +283,6 @@ pub fn graph_result_state_to_dto(
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect(),
-        compiled_artifact_id: projection
-            .compiled_artifact_id
-            .map(|hash| hash.iter().map(|byte| format!("{byte:02x}")).collect()),
         outputs,
         connections,
     })
@@ -303,7 +300,6 @@ mod tests {
         let state = crate::graph::results::GraphResultState {
             execution_session_id: ExecutionSessionId::new(uuid::Uuid::from_u128(1)),
             semantic_input_hash: [0xaa; 32],
-            compiled_artifact_id: Some([0xaa; 32]),
             outputs: [
                 (
                     "result",

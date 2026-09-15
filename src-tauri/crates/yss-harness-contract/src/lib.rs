@@ -180,7 +180,7 @@ pub enum CapabilityId {
     InspectResult,
     InspectProject,
     ApplyGraphEdit,
-    CompileGraph,
+    ValidateGraph,
     ExecuteGraph,
     SaveGraph,
     ListGraphResults,
@@ -196,7 +196,7 @@ impl CapabilityId {
             Self::InspectResult => "inspect_result",
             Self::InspectProject => "inspect_project",
             Self::ApplyGraphEdit => "apply_graph_edit",
-            Self::CompileGraph => "compile_graph",
+            Self::ValidateGraph => "validate_graph",
             Self::ExecuteGraph => "execute_graph",
             Self::SaveGraph => "save_graph",
             Self::ListGraphResults => "list_graph_results",
@@ -212,7 +212,7 @@ impl CapabilityId {
             Self::InspectResult => &CAPABILITY_DESCRIPTORS[4],
             Self::InspectProject => &CAPABILITY_DESCRIPTORS[5],
             Self::ApplyGraphEdit => &CAPABILITY_DESCRIPTORS[6],
-            Self::CompileGraph => &CAPABILITY_DESCRIPTORS[7],
+            Self::ValidateGraph => &CAPABILITY_DESCRIPTORS[7],
             Self::ExecuteGraph => &CAPABILITY_DESCRIPTORS[8],
             Self::SaveGraph => &CAPABILITY_DESCRIPTORS[9],
             Self::ListGraphResults => &CAPABILITY_DESCRIPTORS[10],
@@ -290,8 +290,8 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 11] = [
         maximum_results: 200,
     },
     CapabilityDescriptor {
-        id: CapabilityId::CompileGraph,
-        effect: ToolEffect::Compute,
+        id: CapabilityId::ValidateGraph,
+        effect: ToolEffect::Inspect,
         approval: ApprovalPolicy::Automatic,
         maximum_results: 200,
     },
@@ -492,7 +492,7 @@ pub enum AutomationCapabilityRequest {
     InspectResult(InspectResultRequest),
     InspectProject(InspectProjectRequest),
     ApplyGraphEdit(ApplyGraphEditRequest),
-    CompileGraph(CompileGraphRequest),
+    ValidateGraph(ValidateGraphRequest),
     ExecuteGraph(ExecuteGraphRequest),
     SaveGraph(SaveGraphRequest),
     ListGraphResults(ListGraphResultsRequest),
@@ -508,7 +508,7 @@ impl AutomationCapabilityRequest {
             Self::InspectResult(_) => CapabilityId::InspectResult,
             Self::InspectProject(_) => CapabilityId::InspectProject,
             Self::ApplyGraphEdit(_) => CapabilityId::ApplyGraphEdit,
-            Self::CompileGraph(_) => CapabilityId::CompileGraph,
+            Self::ValidateGraph(_) => CapabilityId::ValidateGraph,
             Self::ExecuteGraph(_) => CapabilityId::ExecuteGraph,
             Self::SaveGraph(_) => CapabilityId::SaveGraph,
             Self::ListGraphResults(_) => CapabilityId::ListGraphResults,
@@ -532,15 +532,14 @@ impl AutomationCapabilityRequest {
                 }
             }
             Self::InspectProject(_) => Ok(()),
-            Self::CompileGraph(request) => {
+            Self::ValidateGraph(request) => {
                 validate_graph_request(&request.graph_path, &request.graph_hash)
             }
             Self::SaveGraph(request) => {
                 validate_graph_request(&request.graph_path, &request.graph_hash)
             }
             Self::ExecuteGraph(request) => {
-                validate_graph_request(&request.graph_path, &request.graph_hash)?;
-                validate_graph_hash(&request.artifact_id)
+                validate_graph_request(&request.graph_path, &request.graph_hash)
             }
             Self::ListGraphResults(request) => {
                 validate_resource_id("graphPath", &request.graph_path)
@@ -992,7 +991,7 @@ pub enum AutomationCapabilityResult {
     ResultInspection(ResultInspection),
     ProjectInspection(ProjectInspection),
     GraphEditReceipt(GraphEditReceipt),
-    GraphCompilation(GraphCompilation),
+    GraphValidation(GraphValidation),
     GraphExecution(GraphExecution),
     GraphSaved(GraphSaved),
     GraphResults(GraphResults),
@@ -1018,7 +1017,7 @@ impl AutomationCapabilityResult {
             Self::ResultInspection(_) => CapabilityId::InspectResult,
             Self::ProjectInspection(_) => CapabilityId::InspectProject,
             Self::GraphEditReceipt(_) => CapabilityId::ApplyGraphEdit,
-            Self::GraphCompilation(_) => CapabilityId::CompileGraph,
+            Self::GraphValidation(_) => CapabilityId::ValidateGraph,
             Self::GraphExecution(_) => CapabilityId::ExecuteGraph,
             Self::GraphSaved(_) => CapabilityId::SaveGraph,
             Self::GraphResults(_) => CapabilityId::ListGraphResults,
@@ -1069,8 +1068,8 @@ pub enum CapabilityFailureCode {
     GraphClientUnavailable,
     #[error("graph_draft_changed")]
     GraphDraftChanged,
-    #[error("graph_compile_failed")]
-    GraphCompileFailed,
+    #[error("graph_validation_failed")]
+    GraphValidationFailed,
     #[error("graph_execution_failed")]
     GraphExecutionFailed,
     #[error("outcome_unknown")]
@@ -1170,7 +1169,7 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
         CapabilityId::InspectResult => schemars::schema_for!(InspectResultRequest),
         CapabilityId::InspectProject => schemars::schema_for!(InspectProjectRequest),
         CapabilityId::ApplyGraphEdit => schemars::schema_for!(ApplyGraphEditRequest),
-        CapabilityId::CompileGraph => schemars::schema_for!(CompileGraphRequest),
+        CapabilityId::ValidateGraph => schemars::schema_for!(ValidateGraphRequest),
         CapabilityId::ExecuteGraph => schemars::schema_for!(ExecuteGraphRequest),
         CapabilityId::SaveGraph => schemars::schema_for!(SaveGraphRequest),
         CapabilityId::ListGraphResults => schemars::schema_for!(ListGraphResultsRequest),
@@ -1186,7 +1185,7 @@ pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema
         CapabilityId::InspectResult => schemars::schema_for!(ResultInspection),
         CapabilityId::InspectProject => schemars::schema_for!(ProjectInspection),
         CapabilityId::ApplyGraphEdit => schemars::schema_for!(GraphEditReceipt),
-        CapabilityId::CompileGraph => schemars::schema_for!(GraphCompilation),
+        CapabilityId::ValidateGraph => schemars::schema_for!(GraphValidation),
         CapabilityId::ExecuteGraph => schemars::schema_for!(GraphExecution),
         CapabilityId::SaveGraph => schemars::schema_for!(GraphSaved),
         CapabilityId::ListGraphResults => schemars::schema_for!(GraphResults),

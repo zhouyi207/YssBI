@@ -1,6 +1,7 @@
 use crate::graph::open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::ipc::activity_panel_sync::{ActivityPanelSyncState, ActivityPanelUpdateDto};
 use crate::ipc::error::CommandError;
+use crate::ipc::graph_editor_sync::{Binding, GraphEditorSyncState};
 use crate::ipc::schema::activity_panel::{
     ActivityPanelDocumentDto, ActivityPanelId, ActivityPanelRequest,
 };
@@ -9,7 +10,7 @@ use crate::session::{ApplicationState, SessionCaptureError};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use tauri::{Manager, State, WebviewWindow};
-use yss_ipc_contract::graph_draft::GraphEditorSessionDto;
+use yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto;
 use yss_ipc_contract::project::ProjectActivationResultDto;
 use yss_project::ProjectIndex;
 use yss_project_registry::normalize_existing_path;
@@ -164,35 +165,59 @@ pub async fn get_project_index(
 }
 
 #[tauri::command]
-pub fn load_project_graph(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri binds graph load identity and transport context"
+)]
+pub async fn load_project_graph(
+    window: tauri::WebviewWindow,
+    sync: State<'_, GraphEditorSyncState>,
+    cursor: Option<String>,
     state: State<'_, ApplicationState>,
     project_instance_id: String,
     graph_path: String,
     locale: Option<String>,
     lifecycle_token: u64,
-) -> Result<GraphEditorSessionDto, CommandError> {
-    let project_instance_id =
-        yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
-    let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
-        .map_err(|_| CommandError::expected("invalid_project_format"))?;
-    let receipt = state
-        .open_graph(OpenGraphRequest::new(
-            project_instance_id,
-            graph_path,
-            lifecycle_token,
-            locale.as_deref().unwrap_or("en-US"),
-        ))
-        .map_err(open_graph_command_error)?;
-    Ok(
-        crate::ipc::schema::graph_draft::graph_editor_session_to_transport(
-            receipt.document(),
-            receipt.projection(),
-        ),
-    )
+) -> Result<GraphEditorSyncResponseDto, CommandError> {
+    let binding = Binding {
+        window: window.label().into(),
+        project: project_instance_id.clone(),
+        graph: graph_path.clone(),
+        locale: locale.clone().unwrap_or_else(|| "en-US".into()),
+    };
+    let state = state.inner().clone();
+    let sync = sync.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let project_instance_id =
+            yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
+        let graph_path = yss_graph_document::GraphResourcePath::new(graph_path)
+            .map_err(|_| CommandError::expected("invalid_project_format"))?;
+        let receipt = state
+            .open_graph(OpenGraphRequest::new(
+                project_instance_id,
+                graph_path,
+                lifecycle_token,
+                locale.as_deref().unwrap_or("en-US"),
+            ))
+            .map_err(open_graph_command_error)?;
+        crate::ipc::schema::graph_editing::encode_graph_session(
+            &sync,
+            binding,
+            cursor.as_deref(),
+            crate::ipc::schema::graph_editing::graph_editor_session_to_transport(
+                receipt.document(),
+                receipt.projection(),
+                receipt.editing(),
+            ),
+        )
+    })
+    .await
+    .map_err(CommandError::internal)?
 }
 
 fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
     match error {
+        OpenGraphApplicationError::EditingBusy => CommandError::expected("graph_edit_busy"),
         OpenGraphApplicationError::SessionCapture(error) => match error {
             SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
             SessionCaptureError::Replacing => {

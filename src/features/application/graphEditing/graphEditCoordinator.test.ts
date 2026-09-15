@@ -1,0 +1,145 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { saveGraph } from "./saveGraph";
+import { applyGraphMutation, resetGraphEditCoordinator } from "./graphEditCoordinator";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
+import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
+import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
+import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
+import {
+  hydrateGraphProjection,
+  resetGraphProjectionLifecycle,
+} from "@/features/application/graphProjection/graphProjectionLifecycle";
+import {
+  makeEditorProjectionFixture,
+  makeGraphEditorSession,
+  makeGraphEditingState,
+} from "@/tests/helpers/editorProjectionFixtures";
+import type { GraphEditResultDto, GraphSaveResultDto } from "@/shared/types/domain/editorMutation";
+
+const graphPath = "events/Queue.yssbi-event";
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("Graph draft task ordering", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    clearProjectLifecycle();
+    startProjectLifecycle("queue-project");
+    resetGraphEditCoordinator();
+    resetGraphProjectionLifecycle();
+    useGraphEditingStore.getState().clear();
+    useGraphProjectionStore.setState({ graphEntities: {} });
+    const projection = makeEditorProjectionFixture({ graphPath }).projection;
+    useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
+    useGraphEditingStore.getState().install(graphPath, makeGraphEditorSession(projection));
+  });
+
+  it("orders edit and refresh without resolving the pre-edit document", async () => {
+    const pendingEdit = deferred<GraphEditResultDto>();
+    const pendingResolve = deferred<GraphEditResultDto>();
+    const current = useGraphEditingStore.getState().sessions[graphPath];
+    const document = structuredClone(current.document);
+    document.nodes["local-node"] = {
+      id: "local-node",
+      node_type: "tests.projected-node",
+      position: { x: 10, y: 20 },
+      parameters: {},
+      user_label: "Edited",
+    };
+    const projection = structuredClone(current.projection);
+    projection.basis.semanticInputHash = "1".repeat(64);
+    const transform = vi
+      .spyOn(GraphEditingService, "transform")
+      .mockReturnValueOnce(pendingEdit.promise);
+    const resolve = vi
+      .spyOn(GraphEditingService, "resolve")
+      .mockReturnValue(pendingResolve.promise);
+    const hydrate = vi.spyOn(GraphProjectionService, "hydrateGraph");
+    const editing = applyGraphMutation({
+      graphPath,
+      mutation: { type: "moveNodes", payload: { positions: [] } },
+    });
+    await vi.waitFor(() => expect(transform).toHaveBeenCalledOnce());
+    const refreshing = hydrateGraphProjection(graphPath, "en-US");
+    expect(resolve).not.toHaveBeenCalled();
+    pendingEdit.resolve({
+      changed: true,
+      document,
+      projection,
+      editing: makeGraphEditingState({
+        dirty: true,
+        canUndo: true,
+        version: { ...current.version, revision: "1" },
+      }),
+    });
+    expect((await editing).status).toBe("applied");
+    await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
+    expect(resolve.mock.calls[0]?.[3]).toEqual({ ...current.version, revision: "1" });
+    expect(hydrate).not.toHaveBeenCalled();
+    pendingResolve.resolve({
+      changed: false,
+      document,
+      projection,
+      editing: makeGraphEditingState({
+        dirty: true,
+        canUndo: true,
+        version: { ...current.version, revision: "1" },
+      }),
+    });
+    expect(await refreshing).toBe(true);
+    expect(useGraphEditingStore.getState().sessions[graphPath].document).toEqual(document);
+  });
+
+  it("releases the save lock before a queued refresh after Save fails", async () => {
+    const pending = deferred<GraphSaveResultDto>();
+    vi.spyOn(GraphEditingService, "save").mockReturnValueOnce(pending.promise);
+    const session = useGraphEditingStore.getState().sessions[graphPath];
+    const hydrate = vi
+      .spyOn(GraphProjectionService, "hydrateGraph")
+      .mockResolvedValueOnce({
+        document: session.document,
+        projection: session.projection,
+        editing: makeGraphEditingState(),
+      });
+    const saving = saveGraph(graphPath, "event");
+    const failedSave = expect(saving).rejects.toThrow("save failed");
+    await vi.waitFor(() => expect(GraphEditingService.save).toHaveBeenCalledOnce());
+    const refreshing = hydrateGraphProjection(graphPath, "en-US");
+    expect(hydrate).not.toHaveBeenCalled();
+    pending.reject(new Error("save failed"));
+    await failedSave;
+    expect(await refreshing).toBe(true);
+    expect(useGraphEditingStore.getState().sessions[graphPath].saving).toBe(false);
+  });
+
+  it("rejects an invalid mutation projection before changing draft or history", async () => {
+    const before = structuredClone(useGraphEditingStore.getState().sessions[graphPath]);
+    const projection = structuredClone(before.projection);
+    projection.nodes.push(structuredClone(projection.nodes[0]));
+    await expect(
+      applyGraphMutation(
+        { graphPath, locale: "en-US", mutation: { type: "moveNodes", payload: { positions: [] } } },
+        {
+          transform: async () => ({
+            changed: true,
+            document: before.document,
+            projection,
+            editing: makeGraphEditingState(),
+          }),
+        },
+      ),
+    ).rejects.toThrow("could not be installed");
+    expect(useGraphEditingStore.getState().sessions[graphPath]).toEqual(before);
+  });
+});

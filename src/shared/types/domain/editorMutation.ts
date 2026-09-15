@@ -271,25 +271,36 @@ export interface ResourceDeltaDto<TPayload = ResourceDocumentPatchDto> {
 }
 
 export interface GraphEditorSessionDto {
+  editing: GraphEditingStateDto;
   document: GraphDocumentDto;
   projection: EditorGraphProjectionDto;
 }
 
-export type CompileGraphDraftDto =
-  | { type: "ready"; artifactId: string; cacheHit: boolean; projection: EditorGraphProjectionDto }
-  | { type: "blocked"; projection: EditorGraphProjectionDto };
-
-export interface GraphDraftTransformDto {
+export interface GraphEditResultDto {
+  editing: GraphEditingStateDto;
   changed: boolean;
   document: GraphDocumentDto;
   projection: EditorGraphProjectionDto;
 }
 
-export interface GraphDraftSaveDto {
+export interface GraphSaveResultDto {
+  editing: GraphEditingStateDto;
   projectInstanceId: string;
   resourceRevision: number;
   document: GraphDocumentDto;
   projectionReplacement: GraphProjectionReplacementDto;
+}
+
+export interface GraphEditVersionDto {
+  sessionId: string;
+  revision: string;
+}
+
+export interface GraphEditingStateDto {
+  version: GraphEditVersionDto;
+  dirty: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export type ProjectionStatusDto =

@@ -60,9 +60,9 @@ export interface ResultGraphStateRequest {
   readonly graphPath: string;
   readonly semanticInputHash: string;
   readonly sessionId: number;
-  readonly draftGeneration: number;
+  readonly projectionGeneration: number;
   /** Local publication identity; never sent to Rust. */
-  readonly draftSession: object;
+  readonly editorState: object;
 }
 
 export type ResultQueryScope =
@@ -94,7 +94,10 @@ export interface ResultQueryCoordinator {
 }
 
 export interface ResultQueryServicePort {
-  readonly getGraphState: (graphPath: string, semanticInputHash: string) => Promise<GraphResultState | null>;
+  readonly getGraphState: (
+    graphPath: string,
+    semanticInputHash: string,
+  ) => Promise<GraphResultState | null>;
   readonly getDescriptor: (reference: ResultReference) => Promise<ResultDescriptor | null>;
   readonly getValue: (reference: ResultReference) => Promise<ResultValue | null>;
   readonly getPage: (
@@ -114,7 +117,11 @@ export interface ResultQueryServicePort {
 }
 
 export interface ResultQueryPublication {
-  readonly publishGraphState: (projectInstanceId: string | null, request: ResultGraphStateRequest, projection: DeepReadonly<GraphResultState | null>) => void;
+  readonly publishGraphState: (
+    projectInstanceId: string | null,
+    request: ResultGraphStateRequest,
+    projection: DeepReadonly<GraphResultState | null>,
+  ) => void;
   readonly releasePayload: (reference: ResultReference) => void;
   readonly publishDescriptor: (
     projectInstanceId: string | null,
@@ -175,7 +182,12 @@ interface RequestOwner {
   readonly scope: ResultQueryScope;
 }
 
-type ResultQueryValue = ResultDescriptor | ResultValue | ResultPage | ResultAnalysis | GraphResultState;
+type ResultQueryValue =
+  | ResultDescriptor
+  | ResultValue
+  | ResultPage
+  | ResultAnalysis
+  | GraphResultState;
 
 function queryPart(value: string): string {
   return `${value.length}:${value}`;
@@ -198,7 +210,11 @@ function queryKey(scope: ResultQueryScope): string {
 }
 
 function referenceFor(scope: ResultQueryScope): ResultReference | null {
-  return scope.kind === "analysis" ? scope.reference : scope.kind === "pinResult" || scope.kind === "graphState" ? null : scope;
+  return scope.kind === "analysis"
+    ? scope.reference
+    : scope.kind === "pinResult" || scope.kind === "graphState"
+      ? null
+      : scope;
 }
 
 function validIdentity(value: string | null): value is string {
@@ -392,13 +408,17 @@ export function createResultQueryCoordinator(
   };
 
   return {
-    loadGraphState: (request) => load(
-      { kind: "graphState", ...request },
-      () => dependencies.service.getGraphState(request.graphPath, request.semanticInputHash),
-      (projectInstanceId, value) => dependencies.publication.publishGraphState(projectInstanceId, request, value),
-      "result_source_read_failed",
-    ),
-    resetGraphState: (graphPath) => { requests.delete(`graphState:${queryPart(graphPath)}`); },
+    loadGraphState: (request) =>
+      load(
+        { kind: "graphState", ...request },
+        () => dependencies.service.getGraphState(request.graphPath, request.semanticInputHash),
+        (projectInstanceId, value) =>
+          dependencies.publication.publishGraphState(projectInstanceId, request, value),
+        "result_source_read_failed",
+      ),
+    resetGraphState: (graphPath) => {
+      requests.delete(`graphState:${queryPart(graphPath)}`);
+    },
     loadDescriptor,
     loadValue,
     loadPage,

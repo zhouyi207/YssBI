@@ -43,7 +43,7 @@ export type EditorCanvasCommandsSlice = Pick<
 > &
   Pick<
     ReturnType<typeof useProjectOperations>,
-    "compileGraph" | "executeGraph" | "cancelGraphExecution" | "clearGraphArtifacts"
+    "executeGraph" | "cancelGraphExecution" | "clearGraphArtifacts"
   > &
   Pick<ReturnType<typeof useNodeManagement>, "createNode">;
 
@@ -55,7 +55,6 @@ export interface EditorCanvasWorkspaceSlice {
   } | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
-  compileStatus: "uncompiled" | "compiling" | "compiled" | "blocked" | "failed";
 }
 
 export interface EditorCanvasInteractionSlice {

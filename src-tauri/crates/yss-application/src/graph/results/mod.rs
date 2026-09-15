@@ -2,7 +2,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-use super::inputs::{DraftResolutionContext, GraphInputError};
+use super::inputs::{GraphInputError, GraphResolutionContext};
 use crate::session::{ApplicationSession, ApplicationState, SessionCaptureError};
 use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
@@ -48,7 +48,6 @@ pub enum ResultQueryApplicationError {
 pub struct GraphResultState {
     pub execution_session_id: yss_graph_execution::identity::ExecutionSessionId,
     pub semantic_input_hash: [u8; 32],
-    pub compiled_artifact_id: Option<[u8; 32]>,
     pub outputs:
         std::collections::BTreeMap<PlanOutputRef, yss_graph_execution::result::ResultCacheState>,
     pub connections: Vec<yss_graph_execution::result::ConnectionResultState>,
@@ -57,13 +56,13 @@ pub struct GraphResultState {
 fn with_current_graph_results<T>(
     captured: &ApplicationSession,
     graph: &GraphResourcePath,
-    read: impl FnOnce(Option<&mut DraftResolutionContext>) -> Result<T, ResultQueryApplicationError>,
+    read: impl FnOnce(Option<&mut GraphResolutionContext>) -> Result<T, ResultQueryApplicationError>,
 ) -> Result<T, ResultQueryApplicationError> {
     let keys = captured.execution().result_resource_keys(graph.as_str());
     let mut context = if keys.is_empty() {
         None
     } else {
-        let context = DraftResolutionContext::capture_catalog(captured)?;
+        let context = GraphResolutionContext::capture_catalog(captured)?;
         let versions = context.result_resource_versions(captured, &keys)?;
         context.revalidate(captured)?;
         captured
@@ -190,35 +189,16 @@ impl ApplicationState {
         semantic_input_hash: [u8; 32],
     ) -> Result<Option<GraphResultState>, ResultQueryApplicationError> {
         let captured = self.capture_session()?;
-        let result = with_current_graph_results(&captured, &graph, |context| {
+        let result = with_current_graph_results(&captured, &graph, |_| {
             let Some(cache) = captured
                 .execution()
                 .query_result_cache_states(graph.as_str(), &semantic_input_hash)
             else {
                 return Ok(None);
             };
-            let compiled_artifact_id = if let Some(context) = context {
-                context.matching_compiled_artifact(&captured, &graph, &semantic_input_hash)?
-            } else {
-                captured
-                    .graph()
-                    .compiled_draft(&graph, &semantic_input_hash)
-                    .filter(|compiled| {
-                        compiled.analysis().kernel_fingerprint()
-                            == &captured.execution().kernels().fingerprint().as_bytes()
-                            && compiled
-                                .analysis()
-                                .semantic_snapshot()
-                                .dependencies()
-                                .entries()
-                                .is_empty()
-                    })
-                    .map(|_| semantic_input_hash)
-            };
             Ok(Some(GraphResultState {
                 execution_session_id: captured.execution_session_id(),
                 semantic_input_hash,
-                compiled_artifact_id,
                 outputs: cache.outputs,
                 connections: cache.connections,
             }))

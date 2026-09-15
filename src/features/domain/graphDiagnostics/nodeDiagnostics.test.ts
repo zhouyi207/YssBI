@@ -182,7 +182,7 @@ describe("collectGraphProblems", () => {
     const unrelated = diagnostic("warning", "Other node", "node-b");
     const unbound: DiagnosticDto = {
       ...diagnostic("error", "Required input is unbound", "node-a"),
-      code: "compiler.input.unbound",
+      code: "graph.input.unbound",
       location: { kind: "port", address },
     };
 

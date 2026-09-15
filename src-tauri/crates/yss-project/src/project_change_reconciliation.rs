@@ -75,6 +75,11 @@ impl ProjectState {
                 });
             }
             let mut data = self.project_data.write().unwrap();
+            // File notifications must not replace edits that have not been explicitly saved.
+            graph_changes.retain(|(path, _)| !self.is_graph_modified(path));
+            if graph_changes.is_empty() && chart_changes.is_empty() {
+                return Ok(Some(ProjectIndexInvalidation::new(project.clone())));
+            }
             let mut graph_revisions = self.graph_resource_revisions.write().unwrap();
             let mut chart_revisions = self.chart_revisions.write().unwrap();
             // Prepare all fallible revision advances before publishing any part of the rescan.
@@ -89,6 +94,7 @@ impl ProjectState {
             let advance = publication.prepare_resource_revision()?;
             for ((path, incoming), revision) in graph_changes.into_iter().zip(next_graph_revisions)
             {
+                self.graph_editing.lock().unwrap().remove(&path);
                 if let Some(mut resource) = incoming {
                     if let Some(function) = resource.function.as_mut() {
                         function.revision = revision;

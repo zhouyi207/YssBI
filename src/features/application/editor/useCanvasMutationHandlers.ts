@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { i18n } from "@/app/i18n";
 import type { CanvasInteractionHandlers, CanvasMutationOutcome } from "@/features/core/canvas";
 import { executeGraphEdit } from "@/features/application/graphEditing";
-import { graphDraftErrorMessageKey } from "@/features/application/graphDraft/graphDraftError";
+import { graphEditErrorMessageKey } from "@/features/application/graphEditing/graphEditError";
 import { logger } from "@/features/application/observability/appLogger";
 import { insertRerouteAtConnection } from "./edgeOperations";
 
@@ -12,7 +12,7 @@ function toCanvasMutationOutcome(
   if (outcome.status === "applied") return { status: "applied" };
 
   const code = outcome.status === "rejected" ? outcome.code : null;
-  const key = code ? graphDraftErrorMessageKey(code) : null;
+  const key = code ? graphEditErrorMessageKey(code) : null;
   return key ? { status: "failed", message: i18n.t(key) } : { status: "failed" };
 }
 

@@ -3,9 +3,10 @@ use yss_graph_document::{
     GraphDocument, GraphResourceKind, GraphResourcePath, InputState, JsonValue, NodeId,
     NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId, PortRef,
 };
+use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_graph_document_edit::{
-    DocumentError, GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch,
-    port_member_group_state, user_created_port_instance_count,
+    DocumentError, apply_graph_document_patch, port_member_group_state,
+    user_created_port_instance_count,
 };
 use yss_node_catalog::reroute_node_type;
 use yss_node_catalog::{CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs};
@@ -1087,7 +1088,7 @@ fn validate_shared_parameters(
     let Some(issue) = yss_node_protocol::validate_parameter_values(protocol, parameters, nominal)
         .into_iter()
         .find(|issue| {
-            // Constant selection may be incomplete in a draft; Compile still requires it.
+            // Constant selection may be incomplete while editing; execution requires it.
             !(matches!(issue.kind, yss_node_protocol::ParameterIssueKind::Required)
                 && protocol.parameters.parameters.iter().any(|spec| {
                     spec.key == issue.key

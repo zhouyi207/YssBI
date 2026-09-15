@@ -4,6 +4,7 @@ mod activity_panel_sync;
 mod channel;
 mod commands;
 mod error;
+mod graph_editor_sync;
 mod runtime;
 mod schema;
 
@@ -26,12 +27,15 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         rename_graph_resource,
         update_function_signature,
         hydrate_editor_graph,
-        compile_graph_draft,
-        resolve_graph_draft,
+        resolve_editor_graph,
         export_graph_subgraph,
-        transform_graph_draft,
+        edit_graph,
+        change_graph_history,
+        subscribe_graph_activity,
+        unsubscribe_graph_activity,
+        get_execution_run_state,
         allocate_pin_preview_generation,
-        execute_compiled_graph,
+        execute_graph,
         cancel_graph_run,
         get_result_descriptor,
         retain_result,
@@ -106,11 +110,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_harness_runtime_status,
         configure_harness_provider,
         create_harness_session,
-        subscribe_harness_graph_tools,
-        unsubscribe_harness_graph_tools,
-        prepare_harness_graph_tool,
-        complete_harness_graph_tool,
-        claim_harness_graph_tool,
         subscribe_harness_events,
         unsubscribe_harness_events,
         submit_harness_turn,

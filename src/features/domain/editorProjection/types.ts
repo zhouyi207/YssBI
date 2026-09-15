@@ -1,5 +1,5 @@
 import type {
-  CompilationOutcomeDto,
+  ResolutionOutcomeDto,
   DiagnosticDto,
   EditorConnectionProjectionDto,
   EditorGraphProjectionDto,
@@ -21,7 +21,7 @@ export interface EditorProjectionEntities {
   portIdsByNodeId: Record<string, string[]>;
   connectionIdsByPortId: Record<string, string[]>;
   diagnostics: DiagnosticDto[];
-  outcome: CompilationOutcomeDto;
+  outcome: ResolutionOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
 

@@ -7,7 +7,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 import { getSettingsSnapshot, useSettingsRead } from "@/features/core/settings/read";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
-import { assistantActiveGraphPath, subscribeAssistantGraphTools } from "./assistantGraphTools";
+import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   HarnessService,
   type HarnessEvent,
@@ -131,7 +131,6 @@ class AssistantHarnessProjection {
   private snapshot: AssistantHarnessSnapshot = INITIAL_SNAPSHOT;
   private readonly listeners = new Set<() => void>();
   private subscription: HarnessEventSubscription | null = null;
-  private graphTools: Awaited<ReturnType<typeof subscribeAssistantGraphTools>> | null = null;
   private generation = 0;
   private streamGeneration = 0;
   private recovering = false;
@@ -182,12 +181,6 @@ class AssistantHarnessProjection {
         sessionId: session.sessionId,
         status: "initializing",
       });
-      const graphTools = await subscribeAssistantGraphTools(session.sessionId);
-      if (generation !== this.generation) {
-        await graphTools.close();
-        return;
-      }
-      this.graphTools = graphTools;
       const streamGeneration = ++this.streamGeneration;
       const subscription = await HarnessService.subscribeEvents(
         session.sessionId,
@@ -258,9 +251,6 @@ class AssistantHarnessProjection {
     const subscription = this.subscription;
     const sessionId = this.snapshot.sessionId;
     this.subscription = null;
-    const graphTools = this.graphTools;
-    this.graphTools = null;
-    if (graphTools) void graphTools.close().catch(() => {});
     if (subscription) void subscription.unsubscribe().catch(() => {});
     if (sessionId) void HarnessService.closeSession(sessionId).catch(() => {});
   };
@@ -273,7 +263,11 @@ class AssistantHarnessProjection {
     this.submitting = true;
     this.update({ ...this.snapshot, isRunning: true, activity: null, error: null });
     try {
-      await HarnessService.submitTurn(sessionId, text, assistantActiveGraphPath());
+      await HarnessService.submitTurn(
+        sessionId,
+        text,
+        useGraphSessionStore.getState().getFocusedGraphPath(),
+      );
     } catch (error) {
       if (generation !== this.generation || sessionId !== this.snapshot.sessionId) return;
       const failure = toErrorReference(error, "assistant_turn_failed");

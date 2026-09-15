@@ -1033,11 +1033,7 @@ fn project_macro_declares_symbol(item: &syn::ItemMacro, symbol: &str) -> bool {
     }
     matches!(
         (macro_name.as_str(), symbol),
-        ("define_compiler_diagnostics", "CompilerDiagnostic")
-            | (
-                "define_compiler_diagnostics",
-                "COMPILER_DIAGNOSTIC_DEFINITIONS"
-            )
+        ("define_graph_diagnostics", "GRAPH_DIAGNOSTIC_DEFINITIONS")
             | ("define_execution_demand", "ExecutionDemand")
             | ("define_execution_demand_dto", "ExecutionDemandDto")
             | ("define_run_event_kind", "RunEventKind")

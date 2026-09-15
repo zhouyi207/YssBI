@@ -1,5 +1,5 @@
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface DuplicateSubgraphArgs {
   nodeIds: string[];
@@ -9,7 +9,7 @@ export interface DuplicateSubgraphArgs {
 export const duplicateSubgraphCommand: CommandHandler<DuplicateSubgraphArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
     if (args.nodeIds.length === 0) return { status: "unavailable" };
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "duplicateSubgraph",

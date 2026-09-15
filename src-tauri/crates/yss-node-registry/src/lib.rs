@@ -235,7 +235,7 @@ fn canonical_registry(
                     {
                         (Some(implementation), None, None) => json!({
                             "implementationIdentity": implementation.implementation_identity(),
-                            "kind": "CompilerLowering",
+                            "kind": "LeafImplementation",
                         }),
                         (None, Some(role), None) => json!({
                             "kind": "Structural",

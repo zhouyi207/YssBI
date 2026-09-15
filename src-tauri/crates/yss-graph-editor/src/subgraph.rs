@@ -15,7 +15,7 @@ use yss_graph_document::{
     InputState, LastKnownPortMetadata, NodeId, NodePosition, OrderKey, ParameterValues,
     PortAddress, PortInstanceId, PortRef, SchemaFieldIdentity, SchemaSourceIdentity,
 };
-use yss_graph_document_edit::{GraphDocumentOperation, GraphDocumentPatch};
+use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
 use yss_node_catalog::{
     CatalogResourcePath, NodeCreation, ResourceBoundCreateArgs, authoritative_static_descriptor,
 };

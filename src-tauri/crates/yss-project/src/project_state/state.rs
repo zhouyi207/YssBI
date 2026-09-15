@@ -2,6 +2,14 @@ use super::*;
 
 #[derive(Clone)]
 pub struct ProjectState {
+    pub(crate) graph_editing: Arc<
+        Mutex<
+            std::collections::HashMap<
+                GraphResourcePath,
+                super::graph_editing::GraphEditingMetadata,
+            >,
+        >,
+    >,
     pub(crate) project_data: Arc<RwLock<ProjectData>>,
     pub(crate) project_path: Arc<RwLock<Option<String>>>,
     pub(crate) project_store: Arc<RwLock<ProjectStore>>,
@@ -50,6 +58,7 @@ impl ProjectState {
             project_session_id: store.project_session_id.clone(),
         };
         Self {
+            graph_editing: Arc::new(Mutex::new(std::collections::HashMap::new())),
             project_data: Arc::new(RwLock::new(ProjectData::new())),
             project_path: Arc::new(RwLock::new(None)),
             project_store: Arc::new(RwLock::new(store)),

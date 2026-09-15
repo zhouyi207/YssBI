@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
+use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
 use yss_node_protocol::{
     InputCoercionKind, NodeTypingSpec, NumericPromotionRule, PortDirection, PortKey, PortSelector,
@@ -18,6 +18,7 @@ const MAX_DOMAIN_SIZE: usize = 128;
 
 #[derive(Clone, Default)]
 pub struct GraphSemanticCache {
+    pub(crate) schemas: super::schema_resolution::SchemaCache,
     nodes: BTreeMap<NodeId, CachedNodeResolution>,
     reused_nodes: usize,
 }
@@ -38,6 +39,7 @@ struct CachedNodeResolution {
 
 pub(crate) fn resolve_node_types(
     document: &GraphDocument,
+    index: &super::document_index::DocumentIndex<'_>,
     registry: &NodeRegistry,
     nodes: &mut [GraphNodeSemanticFact],
     cache: &mut GraphSemanticCache,
@@ -52,7 +54,7 @@ pub(crate) fn resolve_node_types(
         .enumerate()
         .map(|(index, node)| (node.node_id, index))
         .collect::<BTreeMap<_, _>>();
-    let connections = connections_by_input(document);
+    let connections = &index.incoming;
     let mut resolved = BTreeMap::<PortAddress, TypeState>::new();
     let mut diagnostics = Vec::new();
 
@@ -76,7 +78,7 @@ pub(crate) fn resolve_node_types(
             .filter(|port| port.direction == PortDirection::Input)
         {
             let (state, mut input_diagnostics) =
-                resolve_input_state(port, document, &connections, &resolved, registry.types());
+                resolve_input_state(port, document, connections, &resolved, registry.types());
             states.insert(port.address.clone(), state);
             diagnostics.append(&mut input_diagnostics);
         }
@@ -296,26 +298,6 @@ pub(crate) fn topological_order(document: &GraphDocument) -> Option<Vec<NodeId>>
         }
     }
     (order.len() == document.nodes.len()).then_some(order)
-}
-
-fn connections_by_input(
-    document: &GraphDocument,
-) -> BTreeMap<PortAddress, Vec<&yss_graph_document::DocumentConnection>> {
-    let mut by_input = BTreeMap::<PortAddress, Vec<_>>::new();
-    for connection in document.connections.values() {
-        by_input
-            .entry(connection.input.clone())
-            .or_default()
-            .push(connection);
-    }
-    for connections in by_input.values_mut() {
-        connections.sort_by(|left, right| {
-            left.order
-                .cmp(&right.order)
-                .then_with(|| left.id.cmp(&right.id))
-        });
-    }
-    by_input
 }
 
 fn resolve_input_state(

@@ -1,10 +1,17 @@
 use super::*;
+use crate::document_index::DocumentIndex;
 
 pub(super) fn include_referenced_orphan_ports(
     document: &GraphDocument,
+    index: &DocumentIndex<'_>,
     nodes: &mut [GraphNodeSemanticFact],
     diagnostics: &mut Vec<GraphDiagnosticFact>,
 ) {
+    let node_indices = nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| (node.node_id, index))
+        .collect::<std::collections::BTreeMap<_, _>>();
     let addresses = document
         .connections
         .values()
@@ -21,12 +28,10 @@ pub(super) fn include_referenced_orphan_ports(
                 .map(|address| (address, PortDirection::Input)),
         );
     for (address, direction) in addresses {
-        let Some(node) = nodes
-            .iter_mut()
-            .find(|node| node.node_id == address.node_id)
-        else {
+        let Some(node_index) = node_indices.get(&address.node_id) else {
             continue;
         };
+        let node = &mut nodes[*node_index];
         if node.ports.iter().any(|port| &port.address == address) {
             continue;
         }
@@ -49,13 +54,7 @@ pub(super) fn include_referenced_orphan_ports(
             orphan: true,
             can_remove: false,
             connections: GraphPortConnectionFacts {
-                current: document
-                    .connections
-                    .values()
-                    .filter(|connection| {
-                        &connection.output == address || &connection.input == address
-                    })
-                    .count() as u32,
+                current: index.connection_count(address),
                 maximum: None,
                 ordered: false,
             },
@@ -148,6 +147,7 @@ pub(super) fn port_cardinality_kind(cardinality: &PortCardinality) -> &'static s
 
 pub(super) fn project_declared_port(
     document: &GraphDocument,
+    index: &DocumentIndex<'_>,
     address: PortAddress,
     spec: &yss_node_protocol::PortSpec,
     resolved_schema: Option<&ResolvedSchemaFact>,
@@ -155,6 +155,7 @@ pub(super) fn project_declared_port(
     debug_assert!(matches!(spec.cardinality, PortCardinality::Declared));
     project_concrete_port(
         document,
+        index,
         spec,
         ConcretePortProjection {
             address,
@@ -170,6 +171,7 @@ pub(super) fn project_declared_port(
 
 pub(super) fn project_bound_port(
     document: &GraphDocument,
+    index: &DocumentIndex<'_>,
     protocol: &yss_node_protocol::NodeProtocol,
     spec: &yss_node_protocol::PortSpec,
     node_bindings: &[(&PortAddress, &DynamicPortBinding)],
@@ -213,6 +215,7 @@ pub(super) fn project_bound_port(
     };
     project_concrete_port(
         document,
+        index,
         spec,
         ConcretePortProjection {
             address: address.clone(),
@@ -248,6 +251,7 @@ pub(super) struct ConcretePortProjection {
 
 pub(super) fn project_concrete_port(
     document: &GraphDocument,
+    index: &DocumentIndex<'_>,
     spec: &yss_node_protocol::PortSpec,
     projection: ConcretePortProjection,
 ) -> GraphPortSemanticFact {
@@ -260,11 +264,7 @@ pub(super) fn project_concrete_port(
         value_type,
         resolved_schema,
     } = projection;
-    let connections = document
-        .connections
-        .values()
-        .filter(|connection| connection.input == address || connection.output == address)
-        .count() as u32;
+    let connections = index.connection_count(&address);
     let (maximum, ordered) = match spec.connections {
         ConnectionsPerPort::Single => (Some(1), false),
         ConnectionsPerPort::Multiple { max, ordered } => (max.map(u32::from), ordered),

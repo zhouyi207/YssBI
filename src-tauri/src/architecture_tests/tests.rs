@@ -411,16 +411,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-graph-compiler"
-                && root.target == "yss_graph_compiler"
-                && root.kind == ProductionRootKind::Library)
-    );
-    assert!(
-        workspace
-            .roots
-            .iter()
-            .any(|root| root.package == "yss-graph-compiler-diagnostics"
-                && root.target == "yss_graph_compiler_diagnostics"
+            .any(|root| root.package == "yss-graph-diagnostics"
+                && root.target == "yss_graph_diagnostics"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -530,14 +522,14 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         ("yssbi", "yss_application", "yss-application"),
         ("yss-ipc-contract", "yss_data_contract", "yss-data-contract"),
         (
-            "yss-application",
-            "yss_graph_compiler",
-            "yss-graph-compiler",
+            "yss-graph-execution",
+            "yss_graph_analysis",
+            "yss-graph-analysis",
         ),
         (
             "yss-graph-runtime",
-            "yss_graph_compiler_diagnostics",
-            "yss-graph-compiler-diagnostics",
+            "yss_graph_diagnostics",
+            "yss-graph-diagnostics",
         ),
         (
             "yss-graph-editor",
@@ -785,19 +777,12 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         kind: ProductionRootKind::Library,
         source_path: PathBuf::from("src-tauri/crates/yss-node-catalog/src/lib.rs"),
     };
-    let graph_compiler_root = ProductionRoot {
-        package_id: "graph-compiler-package".to_owned(),
-        package: "yss-graph-compiler".to_owned(),
-        target: "yss_graph_compiler".to_owned(),
+    let graph_diagnostics_root = ProductionRoot {
+        package_id: "graph-diagnostics-package".to_owned(),
+        package: "yss-graph-diagnostics".to_owned(),
+        target: "yss_graph_diagnostics".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-graph-compiler/src/lib.rs"),
-    };
-    let graph_compiler_diagnostics_root = ProductionRoot {
-        package_id: "graph-compiler-diagnostics-package".to_owned(),
-        package: "yss-graph-compiler-diagnostics".to_owned(),
-        target: "yss_graph_compiler_diagnostics".to_owned(),
-        kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-graph-diagnostics/src/lib.rs"),
     };
     let graph_document_root = ProductionRoot {
         package_id: "graph-document-package".to_owned(),
@@ -907,8 +892,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         graph_analysis_root.clone(),
         graph_analysis_contract_root.clone(),
         graph_catalog_root.clone(),
-        graph_compiler_root.clone(),
-        graph_compiler_diagnostics_root.clone(),
+        graph_diagnostics_root.clone(),
         graph_document_root.clone(),
         graph_document_edit_root.clone(),
         graph_protocol_root.clone(),
@@ -986,14 +970,9 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "yss_graph_analysis_contract",
             ),
             module(
-                &graph_compiler_root,
-                "src-tauri/crates/yss-graph-compiler/src/lib.rs",
-                "yss_graph_compiler",
-            ),
-            module(
-                &graph_compiler_diagnostics_root,
-                "src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs",
-                "yss_graph_compiler_diagnostics",
+                &graph_diagnostics_root,
+                "src-tauri/crates/yss-graph-diagnostics/src/lib.rs",
+                "yss_graph_diagnostics",
             ),
             module(
                 &graph_document_root,
@@ -1115,11 +1094,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Graph
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-graph-compiler/src/lib.rs"],
-        RustLayer::Graph
-    );
-    assert_eq!(
-        classified["src-tauri/crates/yss-graph-compiler-diagnostics/src/lib.rs"],
+        classified["src-tauri/crates/yss-graph-diagnostics/src/lib.rs"],
         RustLayer::Graph
     );
     assert_eq!(
@@ -1540,7 +1515,7 @@ fn legacy_execution_runtime_and_project_store_mirrors_are_absent() {
         "node_registry:",
         "catalog:",
         "kernels:",
-        "compiled_parameters:",
+        "plan_parameters:",
         "function_plans:",
         "results:",
         "memoization:",
@@ -2452,6 +2427,78 @@ fn result_projection_capability_does_not_grant_application_state_access() {
         .unwrap()
         .len(),
         1
+    );
+}
+
+#[test]
+fn execution_plan_preparation_can_read_semantics_without_access_to_graph_runtime() {
+    let preparation = "src-tauri/crates/yss-graph-execution/src/graph_preparation.rs";
+    let execution = "src-tauri/crates/yss-graph-execution/src/state.rs";
+    let analysis = "src-tauri/crates/yss-graph-analysis/src/lib.rs";
+    let runtime = "src-tauri/crates/yss-graph-runtime/src/lib.rs";
+    let classification = BTreeMap::from([
+        (preparation.into(), RustLayer::Execution),
+        (execution.into(), RustLayer::Execution),
+        (analysis.into(), RustLayer::Graph),
+        (runtime.into(), RustLayer::Graph),
+    ]);
+    let dependency = |source: &str,
+                      owner: &str,
+                      declaration: &str,
+                      package: &str,
+                      target: &str,
+                      symbol: &str| CanonicalDependency {
+        owning_package: "yss-graph-execution".into(),
+        source_file: source.into(),
+        owner: owner.into(),
+        kind: RustDependencyKind::Use,
+        mode: RustDependencyMode::Runtime,
+        origin: CanonicalOrigin::Repository {
+            package_name: package.into(),
+            repository_relative_declaration_file: declaration.into(),
+            fully_qualified_target: target.into(),
+            symbol: symbol.into(),
+        },
+        canonical_origin_target: target.into(),
+        line: 1,
+        column: 1,
+    };
+    let allowed = dependency(
+        preparation,
+        "yss_graph_execution::graph_preparation",
+        analysis,
+        "yss-graph-analysis",
+        "yss_graph_analysis::GraphSemanticSnapshot",
+        "GraphSemanticSnapshot",
+    );
+    assert!(
+        rust_dependency_findings(&[allowed], &classification)
+            .unwrap()
+            .is_empty()
+    );
+    let denied = [
+        dependency(
+            preparation,
+            "yss_graph_execution::graph_preparation",
+            runtime,
+            "yss-graph-runtime",
+            "yss_graph_runtime::GraphRuntimeState",
+            "GraphRuntimeState",
+        ),
+        dependency(
+            execution,
+            "yss_graph_execution::state",
+            analysis,
+            "yss-graph-analysis",
+            "yss_graph_analysis::GraphSemanticSnapshot",
+            "GraphSemanticSnapshot",
+        ),
+    ];
+    assert_eq!(
+        rust_dependency_findings(&denied, &classification)
+            .unwrap()
+            .len(),
+        2
     );
 }
 

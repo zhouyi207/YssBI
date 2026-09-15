@@ -5,33 +5,9 @@
     "dependencies": []
   },
   {
-    "name": "yss-harness-rig",
-    "manifest": "src-tauri/crates/yss-harness-rig/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
     "name": "yss-application",
     "manifest": "src-tauri/crates/yss-application/Cargo.toml",
     "dependencies": [
-      {
-        "name": "yss-harness-rig",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
       {
         "name": "yss-canonical-hash",
         "kind": "normal",
@@ -111,12 +87,6 @@
         "target": null
       },
       {
-        "name": "yss-graph-compiler",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-graph-document-edit",
         "kind": "normal",
         "optional": false,
@@ -154,6 +124,30 @@
       },
       {
         "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-core",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-rig",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-sqlite",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -291,18 +285,6 @@
         "target": null
       },
       {
-        "name": "yss-harness-sqlite",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-harness-core",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-tabular-arrow",
         "kind": "normal",
         "optional": false,
@@ -316,18 +298,6 @@
       },
       {
         "name": "yss-tabular-io",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-harness-contract",
-    "manifest": "src-tauri/crates/yss-harness-contract/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-project-identity",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -716,7 +686,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-compiler-diagnostics",
+        "name": "yss-graph-diagnostics",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -770,12 +740,6 @@
     "manifest": "src-tauri/crates/yss-graph-analysis-contract/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
@@ -790,44 +754,8 @@
     ]
   },
   {
-    "name": "yss-graph-compiler",
-    "manifest": "src-tauri/crates/yss-graph-compiler/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-graph-analysis-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-analysis",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-document",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-node-protocol",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-node-registry",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-graph-compiler-diagnostics",
-    "manifest": "src-tauri/crates/yss-graph-compiler-diagnostics/Cargo.toml",
+    "name": "yss-graph-diagnostics",
+    "manifest": "src-tauri/crates/yss-graph-diagnostics/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-graph-analysis-contract",
@@ -980,6 +908,30 @@
         "target": null
       },
       {
+        "name": "yss-graph-analysis",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-graph-type-mapping",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-node-protocol",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-relational-contract",
         "kind": "normal",
         "optional": false,
@@ -993,6 +945,12 @@
       },
       {
         "name": "yss-sci-runtime",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-tabular-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1046,13 +1004,7 @@
         "target": null
       },
       {
-        "name": "yss-graph-compiler-diagnostics",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-graph-compiler",
+        "name": "yss-graph-diagnostics",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1120,6 +1072,60 @@
     ]
   },
   {
+    "name": "yss-harness-contract",
+    "manifest": "src-tauri/crates/yss-harness-contract/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-project-identity",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-harness-core",
+    "manifest": "src-tauri/crates/yss-harness-core/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-harness-rig",
+    "manifest": "src-tauri/crates/yss-harness-rig/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-harness-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-harness-sqlite",
+    "manifest": "src-tauri/crates/yss-harness-sqlite/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-harness-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
     "name": "yss-ipc-channel",
     "manifest": "src-tauri/crates/yss-ipc-channel/Cargo.toml",
     "dependencies": [
@@ -1148,12 +1154,6 @@
     "manifest": "src-tauri/crates/yss-ipc-contract/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
         "name": "yss-data-contract",
         "kind": "normal",
         "optional": false,
@@ -1173,6 +1173,12 @@
       },
       {
         "name": "yss-graph-document",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1794,36 +1800,6 @@
       },
       {
         "name": "yss-relational-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-harness-core",
-    "manifest": "src-tauri/crates/yss-harness-core/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-harness-contract",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      },
-      {
-        "name": "yss-canonical-hash",
-        "kind": "normal",
-        "optional": false,
-        "target": null
-      }
-    ]
-  },
-  {
-    "name": "yss-harness-sqlite",
-    "manifest": "src-tauri/crates/yss-harness-sqlite/Cargo.toml",
-    "dependencies": [
-      {
-        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null

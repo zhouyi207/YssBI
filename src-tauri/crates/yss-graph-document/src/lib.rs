@@ -1,3 +1,5 @@
+mod change;
+pub use change::{GraphDocumentOperation, GraphDocumentPatch};
 mod constant_value;
 mod identity;
 pub use constant_value::{
@@ -7,7 +9,7 @@ pub use constant_value::{
 mod model;
 mod resource_path;
 mod semantic_hash;
-pub use semantic_hash::semantic_document_fingerprint;
+pub use semantic_hash::{resolution_document_fingerprint, semantic_document_fingerprint};
 
 pub use identity::{ConnectionId, ConstantId, NodeId, PortInstanceId};
 pub use model::{

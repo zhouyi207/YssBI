@@ -10,7 +10,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
   makeEditorProjectionFixture,
@@ -22,7 +22,6 @@ import { normalizeIpcError } from "@/services/ipc/ipcError";
 
 const projectInstanceId = "project-instance-1";
 const graphPath = "events/Main.yssbi-event";
-const compiledArtifactId = "2".repeat(64);
 
 function runStartedEvent(): RunEvent {
   return {
@@ -107,23 +106,11 @@ describe("useProjectOperations execution demand", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockResolvedValue(undefined);
+    vi.spyOn(ProjectService, "executeGraph").mockResolvedValue(undefined);
     const projection = makeEditorProjectionFixture({ graphPath }).projection;
     const session = makeGraphEditorSession(projection);
     useGraphProjectionStore.getState().replaceProjection(graphPath, projection);
-    useGraphDraftStore.getState().install(graphPath, session);
-    expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
-    useGraphDraftStore.getState().completeCompile(
-      graphPath,
-      {
-        type: "ready",
-        artifactId: compiledArtifactId,
-        cacheHit: false,
-        projection,
-      },
-      useGraphDraftStore.getState().sessions[graphPath].compileRequest!,
-    );
-
+    useGraphEditingStore.getState().install(graphPath, session);
     function Harness() {
       operations = useProjectOperations();
       return null;
@@ -135,7 +122,7 @@ describe("useProjectOperations execution demand", () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
-    useGraphDraftStore.getState().clear();
+    useGraphEditingStore.getState().clear();
     useGraphProjectionStore.setState({ graphEntities: {} });
     clearProjectLifecycle();
   });
@@ -145,10 +132,11 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(ProjectService.executeCompiledGraph).toHaveBeenCalledWith({
+    expect(ProjectService.executeGraph).toHaveBeenCalledWith({
       projectInstanceId,
       graphPath,
-      compiledArtifactId,
+      document: useGraphEditingStore.getState().sessions[graphPath].document,
+      semanticInputHash: useGraphEditingStore.getState().sessions[graphPath].semanticInputHash,
       demand: { type: "default" },
       onEvent: expect.any(Function),
     });
@@ -157,9 +145,9 @@ describe("useProjectOperations execution demand", () => {
   it("rejects execution when the current projection has blocking problems", async () => {
     const blocked = makeEditorProjectionFixture({ graphPath }).projection;
     blocked.diagnostics.push({
-      code: "compiler.input.unbound",
-      messageKey: "diagnostics.compiler.input.unbound",
-      arguments: { value: "compiler.input.unbound" },
+      code: "graph.input.unbound",
+      messageKey: "diagnostics.graph.input.unbound",
+      arguments: { value: "graph.input.unbound" },
       severity: "error",
       blocking: true,
       location: { kind: "graph" },
@@ -173,11 +161,11 @@ describe("useProjectOperations execution demand", () => {
       await operations.executeGraph();
     });
 
-    expect(ProjectService.executeCompiledGraph).not.toHaveBeenCalled();
+    expect(ProjectService.executeGraph).not.toHaveBeenCalled();
   });
 
   it("opens only the backend-requested result window", async () => {
-    vi.mocked(ProjectService.executeCompiledGraph).mockImplementation(async ({ onEvent }) => {
+    vi.mocked(ProjectService.executeGraph).mockImplementation(async ({ onEvent }) => {
       onEvent?.({
         ...runStartedEvent(),
         kind: {
@@ -232,9 +220,9 @@ describe("useProjectOperations execution demand", () => {
 
   it("shows command failures in Output when no run event was delivered", async () => {
     executionState.getGraph.mockReturnValueOnce({ status: "running", runId: null } as never);
-    vi.mocked(ProjectService.executeCompiledGraph).mockRejectedValueOnce(
-      normalizeIpcError("execute_compiled_graph", {
-        code: "graph_compile_required",
+    vi.mocked(ProjectService.executeGraph).mockRejectedValueOnce(
+      normalizeIpcError("execute_graph", {
+        code: "graph_draft_changed",
         details: null,
         incidentId: null,
       }),
@@ -242,7 +230,7 @@ describe("useProjectOperations execution demand", () => {
     await act(async () => operations.executeGraph());
     expect(executionState.recordRunFailure).toHaveBeenCalledWith(graphPath, {
       runId: null,
-      code: "graph_compile_required",
+      code: "graph_draft_changed",
       phase: null,
       source: null,
       incidentId: null,
@@ -254,7 +242,7 @@ describe("useProjectOperations execution demand", () => {
   it("ignores delayed events and completion after project lifecycle replacement", async () => {
     let emit!: (event: RunEvent) => void;
     let resolveExecution!: () => void;
-    vi.mocked(ProjectService.executeCompiledGraph).mockImplementation(
+    vi.mocked(ProjectService.executeGraph).mockImplementation(
       ({ onEvent }) =>
         new Promise<void>((resolve) => {
           emit = onEvent ?? (() => undefined);

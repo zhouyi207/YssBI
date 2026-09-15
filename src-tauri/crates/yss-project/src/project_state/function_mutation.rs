@@ -110,6 +110,14 @@ impl ProjectState {
         self.validate_writer_context(&mutation_context, snapshot.authority_generation)
             .map_err(function_mutation_error)?;
         let mut candidate = snapshot.data.graphs[graph_path].clone();
+        if self.is_graph_modified(graph_path) {
+            candidate.document = crate::project_io::load_project_graph_document_from_file(
+                snapshot.session.root.as_path().to_string_lossy().as_ref(),
+                graph_path,
+            )
+            .map_err(|error| ProjectResourceMutationError::Mutation(error.to_string().into()))?
+            .document;
+        }
         candidate.function = Some(yss_project_history::FunctionDocument {
             revision,
             signature: request.payload.after.clone(),

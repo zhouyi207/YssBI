@@ -207,7 +207,6 @@
   "graphResultState": {
     "executionSessionId": "00000000-0000-0000-0000-000000000001",
     "semanticInputHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "compiledArtifactId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "outputs": [
       {
         "output": {

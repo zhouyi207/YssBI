@@ -6,7 +6,9 @@ use yss_graph_document::{
     DynamicMemberLocator, GraphDocument, NodeId, PortAddress, PortRef, SchemaFieldIdentity,
     SchemaSourceIdentity,
 };
-use yss_graph_resource_contract::{GraphResourceId, ResourceCatalogSnapshot};
+use yss_graph_resource_contract::{
+    GraphDependencyManifest, GraphResourceId, ResourceCatalogSnapshot,
+};
 use yss_node_protocol::{
     ColumnSelectionExpr, ParameterKey, PortKey, RelationalScalarType, RenameExpr,
     ResolvedSchemaFact, SchemaColumnRef, SchemaExpr, SchemaField, SchemaFieldLineage, TypeExpr,
@@ -16,6 +18,20 @@ use yss_node_registry::NodeRegistry;
 const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 const DATAFRAME_COLUMNS_INTERFACE_RESOLVER: &str = "yssbi.dataframe.interface.columns";
 const DATAFRAME_INPUT_PORT: &str = "dataframe";
+
+#[derive(Clone, Default)]
+pub(crate) struct SchemaCache {
+    outputs: BTreeMap<PortAddress, CachedSchemaOutput>,
+    #[cfg(test)]
+    pub(crate) reused_outputs: usize,
+}
+
+#[derive(Clone)]
+struct CachedSchemaOutput {
+    input_fingerprint: [u8; 32],
+    dependencies: GraphDependencyManifest,
+    state: GraphSchemaState,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct DerivedSchemaPortMember {
@@ -29,7 +45,12 @@ pub(crate) fn resolve_graph_schemas(
     document: &GraphDocument,
     registry: &NodeRegistry,
     resources: &ResourceCatalogSnapshot,
+    cache: &mut SchemaCache,
 ) -> SchemaResolution {
+    #[cfg(test)]
+    {
+        cache.reused_outputs = 0;
+    }
     let mut output_addresses = document
         .nodes
         .values()
@@ -59,6 +80,7 @@ pub(crate) fn resolve_graph_schemas(
         })
         .collect::<Vec<_>>();
     let Some(order) = crate::type_resolution::topological_order(document) else {
+        cache.outputs.clear();
         return SchemaResolution(
             output_addresses
                 .into_iter()
@@ -78,24 +100,32 @@ pub(crate) fn resolve_graph_schemas(
         .collect::<BTreeMap<_, _>>();
     output_addresses
         .sort_by_key(|address| ranks.get(&address.node_id).copied().unwrap_or(usize::MAX));
+    let mut input_sources = BTreeMap::<PortAddress, Vec<PortAddress>>::new();
+    let mut node_sources = BTreeMap::<NodeId, Vec<(PortAddress, PortAddress)>>::new();
+    for connection in document.connections.values() {
+        input_sources
+            .entry(connection.input.clone())
+            .or_default()
+            .push(connection.output.clone());
+        node_sources
+            .entry(connection.input.node_id)
+            .or_default()
+            .push((connection.input.clone(), connection.output.clone()));
+    }
     let mut resolver = EditorSchemaResolver {
         document,
         registry,
-        resources,
+        resources: resources.clone(),
+        cache,
+        input_sources: &input_sources,
+        node_sources: &node_sources,
         resolved: SchemaResolution::default(),
         visiting: BTreeSet::new(),
     };
     for address in output_addresses {
         let _ = resolver.resolve_output(&address);
     }
-    let mut input_sources = BTreeMap::<_, Vec<_>>::new();
-    for connection in document.connections.values() {
-        input_sources
-            .entry(&connection.input)
-            .or_default()
-            .push(&connection.output);
-    }
-    for (input, outputs) in input_sources {
+    for (input, outputs) in &input_sources {
         let [output] = outputs.as_slice() else {
             resolver.resolved.insert(
                 input.clone(),
@@ -120,6 +150,10 @@ pub(crate) fn resolve_graph_schemas(
             resolver.resolved.insert(input.clone(), state);
         }
     }
+    resolver
+        .cache
+        .outputs
+        .retain(|address, _| resolver.resolved.state(address).is_some());
     resolver.resolved
 }
 
@@ -196,7 +230,10 @@ impl SchemaResolution {
 struct EditorSchemaResolver<'a> {
     document: &'a GraphDocument,
     registry: &'a NodeRegistry,
-    resources: &'a ResourceCatalogSnapshot,
+    resources: ResourceCatalogSnapshot,
+    cache: &'a mut SchemaCache,
+    input_sources: &'a BTreeMap<PortAddress, Vec<PortAddress>>,
+    node_sources: &'a BTreeMap<NodeId, Vec<(PortAddress, PortAddress)>>,
     resolved: SchemaResolution,
     visiting: BTreeSet<PortAddress>,
 }
@@ -209,16 +246,90 @@ impl EditorSchemaResolver<'_> {
         if !self.visiting.insert(address.clone()) {
             return GraphSchemaState::Conflict(GraphSchemaIssue::DependencyCycle);
         }
-        let result = match self.output_schema_expression(address) {
-            None => GraphSchemaState::NotApplicable,
-            Some(expression) => match self.resolve_expression(address.node_id, &expression) {
-                Ok(fields) => GraphSchemaState::Exact(ResolvedSchemaFact { expression, fields }),
-                Err(issue) => GraphSchemaState::from_issue(issue),
-            },
-        };
+        let result = self.resolve_schema_output(address);
         self.visiting.remove(address);
         self.resolved.insert(address.clone(), result.clone());
         result
+    }
+
+    fn resolve_schema_output(&mut self, address: &PortAddress) -> GraphSchemaState {
+        let Some(expression) = self.output_schema_expression(address) else {
+            self.cache.outputs.remove(address);
+            return GraphSchemaState::NotApplicable;
+        };
+        // Resolve upstream facts before checking this output. If a changed
+        // branch produces the same Schema, downstream expressions stay cached.
+        let sources = self
+            .node_sources
+            .get(&address.node_id)
+            .cloned()
+            .unwrap_or_default();
+        for (_, source) in &sources {
+            let _ = self.resolve_output(source);
+        }
+        let node = &self.document.nodes[&address.node_id];
+        let constant = self
+            .registry
+            .protocol(&node.node_type)
+            .and_then(|protocol| match &protocol.typing {
+                yss_node_protocol::NodeTypingSpec::ConstantOutput { parameter, .. } => {
+                    super::referenced_constant(self.document, node, parameter)
+                }
+                _ => None,
+            });
+        let input_fingerprint = yss_canonical_hash::hash_canonical(
+            "yssbi.graph-schema-input.v1",
+            &(
+                self.registry.fingerprint().as_bytes(),
+                &node.node_type,
+                &node.parameters,
+                &expression,
+                // Include target addresses as well: moving a source between
+                // two inputs can change Project/Append/Rename semantics.
+                sources
+                    .iter()
+                    .map(|(input, source)| (input, source, self.resolved.state(source)))
+                    .collect::<Vec<_>>(),
+                constant.map(|constant| {
+                    (
+                        constant.id,
+                        &constant.data_type,
+                        &constant.data_value,
+                        &constant.tabular,
+                    )
+                }),
+            ),
+        )
+        .expect("schema inputs are serializable");
+        if let Some(cached) = self.cache.outputs.get(address).filter(|cached| {
+            cached.input_fingerprint == input_fingerprint
+                && self.resources.matches_dependencies(&cached.dependencies)
+        }) {
+            self.resources.record_dependencies(&cached.dependencies);
+            #[cfg(test)]
+            {
+                self.cache.reused_outputs += 1;
+            }
+            return cached.state.clone();
+        }
+        let tracked = self.resources.tracked();
+        let parent = std::mem::replace(&mut self.resources, tracked);
+        let state = match self.resolve_expression(address.node_id, &expression) {
+            Ok(fields) => GraphSchemaState::Exact(ResolvedSchemaFact { expression, fields }),
+            Err(issue) => GraphSchemaState::from_issue(issue),
+        };
+        let dependencies = self.resources.dependencies();
+        self.resources = parent;
+        self.resources.record_dependencies(&dependencies);
+        self.cache.outputs.insert(
+            address.clone(),
+            CachedSchemaOutput {
+                input_fingerprint,
+                dependencies,
+                state: state.clone(),
+            },
+        );
+        state
     }
 
     fn output_schema_expression(&self, address: &PortAddress) -> Option<SchemaExpr> {
@@ -340,13 +451,7 @@ impl EditorSchemaResolver<'_> {
         port: &PortKey,
     ) -> Result<Vec<SchemaField>, GraphSchemaIssue> {
         let input = PortAddress::declared(node_id, port.clone());
-        let outputs = self
-            .document
-            .connections
-            .values()
-            .filter(|connection| connection.input == input)
-            .map(|connection| connection.output.clone())
-            .collect::<Vec<_>>();
+        let outputs = self.input_sources.get(&input).cloned().unwrap_or_default();
         let output = match outputs.as_slice() {
             [] => return Err(GraphSchemaIssue::UnconnectedInput),
             [output] => output,
@@ -536,3 +641,6 @@ fn field_series_type(scalar_type: RelationalScalarType) -> TypeExpr {
     yss_graph_type_mapping::type_expr_from_data_type(&DataType::DataSeries(Box::new(element)))
         .unwrap_or(TypeExpr::Unknown)
 }
+
+#[cfg(test)]
+mod tests;

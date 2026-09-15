@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useGraphDraftEditingLocked } from "@/features/application/graphDraft/useGraphDraftEditingLocked";
+import { useGraphEditingLocked } from "@/features/application/graphEditing/useGraphEditingLocked";
 import { useGraphRead } from "@/features/core/graph/read";
 import type {
   ConnectionData,
@@ -100,7 +100,7 @@ export function NodePinInterfacePanel({
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
-  const editingLocked = useGraphDraftEditingLocked(graphPath);
+  const editingLocked = useGraphEditingLocked(graphPath);
   const graphPins = useMemo(
     () => Object.values(bucket?.pins ?? {}).map((pin) => structuredClone(pin) as PinData),
     [bucket],

@@ -10,7 +10,7 @@ import {
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
 import type { PortInstanceAdditionDto } from "@/shared/types/domain/editorProjection";
-import { graphDraftMutationMessageKey } from "./nodeMutationFeedback";
+import { graphMutationMessageKey } from "./nodeMutationFeedback";
 
 interface PortInstanceControlProps {
   graphPath: string;
@@ -42,7 +42,7 @@ function PortInstanceMutationButton({
     setErrorKey(null);
     try {
       const result = await execute();
-      setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.portInstanceFailed"));
+      setErrorKey(graphMutationMessageKey(result, "detail.nodeDoc.portInstanceFailed"));
     } catch {
       setErrorKey("detail.nodeDoc.portInstanceFailed");
     } finally {

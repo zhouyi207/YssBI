@@ -49,9 +49,15 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
+        editing_updates: Vec<super::graph_editing::PreparedGraphEditingUpdate>,
     ) -> Result<crate::project_writers::ProjectResourceMutationFacts, ProjectOperationError> {
-        self.apply_resource_document_patch_internal(context, patch, rename_ownership)
-            .map(CommittedResourceMutation::into_project_facts)
+        self.apply_resource_document_patch_internal(
+            context,
+            patch,
+            rename_ownership,
+            editing_updates,
+        )
+        .map(CommittedResourceMutation::into_project_facts)
     }
 
     pub(in crate::project_state) fn apply_resource_document_patch_internal(
@@ -59,6 +65,7 @@ impl ProjectState {
         context: &ProjectTransactionContext,
         mut patch: ProjectDataPatch,
         rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
+        editing_updates: Vec<super::graph_editing::PreparedGraphEditingUpdate>,
     ) -> Result<CommittedResourceMutation, ProjectOperationError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
@@ -127,6 +134,7 @@ impl ProjectState {
 
             match patch {
                 ProjectDataPatch::InsertGraph { path, resource } => {
+                    self.graph_editing.lock().unwrap().remove(&path);
                     let revision = graph_resource_revisions
                         .get(&path)
                         .copied()
@@ -140,6 +148,7 @@ impl ProjectState {
                     graph_resource_revisions.insert(path, revision);
                 }
                 ProjectDataPatch::RemoveGraph { path, revision } => {
+                    self.graph_editing.lock().unwrap().remove(&path);
                     let next = checked_resource_revision(path.as_str(), revision)?;
                     data.graphs.remove(&path);
                     graph_resource_revisions.insert(path, next);
@@ -165,6 +174,8 @@ impl ProjectState {
                         source_revision.max(target_revision),
                     )?;
                     let was_loaded = data.graphs.remove(&from).is_some();
+                    self.graph_editing.lock().unwrap().remove(&from);
+                    self.graph_editing.lock().unwrap().remove(&to);
                     graph_resource_revisions.insert(
                         from.clone(),
                         checked_resource_revision(from.as_str(), source_revision)?,
@@ -212,6 +223,12 @@ impl ProjectState {
                 }
             }
 
+            for update in editing_updates {
+                self.graph_editing
+                    .lock()
+                    .unwrap()
+                    .insert(update.path, update.metadata);
+            }
             let publication_revision = publication.commit_prepared(publication_advance);
             CommittedResourceMutation {
                 operation_id: context.operation_id,

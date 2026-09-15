@@ -18,14 +18,14 @@ export interface ProjectionBasisDto {
   >;
 }
 
-export type CompilationStageDto = "analysis" | "lowering";
+export type ResolutionStageDto = "analysis";
 
-export type CompilationOutcomeDto =
+export type ResolutionOutcomeDto =
   | { type: "success" }
   | { type: "analysisBlocked" }
   | {
       type: "internalFailure";
-      stage: CompilationStageDto;
+      stage: ResolutionStageDto;
       code: string;
       nodeId: string | null;
     };
@@ -37,7 +37,7 @@ export interface EditorGraphProjectionDto {
   connections: EditorConnectionProjectionDto[];
   /** Complete canonical problem set for this graph projection. */
   diagnostics: DiagnosticDto[];
-  outcome: CompilationOutcomeDto;
+  outcome: ResolutionOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
 

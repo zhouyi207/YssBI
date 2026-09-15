@@ -2,6 +2,12 @@
 
 use std::sync::Arc;
 
+use yss_database_contract::DatabaseId;
+use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
+use yss_graph_document::{PortAddress, PortRef};
+use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
+use yss_graph_execution::result::ResultId;
+use yss_graph_execution::value::RuntimeValue;
 use yss_harness_contract::{
     AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityContractError,
     CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
@@ -12,12 +18,6 @@ use yss_harness_contract::{
     ProjectResourceKindInspection, ResultCategoryInspection, ResultInspection,
     ResultValueInspection, SearchNodeCatalogRequest,
 };
-use yss_database_contract::DatabaseId;
-use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_snapshot};
-use yss_graph_document::{PortAddress, PortRef};
-use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
-use yss_graph_execution::result::ResultId;
-use yss_graph_execution::value::RuntimeValue;
 use yss_node_catalog::LocalizedCatalogItem;
 
 use crate::graph::catalog::{
@@ -27,10 +27,7 @@ use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 mod graph;
-pub use graph::{
-    AutomationGraphAction, AutomationGraphDraft, AutomationGraphUpdate,
-    prepare_automation_graph_action,
-};
+pub use graph::invoke_graph_capability;
 
 impl ApplicationState {
     /// Synchronous business entry point; async adapters must dispatch it to a blocking worker.
@@ -62,9 +59,12 @@ fn invoke_capability(
     ensure_project_binding(&captured, &context)?;
 
     let result = match request {
-        AutomationCapabilityRequest::InspectGraph(request) => {
-            graph::inspect_saved_graph(application, &captured, request)
-                .map(AutomationCapabilityResult::GraphInspection)
+        request @ (AutomationCapabilityRequest::InspectGraph(_)
+        | AutomationCapabilityRequest::ApplyGraphEdit(_)
+        | AutomationCapabilityRequest::ValidateGraph(_)
+        | AutomationCapabilityRequest::ExecuteGraph(_)
+        | AutomationCapabilityRequest::SaveGraph(_)) => {
+            return graph::invoke_graph_capability(application, context, request, control);
         }
         AutomationCapabilityRequest::SearchNodeCatalog(request) => {
             search_node_catalog(application, &captured, request)
@@ -88,17 +88,6 @@ fn invoke_capability(
         AutomationCapabilityRequest::ListGraphResults(request) => {
             graph::list_graph_results(&captured, request.graph_path)
                 .map(AutomationCapabilityResult::GraphResults)
-        }
-        AutomationCapabilityRequest::CompileGraph(_)
-        | AutomationCapabilityRequest::ExecuteGraph(_)
-        | AutomationCapabilityRequest::SaveGraph(_) => Err(CapabilityFailure::new(
-            CapabilityFailureCode::GraphClientUnavailable,
-        )),
-        AutomationCapabilityRequest::ApplyGraphEdit(request) => {
-            let _ = request;
-            Err(CapabilityFailure::new(
-                CapabilityFailureCode::GraphClientUnavailable,
-            ))
         }
     }?;
 
@@ -689,9 +678,9 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 mod tests {
     use super::graph::editor_mutation;
     use super::*;
-    use yss_harness_contract::GraphEditOperation;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
+    use yss_harness_contract::GraphEditOperation;
 
     #[test]
     fn result_bounds_fail_closed_at_the_contract_descriptor_limit() {

@@ -1,6 +1,6 @@
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface MoveConnectionsArgs {
   sourcePinId: string;
@@ -13,7 +13,7 @@ export const moveConnectionsCommand: CommandHandler<MoveConnectionsArgs, GraphEd
     const source = store.getGraphPin(graphPath, args.sourcePinId);
     const target = store.getGraphPin(graphPath, args.targetPinId);
     if (!source || !target) return { status: "unavailable" };
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "moveConnections",

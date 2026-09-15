@@ -29,6 +29,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Transport,
     ),
     (
+        "src-tauri/crates/yss-application/src/ipc/graph_editor_sync.rs",
+        RustLayer::Transport,
+    ),
+    (
         "src-tauri/crates/yss-application/src/ipc/graph_projection_runtime.rs",
         RustLayer::Commands,
     ),
@@ -105,8 +109,8 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Graph,
     ),
     (
-        "src-tauri/crates/yss-graph-compiler/src/lib.rs",
-        RustLayer::Graph,
+        "src-tauri/crates/yss-graph-execution/src/graph_preparation.rs",
+        RustLayer::Execution,
     ),
     (
         "src-tauri/crates/yss-project/src/execution_authority.rs",
@@ -152,6 +156,48 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::Transport,
+        repository_relative_source_file: "src-tauri/crates/yss-ipc-contract/src/graph_editing.rs",
+        fully_qualified_owner: "yss_ipc_contract::graph_editing",
+        canonical_origin_targets: &[
+            "yss_function_editor_projection::FunctionEditorProjection",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Transport,
+        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/channel/graph_activity.rs",
+        fully_qualified_owner: "yss_application::ipc::channel::graph_activity",
+        canonical_origin_targets: &[
+            "yss_application::graph::editing::GraphActivity",
+            "yss_application::graph::editing::GraphActivity::Changed",
+            "yss_application::graph::editing::GraphActivity::Execution",
+            "yss_application::graph::editing::GraphActivitySubscription",
+        ],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::Execution,
+        repository_relative_source_file: "src-tauri/crates/yss-graph-execution/src/graph_preparation.rs",
+        fully_qualified_owner: "yss_graph_execution::graph_preparation",
+        canonical_origin_targets: &[
+            "yss_graph_analysis::GraphAnalysis",
+            "yss_graph_analysis::GraphSemanticSnapshot",
+            "yss_graph_analysis::GraphNodeSemanticFact",
+            "yss_graph_analysis::GraphPortSemanticFact",
+            "yss_graph_analysis::GraphKernelSpecialization",
+            "yss_graph_analysis::GraphPortTypeBinding",
+            "yss_graph_analysis::GraphResolvedInputSource",
+            "yss_graph_analysis::GraphResolvedInputSource::Output",
+            "yss_graph_analysis::GraphResolvedInputSource::Literal",
+            "yss_graph_analysis::GraphResolvedParameterValue",
+            "yss_graph_analysis::GraphResolvedParameterValue::Resource",
+            "yss_graph_analysis::GraphResolvedParameterValue::Literal",
+            "yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral",
+            "yss_graph_analysis::result_category::GraphPlotDataKind",
+            "yss_graph_analysis::result_category::GraphResultCategory",
+            "yss_graph_analysis::result_category::GraphStatisticalReportKind",
+        ],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::CompositionRoot,
         repository_relative_source_file: "src-tauri/src/lib.rs",
         fully_qualified_owner: "yssbi_lib",
@@ -188,34 +234,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "ols_bench",
         canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
     },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Commands,
-        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_harness/graph_client.rs",
-        fully_qualified_owner: "yss_application::ipc::commands::command_harness::graph_client",
-        canonical_origin_targets: &[
-            "yss_application::automation::graph::AutomationGraphAction",
-            "yss_application::automation::graph::AutomationGraphDraft",
-            "yss_application::automation::graph::AutomationGraphUpdate",
-            "yss_application::automation::graph::prepare_automation_graph_action",
-            "yss_application::session::slot::ApplicationState",
-            "yss_application::ipc::error::CommandError",
-            "yss_ipc_contract::graph_draft::CompileGraphDraftDto",
-            "yss_ipc_contract::graph_draft::GraphDraftSaveDto",
-            "yss_ipc_contract::graph_draft::GraphDraftTransformDto",
-            "yss_application::ipc::schema::graph_draft::compile_graph_draft_to_transport",
-            "yss_application::ipc::schema::graph_draft::graph_draft_save_to_transport",
-            "yss_application::ipc::schema::graph_draft::graph_draft_transform_to_transport",
-            "yss_ipc_contract::harness_graph::HarnessGraphToolRequestDto",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto::None",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto::Execution",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto::Draft",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto::Compilation",
-            "yss_ipc_contract::harness_graph::HarnessGraphUpdateDto::Saved",
-            "yss_ipc_contract::execution::RunEventDto",
-            "yss_application::ipc::channel::execution::execution_event_to_transport",
-        ],
-    },
+
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/mod.rs",
@@ -355,9 +374,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/runtime.rs",
         fully_qualified_owner: "yss_application::ipc::runtime",
         canonical_origin_targets: &[
+            "yss_application::ipc::channel::graph_activity::GraphActivityChannels",
+            "yss_application::ipc::channel::graph_activity::GraphActivityChannels::default",
+            "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
+            "yss_application::ipc::graph_editor_sync::GraphEditorSyncState::default",
+
             "yss_application::session::slot::ApplicationState",
             "yss_ipc_channel::harness::HarnessChannelHub",
-            "yss_application::ipc::channel::harness_graph::HarnessGraphClientHub",
             "yss_application::ipc::activity_panel_sync::ActivityPanelSyncState",
             "yss_application::ipc::activity_panel_sync::ActivityPanelSyncState::default",
         ],
@@ -368,8 +391,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yss_application::ipc::commands::command_harness::gateway",
         canonical_origin_targets: &[
             "yss_application::session::slot::ApplicationState",
-            "yss_application::ipc::channel::harness_graph::HarnessGraphClientHub",
-            "yss_application::ipc::channel::harness_graph::graph_path",
         ],
     },
     InternalDependencyCapability {
@@ -399,7 +420,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_harness_core::host::HarnessHost::session_memory",
             "yss_harness_core::workflow::dataset_quality_review_workflow",
             "yss_ipc_channel::harness::HarnessChannelHub",
-            "yss_application::ipc::channel::harness_graph::HarnessGraphClientHub",
             "yss_ipc_contract::harness::HarnessMemoryRecordDto::from",
             "yss_ipc_contract::harness::HarnessSessionDto::from",
             "yss_ipc_contract::harness::WorkflowRunDto::from",
@@ -553,6 +573,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/catalog.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::catalog",
         canonical_origin_targets: &[
+            "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
+            "yss_ipc_contract::graph_editing::GraphEditVersionDto",
+
             "yss_application::graph::catalog::CatalogQueryApplicationError",
             "yss_application::graph::catalog::CompatibleCatalogRequest",
             "yss_application::graph::catalog::GraphCatalogQueryError",
@@ -580,6 +603,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/common.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::common",
         canonical_origin_targets: &[
+            "yss_project::project_state::graph_operation::ProjectGraphCommitError::InvalidDocument",
+
             "yss_application::ipc::error::CommandError",
             "yss_ipc_contract::error::GraphMutationErrorDetailsDto",
             "yss_ipc_contract::error::GraphMutationErrorDetailsDto::VALUE",
@@ -633,8 +658,24 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/editor.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::editor",
         canonical_origin_targets: &[
-            "yss_application::graph::compile::CompileGraphDraftError",
-            "yss_application::graph::compile::compile_graph_draft",
+            "yss_application::ipc::graph_editor_sync::Binding",
+            "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
+            "yss_application::ipc::schema::graph_editing::encode_graph_edit",
+            "yss_application::ipc::schema::graph_editing::encode_graph_session",
+            "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
+            "yss_application::graph::editing::GraphEditRequest",
+            "yss_application::ipc::channel::graph_activity::GraphActivityChannels",
+            "yss_ipc_contract::graph_editing::GraphEditVersionDto",
+            "yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto",
+            "yss_ipc_contract::graph_editing::GraphActivityDto",
+            "yss_graph_execution::run_registry::RunState",
+            "yss_graph_execution::run_registry::RunState::Admitted",
+            "yss_graph_execution::run_registry::RunState::Running",
+            "yss_graph_execution::run_registry::RunState::Finalizing",
+            "yss_graph_execution::run_registry::RunState::Succeeded",
+            "yss_graph_execution::run_registry::RunState::Failed",
+            "yss_graph_execution::run_registry::RunState::Cancelled",
+
             "yss_application::session::slot::ApplicationState",
             "yss_application::session::slot::SessionCaptureError",
             "yss_application::graph::open::OpenGraphApplicationError",
@@ -668,12 +709,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::ipc::schema::editor_projection::map_editor_projection",
             "yss_ipc_contract::editor_projection::EditorGraphProjectionDto",
             "yss_application::ipc::schema::graph_clipboard::ClipboardSubgraphDto",
-            "yss_ipc_contract::graph_draft::CompileGraphDraftDto",
-            "yss_ipc_contract::graph_draft::GraphDraftTransformDto",
-            "yss_ipc_contract::graph_draft::GraphEditorSessionDto",
-            "yss_application::ipc::schema::graph_draft::compile_graph_draft_to_transport",
-            "yss_application::ipc::schema::graph_draft::graph_draft_transform_to_transport",
-            "yss_application::ipc::schema::graph_draft::graph_editor_session_to_transport",
+            "yss_ipc_contract::graph_editing::GraphEditorSessionDto",
+            "yss_application::ipc::schema::graph_editing::graph_editor_session_to_transport",
             "yss_application::ipc::schema::graph_mutation::EditorGraphMutationDto",
         ],
     },
@@ -682,6 +719,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/execution.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::execution",
         canonical_origin_targets: &[
+            "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
+            "yss_ipc_contract::graph_editing::GraphEditVersionDto",
+
             "yss_application::session::slot::ApplicationState",
             "yss_application::session::slot::SessionCaptureError",
             "yss_application::session::slot::SessionCaptureError::Inactive",
@@ -762,6 +802,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/resources.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::resources",
         canonical_origin_targets: &[
+            "yss_application::ipc::graph_editor_sync::Binding",
+            "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
+            "yss_application::ipc::schema::graph_editing::encode_graph_edit",
+            "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
+            "yss_application::graph::editing::GraphEditRequest",
+            "yss_ipc_contract::graph_editing::GraphEditVersionDto",
+            "yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto",
+
             "yss_application::session::slot::ApplicationState",
             "yss_application::graph::resources::ResourceMutationApplicationError",
             "yss_application::graph::resources::ResourceMutationApplicationError::GraphOperation",
@@ -778,8 +826,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_project::project_writers::ProjectSaveResult",
             "yss_ipc_contract::project::ResourceMutationResultDto",
             "yss_application::ipc::schema::application_event::resource_mutation_to_transport",
-            "yss_ipc_contract::graph_draft::GraphDraftSaveDto",
-            "yss_application::ipc::schema::graph_draft::graph_draft_save_to_transport",
             "yss_ipc_contract::project::ProjectSaveResultDto",
             "yss_project_history::FunctionDocumentPatch",
             "yss_ipc_contract::event::Event::Project",
@@ -1018,6 +1064,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_project/query.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_project::query",
         canonical_origin_targets: &[
+            "yss_application::ipc::graph_editor_sync::Binding",
+            "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
+            "yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto",
+            "yss_application::ipc::schema::graph_editing::encode_graph_session",
+
             "yss_application::ipc::activity_panel_sync::ActivityPanelSyncState",
             "yss_application::ipc::activity_panel_sync::ActivityPanelUpdateDto",
             "yss_application::ipc::schema::activity_panel::ActivityPanelId",
@@ -1044,8 +1095,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::ipc::schema::database::column_info_from_schema",
             "yss_ipc_contract::editor_projection::EditorGraphProjectionDto",
             "yss_application::ipc::schema::editor_projection::map_editor_projection",
-            "yss_ipc_contract::graph_draft::GraphEditorSessionDto",
-            "yss_application::ipc::schema::graph_draft::graph_editor_session_to_transport",
+            "yss_ipc_contract::graph_editing::GraphEditorSessionDto",
+            "yss_application::ipc::schema::graph_editing::graph_editor_session_to_transport",
             "yss_application::ipc::schema::project::ProjectDatabasesDTO",
         ],
     },
@@ -1186,8 +1237,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::events::ResourceMove",
             "yss_application::events::ResourceProjectionStatus",
             "yss_application::project::query::ProjectActivation",
-            "yss_graph_document_edit::GraphDocumentPatch",
-            "yss_graph_document_edit::patch::GraphDocumentPatch",
+            "yss_graph_document::GraphDocumentPatch",
+            "yss_graph_document::change::GraphDocumentPatch",
             "yss_project_history::ResourceDeltaEvent",
             "yss_project_history::ResourceKey",
             "yss_project_history::ResourceLifecycleKind",
@@ -1264,7 +1315,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_editor::projection::model::EditorSchemaSummary",
             "yss_graph_editor::projection::model::EditorSchemaSummaryKind",
             "yss_graph_editor::projection::model::EditorResolutionOutcome",
-            "yss_graph_editor::projection::model::EditorCompilationStage",
+            "yss_graph_editor::projection::model::EditorResolutionStage",
             "yss_graph_editor::projection::model::ParameterEditorKind",
             "yss_graph_analysis::GraphDiagnosticLocation",
             "yss_graph_analysis_contract::DiagnosticLocation",
@@ -1331,14 +1382,17 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/schema/graph_draft.rs",
-        fully_qualified_owner: "yss_application::ipc::schema::graph_draft",
+        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/schema/graph_editing.rs",
+        fully_qualified_owner: "yss_application::ipc::schema::graph_editing",
         canonical_origin_targets: &[
+            "yss_application::graph::editing::GraphEditResponse",
+            "yss_project::project_state::graph_editing::GraphEditVersion",
+            "yss_project::project_state::graph_editing::GraphEditingState",
+
             "yss_graph_editor::projection::model::EditorProjectionModel",
-            "yss_application::graph::compile::CompileGraphDraftReceipt",
             "yss_application::graph::edit::GraphDraftSave",
-            "yss_application::graph::edit::GraphDraftTransform",
-            "yss_graph_document_edit::patch::GraphDocumentPatch",
+            "yss_application::graph::edit::GraphDocumentChange",
+            "yss_graph_document::change::GraphDocumentPatch",
         ],
     },
     InternalDependencyCapability {
@@ -1382,20 +1436,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_project::project_writers::ProjectSaveResult",
         ],
     },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/channel/harness_graph.rs",
-        fully_qualified_owner: "yss_application::ipc::channel::harness_graph",
-        canonical_origin_targets: &[
-            "yss_application::automation::graph::AutomationGraphAction",
-            "yss_application::automation::graph::AutomationGraphUpdate",
-            "yss_application::automation::graph::AutomationGraphUpdate::None",
-            "yss_application::automation::graph::AutomationGraphUpdate::Draft",
-            "yss_application::automation::graph::AutomationGraphUpdate::Compilation",
-            "yss_application::automation::graph::AutomationGraphUpdate::Execution",
-            "yss_application::automation::graph::AutomationGraphUpdate::Saved",
-        ],
-    },
+
     InternalDependencyCapability {
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/channel/execution.rs",
@@ -1611,8 +1652,7 @@ fn non_build_memberships(
         package,
         "yss-graph-analysis"
             | "yss-graph-analysis-contract"
-            | "yss-graph-compiler"
-            | "yss-graph-compiler-diagnostics"
+            | "yss-graph-diagnostics"
             | "yss-graph-document-edit"
             | "yss-graph-editor"
             | "yss-graph-runtime"

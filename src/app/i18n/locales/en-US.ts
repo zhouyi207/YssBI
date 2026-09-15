@@ -60,8 +60,6 @@ export const enUS = {
       saveAsFailed: "Could not save project as: {{error}}",
       openResourceBeforeSaving: "Open a graph or chart before saving",
       saveFailed: "Could not save: {{error}}",
-      compileFailed: "Could not compile graph: {{error}}",
-      compileRequired: "Compile the current graph before running it",
       problemsBlockExecution: "Resolve the graph's blocking problems before running it",
       loadFailed: "Could not load project",
     },
@@ -173,7 +171,7 @@ export const enUS = {
     problems: "Problems",
     problemsLocate: "Reveal problem location",
     problemsRelated: "Related",
-    problemsBlocking: "Blocks compilation",
+    problemsBlocking: "Blocks execution",
     outputNoGraph: "Open a graph to view its program output",
     outputEmpty: "The current graph has no run failure",
     outputClear: "Clear run failure",
@@ -210,10 +208,14 @@ export const enUS = {
         "A required runtime resource is unavailable. Check the data sources and project resources.",
       finalizationFailed:
         "The calculation results could not be committed. Check the project state and try again.",
-      graph_compile_required:
-        "The graph changed or its compiled artifact expired. Compile it again before executing.",
+      graph_draft_changed: "The graph or its dependencies changed. Run the current graph again.",
+      graph_not_ready: "Resolve the graph's blocking problems before running it.",
+      graph_resolution_failed:
+        "Could not check the graph. Use the diagnostic reference for technical details.",
+      graph_plan_failed:
+        "Could not prepare the execution plan. Use the diagnostic reference for technical details.",
       stale_project_lifecycle:
-        "The project state changed. Compile the graph again in the current project.",
+        "The project state changed. Run the graph again in the current project.",
       execution_channel_failed:
         "Run event delivery failed, so complete results could not be confirmed. Try again and check the logs.",
       ipc_transport_failure:
@@ -485,15 +487,15 @@ export const enUS = {
       graph: {
         title: "Graph editing & execution UI",
         description:
-          "Manage graph drafts and canvas interaction; request compilation, saving and execution, and display projections and results.",
+          "Manage graph drafts and canvas interaction; resolve edits, save and run, and display projections and results.",
         parts: {
           draft: "Draft & history",
           projection: "Semantic projection",
           canvas: "Canvas interaction",
-          execution: "Compile / Save / Execute",
+          execution: "Validate / Save / Execute",
         },
         boundary:
-          "Drafts, save baselines and transient canvas state are separate. Application orders actions and checks project, draft and request identity. Canvas, Details and Problems consume the same Rust GraphSemanticSnapshot. Draft, Compile, Save and Execute are independent; failed saves retain drafts and execution uses a matching artifact. Rust owns Results lifecycles. Problems, Results and Run Output remain distinct streams; the production Run Output producer is not connected yet.",
+          "Drafts, save baselines and transient canvas state are separate. Application orders actions and checks project, draft and request identity. Canvas, Details and Problems consume the same Rust GraphSemanticSnapshot. Editing resolves diagnostics; execution prepares its plan internally. Save is independent and failed saves retain drafts. Rust owns results and their leases. Problems, results and run failures remain distinct streams.",
       },
       data: {
         title: "Data browsing & editing",
@@ -632,7 +634,7 @@ export const enUS = {
           "Send one explicit request and receive its outcome; a Channel can be passed as an argument.",
         parts: { request: "One request", result: "One result", channelArgument: "Channel binding" },
         boundary:
-          "Commands query, save, compile or start tasks. The frontend creates a Channel and passes it as a Command argument to bind subsequent delivery. The command outcome and continuous messages each follow their own contract.",
+          "Commands query, save, validate or start tasks. The frontend creates a Channel and passes it as a Command argument to bind subsequent delivery. The command outcome and continuous messages each follow their own contract.",
       },
       transport: {
         title: "Command adapter",
@@ -649,7 +651,7 @@ export const enUS = {
       business: {
         title: "Rust business use case",
         description:
-          "Run query, save, compile and task use cases; own business rules and committed state.",
+          "Run query, save, validate and task use cases; own business rules and committed state.",
         parts: { useCase: "Use case", authority: "State authority", blocking: "Blocking boundary" },
         boundary:
           "Application and domain owners perform orchestration, filesystem transactions and computation, returning typed outcomes to the transport adapter. Expensive work enters the established blocking boundary. Large tables are queried, paged or summarized in Rust to bound transfer size.",
@@ -765,20 +767,20 @@ export const enUS = {
           localization: "Node documentation & localization",
         },
         boundary:
-          "Node describes a node type and does not depend on Graph. Graph documents own instances, positions and connections. GraphSemanticSnapshot owns resolved types, schema, lineage and diagnostics; compiler diagnostic templates belong to Graph.",
+          "Node describes a node type and does not depend on Graph. Graph documents own instances, positions and connections. GraphSemanticSnapshot owns resolved types, schema, lineage and diagnostics; graph diagnostic templates belong to Graph.",
       },
       graph: {
         title: "Graph analysis & execution",
         description:
-          "From graph documents and semantic analysis to compilation, execution and result queries.",
+          "From graph documents and semantic analysis to plan preparation, execution and result queries.",
         parts: {
           documents: "Documents & editing",
           semantics: "Semantics & projection",
-          compilation: "Compilation & artifacts",
+          preparation: "Run preparation",
           execution: "Execution & results",
         },
         boundary:
-          "GraphSemanticSnapshot is the semantic authority. Graph Editor creates projections, Graph Runtime owns resolution and compilation caches, and Graph Execution runs matching artifacts and owns results. Compile, Save and Execute are independent; the Run Output producer is not connected yet.",
+          "GraphSemanticSnapshot is the semantic authority. Graph Editor creates projections, Graph Runtime resolves edits and prepares matching plans internally, and Graph Execution runs those plans and owns results. Save is independent of execution; Output shows run failures.",
       },
       data: {
         title: "Data management & queries",
@@ -930,7 +932,7 @@ export const enUS = {
       command: {
         title: "Command",
         summary: "Request / response · Query, save and run",
-        description: "Query, submit edits, save, compile, and start or cancel tasks.",
+        description: "Query, submit edits, save, validate, and start or cancel tasks.",
       },
       event: {
         title: "Event System",
@@ -964,15 +966,15 @@ export const enUS = {
       },
       domain: {
         title: "Domain logic",
-        summary: "Graph validation, compilation and science",
+        summary: "Graph validation, execution plans and science",
         description:
-          "Validate rules, graph types and dependencies; compile, execute and run scientific computations.",
+          "Validate rules, graph types and dependencies; prepare plans, execute and run scientific computations.",
       },
       state: {
         title: "State management",
         summary: "Committed projects, versions and results",
         description:
-          "Own committed projects, resource versions, compiled artifacts and results; expose queryable projections.",
+          "Own committed projects, resource versions, execution plans and results; expose queryable projections.",
       },
       persistence: {
         title: "Persistence",
@@ -1593,6 +1595,8 @@ export const enUS = {
         graph_connection_order_required: "This connection requires an order",
         graph_connection_order_forbidden: "This connection does not accept an order",
         graph_connection_already_exists: "These ports are already connected",
+        graph_edit_changed: "The graph has changed. Please try again.",
+        graph_edit_busy: "The graph is processing another edit. Please try again shortly.",
         graph_connection_move_source_empty: "The source port has no connections to move",
         graph_connection_move_same_port: "Choose a different destination port",
         graph_mutation_empty_targets: "Select at least one graph item",
@@ -1611,11 +1615,9 @@ export const enUS = {
     },
     graphState: {
       new: "No matching result",
-      uncompiled: "Needs compilation",
-      compiling: "Compiling",
-      compiled: "Compiled; no matching result",
+      unexecuted: "Not yet run",
       running: "In the current run",
-      error: "Compilation or execution failed",
+      error: "Blocking problem or execution failure",
       valid: "Result available",
       stale: "Stale result",
       partial: "Some results available",
@@ -1628,9 +1630,6 @@ export const enUS = {
     executionArtifactsClearFailed: "Failed to clear run notice: {{message}}",
     executionCancelled: "Execution cancelled",
     executing: "Running...",
-    compileGraph: "Compile graph",
-    compilingGraph: "Compiling graph...",
-    compileRequired: "Compile the graph before running",
     functionRunUnavailable: "Function graphs run through their consumers",
     problemsBlockExecution: "Resolve blocking graph problems before running",
     executeCurrentGraph: "Run current graph",

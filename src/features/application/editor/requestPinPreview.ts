@@ -1,9 +1,13 @@
 import type { TFunction } from "i18next";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import type { GraphEntityBucket } from "@/features/core/dataStore/graphEntityAccess";
+import {
+  isGraphProjectionExecutable,
+  type GraphEntityBucket,
+} from "@/features/core/dataStore/graphEntityAccess";
 import { isGraphCachedInMemory } from "@/features/core/dataStore/graphDocumentLoadPolicy";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore, type GraphEditorState } from "@/features/core/graphEditing";
+import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -34,7 +38,7 @@ export type PinPreviewRejectionReason =
   | "missing-pin"
   | "input-pin"
   | "orphan-pin"
-  | "compile-required"
+  | "blocking-problems"
   | "generation-exhausted"
   | "stale-project-lifecycle";
 
@@ -68,7 +72,7 @@ export function isPinPreviewActionAvailable(
 
 type ValidPreviewRequest = {
   output: GraphOutputRefDto;
-  compiledArtifactId: string;
+  draft: GraphEditorState;
   authority: PreviewAuthority;
 };
 
@@ -109,14 +113,14 @@ function capturePreviewRequest(
   const pin = bucket.pins[pinId];
   const invalid = validatePin(pin);
   if (invalid) return invalid;
-  const draft = useGraphDraftStore.getState().sessions[graphPath];
-  if (draft?.compileStatus !== "compiled" || !draft.compiledArtifactId) {
-    return "compile-required";
+  const draft = useGraphEditingStore.getState().sessions[graphPath];
+  if (!draft || draft.saving || !isGraphProjectionExecutable(bucket)) {
+    return "blocking-problems";
   }
 
   return {
     output: { graphPath, port: pin.address },
-    compiledArtifactId: draft.compiledArtifactId,
+    draft,
     authority: {
       project,
       projection: bucket,
@@ -136,7 +140,11 @@ export async function requestPinPreview(
   graphPath: string,
   pinId: string,
 ): Promise<PinPreviewRequestResult> {
-  const captured = capturePreviewRequest(graphPath, pinId);
+  const captured = await enqueueGraphTask(
+    graphPath,
+    async () => capturePreviewRequest(graphPath, pinId),
+    "stale-project-lifecycle" as const,
+  );
   if (captured === "stale-project-lifecycle") return staleSettlement();
   if (typeof captured === "string") return reject(captured);
 
@@ -175,10 +183,11 @@ export async function requestPinPreview(
   };
 
   try {
-    await ProjectService.executeCompiledGraph({
+    await ProjectService.executeGraph({
       projectInstanceId: captured.authority.project.projectInstanceId,
       graphPath,
-      compiledArtifactId: captured.compiledArtifactId,
+      version: captured.draft.version,
+      semanticInputHash: captured.draft.semanticInputHash,
       demand: {
         type: "pinPreview",
         output: captured.output,
@@ -205,7 +214,7 @@ export async function requestPinPreview(
       captured.output.port,
     );
     if (current?.generation !== generation) return staleSettlement();
-    const ipcError = normalizeApplicationIpcError("execute_compiled_graph", error);
+    const ipcError = normalizeApplicationIpcError("execute_graph", error);
     const failure = { code: ipcError.code, incidentId: ipcError.incidentId };
     lease.fail(failure.code);
     return { status: "failed", generation, error: failure };

@@ -5,10 +5,10 @@ import { portAddressKey } from "@/features/domain/editorProjection";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { executeGraphEdit } from "./commandExecutor";
 
-const applyGraphDraftMutation = vi.hoisted(() => vi.fn());
+const applyGraphMutation = vi.hoisted(() => vi.fn());
 
-vi.mock("@/features/application/graphDraft/graphDraftCoordinator", () => ({
-  applyGraphDraftMutation,
+vi.mock("@/features/application/graphEditing/graphEditCoordinator", () => ({
+  applyGraphMutation,
 }));
 vi.mock("@/features/application/graphProjection/projectionLocale", async (importOriginal) => ({
   ...(await importOriginal<
@@ -154,13 +154,13 @@ describe("forward-only editor commands", () => {
       const fixture = installProjection();
       const before = useGraphProjectionStore.getState().graphEntities[graphPath];
       const pending = deferred<{ status: "applied" }>();
-      applyGraphDraftMutation.mockReturnValueOnce(pending.promise);
+      applyGraphMutation.mockReturnValueOnce(pending.promise);
       const randomId = vi.spyOn(crypto, "randomUUID");
 
       const command = executeGraphEdit(graphPath, type, build(fixture) as never);
 
-      expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
-      expect(applyGraphDraftMutation).toHaveBeenCalledWith({
+      expect(applyGraphMutation).toHaveBeenCalledTimes(1);
+      expect(applyGraphMutation).toHaveBeenCalledWith({
         graphPath,
         mutation: mutation(fixture),
       });
@@ -199,7 +199,7 @@ describe("forward-only editor commands", () => {
         document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
         projection: makeEditorProjectionFixture({ graphPath }).projection,
       };
-      applyGraphDraftMutation.mockResolvedValueOnce({
+      applyGraphMutation.mockResolvedValueOnce({
         status: "applied",
         result,
         insertedNodeIds: [],
@@ -214,8 +214,8 @@ describe("forward-only editor commands", () => {
         insertedNodeIds: [],
       });
 
-      expect(applyGraphDraftMutation).toHaveBeenCalledOnce();
-      expect(applyGraphDraftMutation).toHaveBeenCalledWith({
+      expect(applyGraphMutation).toHaveBeenCalledOnce();
+      expect(applyGraphMutation).toHaveBeenCalledWith({
         graphPath,
         mutation,
       });
@@ -226,7 +226,7 @@ describe("forward-only editor commands", () => {
 
   it("keeps MoveNodes forward-only and sends final positions unchanged", async () => {
     installProjection();
-    applyGraphDraftMutation.mockResolvedValueOnce({ status: "applied" });
+    applyGraphMutation.mockResolvedValueOnce({ status: "applied" });
 
     await expect(
       executeGraphEdit(graphPath, "MoveNodes", {
@@ -234,8 +234,8 @@ describe("forward-only editor commands", () => {
       }),
     ).resolves.toMatchObject({ status: "applied" });
 
-    expect(applyGraphDraftMutation).toHaveBeenCalledTimes(1);
-    expect(applyGraphDraftMutation).toHaveBeenCalledWith({
+    expect(applyGraphMutation).toHaveBeenCalledTimes(1);
+    expect(applyGraphMutation).toHaveBeenCalledWith({
       graphPath,
       mutation: {
         type: "moveNodes",
@@ -258,7 +258,7 @@ describe("forward-only editor commands", () => {
         status: "unavailable",
       });
 
-      expect(applyGraphDraftMutation).not.toHaveBeenCalled();
+      expect(applyGraphMutation).not.toHaveBeenCalled();
     },
   );
 
@@ -269,7 +269,7 @@ describe("forward-only editor commands", () => {
     { status: "saving" as const },
   ])("preserves the InsertReroute $status outcome", async (outcome) => {
     installProjection();
-    applyGraphDraftMutation.mockResolvedValueOnce(outcome);
+    applyGraphMutation.mockResolvedValueOnce(outcome);
 
     await expect(
       executeGraphEdit(graphPath, "InsertReroute", {

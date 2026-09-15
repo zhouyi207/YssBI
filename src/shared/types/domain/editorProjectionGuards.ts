@@ -423,7 +423,7 @@ function isConnection(value: unknown): boolean {
   );
 }
 
-function isCompilationOutcome(value: unknown): boolean {
+function isResolutionOutcome(value: unknown): boolean {
   if (!isRecord(value) || typeof value.type !== "string") return false;
   switch (value.type) {
     case "success":
@@ -432,7 +432,7 @@ function isCompilationOutcome(value: unknown): boolean {
     case "internalFailure":
       return (
         hasExactKeys(value, ["type", "stage", "code", "nodeId"]) &&
-        (value.stage === "analysis" || value.stage === "lowering") &&
+        value.stage === "analysis" &&
         typeof value.code === "string" &&
         value.code.length > 0 &&
         (value.nodeId === null ||
@@ -462,7 +462,7 @@ export function isEditorGraphProjectionDto(value: unknown): value is EditorGraph
     value.connections.every(isConnection) &&
     Array.isArray(value.diagnostics) &&
     value.diagnostics.every(isDiagnostic) &&
-    isCompilationOutcome(value.outcome) &&
+    isResolutionOutcome(value.outcome) &&
     typeof value.hasBlockingDiagnostics === "boolean" &&
     value.hasBlockingDiagnostics ===
       value.diagnostics.some((diagnostic: { blocking: boolean }) => diagnostic.blocking) &&

@@ -1,39 +1,69 @@
+import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
+import { clearGraphSyncBaselines } from "./graphEditorSync";
 import { invoke } from "@tauri-apps/api/core";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import editorProjection from "@/tests/fixtures/node-system-contracts/editor-projection.json";
 import { GraphProjectionService } from "./graphProjectionService";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const session = {
+  editing: makeGraphEditingState(),
   document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
   projection: editorProjection,
 };
 
+function wire(data: unknown, locale = "en-US") {
+  return {
+    projectInstanceId: "project-instance-1",
+    graphPath: editorProjection.graphPath,
+    locale,
+    changed: false,
+    resourceRevision: null,
+    functionEditorProjection: null,
+    update: { kind: "snapshot", cursor: "test", data },
+  };
+}
+
 describe("GraphProjectionService", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearGraphSyncBaselines();
+  });
   it("loads the authoritative projection with unchanged command arguments", async () => {
-    vi.mocked(invoke).mockResolvedValue(session as unknown);
+    vi.mocked(invoke).mockResolvedValue(wire(session, "zh-CN"));
 
     await expect(
-      GraphProjectionService.loadGraph("functions/main", "zh-CN", 7, "project-instance-1"),
+      GraphProjectionService.loadGraph(
+        editorProjection.graphPath,
+        "zh-CN",
+        7,
+        "project-instance-1",
+      ),
     ).resolves.toEqual(session);
     expect(invoke).toHaveBeenLastCalledWith("load_project_graph", {
-      graphPath: "functions/main",
+      graphPath: editorProjection.graphPath,
       locale: "zh-CN",
       lifecycleToken: 7,
       projectInstanceId: "project-instance-1",
+      cursor: null,
     });
   });
 
   it("hydrates the authoritative projection with unchanged command arguments", async () => {
-    vi.mocked(invoke).mockResolvedValue(session as unknown);
+    vi.mocked(invoke).mockResolvedValue(wire(session));
 
     await expect(
-      GraphProjectionService.hydrateGraph("project-instance-1", "functions/main", "en-US"),
+      GraphProjectionService.hydrateGraph(
+        "project-instance-1",
+        editorProjection.graphPath,
+        "en-US",
+      ),
     ).resolves.toEqual(session);
     expect(invoke).toHaveBeenLastCalledWith("hydrate_editor_graph", {
       projectInstanceId: "project-instance-1",
-      graphPath: "functions/main",
+      graphPath: editorProjection.graphPath,
       locale: "en-US",
+      cursor: null,
     });
   });
 
@@ -62,7 +92,7 @@ describe("GraphProjectionService", () => {
   it.each(requests)(
     "rejects a malformed root from %s with the public error",
     async (_name, request) => {
-      vi.mocked(invoke).mockResolvedValue({ ...session, compatibility: true } as unknown);
+      vi.mocked(invoke).mockResolvedValue(wire({ ...session, compatibility: true }));
       await expect(request()).rejects.toThrow();
     },
   );
@@ -81,7 +111,7 @@ describe("GraphProjectionService", () => {
         value: [],
         compatibility: true,
       };
-      vi.mocked(invoke).mockResolvedValue(malformed as unknown);
+      vi.mocked(invoke).mockResolvedValue(wire(malformed));
 
       await expect(request()).rejects.toThrow();
     },

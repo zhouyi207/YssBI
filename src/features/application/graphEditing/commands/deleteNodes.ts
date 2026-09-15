@@ -1,5 +1,5 @@
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface DeleteNodesArgs {
   nodeIds: string[];
@@ -8,7 +8,7 @@ export interface DeleteNodesArgs {
 export const deleteNodesCommand: CommandHandler<DeleteNodesArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
     if (args.nodeIds.length === 0) return { status: "unavailable" };
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "deleteNodes",

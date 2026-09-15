@@ -14,18 +14,6 @@ pub(crate) fn project_activation_to_transport(
     }
 }
 
-pub(crate) fn graph_projection_replacement_to_transport(
-    replacement: &crate::events::GraphProjectionReplacement,
-) -> GraphProjectionReplacementDto {
-    GraphProjectionReplacementDto {
-        graph_path: replacement.graph_path.to_string(),
-        projection: crate::ipc::schema::editor_projection::map_editor_projection(
-            &replacement.projection,
-        ),
-        function_editor_projection: replacement.function_editor_projection.clone(),
-    }
-}
-
 pub(crate) fn project_lifecycle_to_transport(
     event: &crate::events::ProjectLifecycleApplicationEvent,
 ) -> LifecycleMutationResultDto {

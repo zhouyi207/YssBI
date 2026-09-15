@@ -68,12 +68,12 @@ mod tests {
         HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
         HarnessTurnState, UnixMillis,
     };
-    use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
     use yss_harness_core::test_support::{
         FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway,
         SequentialIds,
     };
     use yss_harness_core::{KnowledgeQuery, KnowledgeService};
+    use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]
     async fn startup_recovers_interrupted_work_and_sessions_follow_project_replacement() {

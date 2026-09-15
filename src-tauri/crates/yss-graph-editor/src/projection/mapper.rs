@@ -26,19 +26,26 @@ pub fn build_editor_projection(
     ) {
         return Err(EditorProjectionError::ResolutionFailed);
     }
-    validate_semantic_snapshot(input.document, snapshot)?;
+    let node_semantics = validate_semantic_snapshot(input.document, snapshot)?;
+    let diagnostics = diagnostics_by_node(snapshot.diagnostics(), input.document);
 
     let nodes = input
         .document
         .nodes
         .values()
         .map(|node| {
-            let node_semantics = snapshot
-                .nodes()
-                .iter()
-                .find(|semantics| semantics.node_id == node.id)
+            let node_semantics = node_semantics
+                .get(&node.id)
                 .ok_or(EditorProjectionError::SemanticSnapshotMismatch)?;
-            project_node(node, node_semantics, snapshot.diagnostics(), input.document)
+            project_node(
+                node,
+                node_semantics,
+                diagnostics
+                    .get(&node.id)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default(),
+                input.document,
+            )
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_boxed_slice();
@@ -77,23 +84,35 @@ pub fn build_editor_projection(
     })
 }
 
-fn validate_semantic_snapshot(
+fn validate_semantic_snapshot<'a>(
     document: &GraphDocument,
-    snapshot: &GraphSemanticSnapshot,
-) -> Result<(), EditorProjectionError> {
+    snapshot: &'a GraphSemanticSnapshot,
+) -> Result<BTreeMap<NodeId, &'a GraphNodeSemanticFact>, EditorProjectionError> {
+    let mut connection_counts = BTreeMap::<&PortAddress, u32>::new();
+    for connection in document.connections.values() {
+        *connection_counts.entry(&connection.input).or_default() += 1;
+        if connection.output != connection.input {
+            *connection_counts.entry(&connection.output).or_default() += 1;
+        }
+    }
     let mut node_ids = BTreeMap::new();
     for node in snapshot.nodes() {
         let Some(document_node) = document.nodes.get(&node.node_id) else {
             return Err(EditorProjectionError::SemanticSnapshotMismatch);
         };
-        if document_node.node_type != node.node_type || node_ids.insert(node.node_id, ()).is_some()
+        if document_node.node_type != node.node_type
+            || node_ids.insert(node.node_id, node).is_some()
         {
             return Err(EditorProjectionError::SemanticSnapshotMismatch);
         }
         for port in &node.ports {
             if port.address.node_id != node.node_id
                 || !port_fact_has_concrete_address(port, document)
-                || count_connections(document, &port.address) != port.connections.current
+                || connection_counts
+                    .get(&port.address)
+                    .copied()
+                    .unwrap_or_default()
+                    != port.connections.current
             {
                 return Err(EditorProjectionError::SemanticSnapshotMismatch);
             }
@@ -110,13 +129,13 @@ fn validate_semantic_snapshot(
     if node_ids.len() != document.nodes.len() {
         return Err(EditorProjectionError::SemanticSnapshotMismatch);
     }
-    Ok(())
+    Ok(node_ids)
 }
 
 fn project_node(
     node: &yss_graph_document::DocumentNode,
     facts: &GraphNodeSemanticFact,
-    diagnostics: &[GraphDiagnosticFact],
+    diagnostics: &[&GraphDiagnosticFact],
     document: &GraphDocument,
 ) -> Result<EditorNodeModel, EditorProjectionError> {
     let parameters = facts
@@ -179,8 +198,7 @@ fn project_node(
         capabilities,
         diagnostics: diagnostics
             .iter()
-            .filter(|diagnostic| diagnostic_belongs_to_node(diagnostic, node.id, document))
-            .map(project_diagnostic)
+            .map(|diagnostic| project_diagnostic(diagnostic))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     })
@@ -196,7 +214,7 @@ fn project_port(
             .get(&port.address)
             .and_then(|state| state.literal_override.as_ref())
             .map(|value| yss_node_protocol::protocol_value_to_json(&value.value));
-        let effective = if has_connection(document, &port.address) {
+        let effective = if port.connections.current > 0 {
             EditorEffectiveInputBinding::Connections
         } else if literal_override.is_some() {
             EditorEffectiveInputBinding::Literal
@@ -502,11 +520,8 @@ fn project_outcome(value: &GraphResolutionOutcome) -> EditorResolutionOutcome {
             node_id,
         } => EditorResolutionOutcome::InternalFailure {
             stage: match stage {
-                yss_graph_analysis::GraphCompilationStage::Analysis => {
-                    EditorCompilationStage::Analysis
-                }
-                yss_graph_analysis::GraphCompilationStage::Lowering => {
-                    EditorCompilationStage::Lowering
+                yss_graph_analysis::GraphResolutionStage::Analysis => {
+                    EditorResolutionStage::Analysis
                 }
             },
             code: code.clone(),
@@ -515,39 +530,35 @@ fn project_outcome(value: &GraphResolutionOutcome) -> EditorResolutionOutcome {
     }
 }
 
-fn diagnostic_belongs_to_node(
-    diagnostic: &GraphDiagnosticFact,
-    node_id: NodeId,
+fn diagnostics_by_node<'a>(
+    diagnostics: &'a [GraphDiagnosticFact],
     document: &GraphDocument,
-) -> bool {
-    match &diagnostic.primary {
-        DiagnosticLocation::Node(id) | DiagnosticLocation::Parameter { node_id: id, .. } => {
-            *id == node_id
+) -> BTreeMap<NodeId, Vec<&'a GraphDiagnosticFact>> {
+    let mut by_node = BTreeMap::<_, Vec<_>>::new();
+    for diagnostic in diagnostics {
+        let nodes = match &diagnostic.primary {
+            DiagnosticLocation::Node(id) | DiagnosticLocation::Parameter { node_id: id, .. } => {
+                [Some(*id), None]
+            }
+            DiagnosticLocation::Port(address) => [Some(address.node_id), None],
+            DiagnosticLocation::Connection(connection_id) => document
+                .connections
+                .get(connection_id)
+                .map(|connection| {
+                    [
+                        Some(connection.input.node_id),
+                        (connection.input.node_id != connection.output.node_id)
+                            .then_some(connection.output.node_id),
+                    ]
+                })
+                .unwrap_or_default(),
+            DiagnosticLocation::Graph | DiagnosticLocation::Resource(_) => [None, None],
+        };
+        for node in nodes.into_iter().flatten() {
+            by_node.entry(node).or_default().push(diagnostic);
         }
-        DiagnosticLocation::Port(address) => address.node_id == node_id,
-        DiagnosticLocation::Connection(connection_id) => document
-            .connections
-            .get(connection_id)
-            .is_some_and(|connection| {
-                connection.input.node_id == node_id || connection.output.node_id == node_id
-            }),
-        DiagnosticLocation::Graph | DiagnosticLocation::Resource(_) => false,
     }
-}
-
-fn has_connection(document: &GraphDocument, address: &PortAddress) -> bool {
-    document
-        .connections
-        .values()
-        .any(|connection| connection.input == *address || connection.output == *address)
-}
-
-fn count_connections(document: &GraphDocument, address: &PortAddress) -> u32 {
-    document
-        .connections
-        .values()
-        .filter(|connection| connection.input == *address || connection.output == *address)
-        .count() as u32
+    by_node
 }
 
 fn data_type_for(value: &TypeExpr) -> Option<DataType> {

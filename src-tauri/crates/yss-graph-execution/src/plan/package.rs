@@ -2,19 +2,19 @@ use std::sync::Arc;
 
 use super::identity::PlanProvenance;
 use super::model::ExecutionPlan;
-use super::parameter::CompiledParameterBundle;
+use super::parameter::PlanParameterBundle;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompiledExecutionPackage {
+pub struct ExecutionPlanPackage {
     plan: Arc<ExecutionPlan>,
-    parameters: Arc<CompiledParameterBundle>,
+    parameters: Arc<PlanParameterBundle>,
     provenance: PlanProvenance,
 }
 
-impl CompiledExecutionPackage {
+impl ExecutionPlanPackage {
     pub fn new(
         plan: Arc<ExecutionPlan>,
-        parameters: Arc<CompiledParameterBundle>,
+        parameters: Arc<PlanParameterBundle>,
         provenance: PlanProvenance,
     ) -> Self {
         Self {
@@ -28,7 +28,7 @@ impl CompiledExecutionPackage {
         &self.plan
     }
 
-    pub fn parameters(&self) -> &Arc<CompiledParameterBundle> {
+    pub fn parameters(&self) -> &Arc<PlanParameterBundle> {
         &self.parameters
     }
 

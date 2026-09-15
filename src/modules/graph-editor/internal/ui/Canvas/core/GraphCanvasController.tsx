@@ -51,13 +51,12 @@ export function GraphCanvasController({
       disconnectPinById,
       resetPinValue,
       setSelectedNodeIds,
-      compileGraph,
       executeGraph,
       cancelGraphExecution,
       clearGraphArtifacts,
       createNode,
     },
-    workspace: { activeGraph, compileStatus },
+    workspace: { activeGraph },
     interaction: { contextMenu, setContextMenu, pendingConnection, setPendingConnection },
   } = canvas;
   const activeResourceRef = activeGraph?.graphPath ?? null;
@@ -132,10 +131,6 @@ export function GraphCanvasController({
                 : projectionAllowsExecution
                   ? null
                   : "blockingProblems",
-            compileStatus,
-            onCompile: () => {
-              void compileGraph(activeGraph.graphPath);
-            },
             onExecute: () => {
               void executeGraph(activeGraph.graphPath);
             },
@@ -154,13 +149,11 @@ export function GraphCanvasController({
       cancelGraphExecution,
       clearGraphArtifacts,
       closePalette,
-      compileGraph,
       contextMenu,
       executeGraph,
       handlePaletteSelect,
       projectionAllowsExecution,
       sourcePort,
-      compileStatus,
     ],
   );
   const contextMenuActions = useMemo(

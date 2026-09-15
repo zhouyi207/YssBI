@@ -6,7 +6,7 @@ use yss_graph_analysis::{
     GraphSemanticSnapshot,
 };
 use yss_graph_analysis_contract::{
-    CompilationBasis, DiagnosticCode, DiagnosticSeverity, ResourceKey, ResourceVersion,
+    DiagnosticCode, DiagnosticSeverity, GraphAnalysisBasis, ResourceKey, ResourceVersion,
 };
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, InputState,
@@ -111,7 +111,7 @@ fn analysis_with_facts(
     _path: &GraphResourcePath,
     facts: GraphSemanticSnapshot,
 ) -> yss_graph_analysis::GraphAnalysis {
-    let basis = CompilationBasis {
+    let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
         resource_versions: BTreeMap::from([(
@@ -302,19 +302,19 @@ fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
     };
     let diagnostics = [
         problem(
-            "compiler.dependency.value_cycle",
+            "graph.dependency.value_cycle",
             GraphDiagnosticLocation::Graph,
         ),
         problem(
-            "compiler.resource.resolution_failed",
+            "graph.resource.resolution_failed",
             GraphDiagnosticLocation::Resource("database/source".into()),
         ),
         problem(
-            "compiler.connection.limit",
+            "graph.connection.limit",
             GraphDiagnosticLocation::Connection(connection),
         ),
         problem(
-            "compiler.parameter.invalid",
+            "graph.parameter.invalid",
             GraphDiagnosticLocation::Parameter {
                 node_id: source,
                 key: ParameterKey::new("value").expect("test parameter key is valid"),
@@ -352,10 +352,10 @@ fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
     assert_eq!(
         diagnostic_codes(&model.diagnostics),
         [
-            "compiler.dependency.value_cycle",
-            "compiler.resource.resolution_failed",
-            "compiler.connection.limit",
-            "compiler.parameter.invalid",
+            "graph.dependency.value_cycle",
+            "graph.resource.resolution_failed",
+            "graph.connection.limit",
+            "graph.parameter.invalid",
         ]
     );
     let source_node = model
@@ -365,7 +365,7 @@ fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
         .expect("source node is projected");
     assert_eq!(
         diagnostic_codes(&source_node.diagnostics),
-        ["compiler.connection.limit", "compiler.parameter.invalid"]
+        ["graph.connection.limit", "graph.parameter.invalid"]
     );
     let target_node = model
         .nodes
@@ -374,7 +374,7 @@ fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
         .expect("target node is projected");
     assert_eq!(
         diagnostic_codes(&target_node.diagnostics),
-        ["compiler.connection.limit"]
+        ["graph.connection.limit"]
     );
 }
 
@@ -395,7 +395,7 @@ fn editor_projection_fails_closed_when_nonempty_graph_lacks_neutral_facts() {
     );
     let path = GraphResourcePath::new("events/missing-facts.yssbi-event")
         .expect("test graph path is valid");
-    let basis = CompilationBasis {
+    let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([9; 32]),
         resource_versions: BTreeMap::new(),

@@ -299,8 +299,8 @@ mod inline {
 #[doc(hidden)]
 pub struct Hidden;
 
-pub use crate::facade::GraphCompiler;
-use crate::{graph::Graph, facade::GraphCompiler as Compiler};
+pub use crate::facade::GraphPlanner;
+use crate::{graph::Graph, facade::GraphPlanner as Planner};
 use crate::graph::{self, Graph as ImportedGraph};
 
 #[allow(clippy::too_many_arguments)]
@@ -369,7 +369,7 @@ include!("included_body.rs");
     assert!(contains(
         RustDependencyKind::ReExport,
         RustDependencyMode::Runtime,
-        "crate::facade::GraphCompiler"
+        "crate::facade::GraphPlanner"
     ));
     assert!(contains(
         RustDependencyKind::Path,
@@ -476,13 +476,13 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
     );
     fixture.write(
         "main.rs",
-        "fn main() { fixture_lib::facade::GraphCompiler; }\n",
+        "fn main() { fixture_lib::facade::GraphPlanner; }\n",
     );
     fixture.write(
         "facade.rs",
-        "use ndarray::Array1;\nuse polars::prelude::*;\nuse crate::graph::compiler::GraphCompiler as PrivateCompiler;\nmod child;\npub mod local;\npub use local::Local;\npub use crate::graph::compiler::GraphCompiler;\ninclude!(\"facade/included.rs\");\nmacro_rules! string_identity { ($name:ident) => { pub struct $name; }; }\nmacro_rules! uuid_id { ($name:ident) => { pub struct $name; }; }\nmacro_rules! semantic_id { ($name:ident, $label:literal) => { pub struct $name; }; }\nmacro_rules! define_execution_demand { ($variant:ident) => { pub enum ExecutionDemand { $variant } }; }\nstring_identity!(Generated);\nuuid_id!(GeneratedId);\nsemantic_id!(GeneratedSemantic, \"semantic\");\ndefine_execution_demand!(Default);\n",
+        "use ndarray::Array1;\nuse polars::prelude::*;\nuse crate::graph::planning::GraphPlanner as PrivatePlanner;\nmod child;\npub mod local;\npub use local::Local;\npub use crate::graph::planning::GraphPlanner;\ninclude!(\"facade/included.rs\");\nmacro_rules! string_identity { ($name:ident) => { pub struct $name; }; }\nmacro_rules! uuid_id { ($name:ident) => { pub struct $name; }; }\nmacro_rules! semantic_id { ($name:ident, $label:literal) => { pub struct $name; }; }\nmacro_rules! define_execution_demand { ($variant:ident) => { pub enum ExecutionDemand { $variant } }; }\nstring_identity!(Generated);\nuuid_id!(GeneratedId);\nsemantic_id!(GeneratedSemantic, \"semantic\");\ndefine_execution_demand!(Default);\n",
     );
-    fixture.write("facade/child.rs", "use super::PrivateCompiler;\n");
+    fixture.write("facade/child.rs", "use super::PrivatePlanner;\n");
     fixture.write(
         "facade/local.rs",
         "pub struct Local;\nimpl Local { pub fn new() -> Self { Self } }\n",
@@ -494,11 +494,11 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
     );
     fixture.write(
         "glob_facade/recursive.rs",
-        "use crate::graph::compiler::GraphCompiler as Unique;\npub use crate::glob_facade::*;\n",
+        "use crate::graph::planning::GraphPlanner as Unique;\npub use crate::glob_facade::*;\n",
     );
     fixture.write("glob_facade/target.rs", "pub struct Unique;\n");
-    fixture.write("graph/mod.rs", "pub mod compiler;\n");
-    fixture.write("graph/compiler.rs", "pub struct GraphCompiler;\n");
+    fixture.write("graph/mod.rs", "pub mod planning;\n");
+    fixture.write("graph/planning.rs", "pub struct GraphPlanner;\n");
     fixture.write("sci/src/lib.rs", "pub mod facade;\npub mod api;\n");
     fixture.write(
         "sci/src/facade.rs",
@@ -608,7 +608,7 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
             fully_qualified_owner: "fixture_lib".to_owned(),
             kind: RustDependencyKind::ReExport,
             mode: RustDependencyMode::Runtime,
-            written_target: "crate::facade::GraphCompiler".to_owned(),
+            written_target: "crate::facade::GraphPlanner".to_owned(),
             line: 1,
             column: 1,
         },
@@ -778,7 +778,7 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
             fully_qualified_owner: "fixture".to_owned(),
             kind: RustDependencyKind::Path,
             mode: RustDependencyMode::Runtime,
-            written_target: "fixture_lib::facade::GraphCompiler".to_owned(),
+            written_target: "fixture_lib::facade::GraphPlanner".to_owned(),
             line: 1,
             column: 13,
         },
@@ -788,7 +788,7 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
             fully_qualified_owner: "fixture_lib::facade::child".to_owned(),
             kind: RustDependencyKind::Use,
             mode: RustDependencyMode::Runtime,
-            written_target: "super::PrivateCompiler".to_owned(),
+            written_target: "super::PrivatePlanner".to_owned(),
             line: 1,
             column: 5,
         },
@@ -805,9 +805,9 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
                 fully_qualified_target,
                 symbol,
             } if package_name == "fixture"
-                && repository_relative_declaration_file == "src/graph/compiler.rs"
-                && fully_qualified_target == "fixture_lib::graph::compiler::GraphCompiler"
-                && symbol == "GraphCompiler"
+                && repository_relative_declaration_file == "src/graph/planning.rs"
+                && fully_qualified_target == "fixture_lib::graph::planning::GraphPlanner"
+                && symbol == "GraphPlanner"
         )
     }));
     assert!(canonical.iter().any(|dependency| {
@@ -966,8 +966,8 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
                     fully_qualified_target,
                     symbol,
                     ..
-                } if fully_qualified_target == "fixture_lib::graph::compiler::GraphCompiler"
-                    && symbol == "GraphCompiler"
+                } if fully_qualified_target == "fixture_lib::graph::planning::GraphPlanner"
+                    && symbol == "GraphPlanner"
             )
     }));
     assert!(canonical.iter().any(|dependency| {
@@ -978,8 +978,8 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
                     fully_qualified_target,
                     symbol,
                     ..
-                } if fully_qualified_target == "fixture_lib::graph::compiler::GraphCompiler"
-                    && symbol == "GraphCompiler"
+                } if fully_qualified_target == "fixture_lib::graph::planning::GraphPlanner"
+                    && symbol == "GraphPlanner"
             )
     }));
     assert!(canonical.iter().any(|dependency| {
@@ -1098,7 +1098,7 @@ fn canonical_dependency_resolution_prefers_workspace_members_and_preserves_exter
             fully_qualified_owner: "fixture_lib".to_owned(),
             kind: RustDependencyKind::Use,
             mode: RustDependencyMode::Runtime,
-            written_target: "crate::facade::PrivateCompiler".to_owned(),
+            written_target: "crate::facade::PrivatePlanner".to_owned(),
             line: 6,
             column: 1,
         }],

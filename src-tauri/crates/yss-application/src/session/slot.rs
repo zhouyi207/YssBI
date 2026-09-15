@@ -49,6 +49,8 @@ pub struct ApplicationSession {
     execution: Arc<ExecutionRuntimeState>,
     database: Arc<DatabaseRuntimeSession>,
     resource_provider_factory: Arc<ResourceProviderFactory>,
+    graph_activity: crate::graph::editing::GraphActivitySource,
+    graph_editing: crate::graph::editing::GraphEditingCoordinator,
 }
 
 impl ApplicationSession {
@@ -79,6 +81,8 @@ impl ApplicationSession {
             execution,
             database,
             resource_provider_factory,
+            graph_activity: crate::graph::editing::GraphActivitySource::default(),
+            graph_editing: crate::graph::editing::GraphEditingCoordinator::default(),
         }
     }
 
@@ -110,11 +114,35 @@ impl ApplicationSession {
             execution,
             database,
             resource_provider_factory,
+            graph_activity: crate::graph::editing::GraphActivitySource::default(),
+            graph_editing: crate::graph::editing::GraphEditingCoordinator::default(),
         }
     }
 
     pub(crate) fn project(&self) -> &ProjectState {
         &self.project
+    }
+
+    pub(crate) fn publish_graph_activity(&self, activity: crate::graph::editing::GraphActivity) {
+        self.graph_activity.publish(activity);
+    }
+
+    pub(crate) fn coordinate_graph_edit(
+        &self,
+        path: &yss_graph_document::GraphResourcePath,
+    ) -> Result<crate::graph::editing::GraphEditingPermit, crate::graph::editing::GraphEditingBusy>
+    {
+        self.graph_editing.acquire(path)
+    }
+
+    pub(crate) fn subscribe_graph_activity(
+        &self,
+        observer: crate::graph::editing::GraphActivityObserver,
+    ) -> Result<
+        crate::graph::editing::GraphActivitySubscription,
+        crate::graph::resources::ResourceMutationApplicationError,
+    > {
+        self.graph_activity.subscribe(observer)
     }
 
     pub(crate) fn graph(&self) -> &GraphRuntimeState {

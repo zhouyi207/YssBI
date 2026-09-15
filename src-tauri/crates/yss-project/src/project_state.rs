@@ -18,9 +18,13 @@ use yss_resource_lifecycle::ResourceLifecycleRegistry;
 mod activation;
 mod authority;
 mod function_mutation;
+mod graph_editing;
 #[path = "project_state/graph_lifecycle.rs"]
 mod graph_lifecycle;
 mod graph_operation;
+pub use graph_editing::{
+    GraphEditVersion, GraphEditingSnapshot, GraphEditingState, GraphHistoryAction,
+};
 mod lifecycle;
 mod resource_patch;
 mod resource_publication;

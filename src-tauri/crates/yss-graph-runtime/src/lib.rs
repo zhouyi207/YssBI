@@ -8,24 +8,21 @@ use std::sync::Barrier;
 
 use thiserror::Error;
 use yss_graph_analysis::{
-    GraphAnalysis, GraphSemanticCache, GraphSemanticSnapshot, analyze,
-    resolve_graph_semantics_with_cache,
+    GraphAnalysis, GraphSemanticSnapshot, analyze, resolve_graph_semantics_with_cache,
 };
 use yss_graph_analysis_contract::{
-    CompilationBasis, CompileId, ResourceKey, ResourceObservedState, ResourceVersion,
+    GraphAnalysisBasis, ResourceKey, ResourceObservedState, ResourceVersion,
 };
-use yss_graph_compiler::{GraphCompilationInput, GraphCompileError, GraphCompiledPackage, compile};
-use yss_graph_compiler_diagnostics::{
-    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticDefinitionError,
-    validate_compiler_diagnostic_definitions,
+use yss_graph_diagnostics::{
+    GRAPH_DIAGNOSTIC_DEFINITIONS, GraphDiagnosticDefinitionError,
+    validate_graph_diagnostic_definitions,
 };
 use yss_graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId, OrderKey,
     PortAddress,
 };
-use yss_graph_document_edit::{
-    GraphDocumentOperation, GraphDocumentPatch, apply_graph_document_patch, validate_graph_document,
-};
+use yss_graph_document::{GraphDocumentOperation, GraphDocumentPatch};
+use yss_graph_document_edit::{apply_graph_document_patch, validate_graph_document};
 use yss_graph_editor::{
     CatalogMutationValidationSnapshot, ClipboardSubgraph, EditorGraphMutation, MutationConflict,
     SourcePort, export_subgraph, filter_compatible_catalog,
@@ -34,6 +31,9 @@ use yss_graph_resource_contract::ResourceCatalogSnapshot;
 use yss_node_catalog::{BuiltinCatalog, CatalogResourceEntry, LocalizedCatalog};
 use yss_node_protocol::{PortDirection, ResolvedType, TypeExpr};
 use yss_node_registry::{NodeRegistry, RegistryFingerprint};
+
+mod semantic_cache;
+use semantic_cache::{CachedGraphAnalysis, GraphResolutionCache, GraphResolutionCaches};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct GraphRuntimeEpoch(u64);
@@ -54,8 +54,8 @@ pub struct GraphRuntimeComponents {
 }
 
 #[derive(Debug, Error)]
-#[error("graph compiler diagnostic definitions are invalid")]
-pub struct GraphRuntimeInitializationError(#[from] CompilerDiagnosticDefinitionError);
+#[error("graph diagnostic definitions are invalid")]
+pub struct GraphRuntimeInitializationError(#[from] GraphDiagnosticDefinitionError);
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -157,65 +157,9 @@ fn wait_for_test_rendezvous(rendezvous: Option<GraphRuntimeTestRendezvous>) {
 pub struct GraphRuntimeState {
     epoch: GraphRuntimeEpoch,
     components: GraphRuntimeComponents,
-    compiled_drafts: Mutex<BTreeMap<GraphResourcePath, CachedGraphDraft>>,
-    semantic_caches: Mutex<BTreeMap<GraphResourcePath, GraphSemanticCache>>,
+    semantic_caches: Mutex<GraphResolutionCaches>,
     #[cfg(any(test, feature = "test-support"))]
     test_control: Option<Arc<GraphRuntimeTestControl>>,
-}
-
-#[derive(Clone)]
-struct CachedGraphDraft {
-    artifact_id: [u8; 32],
-    document: Arc<GraphDocument>,
-    analysis: GraphAnalysis,
-    package: GraphCompiledPackage,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct CompiledGraphDraft {
-    artifact_id: [u8; 32],
-    document: Arc<GraphDocument>,
-    analysis: GraphAnalysis,
-    package: GraphCompiledPackage,
-}
-
-impl CompiledGraphDraft {
-    pub const fn artifact_id(&self) -> &[u8; 32] {
-        &self.artifact_id
-    }
-
-    pub fn document(&self) -> &GraphDocument {
-        &self.document
-    }
-
-    pub fn package(&self) -> &GraphCompiledPackage {
-        &self.package
-    }
-
-    pub fn analysis(&self) -> &GraphAnalysis {
-        &self.analysis
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct GraphDraftCompilation {
-    artifact_id: Option<[u8; 32]>,
-    cache_hit: bool,
-    analysis: GraphAnalysis,
-}
-
-impl GraphDraftCompilation {
-    pub const fn artifact_id(&self) -> Option<&[u8; 32]> {
-        self.artifact_id.as_ref()
-    }
-
-    pub const fn cache_hit(&self) -> bool {
-        self.cache_hit
-    }
-
-    pub fn analysis(&self) -> &GraphAnalysis {
-        &self.analysis
-    }
 }
 
 impl GraphRuntimeState {
@@ -223,12 +167,11 @@ impl GraphRuntimeState {
         epoch: GraphRuntimeEpoch,
         components: GraphRuntimeComponents,
     ) -> Result<Self, GraphRuntimeInitializationError> {
-        validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS)?;
+        validate_graph_diagnostic_definitions(GRAPH_DIAGNOSTIC_DEFINITIONS)?;
         Ok(Self {
             epoch,
             components,
-            compiled_drafts: Mutex::new(BTreeMap::new()),
-            semantic_caches: Mutex::new(BTreeMap::new()),
+            semantic_caches: Mutex::new(GraphResolutionCaches::default()),
             #[cfg(any(test, feature = "test-support"))]
             test_control: None,
         })
@@ -254,135 +197,23 @@ impl GraphRuntimeState {
         self.components.registry.as_ref()
     }
 
-    fn compile_graph(
-        &self,
-        semantics: &GraphSemanticSnapshot,
-        graph: GraphResourcePath,
-        compile_id: CompileId,
-        kernel_fingerprint: [u8; 32],
-    ) -> Result<GraphCompiledPackage, GraphCompileError> {
-        compile(GraphCompilationInput::new(
-            semantics
-                .ready()
-                .ok_or_else(|| GraphCompileError::InvalidGraph {
-                    graph: graph.clone(),
-                    code: yss_graph_compiler::GraphCompileErrorCode::LoweringInvariant,
-                })?,
-            graph,
-            compile_id,
-            kernel_fingerprint,
-        ))
-    }
-
-    pub fn compile_draft(
-        &self,
-        document: &GraphDocument,
-        graph: GraphResourcePath,
-        resource_catalog: &ResourceCatalogSnapshot,
-        basis: &CompilationBasis,
-        supports_kernel: &dyn Fn(&str) -> bool,
-    ) -> Result<GraphDraftCompilation, GraphDraftCompilationError> {
-        let analysis =
-            self.resolve_graph_draft(&graph, document, basis, resource_catalog, &[], "en-US");
-        let semantics = analysis
-            .semantic_snapshot()
-            .clone()
-            .with_execution_kernel_support(supports_kernel);
-        let analysis = analysis.with_semantic_snapshot(semantics);
-        if let yss_graph_analysis::GraphResolutionOutcome::InternalFailure { code, .. } =
-            analysis.semantic_snapshot().outcome()
-        {
-            return Err(GraphDraftCompilationError::Resolution { code: code.clone() });
-        }
-        if analysis.semantic_snapshot().has_blocking_diagnostics()
-            || !matches!(
-                analysis.semantic_snapshot().outcome(),
-                yss_graph_analysis::GraphResolutionOutcome::Complete
-            )
-        {
-            return Ok(GraphDraftCompilation {
-                artifact_id: None,
-                cache_hit: false,
-                analysis,
-            });
-        }
-        let artifact_id = *analysis.semantic_input_hash();
-        if self
-            .compiled_drafts
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&graph)
-            .filter(|cached| cached.artifact_id == artifact_id)
-            .is_some()
-        {
-            return Ok(GraphDraftCompilation {
-                artifact_id: Some(artifact_id),
-                cache_hit: true,
-                analysis,
-            });
-        }
-        let semantics = analysis.semantic_snapshot();
-        let compile_id = CompileId::new(u64::from_be_bytes(
-            artifact_id[..8]
-                .try_into()
-                .expect("SHA-256 prefix has exactly eight bytes"),
-        ));
-        let package = self
-            .compile_graph(
-                semantics,
-                graph.clone(),
-                compile_id,
-                basis.kernel_fingerprint,
-            )
-            .map_err(GraphDraftCompilationError::Compile)?;
-        self.compiled_drafts
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(
-                graph,
-                CachedGraphDraft {
-                    artifact_id,
-                    document: Arc::new(document.clone()),
-                    analysis: analysis.clone(),
-                    package: package.clone(),
-                },
-            );
-        Ok(GraphDraftCompilation {
-            artifact_id: Some(artifact_id),
-            cache_hit: false,
-            analysis,
-        })
-    }
-
-    pub fn compiled_draft(
-        &self,
-        graph: &GraphResourcePath,
-        artifact_id: &[u8; 32],
-    ) -> Option<CompiledGraphDraft> {
-        self.compiled_drafts
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(graph)
-            .filter(|cached| &cached.artifact_id == artifact_id)
-            .map(|cached| CompiledGraphDraft {
-                artifact_id: cached.artifact_id,
-                document: Arc::clone(&cached.document),
-                analysis: cached.analysis.clone(),
-                package: cached.package.clone(),
-            })
-    }
-
     pub fn plan_editor_mutation(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
         mutation: EditorGraphMutation,
         catalog: &CatalogMutationValidationSnapshot,
-        semantics: &GraphSemanticSnapshot,
+        resolve: impl FnOnce() -> GraphAnalysis,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let mut candidate = document.clone();
         let mut operations = Vec::new();
-        for address in mutation.referenced_ports() {
+        let referenced_ports = mutation.referenced_ports();
+        let analysis = (!referenced_ports.is_empty()).then(resolve);
+        for address in referenced_ports {
+            let semantics = analysis
+                .as_ref()
+                .expect("referenced ports require analysis")
+                .semantic_snapshot();
             let Some(port) = semantics.concrete_interface().port(address) else {
                 continue;
             };
@@ -455,15 +286,17 @@ impl GraphRuntimeState {
         )?;
         apply_graph_document_patch(&mut candidate, &mutation_patch)?;
         operations.extend(mutation_patch.operations);
+        let referenced_ports = candidate
+            .connections
+            .values()
+            .flat_map(|connection| [&connection.output, &connection.input])
+            .chain(candidate.input_states.keys())
+            .collect::<std::collections::BTreeSet<_>>();
         for (address, binding) in &candidate.port_bindings {
             if matches!(binding, DynamicPortBinding::UserCreated { .. }) {
                 continue;
             }
-            let referenced = candidate.input_states.contains_key(address)
-                || candidate.connections.values().any(|connection| {
-                    &connection.output == address || &connection.input == address
-                });
-            if !referenced {
+            if !referenced_ports.contains(address) {
                 operations.push(GraphDocumentOperation::RemovePortBinding {
                     address: address.clone(),
                     binding: binding.clone(),
@@ -486,11 +319,11 @@ impl GraphRuntimeState {
         *self.components.registry.fingerprint().as_bytes()
     }
 
-    pub fn resolve_graph_draft(
+    pub fn resolve_graph_document(
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
-        basis: &CompilationBasis,
+        basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
         resources: &[CatalogResourceEntry],
         locale: &str,
@@ -503,26 +336,36 @@ impl GraphRuntimeState {
         &self,
         graph_path: &GraphResourcePath,
         document: &GraphDocument,
-        basis: &CompilationBasis,
+        basis: &GraphAnalysisBasis,
         resource_catalog: &ResourceCatalogSnapshot,
     ) -> GraphAnalysis {
         let mut cache = self
             .semantic_caches
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .remove(graph_path)
-            .unwrap_or_default();
+            .take(graph_path);
+        let document_fingerprint = yss_graph_document::resolution_document_fingerprint(document)
+            .expect("validated resolution inputs are serializable");
+        if let Some(cached) = cache.analysis.as_ref().filter(|cached| {
+            cached.document_fingerprint == document_fingerprint
+                && cached.analysis.registry_fingerprint() == basis.registry_fingerprint.as_bytes()
+                && cached.analysis.kernel_fingerprint() == &basis.kernel_fingerprint
+                && cached.dependency_fingerprint
+                    == resource_catalog.resolution_dependency_fingerprint(
+                        cached.analysis.semantic_snapshot().dependencies(),
+                    )
+        }) {
+            let analysis = cached.analysis.clone();
+            self.retain_semantic_cache(graph_path, cache);
+            return analysis;
+        }
         let resources = resource_catalog.tracked();
         let snapshot = resolve_graph_semantics_with_cache(
             document,
             self.components.registry.as_ref(),
             &resources,
-            &mut cache,
+            &mut cache.nodes,
         );
-        self.semantic_caches
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(graph_path.clone(), cache);
         let dependencies = resources.dependencies();
         let mut resolved_basis = basis.clone();
         resolved_basis.resource_versions.clear();
@@ -554,8 +397,27 @@ impl GraphRuntimeState {
             &dependencies.fingerprint(),
         )
         .expect("validated graph semantic input is canonically serializable");
-        analyze(&resolved_basis, snapshot.with_dependencies(dependencies))
-            .with_semantic_input_hash(hash)
+        let dependency_fingerprint =
+            resource_catalog.resolution_dependency_fingerprint(&dependencies);
+        let analysis = analyze(&resolved_basis, snapshot.with_dependencies(dependencies))
+            .with_semantic_input_hash(hash);
+        cache.analysis = Some(CachedGraphAnalysis {
+            document_fingerprint,
+            dependency_fingerprint,
+            analysis: analysis.clone(),
+        });
+        self.retain_semantic_cache(graph_path, cache);
+        analysis
+    }
+
+    fn retain_semantic_cache(&self, graph_path: &GraphResourcePath, cache: GraphResolutionCache) {
+        let retired = self
+            .semantic_caches
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .put(graph_path.clone(), cache);
+        // Large snapshots and tabular constants are also released off-lock.
+        drop(retired);
     }
 
     pub fn localize_analysis(
@@ -565,15 +427,16 @@ impl GraphRuntimeState {
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> GraphAnalysis {
-        let snapshot = localize_semantic_snapshot(
-            document,
-            self.components.registry.as_ref(),
-            resources,
-            self.components.catalog.as_ref(),
-            locale,
-            analysis.semantic_snapshot().clone(),
-        );
-        analysis.with_semantic_snapshot(snapshot)
+        analysis.map_semantic_snapshot(|snapshot| {
+            localize_semantic_snapshot(
+                document,
+                self.components.registry.as_ref(),
+                resources,
+                self.components.catalog.as_ref(),
+                locale,
+                snapshot,
+            )
+        })
     }
 
     pub fn materialize_open_candidate(
@@ -617,14 +480,14 @@ impl GraphRuntimeState {
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> Result<LocalizedCatalog, GraphRuntimeCatalogError> {
-        let basis = CompilationBasis {
+        let basis = GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(self.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),
         };
         let analysis =
-            self.resolve_graph_draft(graph_path, document, &basis, catalog, resources, locale);
+            self.resolve_graph_document(graph_path, document, &basis, catalog, resources, locale);
         let node = analysis
             .semantic_snapshot()
             .node(source.node_id)
@@ -697,26 +560,15 @@ fn resolved_type_expr(value: &ResolvedType) -> TypeExpr {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum GraphDraftCompilationError {
-    #[error("graph semantic resolution failed: {code}")]
-    Resolution { code: Box<str> },
-    #[error("graph draft source hashing failed")]
-    SourceHash(#[source] yss_canonical_hash::CanonicalEncodingError),
-    #[error("graph draft compilation failed")]
-    Compile(#[source] GraphCompileError),
-}
-
 fn graph_semantic_input_hash(
     document: &GraphDocument,
     registry_fingerprint: &[u8; 32],
     kernel_fingerprint: &[u8; 32],
     resource_catalog_fingerprint: &[u8; 32],
-) -> Result<[u8; 32], GraphDraftCompilationError> {
-    let document_hash = yss_graph_document::semantic_document_fingerprint(document)
-        .map_err(GraphDraftCompilationError::SourceHash)?;
+) -> Result<[u8; 32], yss_canonical_hash::CanonicalEncodingError> {
+    let document_hash = yss_graph_document::semantic_document_fingerprint(document)?;
     yss_canonical_hash::hash_canonical(
-        "yssbi.graph-artifact-input.v3",
+        "yssbi.graph-semantic-input.v1",
         &(
             document_hash,
             registry_fingerprint,
@@ -724,7 +576,6 @@ fn graph_semantic_input_hash(
             resource_catalog_fingerprint,
         ),
     )
-    .map_err(GraphDraftCompilationError::SourceHash)
 }
 
 fn localize_semantic_snapshot(
@@ -826,42 +677,18 @@ impl GraphMaterializationError {
 }
 
 #[cfg(test)]
-mod tests {
-    pub(super) fn set_constant(
-        document: &mut GraphDocument,
-        node: NodeId,
-        data_type: yss_data_contract::DataType,
-        data_value: yss_data_contract::DataValue,
-    ) {
-        let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
-        document.constants.insert(
-            id,
-            yss_graph_document::GraphConstant {
-                id,
-                name: id.to_string(),
-                data_type,
-                data_value,
-                tabular: None,
-                description: String::new(),
-                tags: vec![],
-            },
-        );
-        let node = document.nodes.get_mut(&node).unwrap();
-        node.node_type = "yssbi.constant.get".parse().unwrap();
-        node.parameters = ParameterValues::from([(
-            "constant".parse().unwrap(),
-            serde_json::json!(id.to_string()),
-        )]);
-    }
+mod resolution_tests;
 
+#[cfg(test)]
+mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use yss_graph_analysis_contract::CompilationBasis;
+    use yss_graph_analysis_contract::GraphAnalysisBasis;
     use yss_graph_document::{DocumentNode, NodePosition, ParameterValues};
     use yss_node_catalog::build_builtin_node_system;
     use yss_node_registry::RegistryFingerprint;
 
-    fn components() -> GraphRuntimeComponents {
+    pub(super) fn components() -> GraphRuntimeComponents {
         let builtin = build_builtin_node_system().expect("built-in graph system must be valid");
         GraphRuntimeComponents {
             registry: builtin.registry,
@@ -869,16 +696,8 @@ mod tests {
         }
     }
 
-    fn empty_resource_catalog() -> ResourceCatalogSnapshot {
-        ResourceCatalogSnapshot::new(
-            BTreeMap::new(),
-            BTreeMap::new(),
-            yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
-        )
-    }
-
-    fn basis(runtime: &GraphRuntimeState) -> CompilationBasis {
-        CompilationBasis {
+    pub(super) fn basis(runtime: &GraphRuntimeState) -> GraphAnalysisBasis {
+        GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
             resource_versions: BTreeMap::new(),
@@ -979,7 +798,7 @@ mod tests {
         );
 
         let graph = GraphResourcePath::new("events/Call.yssbi-event").unwrap();
-        let resolved = runtime.resolve_graph_draft(
+        let resolved = runtime.resolve_graph_document(
             &graph,
             &document,
             &basis(&runtime),
@@ -1016,7 +835,7 @@ mod tests {
         }
         assert!(document.port_bindings.is_empty());
         assert_eq!(
-            runtime.resolve_graph_draft(
+            runtime.resolve_graph_document(
                 &graph,
                 &document,
                 &basis(&runtime),
@@ -1025,172 +844,6 @@ mod tests {
                 "en-US"
             ),
             resolved
-        );
-    }
-
-    #[test]
-    fn draft_compilation_cache_tracks_semantics_not_layout() {
-        let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components())
-                .unwrap();
-        let graph =
-            GraphResourcePath::new("events/Cache.yssbi-event").expect("test graph path is valid");
-        let node_id = NodeId::new();
-        let mut document = GraphDocument::default();
-        document.nodes.insert(
-            node_id,
-            DocumentNode {
-                id: node_id,
-                node_type: "yssbi.constant.get"
-                    .parse()
-                    .expect("built-in node type is valid"),
-                position: NodePosition { x: 0.0, y: 0.0 },
-                parameters: ParameterValues::from([(
-                    "value".parse().expect("built-in parameter key is valid"),
-                    serde_json::json!(7),
-                )]),
-                user_label: None,
-            },
-        );
-        set_constant(
-            &mut document,
-            node_id,
-            yss_data_contract::DataType::Int64,
-            yss_data_contract::DataValue::Int64(7),
-        );
-        let resources = empty_resource_catalog();
-        let compile_basis = basis(&runtime);
-
-        let first = runtime
-            .compile_draft(
-                &document,
-                graph.clone(),
-                &resources,
-                &compile_basis,
-                &|_| true,
-            )
-            .expect("initial draft compiles");
-        assert!(!first.cache_hit());
-
-        let unsupported = runtime
-            .compile_draft(
-                &document,
-                graph.clone(),
-                &resources,
-                &compile_basis,
-                &|_| false,
-            )
-            .expect("unavailable execution capability is a compile diagnostic");
-        assert!(unsupported.artifact_id().is_none());
-        assert_eq!(
-            unsupported.analysis().semantic_snapshot().outcome(),
-            &yss_graph_analysis::GraphResolutionOutcome::Incomplete
-        );
-        assert!(
-            unsupported
-                .analysis()
-                .semantic_snapshot()
-                .diagnostics()
-                .iter()
-                .any(|diagnostic| {
-                    diagnostic.blocking
-                        && diagnostic.code.as_str() == "compiler.node.kernel_unavailable"
-                })
-        );
-
-        document.nodes.get_mut(&node_id).unwrap().position = NodePosition { x: 20.0, y: 40.0 };
-        document.nodes.get_mut(&node_id).unwrap().user_label = Some("Renamed".into());
-        let layout_only = runtime
-            .compile_draft(
-                &document,
-                graph.clone(),
-                &resources,
-                &compile_basis,
-                &|_| true,
-            )
-            .expect("layout-only draft compiles");
-        assert!(layout_only.cache_hit());
-        assert_eq!(layout_only.artifact_id(), first.artifact_id());
-        assert_eq!(
-            layout_only.analysis().semantic_snapshot().outcome(),
-            &yss_graph_analysis::GraphResolutionOutcome::Complete
-        );
-        assert!(
-            !layout_only
-                .analysis()
-                .semantic_snapshot()
-                .has_blocking_diagnostics()
-        );
-
-        set_constant(
-            &mut document,
-            node_id,
-            yss_data_contract::DataType::Int64,
-            yss_data_contract::DataValue::Int64(8),
-        );
-        let semantic_change = runtime
-            .compile_draft(&document, graph, &resources, &compile_basis, &|_| true)
-            .expect("updated draft compiles");
-        assert!(!semantic_change.cache_hit());
-        assert_ne!(semantic_change.artifact_id(), first.artifact_id());
-
-        // A signature label change keeps ABI/hash identity but must refresh editor facts.
-        let function = GraphResourcePath::new("functions/Labels.yssbi-function").unwrap();
-        let resources = |label: &str| {
-            ResourceCatalogSnapshot::new(
-                BTreeMap::from([(
-                    function.clone(),
-                    yss_graph_resource_contract::FunctionCatalogEntry::new(
-                        yss_graph_resource_contract::FunctionSignature::new(
-                            vec![yss_graph_resource_contract::FunctionParameterContract::new(
-                                yss_graph_document::FunctionParameterId::new("parameter"),
-                                label,
-                                yss_data_contract::DataType::Int64,
-                            )],
-                            None,
-                        ),
-                    ),
-                )]),
-                BTreeMap::new(),
-                yss_graph_resource_contract::ResourceCatalogFingerprint::from_bytes([0; 32]),
-            )
-        };
-        let entry = document.nodes.get_mut(&node_id).unwrap();
-        entry.node_type = "yssbi.project.function.entry".parse().unwrap();
-        entry.parameters = ParameterValues::from([(
-            "function".parse().unwrap(),
-            serde_json::json!(function.as_str()),
-        )]);
-        let original = runtime
-            .compile_draft(
-                &document,
-                function.clone(),
-                &resources("Before"),
-                &compile_basis,
-                &|_| true,
-            )
-            .unwrap();
-        let renamed = runtime
-            .compile_draft(
-                &document,
-                function.clone(),
-                &resources("After"),
-                &compile_basis,
-                &|_| true,
-            )
-            .unwrap();
-        assert!(renamed.cache_hit());
-        assert_eq!(renamed.artifact_id(), original.artifact_id());
-        assert_eq!(
-            renamed
-                .analysis()
-                .semantic_snapshot()
-                .node(node_id)
-                .unwrap()
-                .ports[0]
-                .label
-                .as_ref(),
-            "After"
         );
     }
 }

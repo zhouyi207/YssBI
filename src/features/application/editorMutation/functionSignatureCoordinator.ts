@@ -22,7 +22,7 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { isGraphDraftSaving } from "@/features/core/graphDraft";
+import { isGraphSaving } from "@/features/core/graphEditing";
 
 export interface ExecuteFunctionSignatureMutationInput {
   functionPath: string;
@@ -125,7 +125,7 @@ export async function executeFunctionSignatureMutation(
   input: ExecuteFunctionSignatureMutationInput,
   overrides: Partial<FunctionSignatureCoordinatorDependencies> = {},
 ): Promise<ExecuteFunctionSignatureMutationOutcome> {
-  if (isGraphDraftSaving(input.functionPath)) return { status: "stale" };
+  if (isGraphSaving(input.functionPath)) return { status: "stale" };
   const dependencies = { ...defaultDependencies, ...overrides };
   const { context, captured: meta } = captureRevisionedProjectCommandSnapshot(
     () => useGraphMetaStore.getState().graphs[input.functionPath],

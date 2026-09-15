@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => {
   };
 
   const confirm3 = vi.fn();
-  const saveGraphDraft = vi.fn();
+  const saveGraph = vi.fn();
   const saveChart = vi.fn();
   const clearResourceDocumentState = vi.fn();
   const showBlockingIpcError = vi.fn();
@@ -110,7 +110,7 @@ const mocks = vi.hoisted(() => {
 
     for (const mock of [
       confirm3,
-      saveGraphDraft,
+      saveGraph,
       saveChart,
       clearResourceDocumentState,
       showBlockingIpcError,
@@ -129,7 +129,7 @@ const mocks = vi.hoisted(() => {
     }
 
     confirm3.mockResolvedValue("discard");
-    saveGraphDraft.mockResolvedValue(true);
+    saveGraph.mockResolvedValue(true);
     saveChart.mockResolvedValue(true);
     unloadGraphDocument.mockResolvedValue(undefined);
     setChartState.mockImplementation(applyChartState);
@@ -171,7 +171,7 @@ const mocks = vi.hoisted(() => {
     chartState,
     dirtyKey,
     confirm3,
-    saveGraphDraft,
+    saveGraph,
     saveChart,
     clearResourceDocumentState,
     showBlockingIpcError,
@@ -227,8 +227,8 @@ vi.mock("@/features/core/resource", () => ({
   clearResourceDocumentState: mocks.clearResourceDocumentState,
 }));
 
-vi.mock("@/features/application/graphDraft/saveGraphDraft", () => ({
-  saveGraphDraft: mocks.saveGraphDraft,
+vi.mock("@/features/application/graphEditing/saveGraph", () => ({
+  saveGraph: mocks.saveGraph,
 }));
 
 vi.mock("@/features/core/chart/chartDocumentStore", () => ({
@@ -613,7 +613,7 @@ describe("workbench panel close coordinator", () => {
     seedPanels([editorPanel("editor-a", graphPath)]);
     markDirty(graphPath, "event");
     mocks.confirm3.mockResolvedValueOnce("confirm");
-    mocks.saveGraphDraft.mockImplementationOnce(async () => {
+    mocks.saveGraph.mockImplementationOnce(async () => {
       mocks.project.epoch += 1;
       throw new Error("stale project internals");
     });
@@ -705,8 +705,8 @@ describe("workbench panel close coordinator", () => {
 
     await expect(requestCloseWorkbenchPanels(["editor-a", "editor-b"])).resolves.toBe(false);
 
-    expect(mocks.saveGraphDraft).toHaveBeenCalledOnce();
-    expect(mocks.saveGraphDraft).toHaveBeenCalledWith(firstPath, "event");
+    expect(mocks.saveGraph).toHaveBeenCalledOnce();
+    expect(mocks.saveGraph).toHaveBeenCalledWith(firstPath, "event");
     expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.panels).toHaveLength(2);
   });
@@ -721,7 +721,7 @@ describe("workbench panel close coordinator", () => {
     await expect(requestCloseWorkbenchPanel("chart-a")).resolves.toBe(false);
 
     expect(mocks.saveChart).toHaveBeenCalledWith(chartPath);
-    expect(mocks.saveGraphDraft).not.toHaveBeenCalled();
+    expect(mocks.saveGraph).not.toHaveBeenCalled();
     expect(mocks.showBlockingMessage).toHaveBeenCalledOnce();
     expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.releasePane).not.toHaveBeenCalled();

@@ -5,16 +5,13 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use super::execution_mapping::execution_package_from_graph;
 use super::finalization::{FinalizationError, finalize_successful_run};
-use super::inputs::build_resource_catalog;
-use crate::graph::catalog::capture_localized_project_facts;
+use super::inputs::{GraphInputError, GraphResolutionContext};
 use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
 use yss_database_runtime::error::DatabaseError;
-use yss_database_runtime::session_api::catalog_snapshot;
-use yss_graph_document::GraphResourcePath;
+use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_execution::error::RunPhase;
 use yss_graph_execution::package_preparation::PackagePreparationError;
 use yss_graph_execution::plan::{
@@ -62,14 +59,16 @@ pub struct RunGraphRequest {
     required_resources: Box<[ProjectResourceRequirement]>,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
-    compiled_artifact_id: [u8; 32],
+    document: GraphDocument,
+    semantic_input_hash: [u8; 32],
 }
 
 impl RunGraphRequest {
     pub fn new(
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
-        compiled_artifact_id: [u8; 32],
+        document: GraphDocument,
+        semantic_input_hash: [u8; 32],
     ) -> Self {
         Self {
             project_instance_id,
@@ -78,7 +77,8 @@ impl RunGraphRequest {
             required_resources: Box::new([]),
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline: Instant::now() + std::time::Duration::from_secs(60),
-            compiled_artifact_id,
+            document,
+            semantic_input_hash,
         }
     }
 
@@ -208,12 +208,18 @@ pub enum ExecutionApplicationError {
     ProjectFacts(#[source] crate::graph::catalog::ProjectCatalogReadError),
     #[error("database catalog snapshot failed")]
     DatabaseCatalog(#[source] DatabaseError),
-    #[error("compiled graph draft is unavailable or stale")]
-    CompiledDraftUnavailable,
+    #[error("graph draft is invalid")]
+    InvalidDocument(#[source] yss_graph_document_edit::DocumentError),
+    #[error("graph draft or its dependencies changed")]
+    DraftChanged,
+    #[error("graph has blocking diagnostics")]
+    GraphNotReady,
+    #[error("graph resolution failed: {code}")]
+    GraphResolutionFailed { code: Box<str> },
+    #[error("graph execution plan preparation failed")]
+    GraphPlan(#[source] yss_graph_execution::graph_preparation::GraphPlanError),
     #[error("graph contract mapping failed")]
     GraphContract(#[source] crate::graph::inputs::GraphContractMappingError),
-    #[error("graph execution package mapping failed")]
-    GraphPackage(#[source] crate::graph::execution_mapping::GraphPackageMappingError),
     #[error("execution package preparation failed")]
     PackagePreparation(#[source] PackagePreparationError),
     #[error("prepared execution failed")]
@@ -238,6 +244,16 @@ pub enum ResourceBindingError {
     MissingVersion { resource: ProjectResourceId },
     #[error("project value contains an invalid Execution identity")]
     Identity(#[source] InvalidPlanIdentity),
+}
+
+impl From<GraphInputError> for ExecutionApplicationError {
+    fn from(error: GraphInputError) -> Self {
+        match error {
+            GraphInputError::Catalog(error) => Self::ProjectFacts(error),
+            GraphInputError::Database(error) => Self::DatabaseCatalog(error),
+            GraphInputError::Contract(error) => Self::GraphContract(error),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -280,22 +296,11 @@ where
         .project()
         .get_data()
         .map_err(ExecutionApplicationError::ProjectSnapshot)?;
-    let compiled_draft = captured
-        .graph()
-        .compiled_draft(&request.graph_path, &request.compiled_artifact_id)
-        .ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
-    if compiled_draft.analysis().kernel_fingerprint()
-        != &captured.execution().kernels().fingerprint().as_bytes()
-    {
-        return Err(ExecutionApplicationError::CompiledDraftUnavailable);
-    }
+    yss_graph_document_edit::validate_graph_document(&request.document)
+        .map_err(ExecutionApplicationError::InvalidDocument)?;
     let required_resources = merge_resource_requirements(
         request.required_resources.iter().cloned(),
-        graph_resource_requirements(
-            &initial_data,
-            &request.graph_path,
-            Some(compiled_draft.document()),
-        )?,
+        graph_resource_requirements(&initial_data, &request.graph_path, Some(&request.document))?,
     );
 
     let project_request = ProjectExecutionRequest::new(
@@ -308,45 +313,44 @@ where
         .prepare_execution(project_request)
         .map_err(ExecutionApplicationError::ProjectPreparation)?;
 
-    check_control(&request)?;
-
-    let project_facts = capture_localized_project_facts(&captured)
-        .map_err(ExecutionApplicationError::ProjectFacts)?;
-    let database_facts = catalog_snapshot(captured.database())
-        .map_err(ExecutionApplicationError::DatabaseCatalog)?;
-    let validated_graph_catalog =
-        build_resource_catalog(project_facts.resources().graph(), &database_facts)
-            .map_err(ExecutionApplicationError::GraphContract)?;
-    let validated_graph_catalog = crate::graph::inputs::capture_function_dependencies(
-        &captured,
-        compiled_draft.document(),
-        validated_graph_catalog,
-    )
-    .map_err(ExecutionApplicationError::GraphContract)?;
-    if !validated_graph_catalog
-        .matches_dependencies(compiled_draft.analysis().semantic_snapshot().dependencies())
-    {
-        return Err(ExecutionApplicationError::CompiledDraftUnavailable);
+    let context = GraphResolutionContext::capture(&captured, &request.document)?;
+    let analysis = context.resolve(&captured, &request.graph_path, &request.document, "en-US");
+    if analysis.semantic_input_hash() != &request.semantic_input_hash {
+        return Err(ExecutionApplicationError::DraftChanged);
     }
+    if let yss_graph_analysis::GraphResolutionOutcome::InternalFailure { code, .. } =
+        analysis.semantic_snapshot().outcome()
+    {
+        return Err(ExecutionApplicationError::GraphResolutionFailed { code: code.clone() });
+    }
+    if analysis.semantic_snapshot().ready().is_none() {
+        return Err(ExecutionApplicationError::GraphNotReady);
+    }
+    context.revalidate(&captured)?;
+    revalidate_final_session(state, &captured)?;
     let result_basis = captured
         .execution()
         .capture_result_run_basis(
             request.graph_path.as_str(),
             crate::graph::inputs::graph_result_inputs(
                 &request.graph_path,
-                compiled_draft.analysis(),
-                &database_facts,
-                captured.graph().registry_fingerprint(),
+                &analysis,
+                &context.database,
+                context.registry_fingerprint,
             ),
         )
-        .ok_or(ExecutionApplicationError::CompiledDraftUnavailable)?;
+        .ok_or(ExecutionApplicationError::DraftChanged)?;
+    check_control(&request)?;
+
+    context.revalidate(&captured)?;
     let basis = plan_basis(&captured, prepared_project.resources().grants())?;
-    let graph_package = compiled_draft.package().clone();
-    let package = execution_package_from_graph(graph_package, basis)
-        .map_err(ExecutionApplicationError::GraphPackage)?;
+    let package = captured
+        .execution()
+        .prepare_graph_package(&request.graph_path, &analysis, basis)
+        .map_err(ExecutionApplicationError::GraphPlan)?;
     let prepared_plan = captured
         .execution()
-        .prepare_compiled_package(package, captured.runtime_generation())
+        .prepare_package(package, captured.runtime_generation())
         .map_err(ExecutionApplicationError::PackagePreparation)?;
     let bindings = map_project_resource_facts(&captured, prepared_project.resources().grants())
         .map_err(ExecutionApplicationError::ResourceBindings)?;
@@ -670,7 +674,7 @@ fn collect_resource_requirements(
 fn plan_basis(
     captured: &ApplicationSession,
     grants: &[ProjectResourceGrant],
-) -> Result<yss_graph_execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
+) -> Result<yss_graph_execution::plan::PlanBasis, ExecutionApplicationError> {
     let mut versions = BTreeMap::new();
     let mut observations = BTreeMap::new();
     for grant in grants {
@@ -702,7 +706,7 @@ fn plan_basis(
             },
         );
     }
-    Ok(yss_graph_execution::plan::PlanCompilationBasis::new(
+    Ok(yss_graph_execution::plan::PlanBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
         PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
         captured.execution().kernels().fingerprint(),
@@ -785,6 +789,7 @@ fn map_project_resource_facts(
 
 #[cfg(test)]
 mod tests {
+    mod ols_configuration;
     use super::*;
     use crate::session::ApplicationSessionEpoch;
     use std::num::NonZeroU64;
@@ -886,6 +891,7 @@ mod tests {
         let request = RunGraphRequest::new(
             active.project_instance_id().clone(),
             GraphResourcePath::new("events/cancel.yssbi-event").expect("valid graph path"),
+            GraphDocument::default(),
             [1; 32],
         )
         .with_cancellation(cancellation);
@@ -900,6 +906,7 @@ mod tests {
         let request = RunGraphRequest::new(
             active.project_instance_id().clone(),
             GraphResourcePath::new("events/admission.yssbi-event").expect("valid graph path"),
+            GraphDocument::default(),
             [1; 32],
         );
         assert!(matches!(

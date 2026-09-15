@@ -26,7 +26,7 @@ impl ToolRegistry {
         let mut registry = Self::read_only_foundation()?;
         for capability in [
             CapabilityId::ApplyGraphEdit,
-            CapabilityId::CompileGraph,
+            CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,
             CapabilityId::SaveGraph,
             CapabilityId::ListGraphResults,
@@ -544,7 +544,7 @@ mod tests {
         let editor = ToolRegistry::graph_assistant().unwrap();
         for id in [
             CapabilityId::ApplyGraphEdit,
-            CapabilityId::CompileGraph,
+            CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,
             CapabilityId::SaveGraph,
             CapabilityId::ListGraphResults,

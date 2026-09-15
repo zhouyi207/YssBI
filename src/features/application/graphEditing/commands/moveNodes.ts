@@ -1,6 +1,6 @@
 import type { NodePositionDto } from "@/shared/types/domain/editorProjection";
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface MoveNodesArgs {
   positions: Array<{ nodeId: string; position: NodePositionDto }>;
@@ -8,7 +8,7 @@ export interface MoveNodesArgs {
 
 export const moveNodesCommand: CommandHandler<MoveNodesArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "moveNodes",

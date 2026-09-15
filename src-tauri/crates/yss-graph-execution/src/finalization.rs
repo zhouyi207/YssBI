@@ -5,8 +5,8 @@
 //! candidate, replace one of its results, or detach its grant evidence.
 
 use crate::plan::{
-    PlanCompileId, PlanOutputRef, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
-    ResourceAccess, ResourceKind,
+    PlanId, PlanOutputRef, PlanResourceId, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
+    ResourceKind,
 };
 use crate::result::{ResultId, ResultProvenance, StoredResult};
 
@@ -74,14 +74,14 @@ impl ReadyResult {
 }
 
 /// Execution-private evidence that a candidate was checked against the
-/// compiled resource basis. The fields never cross the Application seam.
+/// prepared resource basis. The fields never cross the Application seam.
 #[derive(Debug)]
 #[allow(
     dead_code,
     reason = "grant evidence is retained by the sealed candidate until finalization"
 )]
 pub(crate) struct SealedCandidateGrant {
-    compile_id: PlanCompileId,
+    plan_id: PlanId,
     resource: PlanResourceId,
     version: PlanResourceVersion,
     kind: ResourceKind,
@@ -90,14 +90,14 @@ pub(crate) struct SealedCandidateGrant {
 
 impl SealedCandidateGrant {
     pub(crate) fn new(
-        compile_id: PlanCompileId,
+        plan_id: PlanId,
         resource: PlanResourceId,
         version: PlanResourceVersion,
         kind: ResourceKind,
         access: ResourceAccess,
     ) -> Self {
         Self {
-            compile_id,
+            plan_id,
             resource,
             version,
             kind,

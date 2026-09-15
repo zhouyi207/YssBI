@@ -268,16 +268,15 @@ pub enum EditorResolutionOutcome {
     Complete,
     Incomplete,
     InternalFailure {
-        stage: EditorCompilationStage,
+        stage: EditorResolutionStage,
         code: Box<str>,
         node_id: Option<NodeId>,
     },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EditorCompilationStage {
+pub enum EditorResolutionStage {
     Analysis,
-    Lowering,
 }
 
 #[derive(Debug, thiserror::Error)]

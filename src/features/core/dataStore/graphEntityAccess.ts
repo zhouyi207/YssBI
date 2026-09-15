@@ -8,7 +8,7 @@ import type {
   PinId,
 } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type {
-  CompilationOutcomeDto,
+  ResolutionOutcomeDto,
   DiagnosticDto,
   ProjectionBasisDto,
 } from "@/shared/types/domain/editorProjection";
@@ -23,7 +23,7 @@ export interface GraphEntityBucket {
   basis: ProjectionBasisDto;
   /** Complete canonical problem set copied from the same projection as the entities. */
   diagnostics: DiagnosticDto[];
-  outcome: CompilationOutcomeDto;
+  outcome: ResolutionOutcomeDto;
   hasBlockingDiagnostics: boolean;
 }
 

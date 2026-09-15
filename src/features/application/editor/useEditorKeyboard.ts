@@ -7,7 +7,7 @@ import { getViewport, editorViewportScope } from "@/features/core/viewport";
 import { useModifierKeyStore } from "@/features/core/keyboard";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import { isGraphDraftSaving, useGraphDraftStore } from "@/features/core/graphDraft";
+import { isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
@@ -146,7 +146,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (event.key === "Delete" || event.key === "Backspace") {
         const target = currentEditorCommandTarget();
-        if (!target || isGraphDraftSaving(target.resourceRef)) return;
+        if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         void commands.deleteSelected(target);
         return;
@@ -155,9 +155,9 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "z") {
         const target = currentEditorCommandTarget();
         if (!target) return;
-        const session = useGraphDraftStore.getState().sessions[target.resourceRef];
-        const canUndo = Boolean(session?.undoStack.length);
-        const canRedo = Boolean(session?.redoStack.length);
+        const session = useGraphEditingStore.getState().sessions[target.resourceRef];
+        const canUndo = Boolean(session?.canUndo);
+        const canRedo = Boolean(session?.canRedo);
         if (!session?.saving && (event.shiftKey ? canRedo : canUndo)) {
           event.preventDefault();
           if (event.shiftKey) void commands.redo(target);
@@ -169,8 +169,8 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       if (isControlKey && key === "y") {
         const target = currentEditorCommandTarget();
         if (!target) return;
-        const session = useGraphDraftStore.getState().sessions[target.resourceRef];
-        if (session?.redoStack.length && !session.saving) {
+        const session = useGraphEditingStore.getState().sessions[target.resourceRef];
+        if (session?.canRedo && !session.saving) {
           event.preventDefault();
           void commands.redo(target);
         }
@@ -179,7 +179,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "c") {
         const target = currentEditorCommandTarget();
-        if (!target || isGraphDraftSaving(target.resourceRef)) return;
+        if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.copy(target);
         return;
@@ -187,7 +187,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "x") {
         const target = currentEditorCommandTarget();
-        if (!target || isGraphDraftSaving(target.resourceRef)) return;
+        if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat) void commands.cut(target);
         return;
@@ -195,7 +195,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "v") {
         const target = currentEditorCommandTarget();
-        if (!target || isGraphDraftSaving(target.resourceRef)) return;
+        if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
           const point = getActiveCanvasLocalPoint(
@@ -210,7 +210,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "d") {
         const target = currentEditorCommandTarget();
-        if (!target || isGraphDraftSaving(target.resourceRef)) return;
+        if (!target || isGraphSaving(target.resourceRef)) return;
         event.preventDefault();
         if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) {
           void commands.duplicateSelected(target);

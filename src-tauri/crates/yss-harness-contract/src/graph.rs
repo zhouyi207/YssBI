@@ -14,7 +14,7 @@ pub enum GraphConstantLiteral {
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CompileGraphRequest {
+pub struct ValidateGraphRequest {
     pub graph_path: String,
     pub graph_hash: String,
 }
@@ -24,7 +24,6 @@ pub struct CompileGraphRequest {
 pub struct ExecuteGraphRequest {
     pub graph_path: String,
     pub graph_hash: String,
-    pub artifact_id: String,
 }
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -88,10 +87,9 @@ pub struct GraphDiagnosticInspection {
 
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GraphCompilation {
+pub struct GraphValidation {
     pub graph_path: String,
     pub graph_hash: String,
-    pub artifact_id: Option<String>,
     pub ready: bool,
     pub diagnostics: Vec<GraphDiagnosticInspection>,
 }
@@ -101,7 +99,6 @@ pub struct GraphCompilation {
 pub struct GraphExecution {
     pub graph_path: String,
     pub graph_hash: String,
-    pub artifact_id: String,
     pub run_id: Option<u64>,
     pub status: String,
     pub failure_code: Option<String>,

@@ -207,12 +207,12 @@ describe("Rust-generated node-system golden contracts", () => {
     expect(parseEditorGraphProjectionDto(editorProjection)).toEqual(editorProjection);
   });
 
-  it("strictly parses typed projection compilation outcomes", () => {
+  it("strictly parses typed projection resolution outcomes", () => {
     const internal = clone(editorProjection) as unknown as Record<string, unknown>;
     internal.outcome = {
       type: "internalFailure",
-      stage: "lowering",
-      code: "compiler.lowering.internal_invariant",
+      stage: "analysis",
+      code: "graph.analysis.internal_failure",
       nodeId: editorProjection.nodes[0].nodeId,
     };
     internal.hasBlockingDiagnostics = false;

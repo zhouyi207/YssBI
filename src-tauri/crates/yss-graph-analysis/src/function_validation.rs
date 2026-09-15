@@ -4,7 +4,7 @@ use crate::{
     resolve_graph_semantics_inner,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
+use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{
     DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
     GraphResourcePath, PortAddress,
@@ -142,8 +142,8 @@ pub(crate) fn resolve(
         ) {
             // A resolver failure inside a callee remains an internal failure at the root.
             resolution.internal_failure = Some(GraphResolutionOutcome::InternalFailure {
-                stage: crate::GraphCompilationStage::Analysis,
-                code: "compiler.function.resolution_failed".into(),
+                stage: crate::GraphResolutionStage::Analysis,
+                code: "graph.function.resolution_failed".into(),
                 node_id: None,
             });
         } else if semantics.ready().is_none() {
@@ -419,7 +419,7 @@ mod tests {
                 .diagnostics()
                 .iter()
                 .any(
-                    |diagnostic| diagnostic.code.as_str() == "compiler.function.dependency_cycle"
+                    |diagnostic| diagnostic.code.as_str() == "graph.function.dependency_cycle"
                         && diagnostic.blocking
                 )
         );
@@ -431,7 +431,7 @@ mod tests {
                 .diagnostics()
                 .iter()
                 .any(
-                    |diagnostic| diagnostic.code.as_str() == "compiler.function.abi_mismatch"
+                    |diagnostic| diagnostic.code.as_str() == "graph.function.abi_mismatch"
                         && diagnostic.primary
                             == GraphDiagnosticLocation::Resource(b.as_str().into())
                 )

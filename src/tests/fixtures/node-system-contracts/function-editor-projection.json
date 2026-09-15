@@ -87,24 +87,24 @@
       "diagnostics": [
         {
           "blocking": true,
-          "code": "compiler.function.abi.managed_role_invalid",
+          "code": "graph.function.abi.managed_role_invalid",
           "location": {
             "kind": "graph"
           },
           "related": [],
           "severity": "error",
-          "messageKey": "diagnostics.compiler.function.abi.managed_role_invalid",
+          "messageKey": "diagnostics.graph.function.abi.managed_role_invalid",
           "arguments": {}
         },
         {
           "blocking": true,
-          "code": "compiler.function.abi.managed_role_invalid",
+          "code": "graph.function.abi.managed_role_invalid",
           "location": {
             "kind": "graph"
           },
           "related": [],
           "severity": "error",
-          "messageKey": "diagnostics.compiler.function.abi.managed_role_invalid",
+          "messageKey": "diagnostics.graph.function.abi.managed_role_invalid",
           "arguments": {}
         }
       ],

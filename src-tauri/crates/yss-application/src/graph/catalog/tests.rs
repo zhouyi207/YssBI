@@ -295,6 +295,265 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
 }
 
 #[test]
+fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
+    use crate::graph::run::{ExecutionApplicationError, RunGraphRequest, run_graph};
+    use yss_data_contract::{DataType, DataValue};
+    use yss_graph_document::{ConnectionId, DocumentConnection};
+    use yss_graph_editor::EditorGraphMutation;
+    use yss_graph_execution::result::{ConnectionCacheState, ResultCacheState};
+
+    let graph = GraphResourcePath::new("events/New Event.yssbi-event").unwrap();
+    let session = staged_session(
+        compatible_project(&graph),
+        "decompose-view-results",
+        GraphRuntimeTestControl::default(),
+    );
+    let app = &session.application;
+    let instance = session.session.project_instance_id().clone();
+    let source = NodeId::new();
+    let decompose = NodeId::new();
+    let viewers = [NodeId::new(), NodeId::new(), NodeId::new()];
+    let mut document = compatible_draft(source);
+    set_constant(
+        &mut document,
+        source,
+        DataType::DataFrame,
+        DataValue::DataFrame(
+            r#"{"species":["setosa","versicolor"],"sepal":[5.1,7.0],"petal":[1.4,4.7]}"#.into(),
+        ),
+    );
+    yss_graph_document::normalize_constant_value(document.constants.values_mut().next().unwrap())
+        .unwrap();
+    for (id, kind) in std::iter::once((decompose, "yssbi.dataframe.decompose"))
+        .chain(viewers.into_iter().map(|id| (id, "yssbi.debug.view")))
+    {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 200., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: PortAddress::declared(decompose, "dataframe".parse().unwrap()),
+            order: None,
+        },
+    );
+    let resolve = |document: &GraphDocument| {
+        app.resolve_graph_document(
+            instance.clone(),
+            graph.clone(),
+            document.clone(),
+            "en-US".into(),
+        )
+        .unwrap()
+    };
+    let projection = resolve(&document);
+    let columns = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == decompose)
+        .unwrap();
+    let column = |name: &str| {
+        columns
+            .ports
+            .iter()
+            .find(|port| port.display.label.as_ref() == name)
+            .unwrap()
+            .address
+            .clone()
+    };
+    let species = column("species");
+    for (viewer, name) in viewers.into_iter().zip(["species", "sepal", "petal"]) {
+        document = app
+            .transform_graph_document(
+                instance.clone(),
+                graph.clone(),
+                "en-US".into(),
+                document,
+                EditorGraphMutation::Connect {
+                    output: column(name),
+                    input: PortAddress::declared(viewer, "data".parse().unwrap()),
+                    order: None,
+                },
+            )
+            .unwrap()
+            .document;
+    }
+    let original = document.clone();
+    let captured = app.capture_session().unwrap();
+    let fixture_capture = captured
+        .project()
+        .capture_graph_overwrite_operation(
+            &instance,
+            &graph,
+            yss_project_identity::OperationId::new(),
+        )
+        .unwrap();
+    captured
+        .project()
+        .commit_graph_candidate(fixture_capture.into_authority(), Arc::new(document.clone()))
+        .unwrap();
+    let ready = app
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
+            instance.clone(),
+            graph.clone(),
+            0,
+            "en-US",
+        ))
+        .unwrap()
+        .projection()
+        .clone();
+    let edit_request = || crate::graph::editing::GraphEditRequest {
+        project_instance_id: instance.clone(),
+        graph_path: graph.clone(),
+        locale: "en-US".into(),
+        operation_id: yss_project_identity::OperationId::new(),
+        version: captured
+            .project()
+            .read_graph_editing(&instance, &graph)
+            .unwrap()
+            .state
+            .version,
+    };
+    let semantic_input_hash = ready.basis.semantic_input_hash;
+    run_graph(
+        app,
+        RunGraphRequest::new(
+            instance.clone(),
+            graph.clone(),
+            document.clone(),
+            semantic_input_hash,
+        ),
+    )
+    .unwrap();
+    let query = |hash| {
+        app.query_graph_result_state(graph.clone(), hash)
+            .unwrap()
+            .expect("current graph cache state")
+    };
+    let initial = query(semantic_input_hash);
+    assert_eq!(initial.connections.len(), 4);
+    assert!(
+        initial
+            .connections
+            .iter()
+            .all(|edge| edge.state == ConnectionCacheState::Valid)
+    );
+    assert!(
+        initial
+            .outputs
+            .values()
+            .all(|state| matches!(state, ResultCacheState::Valid { .. }))
+    );
+
+    let disconnected = app
+        .edit_graph(
+            edit_request(),
+            EditorGraphMutation::DisconnectPort {
+                address: species.clone(),
+            },
+        )
+        .unwrap();
+    let disconnected = disconnected.update;
+    let current = query(
+        disconnected
+            .projection_replacement
+            .projection
+            .basis
+            .semantic_input_hash,
+    );
+    assert_eq!(current.outputs, initial.outputs);
+    assert_eq!(current.connections.len(), 3);
+    assert!(
+        current
+            .connections
+            .iter()
+            .all(|edge| edge.state == ConnectionCacheState::Valid)
+    );
+    assert!(matches!(
+        run_graph(
+            app,
+            RunGraphRequest::new(
+                instance.clone(),
+                graph.clone(),
+                original.clone(),
+                semantic_input_hash
+            )
+        ),
+        Err(ExecutionApplicationError::DraftChanged)
+    ));
+    let after_rejection = query(
+        disconnected
+            .projection_replacement
+            .projection
+            .basis
+            .semantic_input_hash,
+    );
+    assert_eq!(after_rejection.outputs, current.outputs);
+    assert_eq!(after_rejection.connections.len(), current.connections.len());
+
+    let reconnected = app
+        .edit_graph(
+            edit_request(),
+            EditorGraphMutation::Connect {
+                output: column("sepal"),
+                input: PortAddress::declared(viewers[0], "data".parse().unwrap()),
+                order: None,
+            },
+        )
+        .unwrap();
+    let reconnected = reconnected.update;
+    let current = query(
+        reconnected
+            .projection_replacement
+            .projection
+            .basis
+            .semantic_input_hash,
+    );
+    assert_eq!(current.outputs, initial.outputs);
+    for edge in &current.connections {
+        let is_new = edge.input.as_str()
+            == PortAddress::declared(viewers[0], "data".parse().unwrap()).to_string();
+        assert_eq!(
+            edge.state,
+            if is_new {
+                ConnectionCacheState::New
+            } else {
+                ConnectionCacheState::Valid
+            }
+        );
+    }
+    app.change_graph_history(edit_request(), false).unwrap();
+    let restored = app.change_graph_history(edit_request(), false).unwrap();
+    assert_eq!(restored.update.document, original);
+    let current = query(
+        restored
+            .update
+            .projection_replacement
+            .projection
+            .basis
+            .semantic_input_hash,
+    );
+    assert_eq!(current.outputs, initial.outputs);
+    assert!(
+        current
+            .connections
+            .iter()
+            .all(|edge| edge.state == ConnectionCacheState::Valid)
+    );
+}
+
+#[test]
 fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_a_connection() {
     use yss_data_contract::{DataType, DataValue};
     use yss_graph_document::{ConnectionId, DocumentConnection};
@@ -339,7 +598,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     );
     let projection = session
         .application
-        .resolve_graph_draft(
+        .resolve_graph_document(
             instance.clone(),
             graph.clone(),
             document.clone(),
@@ -411,7 +670,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
         .clone();
     let updated = session
         .application
-        .transform_graph_draft(
+        .transform_graph_document(
             instance.clone(),
             graph.clone(),
             "en-US".into(),
@@ -436,7 +695,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     let first_connections = updated.document.connections.clone();
     let updated = session
         .application
-        .transform_graph_draft(
+        .transform_graph_document(
             instance.clone(),
             graph.clone(),
             "en-US".into(),

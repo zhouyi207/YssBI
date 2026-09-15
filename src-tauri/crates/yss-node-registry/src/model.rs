@@ -8,7 +8,7 @@ use yss_node_protocol::{
     SchemaResolverId, TypeClassId, TypeConstructorId, TypeId,
 };
 
-/// Stable identity of a leaf node's compiler lowering.
+/// Stable identity of a leaf node's execution implementation.
 #[derive(Clone)]
 pub struct LeafImplementation(Arc<str>);
 

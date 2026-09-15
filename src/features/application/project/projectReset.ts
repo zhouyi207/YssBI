@@ -11,8 +11,8 @@ import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
-import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
-import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
+import { resetHistoryCoordinator } from "@/features/application/graphEditing/historyCoordinator";
+import { resetGraphEditCoordinator } from "@/features/application/graphEditing/graphEditCoordinator";
 
 export interface ProjectPresentationResetActions {
   removeProjectScopedWorkbenchPanels(
@@ -44,7 +44,7 @@ export async function resetClientProjectState(
   }
   if (!runOwnedReset(owner, () => useViewportStore.getState().clear())) return;
   if (!runOwnedReset(owner, resetFunctionSignatureCoordinator)) return;
-  if (!runOwnedReset(owner, resetGraphDraftCoordinator)) return;
+  if (!runOwnedReset(owner, resetGraphEditCoordinator)) return;
   if (!runOwnedReset(owner, resetHistoryCoordinator)) return;
   if (!runOwnedReset(owner, () => useGraphInteractionStore.setState({ interactions: {} }))) return;
   if (!runOwnedReset(owner, () => useColumnStatsStore.getState().clear())) return;

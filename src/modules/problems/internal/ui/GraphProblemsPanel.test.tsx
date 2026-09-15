@@ -26,11 +26,11 @@ const graphPath = "events/Main.yssbi-event";
 
 function diagnostic(nodeId: string, code: string, message: string): DiagnosticDto {
   return {
-    code: code === "node.error" ? "compiler.node.unknown" : "compiler.input.unbound",
+    code: code === "node.error" ? "graph.node.unknown" : "graph.input.unbound",
     messageKey:
       code === "node.error"
-        ? "diagnostics.compiler.node.unknown"
-        : "diagnostics.compiler.input.unbound",
+        ? "diagnostics.graph.node.unknown"
+        : "diagnostics.graph.input.unbound",
     arguments: { node_type: message, port: message },
     severity: code === "node.error" ? "error" : "warning",
     blocking: code === "node.error",

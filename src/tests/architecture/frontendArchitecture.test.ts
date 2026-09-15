@@ -907,6 +907,7 @@ describe("frontend architecture model", () => {
 
   it("audits frontend packages and stylesheet assets by layer mode and origin", () => {
     const productionSources = [
+      "src/modules/assistant/internal/ui/AssistantMarkdown.tsx",
       "src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx",
       "src/modules/settings/internal/ui/SettingsView.tsx",
       "src/modules/workbench/internal/ui/menu/ArchitectureModal.tsx",
@@ -1021,6 +1022,7 @@ describe("frontend architecture model", () => {
     ];
     const stylesheetGraph: ResolvedStylesheetGraph = {
       repositoryStylesheets: [
+        "src/modules/assistant/internal/ui/assistant.css",
         "src/app/App.css",
         "src/app/workbench-dockview.css",
         "src/modules/settings/internal/ui/settings.css",
@@ -1054,6 +1056,14 @@ describe("frontend architecture model", () => {
     );
     expect(FRONTEND_EXTERNAL_DEPENDENCY_POLICY.declaredBuildOnlyPackages).toEqual(["tailwindcss"]);
     expect(FRONTEND_ASSET_DEPENDENCY_POLICY.uses).toEqual([
+      {
+        sourceLayer: "views",
+        consumerSourceFile: "src/modules/assistant/internal/ui/AssistantMarkdown.tsx",
+        repositoryRelativeAssetPath: "src/modules/assistant/internal/ui/assistant.css",
+        dependencyKind: "side-effect-import",
+        mode: "runtime",
+        resourceKind: "stylesheet",
+      },
       {
         sourceLayer: "app-composition",
         mode: "runtime",
@@ -1273,7 +1283,12 @@ describe("frontend architecture model", () => {
       }),
     );
     const duplicateAssetPolicy = {
-      uses: [...FRONTEND_ASSET_DEPENDENCY_POLICY.uses, FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0]],
+      uses: [
+        ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses,
+        FRONTEND_ASSET_DEPENDENCY_POLICY.uses.find(
+          (row) => row.consumerSourceFile === "src/app/App.tsx",
+        )!,
+      ],
     };
     expect(
       auditFrontendAssetDependencies(
@@ -1287,7 +1302,14 @@ describe("frontend architecture model", () => {
       ).errors,
     ).toContainEqual(expect.objectContaining({ kind: "invalid-asset-policy-row" }));
     const typeOnlyAssetPolicy = {
-      uses: [{ ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0], mode: "type-only" }],
+      uses: [
+        {
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses.find(
+            (row) => row.consumerSourceFile === "src/app/App.tsx",
+          )!,
+          mode: "type-only",
+        },
+      ],
     } as unknown as AssetDependencyPolicy;
     expect(
       auditFrontendAssetDependencies(
@@ -1308,7 +1330,9 @@ describe("frontend architecture model", () => {
     const stylesheetRuntimeConsumerPolicy: AssetDependencyPolicy = {
       uses: [
         {
-          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses.find(
+            (row) => row.consumerSourceFile === "src/app/App.tsx",
+          )!,
           consumerSourceFile: "src/app/App.css",
         },
       ],
@@ -1337,11 +1361,15 @@ describe("frontend architecture model", () => {
     const conflictPolicy: AssetDependencyPolicy = {
       uses: [
         {
-          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses.find(
+            (row) => row.consumerSourceFile === "src/app/App.tsx",
+          )!,
           repositoryRelativeAssetPath: "src/app/shared.css",
         },
         {
-          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses.find(
+            (row) => row.consumerSourceFile === "src/app/App.tsx",
+          )!,
           sourceLayer: "views",
           consumerSourceFile: "src/views/fixture.tsx",
           repositoryRelativeAssetPath: "src/app/shared.css",

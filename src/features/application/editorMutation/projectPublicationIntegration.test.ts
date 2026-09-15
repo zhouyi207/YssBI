@@ -15,7 +15,7 @@ import { useChartDocumentStore } from "@/features/core/chart/chartDocumentStore"
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDatabaseStore } from "@/features/core/dataStore/databaseStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { captureProjectLifecycleState } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import {
   makeEditorProjectionFixture,
@@ -95,7 +95,7 @@ beforeEach(() => {
   useGraphMetaStore.setState({ graphs: {} });
   useChartDocumentStore.setState({ index: [], documents: {} });
   useDatabaseStore.setState({ databases: {}, revisions: {} });
-  useGraphDraftStore.getState().clear();
+  useGraphEditingStore.getState().clear();
 });
 afterEach(() => coordinator?.cancelProject());
 

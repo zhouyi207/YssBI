@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { publishResultSessionEnd } from "@/services/result/resultSessionChannel";
 import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution";
 import { graphOutputKey } from "@/features/domain/editorProjection";
 import type { RunEvent } from "@/shared/types/domain/runEvent";
@@ -77,19 +77,18 @@ export function useGraphResultCache(graphPath: string): GraphResultCacheProjecti
 export function useGraphResultPresentation(graphPath: string) {
   const cache = useGraphResultCache(graphPath);
   const statuses = resultProjection((state) => state.pinStatuses);
-  const draft = useGraphDraftStore((state) => state.sessions[graphPath]);
+  const draft = useGraphEditingStore((state) => state.sessions[graphPath]);
   const failure = useExecutionStore((state) => state.graphs[graphPath]?.runFailure ?? null);
   return useMemo(
     () =>
       projectGraphPresentation(
         cache?.semanticInputHash === draft?.semanticInputHash ? cache : undefined,
-        draft?.compileStatus ?? "uncompiled",
         [...outputRuns.values()]
           .filter((run) => run.active && run.request.graphPath === graphPath)
           .map((run) => run.request.output.nodeId),
         failure,
       ),
-    [cache, draft?.semanticInputHash, draft?.compileStatus, statuses, failure, graphPath],
+    [cache, draft?.semanticInputHash, statuses, failure, graphPath],
   );
 }
 
@@ -310,11 +309,11 @@ const outputRuns = new Map<string, { runId: string; request: ResultPinRequest; a
 const pendingGraphRefreshes = new Set<string>();
 
 function currentGraphStateRequest(request: ResultGraphStateRequest): boolean {
-  const current = useGraphDraftStore.getState().sessions[request.graphPath];
+  const current = useGraphEditingStore.getState().sessions[request.graphPath];
   return Boolean(
     current &&
     current.sessionId === request.sessionId &&
-    current.draftGeneration === request.draftGeneration &&
+    current.projectionGeneration === request.projectionGeneration &&
     current.semanticInputHash === request.semanticInputHash,
   );
 }
@@ -328,14 +327,14 @@ function scheduleGraphStateRefresh(graphPath: string): void {
     pendingGraphRefreshes.clear();
     if (!captureProjectLifecycleState().projectInstanceId) return;
     for (const graphPath of graphs) {
-      const session = useGraphDraftStore.getState().sessions[graphPath];
+      const session = useGraphEditingStore.getState().sessions[graphPath];
       if (!session) continue;
       void resultQueryCoordinator.loadGraphState({
         graphPath,
         semanticInputHash: session.semanticInputHash,
         sessionId: session.sessionId,
-        draftGeneration: session.draftGeneration,
-        draftSession: session,
+        projectionGeneration: session.projectionGeneration,
+        editorState: session,
       });
     }
   });
@@ -395,11 +394,6 @@ function publishGraphState(
     if (state === "valid" && resultProjection.getState().pinResults[key]?.resultId !== resultId)
       void resultQueryCoordinator.loadPinResult({ graphPath, output: output.port });
   }
-  const session = useGraphDraftStore.getState().sessions[graphPath];
-  if (session === request.draftSession)
-    useGraphDraftStore
-      .getState()
-      .observeCompiledArtifact(graphPath, session, projection?.compiledArtifactId ?? null);
 }
 
 function publishCurrentResult(
@@ -410,7 +404,7 @@ function publishCurrentResult(
   const key = pinResultKey(request);
   const previous = resultProjection.getState().pinResults[key];
   if (result) {
-    const draft = useGraphDraftStore.getState().sessions[request.graphPath];
+    const draft = useGraphEditingStore.getState().sessions[request.graphPath];
     if (draft) {
       const cache = resultProjection.getState().graphCaches[request.graphPath];
       if (
@@ -532,7 +526,7 @@ export function observeResultRunEvent(event: RunEvent): void {
       terminalStatuses[key] = status;
       if (
         event.kind.type === "runCompleted" &&
-        !useGraphDraftStore.getState().sessions[event.run.graphPath]
+        !useGraphEditingStore.getState().sessions[event.run.graphPath]
       )
         void resultQueryCoordinator.loadPinResult(pending.request);
     }
@@ -561,7 +555,7 @@ useGraphProjectionStore.subscribe((state, previous) => {
   }
 });
 
-useGraphDraftStore.subscribe((state, previous) => {
+useGraphEditingStore.subscribe((state, previous) => {
   for (const [graphPath, session] of Object.entries(state.sessions)) {
     const previousSession = previous.sessions[graphPath];
     if (previousSession && session.semanticInputHash !== previousSession.semanticInputHash) {

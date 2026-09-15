@@ -1,5 +1,27 @@
 use crate::{DynamicPortBinding, GraphDocument};
 
+/// Inputs retained by an editor semantic snapshot. Unlike execution identity,
+/// this includes diagnostic addresses, orphan metadata and constant names.
+/// Canvas positions and user labels are projected directly from the document.
+pub fn resolution_document_fingerprint(
+    document: &GraphDocument,
+) -> Result<[u8; 32], yss_canonical_hash::CanonicalEncodingError> {
+    yss_canonical_hash::hash_canonical(
+        "yssbi.graph-resolution-document.v1",
+        &(
+            &document.constants,
+            document
+                .nodes
+                .iter()
+                .map(|(id, node)| (id, node.id, &node.node_type, &node.parameters))
+                .collect::<Vec<_>>(),
+            document.port_bindings.iter().collect::<Vec<_>>(),
+            &document.connections,
+            document.input_states.iter().collect::<Vec<_>>(),
+        ),
+    )
+}
+
 /// Hash persisted semantic intent, excluding presentation and unused derived metadata.
 pub fn semantic_document_fingerprint(
     document: &GraphDocument,
@@ -22,15 +44,18 @@ pub fn semantic_document_fingerprint(
         .into_iter()
         .map(|connection| (&connection.output, &connection.input, &connection.order))
         .collect::<Vec<_>>();
+    let referenced_ports = document
+        .connections
+        .values()
+        .flat_map(|connection| [&connection.output, &connection.input])
+        .chain(document.input_states.keys())
+        .collect::<std::collections::BTreeSet<_>>();
     let bindings = document
         .port_bindings
         .iter()
         .filter(|(address, binding)| {
             matches!(binding, DynamicPortBinding::UserCreated { .. })
-                || document.input_states.contains_key(*address)
-                || document.connections.values().any(|connection| {
-                    &connection.output == *address || &connection.input == *address
-                })
+                || referenced_ports.contains(address)
         })
         .map(|(address, binding)| match binding {
             DynamicPortBinding::UserCreated { order } => (address, None, order),

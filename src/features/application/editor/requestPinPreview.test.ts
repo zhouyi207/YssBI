@@ -9,7 +9,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { markResourceLoaded, useDocumentStateStore } from "@/features/core/resource";
 import { pinPreviewCacheKey, useExecutionStore } from "@/features/core/execution";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { ProjectService } from "@/services/project/projectService";
 import { PinPreviewGenerationService } from "@/services/nodeSystem/pinPreviewGenerationService";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
@@ -24,7 +24,6 @@ import { requestPinPreview } from "./requestPinPreview";
 const eventGraphPath = "events/Main.yssbi-event";
 const frontendProjectInstanceId = "frontend-project-instance-1";
 const backendExecutionSessionId = "backend-project-session-1";
-const compiledArtifactId = "1".repeat(64);
 
 function runEvent(kind: RunEvent["kind"], runId = "run-1"): RunEvent {
   return {
@@ -51,18 +50,7 @@ function installGraph(
     .replaceProjection(graphPath, fixture.projection);
   expect(applied.applied).toBe(true);
   const editorSession = makeGraphEditorSession(fixture.projection);
-  useGraphDraftStore.getState().install(graphPath, editorSession);
-  expect(useGraphDraftStore.getState().beginCompile(graphPath)).toBe(true);
-  useGraphDraftStore.getState().completeCompile(
-    graphPath,
-    {
-      type: "ready",
-      artifactId: compiledArtifactId,
-      cacheHit: false,
-      projection: fixture.projection,
-    },
-    useGraphDraftStore.getState().sessions[graphPath].compileRequest!,
-  );
+  useGraphEditingStore.getState().install(graphPath, editorSession);
   const kind = graphPath.startsWith("events/") ? "event" : "function";
   useResourceStore.getState().upsertResource(buildGraphResourceMeta(kind, graphPath, "Graph"));
   markResourceLoaded({ id: graphPath, kind });
@@ -101,7 +89,7 @@ describe("requestPinPreview", () => {
     startProjectLifecycle(frontendProjectInstanceId);
     useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphSessionStore.getState().reset();
-    useGraphDraftStore.getState().clear();
+    useGraphEditingStore.getState().clear();
     useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
     useExecutionStore.setState({
@@ -136,7 +124,7 @@ describe("requestPinPreview", () => {
     async ({ address }) => {
       const { outputKey } = installGraph(eventGraphPath, address);
       const execute = vi
-        .spyOn(ProjectService, "executeCompiledGraph")
+        .spyOn(ProjectService, "executeGraph")
         .mockImplementation(async ({ demand, onEvent }) => {
           emitSuccessfulPreview(demand, onEvent);
         });
@@ -148,7 +136,9 @@ describe("requestPinPreview", () => {
       expect(execute).toHaveBeenCalledWith({
         projectInstanceId: frontendProjectInstanceId,
         graphPath: eventGraphPath,
-        compiledArtifactId,
+        document: useGraphEditingStore.getState().sessions[eventGraphPath].document,
+        semanticInputHash:
+          useGraphEditingStore.getState().sessions[eventGraphPath].semanticInputHash,
         demand: {
           type: "pinPreview",
           output: { graphPath: eventGraphPath, port: address },
@@ -168,7 +158,7 @@ describe("requestPinPreview", () => {
   it("settles capture failure as a pure stale lifecycle rejection", async () => {
     const { outputKey } = installGraph();
     clearProjectLifecycle();
-    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
+    const execute = vi.spyOn(ProjectService, "executeGraph");
     const getExecutionState = vi.spyOn(useExecutionStore, "getState");
 
     await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
@@ -187,7 +177,7 @@ describe("requestPinPreview", () => {
     vi.mocked(PinPreviewGenerationService.allocate).mockRejectedValue(
       new Error("generation exhausted"),
     );
-    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
+    const execute = vi.spyOn(ProjectService, "executeGraph");
 
     await expect(requestPinPreview(eventGraphPath, outputKey)).resolves.toEqual({
       status: "rejected",
@@ -202,14 +192,14 @@ describe("requestPinPreview", () => {
 
   it.each([
     {
-      name: "uncompiled graph",
+      name: "missing graph draft",
       prepare: () => {
         const graph = installGraph();
-        useGraphDraftStore.getState().clearGraph(eventGraphPath);
+        useGraphEditingStore.getState().clearGraph(eventGraphPath);
         return {
           graphPath: eventGraphPath,
           pinId: graph.outputKey,
-          reason: "compile-required",
+          reason: "blocking-problems",
         } as const;
       },
     },
@@ -279,7 +269,7 @@ describe("requestPinPreview", () => {
       },
     },
   ])("rejects $name before IPC", async ({ prepare }) => {
-    const execute = vi.spyOn(ProjectService, "executeCompiledGraph");
+    const execute = vi.spyOn(ProjectService, "executeGraph");
     const request = prepare();
 
     await expect(requestPinPreview(request.graphPath, request.pinId)).resolves.toEqual({
@@ -298,31 +288,29 @@ describe("requestPinPreview", () => {
     const completePinPreview = vi.spyOn(store, "completePinPreview");
     const failPinPreview = vi.spyOn(store, "failPinPreview");
     const removePinPreview = vi.spyOn(store, "removePinPreview");
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
-      async ({ demand, onEvent }) => {
-        if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
-        onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
-        const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
-        useGraphProjectionStore.setState({
-          graphEntities: {
-            ...useGraphProjectionStore.getState().graphEntities,
-            [eventGraphPath]: { ...current, pins: { ...current.pins } },
-          },
-        });
-        onEvent?.(
-          runEvent({
-            type: "pinPreviewResultReady",
-            output: demand.output,
-            generation: demand.generation,
-            resultId: "result-stale-projection",
-          }),
-        );
-        onEvent?.(runEvent({ type: "runCompleted" }));
-      },
-    );
+    vi.spyOn(ProjectService, "executeGraph").mockImplementation(async ({ demand, onEvent }) => {
+      if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
+      onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
+      const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
+      useGraphProjectionStore.setState({
+        graphEntities: {
+          ...useGraphProjectionStore.getState().graphEntities,
+          [eventGraphPath]: { ...current, pins: { ...current.pins } },
+        },
+      });
+      onEvent?.(
+        runEvent({
+          type: "pinPreviewResultReady",
+          output: demand.output,
+          generation: demand.generation,
+          resultId: "result-stale-projection",
+        }),
+      );
+      onEvent?.(runEvent({ type: "runCompleted" }));
+    });
 
     const request = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(1));
     const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
     await expect(request).resolves.toEqual({
       status: "rejected",
@@ -346,7 +334,7 @@ describe("requestPinPreview", () => {
       let emit!: (event: RunEvent) => void;
       let resolveExecution!: () => void;
       let rejectExecution!: (reason: unknown) => void;
-      const execute = vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
+      const execute = vi.spyOn(ProjectService, "executeGraph").mockImplementation(
         ({ onEvent }) =>
           new Promise<void>((resolve, reject) => {
             emit = onEvent ?? (() => undefined);
@@ -356,7 +344,7 @@ describe("requestPinPreview", () => {
       );
 
       const preview = requestPinPreview(eventGraphPath, outputKey);
-      await Promise.resolve();
+      await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(1));
       const cacheKey = pinPreviewCacheKey(eventGraphPath, outputAddress);
       const originalGeneration = originalStore
         .getGraph(eventGraphPath)
@@ -365,7 +353,9 @@ describe("requestPinPreview", () => {
         expect.objectContaining({
           projectInstanceId: frontendProjectInstanceId,
           graphPath: eventGraphPath,
-          compiledArtifactId,
+          document: useGraphEditingStore.getState().sessions[eventGraphPath].document,
+          semanticInputHash:
+            useGraphEditingStore.getState().sessions[eventGraphPath].semanticInputHash,
           demand: expect.objectContaining({ type: "pinPreview" }),
           onEvent: expect.any(Function),
         }),
@@ -429,7 +419,7 @@ describe("requestPinPreview", () => {
     const store = useExecutionStore.getState();
     const failPinPreview = vi.spyOn(store, "failPinPreview");
     const removePinPreview = vi.spyOn(store, "removePinPreview");
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(async () => {
+    vi.spyOn(ProjectService, "executeGraph").mockImplementation(async () => {
       const current = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
       useGraphProjectionStore.setState({
         graphEntities: {
@@ -441,7 +431,7 @@ describe("requestPinPreview", () => {
     });
 
     const request = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(1));
     const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
     await expect(request).resolves.toEqual({
       status: "rejected",
@@ -457,12 +447,12 @@ describe("requestPinPreview", () => {
     const pending: Array<{
       reject: (reason: unknown) => void;
     }> = [];
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
+    vi.spyOn(ProjectService, "executeGraph").mockImplementation(
       () => new Promise<void>((_resolve, reject) => pending.push({ reject })),
     );
 
     const staleRequest = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(1));
     const previous = useGraphProjectionStore.getState().graphEntities[eventGraphPath];
     useGraphProjectionStore.setState({
       graphEntities: {
@@ -471,7 +461,7 @@ describe("requestPinPreview", () => {
       },
     });
     const currentRequest = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(2));
     const currentBeforeCleanup = useExecutionStore
       .getState()
       .getGraph(eventGraphPath)
@@ -499,7 +489,7 @@ describe("requestPinPreview", () => {
     const { outputKey, outputAddress } = installGraph();
     const callbacks: Array<(event: RunEvent) => void> = [];
     const resolvers: Array<() => void> = [];
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
+    vi.spyOn(ProjectService, "executeGraph").mockImplementation(
       ({ onEvent }) =>
         new Promise<void>((resolve) => {
           callbacks.push(onEvent ?? (() => undefined));
@@ -509,7 +499,7 @@ describe("requestPinPreview", () => {
 
     const first = requestPinPreview(eventGraphPath, outputKey);
     const second = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(2));
     const store = useExecutionStore.getState();
     const completePinPreview = vi.spyOn(store, "completePinPreview");
     const failPinPreview = vi.spyOn(store, "failPinPreview");
@@ -569,21 +559,19 @@ describe("requestPinPreview", () => {
 
   it("settles a stale wire generation as a pure no-op", async () => {
     const { outputKey } = installGraph();
-    vi.spyOn(ProjectService, "executeCompiledGraph").mockImplementation(
-      async ({ demand, onEvent }) => {
-        if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
-        onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
-        onEvent?.(
-          runEvent({
-            type: "pinPreviewResultReady",
-            output: demand.output,
-            generation: demand.generation + 1,
-            resultId: "result-stale-generation",
-          }),
-        );
-        onEvent?.(runEvent({ type: "runCompleted" }));
-      },
-    );
+    vi.spyOn(ProjectService, "executeGraph").mockImplementation(async ({ demand, onEvent }) => {
+      if (demand.type !== "pinPreview") throw new Error("expected pin preview demand");
+      onEvent?.(runEvent({ type: "runStarted", outputs: [] }));
+      onEvent?.(
+        runEvent({
+          type: "pinPreviewResultReady",
+          output: demand.output,
+          generation: demand.generation + 1,
+          resultId: "result-stale-generation",
+        }),
+      );
+      onEvent?.(runEvent({ type: "runCompleted" }));
+    });
 
     const store = useExecutionStore.getState();
     const failPinPreview = vi.spyOn(store, "failPinPreview");
@@ -591,7 +579,7 @@ describe("requestPinPreview", () => {
     failPinPreview.mockClear();
     removePinPreview.mockClear();
     const request = requestPinPreview(eventGraphPath, outputKey);
-    await Promise.resolve();
+    await vi.waitFor(() => expect(ProjectService.executeGraph).toHaveBeenCalledTimes(1));
     const previewSnapshot = structuredClone(store.getGraph(eventGraphPath));
 
     await expect(request).resolves.toEqual({

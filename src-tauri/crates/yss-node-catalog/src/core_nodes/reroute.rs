@@ -14,8 +14,8 @@ pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
         id: REROUTE_NODE_TYPE,
         title: "Reroute",
         zh_title: "重路由",
-        documentation: "Persistent compiler-transparent data routing point.",
-        zh_documentation: "持久化且对编译器透明的数据路由点。",
+        documentation: "Persistent data routing point with no execution operation.",
+        zh_documentation: "持久化的数据路由点，不增加执行操作。",
         aliases: &[],
         zh_aliases: &[],
     })?;

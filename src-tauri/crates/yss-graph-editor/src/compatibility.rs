@@ -20,7 +20,7 @@ use yss_node_registry::NodeRegistry;
 /// Editor-facing catalog authority used to validate creation descriptors and dynamic ports.
 ///
 /// This is intentionally richer than `yss_graph_resource_contract::ResourceCatalogSnapshot`,
-/// which owns only the type/schema facts required by graph compilation. Project/session
+/// which owns only the type/schema facts required by graph analysis. Project/session
 /// currentness remains enforced by the caller's graph-operation commit authority.
 pub struct CatalogMutationValidationSnapshot {
     pub resources: BTreeMap<CatalogResourcePath, CatalogMutationResource>,

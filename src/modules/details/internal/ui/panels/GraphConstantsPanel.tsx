@@ -9,8 +9,8 @@ import {
   insertConstantReference,
   updateGraphConstant,
   useGraphConstants,
-} from "@/features/application/graphDraft/graphConstantActions";
-import type { ApplyGraphDraftMutationOutcome } from "@/features/application/graphDraft/graphDraftCoordinator";
+} from "@/features/application/graphEditing/graphConstantActions";
+import type { ApplyGraphMutationOutcome } from "@/features/application/graphEditing/graphEditCoordinator";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { ConstantValueFields } from "./ConstantValueFields";
 
@@ -28,7 +28,7 @@ export function GraphConstantsPanel({ graphPath }: { graphPath: string }) {
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const run = async (operation: () => Promise<ApplyGraphDraftMutationOutcome>) => {
+  const run = async (operation: () => Promise<ApplyGraphMutationOutcome>) => {
     if (pending.current || saving || !loaded) return;
     pending.current = true;
     setBusy(true);

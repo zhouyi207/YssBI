@@ -3,15 +3,13 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
-use yss_graph_analysis_contract::CompileId;
-use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
     DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
 };
 use yss_graph_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
-    PlanResourceId, PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion,
-    ResourceAccess, ResourceKind,
+    PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId,
+    PlanResourceObservedState, PlanResourceRequirement, PlanResourceVersion, ResourceAccess,
+    ResourceKind,
 };
 use yss_graph_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
 use yss_graph_execution::state::RunExecutionControl;
@@ -161,21 +159,24 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
             )]),
             ResourceCatalogFingerprint::from_bytes([0; 32]),
         );
-        let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
-        let semantic =
-            yss_graph_analysis::resolve_graph_semantics(&document, &builtin.registry, &catalog);
-        let package = compile(GraphCompilationInput::new(
-            semantic.ready().unwrap(),
-            graph.clone(),
-            CompileId::new(1),
-            yss_graph_execution::kernels::KernelRegistry::default()
-                .fingerprint()
-                .as_bytes(),
-        ))
-        .unwrap();
+        let analysis = captured.graph().resolve_graph_document(
+            &graph,
+            &document,
+            &yss_graph_analysis_contract::GraphAnalysisBasis {
+                registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
+                    captured.graph().registry_fingerprint(),
+                ),
+                kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
+                resource_versions: BTreeMap::new(),
+                resource_observations: BTreeMap::new(),
+            },
+            &catalog,
+            &[],
+            "en-US",
+        );
         let resource = PlanResourceId::from_existing("data".into());
         let version = PlanResourceVersion::from_existing("7".into());
-        let basis = PlanCompilationBasis::new(
+        let basis = PlanBasis::new(
             session.clone(),
             PlanRegistryFingerprint::from_bytes([0; 32]),
             yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
@@ -185,10 +186,11 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
                 PlanResourceObservedState::Present(version.clone()),
             )]),
         );
-        let package =
-            crate::graph::execution_mapping::execution_package_from_graph(package, basis).unwrap();
+        let package = runtime
+            .prepare_graph_package(&graph, &analysis, basis)
+            .unwrap();
         let plan = runtime
-            .prepare_compiled_package(package, runtime.generation())
+            .prepare_package(package, runtime.generation())
             .unwrap();
         let (entered_tx, entered_rx) = mpsc::sync_channel(1);
         let (resume_tx, resume_rx) = mpsc::sync_channel(1);

@@ -441,9 +441,9 @@ fn decode_request(
             .map(AutomationCapabilityRequest::InspectProject),
         CapabilityId::ApplyGraphEdit => serde_json::from_value::<ApplyGraphEditRequest>(arguments)
             .map(AutomationCapabilityRequest::ApplyGraphEdit),
-        CapabilityId::CompileGraph => {
-            serde_json::from_value::<yss_harness_contract::CompileGraphRequest>(arguments)
-                .map(AutomationCapabilityRequest::CompileGraph)
+        CapabilityId::ValidateGraph => {
+            serde_json::from_value::<yss_harness_contract::ValidateGraphRequest>(arguments)
+                .map(AutomationCapabilityRequest::ValidateGraph)
         }
         CapabilityId::ExecuteGraph => {
             serde_json::from_value::<yss_harness_contract::ExecuteGraphRequest>(arguments)
@@ -490,7 +490,7 @@ fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
         | CapabilityFailureCode::InternalFailure
         | CapabilityFailureCode::GraphClientUnavailable
         | CapabilityFailureCode::GraphDraftChanged
-        | CapabilityFailureCode::GraphCompileFailed
+        | CapabilityFailureCode::GraphValidationFailed
         | CapabilityFailureCode::GraphExecutionFailed => ToolExecutionError::other(code),
     }
     .with_code(failure.code.to_string())
@@ -499,10 +499,10 @@ fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
         CapabilityId::InspectGraph => {
-            "Inspect the current editor draft: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or compiling."
+            "Inspect the current editor draft: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or running."
         }
         CapabilityId::SearchNodeCatalog => {
-            "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. This searches nodes, not compile/run commands."
+            "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. This searches the node catalog."
         }
         CapabilityId::InspectDatasetSchema => {
             "Inspect a bounded dataset schema and its current runtime/schema revisions."
@@ -519,11 +519,11 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
         CapabilityId::ApplyGraphEdit => {
             "Apply one atomic, undoable batch to the current editor draft after the user requests edits. Use revision as baseRevision and graphHash from inspect_graph; use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/configuration/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters merges supplied keys with existing parameters. This updates the canvas, not the saved file; save_graph is separate."
         }
-        CapabilityId::CompileGraph => {
-            "Compile the inspected current draft, passing its graphHash. Returns ready/artifactId or concrete blocking diagnostics. Does not save or execute."
+        CapabilityId::ValidateGraph => {
+            "Validate the inspected current draft, passing its graphHash. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
         }
         CapabilityId::ExecuteGraph => {
-            "Execute the current draft using the matching artifactId from compile_graph and current graphHash. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not implicitly compile or save."
+            "Execute the current draft using its current graphHash. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not save."
         }
         CapabilityId::SaveGraph => {
             "Save the current draft only when the user requests saving. Pass the current graphHash. Uses the editor save operation and clears its draft undo history as a normal Save does."

@@ -1,14 +1,14 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { applyGraphDraftMutation } from "@/features/application/graphDraft/graphDraftCoordinator";
-import { useGraphDraftEditingLocked } from "@/features/application/graphDraft/useGraphDraftEditingLocked";
+import { applyGraphMutation } from "@/features/application/graphEditing/graphEditCoordinator";
+import { useGraphEditingLocked } from "@/features/application/graphEditing/useGraphEditingLocked";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { useGraphRead } from "@/features/core/graph/read";
 import type { ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 import { DetailCollapsibleSection } from "../shared/DetailCollapsibleSection";
 import { DetailForm } from "../shared/DetailForm";
 import { ParameterValueEditor } from "./parameterEditors/NodeParameterEditor";
-import { graphDraftMutationMessageKey, graphDraftMutationSucceeded } from "./nodeMutationFeedback";
+import { graphMutationMessageKey, graphMutationSucceeded } from "./nodeMutationFeedback";
 
 function ConfigurationEditor({
   graphPath,
@@ -20,7 +20,7 @@ function ConfigurationEditor({
   parameter: ParameterEditorDto;
 }) {
   const { t, i18n } = useTranslation();
-  const locked = useGraphDraftEditingLocked(graphPath);
+  const locked = useGraphEditingLocked(graphPath);
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,14 +31,14 @@ function ConfigurationEditor({
     setPending(true);
     setError(null);
     try {
-      const result = await applyGraphDraftMutation({
+      const result = await applyGraphMutation({
         graphPath,
         locale: i18n.resolvedLanguage ?? "en-US",
         mutation: { type: "setConfiguration", payload: { nodeId, key: parameter.key, values } },
       });
-      const errorKey = graphDraftMutationMessageKey(result, "detail.configuration.updateFailed");
+      const errorKey = graphMutationMessageKey(result, "detail.configuration.updateFailed");
       if (errorKey) setError(t(errorKey));
-      return graphDraftMutationSucceeded(result);
+      return graphMutationSucceeded(result);
     } catch (error) {
       setError(formatInlineUserError(error, t));
       return false;

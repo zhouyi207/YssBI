@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { i18n } from "@/app/i18n";
-import type { ApplyGraphDraftMutationOutcome } from "@/features/application/graphDraft/graphDraftCoordinator";
+import type { ApplyGraphMutationOutcome } from "@/features/application/graphEditing/graphEditCoordinator";
 import type { ParameterEditorDto } from "@/shared/types/dto/editorProjection";
 import { NodeParameterEditor } from "./NodeParameterEditor";
 
@@ -17,7 +17,7 @@ vi.mock("@/features/application/editor/setNodeParameters", () => ({ setNodeParam
 
 const graphPath = "events/Main.yssbi-event";
 const nodeId = "constant-node";
-const appliedOutcome: ApplyGraphDraftMutationOutcome = {
+const appliedOutcome: ApplyGraphMutationOutcome = {
   status: "applied",
   result: {} as never,
   insertedNodeIds: [],
@@ -256,7 +256,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("guards synchronously against Enter plus blur duplicate commits", async () => {
-    let resolveMutation: (outcome: ApplyGraphDraftMutationOutcome) => void = () => undefined;
+    let resolveMutation: (outcome: ApplyGraphMutationOutcome) => void = () => undefined;
     setNodeParameters.mockImplementationOnce(
       () =>
         new Promise((resolve) => {

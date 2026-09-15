@@ -7,7 +7,7 @@ import { logger } from "@/features/application/observability/appLogger";
 
 import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
-import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
+import { saveGraph } from "@/features/application/graphEditing/saveGraph";
 
 interface DirtyEditorDocument {
   resourceRef: string;
@@ -60,7 +60,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         continue;
       }
 
-      const saved = await saveGraphDraft(document.resourceRef, document.resourceKind);
+      const saved = await saveGraph(document.resourceRef, document.resourceKind);
       if (!saved) return false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

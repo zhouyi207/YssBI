@@ -86,16 +86,9 @@ export function parseGraphResultState(value: unknown): GraphResultState {
     typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, [
-      "executionSessionId",
-      "semanticInputHash",
-      "compiledArtifactId",
-      "outputs",
-      "connections",
-    ]) ||
+    !hasExactKeys(value, ["executionSessionId", "semanticInputHash", "outputs", "connections"]) ||
     !isUuid(value.executionSessionId) ||
     !isHash(value.semanticInputHash) ||
-    (value.compiledArtifactId !== null && !isHash(value.compiledArtifactId)) ||
     !Array.isArray(value.outputs) ||
     !Array.isArray(value.connections)
   )
@@ -146,7 +139,6 @@ export function parseGraphResultState(value: unknown): GraphResultState {
   return {
     executionSessionId: value.executionSessionId,
     semanticInputHash: value.semanticInputHash,
-    compiledArtifactId: value.compiledArtifactId,
     outputs,
     connections,
   };

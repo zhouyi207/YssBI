@@ -4,6 +4,7 @@
 
 pub mod error;
 pub mod finalization;
+pub mod graph_preparation;
 pub mod identity;
 pub mod kernels;
 mod numeric;

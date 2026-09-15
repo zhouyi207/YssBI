@@ -146,7 +146,7 @@ impl ConfigurationSchema {
     }
 
     /// A stored parameter must already contain the active fields: validators do
-    /// not rewrite the value that compilation will consume.
+    /// not rewrite the value that execution will consume.
     pub fn validate_json(&self, raw: &JsonValue) -> Result<(), String> {
         let normalized = self.normalize_json(raw)?;
         if raw

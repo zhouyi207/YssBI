@@ -1,5 +1,5 @@
 import { useGraphProjectionStore } from "@/features/core/dataStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { invalidateGraphLoadOwnership } from "@/features/application/project/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution";
 import { clearCanvasInteractionGraph } from "@/features/core/canvas/canvasInteractionCleanup";
@@ -26,7 +26,7 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
   const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
   invalidateGraphLoadOwnership(graphPath);
   useGraphProjectionStore.getState().clearGraph(graphPath);
-  useGraphDraftStore.getState().clearGraph(graphPath);
+  useGraphEditingStore.getState().clearGraph(graphPath);
   clearCanvasInteractionGraph(graphPath);
   useExecutionStore.getState().releaseGraphExecutionState(graphPath);
   releaseGraphViewport(graphPath);

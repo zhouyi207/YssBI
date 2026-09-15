@@ -168,6 +168,10 @@ impl ProjectState {
             }
 
             let generation = ActivationGenerationTransition::begin(&self.activation_generation)?;
+            self.graph_editing
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clear();
             resource_operations.reset_for_project(
                 next_instance_id.clone(),
                 next_identity.project_session_id.clone(),

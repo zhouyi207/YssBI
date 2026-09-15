@@ -82,7 +82,7 @@ export function isUnboundInputDiagnostic(
   diagnostic: { readonly code: string } | undefined,
 ): boolean {
   return (
-    diagnostic?.code === "compiler.input.unbound" || diagnostic?.code === "node.input.not_connected"
+    diagnostic?.code === "graph.input.unbound" || diagnostic?.code === "node.input.not_connected"
   );
 }
 

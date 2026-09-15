@@ -19,7 +19,7 @@ use yss_project::ProjectOperationError;
 use yss_project_identity::ProjectInstanceId;
 
 use super::inputs::{
-    DraftResolutionContext, GraphContractMappingError, GraphInputError,
+    GraphContractMappingError, GraphInputError, GraphResolutionContext,
     ProjectGraphResourceSnapshot,
 };
 use crate::session::{
@@ -499,7 +499,7 @@ pub(crate) fn localized_node_catalog_from_facts(
     project: LocalizedCatalogProjectFacts,
     locale: &str,
 ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
-    let context = DraftResolutionContext::from_project_facts(captured, project)?;
+    let context = GraphResolutionContext::from_project_facts(captured, project)?;
     let localized = captured
         .graph()
         .localized_catalog_with_resources(context.project.resources().entries(), locale);
@@ -523,7 +523,7 @@ pub(crate) fn compatible_node_catalog_in_session(
     ensure_requested_project(captured, request.project_instance_id())?;
     let CompatibleCatalogProjectFacts { localized, graph } =
         capture_compatible_project_facts(captured, request.graph_path(), request.document())?;
-    let mut context = DraftResolutionContext::from_project_facts(captured, localized)?;
+    let mut context = GraphResolutionContext::from_project_facts(captured, localized)?;
     context.include_functions(captured, graph.document())?;
     let localized = captured
         .graph()

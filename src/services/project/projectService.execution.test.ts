@@ -12,16 +12,17 @@ import {
 } from "./projectService";
 
 const projectInstanceId = "project-instance-1";
-const compiledArtifactId = "3".repeat(64);
+const semanticInputHash = "3".repeat(64);
 
 function executeGraph(
   demand: ExecutionDemandDto,
   onEvent?: (event: RunEvent) => void,
 ): Promise<void> {
-  return ProjectService.executeCompiledGraph({
+  return ProjectService.executeGraph({
     projectInstanceId,
     graphPath: "events/Main.yssbi-event",
-    compiledArtifactId,
+    semanticInputHash,
+    version: { sessionId: "00000000-0000-0000-0000-000000000090", revision: "0" },
     demand,
     onEvent,
   });
@@ -94,44 +95,14 @@ describe("ProjectService execution contract", () => {
     expect(isPickerTaskCancelledError({ code: PICKER_TASK_CANCELLED })).toBe(false);
   });
 
-  it("preserves a typed internal compilation failure from command IPC", async () => {
-    const commandError = {
-      code: "internal_compilation_failure",
-      details: {
-        internalCompilationFailure: {
-          stage: "lowering",
-          code: "compiler.lowering.internal_invariant",
-          nodeId: "00000000-0000-0000-0000-00000000002a",
-        },
-      },
-      incidentId: "incident-internal-compilation",
-    };
+  it("preserves a plan preparation failure from command IPC", async () => {
+    const commandError = { code: "graph_plan_failed", details: null, incidentId: "plan-incident" };
     vi.mocked(invoke).mockRejectedValue(commandError);
-
     await expect(executeGraph({ type: "default" })).rejects.toMatchObject({
       kind: "backend",
-      code: "internal_compilation_failure",
-      details: commandError.details,
-      incidentId: commandError.incidentId,
+      ...commandError,
       cause: commandError,
     });
-  });
-
-  it("rejects malformed internal compilation failure details at the service boundary", async () => {
-    vi.mocked(invoke).mockRejectedValue({
-      code: "internal_compilation_failure",
-      details: {
-        internalCompilationFailure: {
-          stage: "lowering",
-          code: "compiler.lowering.internal_invariant",
-        },
-      },
-      incidentId: null,
-    });
-
-    await expect(executeGraph({ type: "default" })).rejects.toThrow(
-      "Invalid internal compilation failure response",
-    );
   });
 
   it.each([
@@ -184,7 +155,7 @@ describe("ProjectService execution contract", () => {
     expect(vi.mocked(invoke).mock.calls[0]?.[1]).toMatchObject({ demand });
   });
 
-  it("rejects a malformed demand before invoking execute_compiled_graph", async () => {
+  it("rejects a malformed demand before invoking execute_graph", async () => {
     const malformed = { type: "default", extra: true } as unknown as ExecutionDemandDto;
 
     await expect(executeGraph(malformed)).rejects.toThrow("Invalid default execution demand");
@@ -192,7 +163,7 @@ describe("ProjectService execution contract", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("invokes execute_compiled_graph and drains its RunEvent channel before resolving", async () => {
+  it("invokes execute_graph and drains its RunEvent channel before resolving", async () => {
     let resolveInvoke!: () => void;
     vi.mocked(invoke).mockReturnValue(
       new Promise<void>((resolve) => {
@@ -208,11 +179,12 @@ describe("ProjectService execution contract", () => {
       string,
       { graphPath: string; demand: { type: "default" }; onEvent: Channel<RunEvent> },
     ];
-    expect(command).toBe("execute_compiled_graph");
+    expect(command).toBe("execute_graph");
     expect(args).toEqual({
       projectInstanceId,
       graphPath: "events/Main.yssbi-event",
-      compiledArtifactId,
+      semanticInputHash,
+      version: { sessionId: "00000000-0000-0000-0000-000000000090", revision: "0" },
       demand: { type: "default" },
       onEvent: expect.any(Channel),
     });

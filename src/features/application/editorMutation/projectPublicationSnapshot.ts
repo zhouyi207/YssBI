@@ -12,11 +12,7 @@ import {
   prepareGraphProjectionReplacements,
   useGraphProjectionStore,
 } from "@/features/core/dataStore/graphProjectionStore";
-import {
-  isGraphDraftDirty,
-  isGraphDraftSaving,
-  useGraphDraftStore,
-} from "@/features/core/graphDraft";
+import { isGraphModified, isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
 import {
   assertCurrentProjectIdentity,
   isCurrentProjectIdentity,
@@ -368,13 +364,12 @@ export function prepareProjectSnapshotCommit(
   const replacements = [...plan.graphSessions]
     .filter(([path]) => {
       const previousPath = [...plan.pathRemaps].find(([, to]) => to === path)?.[0] ?? path;
-      return !isGraphDraftDirty(previousPath) && !isGraphDraftSaving(previousPath);
+      return !isGraphModified(previousPath) && !isGraphSaving(previousPath);
     })
     .map(([graphPath, session]) => ({ graphPath, projection: session.projection }));
   const retainedGraphEntities = Object.fromEntries(
     Object.entries(useGraphProjectionStore.getState().graphEntities).filter(
-      ([path]) =>
-        authoritativeGraphPaths.has(path) || isGraphDraftDirty(path) || isGraphDraftSaving(path),
+      ([path]) => authoritativeGraphPaths.has(path) || isGraphModified(path) || isGraphSaving(path),
     ),
   );
   const preparedGraphs = prepareGraphProjectionReplacements(replacements, retainedGraphEntities);
@@ -465,7 +460,7 @@ export function commitPreparedProjectSnapshot(
       useGraphProjectionStore.setState({ graphEntities: plan.graphProjectionPlan.graphEntities });
       for (const path of plan.graphProjectionPlan.graphPaths) {
         const session = plan.graphSessions.get(path);
-        if (session) useGraphDraftStore.getState().hydrate(path, session);
+        if (session) useGraphEditingStore.getState().hydrate(path, session);
       }
       useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
       useViewportStore.setState({ viewports: plan.storeState.viewports });

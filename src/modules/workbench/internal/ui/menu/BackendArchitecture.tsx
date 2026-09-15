@@ -154,7 +154,7 @@ export const backendNodes: BackendArchitectureNode[] = [
       kind: "business",
       color: "var(--chart-1)",
       icon: FiActivity,
-      parts: ["documents", "semantics", "compilation", "execution"],
+      parts: ["documents", "semantics", "preparation", "execution"],
       crates: [
         "yss-graph-document",
         "yss-graph-document-edit",
@@ -163,8 +163,7 @@ export const backendNodes: BackendArchitectureNode[] = [
         "yss-graph-analysis-contract",
         "yss-graph-resource-contract",
         "yss-graph-type-mapping",
-        "yss-graph-compiler",
-        "yss-graph-compiler-diagnostics",
+        "yss-graph-diagnostics",
         "yss-graph-runtime",
         "yss-function-editor-projection",
         "yss-graph-execution",

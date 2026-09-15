@@ -1,10 +1,10 @@
 import type {
-  CompileGraphDraftDto,
   EditorGraphMutationDto,
   GraphDocumentDto,
-  GraphDraftSaveDto,
-  GraphDraftTransformDto,
+  GraphSaveResultDto,
+  GraphEditResultDto,
   GraphEditorSessionDto,
+  GraphEditingStateDto,
   TypeExprDto,
 } from "./editorMutation";
 import type { GraphProjectionReplacementDto } from "./editorProjection";
@@ -18,7 +18,6 @@ import {
 } from "./editorProjectionGuards";
 
 type UnknownRecord = Record<string, unknown>;
-const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -339,56 +338,27 @@ export function parseGraphDocumentDto(value: unknown): GraphDocumentDto {
   ) {
     throw new Error("Graph draft document is malformed");
   }
-  return structuredClone(value) as unknown as GraphDocumentDto;
+  // Validated IPC values are read projections; incremental delivery preserves unchanged references.
+  return value as unknown as GraphDocumentDto;
 }
 
 export function parseGraphEditorSessionDto(value: unknown): GraphEditorSessionDto {
-  if (!isRecord(value) || !hasExactKeys(value, ["document", "projection"])) {
+  if (!isRecord(value) || !hasExactKeys(value, ["document", "projection", "editing"])) {
     throw new Error("Graph editor session is malformed");
   }
   const projection = isEditorGraphProjectionDto(value.projection) ? value.projection : null;
   if (!projection) throw new Error("Graph editor session projection is malformed");
   return {
+    editing: parseGraphEditingState(value.editing),
     document: parseGraphDocumentDto(value.document),
     projection,
   };
 }
 
-export function parseCompileGraphDraftDto(value: unknown): CompileGraphDraftDto {
-  if (!isRecord(value) || !isEditorGraphProjectionDto(value.projection)) {
-    throw new Error("Graph draft compilation result is malformed");
-  }
-  if (
-    value.type === "blocked" &&
-    hasExactKeys(value, ["type", "projection"]) &&
-    value.projection.outcome.type === "analysisBlocked" &&
-    value.projection.hasBlockingDiagnostics
-  ) {
-    return { type: "blocked", projection: value.projection };
-  }
-  if (
-    value.type === "ready" &&
-    hasExactKeys(value, ["type", "artifactId", "cacheHit", "projection"]) &&
-    typeof value.artifactId === "string" &&
-    SHA256_HEX_PATTERN.test(value.artifactId) &&
-    typeof value.cacheHit === "boolean" &&
-    value.projection.outcome.type === "success" &&
-    !value.projection.hasBlockingDiagnostics
-  ) {
-    return {
-      type: "ready",
-      artifactId: value.artifactId,
-      cacheHit: value.cacheHit,
-      projection: value.projection,
-    };
-  }
-  throw new Error("Graph draft compilation outcome is malformed");
-}
-
-export function parseGraphDraftTransformDto(value: unknown): GraphDraftTransformDto {
+export function parseGraphEditResultDto(value: unknown): GraphEditResultDto {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["changed", "document", "projection"]) ||
+    !hasExactKeys(value, ["changed", "document", "projection", "editing"]) ||
     typeof value.changed !== "boolean" ||
     !isEditorGraphProjectionDto(value.projection)
   ) {
@@ -396,15 +366,16 @@ export function parseGraphDraftTransformDto(value: unknown): GraphDraftTransform
   }
   return {
     changed: value.changed,
+    editing: parseGraphEditingState(value.editing),
     document: parseGraphDocumentDto(value.document),
     projection: value.projection,
   };
 }
 
-export function parseGraphDraftSaveDto(
+export function parseGraphSaveResultDto(
   value: unknown,
   expectedProjectInstanceId: string,
-): GraphDraftSaveDto {
+): GraphSaveResultDto {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, [
@@ -412,6 +383,7 @@ export function parseGraphDraftSaveDto(
       "resourceRevision",
       "document",
       "projectionReplacement",
+      "editing",
     ]) ||
     value.projectInstanceId !== expectedProjectInstanceId ||
     !Number.isSafeInteger(value.resourceRevision) ||
@@ -421,9 +393,34 @@ export function parseGraphDraftSaveDto(
   }
   return {
     projectInstanceId: expectedProjectInstanceId,
+    editing: parseGraphEditingState(value.editing),
     resourceRevision: value.resourceRevision as number,
     document: parseGraphDocumentDto(value.document),
     projectionReplacement: parseGraphProjectionReplacementDto(value.projectionReplacement),
+  };
+}
+
+export function parseGraphEditingState(value: unknown): GraphEditingStateDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["version", "dirty", "canUndo", "canRedo"]) ||
+    !isRecord(value.version) ||
+    !hasExactKeys(value.version, ["sessionId", "revision"]) ||
+    !isUuid(value.version.sessionId) ||
+    typeof value.version.revision !== "string" ||
+    !/^(0|[1-9][0-9]{0,19})$/u.test(value.version.revision) ||
+    BigInt(value.version.revision) > 18446744073709551615n ||
+    typeof value.dirty !== "boolean" ||
+    typeof value.canUndo !== "boolean" ||
+    typeof value.canRedo !== "boolean"
+  ) {
+    throw new Error("Graph editing state is malformed");
+  }
+  return {
+    version: { sessionId: value.version.sessionId, revision: value.version.revision },
+    dirty: value.dirty,
+    canUndo: value.canUndo,
+    canRedo: value.canRedo,
   };
 }
 

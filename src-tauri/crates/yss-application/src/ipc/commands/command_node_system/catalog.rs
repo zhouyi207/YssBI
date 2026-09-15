@@ -93,18 +93,28 @@ pub fn get_compatible_node_catalog(
     state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-    document: yss_graph_document::GraphDocument,
+    version: yss_ipc_contract::graph_editing::GraphEditVersionDto,
     source_port: yss_ipc_contract::graph::PortAddressDto,
     locale: String,
 ) -> Result<LocalizedCatalogDto, CommandError> {
     let source_port = source_port
         .try_into()
         .map_err(|_| CommandError::expected("invalid_output"))?;
+    let graph_path = parse_graph_path(graph_path)?;
+    let document = state
+        .current_graph_document(
+            &project_instance_id,
+            &graph_path,
+            crate::ipc::schema::graph_editing::graph_edit_version_from_transport(version)?,
+        )
+        .map_err(|error| {
+            super::common::resource_mutation_to_command_error(error, "graph_edit_changed")
+        })?;
     state
         .compatible_node_catalog(CompatibleCatalogRequest::new(
             project_instance_id,
-            parse_graph_path(graph_path)?,
-            document,
+            graph_path,
+            (*document).clone(),
             source_port,
             locale,
         ))

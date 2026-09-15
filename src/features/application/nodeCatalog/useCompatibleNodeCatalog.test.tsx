@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { CatalogService, type LocalizedCatalogDto } from "@/services/nodeSystem/catalogService";
 import { normalizeIpcError } from "@/services/ipc";
 import type { GraphDocumentDto } from "@/shared/types/domain/editorMutation";
@@ -126,8 +126,10 @@ describe("useCompatibleNodeCatalog", () => {
     projectPublicationCoordinator.startProject("project-1", 7);
     useProjectIOStore.setState({ projectInstanceId: "project-1" });
     const projection = makeEditorProjectionFixture({ graphPath, nodeId: sourcePort.nodeId });
-    useGraphDraftStore.getState().install(graphPath, makeGraphEditorSession(projection.projection));
-    useGraphDraftStore.setState((state) => ({
+    useGraphEditingStore
+      .getState()
+      .install(graphPath, makeGraphEditorSession(projection.projection));
+    useGraphEditingStore.setState((state) => ({
       sessions: {
         ...state.sessions,
         [graphPath]: { ...state.sessions[graphPath], document: structuredClone(draftDocument) },
@@ -143,7 +145,7 @@ describe("useCompatibleNodeCatalog", () => {
     host.remove();
     projectPublicationCoordinator.cancelProject();
     useProjectIOStore.setState({ projectInstanceId: null });
-    useGraphDraftStore.getState().clear();
+    useGraphEditingStore.getState().clear();
   });
 
   it("queries the compatible catalog against the current unsaved Graph Draft", async () => {

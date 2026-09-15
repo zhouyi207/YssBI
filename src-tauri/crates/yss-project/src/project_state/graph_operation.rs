@@ -49,6 +49,7 @@ pub struct GraphCommitReceipt {
     pub from_revision: ResourceRevision,
     pub to_revision: ResourceRevision,
     pub invalidations: GraphInvalidationSet,
+    pub editing: super::GraphEditingState,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,7 +60,7 @@ pub struct ProjectGraphOperationSource {
 }
 
 impl ProjectGraphOperationSource {
-    fn new(source: ProjectOperationError) -> Self {
+    pub(super) fn new(source: ProjectOperationError) -> Self {
         Self { source }
     }
 }
@@ -92,6 +93,8 @@ pub enum ProjectGraphOperationError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectGraphCommitError {
+    #[error("graph document cannot be encoded for an edit transaction")]
+    InvalidDocument(String),
     #[error("graph operation authority is stale")]
     StaleAuthority {
         project_instance_id: ProjectInstanceId,
@@ -263,6 +266,28 @@ impl ProjectState {
         authority: GraphOperationAuthority,
         candidate_document: Arc<GraphDocument>,
     ) -> Result<GraphCommitReceipt, ProjectGraphCommitError> {
+        let before = self
+            .read_resident_graph(&authority.graph_path)
+            .map_err(|_| ProjectGraphCommitError::LifecycleChanged {
+                graph_path: authority.graph_path.clone(),
+            })?
+            .ok_or_else(|| ProjectGraphCommitError::LifecycleChanged {
+                graph_path: authority.graph_path.clone(),
+            })?;
+        let history = super::graph_editing::PreparedGraphEdit::new(
+            &before.document,
+            &candidate_document,
+            super::GraphHistoryAction::Saved,
+        )?;
+        self.commit_graph_candidate_with_history(authority, candidate_document, history)
+    }
+
+    pub(super) fn commit_graph_candidate_with_history(
+        &self,
+        authority: GraphOperationAuthority,
+        candidate_document: Arc<GraphDocument>,
+        history: super::graph_editing::PreparedGraphEdit,
+    ) -> Result<GraphCommitReceipt, ProjectGraphCommitError> {
         let GraphOperationAuthority {
             session,
             graph_path,
@@ -353,6 +378,11 @@ impl ProjectState {
             }
 
             if candidate_document.as_ref() == &graph.document {
+                let mut editing = self.graph_editing.lock().unwrap();
+                let metadata = editing.entry(graph_path.clone()).or_insert_with(|| {
+                    super::graph_editing::GraphEditingMetadata::new(history.before_hash)
+                });
+                metadata.apply(history);
                 return Ok((
                     GraphCommitReceipt {
                         project_instance_id: session.instance_id.clone(),
@@ -361,6 +391,7 @@ impl ProjectState {
                         to_revision: revision,
 
                         invalidations: GraphInvalidationSet { graph: false },
+                        editing: metadata.state(revision),
                     },
                     reservation,
                 ));
@@ -389,6 +420,14 @@ impl ProjectState {
             graph_resource_revisions.insert(graph_path.clone(), next_revision);
             drop(graph_resource_revisions);
 
+            let mut editing = self.graph_editing.lock().unwrap();
+            let metadata = editing.entry(graph_path.clone()).or_insert_with(|| {
+                super::graph_editing::GraphEditingMetadata::new(history.before_hash)
+            });
+            metadata.apply(history);
+            let editing_state = metadata.state(next_revision);
+            drop(editing);
+
             publication.commit_prepared(publication_advance);
             Ok((
                 GraphCommitReceipt {
@@ -398,6 +437,7 @@ impl ProjectState {
                     to_revision: next_revision,
 
                     invalidations: GraphInvalidationSet { graph: true },
+                    editing: editing_state,
                 },
                 reservation,
             ))

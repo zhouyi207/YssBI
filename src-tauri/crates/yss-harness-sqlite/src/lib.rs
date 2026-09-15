@@ -2,6 +2,8 @@
 
 #![forbid(unsafe_code)]
 
+mod migrations;
+
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -78,23 +80,7 @@ impl SqliteHarnessStore {
             .fetch_one(&mut *transaction)
             .await
             .map_err(|_| unavailable())?;
-        if version < 1 {
-            // Graph edit receipts correlate through clientKey and the invocation ledger.
-            // Remove the former unused response ID before strict typed decoding.
-            sqlx::query(
-                "UPDATE tool_invocation
-                 SET payload_json = json_remove(payload_json, '$.result.payload.operationId')
-                 WHERE json_extract(payload_json, '$.result.type') = 'graph_edit_receipt'
-                   AND json_type(payload_json, '$.result.payload.operationId') IS NOT NULL",
-            )
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| unavailable())?;
-            sqlx::query("PRAGMA user_version = 1")
-                .execute(&mut *transaction)
-                .await
-                .map_err(|_| unavailable())?;
-        }
+        migrations::migrate(&mut transaction, version).await?;
         transaction.commit().await.map_err(|_| unavailable())
     }
 }
@@ -1064,7 +1050,7 @@ mod tests {
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]
-    async fn migrates_persisted_graph_edit_receipts_without_losing_idempotency() {
+    async fn migrates_persisted_graph_tools_without_losing_idempotency() {
         let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
         let session = HarnessSessionRecord {
             id: HarnessSessionId::try_new("session-1").unwrap(),
@@ -1151,7 +1137,129 @@ mod tests {
             .fetch_one(&store.pool)
             .await
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 3);
+
+        for (id, kind, result_kind) in [
+            ("tool-2", "compile_graph", "graph_compilation"),
+            ("tool-3", "execute_graph", "graph_execution"),
+        ] {
+            let mut old = serde_json::to_value(&expected).unwrap();
+            old["id"] = id.into();
+            old["idempotencyKey"] = id.into();
+            old["capabilityId"] = kind.into();
+            old["request"] = serde_json::json!({"type": kind, "payload": {
+                "graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64)
+            }});
+            let result = if kind == "compile_graph" {
+                serde_json::json!({"graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64),
+                "artifactId": null, "ready": false, "diagnostics": [{
+                    "code": "compiler.node.unknown", "messageKey": "diagnostics.compiler.node.unknown",
+                    "blocking": true, "severity": "error", "location": "node:missing",
+                    "arguments": {"node_type": "tests.missing"}
+                }]})
+            } else {
+                old["request"]["payload"]["artifactId"] = "a".repeat(64).into();
+                serde_json::json!({"graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64),
+                    "artifactId": "a".repeat(64), "runId": 7, "status": "succeeded", "failureCode": null,
+                    "failureLocation": null, "results": []})
+            };
+            old["result"] = serde_json::json!({"type": result_kind, "payload": result});
+            assert!(serde_json::from_value::<ToolInvocationRecord>(old.clone()).is_err());
+            sqlx::query("INSERT INTO tool_invocation (id, idempotency_key, session_id, state, payload_json) VALUES (?, ?, 'session-1', 'succeeded', ?)")
+                .bind(id).bind(id).bind(old.to_string()).execute(&store.pool).await.unwrap();
+            sqlx::query("PRAGMA user_version = 1")
+                .execute(&store.pool)
+                .await
+                .unwrap();
+            let mut new = old;
+            if kind == "compile_graph" {
+                new["capabilityId"] = "validate_graph".into();
+                new["request"]["type"] = "validate_graph".into();
+                new["result"]["type"] = "graph_validation".into();
+                new["result"]["payload"]["diagnostics"][0]["code"] = "graph.node.unknown".into();
+                new["result"]["payload"]["diagnostics"][0]["messageKey"] =
+                    "diagnostics.graph.node.unknown".into();
+            }
+            new["request"]["payload"]
+                .as_object_mut()
+                .unwrap()
+                .remove("artifactId");
+            new["result"]["payload"]
+                .as_object_mut()
+                .unwrap()
+                .remove("artifactId");
+            let new: ToolInvocationRecord = serde_json::from_value(new).unwrap();
+            for _ in 0..2 {
+                store.ensure_schema().await.unwrap();
+                assert!(
+                    matches!(store.begin(&new).await.unwrap(), ToolInvocationBegin::Existing(record) if *record == new)
+                );
+            }
+            if kind == "compile_graph" {
+                let mut version_two = serde_json::to_value(&new).unwrap();
+                version_two["result"]["payload"]["diagnostics"][0]["code"] =
+                    "compiler.node.unknown".into();
+                version_two["result"]["payload"]["diagnostics"][0]["messageKey"] =
+                    "diagnostics.compiler.node.unknown".into();
+                sqlx::query("UPDATE tool_invocation SET payload_json = ? WHERE id = ?")
+                    .bind(version_two.to_string())
+                    .bind(id)
+                    .execute(&store.pool)
+                    .await
+                    .unwrap();
+                sqlx::query("PRAGMA user_version = 2")
+                    .execute(&store.pool)
+                    .await
+                    .unwrap();
+                store.ensure_schema().await.unwrap();
+                assert!(
+                    matches!(store.begin(&new).await.unwrap(), ToolInvocationBegin::Existing(record) if *record == new)
+                );
+            }
+        }
+        let event = HarnessEventEnvelope {
+            sequence: 1,
+            session_id: session.id.clone(),
+            turn_id: None,
+            occurred_at: UnixMillis::from_existing(20),
+            event: HarnessEvent::Agent(yss_harness_contract::AgentEvent::ToolInvocationFailed {
+                invocation_id: ToolInvocationId::try_new("tool-2").unwrap(),
+                capability_id: yss_harness_contract::CapabilityId::ValidateGraph,
+                failure_code: yss_harness_contract::CapabilityFailureCode::GraphValidationFailed,
+            }),
+        };
+        store.append_event(&event).await.unwrap();
+        let mut old_event = serde_json::to_value(&event).unwrap();
+        old_event["event"]["payload"]["payload"]["capability_id"] = "compile_graph".into();
+        old_event["event"]["payload"]["payload"]["failure_code"] = "graph_compile_failed".into();
+        sqlx::query("UPDATE assistant_event SET payload_json = ? WHERE sequence = 1")
+            .bind(old_event.to_string())
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let text = HarnessEventEnvelope {
+            sequence: 2,
+            event: HarnessEvent::TurnStarted {
+                user_message: "compile_graph graph_compilation artifactId".into(),
+            },
+            ..event.clone()
+        };
+        store.append_event(&text).await.unwrap();
+        sqlx::query("PRAGMA user_version = 1")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        store.ensure_schema().await.unwrap();
+        let values: Vec<String> =
+            sqlx::query_scalar("SELECT payload_json FROM assistant_event ORDER BY sequence")
+                .fetch_all(&store.pool)
+                .await
+                .unwrap();
+        let restored = values
+            .iter()
+            .map(|value| serde_json::from_str::<HarnessEventEnvelope>(value).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(restored, [event, text]);
     }
 
     #[tokio::test]

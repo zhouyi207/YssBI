@@ -116,6 +116,7 @@ impl ProjectState {
                 document,
             },
             None,
+            Vec::new(),
         ) {
             Ok(result) => result,
             Err(error) => {
@@ -249,6 +250,7 @@ impl ProjectState {
                 moved,
             },
             Some(&mut ownership),
+            Vec::new(),
         ) {
             Ok(result) => result,
             Err(error) => {
@@ -304,6 +306,7 @@ impl ProjectState {
                 revision: expected_revision,
             },
             None,
+            Vec::new(),
         ) {
             Ok(result) => result,
             Err(error) => {

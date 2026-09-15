@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 serde.workspace = true
-yss-graph-document = { path = "../yss-graph-document" }
 yss-node-protocol = { path = "../yss-node-protocol" }
 yss-node-registry = { path = "../yss-node-registry" }
 

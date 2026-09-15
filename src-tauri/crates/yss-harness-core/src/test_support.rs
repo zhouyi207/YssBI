@@ -132,10 +132,7 @@ impl StaticCapabilityGateway {
         }
     }
 
-    pub fn with_result(
-        mut self,
-        result: yss_harness_contract::AutomationCapabilityResult,
-    ) -> Self {
+    pub fn with_result(mut self, result: yss_harness_contract::AutomationCapabilityResult) -> Self {
         self.results.insert(result.capability_id(), result);
         self
     }
@@ -534,9 +531,7 @@ impl ToolInvocationLedgerPort for InMemoryHarnessStore {
                 .unwrap_or_else(|error| error.into_inner())
                 .invocations
                 .values()
-                .filter(|record| {
-                    record.state == yss_harness_contract::ToolInvocationState::Running
-                })
+                .filter(|record| record.state == yss_harness_contract::ToolInvocationState::Running)
                 .cloned()
                 .collect())
         })

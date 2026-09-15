@@ -46,18 +46,15 @@
   box-shadow: 0 0 0 2px var(--status-danger);
 }
 
-/* These states come from current compilation, actual run demand, and Rust cache facts. */
+/* These states come from graph diagnostics, actual run demand, and Rust cache facts. */
 .graph-edge-line {
   transition:
     stroke-width 150ms,
     opacity 150ms;
 }
-.graph-edge[data-graph-state="uncompiled"] .graph-edge-line {
+.graph-edge[data-graph-state="unexecuted"] .graph-edge-line {
   stroke-dasharray: 3 6;
   opacity: 0.6;
-}
-.graph-edge[data-graph-state="compiled"] .graph-edge-line {
-  opacity: 0.8;
 }
 .graph-edge[data-graph-state="valid"] .graph-edge-line {
   filter: drop-shadow(0 0 2px currentColor);
@@ -72,18 +69,12 @@
 .graph-edge-activity {
   stroke-dasharray: 12 22;
 }
-.graph-edge[data-graph-state="compiling"] .graph-edge-activity {
-  animation: graph-stage-pulse 0.8s ease-in-out infinite;
-}
 .graph-edge[data-graph-state="running"] .graph-edge-activity {
   animation: graph-demand-flow 1.2s linear infinite;
 }
 
-.yss-flow [data-node-id][data-graph-state="uncompiled"] {
+.yss-flow [data-node-id][data-graph-state="unexecuted"] {
   border-style: dashed;
-}
-.yss-flow [data-node-id][data-graph-state="compiled"] {
-  border-style: solid;
 }
 .yss-flow [data-node-id][data-graph-state="stale"] {
   border-style: dashed;
@@ -92,9 +83,6 @@
 .yss-flow [data-node-id][data-graph-state="partial"] {
   border-style: double;
   border-color: var(--status-success);
-}
-.yss-flow [data-node-id][data-graph-state="compiling"] {
-  border-color: var(--accent-color);
 }
 .yss-flow [data-node-id][data-graph-state="running"] {
   border-color: var(--status-warning);
@@ -115,9 +103,6 @@
   background: var(--node-base);
   color: var(--text-primary);
 }
-[data-graph-state="compiling"] > .graph-state-badge > span:first-child {
-  animation: graph-stage-pulse 0.8s ease-in-out infinite;
-}
 [data-graph-state="running"] > .graph-state-badge > span:first-child {
   color: var(--status-warning);
 }
@@ -132,7 +117,7 @@
   color: var(--status-warning);
 }
 
-.yss-flow [data-pin-id][data-graph-state="uncompiled"] > .pin-circle {
+.yss-flow [data-pin-id][data-graph-state="unexecuted"] > .pin-circle {
   outline: 1px dashed var(--pin-result-color);
   outline-offset: -3px;
 }
@@ -148,8 +133,7 @@
   outline: 2px solid var(--status-danger);
   outline-offset: -3px;
 }
-.yss-flow [data-pin-id][data-graph-state="running"] > .pin-circle,
-.yss-flow [data-pin-id][data-graph-state="compiling"] > .pin-circle {
+.yss-flow [data-pin-id][data-graph-state="running"] > .pin-circle {
   outline: 2px dotted var(--pin-result-color);
   outline-offset: -3px;
   animation: graph-stage-pulse 1s ease-in-out infinite;

@@ -39,9 +39,9 @@ import {
   isEditorCommandTargetCurrent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
-import { saveGraphDraft } from "@/features/application/graphDraft/saveGraphDraft";
-import { compileGraphDraft } from "@/features/application/graphDraft/compileGraphDraft";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { saveGraph as saveCurrentGraph } from "@/features/application/graphEditing/saveGraph";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
+import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import { normalizeApplicationIpcError } from "@/features/application/errorReference";
 import { revealWorkbenchView } from "@/modules/workbench/public";
 
@@ -173,7 +173,7 @@ export function useProjectOperations() {
           return;
         }
 
-        const saved = await saveGraphDraft(target.resourceRef, target.resourceKind);
+        const saved = await saveCurrentGraph(target.resourceRef, target.resourceKind);
         if (!isEditorCommandTargetCurrent(target)) return;
         if (!saved) {
           showBlockingMessage(
@@ -238,23 +238,6 @@ export function useProjectOperations() {
     [],
   );
 
-  const compileGraph = useCallback(
-    async (targetGraphPath?: string) => {
-      const graphPath = resolveExecutionGraphPath(targetGraphPath);
-      if (!graphPath) return false;
-      try {
-        return await compileGraphDraft(graphPath);
-      } catch (error) {
-        logger.exec.error(`编译失败: ${formatErrorMessage(error)}`);
-        showBlockingIpcError(error, "compile_graph_draft", (code) =>
-          t("notifications.project.compileFailed", { error: code }),
-        );
-        return false;
-      }
-    },
-    [t],
-  );
-
   const executeGraph = useCallback(
     async (targetGraphPath?: string) => {
       const graphPath = resolveExecutionGraphPath(targetGraphPath);
@@ -272,40 +255,49 @@ export function useProjectOperations() {
 
       let isCurrentRun: (() => boolean) | undefined;
       try {
-        const draft = useGraphDraftStore.getState().sessions[graphPath];
-        if (draft?.compileStatus !== "compiled" || !draft.compiledArtifactId) {
-          showBlockingMessage(t("notifications.project.compileRequired"));
-          return;
-        }
-        const projection = useGraphProjectionStore.getState().graphEntities[graphPath];
-        if (!isGraphProjectionExecutable(projection)) {
-          showBlockingMessage(t("notifications.project.problemsBlockExecution"));
-          return;
-        }
-        logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);
-
         const runState: GraphRunOutcomeState = { outcome: "success" };
-        isCurrentRun = useExecutionStore.getState().startExecution(graphPath);
-
-        await ProjectService.executeCompiledGraph({
-          projectInstanceId: project.projectInstanceId,
+        const started = await enqueueGraphTask(
           graphPath,
-          compiledArtifactId: draft.compiledArtifactId,
-          demand: { type: "default" },
-          onEvent: (event) => {
-            if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
-            observeGraphRunEvent(graphPath, event, runState);
-            if (event.kind.type === "resultInspectionRequested") {
-              void openInspectableResult(
-                resultRef({
-                  resultId: event.kind.resultId,
-                  executionSessionId: event.run.executionSessionId,
-                }),
-                t,
-              );
+          async () => {
+            if (!isCurrentProjectIdentity(project)) return null;
+            const draft = useGraphEditingStore.getState().sessions[graphPath];
+            if (!draft || draft.saving) return null;
+            const projection = useGraphProjectionStore.getState().graphEntities[graphPath];
+            if (!isGraphProjectionExecutable(projection)) {
+              showBlockingMessage(t("notifications.project.problemsBlockExecution"));
+              return null;
             }
+            logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);
+
+            isCurrentRun = useExecutionStore.getState().startExecution(graphPath);
+
+            const completion = ProjectService.executeGraph({
+              projectInstanceId: project.projectInstanceId,
+              graphPath,
+              version: draft.version,
+              semanticInputHash: draft.semanticInputHash,
+              demand: { type: "default" },
+              onEvent: (event) => {
+                if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
+                observeGraphRunEvent(graphPath, event, runState);
+                if (event.kind.type === "resultInspectionRequested") {
+                  void openInspectableResult(
+                    resultRef({
+                      resultId: event.kind.resultId,
+                      executionSessionId: event.run.executionSessionId,
+                    }),
+                    t,
+                  );
+                }
+              },
+            });
+            // Release the edit queue after dispatch; the run owns its captured draft.
+            return { completion };
           },
-        });
+          null,
+        );
+        if (!started) return;
+        await started.completion;
 
         if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
         finalizeExecutionRun(graphPath, runState.outcome);
@@ -318,7 +310,7 @@ export function useProjectOperations() {
           return;
         }
 
-        const error = normalizeApplicationIpcError("execute_compiled_graph", e);
+        const error = normalizeApplicationIpcError("execute_graph", e);
         const execution = useExecutionStore.getState();
         const graph = execution.getGraph(graphPath);
         execution.recordRunFailure(graphPath, {
@@ -370,7 +362,6 @@ export function useProjectOperations() {
     saveGraph,
     saveGraphAs,
     importGraph,
-    compileGraph,
     executeGraph,
     cancelGraphExecution,
     clearGraphArtifacts,

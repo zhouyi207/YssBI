@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { useGraphConstants } from "@/features/application/graphDraft/graphConstantActions";
+import { useGraphConstants } from "@/features/application/graphEditing/graphConstantActions";
 import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -166,21 +166,24 @@ describe("ResultQueryCoordinator", () => {
       graphPath: "events/contract.yssbi-event",
       semanticInputHash: "a".repeat(64),
       sessionId: 1,
-      draftGeneration: 0,
-      draftSession: {},
+      projectionGeneration: 0,
+      editorState: {},
     };
     const first = coordinator.loadGraphState(request);
     const second = coordinator.loadGraphState({
       ...request,
       semanticInputHash: "b".repeat(64),
-      draftGeneration: 1,
-      draftSession: {},
+      projectionGeneration: 1,
+      editorState: {},
     });
-    const third = coordinator.loadGraphState({ ...request, draftGeneration: 2, draftSession: {} });
+    const third = coordinator.loadGraphState({
+      ...request,
+      projectionGeneration: 2,
+      editorState: {},
+    });
     const state: GraphResultState = {
       executionSessionId: resultSessionFixture,
       semanticInputHash: request.semanticInputHash,
-      compiledArtifactId: request.semanticInputHash,
       connections: [],
       outputs: [
         { output: { graphPath: request.graphPath, port: output }, state: "valid", resultId: "18" },
@@ -188,7 +191,7 @@ describe("ResultQueryCoordinator", () => {
     };
     undone.resolve(state);
     expect(await third).toEqual({ status: "published" });
-    old.resolve({ ...state, compiledArtifactId: null });
+    old.resolve(state);
     edited.resolve({ ...state, semanticInputHash: "b".repeat(64) });
     expect(await first).toEqual({ status: "stale" });
     expect(await second).toEqual({ status: "stale" });

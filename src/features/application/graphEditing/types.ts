@@ -1,7 +1,7 @@
-import type { ApplyGraphDraftMutationOutcome } from "@/features/application/graphDraft/graphDraftCoordinator";
+import type { ApplyGraphMutationOutcome } from "@/features/application/graphEditing/graphEditCoordinator";
 
 export type GraphEditOutcome =
-  | ApplyGraphDraftMutationOutcome
+  | ApplyGraphMutationOutcome
   | { status: "unavailable" }
   | { status: "failed" };
 

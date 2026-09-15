@@ -98,23 +98,31 @@ impl Fixture {
         &mut self,
         request: AutomationCapabilityRequest,
     ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
-        let action = prepare_automation_graph_action(
-            self.application.as_ref().unwrap(),
-            self.context.clone(),
-            request,
-            AutomationGraphDraft {
-                document: self.document.clone(),
-                generation: self.revision,
-                locale: "en-US".into(),
-            },
-            &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
-            |_| true,
-        )?;
-        if let AutomationGraphUpdate::Draft(update) = action.update {
-            self.document = update.document;
-            self.revision += 1;
-        }
-        Ok(action.result)
+        let result = self
+            .application
+            .as_ref()
+            .unwrap()
+            .invoke_automation_capability(
+                self.context.clone(),
+                request,
+                &CapabilityControl::new(CancellationToken::default(), Duration::from_secs(15)),
+            )?;
+        let captured = self
+            .application
+            .as_ref()
+            .unwrap()
+            .capture_session()
+            .unwrap();
+        let snapshot = captured
+            .project()
+            .read_graph_editing(
+                captured.project_instance_id(),
+                &GraphResourcePath::new(&self.path).unwrap(),
+            )
+            .unwrap();
+        self.document = (*snapshot.document).clone();
+        self.revision = snapshot.state.version.revision.get();
+        Ok(result)
     }
     fn inspect(&mut self) -> GraphInspection {
         let AutomationCapabilityResult::GraphInspection(graph) = self
@@ -173,10 +181,12 @@ fn connect(output: GraphEditPortRef, input: GraphEditPortRef) -> GraphEditOperat
 }
 
 #[test]
-fn assistant_edits_current_draft_compiles_runs_and_reads_actual_series_results() {
+fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results() {
     let mut f = Fixture::new();
+    let saved_path = f.directory.join("project").join(&f.path);
+    let saved_document = std::fs::read_to_string(&saved_path).unwrap();
     let initial = f.inspect();
-    assert_eq!(initial.source, "draft");
+    assert_eq!(initial.source, "current");
     let created = f.edit(vec![
         GraphEditOperation::CreateNode {
             client_id: Some("source".into()),
@@ -213,16 +223,16 @@ fn assistant_edits_current_draft_compiles_runs_and_reads_actual_series_results()
         .unwrap();
     assert_eq!(column.maximum_connections, None);
     let x = column.address.clone();
-    let AutomationCapabilityResult::GraphCompilation(blocked) = f
-        .action(AutomationCapabilityRequest::CompileGraph(
-            CompileGraphRequest {
+    let AutomationCapabilityResult::GraphValidation(blocked) = f
+        .action(AutomationCapabilityRequest::ValidateGraph(
+            ValidateGraphRequest {
                 graph_path: f.path.clone(),
                 graph_hash: graph.graph_hash,
             },
         ))
         .unwrap()
     else {
-        panic!("compile")
+        panic!("validation")
     };
     assert!(!blocked.ready);
     assert!(
@@ -235,24 +245,23 @@ fn assistant_edits_current_draft_compiles_runs_and_reads_actual_series_results()
         x.clone(),
         port(&created.created_nodes["product"], "left"),
     )]);
-    let AutomationCapabilityResult::GraphCompilation(compiled) = f
-        .action(AutomationCapabilityRequest::CompileGraph(
-            CompileGraphRequest {
+    let AutomationCapabilityResult::GraphValidation(validated) = f
+        .action(AutomationCapabilityRequest::ValidateGraph(
+            ValidateGraphRequest {
                 graph_path: f.path.clone(),
                 graph_hash: graph_hash(&f.document).unwrap(),
             },
         ))
         .unwrap()
     else {
-        panic!("compile")
+        panic!("validation")
     };
-    assert!(compiled.ready, "{:?}", compiled.diagnostics);
+    assert!(validated.ready, "{:?}", validated.diagnostics);
     let AutomationCapabilityResult::GraphExecution(run) = f
         .action(AutomationCapabilityRequest::ExecuteGraph(
             ExecuteGraphRequest {
                 graph_path: f.path.clone(),
-                graph_hash: compiled.graph_hash,
-                artifact_id: compiled.artifact_id.unwrap(),
+                graph_hash: validated.graph_hash,
             },
         ))
         .unwrap()
@@ -302,15 +311,11 @@ fn assistant_edits_current_draft_compiles_runs_and_reads_actual_series_results()
             ResultValueInspection::Unsigned(9)
         ]
     );
-    let session = f.application.as_ref().unwrap().capture_session().unwrap();
-    assert!(
-        session.project().get_data().unwrap().graphs[&GraphResourcePath::new(&f.path).unwrap()]
-            .document
-            .nodes
-            .is_empty(),
-        "editing, compilation and execution must not save the draft"
+    assert_eq!(
+        std::fs::read_to_string(&saved_path).unwrap(),
+        saved_document,
+        "editing, validation and execution must not save the draft"
     );
-    drop(session);
     let hash = graph_hash(&f.document).unwrap();
     let AutomationCapabilityResult::GraphSaved(saved) = f
         .action(AutomationCapabilityRequest::SaveGraph(SaveGraphRequest {
@@ -383,6 +388,23 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             .into(),
         },
     );
+    {
+        let captured = f.application.as_ref().unwrap().capture_session().unwrap();
+        let path = GraphResourcePath::new(&f.path).unwrap();
+        let operation = captured
+            .project()
+            .capture_graph_overwrite_operation(
+                captured.project_instance_id(),
+                &path,
+                OperationId::new(),
+            )
+            .unwrap();
+        let receipt = captured
+            .project()
+            .commit_graph_candidate(operation.into_authority(), Arc::new(f.document.clone()))
+            .unwrap();
+        f.revision = receipt.to_revision.get();
+    }
     f.edit(vec![GraphEditOperation::SetParameters {
         node_id: id.clone(),
         parameters: [("to".into(), serde_json::json!("second"))].into(),

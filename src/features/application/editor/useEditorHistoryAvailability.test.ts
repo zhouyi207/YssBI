@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useEditorHistoryAvailability } from "./useEditorHistoryAvailability";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,7 +31,7 @@ describe("useEditorHistoryAvailability", () => {
 
   beforeEach(() => {
     activeEditor.activeResourceRef = graphPath;
-    useGraphDraftStore.setState({ sessions: {} });
+    useGraphEditingStore.setState({ sessions: {} });
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
@@ -42,25 +42,19 @@ describe("useEditorHistoryAvailability", () => {
     host.remove();
   });
 
-  it("derives undo/redo only from the active frontend draft and masks both while saving", () => {
-    useGraphDraftStore.setState({
+  it("derives undo/redo only from the active Rust graph projection and masks both while saving", () => {
+    useGraphEditingStore.setState({
       sessions: {
         [graphPath]: {
           ...version,
           sessionId: 1,
-          draftGeneration: 0,
+          projectionGeneration: 0,
           semanticInputHash: "0".repeat(64),
-          compiledInputHash: null,
-          compileRequest: null,
           saveDirty: false,
-          compileDirty: true,
-          savedDocument: draftDocument,
+          version: { sessionId: "00000000-0000-0000-0000-000000000090", revision: "0" },
           saving: false,
-          compileStatus: "uncompiled",
-          compiledArtifactId: null,
-          compileCacheHit: false,
-          undoStack: [version],
-          redoStack: [version],
+          canUndo: true,
+          canRedo: true,
         },
       },
     });
@@ -72,7 +66,7 @@ describe("useEditorHistoryAvailability", () => {
       pending: false,
     });
 
-    act(() => useGraphDraftStore.getState().beginSave(graphPath));
+    act(() => useGraphEditingStore.getState().beginSave(graphPath));
     expect(current).toEqual({
       activeResourceRef: graphPath,
       canUndo: false,

@@ -1,6 +1,6 @@
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface SetPinValueArgs {
   pinId: string;
@@ -15,7 +15,7 @@ export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphEditOutcom
     if (pin.address.nodeId !== args.nodeId) {
       throw new Error(`Port '${args.pinId}' does not belong to node '${args.nodeId}'`);
     }
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "setLiteral",

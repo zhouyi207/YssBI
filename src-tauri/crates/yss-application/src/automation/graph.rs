@@ -2,16 +2,13 @@ use super::{
     enforce_result_bound, ensure_project_binding, inspect_port, inspect_result_category,
     invalid_request, map_session_capture_error, map_session_revalidation_error,
 };
-use crate::graph::compile::{CompileGraphDraftReceipt, compile_graph_draft};
-use crate::graph::edit::GraphDraftEditor;
-use crate::graph::edit::{GraphDraftSave, GraphDraftTransform};
-use crate::graph::run::{
-    RunApplicationEvent, RunApplicationEventKind, RunGraphRequest, run_graph_with_sink,
-};
+use crate::graph::edit::GraphDocumentChange;
+use crate::graph::edit::GraphDocumentEditor;
+use crate::graph::editing::{GraphActivity, GraphEditRequest};
+use crate::graph::run::{RunApplicationEventKind, RunGraphRequest, run_graph_with_sink};
 use crate::session::{ApplicationSession, ApplicationState};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use yss_harness_contract::*;
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
@@ -19,45 +16,17 @@ use yss_graph_document::{
 };
 use yss_graph_editor::projection::*;
 use yss_graph_editor::{EditorGraphMutation, NodePositionMutation};
+use yss_harness_contract::*;
 use yss_node_catalog::LocalizedCatalogItem;
 use yss_node_protocol::PortKey;
 use yss_project_identity::OperationId;
 
-pub enum AutomationGraphUpdate {
-    None,
-    Execution {
-        terminal_event_sent: bool,
-        status: String,
-    },
-    Draft(GraphDraftTransform),
-    Compilation(CompileGraphDraftReceipt),
-    Saved(GraphDraftSave),
-}
-
-pub struct AutomationGraphAction {
-    pub result: AutomationCapabilityResult,
-    pub update: AutomationGraphUpdate,
-}
-
-pub struct AutomationGraphDraft {
-    pub document: GraphDocument,
-    pub generation: u64,
-    pub locale: String,
-}
-
-pub fn prepare_automation_graph_action(
+pub fn invoke_graph_capability(
     application: &ApplicationState,
     context: CapabilityInvocationContext,
     request: AutomationCapabilityRequest,
-    draft: AutomationGraphDraft,
     control: &CapabilityControl,
-    mut deliver: impl FnMut(RunApplicationEvent) -> bool + Send,
-) -> Result<AutomationGraphAction, CapabilityFailure> {
-    let AutomationGraphDraft {
-        document,
-        generation: draft_generation,
-        locale,
-    } = draft;
+) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
     request
         .validate()
@@ -66,25 +35,32 @@ pub fn prepare_automation_graph_action(
         .capture_session()
         .map_err(map_session_capture_error)?;
     ensure_project_binding(&captured, &context)?;
-    yss_graph_document_edit::validate_graph_document(&document)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    let graph_path_text = graph_action_path(&request)
-        .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    let path = GraphResourcePath::new(graph_path_text)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    if !captured
+    let path = GraphResourcePath::new(
+        graph_action_path(&request)
+            .ok_or_else(|| graph_failure(CapabilityFailureCode::InvalidRequest))?,
+    )
+    .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    let locale = match &request {
+        AutomationCapabilityRequest::ApplyGraphEdit(request) => request.locale.clone(),
+        _ => "en-US".into(),
+    };
+    application
+        .open_graph(crate::graph::open::OpenGraphRequest::new(
+            captured.project_instance_id().clone(),
+            path.clone(),
+            0,
+            locale.clone(),
+        ))
+        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+    let current = captured
         .project()
-        .get_data()
-        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
-        .graphs
-        .contains_key(&path)
-    {
-        return Err(graph_failure(CapabilityFailureCode::GraphUnavailable));
-    }
+        .read_graph_editing(captured.project_instance_id(), &path)
+        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+    let document = (*current.document).clone();
     let hash = graph_hash(&document)?;
     let expected = match &request {
         AutomationCapabilityRequest::ApplyGraphEdit(request) => Some(&request.graph_hash),
-        AutomationCapabilityRequest::CompileGraph(request) => Some(&request.graph_hash),
+        AutomationCapabilityRequest::ValidateGraph(request) => Some(&request.graph_hash),
         AutomationCapabilityRequest::ExecuteGraph(request) => Some(&request.graph_hash),
         AutomationCapabilityRequest::SaveGraph(request) => Some(&request.graph_hash),
         _ => None,
@@ -92,115 +68,119 @@ pub fn prepare_automation_graph_action(
     if expected.is_some_and(|expected| expected != &hash) {
         return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
     }
-    let action = match request {
+    let read_only = request.capability_id().descriptor().effect == ToolEffect::Inspect;
+    let result = match request {
         AutomationCapabilityRequest::InspectGraph(_) => {
             let projection = application
-                .resolve_graph_draft(
+                .resolve_graph_document(
                     captured.project_instance_id().clone(),
                     path.clone(),
                     document.clone(),
                     locale,
                 )
                 .map_err(map_graph_error)?;
-            AutomationGraphAction {
-                result: AutomationCapabilityResult::GraphInspection(inspect_projection(
-                    &path,
-                    &document,
-                    &projection,
-                    draft_generation,
-                    "draft",
-                )?),
-                update: AutomationGraphUpdate::None,
-            }
+            AutomationCapabilityResult::GraphInspection(inspect_projection(
+                &path,
+                &document,
+                &projection,
+                current.state.version.revision.get(),
+                "current",
+            )?)
         }
-        AutomationCapabilityRequest::ApplyGraphEdit(mut request) => {
-            request.locale = locale;
-            if request.base_revision != draft_generation {
+        AutomationCapabilityRequest::ApplyGraphEdit(request) => {
+            let _editing = captured
+                .coordinate_graph_edit(&path)
+                .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?;
+            if request.base_revision != current.state.version.revision.get() {
                 return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
             }
-            let (transform, receipt) =
+            let operation = captured
+                .project()
+                .capture_graph_edit(
+                    captured.project_instance_id(),
+                    &path,
+                    current.state.version,
+                    OperationId::new(),
+                )
+                .map_err(|_| graph_failure(CapabilityFailureCode::GraphDraftChanged))?;
+            let (transform, mut receipt) =
                 transform_graph_edit(application, &captured, request, document, control)?;
-            AutomationGraphAction {
-                result: AutomationCapabilityResult::GraphEditReceipt(receipt),
-                update: AutomationGraphUpdate::Draft(transform),
-            }
+            control.check()?;
+            let committed = captured
+                .project()
+                .commit_graph_edit(
+                    operation,
+                    Arc::new(transform.document),
+                    yss_project::GraphHistoryAction::Edit(transform.patch),
+                )
+                .map_err(|_| graph_failure(CapabilityFailureCode::GraphDraftChanged))?;
+            captured
+                .execution()
+                .observe_graph_result_inputs(path.as_str(), transform.result_inputs);
+            captured.publish_graph_activity(GraphActivity::Changed {
+                graph_path: path.as_str().into(),
+                editing: committed.editing.clone(),
+            });
+            receipt.from_revision = committed.from_revision.get();
+            receipt.to_revision = committed.to_revision.get();
+            AutomationCapabilityResult::GraphEditReceipt(receipt)
         }
-        AutomationCapabilityRequest::CompileGraph(_) => {
-            let receipt = compile_graph_draft(
-                application,
-                captured.project_instance_id().clone(),
-                path.clone(),
-                document,
-                &locale,
-            )
-            .map_err(|_| graph_failure(CapabilityFailureCode::GraphCompileFailed))?;
-            let (artifact_id, projection) = match &receipt {
-                CompileGraphDraftReceipt::Ready {
-                    artifact_id,
-                    projection,
-                    ..
-                } => (Some(hex(artifact_id)), projection),
-                CompileGraphDraftReceipt::Blocked { projection } => (None, projection),
-            };
-            AutomationGraphAction {
-                result: AutomationCapabilityResult::GraphCompilation(GraphCompilation {
-                    graph_path: path.as_str().into(),
-                    graph_hash: hash,
-                    ready: artifact_id.is_some(),
-                    artifact_id,
-                    diagnostics: diagnostics(projection),
-                }),
-                update: AutomationGraphUpdate::Compilation(receipt),
-            }
+        AutomationCapabilityRequest::ValidateGraph(_) => {
+            let projection = application
+                .resolve_graph_document(
+                    captured.project_instance_id().clone(),
+                    path.clone(),
+                    document,
+                    locale,
+                )
+                .map_err(map_graph_error)?;
+            AutomationCapabilityResult::GraphValidation(GraphValidation {
+                graph_path: path.as_str().into(),
+                graph_hash: hash,
+                ready: matches!(projection.outcome, EditorResolutionOutcome::Complete)
+                    && !projection
+                        .diagnostics
+                        .iter()
+                        .any(|diagnostic| diagnostic.blocking),
+                diagnostics: diagnostics(&projection),
+            })
         }
         AutomationCapabilityRequest::SaveGraph(_) => {
             let saved = application
-                .save_graph_draft(
-                    captured.project_instance_id().clone(),
-                    path.clone(),
+                .save_current_graph(GraphEditRequest {
+                    project_instance_id: captured.project_instance_id().clone(),
+                    graph_path: path.clone(),
+                    version: current.state.version,
+                    operation_id: OperationId::new(),
                     locale,
-                    OperationId::new(),
-                    document,
-                )
+                })
                 .map_err(map_graph_error)?;
-            AutomationGraphAction {
-                result: AutomationCapabilityResult::GraphSaved(GraphSaved {
-                    graph_path: path.as_str().into(),
-                    graph_hash: graph_hash(&saved.document)?,
-                    resource_revision: saved.resource_revision.get(),
-                }),
-                update: AutomationGraphUpdate::Saved(saved),
-            }
+            AutomationCapabilityResult::GraphSaved(GraphSaved {
+                graph_path: path.as_str().into(),
+                graph_hash: graph_hash(&saved.graph.update.document)?,
+                resource_revision: saved.resource_revision.get(),
+            })
         }
-        AutomationCapabilityRequest::ExecuteGraph(request) => {
-            let artifact_id = parse_hash(&request.artifact_id)?;
+        AutomationCapabilityRequest::ExecuteGraph(_) => {
             let projection = application
-                .resolve_graph_draft(
+                .resolve_graph_document(
                     captured.project_instance_id().clone(),
                     path.clone(),
-                    document,
+                    document.clone(),
                     locale,
                 )
                 .map_err(map_graph_error)?;
-            if projection.basis.semantic_input_hash != artifact_id
-                || captured
-                    .graph()
-                    .compiled_draft(&path, &artifact_id)
-                    .is_none()
-            {
-                return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
-            }
             let mut run_id = None;
             let mut failure_code = None;
             let mut failure_location = None;
             let mut status = "failed";
-            let mut terminal_event_sent = false;
             let outcome = run_graph_with_sink(
                 application,
                 RunGraphRequest::new(
                     captured.project_instance_id().clone(),
                     path.clone(),
-                    artifact_id,
+                    document,
+                    projection.basis.semantic_input_hash,
                 )
                 .with_cancellation(control.cancellation_flag())
                 .with_deadline(control.deadline()),
@@ -216,15 +196,8 @@ pub fn prepare_automation_graph_action(
                         }
                         _ => {}
                     }
-                    let terminal = matches!(
-                        event.kind(),
-                        RunApplicationEventKind::RunCompleted
-                            | RunApplicationEventKind::RunCancelled
-                            | RunApplicationEventKind::RunErrored { .. }
-                    );
-                    let delivered = deliver(event);
-                    terminal_event_sent |= terminal && delivered;
-                    delivered
+                    captured.publish_graph_activity(GraphActivity::Execution(event));
+                    true
                 },
             );
             if outcome.is_err() && failure_code.is_none() && status != "cancelled" {
@@ -235,43 +208,32 @@ pub fn prepare_automation_graph_action(
                 .into_iter()
                 .filter(|result| Some(result.run_id) == run_id && status == "succeeded")
                 .collect();
-            AutomationGraphAction {
-                result: AutomationCapabilityResult::GraphExecution(GraphExecution {
-                    graph_path: path.as_str().into(),
-                    graph_hash: hash,
-                    artifact_id: request.artifact_id,
-                    run_id,
-                    status: status.into(),
-                    failure_code,
-                    failure_location,
-                    results,
-                }),
-                update: AutomationGraphUpdate::Execution {
-                    terminal_event_sent,
-                    status: status.into(),
-                },
-            }
+            AutomationCapabilityResult::GraphExecution(GraphExecution {
+                graph_path: path.as_str().into(),
+                graph_hash: hash,
+                run_id,
+                status: status.into(),
+                failure_code,
+                failure_location,
+                results,
+            })
         }
         _ => return Err(graph_failure(CapabilityFailureCode::InvalidRequest)),
     };
-    application
-        .revalidate_captured_session(&captured)
-        .map_err(map_session_revalidation_error)?;
-    // Save has crossed its commit point; the actual receipt survives late cancellation.
-    if !matches!(
-        action.update,
-        AutomationGraphUpdate::Saved(_) | AutomationGraphUpdate::Execution { .. }
-    ) {
+    if read_only {
         control.check()?;
+        application
+            .revalidate_captured_session(&captured)
+            .map_err(map_session_revalidation_error)?;
     }
-    Ok(action)
+    Ok(result)
 }
 
 pub(crate) fn graph_action_path(request: &AutomationCapabilityRequest) -> Option<&str> {
     match request {
         AutomationCapabilityRequest::InspectGraph(r) => Some(&r.graph_path),
         AutomationCapabilityRequest::ApplyGraphEdit(r) => Some(&r.graph_path),
-        AutomationCapabilityRequest::CompileGraph(r) => Some(&r.graph_path),
+        AutomationCapabilityRequest::ValidateGraph(r) => Some(&r.graph_path),
         AutomationCapabilityRequest::ExecuteGraph(r) => Some(&r.graph_path),
         AutomationCapabilityRequest::SaveGraph(r) => Some(&r.graph_path),
         _ => None,
@@ -284,10 +246,10 @@ fn transform_graph_edit(
     request: ApplyGraphEditRequest,
     original: GraphDocument,
     control: &CapabilityControl,
-) -> Result<(GraphDraftTransform, GraphEditReceipt), CapabilityFailure> {
+) -> Result<(GraphDocumentChange, GraphEditReceipt), CapabilityFailure> {
     let graph_path = GraphResourcePath::new(&request.graph_path)
         .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    let mut editor = GraphDraftEditor::new(captured, &graph_path, &request.locale, original)
+    let mut editor = GraphDocumentEditor::new(captured, &graph_path, &request.locale, original)
         .map_err(map_graph_error)?;
     let localized = editor.localized_catalog();
     let mut created_nodes = BTreeMap::new();
@@ -633,33 +595,6 @@ fn invalid_edit_identity(field: &'static str) -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::InvalidRequest).with_detail("field", field)
 }
 
-pub(crate) fn inspect_saved_graph(
-    application: &ApplicationState,
-    captured: &Arc<ApplicationSession>,
-    request: InspectGraphRequest,
-) -> Result<GraphInspection, CapabilityFailure> {
-    let path = GraphResourcePath::new(request.graph_path)
-        .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
-    let data = captured
-        .project()
-        .get_data()
-        .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
-    let document = &data
-        .graphs
-        .get(&path)
-        .ok_or_else(|| graph_failure(CapabilityFailureCode::GraphUnavailable))?
-        .document;
-    let projection = application
-        .resolve_graph_draft(
-            captured.project_instance_id().clone(),
-            path.clone(),
-            document.clone(),
-            "en-US".into(),
-        )
-        .map_err(map_graph_error)?;
-    inspect_projection(&path, document, &projection, 0, "saved")
-}
-
 fn inspect_projection(
     path: &GraphResourcePath,
     document: &GraphDocument,
@@ -866,17 +801,6 @@ pub fn graph_hash(document: &GraphDocument) -> Result<String, CapabilityFailure>
         .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))
 }
 
-fn parse_hash(value: &str) -> Result<[u8; 32], CapabilityFailure> {
-    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(invalid_edit_identity("artifactId"));
-    }
-    let mut bytes = [0; 32];
-    for (i, byte) in bytes.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[i * 2..i * 2 + 2], 16)
-            .map_err(|_| invalid_edit_identity("artifactId"))?;
-    }
-    Ok(bytes)
-}
 fn hex(value: &[u8]) -> String {
     value.iter().map(|byte| format!("{byte:02x}")).collect()
 }

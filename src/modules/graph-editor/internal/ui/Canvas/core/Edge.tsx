@@ -85,7 +85,7 @@ export const Edge = React.memo<EdgeProps>(
           strokeWidth={state === "valid" || replacementPreview ? thickness + 1 : thickness}
           strokeLinecap="round"
         />
-        {(state === "compiling" || state === "running") && (
+        {state === "running" && (
           <path
             className="graph-edge-activity pointer-events-none"
             d={pathData}

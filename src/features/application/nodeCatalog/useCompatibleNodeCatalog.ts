@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectIOStore } from "@/features/application/project/projectIOStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
@@ -46,12 +46,12 @@ export function useCompatibleNodeCatalog({
   const [refreshGeneration, setRefreshGeneration] = useState(0);
   const [state, setState] = useState<CompatibleRequestState>(IDLE_STATE);
   const sourcePortKey = sourcePort ? JSON.stringify(sourcePort) : "";
-  const document = useGraphDraftStore((store) =>
-    graphPath ? store.sessions[graphPath]?.document : undefined,
+  const version = useGraphEditingStore((store) =>
+    graphPath ? store.sessions[graphPath]?.version : undefined,
   );
 
   useEffect(() => {
-    if (!enabled || !projectInstanceId || !graphPath || !document || !sourcePort) {
+    if (!enabled || !projectInstanceId || !graphPath || !version || !sourcePort) {
       setState(IDLE_STATE);
       return;
     }
@@ -70,7 +70,7 @@ export function useCompatibleNodeCatalog({
     void CatalogService.getCompatibleNodeCatalog({
       projectInstanceId,
       graphPath,
-      document,
+      version,
       sourcePort,
       locale,
     })

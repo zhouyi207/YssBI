@@ -32,9 +32,7 @@ impl ApprovalService {
         request
             .validate()
             .map_err(|_| ApprovalError::InvalidRequest)?;
-        if request.capability_id().descriptor().effect
-            != yss_harness_contract::ToolEffect::Mutate
-        {
+        if request.capability_id().descriptor().effect != yss_harness_contract::ToolEffect::Mutate {
             return Err(ApprovalError::NotRequired);
         }
         if ttl_ms == 0 || ttl_ms > 10 * 60 * 1_000 {

@@ -61,8 +61,7 @@ pub(super) async fn initialize(
     application: &ApplicationState,
     transport: HarnessTransportPorts,
 ) -> Result<HarnessServices, HarnessStartupError> {
-    let store =
-        Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir).await?);
+    let store = Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir).await?);
     let provider = Arc::new(yss_harness_rig::ConfigurableAgentDriver::new());
     let host = application
         .initialize_harness(HarnessPorts {

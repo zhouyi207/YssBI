@@ -9,7 +9,7 @@ import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorPanelScope } from "@/modules/workbench/public";
 import { useVisibleGraphPanel } from "@/features/application/editor/useVisibleGraphPanel";
 import type { NodePaletteCatalogRowRenderer } from "../../NodePalette";
-import { useGraphDraftUi } from "@/features/core/graphDraft/ui";
+import { useGraphEditingUi } from "@/features/core/graphEditing/ui";
 
 export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & {
   readonly catalogRowRenderer: NodePaletteCatalogRowRenderer;
@@ -28,7 +28,7 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   catalogRowRenderer,
 }: GraphDocumentEditorProps) {
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
-  const { saving } = useGraphDraftUi(graphPath);
+  const { saving } = useGraphEditingUi(graphPath);
   const mode = useIsActiveEditorPanel(panelInstanceId) && !saving ? "interactive" : "preview";
   const { graphLoadStatus: graphLoads } = useProjectProjection();
   const graphLoadStatus = graphLoads[graphPath];

@@ -330,7 +330,7 @@ fn add_node_messages(
     out.extend([
         ("en-US", title, Text(en)),
         ("zh-CN", title, Text(zh)),
-        ("en-US", documentation, Text("Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.")),
+        ("en-US", documentation, Text("Resource identity is stored as a stable node parameter and resolved from the semantic snapshot.")),
         ("zh-CN", documentation, Text("资源身份作为稳定节点参数保存，并从编译快照解析。")),
         ("en-US", aliases, Aliases(en_aliases)),
         ("zh-CN", aliases, Aliases(zh_aliases)),

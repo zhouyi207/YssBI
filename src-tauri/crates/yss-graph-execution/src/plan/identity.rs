@@ -81,9 +81,9 @@ impl KernelFingerprint {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PlanCompileId(u64);
+pub struct PlanId(u64);
 
-impl PlanCompileId {
+impl PlanId {
     pub const fn from_existing(value: u64) -> Self {
         Self(value)
     }
@@ -158,20 +158,20 @@ impl PlanOutputRef {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanProvenance {
     source: PlanSourceIdentity,
-    basis: super::basis::PlanCompilationBasis,
-    compile_id: PlanCompileId,
+    basis: super::basis::PlanBasis,
+    plan_id: PlanId,
 }
 
 impl PlanProvenance {
     pub fn new(
         source: PlanSourceIdentity,
-        basis: super::basis::PlanCompilationBasis,
-        compile_id: PlanCompileId,
+        basis: super::basis::PlanBasis,
+        plan_id: PlanId,
     ) -> Self {
         Self {
             source,
             basis,
-            compile_id,
+            plan_id,
         }
     }
 
@@ -179,11 +179,11 @@ impl PlanProvenance {
         &self.source
     }
 
-    pub fn basis(&self) -> &super::basis::PlanCompilationBasis {
+    pub fn basis(&self) -> &super::basis::PlanBasis {
         &self.basis
     }
 
-    pub fn compile_id(&self) -> PlanCompileId {
-        self.compile_id
+    pub fn plan_id(&self) -> PlanId {
+        self.plan_id
     }
 }

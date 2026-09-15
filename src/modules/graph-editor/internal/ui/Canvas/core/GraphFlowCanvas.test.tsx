@@ -75,7 +75,6 @@ function session(): EditorCanvasSession {
       activeGraph: { graphPath: FLOW_GRAPH_PATH, kind: "event" },
       selectedNodeIds: [],
       selectedConnectionIds: [],
-      compileStatus: "uncompiled",
     },
     commands: {
       setSelectedNodeIds: vi.fn(),

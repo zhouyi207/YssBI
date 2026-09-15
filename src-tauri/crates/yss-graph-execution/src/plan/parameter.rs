@@ -50,7 +50,7 @@ macro_rules! parameter_id {
 
 parameter_id!(PlanParameterSchemaId);
 parameter_id!(PlanParameterFieldId);
-parameter_id!(CompiledParameterHandle);
+parameter_id!(PlanParameterHandle);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CanonicalDecimal(f64);
@@ -114,34 +114,34 @@ impl PlanParameterPayload {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
-pub enum CompiledParameterBundleError {
-    #[error("compiled parameter handle is duplicated")]
-    DuplicateHandle { handle: CompiledParameterHandle },
+pub enum PlanParameterBundleError {
+    #[error("prepared parameter handle is duplicated")]
+    DuplicateHandle { handle: PlanParameterHandle },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CompiledParameterBundle {
-    basis: super::basis::PlanCompilationBasis,
-    entries: BTreeMap<CompiledParameterHandle, PlanParameterPayload>,
+pub struct PlanParameterBundle {
+    basis: super::basis::PlanBasis,
+    entries: BTreeMap<PlanParameterHandle, PlanParameterPayload>,
 }
 
-impl CompiledParameterBundle {
-    pub fn basis(&self) -> &super::basis::PlanCompilationBasis {
+impl PlanParameterBundle {
+    pub fn basis(&self) -> &super::basis::PlanBasis {
         &self.basis
     }
 
-    pub fn entries(&self) -> &BTreeMap<CompiledParameterHandle, PlanParameterPayload> {
+    pub fn entries(&self) -> &BTreeMap<PlanParameterHandle, PlanParameterPayload> {
         &self.entries
     }
 }
 
-pub struct CompiledParameterBundleBuilder {
-    basis: super::basis::PlanCompilationBasis,
-    entries: BTreeMap<CompiledParameterHandle, PlanParameterPayload>,
+pub struct PlanParameterBundleBuilder {
+    basis: super::basis::PlanBasis,
+    entries: BTreeMap<PlanParameterHandle, PlanParameterPayload>,
 }
 
-impl CompiledParameterBundleBuilder {
-    pub fn new(basis: super::basis::PlanCompilationBasis) -> Self {
+impl PlanParameterBundleBuilder {
+    pub fn new(basis: super::basis::PlanBasis) -> Self {
         Self {
             basis,
             entries: BTreeMap::new(),
@@ -150,18 +150,18 @@ impl CompiledParameterBundleBuilder {
 
     pub fn insert(
         &mut self,
-        handle: CompiledParameterHandle,
+        handle: PlanParameterHandle,
         payload: PlanParameterPayload,
-    ) -> Result<(), CompiledParameterBundleError> {
+    ) -> Result<(), PlanParameterBundleError> {
         if self.entries.contains_key(&handle) {
-            return Err(CompiledParameterBundleError::DuplicateHandle { handle });
+            return Err(PlanParameterBundleError::DuplicateHandle { handle });
         }
         self.entries.insert(handle, payload);
         Ok(())
     }
 
-    pub fn freeze(self) -> CompiledParameterBundle {
-        CompiledParameterBundle {
+    pub fn freeze(self) -> PlanParameterBundle {
+        PlanParameterBundle {
             basis: self.basis,
             entries: self.entries,
         }

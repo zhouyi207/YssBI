@@ -18,8 +18,8 @@ import { synchronizeProjectPresentation } from "@/features/application/project/p
 import { removeProjectScopedWorkbenchPanels } from "@/features/application/project/projectWorkbenchLifecycle";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 import { resetFunctionSignatureCoordinator } from "@/features/application/editorMutation/functionSignatureCoordinator";
-import { resetHistoryCoordinator } from "@/features/application/graphDraft/historyCoordinator";
-import { resetGraphDraftCoordinator } from "@/features/application/graphDraft/graphDraftCoordinator";
+import { resetHistoryCoordinator } from "@/features/application/graphEditing/historyCoordinator";
+import { resetGraphEditCoordinator } from "@/features/application/graphEditing/graphEditCoordinator";
 import { resetGraphProjectionLifecycle } from "@/features/application/graphProjection/graphProjectionLifecycle";
 import { useGraphMetaStore } from "@/features/core/dataStore/graphMetaStore";
 import { useDocumentStateStore } from "@/features/core/resource/documentStateStore";
@@ -157,7 +157,7 @@ export async function commitPreparedAuthoritativeProjectLoad(
     prepared.index,
   );
   commitProjectLoadStep("graph projection lifecycle", resetGraphProjectionLifecycle);
-  commitProjectLoadStep("graph draft coordinator", resetGraphDraftCoordinator);
+  commitProjectLoadStep("graph draft coordinator", resetGraphEditCoordinator);
   resetGraphLoadOwnership();
   commitProjectLoadStep("graph load status", () =>
     useProjectIOStore.setState({
@@ -319,7 +319,7 @@ export async function clearProjectProjection(owner: ProjectLifecycleStateSnapsho
   };
 
   if (!commitOwnedClear(resetGraphProjectionLifecycle)) return;
-  if (!commitOwnedClear(resetGraphDraftCoordinator)) return;
+  if (!commitOwnedClear(resetGraphEditCoordinator)) return;
   if (!commitOwnedClear(() => resetGraphLoadOwnership())) return;
   if (!commitOwnedClear(() => useProjectIOStore.setState({ graphLoadStatus: {} }))) return;
   if (!commitOwnedClear(() => useProjectIOStore.setState({ projectInstanceId: null }))) return;

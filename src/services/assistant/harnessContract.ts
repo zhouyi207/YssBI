@@ -6,7 +6,7 @@ export type HarnessCapabilityId =
   | "inspect_result"
   | "inspect_project"
   | "apply_graph_edit"
-  | "compile_graph"
+  | "validate_graph"
   | "execute_graph"
   | "save_graph"
   | "list_graph_results";
@@ -135,7 +135,7 @@ const CAPABILITY_IDS = new Set<HarnessCapabilityId>([
   "inspect_result",
   "inspect_project",
   "apply_graph_edit",
-  "compile_graph",
+  "validate_graph",
   "execute_graph",
   "save_graph",
   "list_graph_results",

@@ -1,7 +1,7 @@
 import type { CommandHandler, GraphEditOutcome } from "../types";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
 import type { PortPlacementDto } from "@/shared/types/domain/editorMutation";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface AddPortInstanceArgs {
   nodeId: string;
@@ -11,7 +11,7 @@ export interface AddPortInstanceArgs {
 
 export const addPortInstanceCommand: CommandHandler<AddPortInstanceArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "addPortInstance",
@@ -35,7 +35,7 @@ export interface MovePortInstanceArgs extends RemovePortInstanceArgs {
 
 export const movePortInstanceCommand: CommandHandler<MovePortInstanceArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: { type: "movePortInstance", payload: args },
     });
@@ -44,7 +44,7 @@ export const movePortInstanceCommand: CommandHandler<MovePortInstanceArgs, Graph
 
 export const removePortInstanceCommand: CommandHandler<RemovePortInstanceArgs, GraphEditOutcome> = {
   execute(graphPath, args) {
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "removePortInstance",

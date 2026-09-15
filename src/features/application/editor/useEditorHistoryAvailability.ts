@@ -1,17 +1,17 @@
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useActiveEditorGroup } from "./editorGroupContext";
 
-/** Frontend-draft undo/redo availability for the focused Graph editor. */
+/** Rust-owned undo/redo availability for the focused Graph editor. */
 export function useEditorHistoryAvailability() {
   const { activeResourceRef } = useActiveEditorGroup();
-  const session = useGraphDraftStore((state) =>
+  const session = useGraphEditingStore((state) =>
     activeResourceRef ? state.sessions[activeResourceRef] : undefined,
   );
   const pending = session?.saving === true;
 
   return {
-    canUndo: Boolean(session?.undoStack.length) && !pending,
-    canRedo: Boolean(session?.redoStack.length) && !pending,
+    canUndo: Boolean(session?.canUndo) && !pending,
+    canRedo: Boolean(session?.canRedo) && !pending,
     pending,
     activeResourceRef,
   };

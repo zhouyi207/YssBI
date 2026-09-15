@@ -239,6 +239,67 @@ impl ResourceCatalogSnapshot {
             .iter()
             .all(|(key, expected)| &self.observed_fingerprint(key) == expected)
     }
+
+    /// Reusing a derived fact must preserve its reads, including absent lookups.
+    pub fn record_dependencies(&self, manifest: &GraphDependencyManifest) {
+        if let Some(reads) = &self.reads {
+            reads
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend(manifest.entries().keys().cloned());
+        }
+    }
+
+    /// Editor snapshots retain labels and diagnostic metadata that execution
+    /// identity deliberately excludes. Only previously observed resources enter
+    /// this key; unrelated catalog changes do not invalidate the snapshot.
+    pub fn resolution_dependency_fingerprint(
+        &self,
+        manifest: &GraphDependencyManifest,
+    ) -> [u8; 32] {
+        let observations = manifest
+            .entries()
+            .keys()
+            .map(|key| {
+                let fingerprint = match key {
+                    GraphDependencyKey::Function(identity) => {
+                        GraphResourcePath::new(identity.as_ref())
+                            .ok()
+                            .and_then(|path| self.functions.get(&path))
+                            .map(|entry| {
+                                let parameters = entry
+                                    .signature
+                                    .parameters()
+                                    .iter()
+                                    .map(|parameter| {
+                                        (parameter.id(), parameter.name(), parameter.data_type())
+                                    })
+                                    .collect::<Vec<_>>();
+                                yss_canonical_hash::hash_canonical(
+                                    "yssbi.function-resolution-contract.v1",
+                                    &(parameters, entry.signature.result()),
+                                )
+                                .expect("function contracts are serializable")
+                            })
+                    }
+                    GraphDependencyKey::FunctionBody(identity) => {
+                        GraphResourcePath::new(identity.as_ref())
+                            .ok()
+                            .and_then(|path| self.functions.get(&path))
+                            .and_then(|entry| entry.document.as_deref())
+                            .map(|document| {
+                                yss_graph_document::resolution_document_fingerprint(document)
+                                    .expect("function documents are serializable")
+                            })
+                    }
+                    GraphDependencyKey::Database(_) => self.observed_fingerprint(key),
+                };
+                (key, fingerprint)
+            })
+            .collect::<Vec<_>>();
+        yss_canonical_hash::hash_canonical("yssbi.graph-resolution-dependencies.v1", &observations)
+            .expect("resource observations are serializable")
+    }
 }
 
 #[cfg(test)]
@@ -304,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn resource_catalog_exposes_only_graph_compile_contracts() {
+    fn resource_catalog_exposes_only_graph_semantic_contracts() {
         let function_path = GraphResourcePath::new("functions/Forecast.yssbi-function").unwrap();
         let database_id = GraphResourceId::new("databases/forecast-source");
         let function = FunctionCatalogEntry::new(FunctionSignature::new(

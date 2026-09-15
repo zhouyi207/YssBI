@@ -9,11 +9,11 @@ pub(crate) mod validation;
 pub(crate) mod result_category;
 
 pub use basis::{
-    PlanCompilationBasis, PlanResourceObservationSet, PlanResourceObservedState,
-    PlanResourceRequirement, PlanResourceVersionSet, ResourceAccess, ResourceKind,
+    PlanBasis, PlanResourceObservationSet, PlanResourceObservedState, PlanResourceRequirement,
+    PlanResourceVersionSet, ResourceAccess, ResourceKind,
 };
 pub use identity::{
-    InvalidPlanIdentity, KernelFingerprint, KernelId, PlanCompileId, PlanGraphId, PlanInputGroupId,
+    InvalidPlanIdentity, KernelFingerprint, KernelId, PlanGraphId, PlanId, PlanInputGroupId,
     PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanProjectSessionId,
     PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
     PlanSourceIdentity,
@@ -24,12 +24,12 @@ pub use model::{
     PlanOperation, PlanOutputBinding, PlanOutputContract, PlanOutputField, PlanTypeBinding,
 };
 pub use observation::{PlanObservationIntent, ValueRef};
-pub use package::CompiledExecutionPackage;
+pub use package::ExecutionPlanPackage;
 pub use parameter::{
-    CanonicalDecimal, CanonicalDecimalError, CompiledParameterBundle,
-    CompiledParameterBundleBuilder, CompiledParameterBundleError, CompiledParameterHandle,
-    InvalidPlanParameterId, PlanParameterFieldId, PlanParameterPayload, PlanParameterScalar,
-    PlanParameterSchemaId, PlanParameterValue,
+    CanonicalDecimal, CanonicalDecimalError, InvalidPlanParameterId, PlanParameterBundle,
+    PlanParameterBundleBuilder, PlanParameterBundleError, PlanParameterFieldId,
+    PlanParameterHandle, PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId,
+    PlanParameterValue,
 };
 pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
 pub use validation::PlanValidationError;
@@ -39,8 +39,8 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn basis() -> PlanCompilationBasis {
-        PlanCompilationBasis::new(
+    fn basis() -> PlanBasis {
+        PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
             crate::kernels::KernelRegistry::default().fingerprint(),
@@ -67,8 +67,8 @@ mod tests {
 
     #[test]
     fn duplicate_parameter_handles_are_rejected_before_freezing() {
-        let mut builder = CompiledParameterBundleBuilder::new(basis());
-        let handle = CompiledParameterHandle::from_existing("parameter".into());
+        let mut builder = PlanParameterBundleBuilder::new(basis());
+        let handle = PlanParameterHandle::from_existing("parameter".into());
         let payload = PlanParameterPayload::new(
             PlanParameterSchemaId::from_existing("schema".into()),
             PlanParameterValue::Scalar(PlanParameterScalar::Null),
@@ -76,7 +76,7 @@ mod tests {
         builder.insert(handle.clone(), payload.clone()).unwrap();
         assert_eq!(
             builder.insert(handle.clone(), payload),
-            Err(CompiledParameterBundleError::DuplicateHandle { handle })
+            Err(PlanParameterBundleError::DuplicateHandle { handle })
         );
     }
 }

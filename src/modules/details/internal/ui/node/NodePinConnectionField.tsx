@@ -22,7 +22,7 @@ import {
   listCompatiblePinOptions,
   listPinConnections,
 } from "./nodePinConnectionOptions";
-import { graphDraftMutationMessageKey, graphDraftMutationSucceeded } from "./nodeMutationFeedback";
+import { graphMutationMessageKey, graphMutationSucceeded } from "./nodeMutationFeedback";
 
 interface NodePinConnectionFieldProps {
   graphPath: string;
@@ -125,7 +125,7 @@ export function NodePinConnectionField({
     const result = value
       ? await connectPinsById(graphPath, value, anchor.id)
       : await disconnectPinById(graphPath, anchor.id);
-    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
+    setErrorKey(graphMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 
@@ -134,8 +134,8 @@ export function NodePinConnectionField({
     setBusy(true);
     setErrorKey(null);
     const result = await connectPinsById(graphPath, anchor.id, value);
-    if (graphDraftMutationSucceeded(result)) setEmptySlots((count) => Math.max(0, count - 1));
-    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
+    if (graphMutationSucceeded(result)) setEmptySlots((count) => Math.max(0, count - 1));
+    setErrorKey(graphMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 
@@ -144,7 +144,7 @@ export function NodePinConnectionField({
     setBusy(true);
     setErrorKey(null);
     const result = await disconnectConnectionById(graphPath, connectionId);
-    setErrorKey(graphDraftMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
+    setErrorKey(graphMutationMessageKey(result, "detail.nodeDoc.connectionFailed"));
     setBusy(false);
   };
 

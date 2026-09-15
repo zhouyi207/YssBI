@@ -1,5 +1,8 @@
 import type { EditorGraphProjectionDto, PortAddressDto } from "@/shared/types/dto/editorProjection";
-import type { GraphEditorSessionDto } from "@/shared/types/dto/editorMutation";
+import type {
+  GraphEditorSessionDto,
+  GraphEditingStateDto,
+} from "@/shared/types/dto/editorMutation";
 import type { DataType } from "@/shared/types/domain/dataType";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "@/features/domain/editorProjection";
@@ -67,6 +70,7 @@ export function makeGraphEditorSession(
   projection: EditorGraphProjectionDto,
 ): GraphEditorSessionDto {
   return {
+    editing: makeGraphEditingState(),
     document: {
       nodes: {},
       port_bindings: [],
@@ -74,6 +78,18 @@ export function makeGraphEditorSession(
       input_states: [],
     },
     projection,
+  };
+}
+
+export function makeGraphEditingState(
+  overrides: Partial<GraphEditingStateDto> = {},
+): GraphEditingStateDto {
+  return {
+    version: { sessionId: "00000000-0000-0000-0000-000000000090", revision: "0" },
+    dirty: false,
+    canUndo: false,
+    canRedo: false,
+    ...overrides,
   };
 }
 

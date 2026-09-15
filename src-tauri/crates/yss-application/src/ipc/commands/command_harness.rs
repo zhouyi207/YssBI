@@ -1,4 +1,3 @@
-use crate::ipc::channel::HarnessGraphClientHub;
 use std::sync::Arc;
 use yss_ipc_channel::HarnessChannelHub;
 
@@ -24,14 +23,11 @@ use yss_ipc_contract::harness::WorkflowRunDto;
 
 mod gateway;
 pub use gateway::ApplicationCapabilityGateway;
-mod graph_client;
-pub use graph_client::*;
 
 pub struct HarnessRuntimeState {
     host: Arc<HarnessHost>,
     channels: Arc<HarnessChannelHub>,
     provider: Arc<dyn AgentDriverConfigurationPort>,
-    graph_clients: Arc<HarnessGraphClientHub>,
 }
 
 impl HarnessRuntimeState {
@@ -39,13 +35,11 @@ impl HarnessRuntimeState {
         host: Arc<HarnessHost>,
         channels: Arc<HarnessChannelHub>,
         provider: Arc<dyn AgentDriverConfigurationPort>,
-        graph_clients: Arc<HarnessGraphClientHub>,
     ) -> Self {
         Self {
             host,
             channels,
             provider,
-            graph_clients,
         }
     }
 }

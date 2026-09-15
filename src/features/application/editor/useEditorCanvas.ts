@@ -21,7 +21,6 @@ import type {
 import { useCanvasMutationHandlers } from "./useCanvasMutationHandlers";
 import { useEditorOperations } from "./useEditorOperations";
 import { useProjectOperations } from "./useProjectOperations";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
 
 export interface UseEditorCanvasOptions {
   mode: EditorCanvasMode;
@@ -38,9 +37,6 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
     (state) => state.selections[scope.panelInstanceId] ?? EMPTY_EDITOR_PANE_SELECTION,
   );
   const mutationHandlers = useCanvasMutationHandlers();
-  const compileStatus = useGraphDraftStore(
-    (state) => state.sessions[scope.graphPath]?.compileStatus ?? "uncompiled",
-  );
   const interactive = mode === "interactive";
 
   const paneStillMatches = useCallback(() => {
@@ -162,7 +158,6 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
         editorCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
       setSelectedNodeIds,
       setSelectedConnectionIds,
-      compileGraph: projectCommands.compileGraph,
       executeGraph: projectCommands.executeGraph,
       cancelGraphExecution: projectCommands.cancelGraphExecution,
       clearGraphArtifacts: projectCommands.clearGraphArtifacts,
@@ -182,7 +177,6 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       setSelectedNodeIds,
       setSelectedConnectionIds,
       projectCommands.executeGraph,
-      projectCommands.compileGraph,
       projectCommands.cancelGraphExecution,
       projectCommands.clearGraphArtifacts,
       createNode,
@@ -195,9 +189,8 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
       activeGraph: { graphPath: scope.graphPath, kind: scope.graphKind },
       selectedNodeIds: paneSelection.selectedNodeIds,
       selectedConnectionIds: paneSelection.selectedConnectionIds,
-      compileStatus,
     };
-  }, [compileStatus, paneSelection.selectedConnectionIds, paneSelection.selectedNodeIds, scope]);
+  }, [scope.groupId, scope.graphPath, scope.graphKind, paneSelection]);
 
   const interaction = useMemo(
     (): EditorCanvasInteractionSlice => ({

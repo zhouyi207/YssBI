@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::identity::ExecutionSessionId;
-use crate::plan::{PlanOutputRef, PlanPortAddress, ResultCategory};
+use crate::plan::{PlanNodeId, PlanOutputRef, PlanPortAddress, ResultCategory};
 use crate::value::RuntimeValue;
 
 use super::run_registry::RunId;
@@ -48,6 +48,7 @@ impl OutputResultInputs {
 pub struct GraphResultInputs {
     pub semantic_input_hash: [u8; 32],
     pub outputs: BTreeMap<PlanOutputRef, OutputResultInputs>,
+    pub observers: BTreeMap<PlanNodeId, OutputResultInputs>,
 }
 
 /// A run captures this before preparation. Undo cannot renew an obsolete admission.

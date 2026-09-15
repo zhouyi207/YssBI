@@ -5,8 +5,6 @@ use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::collections::BTreeMap;
 use yss_data_contract::{DataSeriesValue, DataType, DataValue};
-use yss_graph_analysis_contract::CompileId;
-use yss_graph_compiler::{GraphCompilationInput, compile};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, GraphConstant, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
@@ -14,7 +12,7 @@ use yss_graph_document::{
 use yss_graph_editor::{EditorGraphMutation, PortPlacement};
 use yss_graph_execution::identity::ExecutionSessionId;
 use yss_graph_execution::plan::{
-    PlanCompilationBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+    PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::RunExecutionControl;
@@ -127,30 +125,33 @@ fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
         BTreeMap::new(),
         ResourceCatalogFingerprint::from_bytes([0; 32]),
     );
-    let semantic =
-        yss_graph_analysis::resolve_graph_semantics(&document, &builtins.registry, &catalog);
-    let package = compile(GraphCompilationInput::new(
-        semantic
-            .ready()
-            .unwrap_or_else(|| panic!("{:?}", semantic.diagnostics())),
-        graph,
-        CompileId::new(1),
-        yss_graph_execution::kernels::KernelRegistry::default()
-            .fingerprint()
-            .as_bytes(),
-    ))
-    .unwrap();
-    let basis = PlanCompilationBasis::new(
+    let analysis = captured.graph().resolve_graph_document(
+        &graph,
+        &document,
+        &yss_graph_analysis_contract::GraphAnalysisBasis {
+            registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
+                captured.graph().registry_fingerprint(),
+            ),
+            kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
+            resource_versions: BTreeMap::new(),
+            resource_observations: BTreeMap::new(),
+        },
+        &catalog,
+        &[],
+        "en-US",
+    );
+    let basis = PlanBasis::new(
         session.clone(),
         PlanRegistryFingerprint::from_bytes([0; 32]),
         yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
         BTreeMap::new(),
         BTreeMap::new(),
     );
-    let package =
-        crate::graph::execution_mapping::execution_package_from_graph(package, basis).unwrap();
+    let package = runtime
+        .prepare_graph_package(&graph, &analysis, basis)
+        .unwrap();
     let plan = runtime
-        .prepare_compiled_package(package, runtime.generation())
+        .prepare_package(package, runtime.generation())
         .unwrap();
     let execution = runtime
         .execute_prepared_handoff(

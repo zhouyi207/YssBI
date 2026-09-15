@@ -155,7 +155,7 @@ pub enum ProjectSessionCandidateError {
     DatabaseSession(#[source] DatabaseSessionCandidateError),
     #[error("application session generation is exhausted")]
     GenerationExhausted,
-    #[error("graph compiler diagnostic definitions are invalid")]
+    #[error("graph diagnostic definitions are invalid")]
     GraphDiagnosticDefinitions(#[source] yss_graph_runtime::GraphRuntimeInitializationError),
     #[error(transparent)]
     Candidate(#[from] InvalidSessionCandidateError),

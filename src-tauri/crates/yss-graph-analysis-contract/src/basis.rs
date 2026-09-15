@@ -40,22 +40,8 @@ pub enum ResourceObservedState {
 
 pub type ResourceObservationSet = BTreeMap<ResourceKey, ResourceObservedState>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct CompileId(u64);
-
-impl CompileId {
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompilationBasis {
+pub struct GraphAnalysisBasis {
     pub registry_fingerprint: RegistryFingerprint,
     pub kernel_fingerprint: [u8; 32],
     pub resource_versions: ResourceVersionSet,

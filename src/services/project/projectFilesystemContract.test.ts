@@ -36,13 +36,15 @@ function productionSources(directory = sourceRoot): Array<{ path: string; source
 }
 
 const lifecycleOwnedNodeCommandIdentityFields = {
-  transform_graph_draft: "projectInstanceId",
-  compile_graph_draft: "projectInstanceId",
-  resolve_graph_draft: "projectInstanceId",
+  edit_graph: "projectInstanceId",
+  resolve_editor_graph: "projectInstanceId",
+  change_graph_history: "projectInstanceId",
+  subscribe_graph_activity: "projectInstanceId",
+  get_execution_run_state: "projectInstanceId",
   update_function_signature: "projectInstanceId",
   hydrate_editor_graph: "projectInstanceId",
   export_graph_subgraph: "projectInstanceId",
-  execute_compiled_graph: "projectInstanceId",
+  execute_graph: "projectInstanceId",
 } as const;
 
 const projectDatabaseIdentityFields = {

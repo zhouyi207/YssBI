@@ -62,7 +62,7 @@ pub struct EditorGraphProjectionDto {
     pub nodes: Vec<EditorNodeProjectionDto>,
     pub connections: Vec<EditorConnectionProjectionDto>,
     pub diagnostics: Vec<DiagnosticDto>,
-    pub outcome: CompilationOutcomeDto,
+    pub outcome: ResolutionOutcomeDto,
     pub has_blocking_diagnostics: bool,
 }
 
@@ -73,11 +73,11 @@ pub struct EditorGraphProjectionDto {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-pub enum CompilationOutcomeDto {
+pub enum ResolutionOutcomeDto {
     Success,
     AnalysisBlocked,
     InternalFailure {
-        stage: CompilationStageDto,
+        stage: ResolutionStageDto,
         code: Box<str>,
         node_id: Option<Box<str>>,
     },
@@ -85,9 +85,8 @@ pub enum CompilationOutcomeDto {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum CompilationStageDto {
+pub enum ResolutionStageDto {
     Analysis,
-    Lowering,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

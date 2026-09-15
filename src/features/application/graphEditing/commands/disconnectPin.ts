@@ -1,6 +1,6 @@
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface DisconnectPortArgs {
   pinId: string;
@@ -10,7 +10,7 @@ export const disconnectPortCommand: CommandHandler<DisconnectPortArgs, GraphEdit
   execute(graphPath, args) {
     const pin = useGraphProjectionStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin) return { status: "unavailable" };
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "disconnectPort",

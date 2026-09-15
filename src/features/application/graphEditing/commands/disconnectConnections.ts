@@ -1,5 +1,5 @@
 import type { CommandHandler, GraphEditOutcome } from "../types";
-import { applyGraphDraftMutation } from "../../graphDraft/graphDraftCoordinator";
+import { applyGraphMutation } from "../../graphEditing/graphEditCoordinator";
 
 export interface DisconnectConnectionsArgs {
   connectionIds: string[];
@@ -11,7 +11,7 @@ export const disconnectConnectionsCommand: CommandHandler<
 > = {
   execute(graphPath, args) {
     if (args.connectionIds.length === 0) return { status: "unavailable" };
-    return applyGraphDraftMutation({
+    return applyGraphMutation({
       graphPath,
       mutation: {
         type: "disconnectConnections",

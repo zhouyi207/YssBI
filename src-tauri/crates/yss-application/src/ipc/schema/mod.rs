@@ -2,7 +2,7 @@
 
 pub mod activity_panel;
 pub mod database;
-pub mod graph_draft;
+pub mod graph_editing;
 pub mod graph_mutation;
 pub mod project;
 

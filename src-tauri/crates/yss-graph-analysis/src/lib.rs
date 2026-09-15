@@ -9,10 +9,10 @@
 use yss_node_protocol::TypeId;
 
 use yss_graph_analysis_contract::{
-    CompilationBasis, DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
-    ResourceVersionSet,
+    DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
+    GraphAnalysisBasis, ResourceVersionSet,
 };
-use yss_graph_compiler_diagnostics::GraphDiagnosticKind;
+use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
     NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
@@ -27,6 +27,8 @@ use yss_node_protocol::{
 };
 use yss_node_registry::NodeRegistry;
 mod derived_ports;
+mod document_index;
+use document_index::DocumentIndex;
 mod result_category;
 mod schema_resolution;
 mod schema_state;
@@ -145,7 +147,7 @@ impl GraphSemanticSnapshot {
         &self.diagnostics
     }
 
-    /// Runtime capabilities constrain Compile without introducing a second diagnostic store.
+    /// Runtime capabilities constrain readiness without introducing a second diagnostic store.
     pub fn with_execution_kernel_support(mut self, supports: &dyn Fn(&str) -> bool) -> Self {
         let mut diagnostics = self.diagnostics.into_vec();
         for node in &self.nodes {
@@ -417,16 +419,15 @@ pub enum GraphResolutionOutcome {
     Complete,
     Incomplete,
     InternalFailure {
-        stage: GraphCompilationStage,
+        stage: GraphResolutionStage,
         code: Box<str>,
         node_id: Option<NodeId>,
     },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphCompilationStage {
+pub enum GraphResolutionStage {
     Analysis,
-    Lowering,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -470,10 +471,18 @@ impl GraphAnalysis {
         self.semantic_snapshot = snapshot;
         self
     }
+
+    pub fn map_semantic_snapshot(
+        mut self,
+        transform: impl FnOnce(GraphSemanticSnapshot) -> GraphSemanticSnapshot,
+    ) -> Self {
+        self.semantic_snapshot = transform(self.semantic_snapshot);
+        self
+    }
 }
 
 pub fn analyze(
-    basis: &CompilationBasis,
+    basis: &GraphAnalysisBasis,
     semantic_snapshot: GraphSemanticSnapshot,
 ) -> GraphAnalysis {
     GraphAnalysis {
@@ -518,7 +527,8 @@ fn resolve_graph_semantics_inner(
     let mut complete = true;
     let mut internal_interface_node = None;
     let mut diagnostics = Vec::new();
-    let resolved_schemas = resolve_graph_schemas(document, registry, resources);
+    let index = DocumentIndex::new(document);
+    let resolved_schemas = resolve_graph_schemas(document, registry, resources, &mut cache.schemas);
     let mut constants = std::collections::BTreeMap::new();
     let mut nodes = document
         .nodes
@@ -592,11 +602,7 @@ fn resolve_graph_semantics_inner(
                 ));
             }
 
-            let node_bindings = document
-                .port_bindings
-                .iter()
-                .filter(|(address, _)| address.node_id == node.id)
-                .collect::<Vec<_>>();
+            let node_bindings = index.node_bindings(node.id);
             let mut ports = Vec::new();
             let mut derived_orders = std::collections::BTreeMap::new();
             for spec in protocol.interface.ports.iter() {
@@ -605,6 +611,7 @@ fn resolve_graph_semantics_inner(
                     let address = PortAddress::declared(node.id, spec.key.clone());
                     ports.push(project_declared_port(
                         document,
+                        &index,
                         address.clone(),
                         spec,
                         resolved_schemas.get(&address),
@@ -666,9 +673,10 @@ fn resolve_graph_semantics_inner(
                     }
                     let projected = project_bound_port(
                         document,
+                        &index,
                         protocol,
                         spec,
-                        &node_bindings,
+                        node_bindings,
                         BoundPortProjection {
                             address,
                             binding,
@@ -698,6 +706,7 @@ fn resolve_graph_semantics_inner(
                             derived_port_address(document, node.id, &spec.key, &member.locator);
                         ports.push(project_concrete_port(
                             document,
+                            &index,
                             spec,
                             ConcretePortProjection {
                                 address,
@@ -757,7 +766,7 @@ fn resolve_graph_semantics_inner(
                 ));
             }
             let (port_instance_additions, minimum_instances_present) =
-                project_port_instance_additions(node.id, protocol, &node_bindings);
+                project_port_instance_additions(node.id, protocol, node_bindings);
             if !minimum_instances_present {
                 complete = false;
                 diagnostics.push(graph_problem(
@@ -823,9 +832,9 @@ fn resolve_graph_semantics_inner(
             }
         })
         .collect::<Vec<_>>();
-    include_referenced_orphan_ports(document, &mut nodes, &mut diagnostics);
+    include_referenced_orphan_ports(document, &index, &mut nodes, &mut diagnostics);
     let type_diagnostics =
-        type_resolution::resolve_node_types(document, registry, &mut nodes, cache);
+        type_resolution::resolve_node_types(document, &index, registry, &mut nodes, cache);
     if type_diagnostics
         .iter()
         .any(|diagnostic| diagnostic.blocking)
@@ -862,16 +871,7 @@ fn resolve_graph_semantics_inner(
                 PortRef::Instance { instance_id, .. } => Some(*instance_id),
                 PortRef::Declared { .. } => None,
             };
-            let mut connections = document
-                .connections
-                .values()
-                .filter(|connection| connection.input == port.address)
-                .collect::<Vec<_>>();
-            connections.sort_by(|left, right| {
-                left.order
-                    .cmp(&right.order)
-                    .then_with(|| left.id.cmp(&right.id))
-            });
+            let connections = index.input_connections(&port.address);
             if connections.is_empty() {
                 if let Some(value) = document
                     .input_states
@@ -886,18 +886,22 @@ fn resolve_graph_semantics_inner(
                     });
                 }
             } else {
-                inputs.extend(connections.into_iter().map(|connection| {
-                    GraphResolvedInputBinding {
-                        address: port.address.clone(),
-                        group,
-                        source: GraphResolvedInputSource::Output(connection.output.clone()),
-                    }
-                }));
+                inputs.extend(
+                    connections
+                        .iter()
+                        .map(|connection| GraphResolvedInputBinding {
+                            address: port.address.clone(),
+                            group,
+                            source: GraphResolvedInputSource::Output(connection.output.clone()),
+                        }),
+                );
             }
         }
         node.inputs = inputs.into_boxed_slice();
     }
-    diagnostics.extend(semantic_validation::validate(document, registry, &nodes));
+    diagnostics.extend(semantic_validation::validate(
+        document, &index, registry, &nodes,
+    ));
     let function_resolution = if validate_functions {
         function_validation::resolve(document, registry, resources)
     } else {
@@ -918,14 +922,14 @@ fn resolve_graph_semantics_inner(
         diagnostics,
         if let Some(node_id) = internal_interface_node {
             GraphResolutionOutcome::InternalFailure {
-                stage: GraphCompilationStage::Analysis,
-                code: "compiler.interface.unsupported_resolver".into(),
+                stage: GraphResolutionStage::Analysis,
+                code: "graph.interface.unsupported_resolver".into(),
                 node_id: Some(node_id),
             }
         } else if resolved_schemas.internal_failure().is_some() {
             GraphResolutionOutcome::InternalFailure {
-                stage: GraphCompilationStage::Analysis,
-                code: "compiler.schema.unsupported_resolver".into(),
+                stage: GraphResolutionStage::Analysis,
+                code: "graph.schema.unsupported_resolver".into(),
                 node_id: resolved_schemas
                     .internal_failure()
                     .map(|address| address.node_id),
@@ -974,7 +978,7 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
     use yss_data_contract::DataType;
-    use yss_graph_analysis_contract::CompilationBasis;
+    use yss_graph_analysis_contract::GraphAnalysisBasis;
     use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
     use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
     use yss_node_catalog::build_builtin_node_system;
@@ -1469,7 +1473,7 @@ mod tests {
 
     #[test]
     fn analysis_accepts_neutral_document_and_basis() {
-        let basis = CompilationBasis {
+        let basis = GraphAnalysisBasis {
             kernel_fingerprint: [0; 32],
             registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
             resource_versions: BTreeMap::new(),
