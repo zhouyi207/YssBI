@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     KnowledgeChunkId, KnowledgeDocumentId, KnowledgeDocumentRecord, KnowledgeSearchHit,
     KnowledgeSourceId, KnowledgeSourceRecord, KnowledgeSourceStatus, KnowledgeSourceStorePort,
     PersistenceFailure, ProjectSessionBinding, SensitivityClass, SourceHash, UnixMillis,
@@ -138,7 +138,7 @@ impl KnowledgeService {
                 continue;
             }
             hits.push(KnowledgeSearchHit {
-                citation: yss_automation_contract::KnowledgeCitation {
+                citation: yss_harness_contract::KnowledgeCitation {
                     source_id: source.id,
                     document_id: document.id.clone(),
                     chunk_id: chunk_id(&document.id.to_string(), &document.source_hash)?,
@@ -267,7 +267,7 @@ mod tests {
 
     use super::*;
     use crate::test_support::InMemoryHarnessStore;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         KnowledgeDocumentId, KnowledgeDocumentRecord, KnowledgeSourceId, KnowledgeSourceRecord,
         KnowledgeSourceStorePort, SensitivityClass, SourceHash, UnixMillis,
     };

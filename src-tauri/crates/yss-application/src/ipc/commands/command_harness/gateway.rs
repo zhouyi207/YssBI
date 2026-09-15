@@ -1,5 +1,5 @@
 use crate::session::ApplicationState;
-use yss_automation_contract::{
+use yss_harness_contract::{
     AutomationCapabilityRequest, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
     CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext, ToolEffect,
 };
@@ -71,7 +71,7 @@ async fn run_on_blocking_pool<T: Send + 'static>(
         let result = tokio::select! {
             result = task => result,
             reason = control.cancellation().cancelled() => return Err(CapabilityFailure::new(
-                if reason == yss_automation_contract::CancellationReason::DeadlineElapsed {
+                if reason == yss_harness_contract::CancellationReason::DeadlineElapsed {
                     CapabilityFailureCode::DeadlineElapsed
                 } else { CapabilityFailureCode::Cancelled }
             )),
@@ -92,7 +92,7 @@ mod tests {
     use super::*;
     use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
     use std::{sync::Arc, time::Duration};
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         AutomationCapabilityResult, CancellationToken, CapabilityInvocationId, HarnessSessionId,
         InspectDatasetProfileRequest, PrincipalId, ProjectSessionBinding,
     };
@@ -126,7 +126,7 @@ mod tests {
                 tokio::join!(work, async {
                     started.await.unwrap();
                     if cancel {
-                        cancellation.cancel(yss_automation_contract::CancellationReason::User);
+                        cancellation.cancel(yss_harness_contract::CancellationReason::User);
                     }
                 })
             })

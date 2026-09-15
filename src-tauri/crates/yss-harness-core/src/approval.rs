@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
     AutomationIdKind, ClockPort, HarnessSessionId, IdGeneratorPort, PersistenceFailure,
     PrincipalId, ProjectSessionBinding, SourceHash,
@@ -33,7 +33,7 @@ impl ApprovalService {
             .validate()
             .map_err(|_| ApprovalError::InvalidRequest)?;
         if request.capability_id().descriptor().effect
-            != yss_automation_contract::ToolEffect::Mutate
+            != yss_harness_contract::ToolEffect::Mutate
         {
             return Err(ApprovalError::NotRequired);
         }
@@ -103,9 +103,9 @@ fn request_fingerprint(request: &AutomationCapabilityRequest) -> Result<SourceHa
 #[derive(Debug, thiserror::Error)]
 pub enum ApprovalError {
     #[error("approval identity is invalid")]
-    Identity(#[from] yss_automation_contract::AutomationIdentityError),
+    Identity(#[from] yss_harness_contract::AutomationIdentityError),
     #[error("approval id generation failed")]
-    IdGeneration(#[from] yss_automation_contract::IdGenerationFailure),
+    IdGeneration(#[from] yss_harness_contract::IdGenerationFailure),
     #[error("approval persistence failed")]
     Persistence(#[from] PersistenceFailure),
     #[error("approval request is invalid")]
@@ -130,7 +130,7 @@ pub enum ApprovalError {
 mod tests {
     use super::*;
     use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds};
-    use yss_automation_contract::{ApplyGraphEditRequest, GraphEditOperation, GraphEditPosition};
+    use yss_harness_contract::{ApplyGraphEditRequest, GraphEditOperation, GraphEditPosition};
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]

@@ -224,8 +224,8 @@ SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随
 ```text
 Assistant UI projection
   → yss-application::ipc Harness commands + yss-ipc-channel ordered delivery
-  → yss-statistical-harness
-      → AgentDriverPort → yss-agent-rig
+  → yss-harness-core
+      → AgentDriverPort → yss-harness-rig
       → CapabilityGatewayPort → yss-application
       → persistence ports → SQLite adapter
 ```

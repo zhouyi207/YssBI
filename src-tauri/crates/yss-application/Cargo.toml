@@ -22,10 +22,10 @@ yss-math-expr = { path = "../yss-math-expr" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 tokio = { workspace = true, features = ["sync", "time"] }
 tauri.workspace = true
-yss-statistical-harness-sqlite = { path = "../yss-statistical-harness-sqlite" }
+yss-harness-sqlite = { path = "../yss-harness-sqlite" }
 yss-project-registry-sqlite = { path = "../yss-project-registry-sqlite" }
 yss-plugin-runtime = { path = "../yss-plugin-runtime" }
-yss-agent-rig = { path = "../yss-agent-rig" }
+yss-harness-rig = { path = "../yss-harness-rig" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 atomicwrites.workspace = true
 yss-plugin-protocol = { path = "../yss-plugin-protocol" }
@@ -34,7 +34,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-yss-automation-contract = { path = "../yss-automation-contract" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-runtime = { path = "../yss-database-runtime" }
@@ -69,7 +69,7 @@ yss-project-registry = { path = "../yss-project-registry" }
 yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-sci-contract = { path = "../yss-sci-contract" }
-yss-statistical-harness = { path = "../yss-statistical-harness" }
+yss-harness-core = { path = "../yss-harness-core" }
 yss-sql-source = { path = "../yss-sql-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }
@@ -77,7 +77,7 @@ yss-tabular-io = { path = "../yss-tabular-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
-yss-statistical-harness = { path = "../yss-statistical-harness", features = ["test-support"] }
+yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
 yss-datafusion = { path = "../yss-datafusion" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }

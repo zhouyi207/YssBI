@@ -1,5 +1,5 @@
 [package]
-name = "yss-statistical-harness"
+name = "yss-harness-core"
 version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true
@@ -10,7 +10,7 @@ test-support = []
 
 [dependencies]
 thiserror.workspace = true
-yss-automation-contract = { path = "../yss-automation-contract" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 
 [dev-dependencies]

@@ -2,11 +2,11 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentDriverConfigurationPort, AutomationIdKind, CapabilityGatewayPort, ClockPort,
     HarnessEventSinkPort, IdGenerationFailure, IdGeneratorPort, UnixMillis,
 };
-use yss_statistical_harness::{HarnessHost, HarnessPorts};
+use yss_harness_core::{HarnessHost, HarnessPorts};
 
 use crate::session::ApplicationState;
 
@@ -23,7 +23,7 @@ pub struct HarnessServices {
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessStartupError {
     #[error("Harness SQLite persistence could not be initialized")]
-    Persistence(#[from] yss_automation_contract::PersistenceFailure),
+    Persistence(#[from] yss_harness_contract::PersistenceFailure),
     #[error("Harness application initialization failed")]
     Application(#[from] crate::harness::HarnessInitializationError),
 }
@@ -62,8 +62,8 @@ pub(super) async fn initialize(
     transport: HarnessTransportPorts,
 ) -> Result<HarnessServices, HarnessStartupError> {
     let store =
-        Arc::new(yss_statistical_harness_sqlite::SqliteHarnessStore::connect(app_dir).await?);
-    let provider = Arc::new(yss_agent_rig::ConfigurableAgentDriver::new());
+        Arc::new(yss_harness_sqlite::SqliteHarnessStore::connect(app_dir).await?);
+    let provider = Arc::new(yss_harness_rig::ConfigurableAgentDriver::new());
     let host = application
         .initialize_harness(HarnessPorts {
             agent_driver: provider.clone(),

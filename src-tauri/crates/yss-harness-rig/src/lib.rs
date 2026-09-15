@@ -15,7 +15,7 @@ use rig_agent::tool::{DynamicTool, ToolExecutionError, ToolOutput};
 use rig_core::client::CompletionClient;
 use rig_core::completion::{CompletionError, CompletionModel, Message};
 use rig_core::providers::openai;
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentDriverConfigurationFailure, AgentDriverConfigurationPort, AgentDriverFailure,
     AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput, AgentMessage,
     AgentMessageRole, AgentTurnRequest, AgentTurnResult, ApplyGraphEditRequest,
@@ -27,7 +27,7 @@ use yss_automation_contract::{
 };
 
 pub fn openai_agent_driver(
-    api_key: yss_automation_contract::SecretCredential,
+    api_key: yss_harness_contract::SecretCredential,
     base_url: impl Into<String>,
     model: impl Into<String>,
     config: RigAgentDriverConfig,
@@ -64,7 +64,7 @@ impl AgentDriverPort for UnavailableAgentDriver {
         _capabilities: Arc<dyn ModelCapabilityExecutor>,
         _output: Arc<dyn AgentEventOutput>,
         _cancellation: CancellationToken,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
+    ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async { Err(provider_unavailable()) })
     }
 }
@@ -107,7 +107,7 @@ impl AgentDriverPort for ConfigurableAgentDriver {
         capabilities: Arc<dyn ModelCapabilityExecutor>,
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
+    ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         let driver = self
             .driver
             .read()
@@ -301,7 +301,7 @@ where
         capabilities: Arc<dyn ModelCapabilityExecutor>,
         output: Arc<dyn AgentEventOutput>,
         cancellation: CancellationToken,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
+    ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async move {
             self.execute_turn(request, capabilities, output, cancellation)
                 .await
@@ -404,13 +404,13 @@ fn statistical_plan_tool(
     ))
 }
 
-fn map_output_failure(failure: yss_automation_contract::AgentOutputFailure) -> ToolExecutionError {
+fn map_output_failure(failure: yss_harness_contract::AgentOutputFailure) -> ToolExecutionError {
     match failure {
-        yss_automation_contract::AgentOutputFailure::PolicyRejected => {
+        yss_harness_contract::AgentOutputFailure::PolicyRejected => {
             ToolExecutionError::invalid_args("statistical plan failed Harness policy validation")
         }
-        yss_automation_contract::AgentOutputFailure::Closed
-        | yss_automation_contract::AgentOutputFailure::PersistenceFailed => {
+        yss_harness_contract::AgentOutputFailure::Closed
+        | yss_harness_contract::AgentOutputFailure::PersistenceFailed => {
             ToolExecutionError::other("tool event output unavailable")
         }
     }
@@ -442,19 +442,19 @@ fn decode_request(
         CapabilityId::ApplyGraphEdit => serde_json::from_value::<ApplyGraphEditRequest>(arguments)
             .map(AutomationCapabilityRequest::ApplyGraphEdit),
         CapabilityId::CompileGraph => {
-            serde_json::from_value::<yss_automation_contract::CompileGraphRequest>(arguments)
+            serde_json::from_value::<yss_harness_contract::CompileGraphRequest>(arguments)
                 .map(AutomationCapabilityRequest::CompileGraph)
         }
         CapabilityId::ExecuteGraph => {
-            serde_json::from_value::<yss_automation_contract::ExecuteGraphRequest>(arguments)
+            serde_json::from_value::<yss_harness_contract::ExecuteGraphRequest>(arguments)
                 .map(AutomationCapabilityRequest::ExecuteGraph)
         }
         CapabilityId::SaveGraph => {
-            serde_json::from_value::<yss_automation_contract::SaveGraphRequest>(arguments)
+            serde_json::from_value::<yss_harness_contract::SaveGraphRequest>(arguments)
                 .map(AutomationCapabilityRequest::SaveGraph)
         }
         CapabilityId::ListGraphResults => {
-            serde_json::from_value::<yss_automation_contract::ListGraphResultsRequest>(arguments)
+            serde_json::from_value::<yss_harness_contract::ListGraphResultsRequest>(arguments)
                 .map(AutomationCapabilityRequest::ListGraphResults)
         }
     }
@@ -600,7 +600,7 @@ mod tests {
     use rig_core::completion::{
         AssistantContent, CompletionError, CompletionRequest, CompletionResponse, Usage,
     };
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         AgentFuture, AgentOutputFailure, AutomationCapabilityResult, CapabilityFailure,
         DatasetSchemaInspection, HarnessSessionId, HarnessTurnId, ModelCapabilityOutcome,
         PrincipalId, ProjectSessionBinding, ToolInvocationId,
@@ -755,11 +755,11 @@ mod tests {
     #[test]
     fn cancellation_token_preserves_the_first_reason() {
         let token = CancellationToken::default();
-        assert!(token.cancel(yss_automation_contract::CancellationReason::User));
-        assert!(!token.cancel(yss_automation_contract::CancellationReason::DeadlineElapsed));
+        assert!(token.cancel(yss_harness_contract::CancellationReason::User));
+        assert!(!token.cancel(yss_harness_contract::CancellationReason::DeadlineElapsed));
         assert_eq!(
             token.reason(),
-            Some(yss_automation_contract::CancellationReason::User)
+            Some(yss_harness_contract::CancellationReason::User)
         );
     }
 
@@ -912,7 +912,7 @@ mod tests {
             let mut record = [0; 5];
             stream.read_exact(&mut record).await.unwrap();
             // Stop after ClientHello so the probe needs neither a trusted certificate nor an API key.
-            cancellation.cancel(yss_automation_contract::CancellationReason::User);
+            cancellation.cancel(yss_harness_contract::CancellationReason::User);
             record
         };
         let (result, record) = tokio::time::timeout(std::time::Duration::from_secs(5), async {

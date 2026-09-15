@@ -1,5 +1,5 @@
 [package]
-name = "yss-agent-rig"
+name = "yss-harness-rig"
 version = "0.1.0"
 edition = "2024"
 rust-version.workspace = true
@@ -11,7 +11,7 @@ rig-core.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
-yss-automation-contract = { path = "../yss-automation-contract" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 
 [dev-dependencies]
 yss-project-identity = { path = "../yss-project-identity" }

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     DiagnosticRequirement, MethodVersion, StatisticalMethodCard, StatisticalMethodId,
     StatisticalPlan, StatisticalPlanError, StudyDesignKind, VariableRequirement, VariableRole,
 };
@@ -148,7 +148,7 @@ pub enum StatisticalPlannerError {
     #[error("statistical plan failed quality validation")]
     InvalidPlan(#[from] StatisticalPlanError),
     #[error("statistical method identity is invalid")]
-    Identity(#[from] yss_automation_contract::AutomationIdentityError),
+    Identity(#[from] yss_harness_contract::AutomationIdentityError),
     #[error("statistical plan references an unknown method")]
     UnknownMethod,
     #[error("no candidate statistical method is applicable")]
@@ -158,7 +158,7 @@ pub enum StatisticalPlannerError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         AnalysisMode, DiagnosticRequirement, Estimand, ReportingContract, RobustnessCheck,
         RobustnessCheckKind, StatisticalPlan, StudyDesign, VariableRoleAssignment, WorkflowId,
     };

@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Row, SqlitePool};
-use yss_automation_contract::{
+use yss_harness_contract::{
     ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, HarnessEventEnvelope,
     HarnessEventStorePort, HarnessSessionId, HarnessSessionRecord, HarnessSessionState,
     HarnessSessionStorePort, HarnessTurnRecord, HarnessTurnState, KnowledgeDocumentRecord,
@@ -298,7 +298,7 @@ impl HarnessSessionStorePort for SqliteHarnessStore {
 
     fn load_turn<'a>(
         &'a self,
-        turn_id: &'a yss_automation_contract::HarnessTurnId,
+        turn_id: &'a yss_harness_contract::HarnessTurnId,
     ) -> PersistenceFuture<'a, Result<Option<HarnessTurnRecord>, PersistenceFailure>> {
         let id = turn_id.as_str().to_owned();
         Box::pin(async move {
@@ -624,7 +624,7 @@ impl ApprovalStorePort for SqliteHarnessStore {
     fn consume<'a>(
         &'a self,
         id: &'a ApprovalGrantId,
-        consumed_at: yss_automation_contract::UnixMillis,
+        consumed_at: yss_harness_contract::UnixMillis,
     ) -> PersistenceFuture<'a, Result<bool, PersistenceFailure>> {
         let id = id.as_str().to_owned();
         Box::pin(async move {
@@ -868,7 +868,7 @@ impl KnowledgeSourceStorePort for SqliteHarnessStore {
     fn mark_source_deleted<'a>(
         &'a self,
         source_id: &'a KnowledgeSourceId,
-        updated_at: yss_automation_contract::UnixMillis,
+        updated_at: yss_harness_contract::UnixMillis,
     ) -> PersistenceFuture<'a, Result<(), PersistenceFailure>> {
         let source_id = source_id.as_str().to_owned();
         Box::pin(async move {
@@ -1056,7 +1056,7 @@ fn invalid_record() -> PersistenceFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
         HarnessEvent, HarnessSessionState, IdempotencyKey, InspectGraphRequest, PrincipalId,
         ProjectSessionBinding, SourceHash, ToolInvocationId, ToolInvocationState, UnixMillis,
@@ -1187,11 +1187,11 @@ mod tests {
             id: ToolInvocationId::try_new("tool-1").unwrap(),
             idempotency_key: IdempotencyKey::try_new("idem-1").unwrap(),
             session_id: session.id.clone(),
-            turn_id: yss_automation_contract::HarnessTurnId::try_new("turn-1").unwrap(),
+            turn_id: yss_harness_contract::HarnessTurnId::try_new("turn-1").unwrap(),
             workflow_run_id: None,
             workflow_step_id: None,
             project,
-            capability_id: yss_automation_contract::CapabilityId::InspectGraph,
+            capability_id: yss_harness_contract::CapabilityId::InspectGraph,
             request: AutomationCapabilityRequest::InspectGraph(InspectGraphRequest {
                 graph_path: "events/Main.yssbi-event".to_owned(),
             }),
@@ -1217,8 +1217,8 @@ mod tests {
         let mut finished = invocation.clone();
         finished.state = ToolInvocationState::Failed;
         finished.finished_at = Some(UnixMillis::from_existing(43));
-        finished.failure = Some(yss_automation_contract::CapabilityFailure::new(
-            yss_automation_contract::CapabilityFailureCode::InternalFailure,
+        finished.failure = Some(yss_harness_contract::CapabilityFailure::new(
+            yss_harness_contract::CapabilityFailureCode::InternalFailure,
         ));
         store.finish(&finished).await.unwrap();
         assert!(store.load_running_invocations().await.unwrap().is_empty());
@@ -1262,7 +1262,7 @@ mod tests {
             principal_id: session.principal_id.clone(),
             session_id: session.id,
             project: invocation.project.clone(),
-            capability_id: yss_automation_contract::CapabilityId::ApplyGraphEdit,
+            capability_id: yss_harness_contract::CapabilityId::ApplyGraphEdit,
             request_fingerprint: SourceHash::try_new("fingerprint-1").unwrap(),
             issued_at: UnixMillis::from_existing(13),
             expires_at: UnixMillis::from_existing(100),

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
     AgentMessage, AgentMessageRole, AgentOutputFailure, AgentTurnRequest, AgentTurnResult,
     ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
@@ -30,7 +30,7 @@ const MAX_AGENT_TEXT_BYTES: usize = 1024 * 1024;
 #[derive(Clone)]
 pub struct HarnessPorts {
     pub agent_driver: Arc<dyn AgentDriverPort>,
-    pub capability_gateway: Arc<dyn yss_automation_contract::CapabilityGatewayPort>,
+    pub capability_gateway: Arc<dyn yss_harness_contract::CapabilityGatewayPort>,
     pub sessions: Arc<dyn HarnessSessionStorePort>,
     pub events: Arc<dyn HarnessEventStorePort>,
     pub event_sink: Arc<dyn HarnessEventSinkPort>,
@@ -394,15 +394,15 @@ impl HarnessHost {
         for mut record in self.ports.tool_ledger.load_running_invocations().await? {
             // An interrupted mutation has an unknown effect; do not imply that it rolled back.
             let failure_code = if record.capability_id.descriptor().effect
-                == yss_automation_contract::ToolEffect::Mutate
+                == yss_harness_contract::ToolEffect::Mutate
             {
                 CapabilityFailureCode::OutcomeUnknown
             } else {
                 CapabilityFailureCode::InternalFailure
             };
-            record.state = yss_automation_contract::ToolInvocationState::Failed;
+            record.state = yss_harness_contract::ToolInvocationState::Failed;
             record.finished_at = Some(self.ports.clock.now());
-            record.failure = Some(yss_automation_contract::CapabilityFailure::new(
+            record.failure = Some(yss_harness_contract::CapabilityFailure::new(
                 failure_code,
             ));
             self.ports.tool_ledger.finish(&record).await?;
@@ -1189,7 +1189,7 @@ impl AgentEventOutput for PersistingAgentOutput {
     fn emit<'a>(
         &'a self,
         event: AgentEvent,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<(), AgentOutputFailure>> {
+    ) -> yss_harness_contract::AgentFuture<'a, Result<(), AgentOutputFailure>> {
         Box::pin(async move {
             if let AgentEvent::PlanProposed { plan } = &event {
                 let methods =
@@ -1281,7 +1281,7 @@ mod tests {
         FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway,
         SequentialIds, StaticCapabilityGateway,
     };
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         ApplyGraphEditRequest, AutomationCapabilityRequest, AutomationCapabilityResult,
         CapabilityFuture, CapabilityGatewayPort, CapabilityInvocationContext,
         DatasetProfileInspection, DatasetSchemaInspection, GraphEditOperation, GraphEditPosition,
@@ -1342,7 +1342,7 @@ mod tests {
 
     #[tokio::test]
     async fn startup_recovery_closes_interrupted_read_only_tools_and_turns_once() {
-        use yss_automation_contract::{
+        use yss_harness_contract::{
             IdempotencyKey, InspectDatasetProfileRequest, ToolInvocationId, ToolInvocationRecord,
             ToolInvocationState, UnixMillis,
         };
@@ -1391,7 +1391,7 @@ mod tests {
                 workflow_run_id: None,
                 workflow_step_id: None,
                 project: session.project,
-                capability_id: yss_automation_contract::CapabilityId::InspectDatasetProfile,
+                capability_id: yss_harness_contract::CapabilityId::InspectDatasetProfile,
                 request: AutomationCapabilityRequest::InspectDatasetProfile(
                     InspectDatasetProfileRequest {
                         database_id: "data-1".into(),
@@ -1562,7 +1562,7 @@ mod tests {
             &'a self,
             context: CapabilityInvocationContext,
             request: AutomationCapabilityRequest,
-            _control: yss_automation_contract::CapabilityControl,
+            _control: yss_harness_contract::CapabilityControl,
         ) -> CapabilityFuture<'a> {
             Box::pin(async move {
                 assert!(context.approval_grant_id().is_some());

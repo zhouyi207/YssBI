@@ -113,8 +113,8 @@ pub fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_automation_contract::{PrincipalId, ProjectSessionBinding};
-    use yss_statistical_harness::test_support::{InMemoryHarnessStore, RejectingCapabilityGateway};
+    use yss_harness_contract::{PrincipalId, ProjectSessionBinding};
+    use yss_harness_core::test_support::{InMemoryHarnessStore, RejectingCapabilityGateway};
 
     struct TestDirectory(PathBuf);
 

@@ -14,7 +14,7 @@ Assistant UI
     ↓ strict frontend Harness contract
 yss-application::ipc commands + yss-ipc-channel ordered/replayable delivery
     ↓
-yss-statistical-harness
+yss-harness-core
     ├─ session / turn
     ├─ statistical plan / workflow
     ├─ tool registry / invocation ledger
@@ -24,9 +24,9 @@ yss-statistical-harness
     ├─ lexical knowledge / citations
     └─ ordered event sequence
     ↓ typed ports
-    ├─ AgentDriverPort → yss-agent-rig
+    ├─ AgentDriverPort → yss-harness-rig
     ├─ CapabilityGatewayPort → yss-application::ipc blocking adapter → yss-application
-    └─ persistence ports → yss-statistical-harness-sqlite
+    └─ persistence ports → yss-harness-sqlite
 ```
 
 `yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、configurable Rig driver、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway、`HarnessChannelHub` 和本地 `HarnessGraphClientHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/provider 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
@@ -36,7 +36,7 @@ yss-statistical-harness
 | 事实                                                 | Authority                                            |
 | ---------------------------------------------------- | ---------------------------------------------------- |
 | Project、Graph、Database、Execution、Result 和 SCI   | 原有业务 owners，不转移给 Harness                    |
-| Harness session 和 turn                              | `yss-statistical-harness` + session persistence port |
+| Harness session 和 turn                              | `yss-harness-core` + session persistence port |
 | conversation transcript / final turn state           | persisted turn/event records                         |
 | Statistical Plan 和 Workflow run/step                | Harness workflow runtime + workflow store            |
 | Tool invocation state、idempotency 和 result receipt | Harness tool ledger                                  |
@@ -51,7 +51,7 @@ Harness 只保存业务资源的 opaque references、project/session binding、c
 
 ## 3. Stable contracts and ports
 
-`yss-automation-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、workflow records、approval、memory、knowledge citation、event、cancellation/deadline 和 structured failure。
+`yss-harness-contract` 是 Pure Leaf，拥有 Harness、Application Gateway、Rig 和 MCP adapter 共享的 stable typed contracts：identities、project binding、capability request/result、tool descriptor、workflow records、approval、memory、knowledge citation、event、cancellation/deadline 和 structured failure。
 
 Harness 只通过 constructor-injected ports 使用外部能力：
 
@@ -143,7 +143,7 @@ Skill 是允许 tools、knowledge scope 和 workflow policy 的版本化方法�
 
 ## 8. Rig adapter
 
-`yss-agent-rig` 实现 `AgentDriverPort`，负责 provider/model configuration、Rig message mapping、streaming、tool schema/call mapping 和 provider failure 分类。它不拥有：
+`yss-harness-rig` 实现 `AgentDriverPort`，负责 provider/model configuration、Rig message mapping、streaming、tool schema/call mapping 和 provider failure 分类。它不拥有：
 
 - Harness session、workflow 或 event sequence；
 - Tool Registry、approval 或 memory policy；

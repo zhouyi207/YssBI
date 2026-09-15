@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AutomationIdKind, ClockPort, IdGeneratorPort, MemoryAuthor, MemoryProposal, MemoryRecord,
     MemoryRecordId, MemoryScope, MemoryStatus, MemoryStorePort, PersistenceFailure,
     ProjectSessionBinding, RetentionPolicy, SensitivityClass,
@@ -123,14 +123,14 @@ impl MemoryService {
 
     pub async fn records_for_session(
         &self,
-        session_id: &yss_automation_contract::HarnessSessionId,
+        session_id: &yss_harness_contract::HarnessSessionId,
     ) -> Result<Vec<MemoryRecord>, MemoryError> {
         Ok(self.store.query_session(session_id).await?)
     }
 
     pub async fn expire_session(
         &self,
-        session_id: &yss_automation_contract::HarnessSessionId,
+        session_id: &yss_harness_contract::HarnessSessionId,
     ) -> Result<usize, MemoryError> {
         let mut expired = 0usize;
         for mut record in self.store.query_session(session_id).await? {
@@ -199,9 +199,9 @@ fn retention_matches(scope: MemoryScope, retention: RetentionPolicy) -> bool {
 #[derive(Debug, thiserror::Error)]
 pub enum MemoryError {
     #[error("memory identity is invalid")]
-    Identity(#[from] yss_automation_contract::AutomationIdentityError),
+    Identity(#[from] yss_harness_contract::AutomationIdentityError),
     #[error("memory id generation failed")]
-    IdGeneration(#[from] yss_automation_contract::IdGenerationFailure),
+    IdGeneration(#[from] yss_harness_contract::IdGenerationFailure),
     #[error("memory persistence failed")]
     Persistence(#[from] PersistenceFailure),
     #[error("memory proposal was rejected by policy")]
@@ -222,7 +222,7 @@ mod tests {
 
     use super::*;
     use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds};
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         HarnessSessionId, MemoryConfidence, MemorySourceRef, StructuredMemoryValue,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};

@@ -10,7 +10,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-yss-automation-contract = { path = "../yss-automation-contract" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }

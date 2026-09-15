@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityContractError,
     CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
     CapabilityInvocationContext, DatasetColumnSchema, DatasetProfileInspection,
@@ -52,7 +52,7 @@ fn invoke_capability(
 ) -> Result<AutomationCapabilityResult, CapabilityFailure> {
     control.check()?;
     let read_only =
-        request.capability_id().descriptor().effect == yss_automation_contract::ToolEffect::Inspect;
+        request.capability_id().descriptor().effect == yss_harness_contract::ToolEffect::Inspect;
     request
         .validate()
         .map_err(|error| invalid_request(request.capability_id(), error))?;
@@ -689,7 +689,7 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 mod tests {
     use super::graph::editor_mutation;
     use super::*;
-    use yss_automation_contract::GraphEditOperation;
+    use yss_harness_contract::GraphEditOperation;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
 
@@ -739,7 +739,7 @@ mod tests {
         let node_id = uuid::Uuid::from_u128(1);
         let mutation = editor_mutation(
             GraphEditOperation::MoveNodes {
-                positions: vec![yss_automation_contract::GraphEditPosition {
+                positions: vec![yss_harness_contract::GraphEditPosition {
                     node_id: node_id.to_string(),
                     x: 10.0,
                     y: 20.0,

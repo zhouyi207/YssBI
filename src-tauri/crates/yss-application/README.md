@@ -21,7 +21,7 @@ flowchart TD
     APP --> EXEC["yss-graph-execution"]
     APP --> DATA["Database：数据与存储"]
     APP --> CONTRACT["共享契约与通用类型"]
-    APP --> HARNESS["yss-statistical-harness"]
+    APP --> HARNESS["yss-harness-core"]
     APP --> ADAPTERS["SQLite / Rig / notify / Plugin Manager"]
     APP --> TAURI["Tauri：runtime 与 IPC 模块使用"]
     APP --> IPC["Event / 中立 Channel / Contract"]
@@ -43,7 +43,7 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 | Graph 与执行：11 个  | `yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-compiler`、`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`、`yss-graph-execution`、`yss-graph-resource-contract`、`yss-graph-runtime`、`yss-graph-type-mapping`、`yss-function-editor-projection` | 组织图编辑、解析、编译与执行，转换各阶段的类型和产物       |
 | Project 与资源：9 个 | `yss-project`、`yss-project-history`、`yss-project-identity`、`yss-project-model`、`yss-project-progress`、`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`、`yss-resource-naming`                                                              | 项目生命周期、资源操作、身份与版本、文件提交、函数签名展示 |
 | 数据：11 个          | `yss-data-contract`、`yss-database-contract`、`yss-database-runtime`、`yss-database-schema`、`yss-dataset-profile`、`yss-dataset-store`、`yss-relational-contract`、`yss-sql-source`、`yss-tabular-arrow`、`yss-tabular-contract`、`yss-tabular-io`              | 数据导入导出、编辑、查询、快照和项目资源发布               |
-| 自动化与插件：6 个   | `yss-automation-contract`、`yss-plugin-protocol`、`yss-statistical-harness`、`yss-statistical-harness-sqlite`、`yss-agent-rig`、`yss-plugin-runtime`                                                                                                                                  | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
+| 自动化与插件：6 个   | `yss-harness-contract`、`yss-plugin-protocol`、`yss-harness-core`、`yss-harness-sqlite`、`yss-harness-rig`、`yss-plugin-runtime`                                                                                                                                  | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
 | IPC 支持：3 个       | `yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract`                                                                                                                                                                                                                                | 命令事件、通道交付及共享 wire 类型                         |
 | 科学计算：2 个       | `yss-sci-contract`、`yss-sci-runtime`                                                                                                                                                                                                                                                 | 使用统计结果、报告和错误类型                               |
 | 图表文档：1 个       | `yss-chart-document`                                                                                                                                                                                                                                                                  | 图表文档操作与查询                                         |
@@ -72,7 +72,7 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 | 声明方式                                | Crates                                                                                                                                                 | 用途                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`sqlx`、`tracing-subscriber`                                                                                   | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
-| 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-filesystem`、`yss-project-identity`、`yss-statistical-harness` | 构造测试会话和验证跨 crate 契约，共七条声明                  |
+| 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-filesystem`、`yss-project-identity`、`yss-harness-core` | 构造测试会话和验证跨 crate 契约，共七条声明                  |
 
 Application 自身的 `test-support` feature 只开放跨 crate contract 测试所需的构造与 publication seam，转发范围以 manifest 为准。
 

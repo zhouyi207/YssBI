@@ -11,7 +11,7 @@ use crate::graph::run::{
 use crate::session::{ApplicationSession, ApplicationState};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use yss_automation_contract::*;
+use yss_harness_contract::*;
 use yss_graph_document::GraphDocument;
 use yss_graph_document::{
     ConnectionId, GraphResourcePath, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,

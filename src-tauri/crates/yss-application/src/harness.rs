@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 use thiserror::Error;
-use yss_automation_contract::{HarnessSessionRecord, PrincipalId, ProjectSessionBinding};
-use yss_statistical_harness::{
+use yss_harness_contract::{HarnessSessionRecord, PrincipalId, ProjectSessionBinding};
+use yss_harness_core::{
     HarnessError, HarnessHost, HarnessPorts, KnowledgeError, install_builtin_statistical_knowledge,
 };
 
@@ -64,16 +64,16 @@ impl ApplicationState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         HarnessSessionState, HarnessSessionStorePort, HarnessTurnId, HarnessTurnRecord,
         HarnessTurnState, UnixMillis,
     };
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
-    use yss_statistical_harness::test_support::{
+    use yss_harness_core::test_support::{
         FixedClock, InMemoryHarnessStore, MockAgentDriver, RejectingCapabilityGateway,
         SequentialIds,
     };
-    use yss_statistical_harness::{KnowledgeQuery, KnowledgeService};
+    use yss_harness_core::{KnowledgeQuery, KnowledgeService};
 
     #[tokio::test]
     async fn startup_recovers_interrupted_work_and_sessions_follow_project_replacement() {

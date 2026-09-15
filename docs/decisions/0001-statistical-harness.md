@@ -17,7 +17,7 @@ YssBI 最初只有 frontend Assistant shell。要接入模型、Tools、Memory�
 
 ### 1. Provider-neutral Harness Core
 
-`yss-statistical-harness` 独立拥有 session、turn、ordered events、Statistical Plan、Workflow、Tool Registry/ledger、approval、memory proposal 和 knowledge assembly。Core 只依赖 stable automation contracts 与 injected ports，不依赖 Tauri、Rig、MCP、SQLite 或具体业务 owner。
+`yss-harness-core` 独立拥有 session、turn、ordered events、Statistical Plan、Workflow、Tool Registry/ledger、approval、memory proposal 和 knowledge assembly。Core 只依赖 stable automation contracts 与 injected ports，不依赖 Tauri、Rig、MCP、SQLite 或具体业务 owner。
 
 ### 2. One business capability gateway
 

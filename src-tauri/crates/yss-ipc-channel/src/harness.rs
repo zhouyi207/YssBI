@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use tauri::ipc::Channel;
-use yss_automation_contract::{
+use yss_harness_contract::{
     HarnessEventEnvelope, HarnessEventSinkPort, HarnessSessionId, PersistenceFailure,
     PersistenceFuture,
 };
@@ -144,7 +144,7 @@ impl HarnessEventSinkPort for HarnessChannelHub {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use yss_automation_contract::{HarnessEvent, UnixMillis};
+    use yss_harness_contract::{HarnessEvent, UnixMillis};
 
     #[test]
     fn live_events_wait_for_replay_and_are_delivered_once_in_sequence() {

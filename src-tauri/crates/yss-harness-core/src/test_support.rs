@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
     AgentTurnRequest, AgentTurnResult, ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort,
     AutomationIdKind, CapabilityFailure, CapabilityFailureCode, CapabilityFuture,
@@ -48,7 +48,7 @@ impl IdGeneratorPort for SequentialIds {
     fn next_id(
         &self,
         kind: AutomationIdKind,
-    ) -> Result<String, yss_automation_contract::IdGenerationFailure> {
+    ) -> Result<String, yss_harness_contract::IdGenerationFailure> {
         let prefix = match kind {
             AutomationIdKind::HarnessSession => "session",
             AutomationIdKind::HarnessTurn => "turn",
@@ -81,8 +81,8 @@ impl AgentDriverPort for MockAgentDriver {
         _request: AgentTurnRequest,
         _capabilities: std::sync::Arc<dyn ModelCapabilityExecutor>,
         output: std::sync::Arc<dyn AgentEventOutput>,
-        cancellation: yss_automation_contract::CancellationToken,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
+        cancellation: yss_harness_contract::CancellationToken,
+    ) -> yss_harness_contract::AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
         Box::pin(async move {
             if cancellation.is_cancelled() {
                 return Err(AgentDriverFailure::new(AgentDriverFailureCode::Cancelled));
@@ -107,8 +107,8 @@ impl CapabilityGatewayPort for RejectingCapabilityGateway {
     fn invoke<'a>(
         &'a self,
         _context: CapabilityInvocationContext,
-        _request: yss_automation_contract::AutomationCapabilityRequest,
-        _control: yss_automation_contract::CapabilityControl,
+        _request: yss_harness_contract::AutomationCapabilityRequest,
+        _control: yss_harness_contract::CapabilityControl,
     ) -> CapabilityFuture<'a> {
         Box::pin(async {
             Err(CapabilityFailure::new(
@@ -120,13 +120,13 @@ impl CapabilityGatewayPort for RejectingCapabilityGateway {
 
 pub struct StaticCapabilityGateway {
     results: BTreeMap<
-        yss_automation_contract::CapabilityId,
-        yss_automation_contract::AutomationCapabilityResult,
+        yss_harness_contract::CapabilityId,
+        yss_harness_contract::AutomationCapabilityResult,
     >,
 }
 
 impl StaticCapabilityGateway {
-    pub fn new(result: yss_automation_contract::AutomationCapabilityResult) -> Self {
+    pub fn new(result: yss_harness_contract::AutomationCapabilityResult) -> Self {
         Self {
             results: BTreeMap::from([(result.capability_id(), result)]),
         }
@@ -134,7 +134,7 @@ impl StaticCapabilityGateway {
 
     pub fn with_result(
         mut self,
-        result: yss_automation_contract::AutomationCapabilityResult,
+        result: yss_harness_contract::AutomationCapabilityResult,
     ) -> Self {
         self.results.insert(result.capability_id(), result);
         self
@@ -145,8 +145,8 @@ impl CapabilityGatewayPort for StaticCapabilityGateway {
     fn invoke<'a>(
         &'a self,
         _context: CapabilityInvocationContext,
-        request: yss_automation_contract::AutomationCapabilityRequest,
-        _control: yss_automation_contract::CapabilityControl,
+        request: yss_harness_contract::AutomationCapabilityRequest,
+        _control: yss_harness_contract::CapabilityControl,
     ) -> CapabilityFuture<'a> {
         Box::pin(async move {
             self.results
@@ -170,15 +170,15 @@ struct InMemoryState {
     published: Vec<HarnessEventEnvelope>,
     definitions: BTreeMap<(WorkflowId, WorkflowVersion), WorkflowDefinition>,
     runs: BTreeMap<WorkflowRunId, WorkflowRunRecord>,
-    invocations: BTreeMap<yss_automation_contract::IdempotencyKey, ToolInvocationRecord>,
+    invocations: BTreeMap<yss_harness_contract::IdempotencyKey, ToolInvocationRecord>,
     memories: BTreeMap<MemoryRecordId, MemoryRecord>,
     knowledge_sources: BTreeMap<KnowledgeSourceId, KnowledgeSourceRecord>,
     knowledge_documents:
-        BTreeMap<yss_automation_contract::KnowledgeDocumentId, KnowledgeDocumentRecord>,
+        BTreeMap<yss_harness_contract::KnowledgeDocumentId, KnowledgeDocumentRecord>,
     skills: BTreeMap<
         (
-            yss_automation_contract::SkillId,
-            yss_automation_contract::SkillVersion,
+            yss_harness_contract::SkillId,
+            yss_harness_contract::SkillVersion,
         ),
         SkillPackage,
     >,
@@ -218,7 +218,7 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
                 .values()
                 .filter(|turn| {
                     &turn.session_id == session_id
-                        && turn.state == yss_automation_contract::HarnessTurnState::Completed
+                        && turn.state == yss_harness_contract::HarnessTurnState::Completed
                 })
                 .cloned()
                 .collect::<Vec<_>>();
@@ -243,7 +243,7 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
                 .unwrap_or_else(|error| error.into_inner())
                 .turns
                 .values()
-                .filter(|record| record.state == yss_automation_contract::HarnessTurnState::Running)
+                .filter(|record| record.state == yss_harness_contract::HarnessTurnState::Running)
                 .cloned()
                 .collect())
         })
@@ -294,8 +294,8 @@ impl HarnessSessionStorePort for InMemoryHarnessStore {
                 .filter(|session| {
                     matches!(
                         session.state,
-                        yss_automation_contract::HarnessSessionState::Active
-                            | yss_automation_contract::HarnessSessionState::Closing
+                        yss_harness_contract::HarnessSessionState::Active
+                            | yss_harness_contract::HarnessSessionState::Closing
                     )
                 })
                 .cloned()
@@ -535,7 +535,7 @@ impl ToolInvocationLedgerPort for InMemoryHarnessStore {
                 .invocations
                 .values()
                 .filter(|record| {
-                    record.state == yss_automation_contract::ToolInvocationState::Running
+                    record.state == yss_harness_contract::ToolInvocationState::Running
                 })
                 .cloned()
                 .collect())

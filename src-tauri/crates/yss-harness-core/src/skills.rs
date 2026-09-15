@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     CapabilityId, SkillId, SkillManifest, SkillPackage, SkillScope, SkillVersion, SourceHash,
     WorkflowId,
 };
@@ -142,7 +142,7 @@ fn hex(bytes: &[u8]) -> String {
 #[derive(Debug, thiserror::Error)]
 pub enum SkillError {
     #[error("skill identity is invalid")]
-    Identity(#[from] yss_automation_contract::AutomationIdentityError),
+    Identity(#[from] yss_harness_contract::AutomationIdentityError),
     #[error("skill package is invalid")]
     InvalidManifest,
     #[error("skill package hash failed")]

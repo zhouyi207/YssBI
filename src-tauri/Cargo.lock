@@ -9222,7 +9222,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-agent-rig"
+name = "yss-harness-rig"
 version = "0.1.0"
 dependencies = [
  "rig-agent",
@@ -9230,7 +9230,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
- "yss-automation-contract",
+ "yss-harness-contract",
  "yss-project-identity",
 ]
 
@@ -9250,8 +9250,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "yss-agent-rig",
- "yss-automation-contract",
+ "yss-harness-rig",
+ "yss-harness-contract",
  "yss-canonical-hash",
  "yss-chart-document",
  "yss-data-contract",
@@ -9297,15 +9297,15 @@ dependencies = [
  "yss-sci-contract",
  "yss-sci-runtime",
  "yss-sql-source",
- "yss-statistical-harness",
- "yss-statistical-harness-sqlite",
+ "yss-harness-core",
+ "yss-harness-sqlite",
  "yss-tabular-arrow",
  "yss-tabular-contract",
  "yss-tabular-io",
 ]
 
 [[package]]
-name = "yss-automation-contract"
+name = "yss-harness-contract"
 version = "0.1.0"
 dependencies = [
  "schemars 1.2.2",
@@ -9702,7 +9702,7 @@ dependencies = [
  "tauri",
  "thiserror 2.0.20",
  "uuid",
- "yss-automation-contract",
+ "yss-harness-contract",
  "yss-ipc-contract",
  "yss-project-progress",
 ]
@@ -9715,7 +9715,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "uuid",
- "yss-automation-contract",
+ "yss-harness-contract",
  "yss-data-contract",
  "yss-function-editor-projection",
  "yss-graph-analysis-contract",
@@ -10067,25 +10067,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-statistical-harness"
+name = "yss-harness-core"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.20",
  "tokio",
- "yss-automation-contract",
+ "yss-harness-contract",
  "yss-canonical-hash",
  "yss-project-identity",
 ]
 
 [[package]]
-name = "yss-statistical-harness-sqlite"
+name = "yss-harness-sqlite"
 version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
  "sqlx",
  "tokio",
- "yss-automation-contract",
+ "yss-harness-contract",
  "yss-project-identity",
 ]
 

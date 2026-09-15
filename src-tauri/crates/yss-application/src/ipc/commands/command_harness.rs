@@ -6,11 +6,11 @@ use crate::harness::HarnessSessionError;
 use crate::session::ApplicationState;
 use tauri::State;
 use tauri::ipc::Channel;
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentDriverConfigurationFailure, AgentDriverConfigurationPort, HarnessSessionId, HarnessTurnId,
     MemoryRecordId, PrincipalId, SecretCredential, WorkflowRunId,
 };
-use yss_statistical_harness::{HarnessError, HarnessHost, dataset_quality_review_workflow};
+use yss_harness_core::{HarnessError, HarnessHost, dataset_quality_review_workflow};
 
 use crate::ipc::error::CommandError;
 use yss_ipc_contract::harness::ConfigureHarnessProviderRequestDto;
@@ -313,7 +313,7 @@ fn map_harness_error(error: HarnessError) -> CommandError {
         HarnessError::SessionNotActive => CommandError::expected("harness_session_not_active"),
         HarnessError::ConcurrentTurn => CommandError::expected("harness_turn_already_running"),
         HarnessError::Agent(code) => {
-            use yss_automation_contract::AgentDriverFailureCode::*;
+            use yss_harness_contract::AgentDriverFailureCode::*;
             CommandError::expected(match code {
                 ProviderUnavailable => "assistant_provider_unavailable",
                 ProviderAuthenticationFailed => "assistant_authentication_failed",

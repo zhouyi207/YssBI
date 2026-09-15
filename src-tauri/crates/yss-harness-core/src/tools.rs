@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentEvent, AgentEventOutput, ApprovalGrantId, AutomationIdKind, AutomationIdentityError,
     CancellationToken, CapabilityControl, CapabilityFailure, CapabilityFailureCode,
     CapabilityGatewayPort, CapabilityId, CapabilityInvocationContext, CapabilityInvocationId,
@@ -236,7 +236,7 @@ impl HarnessToolExecutor {
         let invocation_id = ToolInvocationId::try_new(raw_invocation_id.clone())
             .map_err(|_| persistence_unavailable())?;
         let idempotency_key =
-            if let yss_automation_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
+            if let yss_harness_contract::AutomationCapabilityRequest::ApplyGraphEdit(edit) =
                 &request.request
             {
                 let digest = yss_canonical_hash::hash_canonical(
@@ -408,7 +408,7 @@ impl ModelCapabilityExecutor for HarnessToolExecutor {
     fn execute<'a>(
         &'a self,
         request: ModelCapabilityRequest,
-    ) -> yss_automation_contract::AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>>
+    ) -> yss_harness_contract::AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>>
     {
         Box::pin(async move { self.execute_request(request).await })
     }
@@ -440,7 +440,7 @@ mod tests {
     use super::*;
     use crate::test_support::{FixedClock, InMemoryHarnessStore, SequentialIds};
     use std::sync::Mutex;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         AgentFuture, AgentOutputFailure, AutomationCapabilityRequest, CancellationReason,
         CapabilityFuture, InspectDatasetProfileRequest,
     };
@@ -556,7 +556,7 @@ mod tests {
     #[tokio::test]
     async fn graph_edit_retries_reuse_the_receipt_and_reject_changed_requests_with_the_same_key() {
         use std::sync::atomic::{AtomicUsize, Ordering};
-        use yss_automation_contract::{
+        use yss_harness_contract::{
             ApplyGraphEditRequest, AutomationCapabilityResult, GraphEditOperation,
             GraphEditPosition, GraphEditReceipt,
         };

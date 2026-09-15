@@ -344,10 +344,10 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::session::slot::ApplicationState",
             "yss_application::harness::HarnessInitializationError",
-            "yss_statistical_harness::host::HarnessHost",
-            "yss_statistical_harness::host::HarnessPorts",
-            "yss_agent_rig::ConfigurableAgentDriver::new",
-            "yss_statistical_harness_sqlite::SqliteHarnessStore::connect",
+            "yss_harness_core::host::HarnessHost",
+            "yss_harness_core::host::HarnessPorts",
+            "yss_harness_rig::ConfigurableAgentDriver::new",
+            "yss_harness_sqlite::SqliteHarnessStore::connect",
         ],
     },
     InternalDependencyCapability {
@@ -390,14 +390,14 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_ipc_contract::harness::HarnessTurnResultDto",
             "yss_ipc_contract::harness::WorkflowRunDto",
             "yss_application::session::slot::ApplicationState",
-            "yss_statistical_harness::host::HarnessError",
-            "yss_statistical_harness::host::HarnessHost",
-            "yss_statistical_harness::host::HarnessHost::delete_session_memory",
-            "yss_statistical_harness::host::HarnessHost::cancel_workflow",
-            "yss_statistical_harness::host::HarnessHost::pause_workflow",
-            "yss_statistical_harness::host::HarnessHost::resume_workflow",
-            "yss_statistical_harness::host::HarnessHost::session_memory",
-            "yss_statistical_harness::workflow::dataset_quality_review_workflow",
+            "yss_harness_core::host::HarnessError",
+            "yss_harness_core::host::HarnessHost",
+            "yss_harness_core::host::HarnessHost::delete_session_memory",
+            "yss_harness_core::host::HarnessHost::cancel_workflow",
+            "yss_harness_core::host::HarnessHost::pause_workflow",
+            "yss_harness_core::host::HarnessHost::resume_workflow",
+            "yss_harness_core::host::HarnessHost::session_memory",
+            "yss_harness_core::workflow::dataset_quality_review_workflow",
             "yss_ipc_channel::harness::HarnessChannelHub",
             "yss_application::ipc::channel::harness_graph::HarnessGraphClientHub",
             "yss_ipc_contract::harness::HarnessMemoryRecordDto::from",
@@ -1543,7 +1543,7 @@ fn non_build_memberships(
     if matches!(
         package,
         "yss-bayes-artifact-contract"
-            | "yss-automation-contract"
+            | "yss-harness-contract"
             | "yss-plugin-protocol"
             | "yss-bayes-model"
             | "yss-bayes-result"
@@ -1591,7 +1591,7 @@ fn non_build_memberships(
         } else {
             layers.insert(RustLayer::Application);
         }
-    } else if matches!(package, "yss-statistical-harness" | "yss-bayes-runtime") {
+    } else if matches!(package, "yss-harness-core" | "yss-bayes-runtime") {
         layers.insert(RustLayer::Application);
     } else if matches!(
         package,
@@ -1649,7 +1649,7 @@ fn non_build_memberships(
     } else if matches!(
         package,
         "yss-bayes-artifact-datafusion"
-            | "yss-agent-rig"
+            | "yss-harness-rig"
             | "yss-bayes-worker-julia"
             | "yss-julia-runtime"
             | "yss-julia-worker"
@@ -1657,7 +1657,7 @@ fn non_build_memberships(
             | "yss-plugin-runtime"
             | "yss-plugin-sdk"
             | "yss-project-registry-sqlite"
-            | "yss-statistical-harness-sqlite"
+            | "yss-harness-sqlite"
     ) {
         layers.insert(RustLayer::BackendAdapter);
     } else if let Some(layer) = cohesive_owner_layer(namespace) {

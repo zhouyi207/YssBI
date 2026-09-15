@@ -10,7 +10,7 @@ tauri.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 yss-ipc-contract = { path = "../yss-ipc-contract" }
-yss-automation-contract = { path = "../yss-automation-contract" }
+yss-harness-contract = { path = "../yss-harness-contract" }
 yss-project-progress = { path = "../yss-project-progress" }
 
 [dev-dependencies]

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use yss_automation_contract::{
+use yss_harness_contract::{
     AgentEvent, CapabilityId, HarnessEvent, HarnessEventEnvelope, HarnessSessionRecord,
     KnowledgeCitation, MemoryKind, MemoryRecord, MemoryScope, MemoryStatus, StatisticalPlan,
     StructuredMemoryValue, WorkflowRunRecord, WorkflowRunState,
@@ -135,7 +135,7 @@ pub enum HarnessEventKindDto {
     ToolInvocationFailed {
         invocation_id: String,
         capability_id: CapabilityId,
-        failure_code: yss_automation_contract::CapabilityFailureCode,
+        failure_code: yss_harness_contract::CapabilityFailureCode,
     },
     TurnCompleted {
         final_text: String,
@@ -328,7 +328,7 @@ mod tests {
             HarnessEventKindDto::ToolInvocationFailed {
                 invocation_id: "tool-2".into(),
                 capability_id: CapabilityId::InspectDatasetProfile,
-                failure_code: yss_automation_contract::CapabilityFailureCode::DeadlineElapsed,
+                failure_code: yss_harness_contract::CapabilityFailureCode::DeadlineElapsed,
             },
         ]
         .into_iter()

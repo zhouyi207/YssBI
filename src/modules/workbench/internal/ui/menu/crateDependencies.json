@@ -5,11 +5,11 @@
     "dependencies": []
   },
   {
-    "name": "yss-agent-rig",
-    "manifest": "src-tauri/crates/yss-agent-rig/Cargo.toml",
+    "name": "yss-harness-rig",
+    "manifest": "src-tauri/crates/yss-harness-rig/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -21,13 +21,13 @@
     "manifest": "src-tauri/crates/yss-application/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-agent-rig",
+        "name": "yss-harness-rig",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -291,13 +291,13 @@
         "target": null
       },
       {
-        "name": "yss-statistical-harness-sqlite",
+        "name": "yss-harness-sqlite",
         "kind": "normal",
         "optional": false,
         "target": null
       },
       {
-        "name": "yss-statistical-harness",
+        "name": "yss-harness-core",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -323,8 +323,8 @@
     ]
   },
   {
-    "name": "yss-automation-contract",
-    "manifest": "src-tauri/crates/yss-automation-contract/Cargo.toml",
+    "name": "yss-harness-contract",
+    "manifest": "src-tauri/crates/yss-harness-contract/Cargo.toml",
     "dependencies": [
       {
         "name": "yss-project-identity",
@@ -1124,7 +1124,7 @@
     "manifest": "src-tauri/crates/yss-ipc-channel/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1148,7 +1148,7 @@
     "manifest": "src-tauri/crates/yss-ipc-contract/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1801,11 +1801,11 @@
     ]
   },
   {
-    "name": "yss-statistical-harness",
-    "manifest": "src-tauri/crates/yss-statistical-harness/Cargo.toml",
+    "name": "yss-harness-core",
+    "manifest": "src-tauri/crates/yss-harness-core/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null
@@ -1819,11 +1819,11 @@
     ]
   },
   {
-    "name": "yss-statistical-harness-sqlite",
-    "manifest": "src-tauri/crates/yss-statistical-harness-sqlite/Cargo.toml",
+    "name": "yss-harness-sqlite",
+    "manifest": "src-tauri/crates/yss-harness-sqlite/Cargo.toml",
     "dependencies": [
       {
-        "name": "yss-automation-contract",
+        "name": "yss-harness-contract",
         "kind": "normal",
         "optional": false,
         "target": null

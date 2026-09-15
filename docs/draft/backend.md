@@ -33,7 +33,7 @@
 | 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-graph-execution`                                |     12 |
 | 数据管理与查询 | 数据契约、数据集目录、存储、查询、编辑与导入导出       | **数据与查询契约**：`yss-data-contract`、`yss-tabular-contract`、`yss-relational-contract`、`yss-database-contract`<br>**数据库运行与编辑**：`yss-database-runtime`、`yss-database-edit`、`yss-database-schema`<br>**数据集与分析**：`yss-dataset-store`、`yss-dataset-profile`<br>**引擎与外部数据源**：`yss-datafusion`、`yss-sql-source`<br>**批次与文件交换**：`yss-tabular-arrow`、`yss-tabular-io`                                               |     13 |
 | 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-sci-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                          |      5 |
-| Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-automation-contract`、`yss-statistical-harness`<br>**模型与存储适配**：`yss-agent-rig`、`yss-statistical-harness-sqlite`                                                                                                                                                                                                                                                                                                          |      4 |
+| Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-harness-contract`、`yss-harness-core`<br>**模型与存储适配**：`yss-harness-rig`、`yss-harness-sqlite`                                                                                                                                                                                                                                                                                                          |      4 |
 | 插件系统       | 宿主插件安装启用、进程管理、任务与结果接入             | `yss-plugin-runtime`、`yss-plugin-protocol`、`yss-plugin-sdk`                                                                                                                                                                                                                                                                                                                                                                                          |      3 |
 | 通信适配       | Tauri 命令注册、DTO 与错误映射、Event / Channel 交付   | `yss-application::ipc`、`yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract`                                                                                                                                                                                                                                                                                                                                                                         |      4 |
 | 基础支撑       | 桌面组装、日志诊断、平台操作与通用工具                 | **启动与组装**：`yssbi`（根包）<br>**结构化日志**：`tauri-plugin-tracing`<br>**文件系统**：`yss-filesystem`<br>**通用工具**：`yss-canonical-hash`、`yss-display-naming`                                                                                                                                                                                                                                                                                |      5 |
@@ -197,7 +197,7 @@ Project 管理资源声明；数据集存储管理已提交表数据；Database 
 
 ## 6. Assistant
 
-负责模型交互、工具执行和业务能力调用过程。核心由 `yss-statistical-harness` 管理，前端 Assistant 是它的界面投影。
+负责模型交互、工具执行和业务能力调用过程。核心由 `yss-harness-core` 管理，前端 Assistant 是它的界面投影。
 
 ### 内部结构
 
@@ -206,7 +206,7 @@ Project 管理资源声明；数据集存储管理已提交表数据；Database 
 | 会话与 turn    | 管理对话轮次、取消、状态和有序事件                                      |
 | 工具与工作流   | 管理工具执行、审批、幂等记录和调用结果                                  |
 | 业务能力入口   | 通过 typed capability gateway 调用 Application 能力                     |
-| 模型适配       | 通过 `yss-agent-rig` 接入模型驱动                                       |
+| 模型适配       | 通过 `yss-harness-rig` 接入模型驱动                                       |
 | 持久化与上下文 | 通过存储接口保存会话、事件、账本、记忆和知识记录；SQLite 适配器提供实现 |
 
 ### 状态与边界
@@ -299,7 +299,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
 | `yss-graph-execution`                                                          | 图分析与执行   | 通过数据与科学计算契约获取执行能力                              | 拥有运行与结果生命周期，不拥有查询引擎或统计算法 |
 | `yss-data-contract`、`yss-relational-contract`                                 | 数据管理与查询 | 为项目、图或执行提供数据值和关系访问契约                        | 共享的是数据含义及访问接口                       |
 | `yss-sci-contract`                                                             | 科学计算       | 为图节点目录、执行和应用提供计算契约                            | 计算输入、选项和结果的含义由科学计算定义         |
-| `yss-automation-contract`                                                      | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
+| `yss-harness-contract`                                                      | Assistant      | 连接 Harness、模型驱动、应用能力入口与通信适配                  | 表达自动化会话与能力调用契约                     |
 | `yss-function-editor-projection`                                               | 图分析与执行   | 将 Project 保存的函数签名转换为编辑器投影，由项目及应用接口交付 | 输入使用项目文档，输出表达函数编辑语义           |
 | `yss-project-history`                                                          | 项目与资源管理 | 用统一资源身份与 mutation envelope 描述图、数据库和图表资源变更 | 资源种类多，不等于拥有各资源的计算规则           |
 | `yssbi`、`yss-canonical-hash`                                                  | 基础支撑       | 分别完成运行时组装和规范哈希，被业务模块使用                    | 每个 crate 保持独立技术职责，业务决策留在调用方  |
@@ -614,7 +614,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph/open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
 3. **统一函数签名请求身份。**请求直接使用捕获上下文的 `operationId`，移除第二个生成器及 `pendingSignatureOperations` 集合。保留 coordinator epoch，在重置后丢弃迟到结果；资源版本、before-state 和结果关联校验继续有效。同一函数的不同 ID 并发修改由后端资源版本边界处理。
 4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphDraft/saveGraphDraft.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
-5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-automation-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-statistical-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-statistical-harness/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-application/src/ipc/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
+5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-harness-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-harness-core/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-application/src/ipc/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
 6. **通用编号使用通用库。**[HarnessIdGenerator](../../src-tauri/src/lib.rs)改用 workspace 已有的 `uuid::Uuid::new_v4()`，将根包的 UUID 测试依赖提升为生产依赖，保持 session、turn、tool、capability、memory、approval 等身份类型和前缀，没有引入新的第三方库。
 7. **删除外部产物的一次性预留。**[commit_external_artifacts](../../src-tauri/crates/yss-project/src/external_resources.rs)显式检查捕获项目实例，取得文件 lease 后重验项目与 session，提交前再次检查身份。落盘回执、来源信息、内容哈希和生命周期准入继续有效。来源中的插件 `operation_id` 保留，它属于另一套协议。
 
@@ -638,12 +638,12 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 以下为已完成的第一轮清理在 Windows 上的验证结果，不代表上述待办计划已经实施：
 
-- `pnpm test:rs:package -p yss-project -p yss-application -p yss-statistical-harness -p yss-api --lib`：141 项通过，覆盖打开图、图覆盖保存、函数签名版本、数据库恢复、Assistant 编辑幂等和插件产物身份校验。
-- `pnpm test:rs:package -p yss-statistical-harness-sqlite -p yss-automation-contract --lib`：5 项通过；SQLite 迁移用例确认旧回执升级后仍能按原幂等键读取，重复初始化不会丢失回执。
+- `pnpm test:rs:package -p yss-project -p yss-application -p yss-harness-core -p yss-api --lib`：141 项通过，覆盖打开图、图覆盖保存、函数签名版本、数据库恢复、Assistant 编辑幂等和插件产物身份校验。
+- `pnpm test:rs:package -p yss-harness-sqlite -p yss-harness-contract --lib`：5 项通过；SQLite 迁移用例确认旧回执升级后仍能按原幂等键读取，重复初始化不会丢失回执。
 - `pnpm test:ts src/features/application/editorMutation/functionSignatureCoordinator.test.ts src/services/nodeSystem/functionMutationService.test.ts src/services/nodeSystem/graphDraftService.test.ts src/features/core/graphDraft/graphDraftStore.test.ts src/features/application/projectLifecycleReceipt.test.ts src/features/application/editorMutation/projectPublicationIntegration.test.ts`：35 项通过，包含重置后丢弃迟到结果、Graph Save 成功解析和错误项目回执拒绝。
 - `pnpm test:rs:package -p yssbi --lib architecture_tests`：40 项通过，覆盖生产依赖与模块归属；根包测试代码仍有 2 条既有 dead code 警告。
 - `pnpm check:ts` 和 `pnpm check:rs:package -p yssbi --lib` 通过。根包将 `uuid` 从测试依赖移至生产依赖，并同步登记其 composition root 使用边界。
-- `pnpm lint:rs:package -p yss-application -p yss-automation-contract -p yss-project -p yss-statistical-harness -p yss-statistical-harness-sqlite --lib --no-deps '--' -D warnings` 通过。扩大到 API 和根包的严格 Clippy 被 API 未改动文件中的 11 条既有告警阻断，涉及命令参数数目、枚举大小和命名；没有添加 lint suppression。
+- `pnpm lint:rs:package -p yss-application -p yss-harness-contract -p yss-project -p yss-harness-core -p yss-harness-sqlite --lib --no-deps '--' -D warnings` 通过。扩大到 API 和根包的严格 Clippy 被 API 未改动文件中的 11 条既有告警阻断，涉及命令参数数目、枚举大小和命名；没有添加 lint suppression。
 - `pnpm lint:ts` 无错误，保留其他文件中的 11 条既有警告。文档相对链接、源码路径和脚本入口共 3 项聚焦检查通过；本轮变更文件已格式化，`git diff --check` 通过。
 
 本轮没有新增第三方库或插件内部改动，未执行完整 CI、桌面安装包测试及 macOS/Linux 验证。
@@ -656,7 +656,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 - [yss-datafusion](../../src-tauri/crates/yss-datafusion/src/lib.rs)负责查询计划和 Arrow 数据执行，包括筛选、连接、聚合与数据分析。
 - [yss-sql-source](../../src-tauri/crates/yss-sql-source/src/lib.rs)负责外部 SQLite、PostgreSQL、MySQL 的连接、表发现、类型解码和有界 Arrow 批次读取。它已承担连接器职责，目前通过 SQLx 实现数据库访问。
-- `yss-dataset-store`、`yss-project-registry-sqlite`、`yss-statistical-harness-sqlite` 和宿主 `yss-plugin-runtime` 使用 SQLx 读写内部 SQLite，持久化数据集提交、项目登记、Assistant 状态和插件回执。数据库事务与提交恢复继续由这些 owner 管理；现成外部数据源连接器不能直接替代这部分业务职责。
+- `yss-dataset-store`、`yss-project-registry-sqlite`、`yss-harness-sqlite` 和宿主 `yss-plugin-runtime` 使用 SQLx 读写内部 SQLite，持久化数据集提交、项目登记、Assistant 状态和插件回执。数据库事务与提交恢复继续由这些 owner 管理；现成外部数据源连接器不能直接替代这部分业务职责。
 
 连接器是查询引擎与数据源之间的适配模块，负责建立连接、获取表结构、发送查询并将结果转换成引擎可处理的数据。采用现成连接器的潜在收益，是减少 `yss-sql-source` 自维护的连接和 Arrow 转换逻辑；是否替换整个 crate，还需检查保留下来的项目规则和调用边界，不能只按代码量决定。
 

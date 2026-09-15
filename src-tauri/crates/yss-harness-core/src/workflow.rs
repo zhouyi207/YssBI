@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use yss_automation_contract::{
+use yss_harness_contract::{
     AutomationCapabilityRequest, HarnessSessionId, HarnessTurnId, InspectDatasetProfileRequest,
     InspectDatasetSchemaRequest, ProjectSessionBinding, UnixMillis, WorkflowDefinition, WorkflowId,
     WorkflowRunId, WorkflowRunRecord, WorkflowRunState, WorkflowStep, WorkflowStepId,
@@ -443,7 +443,7 @@ pub enum WorkflowRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_automation_contract::{
+    use yss_harness_contract::{
         AutomationCapabilityRequest, InspectGraphRequest, WorkflowId, WorkflowStepKind,
         WorkflowVersion,
     };
