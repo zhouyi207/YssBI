@@ -1,8 +1,16 @@
-import { Actions, Model, TabNode, type IJsonModel } from "flexlayout-react";
+import {
+  Actions,
+  Model,
+  TabNode,
+  type IJsonModel,
+  type IJsonRowNode,
+  type IJsonTabNode,
+  type IJsonTabSetNode,
+} from "flexlayout-react";
 import { isLayoutJson, isRecord } from "./layoutSerialization";
 import { isValidLogsLayout } from "./logsLayoutModel";
 import { createEmptyWorkbenchLayout } from "./workbenchLayoutDefaults";
-import { canMoveWorkbenchPanel } from "./workbenchActivityGroup";
+import { canMoveWorkbenchPanel, hasWorkbenchPanelCloseButton } from "./workbenchActivityGroup";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
@@ -47,10 +55,39 @@ export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
 function normalize(layout: IJsonModel): IJsonModel {
   const copy = structuredClone(layout);
   copy.global = { ...copy.global, ...createEmptyWorkbenchLayout().global };
+  const normalizeTabs = (children: IJsonTabSetNode["children"]): void => {
+    for (const child of children ?? []) {
+      if (child.type !== "tab") continue;
+      const tab = child as IJsonTabNode;
+      const metadata: unknown = tab.config?.metadata;
+      if (isWorkbenchPanelMetadata(metadata))
+        tab.enableClose = hasWorkbenchPanelCloseButton(metadata);
+    }
+  };
+  const normalizeTabsets = (node: IJsonRowNode | IJsonTabSetNode): void => {
+    if (node.type === "tabset") {
+      // Older layouts pinned empty groups with per-node overrides of these defaults.
+      const tabset = node as IJsonTabSetNode;
+      delete tabset.enableClose;
+      delete tabset.enableDeleteWhenEmpty;
+      normalizeTabs(tabset.children);
+      return;
+    }
+    for (const child of node.children ?? []) {
+      if (child.type === "row" || child.type === "tabset") normalizeTabsets(child);
+    }
+  };
+  normalizeTabsets(copy.layout);
   const borders = copy.borders ?? [];
   for (const border of createEmptyWorkbenchLayout().borders ?? []) {
-    if (!borders.some((existing) => existing.location === border.location)) borders.push(border);
+    const existing = borders.find((candidate) => candidate.location === border.location);
+    if (!existing) borders.push(border);
+    else if (border.location === "bottom") {
+      existing.enableAutoHide = false;
+      existing.show = true;
+    }
   }
+  for (const border of borders) normalizeTabs(border.children);
   copy.borders = borders;
   return copy;
 }

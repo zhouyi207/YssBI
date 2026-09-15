@@ -13,6 +13,7 @@ import {
   canMoveWorkbenchPanel,
   canRemoveWorkbenchPanel,
   canSplitWorkbenchPanel,
+  hasWorkbenchPanelCloseButton,
 } from "./workbenchActivityGroup";
 import { WORKBENCH_HOME_EDGE, WORKBENCH_EDGE_SIZES } from "./workbenchLayoutDefaults";
 import {
@@ -54,7 +55,9 @@ export function modelTabs(model: Model): TabNode[] {
 export function modelGroups(model: Model): (TabSetNode | BorderNode)[] {
   const groups: (TabSetNode | BorderNode)[] = [];
   model.visitNodes((node) => {
-    if (node instanceof TabSetNode || node instanceof BorderNode) groups.push(node);
+    // The native model keeps an empty central drop target; it is not an open group.
+    if ((node instanceof TabSetNode || node instanceof BorderNode) && node.getTabNodes().length)
+      groups.push(node);
   });
   return groups;
 }
@@ -161,7 +164,7 @@ export class WorkbenchModelOperations {
       position,
       exists,
       groupId: exists ? node.getId() : undefined,
-      visible: exists && node.isShowing(),
+      visible: exists && node.isShowing() && (!node.isAutoHide() || node.getTabNodes().length > 0),
       collapsed: !exists || node.getSelected() < 0,
     };
   };
@@ -183,7 +186,7 @@ export class WorkbenchModelOperations {
       name: title,
       component: componentForWorkbenchMetadata(metadata),
       config: { metadata },
-      enableClose: canRemoveWorkbenchPanel(metadata),
+      enableClose: hasWorkbenchPanelCloseButton(metadata),
       enableDrag: !isWorkbenchPersistentViewMetadata(metadata),
       ...(isWorkbenchActivityMetadata(metadata) ? { enableFloat: false, enablePopout: false } : {}),
     };

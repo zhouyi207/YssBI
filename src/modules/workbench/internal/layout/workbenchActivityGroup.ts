@@ -5,7 +5,11 @@ import {
   isWorkbenchPersistentViewMetadata,
   type WorkbenchPanelMetadata,
 } from "./workbenchPanelModel";
-import { WORKBENCH_ACTIVITY_GROUP_ID, WORKBENCH_EDGE_GROUP_IDS } from "./workbenchLayoutDefaults";
+import {
+  WORKBENCH_ACTIVITY_GROUP_ID,
+  WORKBENCH_EDGE_GROUP_IDS,
+  WORKBENCH_HOME_EDGE,
+} from "./workbenchLayoutDefaults";
 export { WORKBENCH_ACTIVITY_GROUP_ID } from "./workbenchLayoutDefaults";
 export function canMoveWorkbenchPanel(
   metadata: WorkbenchPanelMetadata,
@@ -31,6 +35,12 @@ export function canRemoveWorkbenchPanel(metadata: WorkbenchPanelMetadata): boole
   return (
     metadata.role === "plugin" ||
     (!isWorkbenchActivityMetadata(metadata) && !isWorkbenchPersistentViewMetadata(metadata))
+  );
+}
+export function hasWorkbenchPanelCloseButton(metadata: WorkbenchPanelMetadata): boolean {
+  return (
+    canRemoveWorkbenchPanel(metadata) &&
+    (metadata.role !== "view" || WORKBENCH_HOME_EDGE[metadata.viewId] !== "bottom")
   );
 }
 export function configureWorkbenchModel(model: Model): void {

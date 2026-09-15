@@ -32,6 +32,7 @@ const overlayRegistry = {
 } satisfies WorkbenchOverlayRegistry;
 
 const dragOverlay = <ActivityEditorDndOverlay />;
+const statusBar = <WorkbenchStatusBarContribution />;
 const closePanel = (id: string): void => {
   void requestCloseWorkbenchPanel(id);
 };
@@ -62,7 +63,7 @@ function WorkbenchReadyComposition() {
         layoutTheme={resolveYssbiLayoutTheme(themeMode)}
         watermarkComponent={watermarkComponent}
         menuBar={<WorkbenchMenuContribution commands={commands} />}
-        statusBar={<WorkbenchStatusBarContribution />}
+        statusBar={statusBar}
         dragOverlay={dragOverlay}
         overlays={overlayRegistry}
       />

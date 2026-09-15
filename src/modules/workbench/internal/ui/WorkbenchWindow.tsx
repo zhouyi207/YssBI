@@ -50,10 +50,10 @@ export function WorkbenchWindow({
           onClosePanel={onClosePanel}
           onCloseGroup={onCloseGroup}
           watermarkComponent={watermarkComponent}
+          statusBar={statusBar}
           dragOverlay={dragOverlay}
         />
       </div>
-      {statusBar}
       <WorkbenchOverlayHost overlays={overlays} />
     </div>
   );

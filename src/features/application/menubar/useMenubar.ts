@@ -6,6 +6,8 @@ import {
   resetWorkbenchLayout,
   toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
+  revealWorkbenchView,
+  WORKBENCH_ACTIVITY_GROUP_ID,
 } from "@/modules/workbench/public";
 import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
 
@@ -37,7 +39,10 @@ export function useMenubar() {
       activityGroupOpen: (() => {
         const edge = workbenchLayoutRead.getEdgeState("left");
         return (
-          edge.exists && edge.visible && !edge.collapsed && edge.groupId === "workbench-edge-left"
+          edge.exists &&
+          edge.visible &&
+          !edge.collapsed &&
+          edge.groupId === WORKBENCH_ACTIVITY_GROUP_ID
         );
       })(),
       assistantOpen: views.has("assistant"),
@@ -79,6 +84,9 @@ export function useMenubar() {
   const handleResetLayout = useCallback(() => {
     void resetWorkbenchLayout();
   }, []);
+  const revealBottomPanel = useCallback((viewId: "problems" | "output" | "logs") => {
+    void revealWorkbenchView(viewId);
+  }, []);
 
   return {
     openSettings,
@@ -92,6 +100,7 @@ export function useMenubar() {
     viewActions: {
       toggleActivityGroup,
       toggleAssistant,
+      revealBottomPanel,
       resetLayout: handleResetLayout,
     },
   };

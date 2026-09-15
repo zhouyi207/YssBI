@@ -9,7 +9,7 @@ import {
   type FunctionComponent,
   type ReactNode,
 } from "react";
-import { Actions, Layout, TabNode } from "flexlayout-react";
+import { Actions, BorderNode, DockLocation, Layout, TabNode } from "flexlayout-react";
 import {
   DndContext,
   DragOverlay,
@@ -22,6 +22,7 @@ import {
 import { useWorkbenchLayout } from "../application/useWorkbenchLayout";
 import { workbenchLayoutController } from "../application/workbenchLayoutController";
 import { snapTopLeftToCursor } from "../ui/dnd/snapTopLeftToCursorModifier";
+import { WorkbenchSettingsButton } from "../ui/status/StatusBar";
 import { workbenchLayoutRead } from "./workbenchRead";
 import { workbenchLayoutRootBinding } from "./workbenchRootBinding";
 import type {
@@ -47,6 +48,7 @@ export interface RootLayoutHostProps {
   readonly onCloseGroup: (groupId: string) => void;
   readonly layoutTheme: string;
   readonly watermarkComponent: FunctionComponent;
+  readonly statusBar: ReactNode;
   readonly dragOverlay?: ReactNode;
 }
 function panelProps(node: TabNode): RootPanelProps | undefined {
@@ -122,6 +124,7 @@ export const RootLayoutHost = memo(
         onCloseGroup,
         layoutTheme,
         watermarkComponent: Watermark,
+        statusBar,
         dragOverlay,
       },
       ref,
@@ -190,7 +193,26 @@ export const RootLayoutHost = memo(
                 const props = panelProps(node);
                 if (props) values.content = <TabComponent {...props} />;
               }}
-              onTabSetPlaceHolder={() => <Watermark />}
+              onRenderTabSet={(node, values) => {
+                if (!(node instanceof BorderNode)) return;
+                if (node.getLocation() === DockLocation.BOTTOM) {
+                  values.leading = <WorkbenchSettingsButton />;
+                  values.buttons.push(
+                    <div key="workbench-status" className="min-w-0">
+                      {statusBar}
+                    </div>,
+                  );
+                }
+              }}
+              onTabSetPlaceHolder={() =>
+                workbenchLayoutRead
+                  .listGroups()
+                  .some((group) => group.location.type === "grid") ? null : (
+                  <div className="h-full min-h-0 w-full" data-workbench-watermark>
+                    <Watermark />
+                  </div>
+                )
+              }
             />
           </div>
           <DragOverlay dropAnimation={null} modifiers={[snapTopLeftToCursor]}>

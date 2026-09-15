@@ -32,11 +32,13 @@ export function createEmptyWorkbenchLayout(): IJsonModel {
       tabEnablePin: false,
       tabEnableRenderOnDemand: true,
       tabSetEnableDeleteWhenEmpty: true,
-      tabSetEnableClose: false,
+      // FlexLayout requires both flags to remove a tabset after its last tab leaves.
+      tabSetEnableClose: true,
+      tabSetEnableCloseButton: false,
       tabSetEnableActiveIcon: false,
       tabSetMinWidth: 160,
       tabSetMinHeight: 100,
-      borderEnableAutoHide: false,
+      borderEnableAutoHide: true,
       borderMinSize: 180,
       tabSetEnableTabGroups: false,
     },
@@ -58,6 +60,8 @@ export function createEmptyWorkbenchLayout(): IJsonModel {
       {
         type: "border",
         location: "bottom",
+        // The native bottom strip also hosts status information when its panels are closed.
+        enableAutoHide: false,
         size: WORKBENCH_EDGE_SIZES.bottom,
         selected: -1,
         children: [],
@@ -66,7 +70,7 @@ export function createEmptyWorkbenchLayout(): IJsonModel {
     ],
     layout: {
       type: "row",
-      children: [{ type: "tabset", id: "workbench-center", active: true, children: [] }],
+      children: [],
     },
   };
 }

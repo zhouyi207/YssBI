@@ -2,9 +2,89 @@
 .workbench-layout-host {
   --flexlayout-font-size: 12px;
   --flexlayout-splitter-size: 6px;
-  overflow: hidden;
-  color: var(--fl-color-text);
-  background: var(--fl-color-background);
+}
+
+/* Align the first horizontal tab button with its content, without a leading gutter. */
+.workbench-layout-host
+  :is(.flexlayout__tabset_tabbar_outer, .flexlayout__tabset_tabbar_inner_tab_container) {
+  padding-left: 0;
+}
+.workbench-layout-host
+  .flexlayout__tabset_tabbar_inner_tab_container
+  > .flexlayout__tabset_tab_spacer:first-child {
+  display: none;
+}
+
+/* Share column tracks with the full-width bottom bar so native controls align without measurements. */
+.workbench-layout-host > .flexlayout__layout > .flexlayout__layout_border_container {
+  display: grid;
+  grid-template-columns: auto auto auto minmax(0, 1fr) minmax(0, max-content) auto auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+
+  > .flexlayout__border_top {
+    grid-area: 1 / 4 / 2 / 6;
+  }
+  > .flexlayout__border_bottom {
+    grid-area: 7 / 1 / 8 / -1;
+    /* BorderTabSet supplies an inline flex display. */
+    display: grid !important;
+    grid-template-columns: subgrid;
+    > .flexlayout__border_leading {
+      grid-area: 1 / 1;
+      justify-content: center;
+    }
+    > .flexlayout__mini_scrollbar_container {
+      grid-area: 1 / 4;
+    }
+    > .flexlayout__border_toolbar_bottom {
+      grid-area: 1 / 5;
+      padding-right: 0;
+      justify-content: flex-end;
+      overflow: hidden;
+    }
+  }
+  > .flexlayout__layout_border_container_inner {
+    display: contents;
+    > .flexlayout__border_left {
+      grid-area: 1 / 1 / 7 / 2;
+    }
+    > .flexlayout__border_right {
+      grid-area: 1 / 8 / 7 / 9;
+    }
+    > .flexlayout__layout_border_container_inner {
+      display: contents;
+      > .flexlayout__border_tab_contents:first-child {
+        grid-area: 2 / 4 / 3 / 6;
+      }
+      > .flexlayout__border_tab_contents + .flexlayout__splitter_border {
+        grid-area: 3 / 4 / 4 / 6;
+      }
+      > .flexlayout__layout_border_container_inner ~ .flexlayout__splitter_border {
+        grid-area: 5 / 4 / 6 / 6;
+      }
+      > .flexlayout__layout_border_container_inner ~ .flexlayout__border_tab_contents {
+        grid-area: 6 / 4 / 7 / 6;
+      }
+      > .flexlayout__layout_border_container_inner {
+        display: contents;
+        > .flexlayout__border_tab_contents:first-child {
+          grid-area: 1 / 2 / 7 / 3;
+        }
+        > .flexlayout__border_tab_contents + .flexlayout__splitter_border {
+          grid-area: 1 / 3 / 7 / 4;
+        }
+        > .flexlayout__layout_main {
+          grid-area: 4 / 4 / 5 / 6;
+        }
+        > .flexlayout__layout_main + .flexlayout__splitter_border {
+          grid-area: 1 / 6 / 7 / 7;
+        }
+        > .flexlayout__border_tab_contents:last-child {
+          grid-area: 1 / 7 / 7 / 8;
+        }
+      }
+    }
+  }
 }
 .workbench-tab-label {
   display: inline-flex;
@@ -23,12 +103,22 @@
   border-radius: 50%;
   background: currentColor;
 }
-.workbench-layout-host .flexlayout__tab {
-  overflow: hidden;
+/* The library's final empty drop target presents the workspace empty state without group chrome. */
+.workbench-layout-host
+  .flexlayout__tabset:has(> .flexlayout__tabset_content > [data-workbench-watermark])
+  > .flexlayout__tabset_tabbar_outer {
+  display: none;
 }
 .workbench-logs-layout {
+  --flexlayout-tab-button-radius: 0;
   position: relative;
-  width: 100%;
   height: 100%;
-  min-height: 0;
+  .flexlayout__tabset_tabbar_inner_tab_container_top {
+    border-top: 0;
+  }
+}
+/* Embedded log tabs share the outer workbench panel's frame. */
+.workbench-layout-host .workbench-logs-layout .flexlayout__tab {
+  border: 0;
+  border-radius: 0;
 }

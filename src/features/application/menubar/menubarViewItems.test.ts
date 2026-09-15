@@ -11,6 +11,7 @@ function actions(): MenubarViewMenuActions {
   return {
     toggleActivityGroup: vi.fn(),
     toggleAssistant: vi.fn(),
+    revealBottomPanel: vi.fn(),
     resetLayout: vi.fn(),
   };
 }
@@ -32,6 +33,10 @@ describe("buildViewMenuItems", () => {
       "panel.primarySideBar",
       "panel.assistant",
       "-",
+      "panel.problems",
+      "panel.output",
+      "panel.logs",
+      "-",
       "menubar.resetLayout",
     ]);
     expect(items[0]).toMatchObject({
@@ -44,6 +49,12 @@ describe("buildViewMenuItems", () => {
       checked: true,
       onClick: callbacks.toggleAssistant,
     });
-    expect(items[3]?.onClick).toBe(callbacks.resetLayout);
+    items[3]?.onClick?.();
+    expect(callbacks.revealBottomPanel).toHaveBeenCalledWith("problems");
+    items[4]?.onClick?.();
+    expect(callbacks.revealBottomPanel).toHaveBeenCalledWith("output");
+    items[5]?.onClick?.();
+    expect(callbacks.revealBottomPanel).toHaveBeenCalledWith("logs");
+    expect(items[7]?.onClick).toBe(callbacks.resetLayout);
   });
 });
