@@ -2,3 +2,6 @@ packages:
   - plugins/julia/web
 allowBuilds:
   esbuild: false
+patchedDependencies:
+  # The published CSS references a source map omitted from the package.
+  flexlayout-react@0.11.0: patches/flexlayout-react@0.11.0.patch
