@@ -105,5 +105,4 @@ mod tests {
         let manifest = serde_json::from_value::<ProjectManifest>(value).unwrap();
         assert_eq!(manifest.project_name, "Example");
     }
-
 }

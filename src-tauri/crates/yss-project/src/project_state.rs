@@ -65,6 +65,23 @@ impl ProjectState {
         Ok(self.project_data.read().unwrap().clone())
     }
 
+    pub fn has_resident_graph(
+        &self,
+        graph: &GraphResourcePath,
+    ) -> Result<bool, ProjectOperationError> {
+        self.ensure_project_operational()?;
+        Ok(self.project_data.read().unwrap().graphs.contains_key(graph))
+    }
+
+    /// Read one resident resource without loading a declared graph from disk.
+    pub fn read_resident_graph(
+        &self,
+        graph: &GraphResourcePath,
+    ) -> Result<Option<GraphResourceDocument>, ProjectOperationError> {
+        self.ensure_project_operational()?;
+        Ok(self.project_data.read().unwrap().graphs.get(graph).cloned())
+    }
+
     pub fn project_instance_id(&self) -> String {
         self.mutation_publication
             .lock()

@@ -28,7 +28,7 @@ impl ProjectState {
                 message: "graph read project instance is stale".into(),
             });
         }
-        let resident = self.get_data()?.graphs.get(graph_path).cloned();
+        let resident = self.read_resident_graph(graph_path)?;
         let resource = match resident {
             Some(resource) => resource,
             None => crate::project_io::load_project_graph_from_file(

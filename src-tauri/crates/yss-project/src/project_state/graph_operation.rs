@@ -132,14 +132,9 @@ impl ProjectState {
         operation_id: yss_project_identity::OperationId,
     ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
         for attempt in 0..3 {
-            if !self
-                .get_data()
-                .map_err(|source| {
-                    ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source))
-                })?
-                .graphs
-                .contains_key(graph_path)
-            {
+            if !self.has_resident_graph(graph_path).map_err(|source| {
+                ProjectGraphOperationError::Internal(ProjectGraphOperationSource::new(source))
+            })? {
                 return Err(ProjectGraphOperationError::GraphUnavailable {
                     graph: graph_path.clone(),
                 });
@@ -428,8 +423,7 @@ impl ProjectState {
         let session = capture.authority.session.clone();
         let operation_id = capture.operation_id();
 
-        let data = self.get_data()?;
-        let mut resource = data.graphs.get(&graph_path).cloned().ok_or_else(|| {
+        let mut resource = self.read_resident_graph(&graph_path)?.ok_or_else(|| {
             ProjectOperationError::StaleResourceLifecycle {
                 message: format!("graph '{graph_path}' is not resident"),
             }
