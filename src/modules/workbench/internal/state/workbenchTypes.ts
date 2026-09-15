@@ -1,4 +1,4 @@
-/** Non-placement workbench UI state; the root Dockview owns layout and visibility. */
+/** Non-placement workbench UI state; the root FlexLayout owns layout and visibility. */
 export interface WorkbenchUiState {
   isSettingsOpen: boolean;
   isNodeDocumentationOpen: boolean;

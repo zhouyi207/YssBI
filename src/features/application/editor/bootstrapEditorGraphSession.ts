@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -22,7 +22,7 @@ export async function bootstrapEditorGraphSession(
 ): Promise<boolean> {
   const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const retryDelayMs = options?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
-  if (!workbenchDockviewRead.getActiveEditorPanelInGroup(groupId)) return true;
+  if (!workbenchLayoutRead.getActiveEditorPanelInGroup(groupId)) return true;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const loaded = await activateCurrentEditorPanel(groupId);

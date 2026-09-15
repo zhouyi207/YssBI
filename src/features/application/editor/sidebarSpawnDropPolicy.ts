@@ -9,7 +9,7 @@ function findEditorCanvasAtPointer(clientX: number, clientY: number): HTMLElemen
   return null;
 }
 
-/** Sidebar palette items may only drop on a Dockview editor Canvas. */
+/** Sidebar palette items may only drop on a FlexLayout editor Canvas. */
 export function isSidebarSpawnDropAllowed(
   data: unknown,
   pointer: { x: number; y: number } | null,

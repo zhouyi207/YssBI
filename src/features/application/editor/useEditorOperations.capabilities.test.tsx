@@ -67,8 +67,8 @@ vi.mock("@/modules/workbench/public", async (importOriginal) => ({
   },
   updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
 }));
-vi.mock("@/modules/workbench/internal/dockview", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/flexlayout", () => ({
+  workbenchLayoutRead: {
     getActiveEditorPanelInGroup: (groupId: string) => {
       const resourceRef = mocks.activeResourceByGroup.get(groupId);
       return resourceRef

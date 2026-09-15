@@ -1,7 +1,7 @@
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 import {
   captureProjectLifecycleState,
   startProjectLifecycle,
@@ -38,22 +38,22 @@ vi.mock("@/modules/workbench/internal/application/workbenchLayoutController", ()
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     get isReady() {
       return lifecycleMocks.state.ready;
     },
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
-  workbenchDockviewRuntime: { control: {} },
-  workbenchDockviewInternal: {
+vi.mock("@/modules/workbench/internal/layout/workbenchLayoutInternal", () => ({
+  workbenchLayoutRuntime: { control: {} },
+  workbenchLayoutInternal: {
     runLayoutTransaction: lifecycleMocks.runLayoutTransaction,
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
+vi.mock("@/modules/workbench/internal/layout/editorPaneStateStore", () => ({
   useEditorPaneStateStore: {
     getState: () => ({
       release: lifecycleMocks.releasePaneState,

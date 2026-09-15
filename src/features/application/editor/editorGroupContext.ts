@@ -1,17 +1,17 @@
 import {
-  useDockviewPortSnapshot,
+  useLayoutPortSnapshot,
   useEditorPaneStateStore,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
-  useDockviewPortSnapshot(workbenchDockviewRead);
-  const focusedEditorGroupId = workbenchDockviewRead.getActiveEditorPanel()?.groupId ?? null;
+  useLayoutPortSnapshot(workbenchLayoutRead);
+  const focusedEditorGroupId = workbenchLayoutRead.getActiveEditorPanel()?.groupId ?? null;
   const groupId = overrideGroupId ?? focusedEditorGroupId;
   const group = groupId
-    ? workbenchDockviewRead.listGroups().find((candidate) => candidate.groupId === groupId)
+    ? workbenchLayoutRead.listGroups().find((candidate) => candidate.groupId === groupId)
     : undefined;
-  const panels = groupId ? workbenchDockviewRead.listEditorPanelsInGroup(groupId) : [];
+  const panels = groupId ? workbenchLayoutRead.listEditorPanelsInGroup(groupId) : [];
   const activePanel = panels.find(
     (panel) => panel.panelInstanceId === group?.activePanelInstanceId,
   );

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { WorkbenchUiState, WorkbenchUiStore } from "./workbenchTypes";
 
-/** Default non-placement UI state; the root Dockview owns layout and visibility. */
+/** Default non-placement UI state; the root FlexLayout owns layout and visibility. */
 export const DEFAULT_WORKBENCH_UI_STATE: Readonly<WorkbenchUiState> = {
   isSettingsOpen: false,
   isNodeDocumentationOpen: false,

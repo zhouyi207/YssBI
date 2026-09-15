@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { useEditorStore } from "@/features/core/editor/stores/useEditorStore";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 
@@ -7,12 +7,12 @@ import { requestCloseWorkbenchPanels } from "./workbenchPanelClose";
 import { detailFocusForEditorResource, setDetailContext } from "./rightSidebarActions";
 
 function editorPanelsInGroup(groupId: string) {
-  return workbenchDockviewRead.listEditorPanelsInGroup(groupId);
+  return workbenchLayoutRead.listEditorPanelsInGroup(groupId);
 }
 
 function applyPassiveCloseFallback(): void {
   if (useEditorStore.getState().detailFocus) return;
-  const active = workbenchDockviewRead.getActiveEditorPanel();
+  const active = workbenchLayoutRead.getActiveEditorPanel();
   if (active?.metadata.role !== "editor") return;
 
   const { resourceKind, resourceRef } = active.metadata;
@@ -67,10 +67,10 @@ export function requestCloseSavedEditorPanelsInGroup(groupId: string): Promise<b
   );
 }
 
-/** Physical Close Group owns every canonical panel currently in that Dockview group. */
+/** Physical Close Group owns every canonical panel currently in that FlexLayout group. */
 export function closeEditorGroup(groupId: string): Promise<boolean> {
   return requestClosePanelsAndApplyFallback(
-    workbenchDockviewRead.listGroupPanels(groupId).map((panel) => panel.panelInstanceId),
+    workbenchLayoutRead.listGroupPanels(groupId).map((panel) => panel.panelInstanceId),
   );
 }
 

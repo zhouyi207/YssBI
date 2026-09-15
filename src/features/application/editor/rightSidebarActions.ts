@@ -3,7 +3,7 @@ import { useEditorStore } from "@/features/core/editor";
 import {
   revealWorkbenchView,
   updateEditorGroupSelectedNodeIds,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import type { EditorResourceKind } from "@/modules/workbench/public";
 
@@ -55,7 +55,7 @@ export function setInspectionContext(graphPath: string, selectedNodeIds: readonl
 
 export async function revealDetails(focus: DetailFocus): Promise<void> {
   setDetailContext(focus);
-  if (workbenchDockviewRead.isReady) await revealWorkbenchView("details");
+  if (workbenchLayoutRead.isReady) await revealWorkbenchView("details");
 }
 
 export async function revealDiagnosticNode(

@@ -1,11 +1,11 @@
 import { useResourceStore } from "@/features/core/resource/resourceStore";
 import { lookupGraphResourceByKind } from "@/features/domain/resource/resourceQueries";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
   if (targetGraphPath) return targetGraphPath;
 
-  const panel = workbenchDockviewRead.getActiveEditorPanel();
+  const panel = workbenchLayoutRead.getActiveEditorPanel();
   return panel?.metadata.role === "editor" ? panel.metadata.resourceRef : undefined;
 }
 

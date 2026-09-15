@@ -10,7 +10,7 @@ import {
 } from "./dropFunctionIntoEventEditor";
 import { canvasDropHandlerStore, useSidebarDragStore } from "@/features/core/sidebarDrag";
 import { sidebarDragUi, useSidebarDragUi } from "@/features/core/sidebarDrag/ui";
-import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
 import type { SidebarDragPayload } from "@/features/core/dnd";
 import {
   findSidebarDropCanvasAtPointer,
@@ -129,7 +129,7 @@ async function executeSidebarSpawnDragEnd(
   if (isNodeTemplateDragData(activeData)) {
     const target = resolveCanvasDropTarget(event, dropPointer);
     if (target && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
-      if (!(await workbenchDockviewControl.activate(target.panelInstanceId))) {
+      if (!(await workbenchLayoutControl.activate(target.panelInstanceId))) {
         return;
       }
       const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
@@ -138,7 +138,7 @@ async function executeSidebarSpawnDragEnd(
   }
 }
 
-/** Handle only sidebar-to-editor DnD; Dockview owns tab/group drag, order, move, and split. */
+/** Handle only sidebar-to-editor DnD; FlexLayout owns tab/group drag, order, move, and split. */
 export async function executeEditorDragEnd(
   event: DragEndEvent,
   options: { finishSidebarDrag: () => void },

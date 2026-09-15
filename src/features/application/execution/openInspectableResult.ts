@@ -4,7 +4,7 @@ import {
   openPresentationWindow,
   presentationWindowPayloadFromDescriptor,
 } from "@/features/application/window";
-import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
 import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,
@@ -62,7 +62,7 @@ export async function openInspectableResult(
     const held = await resultLeases.acquire(descriptor);
     leaseId = held.leaseId;
     if (!isCurrentProjectIdentity(project)) return false;
-    const panel = await workbenchDockviewControl.upsertResult({
+    const panel = await workbenchLayoutControl.upsertResult({
       reference: resultReference(held.descriptor),
       leaseId,
       title: held.descriptor.title,

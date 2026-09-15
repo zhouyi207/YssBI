@@ -474,11 +474,11 @@ export const enUS = {
         parts: {
           composition: "App composition",
           registry: "Panel registry",
-          layout: "Root Dockview",
+          layout: "Root FlexLayout",
           templates: "JSON template · Planned",
         },
         boundary:
-          "App composition consumes module public.ts entries. Application orchestrates use cases with core projections, domain rules and services. Root Dockview alone owns panel topology, placement, order, sizes and collapse state. Shared hosts such as Details use the appropriate business data and actions without owning drafts, data or result lifecycles. Editor closing still follows Save, Discard or Cancel.",
+          "App composition consumes module public.ts entries. Application orchestrates use cases with core projections, domain rules and services. Root FlexLayout alone owns panel topology, placement, order, sizes and collapse state. Shared hosts such as Details use the appropriate business data and actions without owning drafts, data or result lifecycles. Editor closing still follows Save, Discard or Cancel.",
         json: {
           template: {
             title: "Page layout template · Not yet implemented",
@@ -493,7 +493,7 @@ export const enUS = {
           snapshot: {
             title: "Runtime layout snapshot · Existing persistence",
             description:
-              "Serialize user-adjusted layout from root Dockview; startup uses fromJSON only on an empty root. The target template design restores a valid snapshot first, creates defaults when none is valid, and resets only through an explicit action.",
+              "Serialize user-adjusted layout from root FlexLayout; startup uses fromJSON only on an empty root. The target template design restores a valid snapshot first, creates defaults when none is valid, and resets only through an explicit action.",
           },
         },
       },

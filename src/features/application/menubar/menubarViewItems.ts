@@ -19,7 +19,7 @@ export interface MenubarViewMenuActions {
   readonly resetLayout: () => void;
 }
 
-/** View menu projected from live root Dockview panels, never mirrored visibility state. */
+/** View menu projected from live root FlexLayout panels, never mirrored visibility state. */
 export function buildViewMenuItems(
   t: TFunction,
   state: MenubarViewState,

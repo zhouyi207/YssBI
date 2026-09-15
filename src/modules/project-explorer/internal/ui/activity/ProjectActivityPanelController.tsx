@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   SidebarRenameDialog,
   useSidebarContextMenu,
-  type RootDockviewPanelComponent,
+  type RootPanelComponent,
 } from "@/modules/workbench/public";
 import {
   PROJECT_TREE_CATEGORY_IDS,
@@ -137,5 +137,4 @@ function ProjectActivityPanelController() {
   );
 }
 
-export const projectActivityPanelContribution: RootDockviewPanelComponent =
-  ProjectActivityPanelController;
+export const projectActivityPanelContribution: RootPanelComponent = ProjectActivityPanelController;

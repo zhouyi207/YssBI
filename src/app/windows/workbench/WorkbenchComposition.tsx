@@ -1,3 +1,7 @@
+import {
+  requestCloseWorkbenchPanel,
+  requestCloseWorkbenchGroup,
+} from "@/features/application/editor/workbenchPanelClose";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,7 +14,7 @@ import { SettingsView } from "@/modules/settings/public";
 import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
 import { LoadStatus } from "@/shared/types/ui";
-import { resolveYssbiDockviewTheme } from "@/shared/theme/dockviewTheme";
+import { resolveYssbiLayoutTheme } from "@/shared/theme/layoutTheme";
 import { useActivityEditorDndCoordinator } from "./integrations/activityEditorDndCoordinator";
 import { ActivityEditorDndOverlay } from "./integrations/activityEditorDndOverlay";
 import { panelActivationCoordinator } from "./integrations/panelActivationCoordinator";
@@ -26,6 +30,14 @@ const overlayRegistry = {
   settings: SettingsView,
   nodeDocumentation: NodeDocumentationModal,
 } satisfies WorkbenchOverlayRegistry;
+
+const dragOverlay = <ActivityEditorDndOverlay />;
+const closePanel = (id: string): void => {
+  void requestCloseWorkbenchPanel(id);
+};
+const closeGroup = (id: string): void => {
+  void requestCloseWorkbenchGroup(id);
+};
 
 function WorkbenchReadyComposition() {
   const dndCoordinator = useActivityEditorDndCoordinator();
@@ -45,11 +57,13 @@ function WorkbenchReadyComposition() {
         tabComponent={rootPanelTabRenderer}
         dndCoordinator={dndCoordinator}
         onActiveEditorPanelChange={panelActivationCoordinator}
-        dockviewTheme={resolveYssbiDockviewTheme(themeMode)}
+        onClosePanel={closePanel}
+        onCloseGroup={closeGroup}
+        layoutTheme={resolveYssbiLayoutTheme(themeMode)}
         watermarkComponent={watermarkComponent}
         menuBar={<WorkbenchMenuContribution commands={commands} />}
         statusBar={<WorkbenchStatusBarContribution />}
-        dragOverlay={<ActivityEditorDndOverlay />}
+        dragOverlay={dragOverlay}
         overlays={overlayRegistry}
       />
     </PluginProvider>

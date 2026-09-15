@@ -22,8 +22,8 @@ import {
   shouldIgnoreEditorShortcutEvent,
   type EditorCommandTarget,
 } from "./editorCommandFocus";
-import { workbenchDockviewControl } from "@/modules/workbench/public";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
@@ -50,9 +50,9 @@ function getActiveCanvasLocalPoint(target: EditorCommandTarget, clientX: number,
 }
 
 function cyclePhysicalPanel(backward: boolean): boolean {
-  const activePanel = workbenchDockviewRead.getActivePanel();
+  const activePanel = workbenchLayoutRead.getActivePanel();
   if (!activePanel) return false;
-  const panels = workbenchDockviewRead.listGroupPanels(activePanel.groupId);
+  const panels = workbenchLayoutRead.listGroupPanels(activePanel.groupId);
   if (panels.length < 2) return false;
   const currentIndex = panels.findIndex(
     (panel) => panel.panelInstanceId === activePanel.panelInstanceId,
@@ -60,7 +60,7 @@ function cyclePhysicalPanel(backward: boolean): boolean {
   if (currentIndex < 0) return false;
   const offset = backward ? -1 : 1;
   const nextIndex = (currentIndex + offset + panels.length) % panels.length;
-  void workbenchDockviewControl.activate(panels[nextIndex].panelInstanceId);
+  void workbenchLayoutControl.activate(panels[nextIndex].panelInstanceId);
   return true;
 }
 
@@ -244,7 +244,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
       }
 
       if (isControlKey && key === "w") {
-        const activePanel = workbenchDockviewRead.getActivePanel();
+        const activePanel = workbenchLayoutRead.getActivePanel();
         if (!activePanel) return;
         event.preventDefault();
         void requestCloseWorkbenchPanel(activePanel.panelInstanceId);
@@ -272,7 +272,7 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
 
       if (isControlKey && key === "i") {
         event.preventDefault();
-        const inspectOpen = workbenchDockviewRead
+        const inspectOpen = workbenchLayoutRead
           .listPanels()
           .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "inspect");
         if (inspectOpen || useEditorStore.getState().detailFocus?.kind === "node") {

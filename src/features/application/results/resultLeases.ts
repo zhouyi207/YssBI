@@ -9,7 +9,7 @@ import { logger } from "@/features/application/observability/appLogger";
 
 type LeasePort = Pick<typeof ResultService, "retain" | "release" | "reconcileLeases">;
 
-/** Serializes ownership changes, not data reads or statistical work. Dockview owns live panels. */
+/** Serializes ownership changes, not data reads or statistical work. FlexLayout owns live panels. */
 export function createResultLeaseController(
   port: LeasePort,
   reportFailure: (error: unknown) => void,

@@ -44,7 +44,7 @@ const canvas = useEditorCanvas({
 });
 ```
 
-Use `mode: 'preview'` for an inactive or saving Dockview panel. Preview disables
+Use `mode: 'preview'` for an inactive or saving FlexLayout panel. Preview disables
 editing, selection, zoom/pan, and context-menu actions; its sidebar drop route remains
 registered so the workbench can activate the target before dropping.
 
@@ -68,7 +68,7 @@ do not implicitly auto-pan.
 
 `useCanvasViewport` connects the controlled React Flow viewport to the existing viewport
 session. Navigation commands, sidebar drops, and view-state persistence use that same
-coordinate system. React Flow does not own draft history, save/execute, or Dockview layout.
+coordinate system. React Flow does not own draft history, save/execute, or FlexLayout layout.
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `execution` model from
 the controller and must not assemble application commands.
@@ -93,10 +93,10 @@ Project Explorer obtains its active resource through
 | `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `interaction` | `GraphCanvasController` |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through
-a subtree, or mirror Dockview topology in a store. Add or reuse a named slice
+a subtree, or mirror FlexLayout topology in a store. Add or reuse a named slice
 at the caller seam instead.
 
-Repository-wide dependency direction and Dockview authority rules are defined in [`.rules`](../../../../.rules).
+Repository-wide dependency direction and FlexLayout authority rules are defined in [`.rules`](../../../../.rules).
 
 ## Related modules
 

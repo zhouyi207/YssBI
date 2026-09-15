@@ -1,24 +1,25 @@
+import { readSerializedEdge } from "../layout/workbenchLayoutOperations";
 import i18n from "i18next";
 
-import { logsDockviewControl } from "../dockview/logsControl";
+import { logsLayoutControl } from "../layout/logsControl";
 import {
   orderWorkbenchPanelIdsForReset,
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_BOTTOM_DEFAULT_ORDER,
-} from "../dockview/workbenchDockviewDefaults";
-import { workbenchDockviewInternal } from "../dockview/workbenchDockviewInternal";
-import { workbenchDockviewRead, type WorkbenchPanelInfo } from "../dockview/workbenchRead";
-import { workbenchDockviewControl } from "../dockview/workbenchControl";
+} from "../layout/workbenchLayoutDefaults";
+import { workbenchLayoutInternal } from "../layout/workbenchLayoutInternal";
+import { workbenchLayoutRead, type WorkbenchPanelInfo } from "../layout/workbenchRead";
+import { workbenchLayoutControl } from "../layout/workbenchControl";
 import {
   isWorkbenchActivityMetadata,
   isWorkbenchPersistentViewMetadata,
   type WorkbenchViewId,
-} from "../dockview/workbenchPanelModel";
+} from "../layout/workbenchPanelModel";
 import { closeWorkbenchViewPanel } from "./panelCommands";
 import { workbenchLayoutController } from "./workbenchLayoutController";
 import { showWorkbenchLayoutError } from "./workbenchLayoutErrorFeedback";
-import type { EnsurePluginViewRequest } from "../dockview/workbenchTypes";
+import type { EnsurePluginViewRequest } from "../layout/workbenchTypes";
 
 const VIEW_TITLE_KEYS = {
   project: "activityBar.project",
@@ -34,7 +35,7 @@ const VIEW_TITLE_KEYS = {
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefined {
-  return workbenchDockviewRead
+  return workbenchLayoutRead
     .listPanels()
     .find((panel) => panel.metadata.role === "view" && panel.metadata.viewId === viewId);
 }
@@ -49,7 +50,7 @@ function viewRequest(viewId: WorkbenchViewId) {
 async function createAssistantAtDefaultHome(): Promise<WorkbenchPanelInfo | null> {
   let assistantPanelInstanceId: string | undefined;
 
-  await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+  await workbenchLayoutInternal.runLayoutTransaction((tx) => {
     const details = tx.ensureView(viewRequest("details"));
     const assistant = tx.ensureView(viewRequest("assistant"));
     const detailsIndex = tx
@@ -66,7 +67,7 @@ async function createAssistantAtDefaultHome(): Promise<WorkbenchPanelInfo | null
   });
 
   return assistantPanelInstanceId
-    ? (workbenchDockviewRead.getPanel(assistantPanelInstanceId) ?? null)
+    ? (workbenchLayoutRead.getPanel(assistantPanelInstanceId) ?? null)
     : null;
 }
 
@@ -76,10 +77,10 @@ export async function revealWorkbenchView(
   try {
     const existing = findWorkbenchView(viewId);
     if (existing) {
-      return (await workbenchDockviewControl.reveal(existing.panelInstanceId)) ? existing : null;
+      return (await workbenchLayoutControl.reveal(existing.panelInstanceId)) ? existing : null;
     }
     if (viewId === "assistant") return await createAssistantAtDefaultHome();
-    return await workbenchDockviewControl.ensureView(viewRequest(viewId));
+    return await workbenchLayoutControl.ensureView(viewRequest(viewId));
   } catch (error) {
     showWorkbenchLayoutError(error);
     return null;
@@ -105,7 +106,7 @@ export async function openPluginWorkbenchView(
   isCurrent: () => boolean = () => true,
 ): Promise<void> {
   try {
-    await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+    await workbenchLayoutInternal.runLayoutTransaction((tx) => {
       if (!isCurrent()) return;
       const existing = tx
         .listPanels()
@@ -117,8 +118,8 @@ export async function openPluginWorkbenchView(
         );
       if (existing && !reveal) return;
       const active = tx.getActivePanel();
-      const left = tx.serialize().edgeGroups?.left;
-      const leftGroup = left?.group as { activeView?: string } | undefined;
+      const left = readSerializedEdge(tx.serialize(), "left");
+      const leftGroup = left ? { activeView: left.activePanelId } : undefined;
       tx.ensurePluginView(request);
       if (!reveal) {
         if (leftGroup?.activeView) tx.activate(leftGroup.activeView);
@@ -143,7 +144,7 @@ export async function syncPluginWorkbenchViews(
   isCurrent: () => boolean,
 ): Promise<void> {
   const installed = new Set(installedPluginIds);
-  const removed = await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+  const removed = await workbenchLayoutInternal.runLayoutTransaction((tx) => {
     if (!isCurrent()) return false;
     const stalePanels = tx
       .listPanels()
@@ -153,8 +154,8 @@ export async function syncPluginWorkbenchViews(
     if (stalePanels.length > 0) tx.removePanels(stalePanels.map((panel) => panel.panelInstanceId));
 
     const active = tx.getActivePanel();
-    const left = tx.serialize().edgeGroups?.left;
-    const leftGroup = left?.group as { activeView?: string } | undefined;
+    const left = readSerializedEdge(tx.serialize(), "left");
+    const leftGroup = left ? { activeView: left.activePanelId } : undefined;
     let added = false;
     for (const request of sidebarViews) {
       if (!installed.has(request.pluginId) || request.location !== "sidebar") continue;
@@ -191,7 +192,7 @@ export async function syncPluginWorkbenchViews(
 }
 
 function activityPanelsInGroup(groupId: string): boolean {
-  const panels = workbenchDockviewRead.listGroupPanels(groupId);
+  const panels = workbenchLayoutRead.listGroupPanels(groupId);
   return (
     panels.length >= WORKBENCH_ACTIVITY_DEFAULT_ORDER.length &&
     panels.every((panel) => isWorkbenchActivityMetadata(panel.metadata))
@@ -199,7 +200,7 @@ function activityPanelsInGroup(groupId: string): boolean {
 }
 
 async function ensureActivityWorkbenchGroup(): Promise<void> {
-  await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+  await workbenchLayoutInternal.runLayoutTransaction((tx) => {
     const panels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
       tx.ensureView(viewRequest(viewId)),
     );
@@ -221,9 +222,9 @@ async function ensureActivityWorkbenchGroup(): Promise<void> {
 
 export async function toggleActivityWorkbenchGroup(): Promise<void> {
   try {
-    const left = workbenchDockviewRead.getEdgeState("left");
+    const left = workbenchLayoutRead.getEdgeState("left");
     if (left.exists && left.groupId && activityPanelsInGroup(left.groupId)) {
-      await workbenchDockviewControl.setEdgeCollapsed("left", left.visible && !left.collapsed);
+      await workbenchLayoutControl.setEdgeCollapsed("left", left.visible && !left.collapsed);
       return;
     }
     await ensureActivityWorkbenchGroup();
@@ -234,19 +235,19 @@ export async function toggleActivityWorkbenchGroup(): Promise<void> {
 
 export async function toggleBottomWorkbenchGroup(): Promise<void> {
   try {
-    const bottom = workbenchDockviewRead.getEdgeState("bottom");
+    const bottom = workbenchLayoutRead.getEdgeState("bottom");
     if (
       bottom.exists &&
       bottom.groupId &&
-      workbenchDockviewRead.listGroupPanels(bottom.groupId).length > 0
+      workbenchLayoutRead.listGroupPanels(bottom.groupId).length > 0
     ) {
-      await workbenchDockviewControl.setEdgeCollapsed("bottom", !bottom.collapsed);
+      await workbenchLayoutControl.setEdgeCollapsed("bottom", !bottom.collapsed);
       return;
     }
 
     const logs = findWorkbenchView("logs");
     if (logs) {
-      await workbenchDockviewControl.reveal(logs.panelInstanceId);
+      await workbenchLayoutControl.reveal(logs.panelInstanceId);
       return;
     }
   } catch (error) {
@@ -260,7 +261,7 @@ export async function toggleBottomWorkbenchGroup(): Promise<void> {
 export async function resetWorkbenchLayout(): Promise<void> {
   const resetEpoch = workbenchLayoutController.beginLayoutReset();
   try {
-    await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+    await workbenchLayoutInternal.runLayoutTransaction((tx) => {
       const before = tx.listPanels();
       const beforeById = new Map(before.map((panel) => [panel.panelInstanceId, panel] as const));
       const ordered = orderWorkbenchPanelIdsForReset(
@@ -300,7 +301,9 @@ export async function resetWorkbenchLayout(): Promise<void> {
         collapsed: true,
         headerPosition: "bottom",
       });
-      const centralGroupId = tx.ensureCentralGroup();
+      const centralGroupId =
+        tx.listGroups().find((group) => group.location.type === "grid")?.groupId ??
+        tx.ensureCentralGroup();
 
       const firstEditor = editors[0];
       if (firstEditor) {
@@ -365,9 +368,9 @@ export async function resetWorkbenchLayout(): Promise<void> {
       );
       tx.activate(editorToRestore?.panelInstanceId ?? project?.panelInstanceId ?? "");
     });
-    // Hide the bottom strip after Dockview settles panel activation during reset.
-    await workbenchDockviewControl.setEdgeCollapsed("bottom", true);
-    logsDockviewControl.resetToDefault();
+    // Hide the bottom strip after FlexLayout settles panel activation during reset.
+    await workbenchLayoutControl.setEdgeCollapsed("bottom", true);
+    logsLayoutControl.resetToDefault();
   } catch (error) {
     showWorkbenchLayoutError(error);
   } finally {

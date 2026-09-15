@@ -1,9 +1,9 @@
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 let nextResultFixtureId = 0;
-import type { SerializedDockview } from "dockview-react";
+import type { IJsonModel } from "flexlayout-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchLayoutTransaction } from "../dockview/workbenchTypes";
+import type { WorkbenchLayoutTransaction } from "../layout/workbenchTypes";
 import type {
   ConfigureWorkbenchEdgeRequest,
   EnsureViewRequest,
@@ -12,8 +12,8 @@ import type {
   WorkbenchEdgeState,
   WorkbenchGroupInfo,
   WorkbenchPanelInfo,
-} from "../dockview/workbenchTypes";
-import type { WorkbenchPanelMetadata, WorkbenchViewId } from "../dockview/workbenchPanelModel";
+} from "../layout/workbenchTypes";
+import type { WorkbenchPanelMetadata, WorkbenchViewId } from "../layout/workbenchPanelModel";
 
 const mocks = vi.hoisted(() => ({
   panels: [] as WorkbenchPanelInfo[],
@@ -46,8 +46,8 @@ vi.mock("i18next", () => ({
   default: { t: (key: string) => key },
 }));
 
-vi.mock("../dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("../layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     listPanels: () => mocks.panels,
     listGroupPanels: (groupId: string) => mocks.panels.filter((panel) => panel.groupId === groupId),
     getEdgeState: (position: WorkbenchEdgePosition) =>
@@ -55,22 +55,22 @@ vi.mock("../dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("../dockview/workbenchControl", () => ({
-  workbenchDockviewControl: {
+vi.mock("../layout/workbenchControl", () => ({
+  workbenchLayoutControl: {
     ensureView: mocks.ensureView,
     reveal: mocks.reveal,
     setEdgeCollapsed: mocks.setEdgeCollapsed,
   },
 }));
 
-vi.mock("../dockview/workbenchDockviewInternal", () => ({
-  workbenchDockviewInternal: {
+vi.mock("../layout/workbenchLayoutInternal", () => ({
+  workbenchLayoutInternal: {
     runLayoutTransaction: mocks.runLayoutTransaction,
   },
 }));
 
-vi.mock("../dockview/logsControl", () => ({
-  logsDockviewControl: {
+vi.mock("../layout/logsControl", () => ({
+  logsLayoutControl: {
     resetToDefault: mocks.resetLogs,
   },
 }));
@@ -234,73 +234,44 @@ function resultPanel(
   );
 }
 
-function serializedLayout(groups: readonly GroupSeed[]): SerializedDockview {
-  const gridLeaves = groups
-    .filter((group) => group.location.type === "grid")
-    .map((group) => ({
-      type: "leaf" as const,
-      data: {
-        id: group.groupId,
-        views: [...group.panelInstanceIds],
-        ...(group.activePanelInstanceId ? { activeView: group.activePanelInstanceId } : {}),
-      },
-    }));
-  const edgeGroups = Object.fromEntries(
-    groups.flatMap((group) =>
+function serializedLayout(groups: readonly GroupSeed[]): IJsonModel {
+  const tabs = (group: GroupSeed) =>
+    group.panelInstanceIds.map((id) => ({ type: "tab" as const, id }));
+  return {
+    layout: {
+      type: "row",
+      children: groups
+        .filter((group) => group.location.type === "grid")
+        .map((group) => ({
+          type: "tabset",
+          id: group.groupId,
+          selected: group.panelInstanceIds.indexOf(group.activePanelInstanceId ?? ""),
+          children: tabs(group),
+        })),
+    },
+    borders: groups.flatMap((group) =>
       group.location.type === "edge"
         ? [
-            [
-              group.location.position,
-              {
-                size: 200,
-                visible: group.visible ?? true,
-                collapsed: group.collapsed ?? false,
-                group: {
-                  id: group.groupId,
-                  views: [...group.panelInstanceIds],
-                  ...(group.activePanelInstanceId
-                    ? { activeView: group.activePanelInstanceId }
-                    : {}),
-                },
-              },
-            ],
+            {
+              type: "border" as const,
+              location: group.location.position,
+              size: 200,
+              selected: group.collapsed
+                ? -1
+                : group.panelInstanceIds.indexOf(group.activePanelInstanceId ?? ""),
+              children: tabs(group),
+            },
           ]
         : [],
     ),
-  );
-  const ids = groups.flatMap((group) => group.panelInstanceIds);
-  return {
-    grid: {
-      root: { type: "branch", data: gridLeaves },
-      height: 800,
-      width: 1200,
-      orientation: "HORIZONTAL",
-    },
-    panels: Object.fromEntries(ids.map((id) => [id, { id }])),
-    edgeGroups,
-    floatingGroups: [],
-    popoutGroups: [],
-  } as unknown as SerializedDockview;
-}
-
-function nestedGridLayout(groups: readonly GroupSeed[]): SerializedDockview {
-  const layout = serializedLayout(groups) as unknown as {
-    grid: { root: { type: "branch"; data: unknown[] } };
   };
-  const gridGroups = groups.filter((group) => group.location.type === "grid");
-  const leaf = (group: GroupSeed) => ({
-    type: "leaf",
-    data: {
-      id: group.groupId,
-      views: [...group.panelInstanceIds],
-      ...(group.activePanelInstanceId ? { activeView: group.activePanelInstanceId } : {}),
-    },
-  });
-  layout.grid.root.data =
-    gridGroups.length < 2
-      ? gridGroups.map(leaf)
-      : [leaf(gridGroups[0]), { type: "branch", data: gridGroups.slice(1).map(leaf) }];
-  return layout as unknown as SerializedDockview;
+}
+function nestedGridLayout(groups: readonly GroupSeed[]): IJsonModel {
+  const layout = serializedLayout(groups);
+  const children = layout.layout.children ?? [];
+  if (children.length > 1)
+    layout.layout.children = [children[0], { type: "row", children: children.slice(1) }];
+  return layout;
 }
 
 function createTransactionHarness(
@@ -879,9 +850,9 @@ describe("resetWorkbenchLayout", () => {
       "inspect",
     ]);
     expect(harness.configureCalls).toEqual([
-      { position: "left", size: 292, collapsed: false, headerPosition: "left" },
-      { position: "right", size: 320, collapsed: false, headerPosition: "right" },
-      { position: "bottom", size: 200, collapsed: true, headerPosition: "bottom" },
+      { position: "left", size: 280, collapsed: false, headerPosition: "left" },
+      { position: "right", size: 330, collapsed: false, headerPosition: "right" },
+      { position: "bottom", size: 240, collapsed: true, headerPosition: "bottom" },
     ]);
     expect(harness.activePanelId()).toBe("editor-grid-b");
     expect(harness.removeCalls).toEqual([]);

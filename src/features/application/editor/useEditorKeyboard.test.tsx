@@ -90,8 +90,8 @@ vi.mock("@/features/core/keyboard", () => ({
     }),
   },
 }));
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     getActivePanel: () => mocks.activePanel ?? undefined,
     listPanels: () => mocks.groupPanels,
     listGroupPanels: (groupId: string) =>
@@ -99,8 +99,8 @@ vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
-  workbenchDockviewControl: {
+vi.mock("@/modules/workbench/internal/layout/workbenchControl", () => ({
+  workbenchLayoutControl: {
     activate: mocks.activate,
   },
 }));

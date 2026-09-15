@@ -1,6 +1,6 @@
 import { showWorkbenchLayoutError } from "@/modules/workbench/public";
 import type { EditorResourceTarget } from "@/modules/workbench/public";
-import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { type WorkbenchEditorPanelInfo, type WorkbenchPanelInfo } from "@/modules/workbench/public";
 import { WorkbenchLayoutError } from "@/modules/workbench/public";
 
@@ -38,7 +38,7 @@ export async function openEditorPanel(
 ): Promise<WorkbenchEditorPanelInfo> {
   try {
     const targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
-    const opened = await workbenchDockviewControl.openEditor({
+    const opened = await workbenchLayoutControl.openEditor({
       resourceRef: target.resourceRef,
       resourceKind: target.resourceKind,
       title: resolveResourceDisplayName(

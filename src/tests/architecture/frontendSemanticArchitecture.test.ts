@@ -106,9 +106,9 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/features/core/fixture/workbenchDockviewPort.ts",
+    "src/features/core/fixture/workbenchLayoutPort.ts",
     `
-    export interface WorkbenchDockviewPort {
+    export interface WorkbenchLayoutPort {
       getSnapshot(): Readonly<{ revision: number }>;
       openEditor(resourceRef: string): Promise<void>;
     }
@@ -117,8 +117,8 @@ const fixtureSources = new Map<string, string>([
   [
     "src/views/TypedProjectionReadView.tsx",
     `
-    import type { WorkbenchDockviewPort } from '../features/core/fixture/workbenchDockviewPort';
-    export function inspectPort(port: WorkbenchDockviewPort): void {
+    import type { WorkbenchLayoutPort } from '../features/core/fixture/workbenchLayoutPort';
+    export function inspectPort(port: WorkbenchLayoutPort): void {
       port.getSnapshot();
       void port.openEditor('events/main');
     }
@@ -158,38 +158,38 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
+    "src/modules/workbench/internal/layout/RootLayoutHost.tsx",
     `
-    import { DockviewReact } from 'dockview-react';
-    export const RootDockviewHost = () => <DockviewReact />;
+    import { Layout } from 'flexlayout-react';
+    export const RootLayoutHost = () => <Layout />;
   `,
   ],
   [
-    "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
+    "src/modules/logs/internal/ui/LogDomainLayoutHost.tsx",
     `
-    import { DockviewReact } from 'dockview-react';
-    export const LogDomainDockviewHost = () => <DockviewReact />;
+    import { Layout } from 'flexlayout-react';
+    export const LogDomainLayoutHost = () => <Layout />;
   `,
   ],
   [
     "src/views/EditorView/Layout/OtherWorkspace.tsx",
     `
-    import { DockviewReact } from 'dockview-react';
-    export const OtherWorkspace = () => <DockviewReact />;
+    import { Layout } from 'flexlayout-react';
+    export const OtherWorkspace = () => <Layout />;
   `,
   ],
   [
     "src/views/EditorView/Layout/NamespaceWorkspace.tsx",
     `
-    import * as Dockview from 'dockview-react';
-    export const NamespaceWorkspace = () => <Dockview.DockviewReact />;
+    import * as FlexLayout from 'flexlayout-react';
+    export const NamespaceWorkspace = () => <FlexLayout.Layout />;
   `,
   ],
   [
     "src/modules/logs/internal/ui/OtherLogWorkspace.tsx",
     `
-    import { DockviewReact } from 'dockview-react';
-    export const OtherLogWorkspace = () => <DockviewReact />;
+    import { Layout } from 'flexlayout-react';
+    export const OtherLogWorkspace = () => <Layout />;
   `,
   ],
   [
@@ -205,9 +205,9 @@ const fixtureSources = new Map<string, string>([
   `,
   ],
   [
-    "node_modules/dockview-react/index.d.ts",
+    "node_modules/flexlayout-react/index.d.ts",
     `
-    export declare function DockviewReact(): unknown;
+    export declare function Layout(): unknown;
   `,
   ],
 ]);
@@ -226,11 +226,11 @@ const fixturePolicy: FrontendArchitecturePolicy = {
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/features/core/fixture/workbenchDockviewPort.ts",
-      exportedSymbols: ["WorkbenchDockviewPort"],
+      canonicalModule: "src/features/core/fixture/workbenchLayoutPort.ts",
+      exportedSymbols: ["WorkbenchLayoutPort"],
       exactConsumers: null,
       memberCapabilities: {
-        WorkbenchDockviewRead: ["getSnapshot"],
+        WorkbenchLayoutRead: ["getSnapshot"],
       },
     },
   ],
@@ -278,22 +278,22 @@ describe("frontend semantic architecture", () => {
           canonicalOriginTarget: "external:@tauri-apps/plugin-dialog",
         },
         {
-          ruleId: "frontend.dockview.nested-constructor",
+          ruleId: "frontend.flexlayout.nested-constructor",
           sourceFile: "src/modules/logs/internal/ui/OtherLogWorkspace.tsx",
           dependencyKind: "constructor",
-          canonicalOriginTarget: "external:dockview-react",
+          canonicalOriginTarget: "external:flexlayout-react",
         },
         {
-          ruleId: "frontend.dockview.root-constructor",
+          ruleId: "frontend.flexlayout.root-constructor",
           sourceFile: "src/views/EditorView/Layout/NamespaceWorkspace.tsx",
           dependencyKind: "constructor",
-          canonicalOriginTarget: "external:dockview-react",
+          canonicalOriginTarget: "external:flexlayout-react",
         },
         {
-          ruleId: "frontend.dockview.root-constructor",
+          ruleId: "frontend.flexlayout.root-constructor",
           sourceFile: "src/views/EditorView/Layout/OtherWorkspace.tsx",
           dependencyKind: "constructor",
-          canonicalOriginTarget: "external:dockview-react",
+          canonicalOriginTarget: "external:flexlayout-react",
         },
         {
           ruleId: "frontend.invoke.raw",
@@ -318,7 +318,7 @@ describe("frontend semantic architecture", () => {
           sourceFile: "src/views/TypedProjectionReadView.tsx",
           dependencyKind: "property-access",
           canonicalOriginTarget:
-            "src/features/core/fixture/workbenchDockviewPort.ts::WorkbenchDockviewPort",
+            "src/features/core/fixture/workbenchLayoutPort.ts::WorkbenchLayoutPort",
         },
         {
           ruleId: "frontend.service-projection-write",

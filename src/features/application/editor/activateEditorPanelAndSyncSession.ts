@@ -1,5 +1,5 @@
-import { workbenchDockviewControl } from "@/modules/workbench/public";
-import { workbenchDockviewRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
+import { workbenchLayoutRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
 import { activateGraphPanelSession } from "./graphPanelSession";
@@ -25,12 +25,12 @@ function scheduleSuspendPreviousGroup(prevGroupId: string): void {
 }
 
 function groupContainsEditor(groupId: string): boolean {
-  return workbenchDockviewRead.listEditorPanelsInGroup(groupId).length > 0;
+  return workbenchLayoutRead.listEditorPanelsInGroup(groupId).length > 0;
 }
 
-/** Synchronize application session focus without writing layout focus back to Dockview. */
+/** Synchronize application session focus without writing layout focus back to FlexLayout. */
 export function focusEditorGroupSync(groupId: string): boolean {
-  const groupExists = workbenchDockviewRead.listGroups().some((group) => group.groupId === groupId);
+  const groupExists = workbenchLayoutRead.listGroups().some((group) => group.groupId === groupId);
   if (!groupExists || !groupContainsEditor(groupId)) return false;
 
   const previousGroupId = useGraphSessionStore.getState().getFocusedGroupId();
@@ -76,7 +76,7 @@ async function synchronizePanelSession(
   return false;
 }
 
-/** Synchronize a user-originated Dockview activation without writing back to Dockview. */
+/** Synchronize a user-originated FlexLayout activation without writing back to FlexLayout. */
 export async function synchronizeActiveEditorPanel(
   panel: ActiveEditorPanelTarget,
 ): Promise<boolean> {
@@ -96,11 +96,11 @@ export async function activateEditorPanelAndSyncSession(
   await editorGroupSessionChain;
   if (request !== latestPanelActivationRequest) return false;
 
-  const current = workbenchDockviewRead.getPanel(panel.panelInstanceId);
+  const current = workbenchLayoutRead.getPanel(panel.panelInstanceId);
   if (current?.metadata.role !== "editor" || current.groupId !== panel.groupId) return false;
   if (
-    workbenchDockviewRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId &&
-    !(await workbenchDockviewControl.activate(panel.panelInstanceId))
+    workbenchLayoutRead.getActivePanel()?.panelInstanceId !== panel.panelInstanceId &&
+    !(await workbenchLayoutControl.activate(panel.panelInstanceId))
   )
     return false;
   if (request !== latestPanelActivationRequest) return false;
@@ -108,7 +108,7 @@ export async function activateEditorPanelAndSyncSession(
 }
 
 export async function activateCurrentEditorPanel(groupId: string): Promise<boolean> {
-  const active = workbenchDockviewRead.getActiveEditorPanelInGroup(groupId);
+  const active = workbenchLayoutRead.getActiveEditorPanelInGroup(groupId);
   if (!active) {
     useGraphSessionStore.getState().clearFocusedSession(groupId);
     return false;
@@ -118,6 +118,6 @@ export async function activateCurrentEditorPanel(groupId: string): Promise<boole
 }
 
 export async function activateEditorGroup(groupId: string): Promise<boolean> {
-  const active = workbenchDockviewRead.getActiveEditorPanelInGroup(groupId);
+  const active = workbenchLayoutRead.getActiveEditorPanelInGroup(groupId);
   return active ? activateEditorPanelAndSyncSession(active) : false;
 }

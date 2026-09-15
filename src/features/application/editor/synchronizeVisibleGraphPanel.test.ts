@@ -7,12 +7,12 @@ import {
   synchronizeVisibleGraphPanels,
 } from "./synchronizeVisibleGraphPanel";
 
-const dockviewMocks = vi.hoisted(() => ({
+const flexlayoutMocks = vi.hoisted(() => ({
   listPanels: vi.fn(),
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: dockviewMocks,
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: flexlayoutMocks,
 }));
 
 vi.mock("@/features/core/viewport", () => ({
@@ -28,7 +28,7 @@ describe("synchronizeVisibleGraphPanel", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    dockviewMocks.listPanels.mockReturnValue([]);
+    flexlayoutMocks.listPanels.mockReturnValue([]);
   });
 
   it("seeds the viewport before loading the visible graph projection", async () => {
@@ -56,7 +56,7 @@ describe("synchronizeVisibleGraphPanel", () => {
   it("seeds every visible group but loads a shared graph only once", async () => {
     const loadGraph = vi.fn(async () => true);
     useProjectIOStore.setState({ loadGraph });
-    dockviewMocks.listPanels.mockReturnValue([
+    flexlayoutMocks.listPanels.mockReturnValue([
       {
         groupId: "group-a",
         visible: true,

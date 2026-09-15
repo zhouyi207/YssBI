@@ -10,7 +10,7 @@ import {
   type WorkbenchPanelCommitToken,
   type WorkbenchPanelInfo,
   type WorkbenchPanelMetadata,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { clearDetailFocusForClosedPanel } from "@/features/application/editor/clearDetailFocusForClosedPanel";
 import { clearResourceDocumentState, isResourceDocumentDirty } from "@/features/core/resource";
@@ -89,7 +89,7 @@ function captureCloseSnapshot(requestedPanelIds: readonly string[]): CloseSnapsh
     return null;
   }
 
-  const allPanels = [...workbenchDockviewRead.listPanels()];
+  const allPanels = [...workbenchLayoutRead.listPanels()];
   const panelsById = new Map<string, WorkbenchPanelInfo>();
   const duplicateIds = new Set<string>();
   for (const panel of allPanels) {
@@ -242,7 +242,7 @@ function finalizeClosedPanels(
   snapshot: CloseSnapshot,
   closedPanels: readonly WorkbenchPanelInfo[] = snapshot.panels,
 ): void {
-  const remainingEditors = workbenchDockviewRead
+  const remainingEditors = workbenchLayoutRead
     .listPanels()
     .filter(
       (panel: WorkbenchPanelInfo): panel is EditorPanelInfo => panel.metadata.role === "editor",
@@ -303,7 +303,7 @@ function finalizeClosedPanels(
 function physicallyAbsentPanels(snapshot: CloseSnapshot): readonly WorkbenchPanelInfo[] {
   try {
     const liveIds = new Set(
-      workbenchDockviewRead.listPanels().map((panel: WorkbenchPanelInfo) => panel.panelInstanceId),
+      workbenchLayoutRead.listPanels().map((panel: WorkbenchPanelInfo) => panel.panelInstanceId),
     );
     return snapshot.panels.filter((panel) => !liveIds.has(panel.panelInstanceId));
   } catch {
@@ -324,7 +324,7 @@ export async function requestCloseWorkbenchPanel(panelInstanceId: string): Promi
 }
 
 export function requestCloseWorkbenchGroup(groupId: string): Promise<boolean> {
-  const panelInstanceIds = workbenchDockviewRead
+  const panelInstanceIds = workbenchLayoutRead
     .listGroupPanels(groupId)
     .map((panel) => panel.panelInstanceId);
   return requestCloseWorkbenchPanels(panelInstanceIds);

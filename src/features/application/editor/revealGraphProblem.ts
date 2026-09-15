@@ -19,8 +19,8 @@ import type { DiagnosticLocationDto } from "@/shared/types/domain/editorProjecti
 import {
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
-  workbenchDockviewControl,
-  workbenchDockviewRead,
+  workbenchLayoutControl,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { openGraphResource } from "./openGraphResource";
 import { revealDetails } from "./rightSidebarActions";
@@ -60,11 +60,11 @@ export async function revealGraphProblem(
     useEditorStore.getState().setDetailFocus({ kind: "node", id: nodeId, graphPath });
   }
   if (location.kind === "connection" && !graph.connections[location.connectionId]) return false;
-  const panels = workbenchDockviewRead.findEditorPanelsByResource(graphPath);
+  const panels = workbenchLayoutRead.findEditorPanelsByResource(graphPath);
   const panel = panels.find((panel) => panel.groupId === groupId) ?? panels[0];
   if (panel) {
-    await workbenchDockviewControl.reveal(panel.panelInstanceId);
-    const currentPanel = workbenchDockviewRead.getPanel(panel.panelInstanceId);
+    await workbenchLayoutControl.reveal(panel.panelInstanceId);
+    const currentPanel = workbenchLayoutRead.getPanel(panel.panelInstanceId);
     if (
       !isCurrentProjectIdentity(identity) ||
       currentPanel?.metadata.role !== "editor" ||
@@ -85,12 +85,12 @@ export async function revealGraphProblem(
 
   if (nodeId) await revealDetails({ kind: "node", id: nodeId, graphPath });
   if (!panel) return true;
-  if (location.kind !== "parameter") await workbenchDockviewControl.activate(panel.panelInstanceId);
-  const revision = workbenchDockviewRead.getSnapshot().revision;
+  if (location.kind !== "parameter") await workbenchLayoutControl.activate(panel.panelInstanceId);
+  const revision = workbenchLayoutRead.getSnapshot().revision;
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   if (
     !isCurrentProjectIdentity(identity) ||
-    workbenchDockviewRead.getSnapshot().revision !== revision
+    workbenchLayoutRead.getSnapshot().revision !== revision
   )
     return false;
   const canvas = document.querySelector<HTMLElement>(

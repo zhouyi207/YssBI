@@ -1,8 +1,8 @@
-import { useEditorPaneStateStore } from "../dockview/editorPaneStateStore";
-import { workbenchDockviewInternal } from "../dockview/workbenchDockviewInternal";
-import { workbenchDockviewRead } from "../dockview/workbenchRead";
-import type { EditorResourceKind } from "../dockview/workbenchPanelModel";
-import type { WorkbenchPanelCommitToken } from "../dockview/workbenchTypes";
+import { useEditorPaneStateStore } from "../layout/editorPaneStateStore";
+import { workbenchLayoutInternal } from "../layout/workbenchLayoutInternal";
+import { workbenchLayoutRead } from "../layout/workbenchRead";
+import type { EditorResourceKind } from "../layout/workbenchPanelModel";
+import type { WorkbenchPanelCommitToken } from "../layout/workbenchTypes";
 
 export interface EditorPanelResourceMove {
   readonly from: string;
@@ -13,7 +13,7 @@ export function commitWorkbenchPanelRemoval(
   tokens: readonly WorkbenchPanelCommitToken[],
   isCurrent?: () => boolean,
 ): Promise<"committed" | "stale"> {
-  return workbenchDockviewInternal.commitRemove(tokens, isCurrent);
+  return workbenchLayoutInternal.commitRemove(tokens, isCurrent);
 }
 
 export function releaseEditorPaneState(panelInstanceId: string): void {
@@ -25,7 +25,7 @@ export function resetEditorPaneState(): void {
 }
 
 export async function closeWorkbenchViewPanel(panelInstanceId: string): Promise<boolean> {
-  const panel = workbenchDockviewRead.getPanel(panelInstanceId);
+  const panel = workbenchLayoutRead.getPanel(panelInstanceId);
   if (!panel || panel.metadata.role !== "view") return false;
   const outcome = await commitWorkbenchPanelRemoval([
     {
@@ -40,8 +40,8 @@ export async function closeWorkbenchViewPanel(panelInstanceId: string): Promise<
 export async function removeProjectScopedPanelsFromWorkbench(
   isCurrent: () => boolean,
 ): Promise<void> {
-  if (!workbenchDockviewRead.isReady || !isCurrent()) return;
-  await workbenchDockviewInternal.runLayoutTransaction((transaction) => {
+  if (!workbenchLayoutRead.isReady || !isCurrent()) return;
+  await workbenchLayoutInternal.runLayoutTransaction((transaction) => {
     if (!isCurrent()) return;
     const panelInstanceIds = transaction
       .listPanels()
@@ -63,11 +63,11 @@ export function commitEditorPanelPublication(
   isCurrent: () => boolean = () => true,
 ): void | Promise<void> {
   if (!isCurrent()) return;
-  if (!workbenchDockviewRead.isReady) {
+  if (!workbenchLayoutRead.isReady) {
     commitBusinessStores();
     return;
   }
-  return commitEditorPanelPublicationWithDockview(
+  return commitEditorPanelPublicationWithFlexLayout(
     [...moves],
     isResourceAvailable,
     commitBusinessStores,
@@ -75,28 +75,26 @@ export function commitEditorPanelPublication(
   );
 }
 
-async function commitEditorPanelPublicationWithDockview(
+async function commitEditorPanelPublicationWithFlexLayout(
   moves: readonly EditorPanelResourceMove[],
   isResourceAvailable: (resourceKind: EditorResourceKind, resourceRef: string) => boolean,
   commitBusinessStores: () => void,
   isCurrent: () => boolean,
 ): Promise<void> {
-  const removedPanelIds = await workbenchDockviewInternal.runPublicationTransaction(
-    (transaction) => {
-      if (!isCurrent()) return [];
-      for (const move of moves) transaction.remapResource(move.from, move.to);
+  const removedPanelIds = await workbenchLayoutInternal.runPublicationTransaction((transaction) => {
+    if (!isCurrent()) return [];
+    for (const move of moves) transaction.remapResource(move.from, move.to);
 
-      const removed = transaction.listPanels().flatMap((panel) => {
-        if (panel.metadata.role !== "editor") return [];
-        return isResourceAvailable(panel.metadata.resourceKind, panel.metadata.resourceRef)
-          ? []
-          : [panel.panelInstanceId];
-      });
-      transaction.removePanels(removed);
-      commitBusinessStores();
-      return removed;
-    },
-  );
+    const removed = transaction.listPanels().flatMap((panel) => {
+      if (panel.metadata.role !== "editor") return [];
+      return isResourceAvailable(panel.metadata.resourceKind, panel.metadata.resourceRef)
+        ? []
+        : [panel.panelInstanceId];
+    });
+    transaction.removePanels(removed);
+    commitBusinessStores();
+    return removed;
+  });
 
   for (const panelInstanceId of removedPanelIds) releaseEditorPaneState(panelInstanceId);
 }

@@ -1,6 +1,6 @@
 import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 import { buildGraphResourceMeta } from "@/features/core/resource";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
@@ -16,9 +16,9 @@ import {
   prepareProjectSnapshotCommit,
   commitPreparedProjectSnapshot,
 } from "./projectPublicationSnapshot";
-import { commitEditorDockviewPublication } from "./editorDockviewPublicationCommit";
+import { commitEditorLayoutPublication } from "./editorLayoutPublicationCommit";
 
-const dockviewMocks = vi.hoisted(() => {
+const flexlayoutMocks = vi.hoisted(() => {
   const panels: WorkbenchPanelInfo[] = [];
   const releasePane = vi.fn();
   const remapResource = vi.fn((from: string, to: string) => {
@@ -60,24 +60,24 @@ const dockviewMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     get isReady() {
-      return dockviewMocks.ready;
+      return flexlayoutMocks.ready;
     },
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
-  workbenchDockviewRuntime: { control: {} },
-  workbenchDockviewInternal: {
-    runPublicationTransaction: dockviewMocks.runPublicationTransaction,
+vi.mock("@/modules/workbench/internal/layout/workbenchLayoutInternal", () => ({
+  workbenchLayoutRuntime: { control: {} },
+  workbenchLayoutInternal: {
+    runPublicationTransaction: flexlayoutMocks.runPublicationTransaction,
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/editorPaneStateStore", () => ({
+vi.mock("@/modules/workbench/internal/layout/editorPaneStateStore", () => ({
   useEditorPaneStateStore: {
-    getState: () => ({ release: dockviewMocks.releasePane }),
+    getState: () => ({ release: flexlayoutMocks.releasePane }),
   },
 }));
 
@@ -90,8 +90,8 @@ function callerSnapshot() {
 describe("project snapshot projection replacement", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dockviewMocks.ready = true;
-    dockviewMocks.panels.splice(0);
+    flexlayoutMocks.ready = true;
+    flexlayoutMocks.panels.splice(0);
     useGraphProjectionStore.setState({ graphEntities: {} });
     useGraphEditingStore.getState().clear();
     const projection = makeEditorProjectionFixture({
@@ -176,13 +176,13 @@ function logsPanel(): WorkbenchPanelInfo {
   };
 }
 
-describe("editor Dockview publication commit", () => {
+describe("editor FlexLayout publication commit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    dockviewMocks.ready = true;
-    dockviewMocks.panels.splice(
+    flexlayoutMocks.ready = true;
+    flexlayoutMocks.panels.splice(
       0,
-      dockviewMocks.panels.length,
+      flexlayoutMocks.panels.length,
       editorPanel("moved-panel", "functions/Old.yssbi-function"),
       editorPanel("stale-panel", "functions/Deleted.yssbi-function"),
       logsPanel(),
@@ -194,28 +194,28 @@ describe("editor Dockview publication commit", () => {
     const movedResource = buildGraphResourceMeta("function", movedPath, "New");
     const commitBusinessStores = vi.fn();
 
-    await commitEditorDockviewPublication(
+    await commitEditorLayoutPublication(
       [{ from: "functions/Old.yssbi-function", to: movedPath }],
       { [movedResource.uri]: movedResource },
       commitBusinessStores,
     );
 
-    expect(dockviewMocks.runPublicationTransaction).toHaveBeenCalledOnce();
-    expect(dockviewMocks.remapResource).toHaveBeenCalledWith(
+    expect(flexlayoutMocks.runPublicationTransaction).toHaveBeenCalledOnce();
+    expect(flexlayoutMocks.remapResource).toHaveBeenCalledWith(
       "functions/Old.yssbi-function",
       movedPath,
     );
-    expect(dockviewMocks.removePanels).toHaveBeenCalledWith(["stale-panel"]);
+    expect(flexlayoutMocks.removePanels).toHaveBeenCalledWith(["stale-panel"]);
     expect(commitBusinessStores).toHaveBeenCalledOnce();
-    expect(dockviewMocks.panels.map((panel) => panel.panelInstanceId)).toEqual([
+    expect(flexlayoutMocks.panels.map((panel) => panel.panelInstanceId)).toEqual([
       "moved-panel",
       "logs-panel",
     ]);
-    expect(dockviewMocks.panels[0].metadata).toMatchObject({
+    expect(flexlayoutMocks.panels[0].metadata).toMatchObject({
       role: "editor",
       resourceRef: movedPath,
     });
-    expect(dockviewMocks.releasePane).toHaveBeenCalledOnce();
-    expect(dockviewMocks.releasePane).toHaveBeenCalledWith("stale-panel");
+    expect(flexlayoutMocks.releasePane).toHaveBeenCalledOnce();
+    expect(flexlayoutMocks.releasePane).toHaveBeenCalledWith("stale-panel");
   });
 });

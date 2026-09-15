@@ -10,19 +10,19 @@ import { ResultPanel } from "@/modules/results/public";
 import { GraphProblemsPanel } from "@/modules/problems/public";
 import { RunFailurePanel } from "@/modules/output/public";
 import {
-  EditorResourceDockPanel,
-  type RootDockviewPanelComponent,
+  EditorResourcePanel,
+  type RootPanelComponent,
   type RootPanelRegistry,
 } from "@/modules/workbench/public";
-import { LogDomainDockviewHost } from "@/modules/logs/public";
+import { LogDomainLayoutHost } from "@/modules/logs/public";
 import { editorRendererRegistry } from "./editorRendererRegistry";
 
-const EditorResourcePanel: RootDockviewPanelComponent = (props) => {
-  return <EditorResourceDockPanel {...props} rendererRegistry={editorRendererRegistry} />;
+const RegisteredEditorPanel: RootPanelComponent = (props) => {
+  return <EditorResourcePanel {...props} rendererRegistry={editorRendererRegistry} />;
 };
 
 function MainLogsDockPanel() {
-  return <LogDomainDockviewHost layout={{ kind: "main" }} />;
+  return <LogDomainLayoutHost layout={{ kind: "main" }} />;
 }
 
 function PluginsDockPanel() {
@@ -45,19 +45,12 @@ function PluginsDockPanel() {
   );
 }
 
-const PluginDockPanel: RootDockviewPanelComponent = ({ params, api }) => {
+const PluginDockPanel: RootPanelComponent = ({ params, visible }) => {
   const runtime = usePlugins();
-  const [activated, setActivated] = useState(api.isVisible);
-  const [visible, setVisible] = useState(api.isVisible);
+  const [activated, setActivated] = useState(visible);
   useEffect(() => {
-    const disposable = api.onDidVisibilityChange((event) => {
-      setVisible(event.isVisible);
-      if (event.isVisible) setActivated(true);
-    });
-    if (api.isVisible) setActivated(true);
-    setVisible(api.isVisible);
-    return () => disposable.dispose();
-  }, [api]);
+    if (visible) setActivated(true);
+  }, [visible]);
   const metadata = params.metadata;
   if (metadata.role !== "plugin" || !activated) return null;
   return (
@@ -70,13 +63,13 @@ const PluginDockPanel: RootDockviewPanelComponent = ({ params, api }) => {
   );
 };
 
-const ResultDockPanel: RootDockviewPanelComponent = ({ params }) => {
+const ResultDockPanel: RootPanelComponent = ({ params }) => {
   const { metadata } = params;
   return metadata.role === "result" ? <ResultPanel reference={metadata.reference} /> : null;
 };
 
 export const rootPanelRegistry = {
-  EditorResource: EditorResourcePanel,
+  EditorResource: RegisteredEditorPanel,
   Project: projectActivityPanelContribution,
   Nodes: nodeCatalogActivityPanelContribution,
   Commands: commandsActivityPanelContribution,

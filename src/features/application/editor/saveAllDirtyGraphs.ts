@@ -1,7 +1,7 @@
 import i18n from "i18next";
 
 import { saveChartDocument } from "@/features/application/chart/saveChartDocument";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { isResourceDocumentDirty, resourceKey } from "@/features/core/resource";
 import { logger } from "@/features/application/observability/appLogger";
 
@@ -18,7 +18,7 @@ interface DirtyEditorDocument {
 function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
   const seen = new Set<string>();
   const dirty: DirtyEditorDocument[] = [];
-  for (const panel of workbenchDockviewRead.listPanels()) {
+  for (const panel of workbenchLayoutRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
     const { resourceRef, resourceKind } = panel.metadata;
     if (resourceKind === "database") continue;

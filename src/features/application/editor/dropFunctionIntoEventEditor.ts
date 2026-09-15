@@ -8,7 +8,7 @@ import {
 } from "@/features/core/dnd";
 import { canCreateFunctionNodeInGraph } from "@/features/application/editor/canvasDrop";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
-import { workbenchDockviewControl } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
 import { useSidebarDragStore } from "@/features/core/sidebarDrag";
 
 export function resolveDropPointerFromDragEnd(
@@ -61,7 +61,7 @@ export async function tryDropFunctionIntoCanvas(
   const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
   if (!handler) return false;
 
-  if (!(await workbenchDockviewControl.activate(target.panelInstanceId))) return false;
+  if (!(await workbenchLayoutControl.activate(target.panelInstanceId))) return false;
   const handled = await handler(dragState, modifiers);
   return handled === true;
 }

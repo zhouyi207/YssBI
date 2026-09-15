@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { VscCheckAll, VscClearAll, VscClose, VscCloseAll } from "react-icons/vsc";
 import { isResourceDocumentDirty } from "@/features/core/resource";
 import type { ActionMenuSection } from "@/shared/ui/actionMenu";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import {
   requestCloseAllEditorPanelsInGroup,
   requestCloseEditorPanel,
@@ -17,7 +17,7 @@ export interface EditorPanelTabMenuTarget {
 }
 
 function groupHasSavedEditorPanels(groupId: string): boolean {
-  return workbenchDockviewRead.listEditorPanelsInGroup(groupId).some(
+  return workbenchLayoutRead.listEditorPanelsInGroup(groupId).some(
     (panel) =>
       !isResourceDocumentDirty({
         id: panel.metadata.resourceRef,

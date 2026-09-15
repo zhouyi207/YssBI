@@ -28,8 +28,8 @@ import type {
 
 const RAW_INVOKE_ADAPTER = "src/services/ipc/invokeCommand.ts";
 const RAW_DIALOG_ADAPTER = "src/services/platform/pathDialog.ts";
-const ROOT_DOCKVIEW_CONSUMER = "src/modules/workbench/internal/dockview/RootDockviewHost.tsx";
-const NESTED_DOCKVIEW_CONSUMER = "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx";
+const ROOT_LAYOUT_CONSUMER = "src/modules/workbench/internal/layout/RootLayoutHost.tsx";
+const NESTED_LAYOUT_CONSUMER = "src/modules/logs/internal/ui/LogDomainLayoutHost.tsx";
 
 const PUBLICATION_MEMBERS = new Set([
   "applyProjection",
@@ -362,13 +362,13 @@ function auditResolvedImports(
   return findings;
 }
 
-function dockviewRule(sourceFile: string): {
-  ruleId: "frontend.dockview.root-constructor" | "frontend.dockview.nested-constructor";
+function flexlayoutRule(sourceFile: string): {
+  ruleId: "frontend.flexlayout.root-constructor" | "frontend.flexlayout.nested-constructor";
   allowedPath: string;
 } {
   return sourceFile.startsWith("src/modules/logs/")
-    ? { ruleId: "frontend.dockview.nested-constructor", allowedPath: NESTED_DOCKVIEW_CONSUMER }
-    : { ruleId: "frontend.dockview.root-constructor", allowedPath: ROOT_DOCKVIEW_CONSUMER };
+    ? { ruleId: "frontend.flexlayout.nested-constructor", allowedPath: NESTED_LAYOUT_CONSUMER }
+    : { ruleId: "frontend.flexlayout.root-constructor", allowedPath: ROOT_LAYOUT_CONSUMER };
 }
 
 function auditSourceExpressions(
@@ -485,11 +485,11 @@ function auditSourceExpressions(
           : null;
       if (
         dependency?.origin.kind === "external" &&
-        dependency.origin.dependency.packageName === "dockview-react" &&
-        (dependency.importedSymbol === "DockviewReact" ||
-          (dependency.importedSymbol === null && namespaceMember === "DockviewReact"))
+        dependency.origin.dependency.packageName === "flexlayout-react" &&
+        (dependency.importedSymbol === "Layout" ||
+          (dependency.importedSymbol === null && namespaceMember === "Layout"))
       ) {
-        const rule = dockviewRule(source.path);
+        const rule = flexlayoutRule(source.path);
         if (source.path !== rule.allowedPath) {
           findings.push(
             semanticFinding(

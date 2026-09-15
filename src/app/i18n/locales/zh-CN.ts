@@ -443,11 +443,11 @@ export const zhCN = {
         parts: {
           composition: "应用组装",
           registry: "面板注册",
-          layout: "根 Dockview",
+          layout: "根 FlexLayout",
           templates: "JSON 模板 · 规划中",
         },
         boundary:
-          "app 通过模块 public.ts 组合能力，Application 编排用例并使用 core 投影、domain 规则和 service。根 Dockview 独占面板拓扑、位置、顺序、尺寸与折叠状态。Details 等共享宿主使用对应业务的数据和操作，不拥有图草稿、数据或结果生命周期。关闭编辑器继续经过保存、放弃或取消流程。",
+          "app 通过模块 public.ts 组合能力，Application 编排用例并使用 core 投影、domain 规则和 service。根 FlexLayout 独占面板拓扑、位置、顺序、尺寸与折叠状态。Details 等共享宿主使用对应业务的数据和操作，不拥有图草稿、数据或结果生命周期。关闭编辑器继续经过保存、放弃或取消流程。",
         json: {
           template: {
             title: "页面布局模板 · 尚未实现",
@@ -462,7 +462,7 @@ export const zhCN = {
           snapshot: {
             title: "运行布局快照 · 已有持久化",
             description:
-              "从根 Dockview 序列化用户调整后的布局；启动仅在空根实例上使用 fromJSON。目标模板方案优先恢复有效快照，无有效快照时建立默认布局，重置由明确操作触发。",
+              "从根 FlexLayout 序列化用户调整后的布局；启动仅在空根实例上使用 fromJSON。目标模板方案优先恢复有效快照，无有效快照时建立默认布局，重置由明确操作触发。",
           },
         },
       },

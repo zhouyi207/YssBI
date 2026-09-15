@@ -28,7 +28,7 @@ const DECLARED_RUNTIME_PACKAGES = [
   "class-variance-authority",
   "clsx",
   "d3",
-  "dockview-react",
+  "flexlayout-react",
   "i18next",
   "katex",
   "pinyin-pro",
@@ -87,8 +87,8 @@ const APP_USES = [
   allowance(
     "app-composition",
     "runtime",
-    "dockview-react",
-    ["dist::styles::dockview.css"],
+    "flexlayout-react",
+    ["style::combined.css"],
     "stylesheet",
   ),
   allowance(
@@ -140,7 +140,7 @@ const VIEW_USES = [
     ["ag-grid-community", [null]],
     ["ag-grid-react", [null]],
     ["d3", [null]],
-    ["dockview-react", [null]],
+    ["flexlayout-react", [null]],
     ["zustand", ["react::shallow"]],
   ]),
   allowance("views", "runtime", "katex", [null]),
@@ -166,7 +166,7 @@ const APPLICATION_USES = [
   ]),
   allowance("application", "runtime", "@dnd-kit/core", [null]),
   allowance("application", "type-only", "@dnd-kit/core", [null]),
-  allowance("application", "type-only", "dockview-react", [null]),
+  allowance("application", "type-only", "flexlayout-react", [null]),
 ];
 
 const CORE_USES = [
@@ -180,8 +180,8 @@ const CORE_USES = [
     ["ag-grid-react", [null]],
   ]),
   allowance("core", "runtime", "react-icons", ["vsc"]),
-  allowance("core", "runtime", "dockview-react", [null]),
-  allowance("core", "type-only", "dockview-react", [null]),
+  allowance("core", "runtime", "flexlayout-react", [null]),
+  allowance("core", "type-only", "flexlayout-react", [null]),
 ];
 
 const COMPONENT_USES = [
@@ -192,7 +192,7 @@ const COMPONENT_USES = [
     ["clsx", [null]],
     ["tailwind-merge", [null]],
     ["d3", [null]],
-    ["dockview-react", [null]],
+    ["flexlayout-react", [null]],
     ["ag-grid-community", [null]],
     ["react-i18next", [null]],
   ]),

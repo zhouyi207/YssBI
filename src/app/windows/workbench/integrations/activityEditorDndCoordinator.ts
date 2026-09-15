@@ -7,9 +7,9 @@ import {
   updateActivityEditorDragPointer,
 } from "@/features/application/editor/editorDragDropActions";
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
-import type { RootDockviewDndCoordinator } from "@/modules/workbench/public";
+import type { RootLayoutDndCoordinator } from "@/modules/workbench/public";
 
-export function useActivityEditorDndCoordinator(): RootDockviewDndCoordinator {
+export function useActivityEditorDndCoordinator(): RootLayoutDndCoordinator {
   const pointerMoveCleanupRef = useRef<(() => void) | null>(null);
 
   const finishDrag = useCallback(() => {
@@ -20,7 +20,7 @@ export function useActivityEditorDndCoordinator(): RootDockviewDndCoordinator {
 
   useEffect(() => finishDrag, [finishDrag]);
 
-  const onDragStart = useCallback<RootDockviewDndCoordinator["onDragStart"]>((event) => {
+  const onDragStart = useCallback<RootLayoutDndCoordinator["onDragStart"]>((event) => {
     if (!beginActivityEditorDrag(event)) return;
     pointerMoveCleanupRef.current?.();
     pointerMoveCleanupRef.current = addGlobalEventListener(
@@ -30,7 +30,7 @@ export function useActivityEditorDndCoordinator(): RootDockviewDndCoordinator {
     );
   }, []);
 
-  const onDragEnd = useCallback<RootDockviewDndCoordinator["onDragEnd"]>(
+  const onDragEnd = useCallback<RootLayoutDndCoordinator["onDragEnd"]>(
     (event) => {
       void executeEditorDragEnd(event, { finishSidebarDrag: finishDrag });
     },

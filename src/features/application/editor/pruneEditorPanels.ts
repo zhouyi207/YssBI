@@ -1,7 +1,7 @@
 import {
   commitWorkbenchPanelRemoval,
   releaseEditorPaneState,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
   type WorkbenchPanelCommitToken,
 } from "@/modules/workbench/public";
 import { resourceKey, useResourceStore } from "@/features/core/resource";
@@ -14,7 +14,7 @@ import {
 export async function pruneEditorPanelsForMissingResources(): Promise<void> {
   const identity = captureProjectLifecycleState();
   const resources = useResourceStore.getState().resources;
-  const stalePanels = workbenchDockviewRead.listPanels().filter((panel) => {
+  const stalePanels = workbenchLayoutRead.listPanels().filter((panel) => {
     if (panel.metadata.role !== "editor") return false;
     return !resources[
       resourceKey({

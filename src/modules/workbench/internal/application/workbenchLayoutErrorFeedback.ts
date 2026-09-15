@@ -1,10 +1,10 @@
 import i18n from "i18next";
 
-import { WorkbenchLayoutError, type WorkbenchLayoutErrorCode } from "../dockview/workbenchTypes";
+import { WorkbenchLayoutError, type WorkbenchLayoutErrorCode } from "../layout/workbenchTypes";
 import { uiStore } from "@/features/core/ui/UIStore";
 
 const MESSAGE_KEYS = {
-  dockview_not_ready: "workbench.layoutError.notReady",
+  layout_not_ready: "workbench.layoutError.notReady",
   invalid_panel_metadata: "workbench.layoutError.invalidPanel",
   group_not_found: "workbench.layoutError.groupUnavailable",
   panel_open_failed: "workbench.layoutError.openFailed",

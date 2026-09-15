@@ -7,8 +7,8 @@ import {
 } from "@/features/application/editor/editorCommandFocus";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { useEditorPaneStateStore } from "@/modules/workbench/public";
-import { useDockviewPortSnapshot } from "@/modules/workbench/public";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { useLayoutPortSnapshot } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import {
   getViewport,
   subscribeToViewport,
@@ -62,8 +62,8 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const { t } = useTranslation();
   const actions = useStatusBarActions();
 
-  const graphTarget = useDockviewPortSnapshot(
-    workbenchDockviewRead,
+  const graphTarget = useLayoutPortSnapshot(
+    workbenchLayoutRead,
     useShallow(() => {
       const target = captureActiveEditorCommandTarget();
       return target &&

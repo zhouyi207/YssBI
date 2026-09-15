@@ -9,40 +9,40 @@ import {
 } from "@/modules/workbench/public";
 import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
 
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import type { WorkbenchViewId } from "@/modules/workbench/public";
 import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import type { MenubarViewState } from "./menubarViewItems";
 
 function openViewIds(): ReadonlySet<WorkbenchViewId> {
   const viewIds = new Set<WorkbenchViewId>();
-  for (const panel of workbenchDockviewRead.listPanels()) {
+  for (const panel of workbenchLayoutRead.listPanels()) {
     if (panel.metadata.role === "view") viewIds.add(panel.metadata.viewId);
   }
   return viewIds;
 }
 
-/** Menubar model projected from live root Dockview state and semantic application actions. */
+/** Menubar model projected from live root FlexLayout state and semantic application actions. */
 export function useMenubar() {
   const openSettings = useWorkbenchUiStore((state) => state.openSettings);
-  const dockviewSnapshot = useSyncExternalStore(
-    workbenchDockviewRead.subscribe,
-    workbenchDockviewRead.getSnapshot,
-    workbenchDockviewRead.getSnapshot,
+  const flexlayoutSnapshot = useSyncExternalStore(
+    workbenchLayoutRead.subscribe,
+    workbenchLayoutRead.getSnapshot,
+    workbenchLayoutRead.getSnapshot,
   );
 
   const viewState = useMemo<MenubarViewState>(() => {
     const views = openViewIds();
     return {
       activityGroupOpen: (() => {
-        const edge = workbenchDockviewRead.getEdgeState("left");
+        const edge = workbenchLayoutRead.getEdgeState("left");
         return (
           edge.exists && edge.visible && !edge.collapsed && edge.groupId === "workbench-edge-left"
         );
       })(),
       assistantOpen: views.has("assistant"),
     };
-  }, [dockviewSnapshot.revision]);
+  }, [flexlayoutSnapshot.revision]);
 
   const editorCommandAuthorized = captureActiveEditorCommandTarget() !== null;
 

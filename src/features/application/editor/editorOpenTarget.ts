@@ -1,9 +1,9 @@
-import { workbenchDockviewControl } from "@/modules/workbench/public";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutControl } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 
 function groupContainsEditor(groupId: string): boolean {
-  return workbenchDockviewRead
+  return workbenchLayoutRead
     .listGroupPanels(groupId)
     .some((panel) => panel.metadata.role === "editor");
 }
@@ -11,24 +11,24 @@ function groupContainsEditor(groupId: string): boolean {
 export async function resolveEditorOpenTargetGroupId(
   explicitGroupId?: string | null,
 ): Promise<string> {
-  const groupIds = new Set(workbenchDockviewRead.listGroups().map((group) => group.groupId));
+  const groupIds = new Set(workbenchLayoutRead.listGroups().map((group) => group.groupId));
   if (explicitGroupId && groupIds.has(explicitGroupId)) return explicitGroupId;
 
   const focused = useGraphSessionStore.getState().focusedSession;
   if (
     focused &&
     groupIds.has(focused.groupId) &&
-    workbenchDockviewRead
+    workbenchLayoutRead
       .findEditorPanelsByResource(focused.graphPath)
       .some((panel) => panel.groupId === focused.groupId)
   ) {
     return focused.groupId;
   }
 
-  const recentGroupId = workbenchDockviewRead.getActiveEditorPanel()?.groupId ?? focused?.groupId;
+  const recentGroupId = workbenchLayoutRead.getActiveEditorPanel()?.groupId ?? focused?.groupId;
   if (recentGroupId && groupIds.has(recentGroupId) && groupContainsEditor(recentGroupId)) {
     return recentGroupId;
   }
 
-  return workbenchDockviewControl.ensureCentralGroup();
+  return workbenchLayoutControl.ensureCentralGroup();
 }

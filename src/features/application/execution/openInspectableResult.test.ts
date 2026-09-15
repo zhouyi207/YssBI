@@ -31,8 +31,8 @@ vi.mock("@/features/application/window", () => ({
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({ route: "/plot", windowTitle: "Plot" })),
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
-  workbenchDockviewControl: { upsertResult: mocks.upsertResult },
+vi.mock("@/modules/workbench/internal/layout/workbenchControl", () => ({
+  workbenchLayoutControl: { upsertResult: mocks.upsertResult },
 }));
 
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutErrorFeedback", () => ({
@@ -190,7 +190,7 @@ describe("openInspectableResult", () => {
   });
 
   it("maps root Result upsert failures through typed layout feedback", async () => {
-    const failure = new Error("private Dockview failure");
+    const failure = new Error("private FlexLayout failure");
     mocks.upsertResult.mockRejectedValueOnce(failure);
 
     await expect(

@@ -1,35 +1,34 @@
-import type { DockviewApi, SerializedDockview } from "dockview-react";
+import type { IJsonModel } from "flexlayout-react";
+import type { LayoutModelBinding } from "../layout/layoutModelBinding";
+import { modelTabs, readSerializedEdge } from "../layout/workbenchLayoutOperations";
 
-import { DEFAULT_LOGS_DOCKVIEW_LAYOUT } from "../dockview/logsDockviewLayout";
-import { createLogsDockviewRuntime } from "../dockview/logsRuntime";
-import { logsDockviewRead, type LogsDockviewRead } from "../dockview/logsRead";
-import { logsDockviewControl, type LogsDockviewControl } from "../dockview/logsControl";
+import { DEFAULT_LOGS_LAYOUT } from "../layout/logsLayoutModel";
+import { createLogsLayoutRuntime } from "../layout/logsRuntime";
+import { logsLayoutRead, type LogsLayoutRead } from "../layout/logsRead";
+import { logsLayoutControl, type LogsLayoutControl } from "../layout/logsControl";
 import {
   createPersistedWorkbenchLayout,
   parsePersistedWorkbenchLayout,
   scrubProjectScopedRootLayout,
   workbenchLayoutStorageKey,
-} from "../dockview/workbenchLayoutPersistence";
+} from "../layout/workbenchLayoutPersistence";
 import {
   WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_BOTTOM_DEFAULT_ORDER,
-} from "../dockview/workbenchDockviewDefaults";
+} from "../layout/workbenchLayoutDefaults";
 import {
-  createWorkbenchDockviewRuntime,
-  workbenchDockviewInternal,
-  type WorkbenchDockviewInternal,
-} from "../dockview/workbenchDockviewInternal";
-import { type WorkbenchLayoutTransaction } from "../dockview/workbenchTypes";
+  createWorkbenchLayoutRuntime,
+  workbenchLayoutInternal,
+  type WorkbenchLayoutInternal,
+} from "../layout/workbenchLayoutInternal";
+import { type WorkbenchLayoutTransaction } from "../layout/workbenchTypes";
 import {
-  workbenchDockviewRead,
-  type WorkbenchDockviewRead,
+  workbenchLayoutRead,
+  type WorkbenchLayoutRead,
   type WorkbenchPanelInfo,
-} from "../dockview/workbenchRead";
-import {
-  workbenchDockviewControl,
-  type WorkbenchDockviewControl,
-} from "../dockview/workbenchControl";
+} from "../layout/workbenchRead";
+import { workbenchLayoutControl, type WorkbenchLayoutControl } from "../layout/workbenchControl";
 
 export interface ProjectResourcesReadyContext {
   isCurrent(): boolean;
@@ -37,8 +36,8 @@ export interface ProjectResourcesReadyContext {
 
 export interface WorkbenchLayoutController {
   readonly projectResourcesReady: boolean;
-  bind(api: DockviewApi, windowLabel: string): void;
-  unbind(api?: DockviewApi): void;
+  bind(api: LayoutModelBinding, windowLabel: string): void;
+  unbind(api?: LayoutModelBinding): void;
   whenHydrated(): Promise<void>;
   flushBeforeWindowClose(): Promise<void>;
   beginLayoutReset(): number;
@@ -54,18 +53,18 @@ type LayoutStorage = Pick<Storage, "getItem" | "setItem">;
 type LayoutReader = (key: string) => string | null | Promise<string | null>;
 
 type ControllerDependencies = {
-  readonly dockviewRead?: WorkbenchDockviewRead;
-  readonly dockviewControl?: WorkbenchDockviewControl;
-  readonly internal?: WorkbenchDockviewInternal;
-  readonly logsRead?: LogsDockviewRead;
-  readonly logsControl?: LogsDockviewControl;
+  readonly layoutRead?: WorkbenchLayoutRead;
+  readonly layoutControl?: WorkbenchLayoutControl;
+  readonly internal?: WorkbenchLayoutInternal;
+  readonly logsRead?: LogsLayoutRead;
+  readonly logsControl?: LogsLayoutControl;
   readonly storage?: LayoutStorage;
   readonly read?: LayoutReader;
   readonly debounceMs?: number;
 };
 
 type BoundRoot = {
-  readonly api: DockviewApi;
+  readonly api: LayoutModelBinding;
   readonly key: string;
   readonly generation: number;
   readonly internalHydrationEpoch: number;
@@ -123,8 +122,8 @@ function createHydrationCycle(epoch: number, bound: BoundRoot): HydrationCycle {
   };
 }
 
-function rootIsEmpty(api: DockviewApi): boolean {
-  return api.panels.length === 0;
+function rootIsEmpty(api: LayoutModelBinding): boolean {
+  return modelTabs(api.getModel()).length === 0;
 }
 
 const DETAILS_VIEW_REQUEST = {
@@ -138,7 +137,7 @@ const ASSISTANT_VIEW_REQUEST = {
 } as const;
 
 function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
-  const right = transaction.serialize().edgeGroups?.right;
+  const right = readSerializedEdge(transaction.serialize(), "right");
   return typeof right?.size === "number" ? right.size : WORKBENCH_EDGE_SIZES.right;
 }
 
@@ -218,6 +217,11 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     (panel) => panel.metadata.role === "view" && panel.metadata.viewId === "project",
   );
   if (project) transaction.activate(project.panelInstanceId);
+  transaction.configureEdge({
+    position: "bottom",
+    size: WORKBENCH_EDGE_SIZES.bottom,
+    collapsed: true,
+  });
 }
 
 function parseStoredLayout(raw: string | null) {
@@ -253,21 +257,21 @@ export function createWorkbenchLayoutController(
   dependencies: ControllerDependencies = {},
 ): WorkbenchLayoutController {
   const hasInjectedRuntime =
-    dependencies.dockviewRead !== undefined ||
-    dependencies.dockviewControl !== undefined ||
+    dependencies.layoutRead !== undefined ||
+    dependencies.layoutControl !== undefined ||
     dependencies.internal !== undefined;
   if (
     hasInjectedRuntime &&
-    (dependencies.dockviewRead === undefined ||
-      dependencies.dockviewControl === undefined ||
+    (dependencies.layoutRead === undefined ||
+      dependencies.layoutControl === undefined ||
       dependencies.internal === undefined)
   ) {
     throw new Error("read, control, and internal must be injected together");
   }
 
-  const isolated = hasInjectedRuntime ? undefined : createWorkbenchDockviewRuntime();
-  const read = dependencies.dockviewRead ?? isolated!.read;
-  const control = dependencies.dockviewControl ?? isolated!.control;
+  const isolated = hasInjectedRuntime ? undefined : createWorkbenchLayoutRuntime();
+  const read = dependencies.layoutRead ?? isolated!.read;
+  const control = dependencies.layoutControl ?? isolated!.control;
   const internal = dependencies.internal ?? isolated!.internal;
   const hasInjectedLogs =
     dependencies.logsRead !== undefined || dependencies.logsControl !== undefined;
@@ -277,13 +281,13 @@ export function createWorkbenchLayoutController(
   ) {
     throw new Error("logsRead and logsControl must be injected together");
   }
-  const isolatedLogs = hasInjectedLogs ? undefined : createLogsDockviewRuntime();
+  const isolatedLogs = hasInjectedLogs ? undefined : createLogsLayoutRuntime();
   const logsRead =
     dependencies.logsRead ??
     ({
       subscribe: isolatedLogs!.subscribe,
       getLatestSnapshot: isolatedLogs!.getLatestSnapshot,
-    } satisfies LogsDockviewRead);
+    } satisfies LogsLayoutRead);
   const logsControl =
     dependencies.logsControl ??
     ({
@@ -291,7 +295,7 @@ export function createWorkbenchLayoutController(
       stageRestore: isolatedLogs!.stageRestore,
       captureBoundSnapshot: isolatedLogs!.captureBoundSnapshot,
       resetToDefault: isolatedLogs!.resetToDefault,
-    } satisfies LogsDockviewControl);
+    } satisfies LogsLayoutControl);
   const storage = dependencies.storage ?? browserStorage;
   const storageRead = dependencies.read ?? ((key: string) => storage.getItem(key));
   const debounceMs = dependencies.debounceMs ?? DEFAULT_PERSISTENCE_DEBOUNCE_MS;
@@ -397,7 +401,7 @@ export function createWorkbenchLayoutController(
     })();
   };
 
-  const writePayload = (currentBound: BoundRoot, root: SerializedDockview): void => {
+  const writePayload = (currentBound: BoundRoot, root: IJsonModel): void => {
     const payload = createPersistedWorkbenchLayout(root, logsRead.getLatestSnapshot());
     storage.setItem(currentBound.key, JSON.stringify(payload));
   };
@@ -494,8 +498,8 @@ export function createWorkbenchLayoutController(
             .some((panel) => panel.metadata.role === "view" && panel.metadata.viewId === "plugins")
         ) {
           const active = transaction.getActivePanel();
-          const left = transaction.serialize().edgeGroups?.left;
-          const leftGroup = left?.group as { activeView?: string } | undefined;
+          const left = readSerializedEdge(transaction.serialize(), "left");
+          const leftGroup = left ? { activeView: left.activePanelId } : undefined;
           transaction.ensureView({ viewId: "plugins", title: "Plugins" });
           if (leftGroup?.activeView) transaction.activate(leftGroup.activeView);
           if (active) transaction.activate(active.panelInstanceId);
@@ -542,7 +546,7 @@ export function createWorkbenchLayoutController(
   const stageLogsLayout = (
     cycle: HydrationCycle,
     logsRestoreEpoch: number,
-    layout: SerializedDockview,
+    layout: IJsonModel,
   ): boolean => {
     if (!isCurrentCycle(cycle)) return false;
     try {
@@ -574,8 +578,7 @@ export function createWorkbenchLayoutController(
     if (!isCurrentCycle(cycle) || bound !== currentBound) return;
 
     const parsed = parseStoredLayout(raw);
-    const logsLayout =
-      parsed?.logs.status === "valid" ? parsed.logs.value : DEFAULT_LOGS_DOCKVIEW_LAYOUT;
+    const logsLayout = parsed?.logs.status === "valid" ? parsed.logs.value : DEFAULT_LOGS_LAYOUT;
     if (!stageLogsLayout(cycle, logsRestoreEpoch, logsLayout)) return;
 
     if (parsed?.root.status !== "valid") {
@@ -594,9 +597,7 @@ export function createWorkbenchLayoutController(
 
     try {
       if (!isCurrentCycle(cycle) || !rootIsEmpty(currentBound.api)) return;
-      currentBound.api.fromJSON(structuredClone(parsed.root.value), {
-        reuseExistingPanels: true,
-      });
+      currentBound.api.replace(parsed.root.value);
     } catch {
       if (!isCurrentCycle(cycle)) return;
       if (rootIsEmpty(currentBound.api)) {
@@ -664,10 +665,10 @@ export function createWorkbenchLayoutController(
           try {
             logsControl.captureBoundSnapshot();
             if (isSuccessfullyHydrated(cycle) && bound === currentBound) {
-              writePayload(currentBound, currentBound.api.toJSON());
+              writePayload(currentBound, currentBound.api.getModel().toJson());
             }
           } catch {
-            // Unbind must still release the live Dockview API.
+            // Unbind must still release the live FlexLayout API.
           }
         }
       } finally {
@@ -702,7 +703,7 @@ export function createWorkbenchLayoutController(
         if (!isSuccessfullyHydrated(cycle) || bound !== currentBound) return;
         logsControl.captureBoundSnapshot();
         if (!isSuccessfullyHydrated(cycle) || bound !== currentBound) return;
-        const root = currentBound.api.toJSON();
+        const root = currentBound.api.getModel().toJson();
         if (!isSuccessfullyHydrated(cycle) || bound !== currentBound) return;
         writePayload(currentBound, root);
       } finally {
@@ -781,10 +782,10 @@ export function createWorkbenchLayoutController(
 }
 
 export const workbenchLayoutController = createWorkbenchLayoutController({
-  dockviewRead: workbenchDockviewRead,
-  dockviewControl: workbenchDockviewControl,
-  internal: workbenchDockviewInternal,
-  logsRead: logsDockviewRead,
-  logsControl: logsDockviewControl,
+  layoutRead: workbenchLayoutRead,
+  layoutControl: workbenchLayoutControl,
+  internal: workbenchLayoutInternal,
+  logsRead: logsLayoutRead,
+  logsControl: logsLayoutControl,
   storage: browserStorage,
 });

@@ -36,7 +36,7 @@ import {
   remapChartNonViewportUiState,
 } from "@/features/application/editor/cascadeGraphPathReferences";
 import { invalidateChartPreviewCacheForMove } from "@/services/chart/chartPreviewCache";
-import { commitEditorDockviewPublication } from "./editorDockviewPublicationCommit";
+import { commitEditorLayoutPublication } from "./editorLayoutPublicationCommit";
 import { buildProjectResourceState } from "@/features/application/project/authoritativeProjectLoadPlan";
 
 export function validateProjectSnapshotIndex(
@@ -435,7 +435,7 @@ export function commitPreparedProjectSnapshot(
     ...[...prepared.pathRemaps].map(([from, to]) => ({ from, to })),
     ...[...prepared.chartPathRemaps].map(([from, to]) => ({ from, to })),
   ];
-  return commitEditorDockviewPublication(
+  return commitEditorLayoutPublication(
     moves,
     prepared.storeState.resources,
     () => {

@@ -1,31 +1,12 @@
-import { useEffect, useMemo } from "react";
-import { useTranslation } from "react-i18next";
-import type { IDockviewPanelProps } from "dockview-react";
-
-import type { LogsDockviewPanelParams } from "@/modules/workbench/public";
-import { isLogDomainId, applyLogFilter } from "@/features/application/log";
+import { useMemo } from "react";
+import { applyLogFilter, type LogDomainId } from "@/features/application/log";
 import type { LogRecordDto } from "@/shared/types/domain/log";
 import { LogPanelList } from "./LogPanelList";
-import { LOG_DOMAIN_TITLE_KEYS } from "./logPresentation";
 import { useLogWorkspaceContext } from "./logWorkspaceContext";
-
 function isSameLog(left: LogRecordDto, right: LogRecordDto): boolean {
   return left.streamId === right.streamId && left.sequence === right.sequence;
 }
-
-export function LogDomainPanel(props: IDockviewPanelProps<LogsDockviewPanelParams>) {
-  const domain = props.params?.domain;
-  if (!isLogDomainId(domain)) {
-    throw new Error("LogDomainPanel requires a valid domain parameter");
-  }
-
-  const { t } = useTranslation();
-  const localizedTitle = t(LOG_DOMAIN_TITLE_KEYS[domain]);
-  const currentTitle = props.api.title;
-  useEffect(() => {
-    if (currentTitle !== localizedTitle) props.api.setTitle(localizedTitle);
-  }, [currentTitle, localizedTitle, props.api]);
-
+export function LogDomainPanel({ domain }: { readonly domain: LogDomainId }) {
   const {
     logs,
     filter,

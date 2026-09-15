@@ -10,7 +10,7 @@ import {
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { executeGraphEdit } from "@/features/application/graphEditing";
 import type { GraphEditOutcome } from "@/features/application/graphEditing/types";
@@ -110,7 +110,7 @@ export function useEditorOperations() {
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
       const update = updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
       if (!update) return;
-      const active = workbenchDockviewRead.getActiveEditorPanelInGroup(update.groupId);
+      const active = workbenchLayoutRead.getActiveEditorPanelInGroup(update.groupId);
       if (
         active?.metadata.resourceKind === "event" ||
         active?.metadata.resourceKind === "function"
@@ -125,7 +125,7 @@ export function useEditorOperations() {
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
       const update = updateEditorGroupSelectedNodeIds(updater, targetGroupId);
       if (!update) return;
-      const active = workbenchDockviewRead.getActiveEditorPanelInGroup(update.groupId);
+      const active = workbenchLayoutRead.getActiveEditorPanelInGroup(update.groupId);
       if (
         active?.metadata.resourceKind === "event" ||
         active?.metadata.resourceKind === "function"

@@ -38,7 +38,7 @@ export const FRONTEND_LITERAL_POLICY_MEMBERSHIP: FrontendLiteralPolicyMembership
   core: [],
   domain: [],
   services: ["src/shared/platform/tauriWebview.ts", "src/shared/utils/openExternalUrl.ts"],
-  "components-ui": ["src/shared/theme/dockviewTheme.ts"],
+  "components-ui": ["src/shared/theme/layoutTheme.ts"],
   "wire-schema": [],
   logging: [],
   "pure-shared": [],
@@ -72,7 +72,7 @@ const LAYER_EDGES = [
   ["logging", "pure-shared"],
 ] as const satisfies readonly (readonly [FrontendLayer, FrontendLayer])[];
 
-const WORKBENCH_DOCKVIEW_READ_MEMBERS = [
+const WORKBENCH_LAYOUT_READ_MEMBERS = [
   "isReady",
   "isHydrated",
   "whenHydrated",
@@ -114,15 +114,15 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/dataStore/nodeView.ts", ["UINode", "isRerouteNodeView"]),
   viewCoreCapability("src/features/core/dataStore/pinLinks.ts", ["derivePinConnectionView"]),
   viewCoreCapability("src/features/core/dataStore/useNodeView.ts", ["useNodeView"]),
-  viewCoreCapability("src/modules/workbench/internal/dockview/logsDockviewLayout.ts", [
-    "DEFAULT_LOGS_DOCKVIEW_LAYOUT",
-    "LOGS_DOCKVIEW_COMPONENT_ID",
-    "LogsDockviewPanelParams",
+  viewCoreCapability("src/modules/workbench/internal/layout/logsLayoutModel.ts", [
+    "DEFAULT_LOGS_LAYOUT",
+    "LOGS_LAYOUT_COMPONENT_ID",
+    "LogsLayoutPanelParams",
   ]),
-  viewCoreCapability("src/modules/workbench/internal/dockview/workbenchDockviewDefaults.ts", [
+  viewCoreCapability("src/modules/workbench/internal/layout/workbenchLayoutDefaults.ts", [
     "WORKBENCH_ACTIVITY_GROUP_ID",
   ]),
-  viewCoreCapability("src/modules/workbench/internal/dockview/workbenchPanelModel.ts", [
+  viewCoreCapability("src/modules/workbench/internal/layout/workbenchPanelModel.ts", [
     "EditorResourceKind",
     "isWorkbenchActivityViewId",
     "isWorkbenchPersistentViewMetadata",
@@ -299,11 +299,11 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     ...VIEW_DOMAIN_CAPABILITIES,
     {
       sourceLayer: "app-composition",
-      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
-      exportedSymbols: ["WorkbenchDockviewRead"],
+      canonicalModule: "src/modules/workbench/internal/layout/workbenchRead.ts",
+      exportedSymbols: ["WorkbenchLayoutRead"],
       exactConsumers: null,
       memberCapabilities: {
-        WorkbenchDockviewRead: WORKBENCH_DOCKVIEW_READ_MEMBERS,
+        WorkbenchLayoutRead: WORKBENCH_LAYOUT_READ_MEMBERS,
       },
     },
     {
@@ -458,32 +458,32 @@ export const FRONTEND_ARCHITECTURE_POLICY: FrontendArchitecturePolicy = {
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
-      exportedSymbols: ["workbenchDockviewRead"],
+      canonicalModule: "src/modules/workbench/internal/layout/workbenchRead.ts",
+      exportedSymbols: ["workbenchLayoutRead"],
       exactConsumers: null,
       memberCapabilities: {
-        workbenchDockviewRead: WORKBENCH_DOCKVIEW_READ_MEMBERS,
+        workbenchLayoutRead: WORKBENCH_LAYOUT_READ_MEMBERS,
       },
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/modules/workbench/internal/dockview/workbenchTypes.ts",
+      canonicalModule: "src/modules/workbench/internal/layout/workbenchTypes.ts",
       exportedSymbols: ["WorkbenchPanelInfo"],
       exactConsumers: null,
       memberCapabilities: null,
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/modules/workbench/internal/dockview/workbenchRootBinding.ts",
-      exportedSymbols: ["workbenchRootBinding"],
-      exactConsumers: ["src/modules/workbench/internal/dockview/RootDockviewHost.tsx"],
+      canonicalModule: "src/modules/workbench/internal/layout/workbenchRootBinding.ts",
+      exportedSymbols: ["workbenchLayoutRootBinding"],
+      exactConsumers: ["src/modules/workbench/internal/layout/RootLayoutHost.tsx"],
       memberCapabilities: null,
     },
     {
       sourceLayer: "views",
-      canonicalModule: "src/modules/workbench/internal/dockview/logsRootBinding.ts",
-      exportedSymbols: ["logsDockviewRootBinding", "LogsDockviewBindingToken"],
-      exactConsumers: ["src/modules/logs/internal/ui/LogDomainDockviewHost.tsx"],
+      canonicalModule: "src/modules/workbench/internal/layout/logsRootBinding.ts",
+      exportedSymbols: ["logsLayoutRootBinding", "LogsLayoutBindingToken"],
+      exactConsumers: ["src/modules/logs/internal/ui/LogDomainLayoutHost.tsx"],
       memberCapabilities: null,
     },
   ],
@@ -530,23 +530,23 @@ function isModuleInternalLayer(path: string, layer: "application" | "state" | "d
   return path.startsWith("src/modules/") && path.includes(`/internal/${layer}/`);
 }
 
-const WORKBENCH_DOCKVIEW_VIEW_CONTRACTS = new Set([
-  "src/modules/workbench/internal/dockview/editorRenderer.ts",
-  "src/modules/workbench/internal/dockview/panelContribution.ts",
+const WORKBENCH_LAYOUT_VIEW_CONTRACTS = new Set([
+  "src/modules/workbench/internal/layout/editorRenderer.ts",
+  "src/modules/workbench/internal/layout/panelContribution.ts",
 ]);
 
-function isWorkbenchDockviewStateSource(path: string): boolean {
+function isWorkbenchLayoutStateSource(path: string): boolean {
   return (
-    path.startsWith("src/modules/workbench/internal/dockview/") &&
+    path.startsWith("src/modules/workbench/internal/layout/") &&
     path.endsWith(".ts") &&
-    !WORKBENCH_DOCKVIEW_VIEW_CONTRACTS.has(path)
+    !WORKBENCH_LAYOUT_VIEW_CONTRACTS.has(path)
   );
 }
 
 function isModuleViewSource(path: string): boolean {
   return (
     path.startsWith("src/modules/") &&
-    !isWorkbenchDockviewStateSource(path) &&
+    !isWorkbenchLayoutStateSource(path) &&
     !isModuleInternalLayer(path, "application") &&
     !isModuleInternalLayer(path, "state") &&
     !isModuleInternalLayer(path, "domain")
@@ -573,7 +573,7 @@ export const FRONTEND_BASE_RULES: readonly FrontendBaseRule[] = [
     matches: (path) =>
       path.startsWith("src/features/core/") ||
       isModuleInternalLayer(path, "state") ||
-      isWorkbenchDockviewStateSource(path),
+      isWorkbenchLayoutStateSource(path),
   },
   {
     layer: "domain",

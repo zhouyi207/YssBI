@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import {
   isGraphResourceDirty,
   resourceKey,
@@ -12,7 +12,7 @@ function resolveResourceDisplayName(ref: ResourceRef, fallbackId: string): strin
 }
 
 export interface DirtyEditorPanelSnapshot {
-  /** Dockview group that owns the editor panel. */
+  /** FlexLayout group that owns the editor panel. */
   groupId: string;
   /** Opaque graph or chart resource reference. */
   resourceRef: string;
@@ -24,7 +24,7 @@ export interface DirtyEditorPanelSnapshot {
 export function collectDirtyEditorPanels(): DirtyEditorPanelSnapshot[] {
   const seen = new Set<string>();
   const dirty: DirtyEditorPanelSnapshot[] = [];
-  for (const panel of workbenchDockviewRead.listPanels()) {
+  for (const panel of workbenchLayoutRead.listPanels()) {
     if (panel.metadata.role !== "editor") continue;
     const { resourceKind, resourceRef } = panel.metadata;
     if (resourceKind === "database") continue;

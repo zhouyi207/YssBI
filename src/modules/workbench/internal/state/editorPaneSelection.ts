@@ -1,5 +1,5 @@
-import { getPaneSelection, useEditorPaneStateStore } from "../dockview/editorPaneStateStore";
-import { workbenchDockviewRead } from "../dockview/workbenchRead";
+import { getPaneSelection, useEditorPaneStateStore } from "../layout/editorPaneStateStore";
+import { workbenchLayoutRead } from "../layout/workbenchRead";
 
 export interface GraphSelection {
   nodeIds: Set<string>;
@@ -14,11 +14,11 @@ export function createGraphSelection(
 }
 
 function resolveEditorGroupId(groupId?: string | null): string | null {
-  return groupId ?? workbenchDockviewRead.getActiveEditorPanel()?.groupId ?? null;
+  return groupId ?? workbenchLayoutRead.getActiveEditorPanel()?.groupId ?? null;
 }
 
 function activePanelInstanceId(groupId: string): string | undefined {
-  return workbenchDockviewRead.getActiveEditorPanelInGroup(groupId)?.panelInstanceId;
+  return workbenchLayoutRead.getActiveEditorPanelInGroup(groupId)?.panelInstanceId;
 }
 
 export function getEditorGroupGraphSelection(groupId: string): GraphSelection {

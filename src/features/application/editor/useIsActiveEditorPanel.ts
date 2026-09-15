@@ -1,12 +1,12 @@
-import { workbenchDockviewRead } from "@/modules/workbench/public";
-import { useDockviewPortSnapshot } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
+import { useLayoutPortSnapshot } from "@/modules/workbench/public";
 
 /** True only for the physically active editor panel. */
 export function useIsActiveEditorPanel(panelInstanceId?: string | null): boolean {
-  return useDockviewPortSnapshot(
-    workbenchDockviewRead,
+  return useLayoutPortSnapshot(
+    workbenchLayoutRead,
     () =>
       panelInstanceId != null &&
-      workbenchDockviewRead.getActiveEditorPanel()?.panelInstanceId === panelInstanceId,
+      workbenchLayoutRead.getActiveEditorPanel()?.panelInstanceId === panelInstanceId,
   );
 }

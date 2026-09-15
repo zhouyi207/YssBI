@@ -1,4 +1,4 @@
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { isAppModalOpen } from "@/features/core/keyboard";
 import {
   captureProjectIdentity,
@@ -37,7 +37,7 @@ const SHORTCUT_CONSUMER_SELECTOR = [
 ].join(",");
 
 export function captureActiveEditorCommandTarget(): EditorCommandTarget | null {
-  const panel = workbenchDockviewRead.getActiveEditorPanel();
+  const panel = workbenchLayoutRead.getActiveEditorPanel();
   if (!panel || panel.metadata.role !== "editor" || panel.metadata.resourceKind === "database")
     return null;
 
@@ -62,7 +62,7 @@ export function isEditorCommandTargetCurrent(target: EditorCommandTarget): boole
   const projectIdentity = projectIdentityByTarget.get(target);
   if (!projectIdentity || !isCurrentProjectIdentity(projectIdentity)) return false;
 
-  const panel = workbenchDockviewRead.getActiveEditorPanel();
+  const panel = workbenchLayoutRead.getActiveEditorPanel();
   return (
     panel?.metadata.role === "editor" &&
     panel.panelInstanceId === target.panelInstanceId &&

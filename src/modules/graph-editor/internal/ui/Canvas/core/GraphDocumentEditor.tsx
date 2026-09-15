@@ -16,7 +16,7 @@ export type GraphDocumentEditorProps = EditorPanelScope<"event" | "function"> & 
 };
 
 /**
- * Graph editor shell per Dockview panel.
+ * Graph editor shell per FlexLayout panel.
  * Each panel renders its own resource; only the physically active panel is interactive.
  */
 export const GraphDocumentEditor = memo(function GraphDocumentEditor({

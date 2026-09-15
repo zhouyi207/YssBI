@@ -1,29 +1,27 @@
-export type { EditorPanelScope, EditorRendererRegistry } from "./internal/dockview/editorRenderer";
-export { EditorResourceDockPanel } from "./internal/dockview/EditorResourceDockPanel";
-export * from "./internal/dockview/index";
-export {
-  DEFAULT_LOGS_DOCKVIEW_LAYOUT,
-  LOGS_DOCKVIEW_COMPONENT_ID,
-} from "./internal/dockview/logsDockviewLayout";
-export type { LogsDockviewPanelParams } from "./internal/dockview/logsDockviewLayout";
-export type { WorkbenchPanelCommitToken } from "./internal/dockview/workbenchTypes";
-export { canRemoveWorkbenchPanel } from "./internal/dockview/workbenchActivityGroup";
+export type { EditorPanelScope, EditorRendererRegistry } from "./internal/layout/editorRenderer";
+export { EditorResourcePanel } from "./internal/layout/EditorResourcePanel";
+export * from "./internal/layout/index";
+export { DEFAULT_LOGS_LAYOUT, LOGS_LAYOUT_COMPONENT_ID } from "./internal/layout/logsLayoutModel";
+export type { LogsLayoutPanelParams } from "./internal/layout/logsLayoutModel";
+export type { WorkbenchPanelCommitToken } from "./internal/layout/workbenchTypes";
+export { canRemoveWorkbenchPanel } from "./internal/layout/workbenchActivityGroup";
 export type {
-  RootDockviewPanelComponent,
+  RootPanelComponent,
+  RootPanelProps,
   RootPanelActivationTarget,
   RootPanelRegistry,
   RootPanelTabComponent,
-} from "./internal/dockview/panelContribution";
+} from "./internal/layout/panelContribution";
 export type {
-  RootDockviewDndCoordinator,
+  RootLayoutDndCoordinator,
   RootPanelActivationCoordinator,
-} from "./internal/dockview/RootDockviewHost";
+} from "./internal/layout/RootLayoutHost";
 export {
   RootPanelTabRenderer,
   type RootPanelTabActions,
   type RootPanelTabRendererProps,
   type WorkbenchTabTarget,
-} from "./internal/dockview/RootPanelTabRenderer";
+} from "./internal/layout/RootPanelTabRenderer";
 export { WorkbenchWindow } from "./internal/ui/WorkbenchWindowEntry";
 export type { WorkbenchOverlayRegistry } from "./internal/ui/overlay/overlayContribution";
 export { useWorkbenchUiStore } from "./internal/state/workbenchUiStore";

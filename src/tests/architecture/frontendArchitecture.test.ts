@@ -59,7 +59,7 @@ const compilerSources = new Map<string, string>([
     import type { D3TypesOnly } from '@types/d3';
     import { createRoot } from 'react-dom/client';
     import { getCurrentWindow } from '@tauri-apps/api/window';
-    import 'dockview-react/dist/styles/dockview.css';
+    import 'flexlayout-react/style/combined.css';
     import 'katex/dist/katex.min.css';
     import './fixture.css';
     import RuntimeEquals = require('./runtime');
@@ -261,7 +261,7 @@ function stylesheetAssetDependency(
 }
 
 describe("frontend architecture model", () => {
-  it("keeps Dockview as the sole editor panel topology authority", () => {
+  it("keeps FlexLayout as the sole editor panel topology authority", () => {
     withProductionTypeScriptProject((context) => {
       const sources = productionTypeScriptSources(context);
       const obsoleteIdentifiers = [
@@ -282,7 +282,7 @@ describe("frontend architecture model", () => {
       const obsoleteFiles = new Set([
         "src/features/core/layout/layoutTabModel.ts",
         "src/features/core/layout/layoutTabQueries.ts",
-        "src/features/application/editor/dockviewTabProjection.ts",
+        "src/features/application/editor/flexlayoutTabProjection.ts",
       ]);
       expect(sources.map(({ path }) => path).filter((path) => obsoleteFiles.has(path))).toEqual([]);
       expect(
@@ -301,13 +301,13 @@ describe("frontend architecture model", () => {
           /\buseWorkbenchLayout\s*\(/u.test(source),
       );
       expect(layoutConsumers.map(({ path }) => path)).toEqual([
-        "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
+        "src/modules/workbench/internal/layout/RootLayoutHost.tsx",
       ]);
 
       const obsoleteShellFiles = new Set([
         "src/views/EditorView/EditorWindow.tsx",
         "src/views/EditorView/Layout/Workspace.tsx",
-        "src/views/EditorView/Layout/WorkbenchDockviewPanels.tsx",
+        "src/views/EditorView/Layout/WorkbenchLayoutPanels.tsx",
       ]);
       expect(
         sources.map(({ path }) => path).filter((path) => obsoleteShellFiles.has(path)),
@@ -338,26 +338,26 @@ describe("frontend architecture model", () => {
     });
   });
 
-  it("keeps business coordination outside the root Dockview adapters", () => {
+  it("keeps business coordination outside the root FlexLayout adapters", () => {
     withProductionTypeScriptProject((context) => {
       const sourceByPath = new Map(
         productionTypeScriptSources(context).map(({ path, source }) => [path, source]),
       );
       const rootHost =
-        sourceByPath.get("src/modules/workbench/internal/dockview/RootDockviewHost.tsx") ?? "";
+        sourceByPath.get("src/modules/workbench/internal/layout/RootLayoutHost.tsx") ?? "";
       const tabRenderer =
-        sourceByPath.get("src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx") ?? "";
+        sourceByPath.get("src/modules/workbench/internal/layout/RootPanelTabRenderer.tsx") ?? "";
       const dragOverlay =
         sourceByPath.get("src/modules/workbench/internal/ui/dnd/SidebarDragOverlay.tsx") ?? "";
       const layoutActions =
         sourceByPath.get("src/modules/workbench/internal/application/workbenchLayoutActions.ts") ??
         "";
-      const directBusinessDockviewConsumers = [...sourceByPath.entries()]
+      const directBusinessFlexLayoutConsumers = [...sourceByPath.entries()]
         .filter(
           ([path, source]) =>
             path.startsWith("src/modules/") &&
             !path.startsWith("src/modules/workbench/") &&
-            /from\s+["']dockview-react["']/u.test(source),
+            /from\s+["']flexlayout-react["']/u.test(source),
         )
         .map(([path]) => path)
         .sort();
@@ -366,10 +366,8 @@ describe("frontend architecture model", () => {
       expect(tabRenderer).not.toMatch(/from\s+["']@\/features\//u);
       expect(dragOverlay).not.toMatch(/from\s+["']@\/features\//u);
       expect(layoutActions).not.toMatch(/\b(?:useEditorStore|useGraphSessionStore)\b/u);
-      expect(directBusinessDockviewConsumers).toEqual([
-        "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
-        "src/modules/logs/internal/ui/LogDomainPanel.tsx",
-        "src/modules/logs/internal/ui/LogWorkspaceActions.tsx",
+      expect(directBusinessFlexLayoutConsumers).toEqual([
+        "src/modules/logs/internal/ui/LogDomainLayoutHost.tsx",
       ]);
 
       expect(
@@ -503,8 +501,8 @@ describe("frontend architecture model", () => {
       const retiredIdentifiers = [
         "BottomBar",
         "GraphEditor",
-        "LogWorkspaceDockview",
-        "WorkbenchDockviewTab",
+        "LogWorkspaceFlexLayout",
+        "WorkbenchLayoutTab",
         "WorkbenchStore",
         "activeTabId",
       ];
@@ -521,17 +519,17 @@ describe("frontend architecture model", () => {
         "src/features/core/workbench/workbenchStore.ts",
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphEditor.tsx",
         "src/views/EditorView/Layout/BottomBar.tsx",
-        "src/views/EditorView/Layout/WorkbenchDockviewTab.tsx",
-        "src/modules/logs/internal/ui/LogWorkspaceDockview.tsx",
+        "src/views/EditorView/Layout/WorkbenchLayoutTab.tsx",
+        "src/modules/logs/internal/ui/LogWorkspaceFlexLayout.tsx",
       ];
       expect(retiredFiles.filter((path) => paths.has(path))).toEqual([]);
 
       const finalFiles = [
         "src/modules/workbench/internal/state/workbenchUiStore.ts",
         "src/modules/graph-editor/internal/ui/Canvas/core/GraphDocumentEditor.tsx",
-        "src/modules/workbench/internal/dockview/RootPanelTabRenderer.tsx",
+        "src/modules/workbench/internal/layout/RootPanelTabRenderer.tsx",
         "src/modules/workbench/internal/ui/status/StatusBar.tsx",
-        "src/modules/logs/internal/ui/LogDomainDockviewHost.tsx",
+        "src/modules/logs/internal/ui/LogDomainLayoutHost.tsx",
       ];
       expect(finalFiles.filter((path) => !paths.has(path))).toEqual([]);
     });
@@ -623,10 +621,10 @@ describe("frontend architecture model", () => {
         "src/app/windows/workbench/rootPanelRegistry.tsx",
       ]);
 
-      const rootDockviewHost = sources.find(
-        ({ path }) => path === "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
+      const rootFlexLayoutHost = sources.find(
+        ({ path }) => path === "src/modules/workbench/internal/layout/RootLayoutHost.tsx",
       )?.source;
-      expect(rootDockviewHost).not.toMatch(
+      expect(rootFlexLayoutHost).not.toMatch(
         /\b(?:beginActivityEditorDrag|executeEditorDragEnd|sidebarDragUi)\b|["']pointermove["']/u,
       );
 
@@ -822,11 +820,11 @@ describe("frontend architecture model", () => {
           source: "export const document = true;",
         },
         {
-          path: "src/modules/workbench/internal/dockview/workbenchRead.ts",
+          path: "src/modules/workbench/internal/layout/workbenchRead.ts",
           source: "export const read = true;",
         },
         {
-          path: "src/modules/workbench/internal/dockview/RootDockviewHost.tsx",
+          path: "src/modules/workbench/internal/layout/RootLayoutHost.tsx",
           source: "export const host = true;",
         },
         { path: "src/shared/platform/testAdapter.ts", source: "export const adapter = true;" },
@@ -843,8 +841,8 @@ describe("frontend architecture model", () => {
       ["src/modules/chart/internal/state/chartStore.ts", "core"],
       ["src/modules/chart/internal/ui/ChartEditor.tsx", "views"],
       ["src/modules/chart/public.ts", "views"],
-      ["src/modules/workbench/internal/dockview/RootDockviewHost.tsx", "views"],
-      ["src/modules/workbench/internal/dockview/workbenchRead.ts", "core"],
+      ["src/modules/workbench/internal/layout/RootLayoutHost.tsx", "views"],
+      ["src/modules/workbench/internal/layout/workbenchRead.ts", "core"],
       ["src/shared/platform/testAdapter.ts", "services"],
     ]);
     expect(report.errors).toEqual([
@@ -868,10 +866,10 @@ describe("frontend architecture model", () => {
     });
     expect(FRONTEND_ARCHITECTURE_POLICY.capabilities).toContainEqual(
       expect.objectContaining({
-        canonicalModule: "src/modules/workbench/internal/dockview/workbenchRead.ts",
-        exportedSymbols: ["WorkbenchDockviewRead"],
+        canonicalModule: "src/modules/workbench/internal/layout/workbenchRead.ts",
+        exportedSymbols: ["WorkbenchLayoutRead"],
         memberCapabilities: {
-          WorkbenchDockviewRead: [
+          WorkbenchLayoutRead: [
             "isReady",
             "isHydrated",
             "whenHydrated",
@@ -896,9 +894,9 @@ describe("frontend architecture model", () => {
         .filter(
           (capability) =>
             capability.canonicalModule ===
-              "src/modules/workbench/internal/dockview/workbenchRead.ts" &&
+              "src/modules/workbench/internal/layout/workbenchRead.ts" &&
             capability.exportedSymbols.some(
-              (symbol) => symbol === "WorkbenchDockviewRead" || symbol === "workbenchDockviewRead",
+              (symbol) => symbol === "WorkbenchLayoutRead" || symbol === "workbenchLayoutRead",
             ),
         )
         .map(({ sourceLayer }) => sourceLayer),
@@ -945,12 +943,17 @@ describe("frontend architecture model", () => {
         "react::shallow",
         "runtime",
       ),
-      externalModuleDependency("src/features/core/fixture.ts", "dockview-react", null, "type-only"),
+      externalModuleDependency(
+        "src/features/core/fixture.ts",
+        "flexlayout-react",
+        null,
+        "type-only",
+      ),
       externalModuleDependency("src/services/fixture.ts", "@tauri-apps/api", "core", "runtime"),
       externalModuleDependency(
         "src/app/App.tsx",
-        "dockview-react",
-        "dist::styles::dockview.css",
+        "flexlayout-react",
+        "style::combined.css",
         "runtime",
         "stylesheet",
       ),
@@ -969,28 +972,28 @@ describe("frontend architecture model", () => {
         "stylesheet",
       ),
       repositoryAssetDependency("src/app/App.tsx", "src/app/App.css"),
-      repositoryAssetDependency("src/app/main.tsx", "src/app/workbench-dockview.css"),
+      repositoryAssetDependency("src/app/main.tsx", "src/app/workbench-layout.css"),
       externalModuleDependency("src/features/domain/fixture.ts", "react", null, "runtime"),
       externalModuleDependency("src/views/fixture.tsx", "zustand", null, "runtime"),
       externalModuleDependency("src/views/fixture.tsx", "@tauri-apps/api", "window", "runtime"),
       externalModuleDependency(
         "src/features/application/fixture.ts",
-        "dockview-react",
+        "flexlayout-react",
         null,
         "runtime",
       ),
       externalModuleDependency("src/views/fixture.tsx", "react", "unlisted", "runtime"),
       externalModuleDependency(
         "src/app/App.tsx",
-        "dockview-react",
+        "flexlayout-react",
         "dist::styles::other.css",
         "runtime",
         "stylesheet",
       ),
       externalModuleDependency(
         "src/views/fixture.tsx",
-        "dockview-react",
-        "dist::styles::dockview.css",
+        "flexlayout-react",
+        "style::combined.css",
         "runtime",
         "stylesheet",
       ),
@@ -1018,13 +1021,13 @@ describe("frontend architecture model", () => {
       stylesheetExternalDependency("src/app/App.css", "tw-animate-css", null),
       stylesheetExternalDependency("src/app/App.css", "shadcn", "tailwind.css"),
       stylesheetExternalDependency("src/app/App.css", "@fontsource-variable/inter", null),
-      stylesheetExternalDependency("src/app/workbench-dockview.css", "tailwindcss", null),
+      stylesheetExternalDependency("src/app/workbench-layout.css", "tailwindcss", null),
     ];
     const stylesheetGraph: ResolvedStylesheetGraph = {
       repositoryStylesheets: [
         "src/modules/assistant/internal/ui/assistant.css",
         "src/app/App.css",
-        "src/app/workbench-dockview.css",
+        "src/app/workbench-layout.css",
         "src/modules/settings/internal/ui/settings.css",
         "src/modules/workbench/internal/ui/menu/architecture.css",
         "src/modules/graph-editor/internal/ui/Canvas/core/graphFlow.css",
@@ -1078,7 +1081,7 @@ describe("frontend architecture model", () => {
         dependencyKind: "side-effect-import",
         resourceKind: "stylesheet",
         consumerSourceFile: "src/app/main.tsx",
-        repositoryRelativeAssetPath: "src/app/workbench-dockview.css",
+        repositoryRelativeAssetPath: "src/app/workbench-layout.css",
       },
       {
         sourceLayer: "views",
@@ -1119,7 +1122,7 @@ describe("frontend architecture model", () => {
     expect(assetReport.stylesheetLayers).toEqual(
       new Map([
         ["src/app/App.css", "app-composition"],
-        ["src/app/workbench-dockview.css", "app-composition"],
+        ["src/app/workbench-layout.css", "app-composition"],
       ]),
     );
     expect(assetReport.findings).toEqual([
@@ -1604,12 +1607,12 @@ describe("frontend architecture model", () => {
           expect.objectContaining({
             kind: "side-effect-import",
             mode: "runtime",
-            canonicalOriginTarget: "external:dockview-react::dist::styles::dockview.css",
+            canonicalOriginTarget: "external:flexlayout-react::style::combined.css",
             origin: {
               kind: "external",
               dependency: {
-                packageName: "dockview-react",
-                canonicalSubpath: "dist::styles::dockview.css",
+                packageName: "flexlayout-react",
+                canonicalSubpath: "style::combined.css",
                 resourceKind: "stylesheet",
               },
             },
@@ -1997,7 +2000,7 @@ describe("frontend architecture model", () => {
 
       expect(graph.repositoryStylesheets).toEqual([
         "src/app/App.css",
-        "src/app/workbench-dockview.css",
+        "src/app/workbench-layout.css",
       ]);
       expect(graph.dependencies.map(({ canonicalOriginTarget }) => canonicalOriginTarget)).toEqual([
         "external:tailwindcss",

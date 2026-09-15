@@ -1,2 +1,2 @@
-export { LogDomainDockviewHost } from "./internal/ui/LogDomainDockviewHost";
+export { LogDomainLayoutHost } from "./internal/ui/LogDomainLayoutHost";
 export { LogWindow } from "./internal/ui/LogWindow";

@@ -1,5 +1,5 @@
 import { useGraphSessionUi } from "@/features/core/graphSession/ui";
-import { useDockviewPortSnapshot, workbenchDockviewRead } from "@/modules/workbench/public";
+import { useLayoutPortSnapshot, workbenchLayoutRead } from "@/modules/workbench/public";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 export interface ActiveProjectGraph {
@@ -9,13 +9,13 @@ export interface ActiveProjectGraph {
 }
 
 export function useActiveProjectGraph(): ActiveProjectGraph | null {
-  useDockviewPortSnapshot(workbenchDockviewRead);
+  useLayoutPortSnapshot(workbenchLayoutRead);
   const focusedSession = useGraphSessionUi((snapshot) => snapshot.focusedSession);
   // Tool focus keeps the existing graph context; an actual editor switch always takes priority.
   const activeEditor =
-    workbenchDockviewRead.getActiveEditorPanel()?.metadata ??
+    workbenchLayoutRead.getActiveEditorPanel()?.metadata ??
     (focusedSession
-      ? workbenchDockviewRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata
+      ? workbenchLayoutRead.getActiveEditorPanelInGroup(focusedSession.groupId)?.metadata
       : null);
 
   return useResourceRead((snapshot) => {

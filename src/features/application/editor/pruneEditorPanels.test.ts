@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/modules/workbench/public", () => ({
   commitWorkbenchPanelRemoval: mocks.remove,
   releaseEditorPaneState: mocks.release,
-  workbenchDockviewRead: {
+  workbenchLayoutRead: {
     listPanels: () => [
       {
         panelInstanceId: "missing",

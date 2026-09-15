@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 import { useEditorStore } from "@/features/core/editor";
 
 const mocks = vi.hoisted(() => ({
@@ -13,25 +13,25 @@ vi.mock("i18next", () => ({
   default: { t: (key: string) => key },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     listPanels: () => mocks.panels,
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchControl", () => ({
-  workbenchDockviewControl: {
+vi.mock("@/modules/workbench/internal/layout/workbenchControl", () => ({
+  workbenchLayoutControl: {
     ensureView: mocks.ensureView,
     reveal: mocks.reveal,
   },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchDockviewInternal", () => ({
-  workbenchDockviewInternal: { runLayoutTransaction: vi.fn() },
+vi.mock("@/modules/workbench/internal/layout/workbenchLayoutInternal", () => ({
+  workbenchLayoutInternal: { runLayoutTransaction: vi.fn() },
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/logsControl", () => ({
-  logsDockviewControl: { resetToDefault: vi.fn() },
+vi.mock("@/modules/workbench/internal/layout/logsControl", () => ({
+  logsLayoutControl: { resetToDefault: vi.fn() },
 }));
 
 vi.mock("@/modules/workbench/internal/application/workbenchLayoutController", () => ({

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { LogDomainDockviewHost } from "./LogDomainDockviewHost";
+import { LogDomainLayoutHost } from "./LogDomainLayoutHost";
 import { useCurrentWindowActions, useCustomTitleBar } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { WindowChrome } from "@/shared/ui/WindowChrome";
@@ -52,7 +52,7 @@ export const LogWindow = () => {
 
       {/* 内容区域 */}
       <div className="min-h-0 flex-1">
-        <LogDomainDockviewHost layout={{ kind: "ephemeral" }} />
+        <LogDomainLayoutHost layout={{ kind: "ephemeral" }} />
       </div>
     </div>
   );

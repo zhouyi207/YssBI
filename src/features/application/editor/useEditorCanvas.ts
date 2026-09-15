@@ -5,7 +5,7 @@ import {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
   useEditorPaneStateStore,
-  workbenchDockviewRead,
+  workbenchLayoutRead,
 } from "@/modules/workbench/public";
 import { setInspectionContext } from "./rightSidebarActions";
 import { useEditorUIActions, type EditorContextMenuState } from "@/features/core/editor";
@@ -27,7 +27,7 @@ export interface UseEditorCanvasOptions {
   scope: EditorCanvasScope;
 }
 
-/** Canvas-only editor projection scoped to one Dockview panel and resource. */
+/** Canvas-only editor projection scoped to one FlexLayout panel and resource. */
 export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): EditorCanvasSession {
   const editorCommands = useEditorOperations();
   const projectCommands = useProjectOperations();
@@ -40,7 +40,7 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
   const interactive = mode === "interactive";
 
   const paneStillMatches = useCallback(() => {
-    const panel = workbenchDockviewRead.getPanel(scope.panelInstanceId);
+    const panel = workbenchLayoutRead.getPanel(scope.panelInstanceId);
     return (
       panel?.groupId === scope.groupId &&
       panel.metadata.role === "editor" &&

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/dockview/workbenchRead";
+import type { WorkbenchPanelInfo } from "@/modules/workbench/internal/layout/workbenchRead";
 
 const mocks = vi.hoisted(() => ({
   activePanel: null as WorkbenchPanelInfo | null,
@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   renderedModalOpen: false,
 }));
 
-vi.mock("@/modules/workbench/internal/dockview/workbenchRead", () => ({
-  workbenchDockviewRead: {
+vi.mock("@/modules/workbench/internal/layout/workbenchRead", () => ({
+  workbenchLayoutRead: {
     getActiveEditorPanel: () =>
       mocks.activePanel?.metadata.role === "editor" ? mocks.activePanel : undefined,
   },

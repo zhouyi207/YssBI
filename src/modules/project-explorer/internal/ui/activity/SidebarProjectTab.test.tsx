@@ -18,7 +18,7 @@ import { PROJECT_TREE_CATEGORY_IDS } from "@/features/core/sidebar/projectTreeSt
 import { useEditorStore } from "@/features/core/editor";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import { setInspectionContext } from "@/features/application/editor/rightSidebarActions";
-import { workbenchDockviewRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
+import { workbenchLayoutRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
 
 import { SidebarProjectTab } from "./SidebarProjectTab";
 
@@ -47,12 +47,12 @@ describe("SidebarProjectTab", () => {
   let root: Root;
   let activeEditor: WorkbenchEditorPanelInfo | undefined;
   let groupEditors: Map<string, WorkbenchEditorPanelInfo>;
-  let dockviewSnapshot: { revision: number; ready: boolean; hydrated: boolean };
-  let dockviewListeners: Set<() => void>;
+  let flexlayoutSnapshot: { revision: number; ready: boolean; hydrated: boolean };
+  let flexlayoutListeners: Set<() => void>;
 
-  function publishDockview() {
-    dockviewSnapshot = { ...dockviewSnapshot, revision: dockviewSnapshot.revision + 1 };
-    for (const listener of dockviewListeners) listener();
+  function publishFlexLayout() {
+    flexlayoutSnapshot = { ...flexlayoutSnapshot, revision: flexlayoutSnapshot.revision + 1 };
+    for (const listener of flexlayoutListeners) listener();
   }
 
   function renderProjectTab() {
@@ -127,17 +127,17 @@ describe("SidebarProjectTab", () => {
     vi.clearAllMocks();
     activeEditor = undefined;
     groupEditors = new Map();
-    dockviewSnapshot = { revision: 0, ready: true, hydrated: true };
-    dockviewListeners = new Set();
-    vi.spyOn(workbenchDockviewRead, "getActiveEditorPanel").mockImplementation(() => activeEditor);
-    vi.spyOn(workbenchDockviewRead, "getActiveEditorPanelInGroup").mockImplementation((groupId) =>
+    flexlayoutSnapshot = { revision: 0, ready: true, hydrated: true };
+    flexlayoutListeners = new Set();
+    vi.spyOn(workbenchLayoutRead, "getActiveEditorPanel").mockImplementation(() => activeEditor);
+    vi.spyOn(workbenchLayoutRead, "getActiveEditorPanelInGroup").mockImplementation((groupId) =>
       groupEditors.get(groupId),
     );
-    vi.spyOn(workbenchDockviewRead, "getSnapshot").mockImplementation(() => dockviewSnapshot);
-    vi.spyOn(workbenchDockviewRead, "subscribe").mockImplementation((listener) => {
-      dockviewListeners.add(listener);
+    vi.spyOn(workbenchLayoutRead, "getSnapshot").mockImplementation(() => flexlayoutSnapshot);
+    vi.spyOn(workbenchLayoutRead, "subscribe").mockImplementation((listener) => {
+      flexlayoutListeners.add(listener);
       return () => {
-        dockviewListeners.delete(listener);
+        flexlayoutListeners.delete(listener);
       };
     });
     useEditorStore.setState({ detailFocus: null });
@@ -195,7 +195,7 @@ describe("SidebarProjectTab", () => {
     act(() => {
       activeEditor = undefined;
       useEditorStore.getState().setDetailFocus({ kind: "nodeDefinition", nodeType: "tests.other" });
-      publishDockview();
+      publishFlexLayout();
     });
     expect(graphRowSelected(first.name)).toBe(true);
   });

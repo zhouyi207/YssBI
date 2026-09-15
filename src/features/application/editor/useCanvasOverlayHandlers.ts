@@ -8,7 +8,7 @@ import {
   getCanvasInteraction,
   useGraphInteractionStore,
 } from "@/features/core/graphInteraction/graphInteractionStore";
-import { workbenchDockviewRead } from "@/modules/workbench/public";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import { clientToWorldInCanvas } from "./canvasDrop";
@@ -43,7 +43,7 @@ function interactionStillMatches(
   menu: { x: number; y: number },
   sourceAddress: PortAddressDto | null,
 ): boolean {
-  const panel = workbenchDockviewRead.getPanel(panelInstanceId);
+  const panel = workbenchLayoutRead.getPanel(panelInstanceId);
   if (
     !panel?.active ||
     panel.groupId !== groupId ||

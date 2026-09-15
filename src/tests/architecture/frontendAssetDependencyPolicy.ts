@@ -35,7 +35,7 @@ export const FRONTEND_ASSET_DEPENDENCY_POLICY: AssetDependencyPolicy = {
       dependencyKind: "side-effect-import",
       resourceKind: "stylesheet",
       consumerSourceFile: "src/app/main.tsx",
-      repositoryRelativeAssetPath: "src/app/workbench-dockview.css",
+      repositoryRelativeAssetPath: "src/app/workbench-layout.css",
     },
     {
       sourceLayer: "views",
