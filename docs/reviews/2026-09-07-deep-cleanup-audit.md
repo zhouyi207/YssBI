@@ -79,7 +79,7 @@ statsActions → useHypothesisTestBlock → statsActions
 
 建议根据消费者需求改成明确的加载结果/回执，移除虚构的空图集合，然后按引用检查退役 `Graph` 等旧模型。不要先给这些模型统一改名，再继续保留无用结构。
 
-命名还存在可直接改进的例子：[database.rs](../../src-tauri/crates/yss-application/src/database.rs#L94) 的 `ApplicationDatabaseError` 包装 [database/error.rs](../../src-tauri/crates/yss-application/src/database/error.rs#L78) 的 `DatabaseApplicationError`，两者只交换词序却表达不同层次。可按会话/用例错误与数据库操作错误命名。数学中的 `n`、`p`、`beta` 等常规符号不应机械展开。
+命名还存在可直接改进的例子：[database.rs](../../src-tauri/crates/yss-application/src/database/mod.rs#L94) 的 `ApplicationDatabaseError` 包装 [database/error.rs](../../src-tauri/crates/yss-application/src/database/error.rs#L78) 的 `DatabaseApplicationError`，两者只交换词序却表达不同层次。可按会话/用例错误与数据库操作错误命名。数学中的 `n`、`p`、`beta` 等常规符号不应机械展开。
 
 **F05：已退出的拖拽机制还占着调用链。**
 
@@ -116,7 +116,7 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 | 文件                                                                                                       | 当前规模与职责                                                                             | 建议优先检查的边界                                                                |
 | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | [workbenchDockviewInternal.ts](../../src/modules/workbench/internal/dockview/workbenchDockviewInternal.ts) | 2,083 行；元数据转换、shadow transaction、序列化布局、live Dockview 操作、排队和 hydration | 纯元数据/布局转换、临时事务执行与 live runtime；保留 root Dockview 唯一 authority |
-| [database.rs](../../src-tauri/crates/yss-application/src/database.rs)                                      | 1,493 行；会话校验、导入导出、SQL/Excel 枚举、物理 ingest、临时文件与 Windows FFI          | 用例顺序和会话校验留在 Application，具体 I/O 交给相应 adapter                     |
+| [database.rs](../../src-tauri/crates/yss-application/src/database/mod.rs)                                      | 1,493 行；会话校验、导入导出、SQL/Excel 枚举、物理 ingest、临时文件与 Windows FFI          | 用例顺序和会话校验留在 Application，具体 I/O 交给相应 adapter                     |
 | [graph-analysis/lib.rs](../../src-tauri/crates/yss-graph-analysis/src/lib.rs)                              | 2,150 行，最终测试模块之前约 1,498 行；语义事实类型、组装与分析逻辑                        | 在当前 crate 内区分事实类型与解析组装，避免再引入第二份 semantic model            |
 
 行数包含空行/注释；Rust 总行数也包含测试，不作为纯生产逻辑行数。`bayes.rs` 的 1,755 行也有约 611 行最终测试模块，不能全部计为单体业务逻辑。
@@ -125,7 +125,7 @@ Rust 的 [GraphResourcePath](../../src-tauri/crates/yss-graph-document/src/resou
 
 **F10：平台文件替换有三份重复实现。**
 
-[database.rs](../../src-tauri/crates/yss-application/src/database.rs#L1399)、`window-state/persistence.rs`（历史实现，现已由官方窗口状态插件替换）、[julia-worker/assets.rs](../../plugins/julia/native/crates/yss-julia-worker/src/assets.rs#L159) 都重复编码 Windows 路径、调用 `MoveFileExW`、设置 replace/write-through 标志并读取系统错误。
+[database.rs](../../src-tauri/crates/yss-application/src/database/mod.rs#L1399)、`window-state/persistence.rs`（历史实现，现已由官方窗口状态插件替换）、[julia-worker/assets.rs](../../plugins/julia/native/crates/yss-julia-worker/src/assets.rs#L159) 都重复编码 Windows 路径、调用 `MoveFileExW`、设置 replace/write-through 标志并读取系统错误。
 
 后续修正 Windows 行为需要维护三处。建议先区分共同的平台 primitive 与各自的临时文件/错误策略，再确定复用位置；不要让 Window/Julia adapter 为复用而依赖 Project 领域，也不要把业务事务抽成万能文件工具。
 

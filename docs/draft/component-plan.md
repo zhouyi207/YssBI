@@ -59,18 +59,20 @@
 
 审计清单与每阶段实施记录一起维护即可，不新建通用审计系统或复制仓库级规则。判断“干净”的依据是职责唯一、调用清楚、状态来源明确、旧路径已清除且行为得到验证，不以 crate 数量、文件大小或零告警作为完成标准。
 
-## 2. 当前实现依据
+## 2. 设计依据与迁移入口
 
-| 检查入口                                                                                                                                           | 当前事实与迁移意义                                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [Application 说明](../../src-tauri/crates/yss-application/README.md)、[manifest](../../src-tauri/crates/yss-application/Cargo.toml)                | Application 同时组织业务用例、会话、IPC 和桌面组装；依赖应按用途收口，不能只按数量判断 |
-| [应用会话](../../src-tauri/crates/yss-application/src/execution/session_slot.rs)                                                                   | 会话绑定 Project、Database、Graph 和 Execution，但位于 execution 目录                  |
-| [图编译](../../src-tauri/crates/yss-application/src/graph_compile.rs)、[草稿编辑](../../src-tauri/crates/yss-application/src/resource_mutation.rs) | 多个图用例组织相似事实；已有 DraftResolutionContext 可整理复用                         |
-| [Graph Runtime](../../src-tauri/crates/yss-graph-runtime/src/lib.rs)                                                                               | 已有解析、编译缓存、编辑规划等入口，无需再建立逐方法转发的组件包装                     |
-| [图相关转换](../../src-tauri/crates/yss-application/src/graph_contracts.rs)                                                                        | 同时承担函数依赖捕获、资源目录构造和执行包转换，需要按职责归位                         |
-| [Chart 用例](../../src-tauri/crates/yss-application/src/chart.rs)、[图表数据查询](../../src-tauri/crates/yss-application/src/chart_plot.rs)        | 独立图表使用 Project 和 Database，不要求运行 Graph                                     |
-| [Execution](../../src-tauri/crates/yss-graph-execution/src/state.rs)                                                                               | 运行和结果由执行运行态持有；kernel 注册与编译支持检查使用固定的内置表                  |
-| [数据库变更协调](../../src-tauri/crates/yss-application/src/database_mutation.rs)                                                                  | 已有准备、提交、最终确认和补偿边界，应保留并整理                                       |
+下表记录迁移前的问题依据，源码链接已随实现归位；当前完成状态与验证见第 9 节。
+
+| 检查入口                                                                                                                                               | 当前事实与迁移意义                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| [Application 说明](../../src-tauri/crates/yss-application/README.md)、[manifest](../../src-tauri/crates/yss-application/Cargo.toml)                    | Application 同时组织业务用例、会话、IPC 和桌面组装；依赖应按用途收口，不能只按数量判断 |
+| [应用会话](../../src-tauri/crates/yss-application/src/session/slot.rs)                                                                                 | 会话绑定 Project、Database、Graph 和 Execution，但位于 execution 目录                  |
+| [图编译](../../src-tauri/crates/yss-application/src/graph/compile.rs)、[草稿编辑](../../src-tauri/crates/yss-application/src/graph/edit.rs)            | 多个图用例组织相似事实；已有 DraftResolutionContext 可整理复用                         |
+| [Graph Runtime](../../src-tauri/crates/yss-graph-runtime/src/lib.rs)                                                                                   | 已有解析、编译缓存、编辑规划等入口，无需再建立逐方法转发的组件包装                     |
+| [图相关转换](../../src-tauri/crates/yss-application/src/graph/execution_mapping.rs)                                                                    | 同时承担函数依赖捕获、资源目录构造和执行包转换，需要按职责归位                         |
+| [Chart 用例](../../src-tauri/crates/yss-application/src/chart/resources.rs)、[图表数据查询](../../src-tauri/crates/yss-application/src/chart/query.rs) | 独立图表使用 Project 和 Database，不要求运行 Graph                                     |
+| [Execution](../../src-tauri/crates/yss-graph-execution/src/state.rs)                                                                                   | 运行和结果由执行运行态持有；kernel 注册与编译支持检查使用固定的内置表                  |
+| [数据库变更协调](../../src-tauri/crates/yss-application/src/database/mutation.rs)                                                                      | 已有准备、提交、最终确认和补偿边界，应保留并整理                                       |
 
 当前架构以 [系统总览](../architecture/ARCHITECTURE.md)、[Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)、[IPC 契约](../../src-tauri/crates/yss-application/src/ipc/README.md) 为准。
 
@@ -293,7 +295,7 @@ Runtime 继续选择 SQLite、Rig、文件监听器及通用插件管理实现�
 
 ### 6.6 已确认遗留的删除边界
 
-- **录制与旧动画**：从 [执行入口](../../src/features/application/editor/useProjectOperations.ts)、[回放 hook](../../src/features/core/execution/useExecutionPlayback.ts)、旧 live event 队列、执行 store、工具栏、Node/Edge renderer 及主题样式一起清理。共享的真实运行终态、取消、Pin 预览和渲染几何继续保留，不能按文件名整包删除。
+- **录制与旧动画**：执行入口、回放 hook、旧 live event 队列、执行 store、工具栏、Node/Edge renderer 及主题样式已一起迁移；回放模块已删除。共享的真实运行终态、取消、Pin 预览和渲染几何继续保留，新呈现见 [graphPresentation](../../src/features/application/results/graphPresentation.ts)；真实界面验收仍待完成。
 - **重复值类型**：[StoredResult](../../src-tauri/crates/yss-graph-execution/src/result.rs) 的正常生产路径统一到 `RuntimeValue`，同步清理 Application 结果查询、分页、IPC DTO 与 Automation 检查中的旧分支。测试数据改用真实生产类型，保留空值、有限数检查、输出类别及报告投影含义。
 - **stdout/stderr**：删除 Execution `run_output` 消息、无生产者回调、Application/IPC 映射、共享 DTO/parser、ProjectService `onOutput`、专用前端投影、sequence/loss 展示与对应空 UI。保留 RunStarted/Completed/Errored/Cancelled、结果通知、Channel 终态排空及错误收尾顺序；Output 面板保留运行失败摘要和节点定位，清除该摘要不清除 Results。
 - **校验控制**：保留 [PlanValidationControl](../../src-tauri/crates/yss-graph-execution/src/plan/validation/control.rs)，继续标明尚未接入。Harness 拥有 turn/tool/workflow 的预算策略，Application 可以把取消和 deadline 转换后交给 Graph Execution；计划校验以及是否在校验步骤检查预算属于后者。当前不得据此声称计划校验超时已经生效，也不新增通用控制框架。
@@ -387,92 +389,146 @@ Node 通过 Registry 注册定义，Catalog 组织内置定义及其目录呈现
 
 ## 9. 分阶段实施
 
-P0 正在实施，P1–P6 尚未完成。已勾选项表示该迁移单元已完成；缓存与图呈现仍需作为完整行为改造验收，当前不能将 P0 标记完成。每一阶段可以拆成多个可独立验证的提交；不将全仓搬迁集中到一次提交。
+P0–P6 代码迁移、审计清理和受影响范围自动验证已完成。2026-09-15 用户明确由其稍后人工验收真实界面，第 10.2 节保留为待验收清单。代码与自动检查完成不等于真实界面已验收，P0/P3 的人工验收项保持未勾选。
 
 P0 建立第 1.2 节的审计清单，P1–P5 在各自迁移范围内持续检查、修复和删除，P6 复核跨组件残留。每个阶段都交付发现的问题、采取的处置、相关验证及未决项，不将所有清理推迟到最后。
 
 ### P0：确认范围、清理执行遗留并建立图状态契约
 
-- [ ] 确认本计划中的状态 owner、组件入口和目标路径。
-- [ ] 按代码列出受影响的公开类型、业务调用方、测试构造、IPC 映射和架构精确权限。
-- [ ] 按第 1.2 节检查七类问题，记录证据、职责归属和处置方式；对本阶段已确认的重复/无效路径完成清理。
-- [ ] 按第 1.1 节落实保留/删除范围，先统一结果缓存及报告租约术语，保留校验控制对象。
+- [x] 确认本计划中的状态 owner、组件入口和目标路径。
+- [x] 按代码列出受影响的公开类型、业务调用方、测试构造、IPC 映射和架构精确权限。
+- [x] 按第 1.2 节检查七类问题，记录证据、职责归属和处置方式；对本阶段已确认的重复/无效路径完成清理。
+- [x] 按第 1.1 节落实保留/删除范围，先统一结果缓存及报告租约术语，保留校验控制对象。
 - [x] 独立清理重复结果值分支，检查分页、报告、Automation 和 IPC 的真实生产类型。
 - [x] 独立删除 stdout/stderr 专用管线，保留运行错误展示、结果事件、取消与终态排空。
-- [ ] 在 Graph/Execution 现有 owner 中实现第 6.4 节的局部依赖失效、编辑期间缓存持有及撤销重验，复用已有编译产物缓存。
-- [ ] 接入第 6.5 节的连线、Pin 和 Node 投影，再一并移除录制器、回放按钮、计时器、旧动画队列及其状态；不留下无事实来源的完成样式。
-- [ ] 为各迁移单元选择现有回归用例，补充实际缺口；完成编译、执行、改线、断线、撤销/重做和旁路不失效的人工验收。
+- [x] 在 Graph/Execution 现有 owner 中实现第 6.4 节的局部依赖失效、编辑期间缓存持有及撤销重验，复用已有编译产物缓存。
+- [x] 接入第 6.5 节的连线、Pin 和 Node 投影，再一并移除录制器、回放按钮、计时器、旧动画队列及其状态；不留下无事实来源的完成样式。
+- [x] 为各迁移单元选择现有回归用例，补充局部失效、实际消费绑定和请求顺序的实际缺口。
+- [ ] 由用户人工验收编译、执行、改线、断线、撤销/重做和旁路不失效；操作与预期见第 10.2 节。
 
 本阶段先完成可独立验证的清理，再把缓存规则与新呈现作为一个完整行为改造交付，不将其掺入后续目录搬迁。完成条件：已确认遗留没有正式调用路径残留；报告保留与结果回收正确；下游失效、撤销恢复和实际数据一致，UI 不重建业务权威；每个待迁移职责有唯一去向。依赖后续阶段才能成立的新 API 不提前创建。
 
 实施中的审计记录：
 
-| 问题与证据                                                                       | 处置与当前状态                                                          | 验证依据或剩余事项                                                                       |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `StoredResult` 与 `RuntimeValue` 平行值分支、递归类别包装及前端 `unknown` 值类别 | 统一到 `RuntimeValue` 与输出类别，迁移查询和传输消费者                  | 结果分页、报告、Automation 与传输相关用例；保留报告租约                                  |
-| Graph stdout/stderr 没有生产者，消息、回调和展示路径仍存在                       | 已删除专用路径；Output 保留运行失败与节点定位                           | 运行事件解析、终态排空、IPC 失败映射；界面人工验收仍待完成                               |
-| 整图 hash 失效无法支持局部缓存恢复，前端录制/动画状态无法证明结果有效            | Rust 已接入输出依赖、资源版本和运行发布资格；前端复用现有结果查询协调器 | 完成绑定状态与 Node/Pin/Edge 呈现后，再删除旧录制/动画状态；不能仅凭后端测试勾选完整行为 |
-| 新状态查询跨过命令层直接映射 Execution 状态                                      | 映射归入现有 IPC schema，命令只调用用例并转换回执                       | Rust 真实依赖审计及禁止 Transport 访问应用状态的权限回归通过；不增加整层或整目录授权     |
-| 文档门禁发现元数据、模块索引及工作台样式权限存在未决项                           | 留待 P6 核实既有状态并修正相应 owner                                    | `documentationContract`、`frontendSemanticArchitecture`；不把未通过门禁视为通过          |
+| 问题与证据                                                                       | 处置与当前状态                                                                                  | 验证依据或剩余事项                                                                   |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `StoredResult` 与 `RuntimeValue` 平行值分支、递归类别包装及前端 `unknown` 值类别 | 统一到 `RuntimeValue` 与输出类别，迁移查询和传输消费者                                          | 结果分页、报告、Automation 与传输相关用例；保留报告租约                              |
+| Graph stdout/stderr 没有生产者，消息、回调和展示路径仍存在                       | 已删除专用路径；Output 保留运行失败与节点定位                                                   | 运行事件解析、终态排空、IPC 失败映射；界面人工验收仍待完成                           |
+| 整图 hash 失效无法支持局部缓存恢复，前端录制/动画状态无法证明结果有效            | Rust 已接入输出依赖、资源版本和运行发布资格；Node/Pin/Edge 接入实际状态，旧录制和动画队列已删除 | 后端局部失效/撤销与结果查询回归通过；完整界面行为仍待人工验收                        |
+| 新状态查询跨过命令层直接映射 Execution 状态                                      | 映射归入现有 IPC schema，命令只调用用例并转换回执                                               | Rust 真实依赖审计及禁止 Transport 访问应用状态的权限回归通过；不增加整层或整目录授权 |
+| 文档门禁发现元数据、模块索引及工作台样式权限存在未决项                           | P6 已修正架构入口、文档归属、生成索引和实际 owner 的精确样式权限                                | 文档、前端依赖、语义和状态权威门禁共 33 项通过；最终文档变动后再复验                 |
 
-当前文档未决项包括 `docs/architecture/README.md`、`docs/architecture/jsonDriver.md` 的状态元数据，以及 `docs/reference/MODULE_MAP.md` 中失效的模块路径和生成结果。应修正声明或通过原生成入口更新，不放宽检查规则。工作台样式的依赖权限另按实际呈现职责核实。
+P6 已补齐架构入口与 Agent 规则索引，将未接受的 JSON UI 方案讨论移至 `docs/draft/jsonDriver.md`，并通过原生成入口更新模块索引。工作台样式仅为实际 owner 添加精确资产权限，架构模型测试样本已同步并通过复验。
+
+2026-09-15：Rust 已将目标 Pin 的实际消费绑定纳入缓存依据，状态查询同时返回输出与连线状态；新绑定、过期绑定及撤销恢复有 ResultStore 回归。前端按当前编译、实际 demand 和缓存投影呈现，删除录制、回放及命令类型驱动的重复失效逻辑。正常运行、Pin 预览和 Harness 的迟到回执继续隔离，报告租约回归通过。用户已接手后续真实界面验收，本次不再依赖电脑控制连接；此项仍未验收，不以自动检查替代。
 
 ### P1：应用会话独立与入口收口
 
-- [ ] 迁移会话 slot、factory 和数据库绑定适配，保留恢复协议。
-- [ ] 收窄 lib.rs 的公开面，公开宿主及独立调用者确实需要的入口。
-- [ ] 宿主窗口关闭通过应用级入口释放结果 owner，不再依赖 execution 模块路径。
-- [ ] 同步 IPC、runtime、测试、examples 和门禁中的受影响引用。
+- [x] 迁移会话 slot、factory 和数据库绑定适配，保留恢复协议。
+- [x] 收窄 lib.rs 的公开面，公开宿主及独立调用者确实需要的入口。
+- [x] 宿主窗口关闭通过应用级入口释放结果 owner，不再依赖 execution 模块路径。
+- [x] 同步 IPC、runtime、测试、examples 和门禁中的受影响引用。
 
 完成条件：项目打开、切换、关闭和失败恢复沿用原有行为；窗口关闭释放相应结果；应用状态不再以图执行模块作为归属入口。
 
 ### P2：Graph 用例内聚与 Execution 归位
 
-- [ ] 按第 7 节聚合图用例、运行、结果和执行包转换。
-- [ ] 以图编译为样板，整理已有 DraftResolutionContext，再逐个接入打开、编辑和目录查询。
-- [ ] 移除不必要的 Execution basis 绕转，保留真实执行授权与编译依赖校验。
-- [ ] 复用 GraphRuntimeState；保持 Graph 与 Execution 底层 crate 的隔离。
-- [ ] 自动化图操作复用整理后的业务能力，保留自动化特有控制与回执。
+- [x] 按第 7 节聚合图用例、运行、结果和执行包转换。
+- [x] 以图编译为样板，整理已有 DraftResolutionContext，再逐个接入打开、编辑和目录查询。
+- [x] 移除不必要的 Execution basis 绕转，保留真实执行授权与编译依赖校验。
+- [x] 复用 GraphRuntimeState；保持 Graph 与 Execution 底层 crate 的隔离。
+- [x] 自动化图操作复用整理后的业务能力，保留自动化特有控制与回执。
 
 完成条件：编辑、编译、保存、执行仍为独立操作；过期输入与不匹配产物被拒绝；保持 P0 已形成的缓存有效性、图呈现、运行取消、结果查询及租约行为。
 
 ### P3：Chart 成为明确业务组件
 
-- [ ] 聚合 Chart 资源、查询和投影入口；保留 ChartDocument 纯契约。
-- [ ] 分离图表查询中的状态访问与纯投影，保留数据及会话重验。
-- [ ] 独立图表和图结果展示复用共享呈现能力，各自保留原有数据生命周期。
-- [ ] 检查图表保存、数据库变更、项目切换和迟到预览的行为。
+- [x] 聚合 Chart 资源、查询和投影入口；保留 ChartDocument 纯契约。
+- [x] 分离图表查询中的状态访问与纯投影，保留数据及会话重验。
+- [x] 独立图表和图结果展示复用共享呈现能力，各自保留原有数据生命周期。
+- [ ] 由用户人工验收图表保存、数据库变更、项目切换和迟到预览的行为。
 
 完成条件：独立图表无须执行图；Chart 不持有执行器或另一份结果存储；修改 Chart 声明或呈现不触碰图调度核心。首轮不为 Chart 新建空运行态或空门面 crate。
 
 ### P4：Project 与 Database 协调代码归位
 
-- [ ] 按既有 owner 聚合项目生命周期、查询、数据库导入导出与变更协调。
-- [ ] 保留 ProjectDatabaseMutationPort、准备对象、最终权限检查及补偿入口。
-- [ ] 明确注册服务、数据库会话和单次导入/编辑操作的不同生命周期。
-- [ ] 审查是否重复读取全量项目数据、重复实现名称或资源规则；仅将已确认重复的逻辑交回既有 owner。
+- [x] 按既有 owner 聚合项目生命周期、查询、数据库导入导出与变更协调。
+- [x] 保留 ProjectDatabaseMutationPort、准备对象、最终权限检查及补偿入口。
+- [x] 明确注册服务、数据库会话和单次导入/编辑操作的不同生命周期。
+- [x] 审查是否重复读取全量项目数据、重复实现名称或资源规则；仅将已确认重复的逻辑交回既有 owner。
 
 完成条件：导入、编辑、撤销、保存重开和跨组件失败仍返回正确状态；通知失败不触发对已提交数据的自动重写。
 
+P1–P4 阶段审计与验证记录（2026-09-15）：
+
+| 检查项                | 已确认问题与处置                                                                                                                         | 验证范围及保留边界                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 重复逻辑              | 图输入捕获/重验统一到 `graph/inputs.rs`；界面单次编辑与自动化批量编辑共用 `GraphDraftEditor`；编辑所用目录与语义上下文从同一项目索引构造 | Graph、目录、自动化批量失败回滚和数值执行测试通过；Project 提交与 Database 重验有不同职责，继续保留              |
+| 无效逻辑              | 删除 Graph 编译依据的 Execution 往返转换，以及只被测试读取的 `RunPresentationContext` 副本；图表投影不再先分配完整点数组                 | 最终提交交接校验、结果持有和实际运行身份继续由原 owner 保留；没有声称数值性能基准已测量                          |
+| 代码漂移              | session、graph、chart、project、database 的 Rust 调用方、IPC 映射和精确权限随目录迁移；图表纯投影测试名称改为描述真实覆盖                | Rust 编译/调用方检查及 P1/P2 架构门禁 40 项通过；最终生成索引和全量文档契约仍归 P6                               |
+| 多事实源              | 会话由 `session/` 统一管理；图缓存有效性来自 Rust；Chart 缓存采用已有 Database revision 投影；Graph 与 Chart 共享渲染而不共享数据权威    | 报告租约不改成图表缓存；未建立新 committed store、服务定位器或双向同步模型                                       |
+| 代码冲突              | 旧模块入口直接移除，消费者转向实际 owner；批量编辑只在所有操作及重验成功后发布，增加末尾取消检查                                         | 会话切换、迟到结果、图保存和数据库补偿回归通过；迁移目录未发现 Git 冲突标记，最终差异复核仍归 P6                 |
+| 无效函数              | 移除目录/资源快照未使用的 getter、运行身份副本 getter 和旧模块导出；收窄数据库变更协调及文件名推导的可见性                               | Project 新增窄驻留查询供已确认的编辑/编译/保存消费者使用，不读取或暴露内部可变容器                               |
+| deprecated / 兼容残留 | 不保留 `execution/session_*`、顶层图用例、`chart_plot` 和旧项目/数据库协调路径的兼容转发                                                 | Node 的具体 crate 名保留职责含义；ResultStore、`PlanValidationControl`、独立插件协议和持久化格式均保持已确认边界 |
+
+P4 最终相关验证：`pnpm test:rs:package -p yss-application --lib --test database_test` 通过 85 + 4 项；`pnpm test:rs:package -p yss-project --lib graph` 通过 9 项。P2 的 `numeric_execution` 5 项通过。Chart 缓存、数据服务和模型投影的 4 个 TypeScript 测试文件共 29 项通过，`pnpm check:ts` 通过。Chart 的配置切换、数据库更新与迟到预览行为已修复，真实界面仍未验收。
+
 ### P5：节点与执行能力扩展
 
-- [ ] 以实际扩展样例完善定义注册、kernel 注册与绑定校验。
-- [ ] 编译和执行使用同一会话的实际能力版本，并验证旧产物失效。
-- [ ] 缺少 kernel 时明确阻断；默认内置节点的行为保持一致。
-- [ ] 用一个普通数值节点验证新增实现不要求修改通用解析器和调度分支。
+- [x] 以实际扩展样例完善定义注册、kernel 注册与绑定校验。
+- [x] 编译和执行使用同一会话的实际能力版本，并验证旧产物失效。
+- [x] 缺少 kernel 时明确阻断；默认内置节点的行为保持一致。
+- [x] 用一个普通数值节点验证新增实现不要求修改通用解析器和调度分支。
 
 完成条件：能力声明和实际实现一致，扩展点可以通过公开注册入口使用，注册更新不会让旧产物在新语义下静默执行。本阶段属于扩展契约改造，单独评估并记录接口与缓存语义变化。
 
+P5 审计：删除每次重新构造默认表的 `supports_kernel`；`KernelRegistryBuilder` 冻结实际实现，编译检查与执行共用该表。`NodeComponents` 复用 NodeRegistryBuilder 的定义注册并校验参数/输出契约，配置由 slot 保持。实现 revision 与契约组成能力指纹，贯穿语义输入、编译包、结果输入与执行依据，映射及运行入口拒绝旧指纹。会话 generation 改为 checked_add，拒绝耗尽后复用最大值。普通数值样例只新增定义、函数实现和注册；不增加解析器或调度器专属分支。
+
+验证：新增 2 个组件回归覆盖普通数值扩展、缺失实现、注册冲突、绑定错误、会话配置保留及旧产物拒绝。Application 87 项库测试通过；Graph Runtime 5、Node Catalog 5 项通过。Compiler 与 Editor 的既有测试分别通过 5、12 项。P6 删除空函数包的专属测试后，Execution 最终 17 项通过；数值集成 5 项及数据库集成 4 项已在最终代码上复验通过。
+
 ### P6：依赖审计与文档收敛
 
-- [ ] 复核各应用用例是否仅消费所需入口；具体适配器选择保持集中。
-- [ ] 复核各阶段审计清单，检查重复实现、无效函数、代码/契约漂移、多事实源、语义冲突及 deprecated 兼容残留；确认清理覆盖全部实际消费者。
-- [ ] 独立评估 `yss-database-edit`：将仅由 Database Runtime 使用的 EditHistory 收入其内部，将共享 EditState 放入合适的既有数据库契约后再删除原包。
-- [ ] 保留有实际共享价值的纯契约和基础库，不按文件大小批量合并。
-- [ ] 不将 Event/Channel 合并纳入本次重构；其独立方向继续遵守当前 IPC 契约。
-- [ ] 更新实际架构、组件说明、精确门禁权限和受影响的生成索引。
+- [x] 复核各应用用例是否仅消费所需入口；具体适配器选择保持集中。
+- [x] 复核各阶段审计清单，检查重复实现、无效函数、代码/契约漂移、多事实源、语义冲突及 deprecated 兼容残留；确认清理覆盖全部实际消费者。
+- [x] 独立评估 `yss-database-edit`：EditHistory 仅被 Database Runtime 使用，已收入私有模块；共享 EditState 归既有数据库契约，原包已删除。
+- [x] 保留有实际共享价值的纯契约和基础库，不按文件大小批量合并。
+- [x] 不将 Event/Channel 合并纳入本次重构；其独立方向继续遵守当前 IPC 契约。
+- [x] 更新实际架构、组件说明、精确门禁权限和受影响的生成索引。
 
 完成条件：旧内部路径已移除，真实依赖满足边界，业务扩展改动范围可预测。crate 数量降低不是完成条件。
+
+P6 跨组件审计记录（2026-09-15）：
+
+| 检查项                | 证据与处置                                                                                                                                              | 验证与保留边界                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 重复逻辑              | 编辑和通用图任务复用同一 FIFO；Compile/Save、加载和刷新把实际请求纳入队列；取消请求直接采用 Execution 的判断，删除 Application 重复匹配                 | 请求交错、保存失败释放锁、关闭重开及既有发布回归；Project/Database 的事务与重验仍由各自 owner 负责                                      |
+| 无效逻辑              | 生产映射始终创建空函数包，调度器无函数子计划消费者，删除 Execution 函数包、未读 recursion_limit 和仅验证空路径的测试；删除未调用的第二套执行包 validate | 保留 Graph 函数语义与明确的缺失实现阻断；正式执行包准备继续校验来源、参数、会话和能力版本                                               |
+| 代码漂移              | 删除数据库编辑包后，同步工作区、依赖、锁文件、调用方、架构图和生成 crate 清单；更新 Current 文档，旧分析标明迁移前基线                                  | 模块地图与 crate 清单使用既有生成命令，文档与架构门禁复核实际路径                                                                       |
+| 多事实源              | 节点定义、实际 kernel registry 由 NodeComponents 装配；能力指纹贯穿编译和结果缓存；EditState 只有数据库契约一份定义                                     | 不新建总管理器、组件容器或状态同步层；ResultStore 与报告租约继续保留，Chart 只使用已有数据库 revision                                   |
+| 代码冲突              | 修复 Compile/Resolve 只等待前序编辑、未阻止后序编辑覆盖缓存依据的竞态；修复重复 Run ID 注册先覆盖旧状态再报错的问题                                     | 保留加载 token、草稿代次和运行发布资格；重复注册回归验证既有 Running 状态未被重置                                                       |
+| 无效函数              | 清除旧模块导出、默认 kernel 支持表、执行前无用的整份 ProjectData 复制、数据库失败状态中无消费者的字符串及旧队列等待函数                                 | 数据库内部状态/历史收窄可见性；公开入口保留宿主、IPC 和实际扩展消费者所需能力                                                           |
+| deprecated / 兼容残留 | 旧路径和旧包直接删除，所有消费者迁移，不添加兼容转发或缺省能力指纹                                                                                      | PlanValidationControl 按用户决定保留；RunRegistry 终态用于取消幂等回执，保持会话生命周期；Harness/插件事件与 Event/Channel 保留独立职责 |
+
+新增的队列回归验证两个独立问题：Compile→编辑→刷新采用正确文档，以及 Save 失败后释放锁继续处理 Compile。现有迟到失败和关闭重开用例同步实际异步顺序，不新增 UI 单元测试。
+
+最终验证记录（2026-09-15，L2 受影响范围）：
+
+| 实际命令及范围                                                                                                                                                       | 结果                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `pnpm check:rs:package -p yss-application -p yss-graph-execution -p yssbi --lib --tests`                                                                             | 通过，包含宿主和集成测试消费者编译                                                  |
+| `pnpm test:rs:package -p yss-application -p yss-graph-execution -p yss-node-catalog --lib -- --quiet`                                                                | 87 + 17 + 5 项通过                                                                  |
+| `pnpm test:rs:package -p yss-application --test numeric_execution --test database_test -- --quiet`                                                                   | 5 + 4 项通过                                                                        |
+| `pnpm test:rs:package -p yss-database-contract --test contract -- --quiet`                                                                                           | 8 项通过，包含迁移后的 EditState wire                                               |
+| `pnpm test:rs:package -p yssbi --lib architecture_tests -- --quiet`                                                                                                  | 最终代码上 40 项通过                                                                |
+| `pnpm check:ts`                                                                                                                                                      | 通过                                                                                |
+| `pnpm test:ts`，选择下列 11 个文件                                                                                                                                   | 67 项通过                                                                           |
+| `pnpm lint:rs:package`，选择 Application、Execution、Graph Runtime/Compiler、Node Catalog、Database Runtime/Contract，使用 `--lib --tests --no-deps`；`pnpm lint:ts` | 均退出 0；保留 Rust 9 项参数数量/枚举命名警告，以及前端 11 项既有警告，不宣称零警告 |
+| `pnpm format:rs:package`，选择 13 个受影响 package 并使用 `-- --check`；`pnpm format:check:ts`，选择实际变更的 60 个源码/样式/JSON 文件                              | 通过                                                                                |
+| `pnpm docs:module-map:check`、`pnpm docs:crate-dependencies:check`、`git diff --check`                                                                               | 通过；crate 清单为 71 个工作区包、249 条依赖声明                                    |
+
+最终 TypeScript 范围：`src/tests/architecture/` 下的 documentationContract、frontendArchitecture、frontendSemanticArchitecture、frontendStateAuthority；`src/features/application/graphDraft/` 下的 compileGraphDraft、graphConstantActions；`editor/graphDocumentUnload`、`editorMutation/projectPublicationIntegration`、`editorMutation/projectPublicationSnapshot`、`assistant/assistantGraphTools`、`graphEditing/editorCommands`，均为对应 `.test.ts` 文件。
+
+Graph Runtime、Compiler、Editor、Database Runtime 及 Chart/Results 的未再改变范围复用同次任务的已通过结果。未运行完整工作区 CI、性能基准或真实界面验收；本次不新增“所有代码无问题”或“性能提升已测得”的结论。剩余工作为用户执行第 10.2 节，并记录实际界面结果。
 
 ## 10. 验证与验收
 
@@ -480,15 +536,15 @@ P0 建立第 1.2 节的审计清单，P1–P5 在各自迁移范围内持续检�
 
 遵循 [本地工作流](../development/LOCAL_WORKFLOW.md) 的 L1/L2 范围选择。行为保持重构优先复用现有测试；新增测试必须对应明确缺口，不编写仅断言旧路径被删除的测试。
 
-| 阶段 | 需要保护的行为                                                      | 可复用的当前验证入口                                                                            |
-| ---- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| P0   | 实际结果类型、运行错误/终态、报告租约、局部失效、撤销重验与缓存回收 | ResultStore、结果查询、Graph Runtime/Analysis、IPC channel、Automation 现有测试及图界面人工验收 |
-| P1   | 候选身份匹配、切换、恢复、迟到引用、窗口结果清理                    | session slot/factory、project_lifecycle 与结果租约相关测试                                      |
-| P2   | 资源事实一致、草稿独立、编译缓存、执行包语义、取消、结果生命周期    | graph_open、catalog_query、graph_contracts、Graph Runtime、numeric_execution 和结果查询测试     |
-| P3   | 图表声明、预览版本、数据格式与点数限制、图结果呈现                  | ChartDocument、chart_plot 的现有 Rust 测试及界面人工验收                                        |
-| P4   | 提交/补偿、导入编辑撤销、保存重开、失败恢复                         | database_mutation、database、database_test、Project 的相关测试                                  |
-| P5   | 注册冲突、支持能力匹配、能力版本变化及旧产物拒绝                    | Node Registry、Graph Runtime、Execution 的受影响行为测试与扩展样例                              |
-| P6   | 所有调用方编译、依赖方向、公开边界、文档和生成索引                  | Rust 架构门禁、文档契约及受影响 package 检查                                                    |
+| 阶段 | 需要保护的行为                                                      | 可复用的当前验证入口                                                                                |
+| ---- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| P0   | 实际结果类型、运行错误/终态、报告租约、局部失效、撤销重验与缓存回收 | ResultStore、结果查询、Graph Runtime/Analysis、IPC channel、Automation 现有测试及图界面人工验收     |
+| P1   | 候选身份匹配、切换、恢复、迟到引用、窗口结果清理                    | session/slot、session/factory、project/lifecycle 与结果租约相关测试                                 |
+| P2   | 资源事实一致、草稿独立、编译缓存、执行包语义、取消、结果生命周期    | graph/open、graph/catalog、graph/execution_mapping、Graph Runtime、numeric_execution 和结果查询测试 |
+| P3   | 图表声明、预览版本、数据格式与点数限制、图结果呈现                  | ChartDocument、chart/projection 的现有 Rust 测试及界面人工验收                                      |
+| P4   | 提交/补偿、导入编辑撤销、保存重开、失败恢复                         | database/mutation、database、database_test、Project 的相关测试                                      |
+| P5   | 注册冲突、支持能力匹配、能力版本变化及旧产物拒绝                    | Node Registry、Graph Runtime、Execution 的受影响行为测试与扩展样例                                  |
+| P6   | 所有调用方编译、依赖方向、公开边界、文档和生成索引                  | Rust 架构门禁、文档契约及受影响 package 检查                                                        |
 
 修改公开 API 时，检查 Application 本身之外的宿主、集成测试和 examples。仅修改 crate 的单元测试通过，不能证明调用方已迁移。
 
@@ -508,7 +564,9 @@ pnpm test:rs:package -p yssbi --lib architecture_tests
 
 ### 10.2 界面人工验收
 
-遵守仓库规则，不新增 UI 单元测试。涉及界面调用与投影的改动，人工检查：
+验收负责人：用户。状态：待用户执行，2026-09-15 已确认稍后人工验收。遵守仓库规则，不新增 UI 单元测试；本清单尚未勾选，不表示已完成真实界面验收。
+
+涉及界面调用与投影的改动，人工检查：
 
 1. 创建、保存、重开图表，切换数据库后绑定和预览正确。
 2. 图表预览进行中切换项目，旧数据和旧错误不会覆盖新项目。
@@ -527,11 +585,11 @@ pnpm test:rs:package -p yssbi --lib architecture_tests
 
 ### 10.3 审计清理验收
 
-- [ ] 七类检查均覆盖本次变更范围，结论附有代码和调用依据；未发现问题、保留例外和未决项分别明确，不把未检查报告为通过。
-- [ ] 已确认的重复规则归入唯一职责归属；必要的校验、转换和投影保留明确目的，没有新增平行事实源或补同步机制。
-- [ ] 无效逻辑、函数、注册、导出、依赖及旧兼容路径同步清除；替代入口的成功、失败、取消和生命周期行为经过受影响范围验证。
-- [ ] 源码、共享契约、消费者、测试、文档和生成索引一致；相关 Git 冲突及语义冲突已处理，用户无关改动得到保留。
-- [ ] 阶段交付说明列出主要删除/复用/重构内容、实际验证命令和结果；有性能结论则附对应测量，未运行的检查明确说明。
+- [x] 七类检查均覆盖本次变更范围，结论附有代码和调用依据；未发现问题、保留例外和未决项分别明确，不把未检查报告为通过。
+- [x] 已确认的重复规则归入唯一职责归属；必要的校验、转换和投影保留明确目的，没有新增平行事实源或补同步机制。
+- [x] 无效逻辑、函数、注册、导出、依赖及旧兼容路径同步清除；替代入口的成功、失败、取消和生命周期行为经过受影响范围验证。
+- [x] 源码、共享契约、消费者、测试、文档和生成索引一致；相关 Git 冲突及语义冲突已处理，用户无关改动得到保留。
+- [x] 阶段交付说明列出主要删除/复用/重构内容、实际验证命令和结果；有性能结论则附对应测量，未运行的检查明确说明。
 
 复用现有行为测试和架构门禁；新增测试只针对实际回归缺口，不编写仅证明某个旧名称消失的测试，不新增 UI 单元测试。未决问题按影响记录在剩余计划中；影响阶段正确性或验收的项解决前，不标记该阶段完成。
 

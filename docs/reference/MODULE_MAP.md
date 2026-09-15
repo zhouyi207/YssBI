@@ -30,7 +30,6 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-chart-document` | `src-tauri/crates/yss-chart-document` | [Cargo.toml](../../src-tauri/crates/yss-chart-document/Cargo.toml) | — |
 | `yss-data-contract` | `src-tauri/crates/yss-data-contract` | [Cargo.toml](../../src-tauri/crates/yss-data-contract/Cargo.toml) | — |
 | `yss-database-contract` | `src-tauri/crates/yss-database-contract` | [Cargo.toml](../../src-tauri/crates/yss-database-contract/Cargo.toml) | — |
-| `yss-database-edit` | `src-tauri/crates/yss-database-edit` | [Cargo.toml](../../src-tauri/crates/yss-database-edit/Cargo.toml) | — |
 | `yss-database-runtime` | `src-tauri/crates/yss-database-runtime` | [Cargo.toml](../../src-tauri/crates/yss-database-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-database-runtime/README.md) |
 | `yss-database-schema` | `src-tauri/crates/yss-database-schema` | [Cargo.toml](../../src-tauri/crates/yss-database-schema/Cargo.toml) | — |
 | `yss-datafusion` | `src-tauri/crates/yss-datafusion` | [Cargo.toml](../../src-tauri/crates/yss-datafusion/Cargo.toml) | — |
@@ -95,14 +94,12 @@ Each row is discovered from `src/modules/`. A public entry is shown only when pr
 | Module | Directory | Public entry |
 | --- | --- | --- |
 | `assistant` | `src/modules/assistant` | [public.ts](../../src/modules/assistant/public.ts) |
-| `bayes` | `src/modules/bayes` | — |
 | `chart` | `src/modules/chart` | [public.ts](../../src/modules/chart/public.ts) |
 | `commands` | `src/modules/commands` | [public.ts](../../src/modules/commands/public.ts) |
 | `data-explorer` | `src/modules/data-explorer` | [public.ts](../../src/modules/data-explorer/public.ts) |
 | `database-editor` | `src/modules/database-editor` | [public.ts](../../src/modules/database-editor/public.ts) |
 | `details` | `src/modules/details` | [public.ts](../../src/modules/details/public.ts) |
 | `graph-editor` | `src/modules/graph-editor` | [public.ts](../../src/modules/graph-editor/public.ts) |
-| `julia` | `src/modules/julia` | — |
 | `logs` | `src/modules/logs` | [public.ts](../../src/modules/logs/public.ts) |
 | `node-catalog` | `src/modules/node-catalog` | [public.ts](../../src/modules/node-catalog/public.ts) |
 | `output` | `src/modules/output` | [public.ts](../../src/modules/output/public.ts) |

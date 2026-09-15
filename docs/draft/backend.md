@@ -1,5 +1,7 @@
 # 后端：Rust
 
+> 本文保留组件迁移前的方案分析和 crate 清单。2026-09-15 的实施结果以 [组件计划](component-plan.md) 和 [当前架构](../architecture/ARCHITECTURE.md) 为准；其中 `yss-database-edit` 已删除，历史容器归 Database Runtime 私有模块，EditState 归数据库契约。
+
 [返回整体架构](architecture.md)
 
 后端先按子系统划分，再在每个子系统内梳理职责层次。子系统回答“提供什么能力、谁拥有状态”，内部结构回答“这项能力如何实现、哪些职责需要分开”。一个子系统可以包含多个 crate，每个 crate 只归属一个子系统，同时可以与其他子系统的 crate 协作。
@@ -538,7 +540,7 @@ macOS、Linux 的运行证据继续作为待办；本机可以先按调用关系
 
 Windows 验证结果：模型与 registry 的 15 项测试、Application 项目生命周期的 8 项测试、Rust 架构门禁的 40 项测试均通过。上述限定范围的 Clippy 通过；前端架构窗口的 6 项测试通过。一次性比对还确认子系统总览与前端架构列表均完整列出 67 个宿主包，每个包只出现一次。
 
-较宽范围的检查未全部通过：包含依赖的 Clippy 遇到未修改的 SCI 文件中的 61 项告警，以及 Project 的 `function_mutation.rs`、`external_resources.rs` 中两处测试模块位置告警。文档契约为 5 项通过、1 项失败，失败项来自既有 [architecture/README.md](../architecture/README.md) 和 [jsonDriver.md](../architecture/jsonDriver.md) 缺少维护状态声明；链接、源码路径、命令及生成模块索引检查通过。这些结果不计入本轮已修复项，也不将聚焦验证表述为完整门禁通过。
+较宽范围的检查未全部通过：包含依赖的 Clippy 遇到未修改的 SCI 文件中的 61 项告警，以及 Project 的 `function_mutation.rs`、`external_resources.rs` 中两处测试模块位置告警。文档契约为 5 项通过、1 项失败，失败项来自既有 [architecture/README.md](../architecture/README.md) 和 [jsonDriver.md](jsonDriver.md) 缺少维护状态声明；链接、源码路径、命令及生成模块索引检查通过。这些结果不计入本轮已修复项，也不将聚焦验证表述为完整门禁通过。
 
 ### 12.9 操作登记 crate 的合并检查
 
@@ -548,7 +550,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 - [Cargo 依赖声明](../../src-tauri/crates/yss-project/Cargo.toml)中，只有 `yss-project` 直接依赖该包；[ProjectState](../../src-tauri/crates/yss-project/src/project_state/state.rs)持有唯一登记表，克隆 ProjectState 共享同一个 `Arc`。
 - 实现只使用标准库集合和同步原语、`thiserror`、`yss-project-identity`；后两者已经是 Project 的依赖。合并无需引入第三方库，也不需要增加操作管理框架。
-- 存在间接公开使用：[数据库准入 API](../../src-tauri/crates/yss-project/src/database_authority.rs)返回 `ProjectOperationReservation`，Application 的[数据库导入](../../src-tauri/crates/yss-application/src/database/import.rs)和[删除](../../src-tauri/crates/yss-application/src/database.rs)取得句柄并调用 `complete()`。不能据“只有一个直接依赖方”就把句柄也改为私有。
+- 存在间接公开使用：[数据库准入 API](../../src-tauri/crates/yss-project/src/database_authority.rs)返回 `ProjectOperationReservation`，Application 的[数据库导入](../../src-tauri/crates/yss-application/src/database/import.rs)和[删除](../../src-tauri/crates/yss-application/src/database/mod.rs)取得句柄并调用 `complete()`。不能据“只有一个直接依赖方”就把句柄也改为私有。
 - 图操作将句柄封装在 `GraphOperationAuthority` 内；图生命周期、函数签名和图表写入则在 Project 内部直接持有句柄。合并不会改变它们的子系统归属。
 
 | 检查项           | 源码结论与保留要求                                                                                                                                                                                                                    |
@@ -604,12 +606,12 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 - **生命周期两路结果**：[后端发送事件并返回相同回执](../../src-tauri/crates/yss-application/src/ipc/commands/command_project/lifecycle.rs)、[前端事件入口](../../src/features/application/initialization/useProjectSync.ts)、[回执登记与合并](../../src/features/application/projectLifecycleReceipt.ts)。`recoverProjectLifecycleDirectFailure` 查看的是前端已经收到的回执状态，并不向后端查询或重新执行请求。
 - **资源关联与版本排序**：[图表保存确认](../../src/features/application/chart/saveChartDocument.ts)、[数据库结果确认](../../src/features/application/dataManagement/databaseMutation.ts)、[函数签名协调](../../src/features/application/editorMutation/functionSignatureCoordinator.ts)、[publication coordinator](../../src/features/application/editorMutation/projectPublicationCoordinator.ts)。按版本发布、按请求确认修改是两个用途；重复回执不是一概需要报错的异常。
-- **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-dataset-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database_mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
+- **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-dataset-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database/mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
 
 #### 已完成的精简
 
 1. **删除无消费者的派生字段。**移除 `ProjectCommandContext.operationPendingKey` 的声明和构造，没有引入替代状态。
-2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph_open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
+2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph/open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
 3. **统一函数签名请求身份。**请求直接使用捕获上下文的 `operationId`，移除第二个生成器及 `pendingSignatureOperations` 集合。保留 coordinator epoch，在重置后丢弃迟到结果；资源版本、before-state 和结果关联校验继续有效。同一函数的不同 ID 并发修改由后端资源版本边界处理。
 4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphDraft/saveGraphDraft.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
 5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-automation-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-statistical-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-statistical-harness/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-application/src/ipc/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。

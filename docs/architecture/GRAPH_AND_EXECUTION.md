@@ -9,14 +9,14 @@
 
 ## 1. Authority and identities
 
-| 事实                                   | Authority                            | Frontend representation       |
-| -------------------------------------- | ------------------------------------ | ----------------------------- |
-| 已保存 document、resource revision     | Rust Project                         | 只读 projection               |
-| 未保存编辑与 undo/redo                 | frontend GraphDraftSession           | document、保存基线、历史      |
-| 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection        |
-| 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId             |
-| run、当前 output result                | Rust Execution / ResultStore         | typed query 与 UI projection  |
-| 运行失败                               | Execution RunErrored / command error | Output panel 失败摘要         |
+| 事实                                   | Authority                            | Frontend representation      |
+| -------------------------------------- | ------------------------------------ | ---------------------------- |
+| 已保存 document、resource revision     | Rust Project                         | 只读 projection              |
+| 未保存编辑与 undo/redo                 | frontend GraphDraftSession           | document、保存基线、历史     |
+| 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection       |
+| 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId            |
+| run、当前 output result                | Rust Execution / ResultStore         | typed query 与 UI projection |
+| 运行失败                               | Execution RunErrored / command error | Output panel 失败摘要        |
 
 `graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
 
@@ -35,7 +35,7 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 | yss-graph-compiler                                                        | Ready snapshot 驱动的 immutable package lowering                                 |
 | yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
-| yss-graph-execution                                                       | immutable plan、demand/DAG、KernelRegistry、ResultStore、Output emitter          |
+| yss-graph-execution                                                       | immutable plan、demand/DAG、KernelRegistry、ResultStore、运行事件                |
 | yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
@@ -51,6 +51,20 @@ IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成�
 
 `yss-graph-runtime` 负责解析与编译产物缓存；`yss-graph-execution` 负责执行计划、节点 kernel、
 run、Results 和运行失败。两者通过 Application 的执行包转换连接，执行端不依赖编辑器投影。
+
+Application 的图用例集中在 `graph/`，包括编辑、编译、资源、运行与结果查询；`session/` 独立拥有整个
+Project/Database/Graph/Execution 会话的组装和替换。`chart/` 按资源操作、数据库查询及纯图表投影组织，
+Chart 预览和图结果复用前端渲染器，各自保留数据持有与失效规则。
+
+执行能力由冻结的 `KernelRegistry` 拥有。`NodeComponents` 在组装时检查定义与已安装实现的参数字段及
+输出数量，随后冻结 kernel 表；未安装的实现由 Compile 产生 `compiler.node.kernel_unavailable` 阻断。
+Compile 的支持检查与实际调度读取同一会话的注册表。注册的标识、显式实现 revision 和调用契约共同
+形成能力指纹；实现行为改变时必须更新 revision，配置改变通过新的会话配置生效。
+
+能力指纹进入 Graph 的语义输入哈希、编译包和 Execution 的编译依据。Application 映射拒绝指纹不同的
+编译包，Execution 在准备及执行入口再次检查；同一图文档不会复用能力版本不同的产物。节点输出缓存
+的输入指纹也包含该能力指纹。普通数值扩展的[注册与执行样例](../../src-tauri/crates/yss-application/src/session/components/tests.rs)
+复用现有 Node 类型及调度语义；注册 API 不承担新的语言语义或动态插件加载。
 
 ## 3. Open and Draft lifecycle
 
@@ -69,7 +83,7 @@ Open、Hydrate、Transform、Save、Compile 共用 Runtime Resolve。只读 `res
 输出端口使用解析后的类型，输入端口使用接受类型域，再交由 Graph Editor 筛选创建候选。
 未引用的派生端口无需先有 document binding；查询不 claim 端口，真正创建连接时才原子登记，orphan 或不存在的端口仍被拒绝。
 
-Mutation 和 history requests 由 frontend application 的同一 Graph FIFO 协调。返回后检查 Project identity、Draft session/generation 和 coordinator epoch；Compile 还检查独立 request ID。关闭重开、Project replacement、后续编辑及新 Compile 都会使旧回调失效，旧失败不能清除新 artifact。
+Mutation、history、Compile、Save、加载及刷新请求由 frontend application 的同一 Graph FIFO 协调，队列覆盖实际 IPC 和投影采用过程。仅等待先前编辑结束不足以防止后续编辑被旧 Resolve/Compile 的缓存依据覆盖。刷新在轮到执行时检查 dirty/saving，项目发布跳过期间变脏的草稿。返回后继续检查 Project identity、Draft session/generation、coordinator epoch 或加载 lifecycle token；Compile 还检查独立 request ID。关闭重开与 Project replacement 使旧回调失效，旧失败不能清除新 artifact。
 
 Draft/history/projection 在写入前完成 projection preparation，避免先改 Draft 再发现 projection 无效。`GraphProjectionStore` 单个 Graph bucket 一次替换 topology、端口、顶层 diagnostics、basis、outcome 和 run gate。无效 response 保留原 document/history；不同 Store 的发布仍由 Application 协调。
 
@@ -213,7 +227,7 @@ Chart Save 同样按提交的完整内容覆盖资源，不接受 frontend `expe
 
 `execute_compiled_graph` 接收 `compiledArtifactId` 与 demand；它只读取当前 session/path 中的匹配 artifact，按精确 manifest 重验依赖并准备 generation-bound resources，不隐式 Compile/Save 或回退磁盘旧文档。
 
-Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用 `PreparedKernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。Input array 与 input slots 按相同顺序传递，每个 slot 携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
+Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。Input array 与 input slots 按相同顺序传递，每个 slot 携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
@@ -221,7 +235,7 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 调用
 
 `RunRegistry` 通过 `RunState` 记录运行状态和终态。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
-函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。Execution 的 FunctionPlanAbi 使用对应的中性身份字段，admission 检查 ABI 地址和类型。实际 Function bundle lowering/subplan execution 仍是准备之后的接入工作；当前 KernelRegistry 不再把 Function 节点作为“返回第一个 input”的占位实现。
+函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时 Compile 明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
 
 加、减、乘、除按已编译 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算，
 仅在编译契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
@@ -276,7 +290,10 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 
 `get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
 同一查询检查已有编译产物和资源依赖，允许前端重新关联仍匹配的产物。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
-当前连线/Pin/Node 视觉迁移及录制器删除仍在[组件化计划](../draft/component-plan.md#p0确认范围清理执行遗留并建立图状态契约)中实施，不据此声称已完成人工验收。
+同一投影还返回当前连线是否已被目标节点实际消费：新绑定、保有旧结果的过期绑定和有效绑定分别表示。
+前端以这份投影组合编译状态、实际 RunStarted demand 和诊断，驱动连线、Pin 与节点样式；不再持有执行录制、回放或逐节点动画队列。
+节点按有效输出数量显示完整或部分结果；编译与运行效果遵守减少动态效果设置。编辑使本地运行请求失效，迟到回执不能覆盖后续运行。
+真实桌面人工验收仍在[组件化计划](../draft/component-plan.md#p0确认范围清理执行遗留并建立图状态契约)中记录，不以接口与测试具备代表该验收已完成。
 
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前解除这些输出的旧结果绑定。
 一个 operation 的所有当前 outputs 同时失效；未参与本次 demand 的输出保留当前结果。已打开报告的租约保留旧快照，
@@ -363,7 +380,7 @@ Harness 事件及其恢复、插件进程通信由各自协议拥有，不通过
 | ------------------------------- | -------------------------------------- |
 | 普通 Graph validation / Blocked | Graph Projection / Problems            |
 | 计算结果                        | ResultStore + typed query              |
-| 图运行失败                      | RunErrored + Output panel 失败摘要      |
+| 图运行失败                      | RunErrored + Output panel 失败摘要     |
 | 内部技术故障                    | sanitized tracing / incident           |
 | command rejection               | yss-application::ipc stable error wire |
 | 用户反馈                        | React localization / UI                |

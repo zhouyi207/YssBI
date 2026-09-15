@@ -1,3 +1,10 @@
+# JSON 驱动界面方案讨论
+
+> Status: Draft
+> Scope: JSON 驱动界面的早期方案讨论，未经当前实现验收
+
+本文保留方案讨论内容，不作为当前架构或依赖选型依据。实际状态与边界以[系统架构](../architecture/ARCHITECTURE.md)为准。
+
 有，而且你这个方向已经不是单纯的“状态管理”了，而是接近一个 **Schema-driven UI / JSON-driven UI / Generative UI Renderer**。
 
 如果你的计划是：

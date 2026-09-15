@@ -1,3 +1,7 @@
+# 组件迁移前的 crate 盘点
+
+> 本文保留迁移前的职责清单。当前 crate 以 Cargo manifests 和生成的模块索引为准；`yss-database-edit` 已在 [组件计划](component-plan.md) P6 删除，编辑历史归 Database Runtime 私有模块。
+
  第一类：项目与资源管理，共 9 个。 负责项目状态、文件提交、项目登记和外部文件变化。
 
    Crate                            作用

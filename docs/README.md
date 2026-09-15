@@ -21,6 +21,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Current architecture
 
+- [架构文档入口](architecture/README.md)：专项架构的阅读方式与状态说明。
 - [系统架构总览](architecture/ARCHITECTURE.md)：系统上下文、authority、依赖方向和主要运行链路。
 - [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：Draft、Projection、Compile、Save、Execute、Problems、Results 与运行失败反馈。
 - [Workbench Dockview](architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
@@ -53,6 +54,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Development
 
+- [仓库 Agent 规则](development/AGENT_RULES.md)：变更纪律、跨系统边界和验证要求，由根 `.rules` 加载。
 - [本地开发工作流](development/LOCAL_WORKFLOW.md)：环境和唯一命令矩阵。
 - [变更流程](development/CHANGE_PROCESS.md)：feature、fix、refactor 和行为变更的设计与交付问题。
 - [架构门禁](development/ARCHITECTURE_GATES.md)：production source discovery、分类、依赖审计和 semantic checks。

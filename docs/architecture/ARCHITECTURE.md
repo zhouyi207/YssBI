@@ -20,6 +20,7 @@ flowchart LR
   APP --> PROJECT[Project authority]
   APP --> GRAPH[Graph semantics]
   APP --> DATABASE[Database runtime]
+  APP --> CHART[Chart resources and projection]
   APP --> EXECUTION[Execution and Results]
   APP --> SCI[SCI]
   API --> PLUGINS[Plugin Manager]
@@ -41,6 +42,8 @@ flowchart LR
 ```
 
 `src-tauri/src/lib.rs` 的业务入口依赖为 `yss-application`，另注册本地平台插件 `tauri-plugin-tracing` 与官方 Tauri 插件。日志插件先安装采集、SQLite 和日志 Channel；Application runtime 安装业务服务、解析业务路径、显示主窗口，并直接构造内部 `ipc::CommandRuntime`。应用命令注册表、schema、error、执行通道编码和图草稿交接都在 `yss-application::ipc`，日志命令使用插件自己的命名空间。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
+
+Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用例。图编译、执行交接和 Results 用例收入 `graph`；底层 Graph 与 Execution crates 继续独立。`session` 负责应用会话装配和替换；不可变 `NodeComponents` 组合节点定义与实际 kernel registry，校验绑定后供新会话复用。Chart 使用数据库查询及纯投影，共享图表呈现组件，不另建执行器或结果仓库。实际入口见 [Application 说明](../../src-tauri/crates/yss-application/README.md)。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
 窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
@@ -191,7 +194,7 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 - 宿主 IPC/CSV/Parquet 文件边界使用 Arrow batches；精确存储 Schema 与 Graph 语义 Schema 分开，见 [Database runtime](../../src-tauri/crates/yss-database-runtime/README.md)；
 - mutation 在锁外执行 I/O，并在最终 Project gate 重新验证 session/revision 后提交。
 
-数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，会话入口保留在 `database.rs`。数据库导出、插件 JSON/文件导出和 Julia worker assets 直接使用 `atomicwrites::replace_atomic`；临时文件、内容同步、会话重验和失败清理由各调用方负责。窗口状态由官方插件独立持久化。
+数据库导入准备和导出发布分别位于 Application 的 `database/import.rs`、`database/export.rs`，用例入口位于 `database/mod.rs`，会话装配位于 `session/database.rs`。编辑历史是 Database Runtime 的私有实现，供 IPC 共享的 EditState 归 `yss-database-contract`。数据库导出、插件 JSON/文件导出和 Julia worker assets 直接使用 `atomicwrites::replace_atomic`；临时文件、内容同步、会话重验和失败清理由各调用方负责。窗口状态由官方插件独立持久化。
 
 文件替换要求临时文件与目标位于同一文件系统。`replace_atomic` 在 Unix 重命名后同步父目录，返回错误时目标可能已经更新；调用方统一保守地报告发布结果不确定，不自动重试、不回滚或删除目标，只清理临时路径。不能通过临时文件消失推断持久化成功。
 数据库导出返回 `database_export_publication_uncertain`，插件 JSON/文件导出返回 `plugin_file_publication_uncertain`，Julia assets 返回 `julia_worker_asset_publication_uncertain` 并停止本次 worker 准备；写入前及内容写入失败继续使用原有失败码。替换失败不提交成功响应或后续内存更新，调用方需检查目标后决定后续操作。该协议不提供多文件事务或跨平台完整断电保证；`replace_atomic` 不同步文件内容，内容同步仍属于调用方。
