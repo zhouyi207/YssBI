@@ -208,7 +208,7 @@ export const RootLayoutHost = memo(
                 workbenchLayoutRead
                   .listGroups()
                   .some((group) => group.location.type === "grid") ? null : (
-                  <div className="h-full min-h-0 w-full" data-workbench-watermark>
+                  <div className="flexlayout__tab inset-0" data-workbench-watermark>
                     <Watermark />
                   </div>
                 )
