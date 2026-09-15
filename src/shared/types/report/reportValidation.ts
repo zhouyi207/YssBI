@@ -1,4 +1,5 @@
-import type { ResultDescriptor } from "@/shared/types/domain/result";
+import { isResultReference, type ResultDescriptor } from "@/shared/types/domain/result";
+import { isRecord } from "./guards";
 import { parseReportPayloadResult } from "./parseReportPayload";
 import type { ReportPayloadKind } from "./reportKinds";
 
@@ -29,7 +30,14 @@ export function validateReportPayload(
   raw: unknown,
 ): ReportValidationResult {
   const parsed = parseReportPayloadResult(report, raw);
-  if (parsed.ok) return { ok: true, value: parsed.value };
+  const identityMatches =
+    report !== "olsSummary" ||
+    (parsed.ok &&
+      isRecord(parsed.value) &&
+      isResultReference(parsed.value.resultRef) &&
+      parsed.value.resultRef.executionSessionId === descriptor.executionSessionId &&
+      parsed.value.resultRef.resultId === descriptor.resultId);
+  if (parsed.ok && identityMatches) return { ok: true, value: parsed.value };
 
   return {
     ok: false,
@@ -40,8 +48,8 @@ export function validateReportPayload(
       outputPinId: outputPinId(descriptor),
       presentation: { kind: "report", report },
       valueKind: descriptor.valueKind,
-      fieldPath: parsed.issue.fieldPath,
-      reason: parsed.issue.reason,
+      fieldPath: parsed.ok ? "resultRef" : parsed.issue.fieldPath,
+      reason: parsed.ok ? "does not match the report result" : parsed.issue.reason,
     },
   };
 }

@@ -1,4 +1,42 @@
 export const enUS = {
+  reportLayout: {
+    title: "Report layout",
+    sessionOnly:
+      "Choose and reorder sections for this report view. Reopening restores the default layout.",
+    moveUp: "Move {{section}} up",
+    moveDown: "Move {{section}} down",
+    json: "Import or export layout",
+    jsonHelp:
+      "Load the current layout to copy or edit its JSON. Imported layouts must reference this report's result.",
+    export: "Load current layout",
+    apply: "Apply layout",
+    sections: {
+      equation: "Equation",
+      modelSummary: "Model summary",
+      anova: "ANOVA",
+      coefficientTable: "Coefficients",
+      hypothesisTest: "Hypothesis tests",
+      diagnostics: "Diagnostics overview",
+      residualPlot: "Residual plot",
+      observations: "Fitted values and residuals",
+      acfPacf: "ACF and PACF",
+      serialTests: "Serial correlation tests",
+    },
+    errors: {
+      invalidJson: "Invalid JSON. The previous layout is preserved.",
+      tooLarge:
+        "The layout or section count exceeds the limit ({{path}}). The previous layout is preserved.",
+      invalidShape:
+        "Invalid layout field or structure ({{path}}). The previous layout is preserved.",
+      unsupportedVersion: "Unsupported layout version. The previous layout is preserved.",
+      sourceMismatch: "The layout references a different result. The previous layout is preserved.",
+      unknownSection: "Unsupported section kind ({{path}}). The previous layout is preserved.",
+      invalidId:
+        "Section IDs must start with a letter and use up to 64 letters, digits, underscores or hyphens ({{path}}).",
+      duplicateSection:
+        "Duplicate section kind or ID ({{path}}). The previous layout is preserved.",
+    },
+  },
   common: {
     loading: "Loading...",
     initializing: "Initializing...",

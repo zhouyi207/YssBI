@@ -1,4 +1,4 @@
-import { useState, type FC, type ReactNode } from "react";
+import { Fragment, useState, type FC, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOlsReport } from "@/features/application/stats/useOlsReport";
@@ -13,6 +13,11 @@ import { ResultReadError } from "@/features/application/results/components/Resul
 import { ScatterChart } from "@/shared/charts/cartesian/ScatterChart";
 import type { OlsReportData } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
+import {
+  defaultOlsReportSpec,
+  type OlsReportSectionKind,
+} from "@/shared/types/domain/olsReportSpec";
+import { OlsReportLayoutControls } from "./OlsReportLayoutControls";
 import {
   ReportLayout,
   ReportLazyBoundary,
@@ -160,9 +165,82 @@ export const OLSComponent: FC<{ data: OlsReportData }> = ({ data }) => (
 );
 
 function OlsReport({ data }: { data: OlsReportData }) {
+  const [spec, setSpec] = useState(() => defaultOlsReportSpec(data.resultRef));
   const { page, coefficients, coefficientError, hypothesisSource, computeAcf, computeSerialTests } =
     useOlsReport(data);
   const info = data.model_basic_info;
+  const renderSection = (kind: OlsReportSectionKind): ReactNode => {
+    switch (kind) {
+      case "equation":
+        return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
+          <ReportSection title="Equation" icon="equation">
+            <ReportLazyBoundary variant="formula">
+              <LazyFormulaBlock endogName={data.endog_name} coefficients={coefficients} />
+            </ReportLazyBoundary>
+          </ReportSection>
+        ) : null;
+      case "modelSummary":
+        return (
+          <ReportSection title="Model Summary" icon="modelSummary">
+            <ModelSummaryGrid info={info} />
+          </ReportSection>
+        );
+      case "anova":
+        return (
+          <ReportSection title="ANOVA" icon="anova">
+            <AnovaTable info={info} />
+          </ReportSection>
+        );
+      case "coefficientTable":
+        return (
+          <>
+            {page.error || coefficientError ? (
+              <ResultReadError
+                error={(page.error ?? coefficientError)!}
+                onRetry={() => void page.reload()}
+              />
+            ) : null}
+            {page.loading ? (
+              <p className="text-sm text-muted-foreground">Loading coefficients…</p>
+            ) : (
+              <CoefficientsBlock coefficients={coefficients} hasCategorical={false} />
+            )}
+            <PageToolbar page={page} />
+          </>
+        );
+      case "hypothesisTest":
+        return <HypothesisTestBlock source={hypothesisSource} />;
+      case "diagnostics":
+        return (
+          <ReportSection title="Diagnostics" icon="test">
+            <p className="text-sm text-muted-foreground">
+              Condition number: {data.diagnostic_info.cond_no}
+            </p>
+          </ReportSection>
+        );
+      case "residualPlot":
+        return (
+          <ExpandableReportSection title="Residuals vs Fitted">
+            <OlsResidualPlot reference={data.resultRef} />
+          </ExpandableReportSection>
+        );
+      case "observations":
+        return (
+          <ExpandableReportSection title="Fitted values and residuals">
+            <OlsObservations data={data} />
+          </ExpandableReportSection>
+        );
+      case "acfPacf":
+        return <ACFPACFBlock observationCount={data.observations.rowCount} compute={computeAcf} />;
+      case "serialTests":
+        return (
+          <SerialTestsBlock
+            observationCount={data.observations.rowCount}
+            compute={computeSerialTests}
+          />
+        );
+    }
+  };
   return (
     <ReportLayout
       title={data.title}
@@ -175,48 +253,12 @@ function OlsReport({ data }: { data: OlsReportData }) {
         </>
       }
     >
-      {coefficients.length === data.coefficients.rowCount && coefficients.length > 0 && (
-        <ReportSection title="Equation" icon="equation">
-          <ReportLazyBoundary variant="formula">
-            <LazyFormulaBlock endogName={data.endog_name} coefficients={coefficients} />
-          </ReportLazyBoundary>
-        </ReportSection>
-      )}
-      <ReportSection title="Model Summary" icon="modelSummary">
-        <ModelSummaryGrid info={info} />
-      </ReportSection>
-      <ReportSection title="ANOVA" icon="anova">
-        <AnovaTable info={info} />
-      </ReportSection>
-      {page.error || coefficientError ? (
-        <ResultReadError
-          error={(page.error ?? coefficientError)!}
-          onRetry={() => void page.reload()}
-        />
-      ) : null}
-      {page.loading ? (
-        <p className="text-sm text-muted-foreground">Loading coefficients…</p>
-      ) : (
-        <CoefficientsBlock coefficients={coefficients} hasCategorical={false} />
-      )}
-      <PageToolbar page={page} />
-      <HypothesisTestBlock source={hypothesisSource} />
-      <ReportSection title="Diagnostics" icon="test">
-        <p className="text-sm text-muted-foreground">
-          Condition number: {data.diagnostic_info.cond_no}
-        </p>
-        <ExpandableReportSection title="Residuals vs Fitted">
-          <OlsResidualPlot reference={data.resultRef} />
-        </ExpandableReportSection>
-        <ExpandableReportSection title="Fitted values and residuals">
-          <OlsObservations data={data} />
-        </ExpandableReportSection>
-        <ACFPACFBlock observationCount={data.observations.rowCount} compute={computeAcf} />
-        <SerialTestsBlock
-          observationCount={data.observations.rowCount}
-          compute={computeSerialTests}
-        />
-      </ReportSection>
+      <OlsReportLayoutControls spec={spec} onChange={setSpec} />
+      {spec.sections
+        .filter((section) => section.visible)
+        .map((section) => (
+          <Fragment key={section.id}>{renderSection(section.kind)}</Fragment>
+        ))}
     </ReportLayout>
   );
 }
