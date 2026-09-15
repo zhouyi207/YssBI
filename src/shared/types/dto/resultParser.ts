@@ -15,6 +15,7 @@ import type {
   ResultLease,
   GraphResultState,
   ResultCacheState,
+  ConnectionCacheState,
 } from "./result";
 
 type UnknownRecord = Record<string, unknown>;
@@ -83,24 +84,72 @@ function parseGraphOutput(value: unknown): GraphOutputRefDto {
 export function parseGraphResultState(value: unknown): GraphResultState {
   const isHash = (input: unknown): input is string =>
     typeof input === "string" && /^[0-9a-f]{64}$/.test(input);
-  if (!isRecord(value) || !hasExactKeys(value, ["executionSessionId", "semanticInputHash", "compiledArtifactId", "outputs"])
-    || !isUuid(value.executionSessionId) || !isHash(value.semanticInputHash)
-    || (value.compiledArtifactId !== null && !isHash(value.compiledArtifactId))
-    || !Array.isArray(value.outputs)) return fail("graph result state");
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "executionSessionId",
+      "semanticInputHash",
+      "compiledArtifactId",
+      "outputs",
+      "connections",
+    ]) ||
+    !isUuid(value.executionSessionId) ||
+    !isHash(value.semanticInputHash) ||
+    (value.compiledArtifactId !== null && !isHash(value.compiledArtifactId)) ||
+    !Array.isArray(value.outputs) ||
+    !Array.isArray(value.connections)
+  )
+    return fail("graph result state");
   const keys = new Set<string>();
   const outputs = value.outputs.map((entry) => {
-    if (!isRecord(entry) || !hasExactKeys(entry, ["output", "state", "resultId"])
-      || !["missing", "stale", "valid"].includes(entry.state as string)) return fail("output result state");
-    if (entry.state === "valid" ? !isDecimalId(entry.resultId) || entry.resultId === "0" : entry.resultId !== null)
+    if (
+      !isRecord(entry) ||
+      !hasExactKeys(entry, ["output", "state", "resultId"]) ||
+      !["missing", "stale", "valid"].includes(entry.state as string)
+    )
+      return fail("output result state");
+    if (
+      entry.state === "valid"
+        ? !isDecimalId(entry.resultId) || entry.resultId === "0"
+        : entry.resultId !== null
+    )
       return fail("output result identity");
     const output = parseGraphOutput(entry.output);
     const key = JSON.stringify([output.graphPath, portAddressKey(output.port)]);
     if (keys.has(key)) return fail("duplicate output result state");
     keys.add(key);
-    return { output, state: entry.state as ResultCacheState, resultId: entry.resultId as string | null };
+    return {
+      output,
+      state: entry.state as ResultCacheState,
+      resultId: entry.resultId as string | null,
+    };
   });
-  return { executionSessionId: value.executionSessionId, semanticInputHash: value.semanticInputHash,
-    compiledArtifactId: value.compiledArtifactId, outputs };
+  const connectionKeys = new Set<string>();
+  const connections = value.connections.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasExactKeys(entry, ["output", "input", "state"]) ||
+      !isPortAddressDto(entry.input) ||
+      !["new", "stale", "valid"].includes(entry.state as string)
+    )
+      return fail("connection result state");
+    const output = parseGraphOutput(entry.output);
+    const key = JSON.stringify([
+      output.graphPath,
+      portAddressKey(output.port),
+      portAddressKey(entry.input),
+    ]);
+    if (connectionKeys.has(key)) return fail("duplicate connection result state");
+    connectionKeys.add(key);
+    return { output, input: entry.input, state: entry.state as ConnectionCacheState };
+  });
+  return {
+    executionSessionId: value.executionSessionId,
+    semanticInputHash: value.semanticInputHash,
+    compiledArtifactId: value.compiledArtifactId,
+    outputs,
+    connections,
+  };
 }
 
 export function parseResultPresentation(value: unknown): ResultPresentation {
@@ -181,10 +230,7 @@ function parseMetadata(value: unknown): ResultMetadata | null {
 }
 
 function parseValueKind(value: unknown): ResultValueKind {
-  if (
-    typeof value !== "string" ||
-    !VALUE_KINDS.has(value)
-  ) {
+  if (typeof value !== "string" || !VALUE_KINDS.has(value)) {
     return fail("result value kind");
   }
   return value as ResultValueKind;

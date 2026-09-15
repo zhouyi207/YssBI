@@ -106,8 +106,6 @@ describe("requestPinPreview", () => {
     useResourceStore.getState().clear();
     useExecutionStore.setState({
       graphs: {},
-      playbackGraphPath: null,
-      isPlaying: false,
     });
     nextGeneration = 0;
     vi.spyOn(PinPreviewGenerationService, "allocate").mockImplementation(
@@ -376,8 +374,6 @@ describe("requestPinPreview", () => {
       startProjectLifecycle("project-session-2");
       useExecutionStore.setState({
         graphs: {},
-        playbackGraphPath: null,
-        isPlaying: false,
       });
       const replacementStore = useExecutionStore.getState();
       replacementStore.startExecution(eventGraphPath);

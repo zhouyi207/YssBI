@@ -62,8 +62,6 @@ describe("Pin preview production path", () => {
     useDocumentStateStore.getState().clear();
     useExecutionStore.setState({
       graphs: {},
-      playbackGraphPath: null,
-      isPlaying: false,
     });
     vi.spyOn(PinPreviewGenerationService, "allocate").mockResolvedValue(1);
     vi.spyOn(ResultService, "getPinResult").mockResolvedValue(null);

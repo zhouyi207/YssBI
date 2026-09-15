@@ -38,8 +38,6 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
       if (!isProjectLifecycleStateCurrent(owner)) return;
       useExecutionStore.setState({
         graphs: {},
-        playbackGraphPath: null,
-        isPlaying: false,
       });
       if (!isProjectLifecycleStateCurrent(owner)) return;
       await clearProjectProjection(owner);

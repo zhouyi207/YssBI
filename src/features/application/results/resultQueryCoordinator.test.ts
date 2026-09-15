@@ -153,16 +153,39 @@ describe("ResultQueryCoordinator", () => {
     const replies = [old, edited, undone];
     fixture.service.getGraphState = () => replies.shift()!.promise;
     const published: Array<GraphResultState | null> = [];
-    const coordinator = createResultQueryCoordinator({ ...fixture.dependencies, publication: {
-      ...fixture.publication, publishGraphState: (_project, _request, value) => { published.push(value as GraphResultState | null); },
-    } });
-    const request = { graphPath: "events/contract.yssbi-event", semanticInputHash: "a".repeat(64),
-      sessionId: 1, draftGeneration: 0, draftSession: {} };
+    const coordinator = createResultQueryCoordinator({
+      ...fixture.dependencies,
+      publication: {
+        ...fixture.publication,
+        publishGraphState: (_project, _request, value) => {
+          published.push(value as GraphResultState | null);
+        },
+      },
+    });
+    const request = {
+      graphPath: "events/contract.yssbi-event",
+      semanticInputHash: "a".repeat(64),
+      sessionId: 1,
+      draftGeneration: 0,
+      draftSession: {},
+    };
     const first = coordinator.loadGraphState(request);
-    const second = coordinator.loadGraphState({ ...request, semanticInputHash: "b".repeat(64), draftGeneration: 1, draftSession: {} });
+    const second = coordinator.loadGraphState({
+      ...request,
+      semanticInputHash: "b".repeat(64),
+      draftGeneration: 1,
+      draftSession: {},
+    });
     const third = coordinator.loadGraphState({ ...request, draftGeneration: 2, draftSession: {} });
-    const state: GraphResultState = { executionSessionId: resultSessionFixture, semanticInputHash: request.semanticInputHash,
-      compiledArtifactId: request.semanticInputHash, outputs: [{ output: { graphPath: request.graphPath, port: output }, state: "valid", resultId: "18" }] };
+    const state: GraphResultState = {
+      executionSessionId: resultSessionFixture,
+      semanticInputHash: request.semanticInputHash,
+      compiledArtifactId: request.semanticInputHash,
+      connections: [],
+      outputs: [
+        { output: { graphPath: request.graphPath, port: output }, state: "valid", resultId: "18" },
+      ],
+    };
     undone.resolve(state);
     expect(await third).toEqual({ status: "published" });
     old.resolve({ ...state, compiledArtifactId: null });

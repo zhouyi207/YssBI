@@ -125,7 +125,7 @@ export interface ProjectPublicationDependencies {
     path: string,
     projectInstanceId: string,
     epoch: number,
-  ): Promise<GraphEditorSessionDto | false>;
+  ): Promise<GraphEditorSessionDto | false | null>;
   captureLoadedGraphPaths(): ReadonlySet<string>;
   prepareSnapshot(plan: ProjectSnapshotPreparation): PreparedProjectSnapshot;
   commitSnapshot(plan: PreparedProjectSnapshot): void | Promise<void>;
@@ -434,6 +434,7 @@ export class ProjectPublicationCoordinator {
                 identity.epoch,
               );
               this.assertCurrent(identity);
+              if (session === null) continue;
               if (!session || toProjectionEntities(session.projection).graphPath !== graph.path)
                 throw protocolError("graph projection identity is invalid");
               graphSessions.set(graph.path, session);

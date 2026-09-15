@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { GraphContextMenuActions } from "@/features/application/editor";
+import type { GraphResultPresentation } from "@/features/application/results";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import type { GraphFlowModel, FlowConnectionFeedback } from "./graphFlowModel";
 
@@ -9,6 +10,8 @@ export interface GraphFlowContextValue {
   interactive: boolean;
   contextMenuActions: GraphContextMenuActions | null;
   model: GraphFlowModel;
+  presentation: GraphResultPresentation;
+  blockedConnections: ReadonlySet<string>;
   sourcePin: PinData | null;
   feedbackForPin(pinId: string): FlowConnectionFeedback | null;
 }

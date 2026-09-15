@@ -245,6 +245,56 @@
         "state": "missing",
         "resultId": null
       }
+    ],
+    "connections": [
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000003",
+          "portKey": "input"
+        },
+        "state": "valid"
+      },
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000004",
+          "portKey": "input"
+        },
+        "state": "stale"
+      },
+      {
+        "output": {
+          "graphPath": "events/contract.yssbi-event",
+          "port": {
+            "kind": "declared",
+            "nodeId": "00000000-0000-0000-0000-000000000002",
+            "portKey": "result"
+          }
+        },
+        "input": {
+          "kind": "declared",
+          "nodeId": "00000000-0000-0000-0000-000000000005",
+          "portKey": "input"
+        },
+        "state": "new"
+      }
     ]
   }
 }

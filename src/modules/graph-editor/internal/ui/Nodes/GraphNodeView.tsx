@@ -8,6 +8,8 @@ import {
 
 export interface GraphNodeViewProps {
   nodeId: string;
+  executionState?: string;
+  cacheState?: string;
   className: string;
   style: CSSProperties;
   contentSlot: ReactNode;
@@ -20,6 +22,8 @@ export interface GraphNodeViewProps {
 
 export const GraphNodeView = memo(function GraphNodeView({
   nodeId,
+  executionState,
+  cacheState,
   className,
   style,
   contentSlot,
@@ -33,6 +37,8 @@ export const GraphNodeView = memo(function GraphNodeView({
     <div
       id={nodeId}
       data-node-id={nodeId}
+      data-graph-state={executionState}
+      data-cache-state={cacheState}
       className={className}
       style={style}
       onPointerDown={onPointerDown}

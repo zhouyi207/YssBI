@@ -19,7 +19,6 @@ import {
 import { useProjectOperations } from "./useProjectOperations";
 import { revealWorkbenchView } from "@/modules/workbench/public";
 import { normalizeIpcError } from "@/services/ipc/ipcError";
-import { ensureGraphExecutionTerminal } from "@/features/core/execution/executionRecording";
 
 const projectInstanceId = "project-instance-1";
 const graphPath = "events/Main.yssbi-event";
@@ -37,11 +36,12 @@ function runStartedEvent(): RunEvent {
 }
 
 const executionState = {
-  graphs: {},
-  startExecution: vi.fn(),
+  graphs: {} as Record<string, { status: string }>,
+  startExecution: vi.fn((): (() => boolean) => {
+    executionState.graphs[graphPath] = { status: "running" };
+    return () => true;
+  }),
   setActiveRunId: vi.fn(),
-  commitExecutionVisual: vi.fn(),
-  setRecording: vi.fn(),
   completeExecution: vi.fn(),
   failExecution: vi.fn(),
   recordRunFailure: vi.fn(),
@@ -60,9 +60,6 @@ vi.mock("@/modules/workbench/public", async (importOriginal) => ({
 vi.mock("@/features/core/execution", () => ({
   useExecutionStore: { getState: () => executionState },
   graphHasClearableArtifacts: () => true,
-}));
-vi.mock("@/features/core/execution/executionRecording", () => ({
-  ensureGraphExecutionTerminal: vi.fn(),
 }));
 vi.mock("./resolveExecutionGraphPath", () => ({
   resolveExecutionGraphPath: (targetGraphPath?: string) =>
@@ -250,7 +247,7 @@ describe("useProjectOperations execution demand", () => {
       source: null,
       incidentId: null,
     });
-    expect(ensureGraphExecutionTerminal).toHaveBeenCalledWith(graphPath, "error");
+    expect(executionState.failExecution).toHaveBeenCalledWith(graphPath);
     expect(revealWorkbenchView).toHaveBeenCalledWith("output");
   });
 
@@ -272,7 +269,7 @@ describe("useProjectOperations execution demand", () => {
     await act(async () => execution);
 
     expect(executionState.setActiveRunId).not.toHaveBeenCalled();
-    expect(executionState.commitExecutionVisual).not.toHaveBeenCalled();
+    expect(executionState.completeExecution).not.toHaveBeenCalled();
     expect(executionState.completeExecution).not.toHaveBeenCalled();
     expect(executionState.failExecution).not.toHaveBeenCalled();
     expect(executionState.interruptExecution).not.toHaveBeenCalled();

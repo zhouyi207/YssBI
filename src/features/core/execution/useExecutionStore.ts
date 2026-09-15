@@ -1,56 +1,15 @@
 import { create } from "zustand";
-import type {
-  ExecutionState,
-  GraphExecutionState,
-  RecordedEvent,
-  RunFailureProjection,
-} from "./executionTypes";
+import type { ExecutionState, GraphExecutionState, RunFailureProjection } from "./executionTypes";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import { flushLiveExecutionEventsNow } from "./executionLiveFeed";
-import {
-  clearExecutionVisual,
-  getExecutionVisual,
-  resetExecutionVisual,
-  snapshotToGraphPatch,
-} from "./executionVisualSession";
-import { clearedRunProjectionsPatch } from "./graphRunArtifacts";
 import { pinPreviewCacheKey } from "./pinResultIndex";
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
   runId: null,
-  nodeStates: new Map(),
-  completedConnections: new Set(),
-  flowingConnections: new Set(),
-  recording: [],
-  graphDirty: false,
+  request: null,
   runFailure: null,
   pinPreviews: new Map(),
 });
-
-function clearedVisualPatch(): Pick<
-  GraphExecutionState,
-  "status" | "runId" | "nodeStates" | "completedConnections" | "flowingConnections"
-> {
-  return {
-    status: "idle",
-    runId: null,
-    nodeStates: new Map(),
-    completedConnections: new Set(),
-    flowingConnections: new Set(),
-  };
-}
-
-function stopPlaybackIfGraph(
-  state: ExecutionState,
-  graphPath: string,
-): Pick<ExecutionState, "isPlaying" | "playbackGraphPath"> {
-  const stop = state.playbackGraphPath === graphPath;
-  return {
-    isPlaying: stop ? false : state.isPlaying,
-    playbackGraphPath: stop ? null : state.playbackGraphPath,
-  };
-}
 
 export interface PinPreviewLease {
   readonly generation: number;
@@ -84,18 +43,12 @@ export function revokeAllPinPreviewLeases(): void {
 
 interface ExecutionStore extends ExecutionState {
   getGraph: (graphPath: string) => GraphExecutionState;
-
-  /** Mark graph as running; clears prior run artifacts and node visuals. */
-  startExecution: (graphPath: string) => void;
+  startExecution: (graphPath: string) => () => boolean;
   setActiveRunId: (graphPath: string, runId: string) => void;
   completeExecution: (graphPath: string) => void;
   failExecution: (graphPath: string) => void;
-  /** User cancelled a live run; clear partial pin results and replay data. */
   interruptExecution: (graphPath: string) => void;
-  /** User cleared last run without executing again. */
   clearGraphRunProjections: (graphPath: string) => void;
-  /** Flush live/replay visual session into store (single React update). */
-  commitExecutionVisual: (graphPath: string) => void;
   recordRunFailure: (graphPath: string, failure: RunFailureProjection) => void;
   clearRunFailure: (graphPath: string) => void;
   beginPinPreview: (graphPath: string, port: PortAddressDto, generation: number) => PinPreviewLease;
@@ -112,130 +65,67 @@ interface ExecutionStore extends ExecutionState {
     error: string,
   ) => boolean;
   removePinPreview: (graphPath: string, port: PortAddressDto, generation: number) => boolean;
-  setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
-  setPlaying: (playing: boolean, graphPath?: string) => void;
-  markGraphDirty: (graphPath: string) => void;
-
-  /** Drop all execution state when a graph is fully closed (no open tab). */
   releaseGraphExecutionState: (graphPath: string) => void;
-  /** Clear node/connection visuals only; keep pin results and recording (replay start). */
-  resetGraphVisuals: (graphPath: string) => void;
 }
 
 function updateGraph(
   state: ExecutionState,
   graphPath: string,
   patch: Partial<GraphExecutionState>,
-): { graphs: Record<string, GraphExecutionState> } {
-  const prev = state.graphs[graphPath] ?? emptyGraphState();
+) {
   return {
     graphs: {
       ...state.graphs,
-      [graphPath]: { ...prev, ...patch },
+      [graphPath]: { ...(state.graphs[graphPath] ?? emptyGraphState()), ...patch },
     },
   };
 }
 
-function commitVisualSnapshot(
-  graphPath: string,
-  set: (fn: (state: ExecutionState) => Partial<ExecutionState> | ExecutionState) => void,
-): void {
-  const snap = getExecutionVisual();
-  if (snap.graphPath !== graphPath) {
-    clearExecutionVisual();
-    return;
-  }
-  const patch = snapshotToGraphPatch(snap);
-  clearExecutionVisual();
-  set((state) => updateGraph(state, graphPath, patch));
-}
-
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   graphs: {},
-  playbackGraphPath: null,
-  isPlaying: false,
-
   getGraph: (graphPath) => get().graphs[graphPath] ?? emptyGraphState(),
-
   startExecution: (graphPath) => {
-    resetExecutionVisual(graphPath);
+    const request = {};
     set((state) =>
-      updateGraph(state, graphPath, {
-        ...clearedVisualPatch(),
-        ...clearedRunProjectionsPatch(),
-              runFailure: null,
-        status: "running",
-      }),
+      updateGraph(state, graphPath, { request, runId: null, runFailure: null, status: "running" }),
     );
+    return () => get().graphs[graphPath]?.request === request;
   },
-
   setActiveRunId: (graphPath, runId) =>
-    set((state) => {
-      const graph = state.graphs[graphPath];
-      if (graph?.status !== "running") return state;
-      return updateGraph(state, graphPath, { runId });
-    }),
-
+    set((state) =>
+      state.graphs[graphPath]?.status === "running"
+        ? updateGraph(state, graphPath, { runId })
+        : state,
+    ),
   completeExecution: (graphPath) =>
     set((state) =>
-      updateGraph(state, graphPath, {
-        status: "completed",
-        runId: null,
-      }),
+      updateGraph(state, graphPath, { status: "completed", runId: null, request: null }),
     ),
-
   failExecution: (graphPath) =>
+    set((state) => updateGraph(state, graphPath, { status: "error", runId: null, request: null })),
+  interruptExecution: (graphPath) => get().clearGraphRunProjections(graphPath),
+  clearGraphRunProjections: (graphPath) =>
     set((state) =>
-      updateGraph(state, graphPath, {
-        status: "error",
-        runId: null,
-      }),
+      state.graphs[graphPath]
+        ? updateGraph(state, graphPath, {
+            status: "idle",
+            runId: null,
+            request: null,
+            runFailure: null,
+          })
+        : state,
     ),
-
-  interruptExecution: (graphPath) => {
-    clearExecutionVisual();
-    set((state) => ({
-      ...updateGraph(state, graphPath, {
-        ...clearedVisualPatch(),
-        ...clearedRunProjectionsPatch(),
-        runFailure: null,
-      }),
-      ...stopPlaybackIfGraph(state, graphPath),
-    }));
-  },
-
-  clearGraphRunProjections: (graphPath) => {
-    clearExecutionVisual();
-    set((state) => ({
-      ...updateGraph(state, graphPath, {
-        ...clearedVisualPatch(),
-        ...clearedRunProjectionsPatch(),
-              runFailure: null,
-      }),
-      ...stopPlaybackIfGraph(state, graphPath),
-    }));
-  },
-
-  commitExecutionVisual: (graphPath) => {
-    flushLiveExecutionEventsNow();
-    commitVisualSnapshot(graphPath, set);
-  },
-
   recordRunFailure: (graphPath, failure) =>
     set((state) => {
       const graph = state.graphs[graphPath];
-      if (!graph || graph.status !== "running" || graph.runId !== failure.runId) return state;
-      return updateGraph(state, graphPath, { runFailure: failure });
+      return graph?.status === "running" && graph.runId === failure.runId
+        ? updateGraph(state, graphPath, { runFailure: failure })
+        : state;
     }),
-
   clearRunFailure: (graphPath) =>
-    set((state) => {
-      if (!state.graphs[graphPath]) return state;
-      return updateGraph(state, graphPath, {
-              runFailure: null,
-      });
-    }),
-
+    set((state) =>
+      state.graphs[graphPath] ? updateGraph(state, graphPath, { runFailure: null }) : state,
+    ),
   beginPinPreview: (graphPath, port, generation) => {
     const key = pinPreviewCacheKey(graphPath, port);
     const previous = activePreviewLeases.get(key);
@@ -333,52 +223,13 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return removed;
   },
 
-  setRecording: (graphPath, recording) =>
-    set((state) => updateGraph(state, graphPath, { recording })),
-
-  setPlaying: (playing, graphPath) =>
-    set({
-      isPlaying: playing,
-      playbackGraphPath: playing ? (graphPath ?? get().playbackGraphPath) : null,
-    }),
-
-  markGraphDirty: (graphPath) =>
-    set((state) => {
-      const g = state.graphs[graphPath];
-      if (!g) return state;
-      if (g.status === "idle" && !(state.isPlaying && state.playbackGraphPath === graphPath)) {
-        return state;
-      }
-      clearExecutionVisual();
-      return {
-        ...updateGraph(state, graphPath, {
-          ...clearedVisualPatch(),
-          graphDirty: true,
-        }),
-        ...stopPlaybackIfGraph(state, graphPath),
-      };
-    }),
-
   releaseGraphExecutionState: (graphPath) => {
     revokeGraphPreviewLeases(graphPath);
     set((state) => {
       if (!state.graphs[graphPath]) return state;
       const graphs = { ...state.graphs };
       delete graphs[graphPath];
-      clearExecutionVisual();
-      return {
-        graphs,
-        ...stopPlaybackIfGraph(state, graphPath),
-      };
+      return { graphs };
     });
   },
-
-  resetGraphVisuals: (graphPath) =>
-    set((state) => {
-      clearExecutionVisual();
-      return {
-        ...updateGraph(state, graphPath, clearedVisualPatch()),
-        ...stopPlaybackIfGraph(state, graphPath),
-      };
-    }),
 }));

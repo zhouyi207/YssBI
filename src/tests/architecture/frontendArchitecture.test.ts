@@ -909,6 +909,7 @@ describe("frontend architecture model", () => {
     const productionSources = [
       "src/modules/graph-editor/internal/ui/Canvas/core/GraphFlowCanvas.tsx",
       "src/modules/settings/internal/ui/SettingsView.tsx",
+      "src/modules/workbench/internal/ui/menu/ArchitectureModal.tsx",
       "src/app/App.tsx",
       "src/app/main.tsx",
       "src/views/fixture.tsx",
@@ -1023,6 +1024,7 @@ describe("frontend architecture model", () => {
         "src/app/App.css",
         "src/app/workbench-dockview.css",
         "src/modules/settings/internal/ui/settings.css",
+        "src/modules/workbench/internal/ui/menu/architecture.css",
         "src/modules/graph-editor/internal/ui/Canvas/core/graphFlow.css",
       ],
       dependencies: stylesheetDependencies,
@@ -1067,6 +1069,14 @@ describe("frontend architecture model", () => {
         resourceKind: "stylesheet",
         consumerSourceFile: "src/app/main.tsx",
         repositoryRelativeAssetPath: "src/app/workbench-dockview.css",
+      },
+      {
+        sourceLayer: "views",
+        mode: "runtime",
+        dependencyKind: "side-effect-import",
+        resourceKind: "stylesheet",
+        consumerSourceFile: "src/modules/workbench/internal/ui/menu/ArchitectureModal.tsx",
+        repositoryRelativeAssetPath: "src/modules/workbench/internal/ui/menu/architecture.css",
       },
       {
         sourceLayer: "views",

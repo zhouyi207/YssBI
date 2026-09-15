@@ -1,35 +1,12 @@
 import type { GraphExecutionState } from "./executionTypes";
 
-/** Clear frontend execution projections without touching backend current results. */
-export function clearedRunProjectionsPatch(
-  graphDirty = false,
-): Pick<GraphExecutionState, "recording" | "graphDirty"> {
-  return {
-    recording: [],
-    graphDirty,
-  };
-}
-
-/** Whether the graph still shows artifacts from a previous run (Clear button). */
+/** Clear acknowledges the run summary; cached results retain their own lifecycle. */
 export function graphHasClearableArtifacts(
-  graph:
-    | {
-        status: GraphExecutionState["status"];
-        recording: { readonly length: number };
-        nodeStates: { readonly size: number };
-        completedConnections: { readonly size: number };
-        flowingConnections: { readonly size: number };
-      }
-    | undefined,
+  graph: Pick<GraphExecutionState, "status" | "runFailure"> | undefined,
 ): boolean {
-  if (!graph) return false;
-  if (graph.status === "running") return false;
-  return (
-    graph.recording.length > 0 ||
-    graph.status === "completed" ||
-    graph.status === "error" ||
-    graph.nodeStates.size > 0 ||
-    graph.completedConnections.size > 0 ||
-    graph.flowingConnections.size > 0
+  return Boolean(
+    graph &&
+    graph.status !== "running" &&
+    (graph.status === "completed" || graph.status === "error" || graph.runFailure),
   );
 }

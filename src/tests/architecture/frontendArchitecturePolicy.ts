@@ -143,11 +143,6 @@ const VIEW_CORE_CAPABILITIES = [
   }),
   viewCoreCapability("src/features/core/editor/ui.ts", ["useEditorUi"]),
   viewCoreCapability("src/features/core/editor/detail/detailTypes.ts", ["DetailTarget"]),
-  viewCoreCapability("src/features/core/execution/executionVisualSession.ts", [
-    "connectionKey",
-    "getExecutionVisual",
-    "subscribeExecutionVisual",
-  ]),
   viewCoreCapability("src/features/core/execution/graphRunArtifacts.ts", [
     "graphHasClearableArtifacts",
   ]),
@@ -161,12 +156,6 @@ const VIEW_CORE_CAPABILITIES = [
   viewCoreCapability("src/features/core/execution/ui.ts", ["runFailureActions"], {
     runFailureActions: ["clearRunFailure"],
   }),
-  viewCoreCapability("src/features/core/execution/useExecutionPlayback.ts", [
-    "useExecutionPlayback",
-  ]),
-  viewCoreCapability("src/features/core/execution/useExecutionVisualBinder.ts", [
-    "useExecutionVisualBinder",
-  ]),
   viewCoreCapability("src/features/core/graph/read.ts", [
     "useGraphRead",
     "GraphProjectionSnapshot",
@@ -176,7 +165,6 @@ const VIEW_CORE_CAPABILITIES = [
   ]),
   viewCoreCapability("src/features/core/graphSession/ui.ts", ["useGraphSessionUi"]),
   viewCoreCapability("src/features/core/keyboard/ui.ts", ["keyboardUi"]),
-  viewCoreCapability("src/features/core/node/useNodeExecution.ts", ["useNodeExecution"]),
   viewCoreCapability("src/features/core/resource/functionResourceView.ts", [
     "FunctionResourceView",
   ]),

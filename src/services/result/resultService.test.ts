@@ -106,14 +106,50 @@ describe("ResultService", () => {
     const graphPath = state.outputs[0].output.graphPath;
     vi.mocked(invoke).mockResolvedValueOnce(state);
     await expect(ResultService.getGraphState(graphPath, hash)).resolves.toEqual(state);
-    expect(invoke).toHaveBeenCalledWith("get_graph_result_state", { graphPath, semanticInputHash: hash });
-    expect(() => parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], resultId: null }] })).toThrow();
-    expect(() => parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], state: "stale" }] })).toThrow();
-    expect(() => parseGraphResultState({ ...state, outputs: [...state.outputs, {
-      ...state.outputs[0], output: { graphPath, port: { portKey: output.portKey, nodeId: output.nodeId, kind: output.kind } },
-    }] })).toThrow();
+    expect(invoke).toHaveBeenCalledWith("get_graph_result_state", {
+      graphPath,
+      semanticInputHash: hash,
+    });
+    expect(() =>
+      parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], resultId: null }] }),
+    ).toThrow();
+    expect(() =>
+      parseGraphResultState({ ...state, outputs: [{ ...state.outputs[0], state: "stale" }] }),
+    ).toThrow();
+    expect(() =>
+      parseGraphResultState({
+        ...state,
+        connections: [...state.connections, state.connections[0]],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseGraphResultState({ ...state, connections: [{ ...state.connections[0], input: {} }] }),
+    ).toThrow();
+    expect(() =>
+      parseGraphResultState({
+        ...state,
+        connections: [{ ...state.connections[0], state: "completed" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseGraphResultState({
+        ...state,
+        outputs: [
+          ...state.outputs,
+          {
+            ...state.outputs[0],
+            output: {
+              graphPath,
+              port: { portKey: output.portKey, nodeId: output.nodeId, kind: output.kind },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
     vi.mocked(invoke).mockResolvedValueOnce(state);
-    await expect(ResultService.getGraphState("events/other.yssbi-event", hash)).rejects.toThrow("Mismatched graph result state");
+    await expect(ResultService.getGraphState("events/other.yssbi-event", hash)).rejects.toThrow(
+      "Mismatched graph result state",
+    );
   });
 
   it("uses session-bound references for report tables and typed statistical analysis", async () => {

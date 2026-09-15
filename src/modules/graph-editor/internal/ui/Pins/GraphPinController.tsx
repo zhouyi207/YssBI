@@ -1,4 +1,13 @@
-import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { graphElementState } from "@/features/application/results";
+import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
 import { useTranslation } from "react-i18next";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import {
@@ -85,6 +94,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
   const defaultValue = input?.protocolDefault;
   const userValue = input?.literalOverride;
   const { t, i18n } = useTranslation();
+  const presentation = useContext(GraphFlowContext)?.presentation;
   const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(() => ({ typeState }), [typeState]);
@@ -111,6 +121,15 @@ export function GraphPinController(props: GraphPinControllerProps) {
       : undefined;
     return diagnostics ? findPrimaryPortDiagnostic(diagnostics, address) : undefined;
   });
+  const nodeCache = presentation?.nodes[nodeId];
+  const cacheState =
+    direction === "output"
+      ? (presentation?.outputs[id] ?? "new")
+      : (presentation?.inputs[id] ??
+        (nodeCache?.valid ? "valid" : nodeCache?.stale ? "stale" : "new"));
+  const executionState = presentation
+    ? graphElementState(presentation, nodeId, cacheState, pinDiagnostic?.blocking)
+    : undefined;
   const connections = useMemo(
     () =>
       connectionIds.flatMap((connectionId) => {
@@ -140,10 +159,7 @@ export function GraphPinController(props: GraphPinControllerProps) {
         : null,
     [address, connections, direction, graphPath],
   );
-  const viewState = useMemo(
-    () => (viewParams ? evaluatePinViewState(viewParams) : null),
-    [viewParams],
-  );
+  const viewState = viewParams ? evaluatePinViewState(viewParams) : null;
   const previewActionAvailable = isPinPreviewActionAvailable(graphPath, {
     direction,
     address,
@@ -190,9 +206,16 @@ export function GraphPinController(props: GraphPinControllerProps) {
       : effectivePinDragState === "highlighted"
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
-  const tooltip = pinDiagnostic
+  const pinTooltip = pinDiagnostic
     ? `${name} (${visualSpec.label}) — ${formatGraphDiagnostic(pinDiagnostic, i18n?.resolvedLanguage)}`
     : `${name} (${visualSpec.label})`;
+  const tooltip = [
+    pinTooltip,
+    executionState && t(`canvas.graphState.${executionState}`),
+    executionState === "error" && cacheState !== "new" && t(`canvas.graphState.${cacheState}`),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const inputSlot = showInput ? (
     <PinInput
@@ -239,6 +262,8 @@ export function GraphPinController(props: GraphPinControllerProps) {
       renderStyle={renderStyle}
       baseColor={baseColor}
       shouldPulse={shouldPulse}
+      executionState={executionState}
+      cacheState={cacheState}
       tooltip={tooltip}
       inputSlot={inputSlot}
       contextMenuSlot={contextMenuSlot}

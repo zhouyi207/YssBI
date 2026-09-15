@@ -28,8 +28,15 @@ export {
   observeResultRunEvent,
   readPinResultStatus,
   useGraphResultCache,
+  useGraphResultPresentation,
   type GraphResultCacheProjection,
 } from "./runtime";
+export {
+  graphElementState,
+  type GraphResultPresentation,
+  type GraphElementState,
+  type GraphCacheAppearance,
+} from "./graphPresentation";
 export { useResultValue } from "./useResultValue";
 export { usePagedResultRows } from "./usePagedResultRows";
 export {

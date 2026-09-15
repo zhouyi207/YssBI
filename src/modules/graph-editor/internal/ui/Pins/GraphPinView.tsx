@@ -40,6 +40,8 @@ export interface GraphPinViewProps {
   renderStyle: PinRenderStyle;
   baseColor: string;
   shouldPulse: boolean;
+  executionState?: string;
+  cacheState?: string;
   tooltip: string;
   inputSlot?: ReactNode;
   handleSlot?: ReactNode;
@@ -179,6 +181,8 @@ export function GraphPinView({
   baseColor,
   shouldPulse,
   tooltip,
+  executionState,
+  cacheState,
   inputSlot,
   handleSlot,
   contextMenuSlot,
@@ -193,8 +197,10 @@ export function GraphPinView({
           className={`group relative flex h-7 shrink-0 items-center transition-opacity pin-container ${
             direction === "input" ? "flex-row justify-start" : "flex-row-reverse justify-end"
           }`}
-          style={dragStyle}
+          style={{ ...dragStyle, "--pin-result-color": baseColor } as CSSProperties}
           data-pin-id={id}
+          data-graph-state={executionState}
+          data-cache-state={cacheState}
           tabIndex={-1}
           {...pinConnectionFeedbackAttributes(connectionFeedback)}
           data-diagnostic={diagnosticMessage ? "true" : undefined}

@@ -66,8 +66,6 @@ describe("observeGraphRunEvent", () => {
     revokeAllPinPreviewLeases();
     useExecutionStore.setState({
       graphs: {},
-      playbackGraphPath: null,
-      isPlaying: false,
     });
   });
 

@@ -1,5 +1,5 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
-import { waitForGraphDraftMutations } from "@/features/application/graphDraft/graphDraftCoordinator";
+import { enqueueGraphDraftTask } from "@/features/application/graphDraft/graphDraftCoordinator";
 import {
   prepareGraphProjectionReplacements,
   commitPreparedGraphProjectionReplacements,
@@ -27,37 +27,42 @@ export async function saveGraphDraft(
 
   let completed = false;
   try {
-    await waitForGraphDraftMutations(graphPath);
-    if (!isCurrentSave()) return false;
-    const draftGeneration = useGraphDraftStore.getState().sessions[graphPath].draftGeneration;
-    const document = getGraphDraftDocument(graphPath);
-    if (!document) throw new Error(`Graph draft '${graphPath}' is not loaded`);
-    const saved = await GraphDraftService.save(
-      identity.projectInstanceId,
+    return await enqueueGraphDraftTask(
       graphPath,
-      currentProjectionLocale(),
-      crypto.randomUUID(),
-      document,
-    );
-    if (
-      !isCurrentSave() ||
-      useGraphDraftStore.getState().sessions[graphPath].draftGeneration !== draftGeneration
-    )
-      return false;
-    if (saved.projectionReplacement.graphPath !== graphPath) {
-      throw new Error("Graph save result targets another graph");
-    }
+      async () => {
+        if (!isCurrentSave()) return false;
+        const draftGeneration = useGraphDraftStore.getState().sessions[graphPath].draftGeneration;
+        const document = getGraphDraftDocument(graphPath);
+        if (!document) throw new Error(`Graph draft '${graphPath}' is not loaded`);
+        const saved = await GraphDraftService.save(
+          identity.projectInstanceId,
+          graphPath,
+          currentProjectionLocale(),
+          crypto.randomUUID(),
+          document,
+        );
+        if (
+          !isCurrentSave() ||
+          useGraphDraftStore.getState().sessions[graphPath].draftGeneration !== draftGeneration
+        )
+          return false;
+        if (saved.projectionReplacement.graphPath !== graphPath) {
+          throw new Error("Graph save result targets another graph");
+        }
 
-    const prepared = prepareGraphProjectionReplacements([saved.projectionReplacement]);
-    if (!prepared.prepared) throw new Error("Saved Graph projection could not be installed");
-    useGraphDraftStore.getState().completeSave(graphPath, saved);
-    commitPreparedGraphProjectionReplacements(prepared.plan);
-    useResourceStore
-      .getState()
-      .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });
-    markResourceDirty({ id: graphPath, kind: graphKind }, false);
-    completed = true;
-    return true;
+        const prepared = prepareGraphProjectionReplacements([saved.projectionReplacement]);
+        if (!prepared.prepared) throw new Error("Saved Graph projection could not be installed");
+        useGraphDraftStore.getState().completeSave(graphPath, saved);
+        commitPreparedGraphProjectionReplacements(prepared.plan);
+        useResourceStore
+          .getState()
+          .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });
+        markResourceDirty({ id: graphPath, kind: graphKind }, false);
+        completed = true;
+        return true;
+      },
+      false,
+    );
   } catch (error) {
     if (!isCurrentSave()) return false;
     throw error;

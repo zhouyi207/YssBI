@@ -1,4 +1,5 @@
 import type { GraphOutputRefDto } from "./executionDemand";
+import type { PortAddressDto } from "./editorProjection";
 import { isUuid } from "./editorProjectionGuards";
 
 export type { GraphOutputRefDto } from "./executionDemand";
@@ -11,6 +12,7 @@ export interface ResultReference {
 }
 
 export type ResultCacheState = "missing" | "stale" | "valid";
+export type ConnectionCacheState = "new" | "stale" | "valid";
 
 export interface GraphResultState {
   readonly executionSessionId: string;
@@ -20,6 +22,11 @@ export interface GraphResultState {
     readonly output: GraphOutputRefDto;
     readonly state: ResultCacheState;
     readonly resultId: string | null;
+  }[];
+  readonly connections: readonly {
+    readonly output: GraphOutputRefDto;
+    readonly input: PortAddressDto;
+    readonly state: ConnectionCacheState;
   }[];
 }
 

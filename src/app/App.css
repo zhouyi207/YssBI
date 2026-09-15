@@ -251,28 +251,6 @@ input[type="number"] {
   animation: loading-indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-[data-node-id][data-exec-state="executing"] {
-  border-color: var(--status-warning) !important;
-  outline: 2px solid color-mix(in srgb, var(--status-warning) 45%, transparent);
-  outline-offset: 0;
-  z-index: 30 !important;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-warning) 25%, transparent);
-}
-
-[data-node-id][data-exec-state="completed"] {
-  border-color: var(--status-success) !important;
-  outline: 1px solid color-mix(in srgb, var(--status-success) 35%, transparent);
-  outline-offset: 0;
-  z-index: 20 !important;
-}
-
-[data-node-id][data-exec-state="error"] {
-  border-color: var(--status-danger) !important;
-  outline: 2px solid color-mix(in srgb, var(--status-danger) 45%, transparent);
-  outline-offset: 0;
-  z-index: 30 !important;
-}
-
 @keyframes project-flow-signal {
   to {
     stroke-dashoffset: -42;

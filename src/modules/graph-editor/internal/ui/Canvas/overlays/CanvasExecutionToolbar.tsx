@@ -1,17 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useExecutionPlayback } from "@/features/core/execution/useExecutionPlayback";
 import { useExecutionRead } from "@/features/core/execution/read";
 import { graphHasClearableArtifacts } from "@/features/core/execution/graphRunArtifacts";
-import {
-  VscClearAll,
-  VscDebugPause,
-  VscDebugStop,
-  VscDebugRestart,
-  VscPlay,
-  VscRunAll,
-  VscGear,
-} from "react-icons/vsc";
+import { VscClearAll, VscDebugStop, VscRunAll, VscGear } from "react-icons/vsc";
 import { useTranslation } from "react-i18next";
 
 function CanvasToolbarButton({
@@ -49,75 +40,16 @@ export function CanvasExecutionToolbar({
   onClearArtifacts: () => void;
 }) {
   const { t } = useTranslation();
-  const {
-    stop: stopReplay,
-    togglePlayPause,
-    isPlaying,
-    isPaused,
-    hasRecording,
-    graphDirty,
-  } = useExecutionPlayback(graphPath);
   const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
   const graphStatus = graphState?.status ?? "idle";
 
-  const playbackActive = isPlaying || isPaused;
   const isLiveRunning = graphStatus === "running";
-  const canReplay = hasRecording && !graphDirty && !isLiveRunning;
-  const canClear = !isLiveRunning && !playbackActive && graphHasClearableArtifacts(graphState);
+  const canClear = !isLiveRunning && graphHasClearableArtifacts(graphState);
   const isCompiling = compileStatus === "compiling";
   const canRunCompiled = canExecute && compileStatus === "compiled" && !isLiveRunning;
 
   return (
     <div className="absolute top-3 right-3 z-40 flex items-center gap-1 bg-[var(--panel-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] rounded-md p-0.5 shadow-lg">
-      {!playbackActive ? (
-        <CanvasToolbarButton
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => canReplay && togglePlayPause()}
-          disabled={!canReplay}
-          className={
-            canReplay
-              ? "text-blue-400 hover:text-blue-300"
-              : "text-[var(--text-secondary)] opacity-40 cursor-not-allowed"
-          }
-          tooltip={
-            graphDirty
-              ? t("canvas.replayDisabledDirty")
-              : !hasRecording
-                ? t("canvas.replayNoRecording")
-                : t("canvas.replayExecution")
-          }
-        >
-          <VscDebugRestart size={14} />
-        </CanvasToolbarButton>
-      ) : (
-        <div className="flex items-center">
-          <CanvasToolbarButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={togglePlayPause}
-            className={isPlaying ? "text-amber-400" : "text-blue-400"}
-            tooltip={isPlaying ? t("canvas.pauseReplay") : t("canvas.resumeReplay")}
-          >
-            {isPlaying ? <VscDebugPause size={14} /> : <VscPlay size={14} />}
-          </CanvasToolbarButton>
-          <CanvasToolbarButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={stopReplay}
-            className="text-red-400"
-            tooltip={t("canvas.stopReplay")}
-          >
-            <VscDebugStop size={14} />
-          </CanvasToolbarButton>
-        </div>
-      )}
-
-      <div className="w-px h-5 bg-[var(--border-color)]" />
-
       <CanvasToolbarButton
         type="button"
         variant="ghost"

@@ -21,10 +21,8 @@ import {
 } from "@/features/core/dataStore/graphProjectionStore";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import { markResourceDirty, useResourceStore } from "@/features/core/resource";
-import { useExecutionStore, ensureGraphExecutionTerminal } from "@/features/core/execution";
-import {
-  observeGraphRunEvent,
-} from "@/features/application/editor/observeGraphRunEvent";
+import { useExecutionStore } from "@/features/core/execution";
+import { observeGraphRunEvent } from "@/features/application/editor/observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
 
@@ -67,7 +65,9 @@ export async function applyAssistantGraphTool(
         const compileRequest =
           useGraphDraftStore.getState().sessions[request.graphPath]?.compileRequest;
         const runState: { outcome: "success" | "error" | "cancelled" } = { outcome: "success" };
-        if (running) useExecutionStore.getState().startExecution(request.graphPath);
+        const isCurrentRun = running
+          ? useExecutionStore.getState().startExecution(request.graphPath)
+          : undefined;
         let completed = false;
         try {
           const update = await HarnessGraphToolsService.prepare(
@@ -76,7 +76,7 @@ export async function applyAssistantGraphTool(
             session.draftGeneration,
             currentProjectionLocale(),
             (event) => {
-              if (!current()) return;
+              if (!current() || (isCurrentRun && !isCurrentRun())) return;
               observeGraphRunEvent(request.graphPath, event, runState);
               if (event.kind.type === "resultInspectionRequested")
                 void openInspectableResult(
@@ -144,10 +144,14 @@ export async function applyAssistantGraphTool(
               break;
             }
             case "execution":
-              ensureGraphExecutionTerminal(
-                request.graphPath,
-                update.update.status === "succeeded" ? "success" : "error",
-              );
+              if (isCurrentRun?.()) {
+                const execution = useExecutionStore.getState();
+                if (update.update.status === "succeeded")
+                  execution.completeExecution(request.graphPath);
+                else if (runState.outcome === "cancelled")
+                  execution.interruptExecution(request.graphPath);
+                else execution.failExecution(request.graphPath);
+              }
               break;
             case "none":
               break;
@@ -159,7 +163,7 @@ export async function applyAssistantGraphTool(
             if (saving) useGraphDraftStore.getState().failSave(request.graphPath);
             if (compiling && compileRequest)
               useGraphDraftStore.getState().failCompile(request.graphPath, compileRequest);
-            if (running) ensureGraphExecutionTerminal(request.graphPath, "error");
+            if (isCurrentRun?.()) useExecutionStore.getState().failExecution(request.graphPath);
           }
         }
       },

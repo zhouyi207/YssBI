@@ -51,7 +51,7 @@ const defaultDependencies: GraphDraftCoordinatorDependencies = {
     GraphDraftService.transform(projectInstanceId, graphPath, locale, document, mutation),
 };
 
-const mutationTails = new Map<string, Promise<void>>();
+const graphTaskTails = new Map<string, Promise<void>>();
 let coordinatorEpoch = 0;
 
 export function installDraftProjection(graphPath: string, result: GraphDraftTransformDto): void {
@@ -70,13 +70,11 @@ export function installDraftProjection(graphPath: string, result: GraphDraftTran
   }
 }
 
-async function applyAfterPrevious(
+async function applyDraftMutation(
   input: ApplyGraphDraftMutationInput,
   dependencies: GraphDraftCoordinatorDependencies,
   requestEpoch: number,
 ): Promise<ApplyGraphDraftMutationOutcome> {
-  const previous = mutationTails.get(input.graphPath);
-  if (previous) await previous;
   if (requestEpoch !== coordinatorEpoch) return { status: "stale" };
   if (isGraphDraftSaving(input.graphPath)) return { status: "saving" };
 
@@ -145,20 +143,11 @@ export function applyGraphDraftMutation(
   if (isGraphDraftSaving(input.graphPath)) return Promise.resolve({ status: "saving" });
   const dependencies = { ...defaultDependencies, ...overrides };
   const requestEpoch = coordinatorEpoch;
-  const completion = applyAfterPrevious(input, dependencies, requestEpoch);
-  const tail = completion.then(
-    () => undefined,
-    () => undefined,
+  return enqueueGraphDraftTask<ApplyGraphDraftMutationOutcome>(
+    input.graphPath,
+    () => applyDraftMutation(input, dependencies, requestEpoch),
+    { status: "stale" },
   );
-  mutationTails.set(input.graphPath, tail);
-  void tail.finally(() => {
-    if (mutationTails.get(input.graphPath) === tail) mutationTails.delete(input.graphPath);
-  });
-  return completion;
-}
-
-export async function waitForGraphDraftMutations(graphPath: string): Promise<void> {
-  await mutationTails.get(graphPath);
 }
 
 export function enqueueGraphDraftTask<T>(
@@ -166,7 +155,7 @@ export function enqueueGraphDraftTask<T>(
   task: () => Promise<T>,
   stale: T,
 ): Promise<T> {
-  const previous = mutationTails.get(graphPath);
+  const previous = graphTaskTails.get(graphPath);
   const epoch = coordinatorEpoch;
   const completion = (async () => {
     await previous;
@@ -176,14 +165,14 @@ export function enqueueGraphDraftTask<T>(
     () => undefined,
     () => undefined,
   );
-  mutationTails.set(graphPath, tail);
+  graphTaskTails.set(graphPath, tail);
   void tail.finally(() => {
-    if (mutationTails.get(graphPath) === tail) mutationTails.delete(graphPath);
+    if (graphTaskTails.get(graphPath) === tail) graphTaskTails.delete(graphPath);
   });
   return completion;
 }
 
 export function resetGraphDraftCoordinator(): void {
   coordinatorEpoch += 1;
-  mutationTails.clear();
+  graphTaskTails.clear();
 }

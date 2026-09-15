@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeEditorProjectionFixture } from "@/tests/helpers/editorProjectionFixtures";
 import { portAddressKey } from "@/features/domain/editorProjection";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useExecutionStore } from "@/features/core/execution";
 import { executeGraphEdit } from "./commandExecutor";
 
 const applyGraphDraftMutation = vi.hoisted(() => vi.fn());
@@ -195,7 +194,6 @@ describe("forward-only editor commands", () => {
     "sends $type as one local draft edit and preserves its transformed result",
     async ({ type, args, mutation }) => {
       installProjection();
-      const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
       const result = {
         changed: true,
         document: { nodes: {}, port_bindings: [], connections: {}, input_states: [] },
@@ -221,8 +219,6 @@ describe("forward-only editor commands", () => {
         graphPath,
         mutation,
       });
-      expect(markGraphDirty).toHaveBeenCalledOnce();
-      expect(markGraphDirty).toHaveBeenCalledWith(graphPath);
       expect(randomId).not.toHaveBeenCalled();
       randomId.mockRestore();
     },
@@ -267,13 +263,12 @@ describe("forward-only editor commands", () => {
   );
 
   it.each([
-    { status: "applied" as const, dirtyCalls: 1 },
-    { status: "noop" as const, result: {} as never, dirtyCalls: 0 },
-    { status: "rejected" as const, code: "graph_connection_type_mismatch" as const, dirtyCalls: 0 },
-    { status: "saving" as const, dirtyCalls: 0 },
-  ])("marks InsertReroute dirty only for $status", async (outcome) => {
+    { status: "applied" as const },
+    { status: "noop" as const, result: {} as never },
+    { status: "rejected" as const, code: "graph_connection_type_mismatch" as const },
+    { status: "saving" as const },
+  ])("preserves the InsertReroute $status outcome", async (outcome) => {
     installProjection();
-    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), "markGraphDirty");
     applyGraphDraftMutation.mockResolvedValueOnce(outcome);
 
     await expect(
@@ -282,8 +277,5 @@ describe("forward-only editor commands", () => {
         position: { x: 120, y: 80 },
       }),
     ).resolves.toEqual(outcome);
-
-    expect(markGraphDirty).toHaveBeenCalledTimes(outcome.dirtyCalls);
-    if (outcome.dirtyCalls === 1) expect(markGraphDirty).toHaveBeenCalledWith(graphPath);
   });
 });

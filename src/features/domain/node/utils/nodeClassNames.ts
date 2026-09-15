@@ -5,7 +5,6 @@
  * - 根据节点状态生成 CSS 类名
  * - 集中管理节点样式逻辑
  *
- * 执行中样式由 [data-exec-state] + App.css 承担（live/replay 阶段）。
  */
 
 export const REROUTE_NODE_WIDTH_PX = 32;

@@ -82,6 +82,7 @@ describe("graph document lifecycle ownership", () => {
       .mockReturnValueOnce(reopenedLoad.promise);
 
     const initial = useProjectIOStore.getState().loadGraph(graphPath);
+    await vi.waitFor(() => expect(GraphProjectionService.loadGraph).toHaveBeenCalledOnce());
     await unloadGraphDocument(graphPath);
     const reopened = useProjectIOStore.getState().loadGraph(graphPath);
 

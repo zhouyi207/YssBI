@@ -54,7 +54,6 @@ vi.mock("@/features/core/execution", () => ({
   revokeAllPinPreviewLeases: vi.fn(),
   useExecutionStore: { getState: vi.fn(), setState: vi.fn() },
   graphHasClearableArtifacts: vi.fn(),
-  enqueueLiveExecutionEvent: vi.fn(),
 }));
 vi.mock("@/services/platform/pathDialog", () => ({ openPathDialog }));
 

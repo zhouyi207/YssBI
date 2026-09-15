@@ -33,8 +33,6 @@ describe("useExecutionStore pin result lifecycle", () => {
     revokeAllPinPreviewLeases();
     useExecutionStore.setState({
       graphs: {},
-      playbackGraphPath: null,
-      isPlaying: false,
     });
   });
 
@@ -112,15 +110,18 @@ describe("useExecutionStore pin result lifecycle", () => {
     expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
   });
 
-  it("marks completed execution visuals dirty after a graph edit", () => {
+  it("revokes a run callback when an edit clears its request or a new run replaces it", () => {
     const graphPath = "events/Main.yssbi-event";
     const store = useExecutionStore.getState();
-    store.completeExecution(graphPath);
-
-    store.markGraphDirty(graphPath);
-
-    const graph = useExecutionStore.getState().graphs[graphPath];
-    expect(graph?.graphDirty).toBe(true);
+    const old = store.startExecution(graphPath);
+    expect(old()).toBe(true);
+    store.clearGraphRunProjections(graphPath);
+    expect(old()).toBe(false);
+    const current = store.startExecution(graphPath);
+    expect(old()).toBe(false);
+    expect(current()).toBe(true);
+    store.startExecution(graphPath);
+    expect(current()).toBe(false);
   });
 
   it("releases execution UI state when a graph tab is fully closed", () => {

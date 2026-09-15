@@ -1,14 +1,18 @@
 import { currentProjectionLocale } from "./projectionLocale";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
-import { useGraphDraftStore } from "@/features/core/graphDraft";
+import {
+  isGraphDraftDirty,
+  isGraphDraftSaving,
+  useGraphDraftStore,
+} from "@/features/core/graphDraft";
 import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
 import type { GraphEditorSessionDto } from "@/shared/types/domain/editorMutation";
-import { getDocumentState } from "@/features/core/resource";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import { resolveCurrentGraphDraft } from "@/features/application/graphDraft/resolveGraphDraft";
+import { enqueueGraphDraftTask } from "@/features/application/graphDraft/graphDraftCoordinator";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -41,6 +45,8 @@ async function requestGraphProjection(
   ) => Promise<GraphEditorSessionDto>,
   locale = currentProjectionLocale(),
 ): Promise<boolean> {
+  if (!isCurrentProjectIdentity(identity) || !isGraphLifecycleCurrent(graphPath, lifecycleToken))
+    return false;
   setGraphProjectionStale(graphPath, true);
   let session: GraphEditorSessionDto;
   try {
@@ -56,7 +62,8 @@ async function requestGraphProjection(
 
   if (
     !isCurrentProjectIdentity(identity) ||
-    lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
+    lifecycleTokenByGraph.get(graphPath) !== lifecycleToken ||
+    isGraphDraftSaving(graphPath)
   ) {
     return false;
   }
@@ -101,32 +108,45 @@ export async function prepareGraphSessionForPublication(
   graphPath: string,
   projectInstanceId: string,
   publicationEpoch: number,
-): Promise<GraphEditorSessionDto | false> {
+): Promise<GraphEditorSessionDto | false | null> {
   const identity = { projectInstanceId, epoch: publicationEpoch };
   if (!isCurrentProjectIdentity(identity)) return false;
   const lifecycleToken = startGraphLifecycle(graphPath);
-  try {
-    const session = await GraphProjectionService.loadGraph(
-      graphPath,
-      currentProjectionLocale(),
-      lifecycleToken,
-      projectInstanceId,
-    );
-    if (
-      !isCurrentProjectIdentity(identity) ||
-      lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
-    ) {
-      return false;
-    }
-    return session;
-  } catch (error) {
-    if (!isCurrentProjectIdentity(identity)) return false;
-    logger.graph.error(
-      `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
-      "GraphProjectionLifecycle",
-    );
-    return false;
-  }
+  return enqueueGraphDraftTask<GraphEditorSessionDto | false | null>(
+    graphPath,
+    async () => {
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        !isGraphLifecycleCurrent(graphPath, lifecycleToken)
+      )
+        return false;
+      // Edits queued before publication may have made this draft dirty since index capture.
+      if (isGraphDraftDirty(graphPath) || isGraphDraftSaving(graphPath)) return null;
+      try {
+        const session = await GraphProjectionService.loadGraph(
+          graphPath,
+          currentProjectionLocale(),
+          lifecycleToken,
+          projectInstanceId,
+        );
+        if (
+          !isCurrentProjectIdentity(identity) ||
+          lifecycleTokenByGraph.get(graphPath) !== lifecycleToken
+        ) {
+          return false;
+        }
+        return session;
+      } catch (error) {
+        if (!isCurrentProjectIdentity(identity)) return false;
+        logger.graph.error(
+          `Graph projection publication prepare failed for '${graphPath}': ${formatErrorMessage(error, "Unknown IPC error")}`,
+          "GraphProjectionLifecycle",
+        );
+        return false;
+      }
+    },
+    false,
+  );
 }
 
 export function loadGraphProjection(
@@ -139,47 +159,58 @@ export function loadGraphProjection(
   } catch {
     return Promise.resolve(false);
   }
-  return requestGraphProjection(
+  return enqueueGraphDraftTask(
     graphPath,
-    "load",
-    lifecycleToken,
-    identity,
-    (path, locale, token) =>
-      GraphProjectionService.loadGraph(path, locale, token, identity.projectInstanceId),
+    () =>
+      requestGraphProjection(graphPath, "load", lifecycleToken, identity, (path, locale, token) =>
+        GraphProjectionService.loadGraph(path, locale, token, identity.projectInstanceId),
+      ),
+    false,
   );
 }
 
 export function hydrateGraphProjection(graphPath: string, locale: string): Promise<boolean> {
-  if (!useGraphProjectionStore.getState().hasGraph(graphPath)) {
-    setGraphProjectionStale(graphPath, true);
-    return Promise.resolve(false);
-  }
-  const kind = getGraphResourceKind(graphPath);
-  if (kind && getDocumentState({ id: graphPath, kind })?.dirty) {
-    setGraphProjectionStale(graphPath, true);
-    return resolveCurrentGraphDraft(graphPath, locale)
-      .then((resolved) => {
-        if (resolved) setGraphProjectionStale(graphPath, false);
-        return resolved;
-      })
-      .catch((error) => {
-        logger.graph.error(
-          `Graph draft resolve failed: ${formatErrorMessage(error)}`,
-          "GraphProjectionLifecycle",
-        );
-        return false;
-      });
-  }
   const identity = captureProjectIdentity();
   const lifecycleToken = startGraphLifecycle(graphPath);
-  return requestGraphProjection(
+  return enqueueGraphDraftTask(
     graphPath,
-    "hydrate",
-    lifecycleToken,
-    identity,
-    (path, requestLocale) =>
-      GraphProjectionService.hydrateGraph(identity.projectInstanceId, path, requestLocale),
-    locale,
+    async () => {
+      if (
+        !isCurrentProjectIdentity(identity) ||
+        !isGraphLifecycleCurrent(graphPath, lifecycleToken)
+      )
+        return false;
+      if (!useGraphProjectionStore.getState().hasGraph(graphPath)) {
+        setGraphProjectionStale(graphPath, true);
+        return Promise.resolve(false);
+      }
+      if (isGraphDraftSaving(graphPath)) return false;
+      if (isGraphDraftDirty(graphPath)) {
+        setGraphProjectionStale(graphPath, true);
+        return resolveCurrentGraphDraft(graphPath, locale)
+          .then((resolved) => {
+            if (resolved) setGraphProjectionStale(graphPath, false);
+            return resolved;
+          })
+          .catch((error) => {
+            logger.graph.error(
+              `Graph draft resolve failed: ${formatErrorMessage(error)}`,
+              "GraphProjectionLifecycle",
+            );
+            return false;
+          });
+      }
+      return requestGraphProjection(
+        graphPath,
+        "hydrate",
+        lifecycleToken,
+        identity,
+        (path, requestLocale) =>
+          GraphProjectionService.hydrateGraph(identity.projectInstanceId, path, requestLocale),
+        locale,
+      );
+    },
+    false,
   );
 }
 

@@ -12,10 +12,7 @@ import { ProjectService, isExecutionCancelledError } from "@/services/project/pr
 import { openPathDialog } from "@/services/platform/pathDialog";
 import { saveAllDirtyGraphs } from "./saveAllDirtyGraphs";
 import { cancelActiveGraphRun } from "./cancelActiveGraphRun";
-import {
-  observeGraphRunEvent,
-  type GraphRunOutcomeState,
-} from "./observeGraphRunEvent";
+import { observeGraphRunEvent, type GraphRunOutcomeState } from "./observeGraphRunEvent";
 import { openInspectableResult } from "@/features/application/execution/openInspectableResult";
 import { resultRef } from "@/features/application/results";
 import { useExecutionStore, graphHasClearableArtifacts } from "@/features/core/execution";
@@ -23,8 +20,6 @@ import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEnti
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { getExecutionEventTarget, resolveExecutionGraphPath } from "./resolveExecutionGraphPath";
 
-import type { RecordedEvent } from "@/features/core/execution/executionTypes";
-import { ensureGraphExecutionTerminal } from "@/features/core/execution/executionRecording";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { logger } from "@/features/application/observability/appLogger";
 import {
@@ -228,7 +223,7 @@ export function useProjectOperations() {
   }, [t]);
 
   const finalizeExecutionRun = useCallback(
-    (graphPath: string, recording: RecordedEvent[], outcome: "success" | "cancelled" | "error") => {
+    (graphPath: string, outcome: "success" | "cancelled" | "error") => {
       const store = useExecutionStore.getState();
 
       if (outcome === "cancelled") {
@@ -236,13 +231,9 @@ export function useProjectOperations() {
         return;
       }
 
-      store.commitExecutionVisual(graphPath);
-
-      if (recording.length > 0) {
-        store.setRecording(graphPath, recording);
-      }
-
-      ensureGraphExecutionTerminal(graphPath, outcome === "error" ? "error" : "success");
+      if (store.graphs[graphPath]?.status !== "running") return;
+      if (outcome === "error") store.failExecution(graphPath);
+      else store.completeExecution(graphPath);
     },
     [],
   );
@@ -279,6 +270,7 @@ export function useProjectOperations() {
         return;
       }
 
+      let isCurrentRun: (() => boolean) | undefined;
       try {
         const draft = useGraphDraftStore.getState().sessions[graphPath];
         if (draft?.compileStatus !== "compiled" || !draft.compiledArtifactId) {
@@ -292,9 +284,8 @@ export function useProjectOperations() {
         }
         logger.exec.info(`执行当前 Analysis Graph: ${target.name} (${graphPath})`);
 
-        const recording: RecordedEvent[] = [];
         const runState: GraphRunOutcomeState = { outcome: "success" };
-        useExecutionStore.getState().startExecution(graphPath);
+        isCurrentRun = useExecutionStore.getState().startExecution(graphPath);
 
         await ProjectService.executeCompiledGraph({
           projectInstanceId: project.projectInstanceId,
@@ -302,7 +293,7 @@ export function useProjectOperations() {
           compiledArtifactId: draft.compiledArtifactId,
           demand: { type: "default" },
           onEvent: (event) => {
-            if (!isCurrentProjectIdentity(project)) return;
+            if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
             observeGraphRunEvent(graphPath, event, runState);
             if (event.kind.type === "resultInspectionRequested") {
               void openInspectableResult(
@@ -316,14 +307,14 @@ export function useProjectOperations() {
           },
         });
 
-        if (!isCurrentProjectIdentity(project)) return;
-        finalizeExecutionRun(graphPath, recording, runState.outcome);
+        if (!isCurrentProjectIdentity(project) || !isCurrentRun?.()) return;
+        finalizeExecutionRun(graphPath, runState.outcome);
         if (runState.outcome === "error") void revealWorkbenchView("output");
       } catch (e) {
-        if (!isCurrentProjectIdentity(project)) return;
+        if (!isCurrentProjectIdentity(project) || (isCurrentRun && !isCurrentRun())) return;
         if (isExecutionCancelledError(e)) {
           logger.exec.info(`执行已中断: ${target.name} (${graphPath})`);
-          finalizeExecutionRun(graphPath, [], "cancelled");
+          finalizeExecutionRun(graphPath, "cancelled");
           return;
         }
 
@@ -342,7 +333,7 @@ export function useProjectOperations() {
         logger.exec.error(
           `执行失败: ${error.code}${error.incidentId ? ` (incident: ${error.incidentId})` : ""}`,
         );
-        finalizeExecutionRun(graphPath, [], "error");
+        finalizeExecutionRun(graphPath, "error");
         void revealWorkbenchView("output");
       }
     },

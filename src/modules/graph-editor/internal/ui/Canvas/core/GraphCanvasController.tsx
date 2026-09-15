@@ -8,7 +8,6 @@ import {
   type GraphContextMenuActions,
 } from "@/features/application/editor";
 import { isGraphProjectionExecutable } from "@/features/core/dataStore/graphEntityAccess";
-import { useExecutionVisualBinder } from "@/features/core/execution";
 import { useGraphRead } from "@/features/core/graph/read";
 import { editorViewportScope } from "@/features/core/viewport/viewportScope";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
@@ -66,11 +65,6 @@ export function GraphCanvasController({
   const viewportScope = useMemo(
     () => (activeResourceRef ? editorViewportScope(groupId, activeResourceRef) : null),
     [activeResourceRef, groupId],
-  );
-
-  useExecutionVisualBinder(
-    canvasElementRef,
-    interactive ? (activeResourceRef ?? undefined) : undefined,
   );
 
   const projectionAllowsExecution = useGraphRead((snapshot) =>

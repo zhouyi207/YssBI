@@ -1,43 +1,7 @@
-/**
- * UI Types - Execution
- *
- * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
- */
-
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
-import type {
-  RunPhase,
-  ResultInspectionSource,
-} from "@/shared/types/domain/runEvent";
-
-// ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
-
-export type ExecutionEvent =
-  | { event: "executionStart" }
-  | { event: "executionComplete"; data: { hasError: boolean } }
-  | { event: "nodeStart"; data: { nodeId: string } }
-  | { event: "nodeComplete"; data: { nodeId: string; durationMs?: number } }
-  | { event: "nodeError"; data: { nodeId: string; error: string; durationMs?: number } }
-  | { event: "connectionActive"; data: { fromPinId: string; toPinId: string } }
-  | { event: "connectionFlow"; data: { fromPinId: string; toPinId: string } };
-
-/** 带时间戳的录制事件 */
-export interface RecordedEvent {
-  event: ExecutionEvent;
-  timestamp: number;
-}
-
-// ─── 前端执行状态 ───
+import type { RunPhase, ResultInspectionSource } from "@/shared/types/domain/runEvent";
 
 export type ExecutionStatus = "idle" | "running" | "completed" | "error";
-
-export interface NodeExecutionState {
-  nodeId: string;
-  status: "completed" | "error";
-  timestamp: number;
-  /** 后端计算耗时（毫秒），用于性能分析 */
-  durationMs?: number;
-}
 
 export interface RunFailureProjection {
   runId: string | null;
@@ -60,13 +24,8 @@ export interface PinPreviewState {
 export interface GraphExecutionState {
   status: ExecutionStatus;
   runId: string | null;
-  nodeStates: Map<string, NodeExecutionState>;
-  /** data 取数阶段已声明的 input 连线（ConnectionActive） */
-  completedConnections: Set<string>;
-  /** data 值已就绪、沿 output→input 流动的连线（ConnectionFlow）；exec 仍只用 completedConnections */
-  flowingConnections: Set<string>;
-  recording: RecordedEvent[];
-  graphDirty: boolean;
+  /** Identity of the current local run request; edits revoke late callbacks. */
+  request: object | null;
   runFailure: RunFailureProjection | null;
 
   /** Stable `(graphPath, PortAddressDto)` preview projections. */
@@ -77,7 +36,4 @@ export interface GraphExecutionState {
 export interface ExecutionState {
   /** 按 graphPath 存储的执行状态 */
   graphs: Record<string, GraphExecutionState>;
-  /** 当前正在回放的 graphPath */
-  playbackGraphPath: string | null;
-  isPlaying: boolean;
 }

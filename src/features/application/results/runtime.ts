@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { publishResultSessionEnd } from "@/services/result/resultSessionChannel";
 import { resultReferenceKey, type ResultReference } from "@/shared/types/domain/result";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -26,12 +27,14 @@ import {
   type ResultGraphStateRequest,
 } from "./resultQueryCoordinator";
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import type { GraphResultState, ResultCacheState } from "@/shared/types/domain/result";
+import type { GraphResultState } from "@/shared/types/domain/result";
+import { projectGraphPresentation } from "./graphPresentation";
 
 export interface GraphResultCacheProjection {
   readonly executionSessionId: string;
   readonly semanticInputHash: string;
-  readonly outputs: Readonly<Record<string, { readonly state: ResultCacheState; readonly resultId: string | null }>>;
+  readonly outputs: Readonly<Record<string, GraphResultState["outputs"][number]>>;
+  readonly connections: GraphResultState["connections"];
 }
 
 interface ResultProjectionState {
@@ -69,6 +72,25 @@ export function useCurrentResultDescriptors() {
 
 export function useGraphResultCache(graphPath: string): GraphResultCacheProjection | undefined {
   return resultProjection((state) => state.graphCaches[graphPath]);
+}
+
+export function useGraphResultPresentation(graphPath: string) {
+  const cache = useGraphResultCache(graphPath);
+  const statuses = resultProjection((state) => state.pinStatuses);
+  const draft = useGraphDraftStore((state) => state.sessions[graphPath]);
+  const failure = useExecutionStore((state) => state.graphs[graphPath]?.runFailure ?? null);
+  return useMemo(
+    () =>
+      projectGraphPresentation(
+        cache?.semanticInputHash === draft?.semanticInputHash ? cache : undefined,
+        draft?.compileStatus ?? "uncompiled",
+        [...outputRuns.values()]
+          .filter((run) => run.active && run.request.graphPath === graphPath)
+          .map((run) => run.request.output.nodeId),
+        failure,
+      ),
+    [cache, draft?.semanticInputHash, draft?.compileStatus, statuses, failure, graphPath],
+  );
 }
 
 function pinResultKey(request: ResultPinRequest): string {
@@ -193,6 +215,7 @@ const resultQueryPublication = {
     result: DeepReadonly<ResultDescriptor | null>,
   ) {
     publishCurrentResult(projectInstanceId, request, result);
+    if (!result) scheduleGraphStateRefresh(request.graphPath);
   },
   publishFailure(projectInstanceId: string | null, scope: ResultQueryScope, issue: ErrorReference) {
     if (scope.kind === "graphState" && !currentGraphStateRequest(scope)) return;
@@ -288,8 +311,12 @@ const pendingGraphRefreshes = new Set<string>();
 
 function currentGraphStateRequest(request: ResultGraphStateRequest): boolean {
   const current = useGraphDraftStore.getState().sessions[request.graphPath];
-  return Boolean(current && current.sessionId === request.sessionId && current.draftGeneration === request.draftGeneration
-    && current.semanticInputHash === request.semanticInputHash);
+  return Boolean(
+    current &&
+    current.sessionId === request.sessionId &&
+    current.draftGeneration === request.draftGeneration &&
+    current.semanticInputHash === request.semanticInputHash,
+  );
 }
 
 function scheduleGraphStateRefresh(graphPath: string): void {
@@ -303,8 +330,13 @@ function scheduleGraphStateRefresh(graphPath: string): void {
     for (const graphPath of graphs) {
       const session = useGraphDraftStore.getState().sessions[graphPath];
       if (!session) continue;
-      void resultQueryCoordinator.loadGraphState({ graphPath, semanticInputHash: session.semanticInputHash,
-        sessionId: session.sessionId, draftGeneration: session.draftGeneration, draftSession: session });
+      void resultQueryCoordinator.loadGraphState({
+        graphPath,
+        semanticInputHash: session.semanticInputHash,
+        sessionId: session.sessionId,
+        draftGeneration: session.draftGeneration,
+        draftSession: session,
+      });
     }
   });
 }
@@ -316,24 +348,47 @@ function publishGraphState(
 ): void {
   if (!currentGraphStateRequest(request)) return;
   const graphPath = request.graphPath;
-  if (projection && resultExecutionSessionId && resultExecutionSessionId !== projection.executionSessionId)
+  if (
+    projection &&
+    resultExecutionSessionId &&
+    resultExecutionSessionId !== projection.executionSessionId
+  )
     resetResultQueryProject();
   if (projection) resultExecutionSessionId = projection.executionSessionId;
-  const outputs = Object.fromEntries((projection?.outputs ?? []).map(({ output, state, resultId }) => [graphOutputKey(output), { state, resultId }]));
-  const previous = Object.values(resultProjection.getState().pinResults).filter((value) => value?.provenance.output?.graphPath === graphPath);
-  invalidateOutputs(previous.flatMap((value) => {
-    if (!value?.provenance.output) return [];
-    const output = value.provenance.output;
-    const current = outputs[graphOutputKey(output)];
-    return current?.state === "valid" && current.resultId === value.resultId ? [] : [{ graphPath, output: output.port }];
-  }));
+  const outputs = Object.fromEntries(
+    (projection?.outputs ?? []).map((entry) => [graphOutputKey(entry.output), entry]),
+  );
+  const connections = projection?.connections ?? [];
+  const previous = Object.values(resultProjection.getState().pinResults).filter(
+    (value) => value?.provenance.output?.graphPath === graphPath,
+  );
+  invalidateOutputs(
+    previous.flatMap((value) => {
+      if (!value?.provenance.output) return [];
+      const output = value.provenance.output;
+      const current = outputs[graphOutputKey(output)];
+      return current?.state === "valid" && current.resultId === value.resultId
+        ? []
+        : [{ graphPath, output: output.port }];
+    }),
+  );
   resultProjection.setState((state) => ({
     ...state,
     projectInstanceId,
-    graphCaches: projection ? { ...state.graphCaches, [graphPath]: {
-      executionSessionId: projection.executionSessionId, semanticInputHash: projection.semanticInputHash, outputs,
-    } } : Object.fromEntries(Object.entries(state.graphCaches).filter(([key]) => key !== graphPath)),
-    failures: Object.fromEntries(Object.entries(state.failures).filter(([key]) => key !== `graphState:${graphPath}`)),
+    graphCaches: projection
+      ? {
+          ...state.graphCaches,
+          [graphPath]: {
+            executionSessionId: projection.executionSessionId,
+            semanticInputHash: projection.semanticInputHash,
+            outputs,
+            connections,
+          },
+        }
+      : Object.fromEntries(Object.entries(state.graphCaches).filter(([key]) => key !== graphPath)),
+    failures: Object.fromEntries(
+      Object.entries(state.failures).filter(([key]) => key !== `graphState:${graphPath}`),
+    ),
   }));
   for (const { output, state, resultId } of projection?.outputs ?? []) {
     const key = graphOutputKey(output);
@@ -342,7 +397,9 @@ function publishGraphState(
   }
   const session = useGraphDraftStore.getState().sessions[graphPath];
   if (session === request.draftSession)
-    useGraphDraftStore.getState().observeCompiledArtifact(graphPath, session, projection?.compiledArtifactId ?? null);
+    useGraphDraftStore
+      .getState()
+      .observeCompiledArtifact(graphPath, session, projection?.compiledArtifactId ?? null);
 }
 
 function publishCurrentResult(
@@ -353,6 +410,17 @@ function publishCurrentResult(
   const key = pinResultKey(request);
   const previous = resultProjection.getState().pinResults[key];
   if (result) {
+    const draft = useGraphDraftStore.getState().sessions[request.graphPath];
+    if (draft) {
+      const cache = resultProjection.getState().graphCaches[request.graphPath];
+      if (
+        cache?.semanticInputHash !== draft.semanticInputHash ||
+        cache.executionSessionId !== result.executionSessionId ||
+        cache.outputs[key]?.state !== "valid" ||
+        cache.outputs[key]?.resultId !== result.resultId
+      )
+        return;
+    }
     const pending = outputRuns.get(key);
     if (pending && BigInt(pending.runId) > BigInt(result.provenance.runId)) return;
   }
@@ -410,7 +478,9 @@ export function invalidateGraphResults(graphPath: string): void {
   invalidateOutputs([...requests.values()]);
   resultProjection.setState((state) => ({
     ...state,
-    graphCaches: Object.fromEntries(Object.entries(state.graphCaches).filter(([key]) => key !== graphPath)),
+    graphCaches: Object.fromEntries(
+      Object.entries(state.graphCaches).filter(([key]) => key !== graphPath),
+    ),
     pinResults: Object.fromEntries(
       Object.entries(state.pinResults).filter(([key]) => !requests.has(key)),
     ),
@@ -449,6 +519,7 @@ export function observeResultRunEvent(event: RunEvent): void {
     }));
   } else if (["runCompleted", "runErrored", "runCancelled"].includes(event.kind.type)) {
     if (event.run.executionSessionId !== resultExecutionSessionId) return;
+    const terminalStatuses: ResultProjectionState["pinStatuses"] = {};
     for (const [key, pending] of outputRuns) {
       if (pending.runId !== event.run.runId || !pending.active) continue;
       pending.active = false;
@@ -458,13 +529,17 @@ export function observeResultRunEvent(event: RunEvent): void {
           : event.kind.type === "runCancelled"
             ? "cancelled"
             : "unavailable";
-      resultProjection.setState((state) => ({
-        ...state,
-        pinStatuses: { ...state.pinStatuses, [key]: status },
-      }));
-      if (event.kind.type === "runCompleted" && !useGraphDraftStore.getState().sessions[event.run.graphPath])
+      terminalStatuses[key] = status;
+      if (
+        event.kind.type === "runCompleted" &&
+        !useGraphDraftStore.getState().sessions[event.run.graphPath]
+      )
         void resultQueryCoordinator.loadPinResult(pending.request);
     }
+    resultProjection.setState((state) => ({
+      ...state,
+      pinStatuses: { ...state.pinStatuses, ...terminalStatuses },
+    }));
   }
   scheduleGraphStateRefresh(event.run.graphPath);
 }
@@ -488,7 +563,13 @@ useGraphProjectionStore.subscribe((state, previous) => {
 
 useGraphDraftStore.subscribe((state, previous) => {
   for (const [graphPath, session] of Object.entries(state.sessions)) {
-    if (session.projection !== previous.sessions[graphPath]?.projection) scheduleGraphStateRefresh(graphPath);
+    const previousSession = previous.sessions[graphPath];
+    if (previousSession && session.semanticInputHash !== previousSession.semanticInputHash) {
+      useExecutionStore.getState().clearGraphRunProjections(graphPath);
+      invalidateGraphResults(graphPath);
+    }
+    if (session.projection !== previous.sessions[graphPath]?.projection)
+      scheduleGraphStateRefresh(graphPath);
   }
   for (const graphPath of Object.keys(previous.sessions)) {
     if (!state.sessions[graphPath]) invalidateGraphResults(graphPath);

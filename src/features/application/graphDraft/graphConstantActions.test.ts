@@ -53,7 +53,7 @@ it("merges queued constant edits against the preceding Rust result", async () =>
     });
   const rename = updateGraphConstant(graphPath, id, { name: "After" });
   const value = updateGraphConstant(graphPath, id, { dataValue: { kind: "Int64", value: 7 } });
-  expect(transform).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(transform).toHaveBeenCalledTimes(1));
   release();
   const outcomes = await Promise.all([rename, value]);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(["applied", "applied"]);

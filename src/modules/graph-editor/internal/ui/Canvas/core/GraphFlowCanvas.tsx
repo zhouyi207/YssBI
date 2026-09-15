@@ -20,6 +20,7 @@ import {
 } from "@xyflow/react";
 import type { EditorCanvasSession, GraphContextMenuActions } from "@/features/application/editor";
 import { useGraphRead } from "@/features/core/graph/read";
+import { useGraphResultPresentation } from "@/features/application/results";
 import {
   EDITOR_VIEWPORT_SCALE_LIMITS,
   type EditorViewport,
@@ -98,6 +99,18 @@ function GraphFlowRuntime({
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
   const bucket = useGraphRead((snapshot) => snapshot.graphEntities[graphPath]);
+  const presentation = useGraphResultPresentation(graphPath);
+  const blockedConnections = useMemo(
+    () =>
+      new Set(
+        (bucket?.diagnostics ?? []).flatMap((diagnostic) =>
+          diagnostic.blocking && diagnostic.location.kind === "connection"
+            ? [diagnostic.location.connectionId]
+            : [],
+        ),
+      ),
+    [bucket?.diagnostics],
+  );
   const model = useMemo(() => buildGraphFlowModel(bucket), [bucket]);
   const modelRef = useRef(model);
   modelRef.current = model;
@@ -209,10 +222,22 @@ function GraphFlowRuntime({
       interactive,
       contextMenuActions,
       model,
+      presentation,
+      blockedConnections,
       sourcePin,
       feedbackForPin,
     }),
-    [graphPath, groupId, interactive, contextMenuActions, model, sourcePin, feedbackForPin],
+    [
+      graphPath,
+      groupId,
+      interactive,
+      contextMenuActions,
+      model,
+      sourcePin,
+      feedbackForPin,
+      presentation,
+      blockedConnections,
+    ],
   );
   const flowViewport = useMemo(
     () => ({ x: viewport.x, y: viewport.y, zoom: viewport.scale }),

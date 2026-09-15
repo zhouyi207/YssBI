@@ -26,9 +26,21 @@ function nullable<T>(value: unknown, parse: (input: unknown) => T): T | null {
 }
 
 export class ResultService {
-  static async getGraphState(graphPath: string, semanticInputHash: string): Promise<GraphResultState | null> {
-    const value = nullable(await invokeCommand<unknown>("get_graph_result_state", { graphPath, semanticInputHash }), parseGraphResultState);
-    if (value && (value.semanticInputHash !== semanticInputHash || value.outputs.some(({ output }) => output.graphPath !== graphPath)))
+  static async getGraphState(
+    graphPath: string,
+    semanticInputHash: string,
+  ): Promise<GraphResultState | null> {
+    const value = nullable(
+      await invokeCommand<unknown>("get_graph_result_state", { graphPath, semanticInputHash }),
+      parseGraphResultState,
+    );
+    if (
+      value &&
+      (value.semanticInputHash !== semanticInputHash ||
+        [...value.outputs, ...value.connections].some(
+          ({ output }) => output.graphPath !== graphPath,
+        ))
+    )
       throw new Error("Mismatched graph result state");
     return value;
   }

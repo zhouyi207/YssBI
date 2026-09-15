@@ -1,12 +1,12 @@
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useContext, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { formatGraphDiagnostic } from "@/features/domain/graphDiagnostics/nodeDiagnostics";
 import type { GraphContextMenuActions } from "@/features/application/editor";
 import { useNodeView } from "@/features/core/dataStore/useNodeView";
 import { isRerouteNodeView } from "@/features/core/dataStore/nodeView";
-import { useExecutionRead } from "@/features/core/execution/read";
 import { useGraphRead } from "@/features/core/graph/read";
-import { useNodeExecution } from "@/features/core/node";
+import { graphElementState } from "@/features/application/results";
+import { GraphFlowContext } from "../Canvas/core/GraphFlowContext";
 import {
   getNodeBackgroundStyle,
   getNodeClassName,
@@ -41,16 +41,21 @@ export const GraphNodeController = memo(function GraphNodeController({
   renderPinHandle,
   canConnectPin,
 }: GraphNodeControllerProps) {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const node = useNodeView(id, graphPath);
-  const graphStatus = useExecutionRead((snapshot) =>
-    graphPath ? (snapshot.graphs[graphPath]?.status ?? "idle") : "idle",
-  );
-  const isReplay = useExecutionRead((snapshot) =>
-    Boolean(graphPath && snapshot.isPlaying && snapshot.playbackGraphPath === graphPath),
-  );
-  const useStoreExecVisual = graphStatus !== "running" && !isReplay;
-  const { isCompleted, hasError } = useNodeExecution(id, graphPath, useStoreExecVisual);
+  const presentation = useContext(GraphFlowContext)?.presentation;
+  const cached = presentation?.nodes[id];
+  const cacheState = cached?.cache ?? "new";
+  const executionState = presentation
+    ? graphElementState(
+        presentation,
+        id,
+        cacheState,
+        node?.diagnostics.some((diagnostic) => diagnostic.blocking),
+      )
+    : undefined;
+  const isCompleted = cacheState === "valid";
+  const hasError = executionState === "error";
   const graphBucket = useGraphRead((snapshot) =>
     graphPath ? snapshot.graphEntities[graphPath] : undefined,
   );
@@ -93,10 +98,42 @@ export const GraphNodeController = memo(function GraphNodeController({
   ) : (
     <DefaultNodeLayout {...layoutProps} />
   );
-  const executionBadgeSlot = hasError ? (
-    <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500" />
-  ) : isCompleted ? (
-    <div className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-green-500 shadow-lg shadow-green-500/40" />
+  const executionLabel = executionState ? t(`canvas.graphState.${executionState}`) : "";
+  const failureLabel =
+    presentation?.failure?.source?.nodeId === id
+      ? t(`runFailure.causes.${presentation.failure.code}`, {
+          defaultValue: t("runFailure.unknown"),
+        })
+      : "";
+  const cacheLabel = cached
+    ? `${t(`canvas.graphState.${cacheState}`)} · ${t("canvas.resultCount", { valid: cached.valid, total: cached.total })}`
+    : "";
+  const executionBadgeSlot = executionState ? (
+    <div
+      className="graph-state-badge"
+      title={[executionLabel, failureLabel, cacheLabel].filter(Boolean).join(" · ")}
+      aria-label={[executionLabel, failureLabel, cacheLabel].filter(Boolean).join(" · ")}
+    >
+      <span aria-hidden="true">
+        {
+          {
+            uncompiled: "○",
+            compiling: "↻",
+            compiled: "◇",
+            running: "▶",
+            error: "!",
+            valid: "✓",
+            stale: "!",
+            partial: "◐",
+          }[executionState]
+        }
+      </span>
+      {cached && (
+        <span className="graph-cache-count" data-cache-state={cacheState}>
+          {cached.valid}/{cached.total}
+        </span>
+      )}
+    </div>
   ) : null;
   const primaryDiagnostic =
     node.diagnostics.find((diagnostic) => diagnostic.blocking) ?? node.diagnostics[0];
@@ -145,14 +182,14 @@ export const GraphNodeController = memo(function GraphNodeController({
   return (
     <GraphNodeView
       nodeId={node.id}
+      executionState={executionState}
+      cacheState={cacheState}
       className={className}
       style={{
         ...minSize,
         background: getNodeBackgroundStyle({ hasError, isCompleted }),
         opacity: nodeDimmed ? 0.35 : undefined,
-        transition: useStoreExecVisual
-          ? "border-color 200ms, box-shadow 200ms, background 200ms, opacity 150ms"
-          : undefined,
+        transition: "border-color 200ms, box-shadow 200ms, background 200ms, opacity 150ms",
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",
       }}

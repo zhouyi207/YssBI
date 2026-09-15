@@ -1,11 +1,7 @@
-import { memo, useSyncExternalStore } from "react";
+import { memo } from "react";
+import { useTranslation } from "react-i18next";
 import { useConnection, type EdgeProps } from "@xyflow/react";
-import {
-  connectionKey,
-  getExecutionVisual,
-  subscribeExecutionVisual,
-} from "@/features/core/execution";
-import { useExecutionRead } from "@/features/core/execution/read";
+import { graphElementState } from "@/features/application/results";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
@@ -16,6 +12,7 @@ import { Edge } from "./Edge";
 export const GraphFlowEdge = memo(function GraphFlowEdge({
   id,
   source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -23,31 +20,25 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
   selected,
   data,
 }: EdgeProps<FlowEdge>) {
-  const { graphPath, interactive, model, sourcePin, feedbackForPin } = useGraphFlowContext();
+  const { interactive, model, sourcePin, feedbackForPin, presentation, blockedConnections } =
+    useGraphFlowContext();
+  const { t } = useTranslation();
   const targetHandle = useConnection((connection) => connection.toHandle?.id ?? null);
   const feedback = targetHandle ? feedbackForPin(targetHandle) : null;
   const replaced = feedback?.kind === "replace" && feedback.displacedConnectionIds.includes(id);
-  const visual = useSyncExternalStore(
-    subscribeExecutionVisual,
-    getExecutionVisual,
-    getExecutionVisual,
-  );
-  const graphState = useExecutionRead((snapshot) => snapshot.graphs[graphPath]);
-  const isReplay = useExecutionRead(
-    (snapshot) => snapshot.isPlaying && snapshot.playbackGraphPath === graphPath,
-  );
   const { tokens } = useTheme();
-  const useVisual = (visual.active && visual.graphPath === graphPath) || isReplay;
-  const status = useVisual ? visual.status : (graphState?.status ?? "idle");
-  const key = connectionKey(data?.fromPinId ?? "", data?.toPinId ?? "");
-  const isError = useVisual
-    ? visual.errorNodeIds.has(source)
-    : graphState?.nodeStates?.get(source)?.status === "error";
-  const hasFlow =
-    (useVisual ? visual.flowingConnections : graphState?.flowingConnections)?.has(key) ?? false;
-  const hasPull =
-    (useVisual ? visual.completedConnections : graphState?.completedConnections)?.has(key) ?? false;
   const pin = data ? model.pins[data.fromPinId] : undefined;
+  const input = data ? model.pins[data.toPinId] : undefined;
+  const cache = pin && input ? (presentation.connections[pin.id]?.[input.id] ?? "new") : "new";
+  const state = graphElementState(
+    presentation,
+    target,
+    cache,
+    blockedConnections.has(id) ||
+      pin?.orphan ||
+      input?.orphan ||
+      presentation.failure?.source?.nodeId === source,
+  );
   const color = pin
     ? getPinTypeColor(resolvePinVisualSpec(pin).colorKey, tokens)
     : tokens.mutedForeground;
@@ -60,11 +51,10 @@ export const GraphFlowEdge = memo(function GraphFlowEdge({
         x2={targetX}
         y2={targetY}
         color={color}
-        isPullActive={hasPull && !hasFlow && !isError}
+        state={state}
+        cacheState={cache}
+        title={t(`canvas.graphState.${state}`)}
         startIsInput={pin?.direction === "input"}
-        isFlowActive={hasFlow}
-        isError={isError}
-        isRunning={status === "running"}
         dimmed={sourcePin !== null}
         replacementPreview={replaced}
         selected={selected}

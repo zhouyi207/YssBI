@@ -6,8 +6,6 @@ describe("cancelActiveGraphRun", () => {
   beforeEach(() => {
     useExecutionStore.setState({
       graphs: {},
-      playbackGraphPath: null,
-      isPlaying: false,
     });
   });
 

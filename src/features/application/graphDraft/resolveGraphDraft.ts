@@ -8,14 +8,13 @@ import {
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphDraftService } from "@/services/nodeSystem/graphDraftService";
-import { waitForGraphDraftMutations } from "./graphDraftCoordinator";
 
+// The projection lifecycle calls this inside the graph's shared task queue.
 export async function resolveCurrentGraphDraft(
   graphPath: string,
   locale: string,
 ): Promise<boolean> {
   const identity = captureProjectIdentity();
-  await waitForGraphDraftMutations(graphPath);
   const session = useGraphDraftStore.getState().sessions[graphPath];
   if (!isCurrentProjectIdentity(identity) || !session || session.saving) return false;
   const isCurrent = () => {

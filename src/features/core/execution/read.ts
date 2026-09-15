@@ -5,7 +5,6 @@ import { useExecutionStore } from "./useExecutionStore";
 import type {
   ExecutionStatus,
   GraphExecutionState,
-  NodeExecutionState,
   PinPreviewState,
   RunFailureProjection,
 } from "@/features/core/execution/executionTypes";
@@ -13,19 +12,12 @@ import type {
 export interface GraphExecutionProjection {
   readonly status: ExecutionStatus;
   readonly runId: string | null;
-  readonly nodeStates: ReadonlyMap<string, NodeExecutionState>;
-  readonly completedConnections: ReadonlySet<string>;
-  readonly flowingConnections: ReadonlySet<string>;
-  readonly recording: readonly import("@/features/core/execution/executionTypes").RecordedEvent[];
-  readonly graphDirty: boolean;
   readonly runFailure: DeepReadonly<RunFailureProjection> | null;
   readonly pinPreviews: ReadonlyMap<string, DeepReadonly<PinPreviewState>>;
 }
 
 export interface ExecutionReadSnapshot {
   readonly graphs: DeepReadonly<Record<string, GraphExecutionProjection>>;
-  readonly isPlaying: boolean;
-  readonly playbackGraphPath: string | null;
 }
 
 export interface ExecutionReadCapability {
@@ -37,24 +29,17 @@ function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
   return {
     status: graph.status,
     runId: graph.runId,
-    nodeStates: graph.nodeStates,
-    completedConnections: graph.completedConnections,
-    flowingConnections: graph.flowingConnections,
-    recording: graph.recording,
-    graphDirty: graph.graphDirty,
     runFailure: graph.runFailure,
     pinPreviews: graph.pinPreviews,
   };
 }
 
 function buildSnapshot(): DeepReadonly<ExecutionReadSnapshot> {
-  const { graphs, isPlaying, playbackGraphPath } = useExecutionStore.getState();
+  const { graphs } = useExecutionStore.getState();
   return freezeProjectionSnapshot({
     graphs: Object.fromEntries(
       Object.entries(graphs).map(([graphPath, graph]) => [graphPath, projectGraph(graph)]),
     ),
-    isPlaying,
-    playbackGraphPath,
   });
 }
 
