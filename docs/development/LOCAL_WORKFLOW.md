@@ -11,7 +11,7 @@
 
 | 脚本                 | 所属位置                                                                                 |
 | -------------------- | ---------------------------------------------------------------------------------------- |
-| Graph 诊断模板生成器 | `src-tauri/crates/yss-graph-compiler-diagnostics/scripts/generate-graph-diagnostics.mjs` |
+| Graph 诊断模板生成器 | `src-tauri/crates/yss-graph-diagnostics/scripts/generate-graph-diagnostics.mjs` |
 | 插件协议生成器       | `src-tauri/crates/yss-plugin-protocol/scripts/generate-plugin-contract.mjs`              |
 | 通用插件打包器及测试 | `plugins/scripts/package-plugin.mjs`、`plugins/scripts/package-plugin.test.mjs`          |
 | 模块索引生成器       | `docs/reference/generate-module-map.mjs`                                                 |
@@ -142,7 +142,7 @@ julia --project=plugins/julia/runtime/julia -e 'using Pkg; Pkg.instantiate()'
 - **文档和命令入口**：检查变更文件格式、相关命令配置和 documentation contract。只有 module map 受影响且已有检查未覆盖时，才另外运行 `pnpm docs:module-map:check`。仅调整验证策略不触发全仓架构审计。
 - **前端局部行为**：选择相关测试文件；L2 补必要的 `pnpm check:ts`、`pnpm lint:ts` 和局部格式检查。`lint:ts` 固定扫描整个前端，追加文件不能缩小范围；按需运行，不因前端修改自动运行 Rust 检查。
 - **Rust 局部实现**：使用对应 `:package` 入口，显式选择 crate 和 target；L2 验证相关模块及调用方，不机械运行 workspace 级 check/Clippy。
-- **公共 API、共享类型、序列化和跨模块行为**：先评估直接和间接受影响的消费者，补充相应契约检查。比如 Graph 类型语义可能影响 Compiler、Execution 和前端 Projection，不能只以 Graph Analysis 自身测试通过收尾；只有影响无法可靠限定时才升级 L3。
+- **公共 API、共享类型、序列化和跨模块行为**：先评估直接和间接受影响的消费者，补充相应契约检查。比如 Graph 类型语义可能影响执行计划准备、Execution 和前端 Projection，不能只以 Graph Analysis 自身测试通过收尾；只有影响无法可靠限定时才升级 L3。
 - **架构策略、依赖边界或 source discovery**：运行对应的门禁回归和真实审计；涉及全局策略时扩大到对应语言的完整架构门禁，不自动扩大到所有业务测试。
 - **toolchain、workspace 公共依赖、features 或测试基础设施**：评估受影响构建图；广泛影响无法可靠限定时升级 L3。仅增加明确的聚焦命令入口不等于改变整个构建图。
 - **Tauri packaging、permission、plugin 或 build config**：按影响补充 `pnpm build` 及目标平台手动验证；局部业务代码修改不默认重新构建安装包。

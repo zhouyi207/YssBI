@@ -53,7 +53,7 @@ flowchart TD
 
 运行观测共用日志插件的输入校验、脱敏、identity、sequence、持久存储、缓冲和订阅。Rust tracing、前端 logger 和显式结构化日志都进入同一条链；Graph Problems、Result、运行状态和错误响应由各自业务 owner 管理。
 
-Compile 的普通语义问题使用成功的 Blocked outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [Compile](GRAPH_AND_EXECUTION.md#compile)。
+编辑解析的普通语义问题使用阻断 outcome 与完整 projection；内部故障继续走 diagnosed rejection。详情见 [语义解析](GRAPH_AND_EXECUTION.md#4-semantic-resolution)。
 
 桌面入口在 Application setup 前注册 `tauri-plugin-tracing`，由插件解析日志路径、打开 SQLite、安装全局 logging subscriber 并保留 guard。Application 组装业务服务；日志插件不可用时仍可完成业务初始化。日志目录或 SQLite 不可用时保留 console，插件查询/订阅返回 `logs_unavailable`。
 

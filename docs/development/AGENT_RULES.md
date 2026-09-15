@@ -54,13 +54,16 @@ add or commit them unless explicitly requested.
 ## Architecture invariants
 
 - Rust is the authority for committed project state, persistence, graph
-  compilation/execution, databases, results, and scientific orchestration.
+  analysis, execution planning, databases, results, and scientific orchestration.
 - Project calendar values and user-facing timestamps are timezone-free. Removing
   an input timezone must preserve its original calendar and wall-clock fields.
-- React stores only Rust projections, explicit unsaved drafts, and UI/runtime
-  state. Do not create a second frontend authority for backend-owned state.
+- Rust Project owns the current GraphDocument, graph undo/redo and saved-content
+  identity. React keeps graph read projections and transient interaction state;
+  do not introduce a separate Graph draft authority. Other resource-specific
+  frontend drafts retain their explicitly documented owner.
 - Do not merge or reconcile parallel committed Rust and React models. Replace
-  projections in one direction and keep drafts separate until Save succeeds.
+  graph projections in one direction. Explicit Save persists the current graph;
+  editing, history navigation and execution must not implicitly save its body.
 - Dependencies flow toward domain and application logic, never from domain code
   toward UI, Tauri, services, or concrete business infrastructure adapters.
   Generic filesystem primitives are an explicit foundation for Project and Application.
@@ -91,9 +94,10 @@ add or commit them unless explicitly requested.
   schemas, lineage, diagnostics, coercions, and kernel specialization.
 - Analysis Graphs model data ports and data dependencies only. Control flow,
   effects, sequencing, and user-program side effects belong to Workflow owners.
-- Graph Draft, Compile, Save, and Execute are independent operations. Compile
-  does not commit, Save does not compile, and Execute requires the matching
-  compiled artifact.
+- Graph edits resolve types, diagnostics and result validity. Save commits the
+  current graph independently. Execute captures its document and semantic identity,
+  prepares a matching immutable plan internally, and never implicitly saves.
+  Plan caches are backend implementation details, not a separate frontend lifecycle.
 - The root Dockview instance is the sole authority for workbench topology,
   placement, ordering, active panels/groups, edge sizes, and collapse state.
 - Graph Problems, operational Logs, Results, and run state/failures are distinct data
@@ -139,7 +143,7 @@ add or commit them unless explicitly requested.
 
 Before changing a subsystem, read its canonical owner:
 
-- Graph, projection, compile, execution, Results, and run state/failures:
+- Graph, projection, plan preparation, execution, Results, and run state/failures:
   `docs/architecture/GRAPH_AND_EXECUTION.md`
 - Workbench layout and panel lifecycle:
   `docs/architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md`

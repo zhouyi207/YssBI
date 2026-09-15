@@ -66,19 +66,19 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 桌面默认使用 `ToolRegistry::graph_assistant`；只读 foundation 仍可供独立检查型调用方使用：
 
-| Capability                | 作用                                                       |
-| ------------------------- | ---------------------------------------------------------- |
-| `inspect_project`         | 读取 bounded project metadata/resource identities          |
-| `inspect_graph`           | 读取当前草稿、版本/hash、参数、列绑定、端口约束和诊断      |
-| `search_node_catalog`     | 查询 localized node catalog                                |
-| `inspect_dataset_schema`  | 读取 schema 和 current revision facts                      |
-| `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                    |
-| `inspect_result`          | 读取 structured result，支持数列/表格的 bounded 分页预览   |
-| `apply_graph_edit`        | 原子应用可撤销的草稿编辑批次                               |
-| `compile_graph`           | 编译匹配 hash 的草稿，返回 artifact 或阻断诊断             |
-| `execute_graph`           | 执行匹配的 artifact，返回实际 run 状态、失败位置与结果 IDs |
-| `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                 |
-| `save_graph`              | 用户要求保存时调用正常的独立 Save                          |
+| Capability                | 作用                                                                  |
+| ------------------------- | --------------------------------------------------------------------- |
+| `inspect_project`         | 读取 bounded project metadata/resource identities                     |
+| `inspect_graph`           | 读取当前图文档、版本/hash、参数、列绑定、端口约束和诊断               |
+| `search_node_catalog`     | 查询 localized node catalog                                           |
+| `inspect_dataset_schema`  | 读取 schema 和 current revision facts                                 |
+| `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                               |
+| `inspect_result`          | 读取 structured result，支持数列/表格的 bounded 分页预览              |
+| `apply_graph_edit`        | 原子应用可撤销的图编辑批次                                            |
+| `validate_graph`          | 只读校验匹配 hash 的当前图，返回可运行性与阻断诊断                    |
+| `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs |
+| `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                            |
+| `save_graph`              | 用户要求保存时调用正常的独立 Save                                     |
 
 Model-facing schema 来自 typed capability contract；Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再通过 Gateway 执行，最后持久化成功 result 或 structured failure。idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 
@@ -86,15 +86,19 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 工具生命周期事件由持有 ledger identity 的 Harness executor 产生：`ToolInvocationStarted` 后必须有 `ToolInvocationCompleted` 或带 `failureCode` 的 `ToolInvocationFailed`。失败码区分取消与超时；事件不携带数据行、结果或异常原文。Rig 只执行模型工具映射，不生成另一套工具完成状态。
 
-桌面图操作通过 `yss-application::ipc::channel::HarnessGraphClientHub` 与当前草稿 owner 协作。临时 channel 只传 request ID、session/project/graph identity 和 capability ID，不建立 Rust draft store。前端在既有 Graph FIFO 内捕获当前 document/generation，Rust Application 进行 Resolve、批量 mutation、Compile、Execute 或 Save。Rust 保留真实 capability result，前端仅领取和确认已验证的 projection，不能提交自行计算的 tool result。prepared update 必须匹配 capability 和图身份，迟到/过期 update 不能安装。
+图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
-`apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（草稿 generation）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向既有草稿 history 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
+`apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（后端图修订）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向后端图历史 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
-`GraphEditReceipt` 保存草稿修订、graph hash、`clientKey` 和创建元素的身份映射，不另行生成项目 `OperationId`。SQLite adapter 在启动事务中将 `user_version = 0` 升至 1，仅移除既有 `tool_invocation` 图编辑结果中的 `operationId`；调用记录、幂等键和其余回执内容保留，读取仍使用严格类型校验。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
+`GraphEditReceipt` 保存图修订、graph hash、`clientKey` 和创建元素的身份映射，回执不暴露内部 Project 操作 ID；数据层提交使用内部 operation ID 保证准入与提交关联。SQLite adapter 在启动事务中将 `user_version = 0` 升至 1，仅移除既有 `tool_invocation` 图编辑结果中的 `operationId`；调用记录、幂等键和其余回执内容保留，读取仍使用严格类型校验。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
 
-编辑、编译和执行不会隐式保存。显式 `save_graph` 复用正常 Save，包括保存成功后的草稿历史清理。没有独立的 AI committed graph 或 AI 撤销栈。图工具需要当前桌面的草稿 channel；external/headless graph mutation 不自动获得这条能力。
+编辑、校验和执行不会隐式保存。显式 `save_graph` 复用正常 Save。图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
 
-节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的技术编译/运行不要求重新设计统计方案。
+SQLite schema version 2 在既有启动事务内迁移旧图工具契约：将旧工具的校验事实迁为 `validate_graph`，移除执行请求／结果中的 artifact ID，同时保留调用记录和幂等键。迁移按固定表、固定类型字段分批处理工具记录、事件、工作流、授权与技能能力列表，不替换消息、指令或图数据中的同名文本。
+
+Schema version 3 将保留的图校验／检查记录中的旧诊断代码和模板键迁为 `graph.*`、`diagnostics.graph.*`。迁移只读取对应结果的诊断字段，消息和用户数据保持原值；当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
+
+节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的校验和运行不要求重新设计统计方案。
 
 ## 5. Session, turn, and events
 
@@ -153,6 +157,7 @@ Skill 是允许 tools、knowledge scope 和 workflow policy 的版本化方法�
 Frontend AI settings 通过 explicit Harness configuration command 更新 configurable driver。credential 不写入 Harness SQLite、Project、event transcript 或 diagnostics；provider network use 仍受用户配置和数据共享边界约束。
 
 Rig adapter 显式启用 `rig-core` 的 Reqwest 和 Rustls 功能，以支持 HTTPS、证书校验及系统代理。
+模型调用使用 Rig 多轮 streaming 接口，只发布公开 text 内容；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期仍由 Gateway 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。`finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。
 Provider 请求有连接/总时限，完整 model turn 也有独立时限；模型任务 panic 和超时均转换为 typed terminal failure，原始 panic/响应内容不进入错误 wire。具体预算由 adapter 配置和源码拥有。
 `providerConfigured` 表示本地客户端配置已建立，不表示远端认证已经通过。模型调用按结构化 HTTP 状态区分认证、限流、请求拒绝、服务不可用和连接失败；响应解析失败单独分类，原始响应和凭据不进入错误 wire。
 
@@ -165,6 +170,9 @@ Provider 请求有连接/总时限，完整 model turn 也有独立时限；模�
 提交携带 active graph reference，并从已持久化的 completed turns 提供有限长度的会话上下文；历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者，不复制到聊天日志。
 
 转换为 assistant-ui 消息时，只有 assistant 角色携带 `status`；user 消息不携带该字段。运行时集成回归使用真实的 ExternalStore 消息转换器校验这一边界。
+消息投影按事件顺序维护 text/source/data/tool parts，相邻文本片段合并，工具终态更新原位置。完成事件只收尾已有流式内容；仅在没有文本片段时使用 `finalText` 恢复正文。取消、失败和按 sequence 重放不覆盖中间说明或重排工具。
+
+Assistant 面板使用 assistant-ui 的 Thread Viewport 管理流式滚动和回到底部，Composer 管理发送/停止，ActionBar 提供回复复制。文本通过配套 MarkdownTextPrimitive 渲染 GFM 表格、列表、代码块和数学公式，代码块提供复制；排版适配工作台主题与窄面板。引用 source part 显示来源标题；连续工具调用使用 Collapsible 分组，运行时默认展开、结束后默认收起，用户手动选择优先。摘要显示调用进度和异常数，每项显示本地化名称与原位更新的状态，详情保留原始工具标识。参数展示支持截断预览、展开与复制；当前 Harness 事件不提供参数，生产记录明确显示未提供参数，不将占位空对象解释为真实参数。统计计划和记忆仍由业务组件展示，不新增会话 authority。
 
 事件 `type` 使用 snake_case，envelope 和 payload 的字段使用 camelCase。Rust 序列化和 TypeScript 解析共用代表性事件夹具，避免两端各自使用不同的手工样本。
 Channel 在历史重放期间缓冲实时事件，按 sequence 合并、去重后交付。等待缺号的实时缓冲有容量限制，超限时交付缺号之后的持久事件并关闭旧订阅，让前端依据 sequence gap 重新重放；长历史按顺序排出，不占用整个实时缓冲。前端重连时封锁发送并忽略已替换订阅的迟到回调。工具卡片按 invocation ID 更新，显示完成、失败、取消、超时或中断；旧持久事件中的 `ToolInvocationRequested` 仅作为重放占位，遇到真实 ID 后合并。turn 终止时未收到工具终态的卡片显示中断/取消，不假定成功。面板卸载后才完成创建的 session 会被关闭。
@@ -200,3 +208,5 @@ React 不生成 authoritative turn/workflow transition，不直接调用 Rig/Gat
 - autonomous background or multi-agent execution。
 
 这些限制是当前边界，不应在 current architecture 中展开为拟议 interface。实施顺序和验收条件只在 [Harness roadmap](../roadmap/STATISTICAL_HARNESS.md) 维护。
+
+图工具直接通过 Application 操作 Project 当前驻留文档，不经过 Webview prepare/claim/adopt 握手。图活动 Channel 负责 UI 通知及执行事件，编辑数据和历史不依赖客户端存活。图编辑 snapshot/delta 和保存语义见 [Graph 与 Execution](GRAPH_AND_EXECUTION.md)。

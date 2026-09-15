@@ -44,7 +44,7 @@ registryFingerprint 是什么，是不是可以处理掉
 
   主要改动：
 
-  - D:/Desktop/YssBI/src-tauri/crates/yss-graph-compiler/src/compiler.rs:20：解析 Data/Control/Effect 输入，应用 protocol default。
+  - D:/Desktop/YssBI/src-tauri/crates/yss-graph-execution/src/graph_preparation.rs:20：解析 Data/Control/Effect 输入，应用 protocol default。
   - D:/Desktop/YssBI/src-tauri/crates/yss-execution/src/run_output.rs:1：恢复 8 KiB/256 条限制及 truncated/dropped 状态。
   - D:/Desktop/YssBI/src-tauri/crates/yss-application/src/execution/run_graph.rs:353：保证 runStarted → output → runCompleted 顺
     序。
@@ -236,7 +236,7 @@ docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中
 
 ## 2026.08.26
 
-- [ ] 移除 `compiler.input.unbound` 诊断文案中的内部端口地址，仅保留结构化端口位置供界面显示。
+- [ ] 移除 `graph.input.unbound` 诊断文案中的内部端口地址，仅保留结构化端口位置供界面显示。
 - [ ] 为未绑定输入诊断补充回归覆盖，验证消息不携带 UUID 且 `Node · Pin` 定位仍然保留。
 - [ ] 为程序输出事件补充结构化 `sourcePort`，并在 Output 中显示节点标题与端口标题。
 - [ ] 让 Diagnostics、Detail 诊断位置和 Pin result 搜索统一使用 `node title · pin title`，保留 opaque ID 仅用于内部定位。
@@ -270,7 +270,7 @@ docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中
 - [ ] 复查六组架构设计与实施计划，统一加入 0.x replace-and-delete 约束，禁止迁移 adapter、bridge、forwarder、双路由、回退和旧新 contract 转换。
 - [ ] 删除 Project 临时 tabular snapshot、Legacy Execution port、旧 Graph facade 迁移及 Frontend 新 coordinator 调用旧 writer 等设计，改为最终 owner 离线构建与单点原子切换。
 - [ ] 将 Julia、ScientificBackend、Execution value/plan/resource ports 直接放入最终路径，旧 `node_system`/Project production route 在切换前不消费最终接口。
-- [ ] 对齐 Project–Graph、Execution、Presentation 与 Frontend 的 Task 8 切换时序，要求同一 compiling checkpoint 切换全部 caller 并删除旧 source、tests 与 debt。
+- [ ] 对齐 Project–Graph、Execution、Presentation 与 Frontend 的 Task 8 切换时序，要求同一构建检查点 切换全部 caller 并删除旧 source、tests 与 debt。
 - [ ] 明确独立 canonical owner relocation 也必须一次切换全部 consumers 并删除旧声明，禁止借独立迁移建立旧 workflow 到 staged replacement 的转接层。
 - [ ] 删除节点目录与编辑器投影中的节点级短 description 字段，保留 documentation 与参数级 description。
 - [ ] 同步 Rust NodeCatalogProtocol、LocalizedCatalog DTO、EditorProjection DTO 及 React 目录/画布投影，避免节点详情再次读取短描述。
@@ -323,9 +323,9 @@ docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中
 - [ ] 为节点选择器实现当前节点/首节点初始化、上下箭头切换和 Enter 确认选择，并完成编辑器回归验证。
 - [ ] 修复 graph canvas 节点选择列表 selector 创建新对象数组导致 React 外部 store snapshot 不稳定的问题。
 - [ ] 为节点选择选项 projection 增加稳定引用回归测试，并完成 React 19 更新深度错误验证。
-- [ ] 复核 `compiler.input.unbound` 的结构化端口位置与文案参数，保留 `Node · Pin` 定位能力并恢复 `{port}` 上下文。
-- [ ] 恢复未绑定输入分析阶段传入精确端口地址，同步编译器诊断定义与 lowering 回归断言。
-- [ ] 完成 compiler diagnostics 与 lowering 聚焦 Rust 测试验证。
+- [ ] 复核 `graph.input.unbound` 的结构化端口位置与文案参数，保留 `Node · Pin` 定位能力并恢复 `{port}` 上下文。
+- [ ] 恢复未绑定输入分析阶段传入精确端口地址，同步图诊断定义与计划构建回归断言。
+- [ ] 完成 图诊断与计划构建 聚焦 Rust 测试验证。
 
 ## 2026.08.25
 
@@ -337,7 +337,7 @@ docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中
 - [ ] 更新权威架构图与 Database module 文档，明确 Application 编排、Project authority、Database primitives 和 Schema wire conversion 的单向边界。
 - [ ] 执行 strict architecture policy：用 Rust/TypeScript canonical-origin 审计、exact debt 与 semantic guards 强制单向依赖，并把现有债务逐项清零。
 - [ ] 执行 Rust backend adapter boundaries：让 SCI、Database、watcher/progress 和 scientific/relational/resource ports 脱离 Graph、Project、Tauri 与具体后端。
-- [ ] 执行 Project–Graph ownership decoupling：Graph 只拥有 document/schema/catalog/compiler contract，Project 保持唯一持久化与 history authority，Application 负责 capture/plan/commit。
+- [ ] 执行 Project–Graph ownership decoupling：Graph 只拥有 document/schema/catalog/plan contract，Project 保持唯一持久化与 history authority，Application 负责 capture/plan/commit。
 - [ ] 执行 Execution runtime extraction：建立原子 Application session、Execution-owned plan/runtime/settings、RunRegistry 与两阶段 finalization，删除 Project 执行 owner。
 - [ ] 执行 Presentation/Event/Command boundaries：把 editor/result presentation 与跨域事件策略归 Application，Schema/Event 只做 wire/delivery，Tauri commands 保持薄层。
 - [ ] 执行 Frontend Application boundaries：后端状态只作不可变 projection，Application hooks/coordinators 统一 reconciliation、optimistic echo 与 use-case，UI/store 不再直连 Services/Tauri。
@@ -543,7 +543,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - 普通运行只计算终端结果、effect 和跨 island 依赖；
 - 中间 Pin 不自动物化；
 - 点击 Pin 预览时单独请求该输出；
-- compiler 根据 requested outputs 决定 roots。
+- 执行计划根据 requested outputs 决定 roots。
 
 ### B. 所有 Pin 每次都可立即查询
 
@@ -563,7 +563,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 
 - [ ] 完成 architecture decoupling 的最终 Rust production composition：ApplicationSessionSlot
       注入 scientific/resource/Bayes/artifact adapters，Graph neutral package 进入 Execution，
-      旧 Project/node-system compiler、projection、command route 与重复测试 owner 已删除。
+      旧 Project/node-system 计划构建、projection、command route 与重复测试 owner 已删除。
 - [ ] 完成 Backend Task 5b、Database session/query ownership、Project–Graph Tasks 2–10、
       Execution Tasks 8–9 与 Presentation/Command Tasks 4–8 的生产 caller cutover；Rust debt
       manifest 已清空并由 exact architecture policy 维护。
@@ -660,8 +660,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       `src-tauri/crates/yss-graph-analysis-contract/`；删除根兼容 module，并清除零调用的 test-only
       resource resolver、projection/alias helper、永久禁用 compatibility projection 路径与重复
       unknown/blocking API。
-- [ ] 将 compiler diagnostic code、双语模板与定义校验迁入独立
-      `src-tauri/crates/yss-graph-compiler-diagnostics/`；删除根兼容 module，并清除仅由自身测试调用的
+- [ ] 将 图诊断代码、双语模板与定义校验迁入独立
+      `src-tauri/crates/yss-graph-diagnostics/`；删除根兼容 module，并清除仅由自身测试调用的
       diagnostic 构造、排序、role/scope helper 与 tracing/UUID 依赖。
 - [ ] 将 built-in protocol、localized catalog 与内置节点文档迁入独立
       `src-tauri/crates/yss-graph-catalog/`；删除根兼容 module、未挂载且重复 resolver ID 的
@@ -673,15 +673,15 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将唯一生产 execution runtime、plan、ports、result store 与 lifecycle state 迁入
       `src-tauri/crates/yss-execution/`；根 crate 直接消费该 crate 而不保留兼容 module，测试构造器通过
       `test-support` feature 隔离，并删除从未读取或构造的 candidate/resource effect 镜像链。
-- [ ] 将 Graph 编译资源标识、函数/变量 contract、数据库 schema 与 immutable resource catalog
+- [ ] 将 Graph 解析资源标识、函数/变量 contract、数据库 schema 与 immutable resource catalog
       snapshot 迁入 `src-tauri/crates/yss-graph-resource-contract/` Pure Leaf；根 crate 不保留兼容
       module，并以显式文档和架构门禁防止其与 built-in `yss-graph-catalog` 漂移成重复事实源。
 - [ ] 将 Graph document analysis、editor projection facts 与 result category 判定迁入
       `src-tauri/crates/yss-graph-analysis/`；根 crate 不保留兼容 module，并删除从 Project settings/
       resource catalog 构造后仅被丢弃的 no-op analysis 输入链。
-- [ ] 将 neutral Graph lowering、immutable compiled package 与 compile error 迁入
-      `src-tauri/crates/yss-graph-compiler/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
-      compilation report、空 diagnostics、重复 basis 与零生产者 error 分支。
+- [ ] 将 图计划构建、不可变执行包与准备错误 迁入
+      `src-tauri/crates/yss-graph-execution/`；根 crate 不保留兼容 module，并删除恒为 `Some` 的
+      计划准备报告、空 diagnostics、重复 basis 与零生产者 error 分支。
 - [ ] 将 Graph document invariant、atomic patch、candidate staging 与 edit error 迁入
       `src-tauri/crates/yss-graph-document-edit/`；根 crate 不保留兼容 re-export，并删除零调用的
       `address_is_complete` helper，保持 `document → document-edit → editor → runtime` 单向依赖。
@@ -1047,7 +1047,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       就绪推进并增加消费者先于生产者的聚焦回归测试。
 - [ ] 将 Execution 生成的首个 RunId 从 `0` 对齐为前端 wire 要求的正整数 `1`，避免合法终止事件被
       channel parser 判为无效，并增加注册表契约回归测试。
-- [ ] 让 GraphRuntime 以 session NodeRegistry 驱动编译，按输入端口协议顺序降低 Data/Control/Effect，
+- [ ] 让图计划准备使用 session NodeRegistry，按输入端口协议顺序映射当时的 Data/Control/Effect，
       并在无用户覆盖时将 protocol default 写入不可变执行参数包。
 - [ ] 恢复 Print 的有序有界 Run Output：只消费 Message 数据输入，经同一运行 Channel 发送文本与
       truncation/drop 状态，保留 graph/node/port 来源身份及既有 flat wire。
@@ -1065,10 +1065,10 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 保留变量 Get/Set 两种资源节点能力，并用本地化动作标题区分目录条目，避免同名变量显示为重复项。
 - [ ] 以纯数据依赖重新定义 Analysis Graph，删除 Event Begin、Print、Variable Set、Control/Effect、
       Sequence/Branch/Loop 与非数据 Reroute 节点；变量目录只保留唯一的读取节点入口。
-- [ ] 新增显式全图 Compile 与 content-addressed GraphRuntime cache，将 Compile、Execute 和 Save 分离；
-      Execute 必须提交当前 compiled source hash，不再隐式保存或回退编译已保存 Graph。
-- [ ] 沿同一组 Data Edge 在 Rust 编译期传播 DataFrame Schema，并将 Decompose 列与函数签名成员物化为
-      稳定可寻址的 derived Pin，恢复动态输出的连接、编译和精确多输出 value ref lowering。
+- [ ] 整理全图解析和按内容身份复用的计划缓存，独立保存与执行；
+      Execute 必须核对当前语义身份，不隐式保存或回退使用旧的已保存图。
+- [ ] 沿同一组 Data Edge 在 Rust 解析阶段传播 DataFrame Schema，并将 Decompose 列与函数签名成员物化为
+      稳定可寻址的 derived Pin，恢复动态输出的连接、计划构建和精确多输出 value ref 映射。
 - [ ] 将执行调度改为完整数据 DAG 与精确 output demand，缓存一次运行中所有已执行节点的 output pin；
       节点 Kernel 返回按 output address 命名的输出集合，Pin Preview 不再误取首个结果。
 - [ ] 从 Analysis Graph 协议与前端签名编辑器中彻底移除 Control/Effect/exec pin 能力、结构化流程角色、
@@ -1076,10 +1076,8 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 
 ## 2026.09.04
 
-- [ ] 删除退化为单值 `Data` 的 PortKind 全链路字段、未使用的 Event node scope 与 Effect compiler
-      diagnostics，使 Analysis Graph 协议、projection、catalog wire 和前端 Pin 模型不再保留 exec 分支痕迹。
-- [ ] 将唯一 Reroute 节点从多种端口时代的 `yssbi.reroute.data` 收敛为 `yssbi.core.reroute`，同步 compiler
-      kernel、editor insertion、i18n inventory 与前端 fixture，不保留旧 node type 兼容别名。
+- [ ] 删除退化为单值 `Data` 的 PortKind 全链路字段、未使用的 Event node scope 与 Effect 图诊断，使 Analysis Graph 协议、projection、catalog wire 和前端 Pin 模型不再保留 exec 分支痕迹。
+- [ ] 将唯一 Reroute 节点从多种端口时代的 `yssbi.reroute.data` 收敛为 `yssbi.core.reroute`，同步执行 kernel、editor insertion、i18n inventory 与前端 fixture，不保留旧 node type 兼容别名。
 - [ ] 将 Graph Problems 与 Run Output 从 Logs UI 模块拆分为独立 `problems`/`output` 模块，显示名改为
       Problems/问题，同时保留 `diagnostics`/`Diagnostics` Workbench 布局兼容标识。
 - [ ] 让 Graph Problems 面板只消费 projection 顶层 canonical diagnostics，并由同一原子 projection 的
@@ -1093,12 +1091,12 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
 - [ ] 将 Workbench layout 升级为 version 2，runtime 正式使用 `problems`/`Problems`，并在 persistence
       boundary 一次性迁移与重写旧 `diagnostics`/`Diagnostics` snapshot。
 - [ ] 补齐 Graph Analysis canonical Problems producer：覆盖 node/parameter/resource/input/dynamic port/Schema
-      与 value cycle，并让 compiler 与 editor projection 复用唯一 dependency-cycle 判定而不污染 tracing。
+      与 value cycle，并让计划准备与 editor projection 复用唯一 dependency-cycle 判定而不污染 tracing。
 - [ ] 清除 Graph Problems 改造后的兼容残留：Workbench 恢复严格的无版本 exact layout contract，不再迁移
       旧 panel identity；Run Output 仅消费 Execution projection，并将 Projection 生命周期逻辑归并到统一目录。
 - [ ] 将 Graph 类型系统收敛为纯 Rust `GraphSemanticSnapshot`：以节点为单位沿 Data DAG 前向求解
       Exact/Constrained/Unknown/Conflict、Schema/Lineage、诊断、coercion 与 kernel specialization，
-      Editor Projection 和 Compiler 消费同一结果，并以节点级 cache 保证增量结果等价于全量求解。
+      Editor Projection 和计划准备消费同一结果，并以节点级 cache 保证增量结果等价于全量求解。
 - [ ] 将 scalar/series 数值节点统一为 `yssbi.numeric.{add,subtract,multiply,divide}`，采用独立 Shape join 与
       `Int64 < Float64` widening；区分 Port cardinality、accepted pattern 和 resolved type，删除未执行的
       type constraint/平行 semantic snapshot、Union-as-resolved、active derived `last_known` 等残留路径。

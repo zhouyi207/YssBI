@@ -30,7 +30,7 @@
 | 应用与会话管理 | 组织业务用例，协调跨模块操作与项目会话生命周期         | `yss-application`                                                                                                                                                                                                                                                                                                                                                                                                                                      |      1 |
 | 项目与资源管理 | 管理已提交项目、资源身份、版本、文档事务及外部文件变化 | **主体、模型与身份**：`yss-project`、`yss-project-model`、`yss-project-layout`、`yss-project-identity`<br>**资源与提交**：`yss-project-operation`、`yss-project-history`、`yss-resource-lifecycle`、`yss-resource-naming`、`yss-chart-document`<br>**文件与进度**：`yss-project-progress`<br>**发现与注册**：`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`<br>**项目监听**：`yss-filesystem::watcher::notify` |     13 |
 | 节点定义与目录 | 节点能力声明、注册校验、内置定义及节点本地化           | `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog`                                                                                                                                                                                                                                                                                                                                                                                           |      3 |
-| 图分析与执行   | 图文档、语义分析、投影、编译、运行与图执行结果         | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**编译与诊断**：`yss-graph-compiler`、`yss-graph-compiler-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**执行与结果**：`yss-graph-execution`                                |     12 |
+| 图分析与执行   | 图文档、语义分析、投影、计划准备、运行与图执行结果     | **文档与编辑**：`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`<br>**分析与契约**：`yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-resource-contract`、`yss-graph-type-mapping`<br>**诊断**：`yss-graph-diagnostics`<br>**图运行时与函数投影**：`yss-graph-runtime`、`yss-function-editor-projection`<br>**计划、执行与结果**：`yss-graph-execution`                                |     11 |
 | 数据管理与查询 | 数据契约、数据集目录、存储、查询、编辑与导入导出       | **数据与查询契约**：`yss-data-contract`、`yss-tabular-contract`、`yss-relational-contract`、`yss-database-contract`<br>**数据库运行与编辑**：`yss-database-runtime`、`yss-database-edit`、`yss-database-schema`<br>**数据集与分析**：`yss-dataset-store`、`yss-dataset-profile`<br>**引擎与外部数据源**：`yss-datafusion`、`yss-sql-source`<br>**批次与文件交换**：`yss-tabular-arrow`、`yss-tabular-io`                                               |     13 |
 | 科学计算       | 统计模型、数值算法、输入准备、数学表达式与计算后端     | **契约与运行时**：`yss-sci-contract`、`yss-sci-runtime`<br>**算法与数值后端**：`yss-sci`、`yss-sci-linalg`<br>**数学表达式**：`yss-math-expr`                                                                                                                                                                                                                                                                                                          |      5 |
 | Assistant      | 会话与工具流程、审批、业务能力调用和记录               | **契约与核心**：`yss-harness-contract`、`yss-harness-core`<br>**模型与存储适配**：`yss-harness-rig`、`yss-harness-sqlite`                                                                                                                                                                                                                                                                                                          |      4 |
@@ -55,7 +55,7 @@
 
 | 部分               | 职责                                                               |
 | ------------------ | ------------------------------------------------------------------ |
-| 用例入口           | 接收业务参数，组织打开、保存、导入、编译、执行等操作               |
+| 用例入口           | 接收业务参数，组织打开、保存、导入、校验、执行等操作               |
 | 跨模块编排         | 捕获相关业务事实，协调 Project、Graph、Database 和 Graph Execution |
 | 会话管理           | 组合当前项目的运行时，管理任务准入、会话替换和旧任务清理           |
 | 提交与结果采用协调 | 在关键操作前重验身份和版本，返回真实提交结果或失败类别             |
@@ -64,7 +64,7 @@
 
 应用会话组合项目、图、数据库和执行运行时，但不复制这些模块拥有的业务状态。项目切换属于应用流程；启动入口只负责初始构造与接线。
 
-应用编排安排步骤，具体规则交给对应子系统。例如执行图时，应用捕获会话、检查编译产物及依赖，再调用执行系统；不会重新实现图编译或统计拟合。
+应用编排安排步骤，具体规则交给对应子系统。例如执行图时，应用捕获会话、检查执行计划及依赖，再调用执行系统；不会重新实现图运行准备或统计拟合。
 
 按唯一归属原则，Application 的职责止于用例编排和应用结果组织。假设检验规则归 SCI；已保存结果的分析交由 `yss-graph-execution` 调用 runtime。图投影模型与映射归 `yss-graph-editor::projection`，Application 只协调其调用与身份校验。
 
@@ -89,11 +89,11 @@ Project 拥有已提交项目、资源版本和保存后的文档。前端未保
 
 ## 节点定义、注册与目录（Node）
 
-Node 描述节点类型的端口、参数、类型约束与执行语义，提供节点注册表和本地化目录。三个 yss-node-* crate 均不依赖 Graph。图中实例、位置、连线和解析后的语义事实属于 Graph；编译诊断模板由 Graph 独立管理。
+Node 描述节点类型的端口、参数、类型约束与执行语义，提供节点注册表和本地化目录。三个 yss-node-* crate 均不依赖 Graph。图中实例、位置、连线和解析后的语义事实属于 Graph；图诊断模板由 Graph 独立管理。
 
 ## 3. 图分析与执行
 
-负责从图文档到图执行结果的完整过程，内部按文档编辑、语义分析、编辑器投影、编译产物、执行运行和结果管理展开。文档将这些能力归入一个子系统，源码中的图模块与 `yss-graph-execution` 继续保持独立职责，由应用层连接。
+负责从图文档到图执行结果的完整过程，内部按文档编辑、语义分析、编辑器投影、执行计划、执行运行和结果管理展开。文档将这些能力归入一个子系统，源码中的图模块与 `yss-graph-execution` 继续保持独立职责，由应用层连接。
 
 ### 3.1 图文档与编辑
 
@@ -113,13 +113,13 @@ Node 描述节点类型的端口、参数、类型约束与执行语义，提供
 
 Canvas、Details 和 Problems 消费同一套解析结果，前端不自行推导另一套类型或诊断。
 
-投影与编译是语义分析之后的两个消费方向，编译不依赖先生成界面投影。
+投影与运行准备是语义分析之后的两个消费方向，运行准备不依赖先生成界面投影。
 
-### 3.4 编译与产物管理
+### 3.4 执行计划准备
 
-`yss-graph-compiler` 将满足编译条件的语义快照转换为不可变编译产物，`yss-graph-runtime` 管理编译缓存。应用层负责连接图编译产物与执行系统所需的执行包。
+`yss-graph-execution` 从满足 Ready 条件的语义快照直接构建不可变执行计划、参数和输出契约，并在执行会话中管理计划缓存。`yss-graph-runtime` 负责编辑解析，应用层组织版本、资源权限及提交校验。
 
-Compile、Save、Execute 保持独立：Compile 不保存项目，Save 不隐式编译，Execute 使用匹配的 `compiledArtifactId`，并重验所属会话与实际依赖。
+Save 与 Execute 保持独立。编辑产生诊断和语义依据，运行自动准备匹配计划并重验会话及实际依赖，运行不隐式保存。
 
 ### 3.5 执行与运行管理
 
@@ -129,7 +129,7 @@ Compile、Save、Execute 保持独立：Compile 不保存项目，Save 不隐式
 - **执行调度**：按数据依赖组织 kernel 执行，通过接口使用数据和科学计算能力。
 - **运行生命周期**：管理运行身份、执行状态、取消和终态。
 
-应用层负责执行入口、会话校验和跨子系统协调。Execution 不解释前端草稿，也不承担项目文档保存；其 crate 不依赖图编辑或图编译 crate。
+应用层负责执行入口、会话校验和跨子系统协调。Execution 不解释前端草稿，也不承担项目文档保存；其 crate 不依赖图编辑或图运行准备 crate。
 
 ### 3.6 图执行结果管理
 
@@ -145,14 +145,14 @@ Results、运行事件和 Run Output 分开管理。Run Output 当前具备通�
 
 ```text
 图文档与资源事实 → 语义分析 → 编辑器投影
-                           → 满足编译条件的快照 → 编译产物
+                           → 满足执行条件的快照 → 执行计划
                                                   ↓
                                     应用层校验与执行包转换
                                                   ↓
                                           执行运行 → 结果查询
 ```
 
-文档与编译负责描述并确定图的含义，执行运行时负责完成计算，结果管理负责输出的身份与生命周期。三者在同一业务链路内协作，各自拥有明确边界。
+文档与语义解析负责描述并确定图的含义，执行运行时负责完成计算，结果管理负责输出的身份与生命周期。三者在同一业务链路内协作，各自拥有明确边界。
 
 ## 4. 数据管理与查询
 
@@ -283,7 +283,7 @@ Harness 拥有对话和工具流程；Project、Graph、Database 和 Execution �
          → Plugin Manager ↔ 独立插件进程
                             ↘ 宿主数据与结果接口 → 应用用例
 
-图文档 → 语义分析 → 编译产物 → 执行 → 结果查询
+图文档 → 语义分析 → 执行计划 → 执行 → 结果查询
 数据系统 → 执行所需数据
 科学计算 → 执行所需计算能力
 ```
@@ -316,7 +316,7 @@ Application 保留跨子系统用例、会话一致性和提交协调，具体�
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `yss-application`                                                                        | Project、Graph、Database、Execution 的事实捕获、会话准入、版本重验与提交协调；`graph_contracts` 转换跨子系统的资源与执行包 |
 | [`yss-graph-editor::projection`](../../src-tauri/crates/yss-graph-editor/src/projection) | 编辑器投影模型，以及从同一语义快照生成节点、端口、Schema、诊断和解析结果的纯映射                                           |
-| `yss-graph-runtime`                                                                      | 图解析编排与编译产物缓存                                                                                                   |
+| `yss-graph-runtime`                                                                      | 图解析编排与执行计划缓存                                                                                                   |
 | `yss-graph-execution`                                                                    | 图执行计划、节点计算、run、结果生命周期及已有结果的统计分析                                                                |
 | IPC schema                                                                               | 将应用回执和 Graph 投影转换为 wire DTO                                                                                     |
 
@@ -613,8 +613,8 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 1. **删除无消费者的派生字段。**移除 `ProjectCommandContext.operationPendingKey` 的声明和构造，没有引入替代状态。
 2. **删除打开图时的无用编号。**[OpenGraphRequest](../../src-tauri/crates/yss-application/src/graph/open.rs)移除 ID 字段、生成和 getter，并删除该入口不适用的 `DuplicateOperation` 分支。[load_graph_document](../../src-tauri/crates/yss-project/src/project_state/graph_lifecycle.rs)继续依靠项目身份、资源 lifecycle token、文件 lease 和版本边界。
 3. **统一函数签名请求身份。**请求直接使用捕获上下文的 `operationId`，移除第二个生成器及 `pendingSignatureOperations` 集合。保留 coordinator epoch，在重置后丢弃迟到结果；资源版本、before-state 和结果关联校验继续有效。同一函数的不同 ID 并发修改由后端资源版本边界处理。
-4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphDraft/saveGraphDraft.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
-5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-harness-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-harness-core/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-application/src/ipc/commands/command_harness/graph_client.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
+4. **收窄 Graph Save 契约。**[Project 提交](../../src-tauri/crates/yss-project/src/project_state/graph_operation.rs)直接从 capture/authority 取得 ID，移除重复参数及仅由两份参数产生的错误分支。Application 结果、API DTO、TypeScript 类型和[解析器](../../src/shared/types/dto/editorMutationWireParser.ts)同步移除回传的 `operationId`。[saveGraphDraft](../../src/features/application/graphEditing/saveGraph.ts)继续按项目身份、draft session/generation 和 graph path 安装结果；请求 ID、内部登记与文件事务身份保留。
+5. **删除 Assistant 图编辑回执的随机 ID。**更新 [automation contract](../../src-tauri/crates/yss-harness-contract/src/lib.rs)、自动派生 schema、构造入口和测试。[SQLite adapter](../../src-tauri/crates/yss-harness-sqlite/src/lib.rs)在启动事务中升级到 `user_version = 1`，仅删除旧图编辑结果的 `operationId`，保留调用记录、幂等键和其余回执内容；不增加旧字段兼容分支。[工具执行器](../../src-tauri/crates/yss-harness-core/src/tools.rs)仍按 session、turn、`client_key` 判断幂等，[Graph client](../../src-tauri/crates/yss-application/src/ipc/commands/command_harness/gateway.rs)仍按 `request_id` 交接草稿。回执 revision 表示草稿修订。
 6. **通用编号使用通用库。**[HarnessIdGenerator](../../src-tauri/src/lib.rs)改用 workspace 已有的 `uuid::Uuid::new_v4()`，将根包的 UUID 测试依赖提升为生产依赖，保持 session、turn、tool、capability、memory、approval 等身份类型和前缀，没有引入新的第三方库。
 7. **删除外部产物的一次性预留。**[commit_external_artifacts](../../src-tauri/crates/yss-project/src/external_resources.rs)显式检查捕获项目实例，取得文件 lease 后重验项目与 session，提交前再次检查身份。落盘回执、来源信息、内容哈希和生命周期准入继续有效。来源中的插件 `operation_id` 保留，它属于另一套协议。
 
@@ -640,7 +640,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 - `pnpm test:rs:package -p yss-project -p yss-application -p yss-harness-core -p yss-api --lib`：141 项通过，覆盖打开图、图覆盖保存、函数签名版本、数据库恢复、Assistant 编辑幂等和插件产物身份校验。
 - `pnpm test:rs:package -p yss-harness-sqlite -p yss-harness-contract --lib`：5 项通过；SQLite 迁移用例确认旧回执升级后仍能按原幂等键读取，重复初始化不会丢失回执。
-- `pnpm test:ts src/features/application/editorMutation/functionSignatureCoordinator.test.ts src/services/nodeSystem/functionMutationService.test.ts src/services/nodeSystem/graphDraftService.test.ts src/features/core/graphDraft/graphDraftStore.test.ts src/features/application/projectLifecycleReceipt.test.ts src/features/application/editorMutation/projectPublicationIntegration.test.ts`：35 项通过，包含重置后丢弃迟到结果、Graph Save 成功解析和错误项目回执拒绝。
+- `pnpm test:ts src/features/application/editorMutation/functionSignatureCoordinator.test.ts src/services/nodeSystem/functionMutationService.test.ts src/services/nodeSystem/graphEditingService.test.ts src/features/core/graphEditing/graphDraftStore.test.ts src/features/application/projectLifecycleReceipt.test.ts src/features/application/editorMutation/projectPublicationIntegration.test.ts`：35 项通过，包含重置后丢弃迟到结果、Graph Save 成功解析和错误项目回执拒绝。
 - `pnpm test:rs:package -p yssbi --lib architecture_tests`：40 项通过，覆盖生产依赖与模块归属；根包测试代码仍有 2 条既有 dead code 警告。
 - `pnpm check:ts` 和 `pnpm check:rs:package -p yssbi --lib` 通过。根包将 `uuid` 从测试依赖移至生产依赖，并同步登记其 composition root 使用边界。
 - `pnpm lint:rs:package -p yss-application -p yss-harness-contract -p yss-project -p yss-harness-core -p yss-harness-sqlite --lib --no-deps '--' -D warnings` 通过。扩大到 API 和根包的严格 Clippy 被 API 未改动文件中的 11 条既有告警阻断，涉及命令参数数目、枚举大小和命名；没有添加 lint suppression。

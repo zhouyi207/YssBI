@@ -1,3 +1,12 @@
+# Graph 状态方案讨论
+
+> Status: Historical
+> Scope: 后端状态与前端投影的早期讨论
+> Canonical owners: 当前实现由 Graph 与 Execution 架构及源码维护
+> Update when: 保留讨论历史，实施说明维护在当前架构文档
+
+实现采用 Project 当前图文档、后端可逆历史及显式 Save，未增加独立 Draft 文档容器。当前接口与投影同步见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。以下为原始讨论。
+
 对，但你**不需要再额外实现一整套“后端 → 前端同步系统”**。更合理的做法是：让前端本来就围绕“后端状态”工作，Harness 只是新增了另一个修改后端状态的入口。
 
 也就是说，重点不是：
@@ -265,9 +274,9 @@ enum AppEvent {
 前端：
 
 ```ts
-listen<AppEvent>("app-event", event => {
-  store.apply(event.payload)
-})
+listen<AppEvent>("app-event", (event) => {
+  store.apply(event.payload);
+});
 ```
 
 于是：

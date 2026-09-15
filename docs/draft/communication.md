@@ -8,7 +8,7 @@
 
 ## 1. Command：请求与响应
 
-Command 用于表达一次明确请求，并返回处理结果，例如查询数据、保存文档、编译图或启动任务。
+Command 用于表达一次明确请求，并返回处理结果，例如查询数据、保存文档、编辑图或启动任务。
 
 ```text
 前端 service → invokeCommand → yss-application::ipc 命令

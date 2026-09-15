@@ -1,0 +1,59 @@
+﻿{
+  "measuredAt": "2026-09-15T02:35:52.378Z",
+  "runtime": "v24.13.0",
+  "platform": "win32/x64",
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13900HX",
+  "warmups": 8,
+  "samples": 60,
+  "scope": "Synthetic homogeneous wire payloads and JavaScript cloning; no graph validation, Rust work, Tauri IPC, React render, or disk I/O. Proposed request is not an implemented API. Serialized bytes are not heap usage.",
+  "results": [
+    {
+      "nodes": 100,
+      "currentRequestBytes": 23317,
+      "proposedRequestBytes": 373,
+      "documentBytes": 23051,
+      "currentReplyBytes": 154002,
+      "fiftyDocumentsSerializedBytes": 1152550,
+      "requestStringify": {
+        "p50Ms": 0.027,
+        "p95Ms": 0.037
+      },
+      "storeCloneAndCompare": {
+        "p50Ms": 1.686,
+        "p95Ms": 2.045
+      }
+    },
+    {
+      "nodes": 1000,
+      "currentRequestBytes": 231574,
+      "proposedRequestBytes": 373,
+      "documentBytes": 231308,
+      "currentReplyBytes": 1538016,
+      "fiftyDocumentsSerializedBytes": 11565400,
+      "requestStringify": {
+        "p50Ms": 0.474,
+        "p95Ms": 0.811
+      },
+      "storeCloneAndCompare": {
+        "p50Ms": 13.898,
+        "p95Ms": 18.657
+      }
+    },
+    {
+      "nodes": 5000,
+      "currentRequestBytes": 1158935,
+      "proposedRequestBytes": 373,
+      "documentBytes": 1158669,
+      "currentReplyBytes": 7692738,
+      "fiftyDocumentsSerializedBytes": 57933450,
+      "requestStringify": {
+        "p50Ms": 2.337,
+        "p95Ms": 3.176
+      },
+      "storeCloneAndCompare": {
+        "p50Ms": 87.52,
+        "p95Ms": 120.833
+      }
+    }
+  ]
+}

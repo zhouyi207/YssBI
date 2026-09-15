@@ -179,6 +179,7 @@ profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polar
 
 图编辑器投影归 `yss-graph-editor::projection`，按 Graph 分类；其错误类型使用该包显式声明的 `thiserror`。
 IPC 的 editor projection 与 graph draft mapper 只获对应 Graph 投影类型的精确读取权限。
+执行计划构建及缓存位于 `yss-graph-execution::graph_preparation`，直接使用已有执行计划和参数契约。该文件按 Execution 分类，只允许读取列明的 Graph Analysis 语义事实；调度器、kernel 等其他 Execution 文件不因此获得 Graph Runtime、编辑器或 Project 状态访问权限。旧包的分类、依赖声明权限和测试库存已移除。诊断定义统一归 `yss-graph-diagnostics`。
 Application 的 `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite` 仅用于测试，声明为 dev-dependencies。
 
 `yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。

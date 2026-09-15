@@ -15,7 +15,7 @@
                        │
                 YssBI Logical Graph
                        │
-                Graph Compiler
+                Graph plan preparation
                        │
           ┌────────────┴────────────┐
           │                         │
@@ -194,7 +194,7 @@ DuckDB semantics
 你之前担心的：
 
 ```text
-compile graph
+prepare execution plan
 execute graph
 动态 pin
 schema inference
@@ -422,7 +422,7 @@ crash recovery
 │                                      │
 │ Node semantics / schema / typing     │
 └──────────────────┬───────────────────┘
-                   │ compile
+                   │ prepare plan
           ┌────────┴────────┐
           ▼                 ▼
 ┌──────────────────┐ ┌─────────────────┐

@@ -28,7 +28,7 @@
 | -------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 应用与工作台         | 应用组装、窗口、页面布局模板、面板与命令接入、布局生命周期 | `src/app/`、`src/modules/workbench/`、`src/modules/commands/`                                                                                        |
 | 项目与资源交互       | 项目打开与切换、资源展示与操作、发布结果采用               | `src/modules/project-explorer/`、`src/features/application/project/`、`src/features/application/resource/`                                           |
-| 图编辑与运行交互     | 图草稿、画布、语义投影、编译与执行入口、结果查看           | `src/modules/graph-editor/`、`src/modules/node-catalog/`、`src/modules/problems/`、`src/modules/results/`、`src/modules/output/`                     |
+| 图编辑与运行交互     | 图草稿、画布、语义投影、计划准备与执行入口、结果查看           | `src/modules/graph-editor/`、`src/modules/node-catalog/`、`src/modules/problems/`、`src/modules/results/`、`src/modules/output/`                     |
 | 数据浏览与编辑       | 数据浏览、分页、编辑请求、导入导出                         | `src/modules/data-explorer/`、`src/modules/database-editor/`、`src/features/application/dataManagement/`、`src/features/application/databaseEditor/` |
 | 图表编辑与展示       | 图表文档、配置、数据绑定与渲染                             | `src/modules/chart/`、`src/features/application/chart/`、`src/features/core/chart/`                                                                  |
 | Assistant            | 对话与工具状态展示、输入与审批、业务操作衔接               | `src/modules/assistant/`、`src/features/application/assistant/`                                                                                      |
@@ -109,17 +109,17 @@ React 保存后端资源索引和 Activity 文档的显示投影，Rust 拥有�
 
 ## 3. 图编辑与运行交互
 
-负责从打开图文档、编辑未保存草稿，到请求编译、保存、执行和查看结果的用户流程。前端组织交互，Rust 执行编辑校验、语义分析、编译与计算。
+负责从打开图文档、编辑未保存草稿，到保存、执行和查看结果的用户流程。前端组织交互，Rust 执行编辑校验、语义分析、计划准备与计算。
 
 ### 内部结构
 
 | 部分             | 职责                                                          | 当前代表位置                                                                           |
 | ---------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| 文档草稿与历史   | 未保存文档、保存基线、dirty、撤销与重做                       | `src/features/core/graphDraft/`                                                        |
-| 编辑操作编排     | 组织草稿操作顺序，检查响应所属的项目、草稿与请求              | `src/features/application/graphDraft/`、`src/features/application/graphEditing/`       |
+| 文档草稿与历史   | 未保存文档、保存基线、dirty、撤销与重做                       | `src/features/core/graphEditing/`                                                        |
+| 编辑操作编排     | 组织草稿操作顺序，检查响应所属的项目、草稿与请求              | `src/features/application/graphEditing/`、`src/features/application/graphEditing/`       |
 | 语义投影采用     | 安装 Rust 返回的节点、端口、类型与诊断，供多个界面消费        | `src/features/application/graphProjection/`、`src/features/core/dataStore/` 中的图投影 |
 | 画布与节点交互   | 选择、视口、测量、拖动预览、连线手势和节点目录                | `src/modules/graph-editor/`、`src/modules/node-catalog/`                               |
-| 编译、保存与执行 | 分别组织三个独立操作，管理请求状态及编译产物引用              | `src/features/application/graphDraft/`、`src/features/application/execution/`          |
+| 保存与执行       | 提交编辑版本并组织运行请求；计划准备及缓存由后端执行组件管理   | `src/features/application/graphEditing/`、`src/features/application/execution/`          |
 | 运行与结果查看   | 展示运行状态、查询结果与报告，分别呈现 Problems 和 Run Output | `src/modules/results/`、`src/modules/problems/`、`src/modules/output/`                 |
 | 编辑器生命周期   | 协调打开、关闭、重新打开及项目切换时的失效和清理              | `src/features/application/editor/`、`src/features/core/graphSession/`                  |
 
@@ -127,7 +127,7 @@ React 保存后端资源索引和 Activity 文档的显示投影，Rust 拥有�
 
 草稿、语义投影和画布临时状态分别管理。拖动预览和测量不创建另一套文档；Canvas、Details 与 Problems 消费同一图语义投影，解析后的类型、Schema 和诊断以 Rust `GraphSemanticSnapshot` 为准。
 
-Draft、Compile、Save、Execute 是独立操作。Compile 不提交文档，Save 不隐式编译，Execute 使用匹配的编译产物。保存失败保留未保存草稿，成功后采用后端返回的状态并更新保存基线。
+编辑时解析语义和诊断；Save 独立提交文档；Execute 在后端准备匹配当前语义的执行计划，不隐式保存。保存失败保留未保存编辑，成功后采用后端返回的状态并更新保存基线。
 
 Results 的身份与生命周期由 Rust 管理，不能由某个图编辑器的挂载状态决定。Graph Problems、Results 和 Run Output 分别展示语义诊断、执行产物和程序文本输出；运行失败摘要也不能伪装成 stdout/stderr。Run Output 当前已有通道与 UI，生产输出 producer 尚未接入。完整契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 

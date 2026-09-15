@@ -37,15 +37,15 @@
 
 [SettingsView.tsx](../../src/modules/settings/internal/ui/SettingsView.tsx#L273) 的编辑器区域展示九个设置：`showGrid`、`autoSave`、`snapToGrid`、`fontSize`、`openSideBySideDirection`、`splitOnDragAndDrop`、`alwaysShowEditorActions`、`closeEmptyGroups`、`splitSizing`。它们在生产源码中的使用停留在类型、默认值、设置存取与设置页，没有控制 Canvas、保存或 Dockview 行为的消费者。`projectName`、`exportPath` 也只在客户端设置中存取。
 
-尤其是 [settings.ts](../../src/shared/config-default/settings.ts#L48) 将 `autoSave` 默认设为 `true`，而 [saveGraphDraft.ts](../../src/features/application/graphDraft/saveGraphDraft.ts#L16) 及其调用链没有读取这个开关。用户看到自动保存已开启，却仍需显式保存；这比单纯的命名问题更应优先处理。没有据此声称已经发生用户数据丢失。
+尤其是 [settings.ts](../../src/shared/config-default/settings.ts#L48) 将 `autoSave` 默认设为 `true`，而 [saveGraph.ts](../../src/features/application/graphEditing/saveGraph.ts#L16) 及其调用链没有读取这个开关。用户看到自动保存已开启，却仍需显式保存；这比单纯的命名问题更应优先处理。没有据此声称已经发生用户数据丢失。
 
 建议逐项决定删除未实现的入口或接入实际 owner。自动保存涉及草稿与文件提交语义，应作为明确行为变更处理。已经有行为消费者的外观设置，如 `smoothScroll`、语言和主题，不在这个删除清单内。
 
 **F02：历史栈保存了无用的解析投影，而且没有边界。**
 
-[graphDraftStore.ts](../../src/features/core/graphDraft/graphDraftStore.ts#L94) 的 `cloneVersion` 同时深拷贝 document 和 projection；第 183 行每次变换直接追加历史版本，没有条数或字节预算。保存、重新安装或清空会释放历史，但持续未保存的编辑会一直增加保留量。
+[graphEditingStore.ts](../../src/features/core/graphEditing/graphEditingStore.ts#L94) 的 `cloneVersion` 同时深拷贝 document 和 projection；第 183 行每次变换直接追加历史版本，没有条数或字节预算。保存、重新安装或清空会释放历史，但持续未保存的编辑会一直增加保留量。
 
-[historyCoordinator.ts](../../src/features/application/graphDraft/historyCoordinator.ts#L39) 恢复时只读取历史 `version.document`，调用 Rust Resolve 获取新投影。Store 的 undo/redo 又用该新投影覆盖历史版本中的 projection（第 304、327 行）。因此，历史中的旧 projection 在当前生产恢复路径里没有用途。
+[historyCoordinator.ts](../../src/features/application/graphEditing/historyCoordinator.ts#L39) 恢复时只读取历史 `version.document`，调用 Rust Resolve 获取新投影。Store 的 undo/redo 又用该新投影覆盖历史版本中的 projection（第 304、327 行）。因此，历史中的旧 projection 在当前生产恢复路径里没有用途。
 
 建议先把历史条目缩为恢复必需的文档意图，再定义容量或内存预算。现状保留量随编辑次数和文档/投影大小增长；本次未做大图内存压测，不给出未经测量的 MB 数值。`MAX_HISTORY = 50` 虽然仍在 `src/shared/config-default/ui.ts`，却没有消费者，不能当作现有上限。
 

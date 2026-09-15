@@ -4,7 +4,7 @@
 
 > **单一应用入口 + 按业务能力划分的组件 + 显式接口 + 统一的跨组件协调。**
 
-我检查了仓库 `main` 分支的 `769f8d7`，包括 `yss-application` 的入口、会话、图编译、项目生命周期、数据库变更，以及节点注册和图运行时代码。以下是基于这些实现的静态架构分析，没有执行项目构建。
+我检查了仓库 `main` 分支的 `769f8d7`，包括 `yss-application` 的入口、会话、图运行准备、项目生命周期、数据库变更，以及节点注册和图运行时代码。以下是基于这些实现的静态架构分析，没有执行项目构建。
 
 ## 一、这种设计叫什么？不是严格意义上的 ECS
 
@@ -54,7 +54,7 @@ Rust 的模块可见性可以隐藏内部实现；而独立 package 的普通依
 ```rust
 pub mod database;
 pub mod execution;
-pub mod graph_compile;
+pub mod graph_run;
 pub mod graph_contracts;
 pub mod project_lifecycle;
 pub mod project_query;
@@ -106,9 +106,9 @@ session/factory.rs
 
 **统一协调会话，不等于所有组件共享一个任意读写的大状态。** 协调层应掌握整体绑定关系，业务组件只获得完成任务所需的能力。
 
-### 3. `graph_compile.rs` 实际上是跨组件用例，不只是 Graph 内部逻辑
+### 3. `graph_run.rs` 实际上是跨组件用例，不只是 Graph 内部逻辑
 
-当前 `compile_graph_draft` 的工作包括：
+当时的图解析用例协调以下步骤；当前入口与归属以 Graph 与 Execution 架构文档为准：
 
 ```text
 捕获 ApplicationSession
@@ -117,9 +117,9 @@ session/factory.rs
     ↓
 读取项目事实和数据库 catalog
     ↓
-构造图编译资源输入
+构造图运行准备资源输入
     ↓
-编译图、生成编辑器投影
+解析图、生成编辑器投影
     ↓
 重新验证项目、数据库和会话
     ↓
@@ -128,16 +128,16 @@ session/factory.rs
 
 这个函数同时协调 Project、Database、Graph 和 Execution。
 
-这类代码放在应用层是有理由的，**不能因为名字叫 `graph_compile`，就把它全部当成 Graph 的内部实现搬进去**。
+这类代码放在应用层是有理由的，**不能因为名字叫 `graph_run`，就把它全部当成 Graph 的内部实现搬进去**。
 
 我建议拆成两个层次：
 
 ```text
-workflows/compile_graph.rs
+workflows/resolve_graph.rs
     负责取哪些事实、何时验证、如何协调其他组件
 
 components/graph/
-    负责给定输入后，如何分析、编译和生成图投影
+    负责给定输入后，如何分析和生成图投影
 ```
 
 这样 Graph 不需要自己去找 Project、再找 Database、最后通知 Execution。
@@ -200,7 +200,7 @@ yss-application/
    ├─ session/                跨组件会话、一致性和生命周期
    │
    ├─ workflows/              跨组件业务用例
-   │  ├─ compile_graph.rs
+   │  ├─ resolve_graph.rs
    │  ├─ run_graph.rs
    │  ├─ switch_project.rs
    │  └─ mutate_database.rs
@@ -222,7 +222,7 @@ yss-application/
 
 | 组件或层                  | 应负责                        | 不应负责                       |
 | --------------------- | -------------------------- | -------------------------- |
-| `graph`               | 图结构规则、编辑运算、语义分析、编译、图相关派生缓存 | 项目切换、数据库连接管理、全局会话协调        |
+| `graph`               | 图结构规则、编辑运算、语义分析、图相关派生缓存 | 项目切换、数据库连接管理、全局会话协调        |
 | `node_catalog`        | 节点类型、协议、注册、目录、节点定义查询       | 某张图中的节点实例及连线的独立可写状态        |
 | `database`            | 数据集访问、连接、schema、查询、数据变更能力  | 所有使用 SQLite 的业务存储、项目全局生命周期 |
 | `project`             | 项目文档、资源声明、项目级写入权限、持久化规则    | 图执行器、查询执行器、其他组件的内部状态       |
@@ -265,7 +265,7 @@ NodeComponent 单独管理图中节点实例
 
 否则删除一个节点时，就得跨两个组件协调节点、连线、端口绑定和缓存。你本来希望减少耦合，却可能把一个本应局部完成的图编辑操作拆成跨组件事务。
 
-另外，当前 `GraphRuntimeState` 已经持有注册表和目录引用，以及编译草稿、语义缓存。拆分时应该整理这些职责，**不是让 NodeComponent 和 GraphComponent 再各建一份注册表或各建一份权威图状态**。
+另外，当前 `GraphRuntimeState` 已经持有注册表和目录引用，以及编辑解析和语义缓存。拆分时应该整理这些职责，**不是让 NodeComponent 和 GraphComponent 再各建一份注册表或各建一份权威图状态**。
 
 ### Database 也不应该变成“所有存储的总管”
 
@@ -299,10 +299,10 @@ Graph → NodeCatalog 的公开查询接口
 
 ### 情况二：横跨多个组件的流程，放到工作流中
 
-例如编译图、运行图、切换项目、修改数据库声明：
+例如解析图、运行图、切换项目、修改数据库声明：
 
 ```text
-              CompileGraphWorkflow
+              ResolveGraphWorkflow
                  /     |     \
                 /      |      \
            Project   Database   Graph
@@ -310,7 +310,7 @@ Graph → NodeCatalog 的公开查询接口
 
 这里箭头表示工作流调用组件能力，不是组件之间互相持有整个应用。
 
-针对当前编译流程，我建议工作流获取**绑定到同一会话、带有版本依据的事实或快照**，交给 Graph 处理，再执行所需的重新验证。不要为了接口简洁而删掉现有身份和版本校验。当前实现已经在做这类检查。
+针对当前解析流程，我建议工作流获取**绑定到同一会话、带有版本依据的事实或快照**，交给 Graph 处理，再执行所需的重新验证。不要为了接口简洁而删掉现有身份和版本校验。当前实现已经在做这类检查。
 
 对于写操作，还应继续保留由状态所属组件执行的最终权限和版本检查；工作流负责协调，但不绕过组件的提交规则。
 
@@ -359,14 +359,14 @@ Arc<ApplicationState>
 
 mod api;
 mod cache;
-mod compiler;
+mod analysis;
 mod projection;
 
 pub(crate) use api::{
     GraphComponent,
-    CompileRequest,
-    CompileReceipt,
-    CompileError,
+    ResolveRequest,
+    ResolveReceipt,
+    ResolveError,
 };
 ```
 
@@ -379,7 +379,7 @@ use crate::components::graph::GraphComponent;
 而不是：
 
 ```rust
-use crate::components::graph::cache::CompileCache;
+use crate::components::graph::cache::AnalysisCache;
 ```
 
 Rust 的私有子模块、私有字段和受限可见性能够支持这种边界。`pub(crate)` 表示当前 crate 内可见，不表示仅某个组件可见；组件内部需要相互访问的项，可以用 `pub(super)` 或限定到所属组件祖先模块的 `pub(in ...)`。([Rust 文档][3])
@@ -439,7 +439,7 @@ pub(crate) 的跨模块访问失效
 
 **第一步：先把会话与跨组件编排识别出来。**
 
-优先整理 `ApplicationSession`、会话构建/切换，以及图编译、数据库变更这些跨组件用例。现有运行时已经有集中组装具体服务的入口，可以沿用，不需要再造一个全局组件注册中心。
+优先整理 `ApplicationSession`、会话构建/切换，以及图运行准备、数据库变更这些跨组件用例。现有运行时已经有集中组装具体服务的入口，可以沿用，不需要再造一个全局组件注册中心。
 
 **第二步：建立组件外观，收窄可见性。**
 
@@ -449,7 +449,7 @@ pub(crate) 的跨模块访问失效
 
 需要独立复用、独立依赖集合或更强编译约束的组件再拆出去。不要同时改变目录、状态权威、IPC 语义、异步执行方式和错误处理模型。
 
-验证也应围绕这次改动最容易破坏的边界：会话切换、过期快照拒绝、图编译输入一致性、数据库提交与补偿，而不是为了每个新目录添加形式化测试。
+验证也应围绕这次改动最容易破坏的边界：会话切换、过期快照拒绝、图运行准备输入一致性、数据库提交与补偿，而不是为了每个新目录添加形式化测试。
 
 ---
 
@@ -461,7 +461,7 @@ pub(crate) 的跨模块访问失效
 
 > **`yss-application` 保留统一入口、组装和跨组件工作流；Graph、NodeCatalog、Database、Project 等组件封装各自业务能力与状态访问。组件可以依赖其他组件的公开 API，但依赖方向必须受控；内部可变状态不得穿透，共同业务由明确的工作流协调。**
 
-其中，当前最重要的三件事是：**把应用会话从 Execution 的概念中独立出来，区分节点定义与图中节点实例，保留图编译和数据库变更中的跨组件一致性约束。**
+其中，当前最重要的三件事是：**把应用会话从 Execution 的概念中独立出来，区分节点定义与图中节点实例，保留图运行准备和数据库变更中的跨组件一致性约束。**
 
 这样拆，才是在降低耦合；否则很可能只是给现有耦合关系换一组 `*-component` 名字。
 

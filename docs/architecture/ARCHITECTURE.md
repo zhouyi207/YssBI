@@ -5,7 +5,7 @@
 > Canonical owners: 本文拥有系统级心智模型；专项 contract 由文末索引中的文档和源码拥有
 > Update when: 顶层 authority、依赖方向、composition root 或跨子系统主链路改变时
 
-YssBI 是基于 Tauri 2 的桌面数据分析 IDE。用户在 React 工作台中管理项目、数据库、Analysis Graph、统计结果和 Assistant；Rust 负责所有已提交业务状态、持久化、编译执行和科学计算。本文只提供进入系统所需的总览，不维护完整 crate 清单、命令矩阵、门禁实现或重构历史。
+YssBI 是基于 Tauri 2 的桌面数据分析 IDE。用户在 React 工作台中管理项目、数据库、Analysis Graph、统计结果和 Assistant；Rust 负责所有已提交业务状态、持久化、图解析、执行和科学计算。本文只提供进入系统所需的总览，不维护完整 crate 清单、命令矩阵、门禁实现或重构历史。
 
 插件系统的稳定职责由 [Plugin 架构与契约](PLUGIN.md) 定义。当前宿主通过通用 Plugin Manager 加载签名原生插件包，Julia/Bayes 前后端属于独立发布的 Julia 插件，不链接到宿主生产依赖图。目标契约中的在线目录、标准 UI provider 和 OS sandbox 等能力不因文档已接受而自动成为当前功能。
 
@@ -41,9 +41,9 @@ flowchart LR
   CHANNELS --> UI
 ```
 
-`src-tauri/src/lib.rs` 的业务入口依赖为 `yss-application`，另注册本地平台插件 `tauri-plugin-tracing` 与官方 Tauri 插件。日志插件先安装采集、SQLite 和日志 Channel；Application runtime 安装业务服务、解析业务路径、显示主窗口，并直接构造内部 `ipc::CommandRuntime`。应用命令注册表、schema、error、执行通道编码和图草稿交接都在 `yss-application::ipc`，日志命令使用插件自己的命名空间。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
+`src-tauri/src/lib.rs` 的业务入口依赖为 `yss-application`，另注册本地平台插件 `tauri-plugin-tracing` 与官方 Tauri 插件。日志插件先安装采集、SQLite 和日志 Channel；Application runtime 安装业务服务、解析业务路径、显示主窗口，并直接构造内部 `ipc::CommandRuntime`。应用命令注册表、schema、error、执行通道编码和图活动与读投影同步都在 `yss-application::ipc`，日志命令使用插件自己的命名空间。Event、中立 Channel 与共享 Contract 保持独立，且不反向依赖 Application。业务 workflow 与状态继续由应用用例和领域 owners 持有。
 
-Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用例。图编译、执行交接和 Results 用例收入 `graph`；底层 Graph 与 Execution crates 继续独立。`session` 负责应用会话装配和替换；不可变 `NodeComponents` 组合节点定义与实际 kernel registry，校验绑定后供新会话复用。Chart 使用数据库查询及纯投影，共享图表呈现组件，不另建执行器或结果仓库。实际入口见 [Application 说明](../../src-tauri/crates/yss-application/README.md)。
+Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用例。图运行准备、执行交接和 Results 用例收入 `graph`；底层 Graph 与 Execution crates 继续独立。`session` 负责应用会话装配和替换；不可变 `NodeComponents` 组合节点定义与实际 kernel registry，校验绑定后供新会话复用。Chart 使用数据库查询及纯投影，共享图表呈现组件，不另建执行器或结果仓库。实际入口见 [Application 说明](../../src-tauri/crates/yss-application/README.md)。
 
 原生窗口几何由根包装配官方 Window State 插件，恢复和保存不经过自有业务 command。
 窗口关闭与 Dockview 布局的分工见 [Workbench 窗口契约](WORKBENCH_DOCKVIEW_ARCHITECTURE.md#81-原生窗口几何与关闭)。
@@ -53,7 +53,7 @@ Application 按 `session`、`project`、`database`、`graph`、`chart` 聚合用
 | 状态或事实                                                                   | 唯一 authority                                   | 非 authority 投影                           |
 | ---------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------- |
 | 已提交 Project、资源、revision                                               | Rust Project crates                              | React Project stores、Workbench panels      |
-| Graph document 的已保存版本                                                  | Rust Project / Graph document owners             | `GraphDraftSession` 中未保存 draft          |
+| Graph 当前文档、历史与保存指纹                                               | Rust Project / Graph document owners             | 当前编辑状态的只读投影                      |
 | resolved type、schema、lineage、diagnostics、coercion、kernel specialization | Rust `GraphSemanticSnapshot`                     | Editor/Canvas/Problems projection           |
 | Database declaration、physical runtime 和 schema                             | Rust Project + Database crates                   | Data explorer 和 editor projection          |
 | Execution、当前 result identity、payload 和 provenance                       | Rust Execution `ResultStore`                     | Result、Inspect 和 preview UI               |
@@ -71,11 +71,11 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 缺失值策略、判秩、收敛和数值保护阈值由各算法的契约与实现管理。Graph OLS 当前仅接收有限数值并采用 Reject 策略，客户端偏好不参与统计计算。相关数值策略见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
 
-命名常量属于 GraphDocument，在 Event/Function 的 Details 中通过 Graph Draft 编辑，并随图保存。没有独立全局变量资源或变量 revision。资源命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
+命名常量属于 GraphDocument，在 Event/Function 的 Details 中通过后端当前图编辑，并随图保存。没有独立全局变量资源或变量 revision。资源命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
 
-节点编辑由 Application 的 `graphEditing` 直接提交 Graph Draft mutation，并返回统一的 `GraphEditOutcome`。Draft 自身保存撤销/重做记录；Project 提交发布资源 revision 和 delta，文件事务仍负责失败回滚。
+节点编辑由 Application 的 graphEditing 发送 typed 命令，Rust Project 直接更新当前文档与可逆历史。前端消费统一 GraphEditOutcome 及只读投影；显式保存通过文件事务写入正文。
 
 身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、Dockview panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
@@ -141,7 +141,7 @@ Application session
 Project replacement 先关闭旧 session 的新任务准入并 drain 或取消活动工作，再构造和验证 candidate session，最后原子替换。旧 session 的 late event、result、database handle 和 Graph projection 因身份或 generation 不匹配而被拒绝；前端在 hydrate 新项目之前先清理旧的 backend-owned projection。
 
 打开项目先通过 Project 的 activation preparation 检查目标文件，再进入 replacement。
-旧格式、损坏文件或无效路径在这一阶段拒绝时，当前 Application session、准入、Draft 和 Results 保持不变。
+旧格式、损坏文件或无效路径在这一阶段拒绝时，当前 Application session、准入、当前文档和 Results 保持不变。
 若最终文件重验在 drain 之后失败，则从仍然有效的 Project authority 重建可用会话并返回打开错误；
 只有 drain、authority 或会话重建确实无法完成时才保留恢复状态。
 
@@ -165,23 +165,24 @@ sequenceDiagram
   APP-->>UI: canonical document and editor projection
 ```
 
-## 5. Graph compile and execute overview
+## 5. Graph editing and execution overview
 
 Analysis Graph 只表达数据端口和数据依赖。Canvas mutation 更新前端未保存 draft；Rust 以无状态 domain operation 校验 mutation，并在同一 command response 返回 candidate document 与完整 projection，但在 Save 前不改变 committed Project authority。
 
 ```text
-Open → Frontend Draft ──→ Compile complete draft ──→ immutable cached artifact ──→ Execute
-                      └──→ locked atomic Save ──────→ committed Project state
+Open → Rust current GraphDocument ──→ Resolve / diagnostics / result validity
+                      ├──→ Run: prepare immutable plan → Execute
+                      └──→ locked atomic Save → committed Project state
 ```
 
-- Compile 对完整 draft 求解，成功时产生 content-addressed artifact，不保存 Project；
-- Save 校验并原子覆盖完整 document，不隐式 Compile；
-- Execute 使用 `compiledArtifactId` 精确匹配缓存 artifact，并重验 session 与实际依赖；
-- Projection 与 Compiler 消费同一个 `GraphSemanticSnapshot`；
+- 编辑解析对完整 draft 求解，交付诊断、可运行性和局部结果有效性；
+- Save 校验并原子覆盖完整 document，独立于运行；
+- Execute 捕获当前 document 与语义身份，在内部准备匹配计划并重验 session 与实际依赖；
+- Projection 与执行计划准备消费同一个 `GraphSemanticSnapshot`；
 - execution result 进入 Rust `ResultStore`；运行失败经 typed channel 投影到 Output panel；
-- Graph Problems 由完整 projection 交付，Compile 通过 Ready/Blocked 区分语义阻断与内部 command failure。
+- Graph Problems 由完整 projection 交付；普通语义阻断与内部 command failure 分开处理。
 
-完整的 Draft、Projection、Compile、Save、Execute、Problems、Results 和运行失败契约只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
+完整的当前图编辑、Projection、Save、运行准备、Execute、Problems、Results 和运行失败契约只在 [Graph 与 Execution](GRAPH_AND_EXECUTION.md) 维护。
 
 ## 6. Database and scientific computation
 
@@ -251,7 +252,7 @@ YssBI 不使用一条“万能日志”承载所有反馈：
 
 | 变更范围                         | 先阅读                                                                                                                             |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Graph、编译、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                                                       |
+| Graph、校验、执行、结果或输出    | [Graph 与 Execution](GRAPH_AND_EXECUTION.md)                                                                                       |
 | 工作台布局、面板身份或生命周期   | [Workbench Dockview](WORKBENCH_DOCKVIEW_ARCHITECTURE.md)                                                                           |
 | 日志、运行观测、错误或反馈       | [Runtime Signals](RUNTIME_SIGNALS.md) 与 [`yss-application::ipc` README](../../src-tauri/crates/yss-application/src/ipc/README.md) |
 | Statistical Harness 或 Assistant | [Statistical Harness](STATISTICAL_HARNESS.md)                                                                                      |

@@ -1,7 +1,7 @@
 # Graph 与 Execution 当前架构
 
 > Status: Current
-> Scope: Graph Draft、Resolve、Projection、Compile、Save、Execute、Problems、Results 与运行失败反馈
+> Scope: 当前图文档、Resolve、Projection、Save、运行准备、Execute、Problems、Results 与运行失败反馈
 > Canonical owners: Graph/Execution/Project 源码与测试拥有可执行事实；本文拥有阶段之间的稳定 contract
 > Update when: Graph authority、阶段语义、projection、execution result 或 output 边界改变时
 
@@ -9,18 +9,19 @@
 
 ## 1. Authority and identities
 
-| 事实                                   | Authority                            | Frontend representation      |
-| -------------------------------------- | ------------------------------------ | ---------------------------- |
-| 已保存 document、resource revision     | Rust Project                         | 只读 projection              |
-| 未保存编辑与 undo/redo                 | frontend GraphDraftSession           | document、保存基线、历史     |
-| 解析后的端口、类型、Schema、诊断、依赖 | Rust GraphSemanticSnapshot           | 完整 editor projection       |
-| 编译产物                               | session-scoped Graph runtime cache   | opaque artifactId            |
-| run、当前 output result                | Rust Execution / ResultStore         | typed query 与 UI projection |
-| 运行失败                               | Execution RunErrored / command error | Output panel 失败摘要        |
+| 事实                                    | Authority                    | Frontend representation  |
+| --------------------------------------- | ---------------------------- | ------------------------ |
+| 当前可编辑 GraphDocument、资源 revision | Rust ProjectData             | 只读文档投影             |
+| 撤销、重做、已保存内容指纹              | Rust GraphEditingMetadata    | dirty、canUndo、canRedo  |
+| 已保存正文                              | Project 文件事务             | 保存成功回执             |
+| 解析后的端口、类型、Schema、诊断、依赖  | Rust GraphSemanticSnapshot   | 编辑器投影               |
+| 执行计划、run、结果                     | Rust Execution / ResultStore | 查询、运行事件与 UI 投影 |
 
-`graphPath`、Project instance/session、Draft session/generation、node/port/connection、artifact、run/result 与 panel/group identity 分别表示不同生命周期。`artifactId` 的查找仍绑定当前 Project session 和 Graph path，不能单独作为跨 session 的授权。
+图编辑直接更新 Project 的当前驻留文档，不维护独立 Draft 文档或前端历史。临时变更候选用于验证及原子提交，不构成另一套可写状态。保存状态比较当前内容与已保存内容的指纹，不保留完整 savedDocument 副本。
 
-Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验；它与 Draft generation、semantic input hash 不同，见 [Project authority](../../src-tauri/crates/yss-project/README.md#graph-resource-revisions)。
+GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，编辑 revision 跨 JS 边界使用十进制字符串。前端 sessionId、projectionGeneration 只控制视图和请求生命周期。Project instance/session、图路径、语义输入 hash、run/result、panel/group 身份继续分别校验。
+
+资源 revision 同时服务文件事务和执行资源校验，语义内容由独立的 semanticInputHash 表达，见 [Project authority](../../src-tauri/crates/yss-project/README.md#graph-resource-revisions)。
 
 ## 2. Module ownership
 
@@ -31,11 +32,11 @@ Project 的 `graph_resource_revisions` 服务资源事务和执行资源校验�
 | yss-graph-document-edit / editor                                          | structural validation、typed mutation、连接预检、端口顺序、clipboard、编辑器投影 |
 | yss-graph-analysis                                                        | concrete interface、type/schema/lineage、canonical diagnostics、Ready proof      |
 | yss-graph-resource-contract                                               | immutable resource facts 与一次 Resolve 的 dependency observations               |
-| yss-graph-runtime                                                         | 唯一 resolve_graph_draft facade、claim 编排、编译 cache                          |
-| yss-graph-compiler                                                        | Ready snapshot 驱动的 immutable package lowering                                 |
+| yss-graph-runtime                                                         | 唯一 resolve_graph_draft facade、claim 编排、编辑解析缓存                        |
+| yss-graph-diagnostics                                                     | 图诊断代码、模板与定义校验                                                       |
 | yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
-| yss-graph-execution                                                       | immutable plan、demand/DAG、KernelRegistry、ResultStore、运行事件                |
+| yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、KernelRegistry、ResultStore、运行事件                |
 | yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
@@ -49,62 +50,52 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
 IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。
 
-`yss-graph-runtime` 负责解析与编译产物缓存；`yss-graph-execution` 负责执行计划、节点 kernel、
-run、Results 和运行失败。两者通过 Application 的执行包转换连接，执行端不依赖编辑器投影。
+`yss-graph-runtime` 负责编辑解析；`yss-graph-execution::graph_preparation` 消费只读的 `GraphAnalysis`，
+直接构建已有 `ExecutionPlan`、`PlanParameterBundle` 和输出契约。计划缓存归执行会话，资源授权依据
+在每次准备时重新绑定。Application 组织资源和会话校验，不再持有一套图包到执行包的转换。
+调度器与 kernel 继续消费中性执行计划；运行准备不读取 UI 投影或 Project 可变状态。
 
-Application 的图用例集中在 `graph/`，包括编辑、编译、资源、运行与结果查询；`session/` 独立拥有整个
+Application 的图用例集中在 `graph/`，包括编辑、解析、资源、运行与结果查询；`session/` 独立拥有整个
 Project/Database/Graph/Execution 会话的组装和替换。`chart/` 按资源操作、数据库查询及纯图表投影组织，
 Chart 预览和图结果复用前端渲染器，各自保留数据持有与失效规则。
 
 执行能力由冻结的 `KernelRegistry` 拥有。`NodeComponents` 在组装时检查定义与已安装实现的参数字段及
-输出数量，随后冻结 kernel 表；未安装的实现由 Compile 产生 `compiler.node.kernel_unavailable` 阻断。
-Compile 的支持检查与实际调度读取同一会话的注册表。注册的标识、显式实现 revision 和调用契约共同
+输出数量，随后冻结 kernel 表；未安装的实现由编辑解析产生 `graph.node.kernel_unavailable` 阻断。
+编辑阶段的支持检查与实际调度读取同一会话的注册表。注册的标识、显式实现 revision 和调用契约共同
 形成能力指纹；实现行为改变时必须更新 revision，配置改变通过新的会话配置生效。
 
-能力指纹进入 Graph 的语义输入哈希、编译包和 Execution 的编译依据。Application 映射拒绝指纹不同的
-编译包，Execution 在准备及执行入口再次检查；同一图文档不会复用能力版本不同的产物。节点输出缓存
+能力指纹进入 Graph 的语义输入哈希和 Execution 的 `PlanBasis`。Execution 在计划准备、资源准备和执行入口
+检查该指纹；同一图文档不会复用能力版本不同的计划。节点输出缓存
 的输入指纹也包含该能力指纹。普通数值扩展的[注册与执行样例](../../src-tauri/crates/yss-application/src/session/components/tests.rs)
 复用现有 Node 类型及调度语义；注册 API 不承担新的语言语义或动态插件加载。
 
-## 3. Open and Draft lifecycle
+## 3. 当前图文档与投影生命周期
 
 ```text
-capture active Project session and coherent resource facts
-  → load/validate document, or construct mutation candidate
-  → resolve_graph_draft
-  → complete GraphSemanticSnapshot
-  → document/editor projection response
-  → validate response, recheck frontend identity, adopt
+GUI / Harness typed command
+  → 捕获当前 Project / Graph 编辑版本
+  → Application 按图串行编排
+  → Graph Document Editor 准备可逆补丁与完整语义投影
+  → Project 原子提交当前文档、revision 和历史
+  → Execution 更新结果有效性，发布图变更通知
+  → 命令返回 snapshot/delta，React 安装只读投影
 ```
 
-Open、Hydrate、Transform、Save、Compile 共用 Runtime Resolve。只读 `resolve_graph_draft` command 还用于 dirty Draft 的资源刷新及 undo/redo 目标验证；它不保存文件、不 claim 端口、不改变 Draft。
+普通编辑、undo/redo 与 Save 使用同一后端图身份。GUI 队列保留请求与显示顺序，最终版本校验和写入顺序由 Rust 决定。按图协调只持有操作预约；Resolve、文件 I/O 和交付期间不持有 Project 数据锁，独立图的编辑不共享一个长临界区。
 
-从 Pin 打开的兼容节点目录也对当前 Draft 调用同一 Resolve。Runtime 从 semantic snapshot 验证源端口，
-输出端口使用解析后的类型，输入端口使用接受类型域，再交由 Graph Editor 筛选创建候选。
-未引用的派生端口无需先有 document binding；查询不 claim 端口，真正创建连接时才原子登记，orphan 或不存在的端口仍被拒绝。
+GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../src-tauri/crates/yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
-Mutation、history、Compile、Save、加载及刷新请求由 frontend application 的同一 Graph FIFO 协调，队列覆盖实际 IPC 和投影采用过程。仅等待先前编辑结束不足以防止后续编辑被旧 Resolve/Compile 的缓存依据覆盖。刷新在轮到执行时检查 dirty/saving，项目发布跳过期间变脏的草稿。返回后继续检查 Project identity、Draft session/generation、coordinator epoch 或加载 lifecycle token；Compile 还检查独立 request ID。关闭重开与 Project replacement 使旧回调失效，旧失败不能清除新 artifact。
+普通编辑、撤销、运行、兼容节点查询或复制导出不上传完整图文档，而是携带图身份和后端 version。导入或粘贴等本身包含新内容的操作仍交付真实输入。过期版本被拒绝，不自动合并并行修改。
 
-Draft/history/projection 在写入前完成 projection preparation，避免先改 Draft 再发现 projection 无效。`GraphProjectionStore` 单个 Graph bucket 一次替换 topology、端口、顶层 diagnostics、basis、outcome 和 run gate。无效 response 保留原 document/history；不同 Store 的发布仍由 Application 协调。
+编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove 路径批次，客户端在候选上应用并验证完整结构后发布。未变化的节点、端口及连线复用引用。该协议只交付读投影，不代替 Graph typed 编辑操作。
 
-Undo/redo 条目只保留文档意图，容量由 `graphDraftStore.ts` 的 `GRAPH_HISTORY_LIMIT` 限制。恢复前重新 Resolve 目标文档，并采用这次解析的投影；历史中不保留旧的解析投影。Graph locale 查询独立于加载/刷新生命周期，草稿 FIFO 不反向依赖加载流程。
+Project 的图活动 Channel 通知后台编辑并交付 Harness 执行事件。通知与命令回执在既有 Graph FIFO 中协调，已覆盖通知不重复查询，密集通知合并。通知滞后时重新读取当前图快照，已知运行的终态从 Execution RunRegistry 查询；无法补回的逐项运行事件不由图投影伪造。普通 GUI 执行保留独立 RunEvent Channel 和终态排空。
 
-本地化节点目录缓存跟随已提交资源的 publication revision 失效。Application 在正常发布、
-恢复和项目初始化完成时通知目录 Store；项目生命周期重置会撤销旧目录请求。
-只有索引内容变化而 Rust 水位未变时额外失效目录，覆盖外部发现未驻留文件；相同索引不重复发布。
-新消费者继承已知版本下限，迟到或低于请求水位的响应不能替换目录。
-该目录刷新只更新资源创建描述，不覆盖 Graph Draft，也不通过点击/拖拽改变 committed state。
+关闭视图、HMR、窗口销毁和 Project replacement 释放订阅或使旧回调失效。最后一个编辑器关闭并完成既有保存/放弃流程后可卸载驻留数据，再次打开生成新的编辑身份。Harness 可直接打开已关闭的图，内部读取使用后端分配的 lifecycle token。
 
-Event/Function 创建、复制、删除复用 Project 的标准资源 patch 发布：回执拥有递增 publication revision
-与 lifecycle delta，不以内部 authority generation 代替资源发布版本。纯资源生命周期变化不要求完整图投影；
-重命名等影响已有图的操作仍声明受影响路径。前端命令回执、资源事件与 watcher 走同一发布队列和
-ProjectIndex 快照安装入口，不由各 CRUD hook 自行选择是否补查。刷新已加载的干净 Graph 时安装完整
-GraphEditorSession，使 document 保存基线与 projection 同步；dirty/saving 草稿保留。
-函数签名修改由 Rust 同一文件事务持久化后发布，watcher 不会用旧磁盘签名覆盖已提交修改。
+Project watcher 保留未保存的当前文档。资源重命名和函数签名事务只持久化其负责的变更，不顺带保存图正文；重命名同步更新历史中的资源引用及保存指纹。节点目录和资源索引仍由现有 Project publication owner 安装。
 
-没有 Graph Projection background channel、独立 ProblemsStore 或面板自有 subscription。关闭 Problems 不影响 Canvas、Details 或 Run Gate。Dirty Draft 的重新解析只替换解析结果，不覆盖未保存 document。
-
-Assistant 的图操作也进入同一 Graph Draft FIFO。它通过临时工具请求 channel 捕获当前草稿，由 Rust Application 验证 hash/generation 并准备批量变更、编译或执行，前端确认安装既有 projection 后才完成工具。一个编辑批次对应一个正常草稿 undo 条目，不直接修改旧的已保存图；显式 Save 仍按下述独立流程执行。工具通道不构成另一个 Graph Projection authority，详见 [Statistical Harness](STATISTICAL_HARNESS.md)。
+从 Pin 查询兼容节点时读取匹配版本的当前文档，使用同一次 Resolve 的端口类型、Schema 和约束。查询不 claim 端口，真正连接时才原子登记。Canvas、Details、Problems 和运行准入共享同一语义投影，没有面板自有的图事实源。
 
 ### Canvas presentation and input
 
@@ -140,23 +131,33 @@ Escape、失活、保存锁定、关闭图和替换项目都撤销手势；回�
 
 ```mermaid
 flowchart LR
-  DOC[GraphDocument] --> RESOLVE[resolve_graph_draft]
+  DOC[GraphDocument] --> RESOLVE[resolve_graph_document]
   RES[Captured resource facts] --> RESOLVE
   RESOLVE --> SNAPSHOT[GraphSemanticSnapshot]
   SNAPSHOT --> VIEW[Editor Projection]
   SNAPSHOT --> READY[ReadyGraphSemanticSnapshot]
-  READY --> COMPILER[Graph Compiler]
+  READY --> PREPARE[Execution plan preparation]
 ```
 
 `ConcreteGraphInterface` 是 snapshot 内端口事实的借用视图，不存第二份端口表。类型使用 `Exact / Constrained / Unknown / Conflict`；`TypeExpr` 只描述声明 pattern。Add、Reroute、Convert 复用 NumericFold、Identity、ParameterOutput 规则，coercion 和 kernel specialization 与类型结果一起交付。
 
-Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识别。`GraphSchemaState` 区分 NotApplicable、Exact（含空字段集合）、Pending、Unavailable、Conflict 和 InternalFailure。Reroute 可传递上游 Schema。Schema 和类型仍是同一次 Resolve 内的阶段，最终组装完整节点事实并发布完整 snapshot；当前 node cache 优化 type/coercion，Schema 重算且参与 cache key，结果须与 full resolve 一致。
+Schema 按 data DAG 顺序求解并保留 lineage，cycle 在递归解析前识别。`GraphSchemaState` 区分 NotApplicable、Exact（含空字段集合）、Pending、Unavailable、Conflict 和 InternalFailure。Reroute 可传递上游 Schema。Schema 和类型仍是同一次 Resolve 内的阶段，最终组装完整节点事实并发布完整 snapshot。
+
+Schema 输出缓存校验 registry、节点参数、常量内容、输入地址与上游 Schema 状态，以及该输出实际读取的资源依赖。上游编辑没有改变 Schema 时，下游可复用已有求解结果。缓存命中也记录所依赖的资源和 absent lookup，避免资源恢复后继续复用缺失状态；cycle 清空该图的 Schema 缓存，删除节点时清除其输出。类型/coercion 缓存继续使用最新 Schema 作为输入。增量结果、诊断和依赖记录须与 full resolve 一致；缓存未命中时仍遍历图、校验输入并组装完整 snapshot，不代表整个流程只访问受影响节点。
+
+Graph Runtime 为最近使用的图保留一个不含本地化文本的完整 `GraphAnalysis` 缓存，容量由 [semantic_cache.rs](../../src-tauri/crates/yss-graph-runtime/src/semantic_cache.rs) 定义。复用前校验解析文档指纹、registry/kernel 指纹和之前实际读取的资源，包括传递函数正文和 absent lookup。解析缓存的身份与执行身份分开：常量名称、函数参数名称、诊断所用 connection ID 和 orphan metadata 会影响解析快照，不能仅凭 `semanticInputHash` 复用。无关资源变化不使该缓存失效。
+
+位置和节点 user label 从当前文档投影，不进入解析缓存身份；资源显示名与语言按当前请求本地化。缓存命中跳过 Schema、类型和函数语义重算，仍执行输入指纹计算、本地化、投影生成以及 Application 的资源/session 重验。缓存只是可丢弃的派生结果，没有文档或历史写权限；解析、哈希、本地化和大对象释放均在缓存锁外完成。
+
+编辑器仅在操作引用端口、需要校验或 claim 派生端口时请求前置 Resolve。移动、普通节点创建、参数设置等操作直接准备文档补丁；批次在最终文档上统一解析并生成投影，批次内部的连接操作仍读取其前序操作之后的端口事实。函数正文也延后到需要解析时捕获。图活动、历史与显式保存仍由原有事务提交。
+
+每次解析使用借用文档的节点 binding、连线计数和有序输入索引，投影使用节点语义与诊断索引，避免逐节点或逐端口扫描整张图。局部索引随请求释放，不形成第二套图状态。
 
 三类端口的生命周期：
 
 - Declared：protocol 定义的固定地址，不新增 document binding。
 - User-created：instance ID/order 持久化；后端 placement 负责 append、before、after、move，member group 共用 ID/order。
-- Derived：未使用成员只投影；首次连接或设置 literal 时与 mutation 原子 claim。被引用成员消失时显示 orphan；未引用的消失成员不再投影。显式编辑清理无引用的旧 derived bindings，Resolve/Compile 不改写 document。
+- Derived：未使用成员只投影；首次连接或设置 literal 时与 mutation 原子 claim。被引用成员消失时显示 orphan；未引用的消失成员不再投影。显式编辑清理无引用的旧 derived bindings，解析与运行准备不改写 document。
 
 未知但被文档引用的端口以有 canonical address 的 orphan fact 展示，便于定位和断开损坏连接。Template 只表示新增能力。普通连接错误保留在 canonical Problems 中；只有附有阻断连接诊断的错误方向连接才可通过 frontend projection 验证。
 
@@ -166,19 +167,19 @@ Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Wo
 新增分支保留已有连线；输入端口仍遵循自身容量，替换单连接输入时只移除该输入的旧连线。
 连接数量与动态端口数量是独立约束，同一个输出值由多个消费者共享。
 
-命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 Graph Draft FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
+命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 当前图文档 FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
 
 前端共享数据类型层定义图文档使用的 `SerializedDataValue` 及其与编辑值的纯转换；传输层校验 Rust 返回的值结构。常量编辑不依赖 IPC 编码器，也不维护另一份已提交数据。
 
-节点目录只有一个 `yssbi.constant.get`，其 `constant` 参数引用当前图内的常量。Details 面板可直接插入引用节点，也可在 Get 节点的参数中选择常量。尚未选择或已删除的引用可保留在草稿中，Compile 会阻断不完整的类型解析。单次使用的输入值仍可通过端口 literal 编辑。
+节点目录只有一个 `yssbi.constant.get`，其 `constant` 参数引用当前图内的常量。Details 面板可直接插入引用节点，也可在 Get 节点的参数中选择常量。尚未选择或已删除的引用可保留在草稿中，编辑解析会报告阻断诊断。单次使用的输入值仍可通过端口 literal 编辑。
 
-常量类型和值由 Graph Document 校验；DataFrame/DataSeries 将列数据持久化为常量内的 `TabularSnapshot`，句柄由 ConstantId 派生。Graph Analysis 解析输出类型及表格列 Schema；Compiler 捕获不可变值，Application 在执行包中将数列转换为值列表、数据框转换为列记录，运行过程不读取可变项目变量。常量内容参与语义 fingerprint，名称、说明和标签不使编译缓存失效。
+常量类型和值由 Graph Document 校验；DataFrame/DataSeries 将列数据持久化为常量内的 `TabularSnapshot`，句柄由 ConstantId 派生。Graph Analysis 解析输出类型及表格列 Schema；Execution 的计划准备捕获不可变值，将数列转换为值列表、数据框转换为列记录，运行过程不读取可变项目变量。常量内容参与语义 fingerprint，名称、说明和标签不使计划缓存失效。
 
 Clipboard 仅携带选中 Get 节点引用的常量。目标图已有同一身份且内容相同的常量时复用；身份或名称冲突时复制定义并重写引用。常量和节点进入同一个可撤销补丁。复制整张图则生成独立常量身份。
 
-节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 Draft document 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。计算参数与缺失值策略由具体算法契约和输入校验拥有，节点参数没有项目设置继承/覆盖模式。
+节点参数使用文档中显式保存的值，未填写时使用 protocol 定义的默认值。Editor Projection 交付该有效值供直接编辑；参数编辑从 当前图文档 合并改动，保留未展示参数，也不把其他参数的显示默认值写回文档。计算参数与缺失值策略由具体算法契约和输入校验拥有，节点参数没有项目设置继承/覆盖模式。
 
-节点通过 `ParameterEditorSpec::Configuration(ConfigurationSchema)` 声明 Detail 配置表单。Schema 复用标量 `ParameterSpec`，提供默认值、选项、约束和基于选择项的条件字段；Rust 只投影当前适用字段，React 复用参数控件。配置对象属于当前节点，保存在节点参数中。`SetConfiguration { node_id, key, values }` 在当前候选文档上合并部分字段、补齐默认值、移除不适用字段，并通过已有 Draft history 和 Save 路径支持撤销、重做与持久化。导入的配置参数必须包含完整且适用的字段，验证不会暗中补写文档。
+节点通过 `ParameterEditorSpec::Configuration(ConfigurationSchema)` 声明 Detail 配置表单。Schema 复用标量 `ParameterSpec`，提供默认值、选项、约束和基于选择项的条件字段；Rust 只投影当前适用字段，React 复用参数控件。配置对象属于当前节点，保存在节点参数中。`SetConfiguration { node_id, key, values }` 在当前候选文档上合并部分字段、补齐默认值、移除不适用字段，并通过已有 后端图历史 和 Save 路径支持撤销、重做与持久化。导入的配置参数必须包含完整且适用的字段，验证不会暗中补写文档。
 
 Detail 直接编辑节点配置，不提供配置来源选择；静态配置不声明 Canvas 引脚。统计目录中的独立 Configure/VCE 节点和 Config 输入已移除，原有模型配置字段归各自 Fit/Summary 节点所有。OLS/WLS 使用常数项和协方差表单，GLS、IV、Logit、Probit、Prais、Panel 使用各自已有配置字段；其他统计节点保留原有参数。Y、X、权重等数据输入仍通过连线表达依赖。0.x 文档中已保存的旧 Configure/VCE 节点不作兼容转换，应在目标模型的 Detail 中重新设置。
 
@@ -186,59 +187,51 @@ Detail 直接编辑节点配置，不提供配置来源选择；静态配置不�
 
 数据框的列投影、筛选谓词和列选择控件从 semantic snapshot 获取当前输入 Schema 的列、兼容操作符和字面量类型，输入变化时刷新，断开输入后停止提供过期列。没有封闭选项集的字符串参数使用文本编辑。配置能力不代表新增执行 kernel；分布采样、整数范围及绘图等尚未注册的 kernel 仍受已有执行能力边界限制。
 
-## 5. Draft, Compile, Save, and Execute
+## 5. 编辑、保存与运行
 
-| 操作           | 改变 committed Project            | 结果                                              |
-| -------------- | --------------------------------- | ------------------------------------------------- |
-| Draft mutation | 否                                | candidate document + projection                   |
-| Resolve        | 否                                | 当前 Draft 的完整 projection                      |
-| Compile        | 否                                | Ready 或 Blocked                                  |
-| Save           | 是                                | 已提交 canonical document + 预先验证的 projection |
-| Execute        | 仅 finalization 明确提交的 effect | run、Results、Output                              |
+| 操作               | 修改当前 Project 文档            | 写入文件     | 结果                       |
+| ------------------ | -------------------------------- | ------------ | -------------------------- |
+| Edit / Undo / Redo | 是                               | 否           | 新编辑版本、历史能力及投影 |
+| Resolve            | 否                               | 否           | 当前版本的语义投影         |
+| Save               | 保持捕获正文，更新保存指纹       | 是           | 文件事务回执与编辑状态     |
+| Execute            | 只执行明确的 finalization effect | 不隐式保存图 | run、Results、Output       |
 
-### Compile
+### 编辑解析与运行准备
 
-Application 校验 document、捕获资源事实后，Runtime 先 Resolve，再复用或生成完整 Graph artifact。生产 Compiler 输入要求 `ReadyGraphSemanticSnapshot`；incremental cache 不把编译范围缩成一个选中 output。
+编辑阶段解析类型、Schema、血缘、输入转换及执行能力，交付完整诊断和结果有效性依据。未绑定输入、orphan、cycle、函数语义错误和缺少 kernel 均在编辑投影中阻断运行；不为普通诊断产生技术故障弹窗。
 
-```text
-Ready   { type: ready, artifactId, projection, cacheHit }
-Blocked { type: blocked, projection }
-```
-
-两个分支都不回写 document。未绑定输入、类型/Schema 问题、orphan、cycle、函数语义错误和当前 Execution registry 不支持的 kernel 返回 Blocked；执行能力诊断也进入同一个 semantic snapshot，并在命中编译缓存前检查。API 不把 Blocked 转换成 diagnosed IPC failure，frontend 不为其写执行 error log 或显示 Compile 失败弹窗。内部 resolver/compiler/cache 故障仍使用 incident-linked command rejection。
+运行准备消费当前不可变的 `GraphAnalysis`，由 `ExecutionRuntimeState::prepare_graph_package` 生成或复用完整计划。它要求当前语义快照满足 Ready 条件，直接构造操作、参数、输入绑定、输出契约和查看意图；选中 output 的 demand 由后续执行调度处理。命中计划缓存前也必须检查当前解析结果的可运行性。计划准备没有独立的用户操作或前端状态。
 
 执行能力检查新增阻断诊断时，同步将完整解析的 snapshot 标为 Incomplete，投影为 `analysisBlocked`；`success` 不得同时携带阻断诊断。已有 InternalFailure 保留原故障信息。
 
 `semanticInputHash` 来自语义文档内容、registry 与实际读取的 dependency manifest，排除 node position/user label、无引用 derived metadata 和相关展示字段。manifest 记录所用函数签名/正文、变量类型、数据库 Schema 以及 absent lookup；basis 同时传递 resource versions/observations。无关 catalog 变化不改变 artifact identity。函数正文读取由 Project owner 完成，Graph resolver 不读文件。
 
-Frontend 区分 `saveDirty` 和 `compileDirty`：只移动布局可保留匹配 artifact；语义输入改变使其失效。请求通过 session/generation/request ID 判定 currentness，不依赖 JSON 字符串比较。保存基线的 document 比较仍是 frontend 自己的 dirty 计算。
+保存状态与计划准备分开。内部计划缓存按图路径与语义输入匹配；移动节点、修改显示标签可以复用计划。请求通过编辑版本和语义身份判定 currentness，前端只消费相应投影，不保存独立的计划身份或准备状态。
 
 ### Save
 
-Save 是锁定编辑入口后的 full-document overwrite，不携带 frontend expectedRevision。每次尝试先构建并验证 candidate projection，再重验 capture、执行 Project 文件/document 事务；成功返回已准备的 projection，不在提交后再次 Resolve。
+Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当前文档并通过文件事务持久化。它不接收前端 authored document，也不把版本不匹配的请求自动覆盖到新内容上。投影在事务前准备，成功后通过同一回执交付；视图增量恢复只执行读取，不能重放写操作。
 
-Graph Save 请求仍携带操作 ID，文件事务和 commit 从捕获的 authority 取得同一身份。回执只包含 project instance、resource revision、document 和 projection replacement，不回传操作 ID。Frontend 按项目身份、Draft session/generation 和 graph path 确认结果归属。
-
-成功才更新保存基线并清除 Draft history。失败保留原 Draft；dirty Draft 不自动 merge/rebase。资源版本和 Project 内部事务检查仍保留。
+成功后更新保存指纹并清理图历史，失败保留当前内存编辑与历史。前端 saving 只用于交互反馈，后端按图协调及版本校验保护真正的提交。保存后的视图恢复读取最新状态，不能把较新的内存编辑误标为已保存。
 
 Chart Save 同样按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。前端用 operation ID 和资源路径确认保存回执，通过文档内容判断保存期间是否产生新编辑，成功才清除 dirty。干净图表的刷新依据资源索引；为索引加载文档时，读取请求绑定同一 Project publication revision，由 Rust 校验快照一致性。重命名、删除等资源操作和 Rust 内部事务继续校验资源版本。
 
 ### Execute
 
-`execute_compiled_graph` 接收 `compiledArtifactId` 与 demand；它只读取当前 session/path 中的匹配 artifact，按精确 manifest 重验依赖并准备 generation-bound resources，不隐式 Compile/Save 或回退磁盘旧文档。
+`execute_graph_draft` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
 
 Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。Input array 与 input slots 按相同顺序传递，每个 slot 携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
-协议默认参数在 semantic snapshot 中保留 typed literal，Compiler 按协议类型 lowering；用于显示的 Decimal 字符串不作为运行时 String。执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
+协议默认参数在 semantic snapshot 中保留 typed literal，Execution 按协议类型构造参数；用于显示的 Decimal 字符串不作为运行时 String。执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
 
 `RunRegistry` 通过 `RunState` 记录运行状态和终态。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
-函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时 Compile 明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
+函数签名/正文依赖、调用环、Entry/Return 一致性已在 Resolve 中检查，初期拒绝递归。Root snapshot 按资源身份保存去重后的可达函数语义；GraphFunctionAbi 按 signature 顺序保留参数 ID、Entry output、Return input 和精确类型。实际函数子计划 lowering/execution 尚未接入，缺少实现时编辑解析明确阻断。Execution 不携带始终为空的函数包、另一套 FunctionPlanAbi 或未使用的 recursion_limit；通用执行包只持有实际计划、参数与来源依据。
 
-加、减、乘、除按已编译 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算，
-仅在编译契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
+加、减、乘、除按已解析 specialization 的元素类型和形状执行。标量 Int64 使用检查溢出的整数运算，
+仅在类型契约要求时提升为 Float64；数列的元素提升和标量广播由计算 kernel 处理，调度器不制造数列长度。
 已物化的常量数列按位置广播/运算，要求等长并约束输出内存；带关系身份的数列保留固定行域和文件租约，
 通过 DataFusion 原生表达式及 Arrow 批运算执行，不在节点求值时整列 collect。
 原始列和计算数列都由 `SeriesHandle` 持有 adapter-owned 表达式，表达式不进入持久化 Graph 文档。
@@ -256,7 +249,7 @@ Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的
 Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
-Compiler 将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
+计划准备将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
 也不为每列提前扫描数据；下游统计消费或 Results 分页时才交由 DataFusion 投影和读取。
 文档内已物化的 DataFrame 常量按同一输出契约返回对应列的值列表。
 关系和数列持有固定 session、dataset snapshot/revision、查询上下文及文件租约。资源准备检查句柄内的
@@ -269,7 +262,7 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 文档内的物化常量使用其不可变行域内的顺序，不将文件/batch offset 当成项目数据集的长期身份。
 
 真实项目的 DataFrame 资源现由 DatabaseRuntime 捕获 catalog 快照，并以 Project grant 的版本封装关系句柄；
-固定 Parquet 链路与真实项目的 CSV 导入 → Graph Compile/Execute → OLS → Results 分页均已通过集成验证。
+固定 Parquet 链路与真实项目的 CSV 导入 → Graph Execute → OLS → Results 分页均已通过集成验证。
 最终提交使用准备时捕获的同一组资源授权，Project 在发布前再次检查版本；不以空授权跳过数据集依赖。
 关系候选 Results 持有懒句柄，不保存所有中间批次；计划准备不表示全部行已经成功扫描，分页扫描失败通过结果读取错误交付。
 逐项证据见[数据引擎迁移验收](../reviews/2026-09-10-data-engine-migration.md)。
@@ -289,10 +282,12 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 已删除输出、重算准入或显式清理释放的结果不会被撤销重新创建。
 
 `get_graph_result_state` 按当前语义 hash 返回缺失、过期或有效状态，仅有效状态携带当前结果 ID；
-同一查询检查已有编译产物和资源依赖，允许前端重新关联仍匹配的产物。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
+查询重验资源依赖，不交付执行计划身份。查询协调器按草稿会话、代次与请求身份拒绝迟到回执。
 同一投影还返回当前连线是否已被目标节点实际消费：新绑定、保有旧结果的过期绑定和有效绑定分别表示。
-前端以这份投影组合编译状态、实际 RunStarted demand 和诊断，驱动连线、Pin 与节点样式；不再持有执行录制、回放或逐节点动画队列。
-节点按有效输出数量显示完整或部分结果；编译与运行效果遵守减少动态效果设置。编辑使本地运行请求失效，迟到回执不能覆盖后续运行。
+仅有输入的“查看数据”节点也参与此投影：Execution 将成功运行的查看记录及其输入依据附在共享结果上，
+重验时同时检查当前绑定与源结果有效性。该记录不复制数据，也不增加结果持有者；新连线不能仅凭源 Pin 有缓存显示已执行。
+前端以这份投影组合实际 RunStarted demand 和诊断，驱动连线、Pin 与节点样式；尚无匹配结果时显示未运行，不以内部计划缓存代替执行结果，也不再持有执行录制、回放或逐节点动画队列。
+节点按有效输出数量显示完整或部分结果，仅有输入的查看节点按实际消费的连线汇总；运行效果遵守减少动态效果设置。编辑使本地运行请求失效，迟到回执不能覆盖后续运行。
 真实桌面人工验收仍在[组件化计划](../draft/component-plan.md#p0确认范围清理执行遗留并建立图状态契约)中记录，不以接口与测试具备代表该验收已完成。
 
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前解除这些输出的旧结果绑定。
@@ -309,6 +304,7 @@ Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 
 在能确认末页总数时返回精确值；列名/精确类型与行值一起交付。页大小和字节预算由 Result query owner 限制。
 读取完成后再次检查 Application session 和 ResultId；失效结果的迟到成功/失败均不重新发布。
 Frontend 在总数未知时照常请求首页，按后端 `hasMore` 翻页，在表格中显示列名；超出 JavaScript 精确整数范围的值以十进制文本显示。
+分页只用于数据表格和数列（包括报告内的观测表）；报告概览、图形和分析结果本身不分页。
 
 Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence 和 DataSeries renderer 都提供分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 
@@ -358,7 +354,7 @@ Producer 覆盖 node/parameter/resource、binding/orphan、repeatable minimum、
 
 诊断 wire 为 code、messageKey、arguments、severity、blocking、location、related。Rust 定义词汇和模板，frontend 生成模板表并统一本地化，未知模板/缺参数安全回退。单条 blocking 与 severity 独立，aggregate 汇总 canonical blocking；内部 failure 通过 outcome 独立阻止运行。未绑定的必需输入可为 Warning，但明确 blocking=true。
 
-编译诊断定义与模板由 `yss-graph-compiler-diagnostics` 拥有，`GraphRuntimeState::from_components`
+图诊断定义与模板由 `yss-graph-diagnostics` 拥有，代码及模板键使用 `graph.*` 与 `diagnostics.graph.*`。`GraphRuntimeState::from_components`
 在构造时校验定义并返回类型化初始化错误。`yss-node-catalog` 只保存节点、端口、参数和分类文本，
 不装配诊断词条，也不依赖诊断类型；Graph Runtime 查询节点文本来填充语义投影，诊断仍交给前端 Graph 模板渲染。
 

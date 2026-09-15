@@ -389,9 +389,9 @@ Save 捕获 resourceRef 与 expectedRevision，插件校验并准备候选内容
 
 ### 10.3 Graph 与自动化
 
-插件可声明 computeProvider 与版本化节点描述，包含输入输出类型、参数 schema、确定性要求及执行能力。宿主只安装验证后的通用描述，类型解析、GraphSemanticSnapshot、诊断和编译产物仍由既有 Graph owner 生成。
+插件可声明 computeProvider 与版本化节点描述，包含输入输出类型、参数 schema、确定性要求及执行能力。宿主只安装验证后的通用描述，类型解析、GraphSemanticSnapshot、诊断和执行计划仍由既有 Graph owner 生成。
 
-编译产物绑定 provider identity、packageDigest、描述版本与输入约束。更新、禁用或缺失使受影响的 provider 绑定失效；Execute 重验匹配实现，不静默使用新版本或由插件页面推断类型。
+执行计划绑定 provider identity、packageDigest、描述版本与输入约束。更新、禁用或缺失使受影响的 provider 绑定失效；Execute 重验匹配实现，不静默使用新版本或由插件页面推断类型。
 
 Analysis Graph 仍只表达数据依赖。安装、联网、项目写入和控制流不能伪装成纯计算节点；副作用进入 Application/Workflow 协调。Assistant 调用插件能力经过既有 Capability Gateway，不自动把所有插件命令发布为模型工具。
 

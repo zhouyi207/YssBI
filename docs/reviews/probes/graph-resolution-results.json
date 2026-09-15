@@ -1,0 +1,112 @@
+{
+  "measuredDate": "2026-09-15",
+  "platform": "Windows x64",
+  "profile": "release",
+  "source": "src-tauri/crates/yss-graph-runtime/src/resolution_tests.rs",
+  "command": "pnpm test:rs:package -p yss-graph-runtime --release --lib benchmark_repeated_resolution_and_projection '--' --ignored --nocapture",
+  "notes": [
+    "Production Rust resolve and editor projection functions; synthetic documents.",
+    "Both modes retain warmed type and Schema caches. The control clears only the whole-analysis snapshot.",
+    "Dataframe graphs consist of ten-node source/limit chains with twelve columns; scalar graphs contain unbound logic nodes.",
+    "Times exclude Project capture/commit, result validity updates, IPC serialization/transport, and frontend rendering.",
+    "Single-machine arithmetic means, not end-to-end latency percentiles or a production frame-rate guarantee."
+  ],
+  "rows": [
+    {
+      "shape": "scalar",
+      "nodeCount": 100,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 1.039,
+      "projectionMeanMs": 0.32
+    },
+    {
+      "shape": "scalar",
+      "nodeCount": 100,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 0.188,
+      "projectionMeanMs": 0.281
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 100,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 4.022,
+      "projectionMeanMs": 0.361
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 100,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 0.452,
+      "projectionMeanMs": 0.29
+    },
+    {
+      "shape": "scalar",
+      "nodeCount": 1000,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 9.658,
+      "projectionMeanMs": 2.97
+    },
+    {
+      "shape": "scalar",
+      "nodeCount": 1000,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 1.939,
+      "projectionMeanMs": 2.875
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 1000,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 41.206,
+      "projectionMeanMs": 3.67
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 1000,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 4.92,
+      "projectionMeanMs": 3.266
+    },
+    {
+      "shape": "scalar",
+      "nodeCount": 5000,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 46.741,
+      "projectionMeanMs": 14.102
+    },
+    {
+      "shape": "scalar",
+      "nodeCount": 5000,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 8.696,
+      "projectionMeanMs": 12.425
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 5000,
+      "snapshotReuse": false,
+      "samples": 20,
+      "resolveMeanMs": 219.675,
+      "projectionMeanMs": 20.331
+    },
+    {
+      "shape": "dataframe",
+      "nodeCount": 5000,
+      "snapshotReuse": true,
+      "samples": 20,
+      "resolveMeanMs": 26.678,
+      "projectionMeanMs": 18.62
+    }
+  ]
+}

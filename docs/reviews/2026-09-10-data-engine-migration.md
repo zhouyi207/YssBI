@@ -11,7 +11,7 @@
 依据 [迁移分析](../architecture/迁移.md) 的 A–E 工作包，以及
 [DataFusion 方向](../architecture/DATAFUSION.md)、[Polars 边界分析](../architecture/POLARS.md)，
 宿主已切换为 DataFusion 关系执行、Arrow 数据边界、Parquet 数据文件和 SQLite 数据集 catalog。
-原有 Project、Graph compiler、GraphSemanticSnapshot、历史、ScientificBackend 和 ResultStore 保留其职责。
+原有 Project、图计划准备、GraphSemanticSnapshot、历史、ScientificBackend 和 ResultStore 保留其职责。
 
 当前行为由 [Database runtime](../../src-tauri/crates/yss-database-runtime/README.md)、
 [Dataset store](../../src-tauri/crates/yss-dataset-store/README.md)、
@@ -24,11 +24,11 @@
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
 | A：精确存储 Schema 与图语义类型分离         | `yss-database-schema` 保持中性 facts；`yss-tabular-arrow` 保留整数宽度/符号、Decimal 精度/scale、时间单位/时区、NULL、ColumnId 和类别域。Arrow 与根数据库回归验证 UInt64、Decimal、时间及导出。  | 通过 |
 | A：宿主数据边界无损，分页 DTO 可用          | IPC/CSV/Parquet 使用原生 Arrow；超过 JavaScript 安全范围的整数按十进制字符串显示。外部字典按标签重映射，实际类别域有独立预算。CSV 宽文本、带换行字段和超大记录有回归。                           | 通过 |
-| B：Compile 与中间关系节点不整表物化         | Source/Project/Filter/Series/Limit/Rename 组合原生计划；集成测试在 Parquet 文件尚不存在时成功 Compile 和构造关系，创建文件后才执行统计读取。                                                     | 通过 |
+| B：计划准备与中间关系节点不整表物化         | Source/Project/Filter/Series/Limit/Rename 组合原生计划；集成测试在 Parquet 文件尚不存在时成功准备计划和构造关系，创建文件后才执行统计读取。                                                     | 通过 |
 | B：统计需求列联合读取、样本对齐及缺失值策略 | Series 必须来自同一个关系句柄；OLS 共同投影后消费 Arrow 批流，使用独立输入预算，拒绝 NULL/非有限值。多批次、反向输入顺序和筛选测试核对响应、解释变量、拟合值及残差。                             | 通过 |
-| B：真实项目资源授权与结果发布               | CSV 导入后的真实 Project Graph 经 Compile/Execute、原 ScientificBackend、finalization 和 ResultStore 完成 OLS；发布前重新验证捕获的 Project grants。                                             | 通过 |
+| B：真实项目资源授权与结果发布               | CSV 导入后的真实 Project Graph 经计划准备与执行、原 ScientificBackend、finalization 和 ResultStore 完成 OLS；发布前重新验证捕获的 Project grants。                                             | 通过 |
 | B：固定快照、有界 Results、取消与迟到拒绝   | Results 保存关系句柄及文件租约；分页保留未知总数、hasMore 和精确列类型。查询控制覆盖取消、deadline、预算；Application 测试拒绝失效后的在途页面成功和失败。                                       | 通过 |
-| B：语义与能力检查权威不分裂                 | GraphSemanticSnapshot 继续拥有类型、Schema、lineage 和诊断；Compile 查询真实 KernelRegistry，阻断未实现 kernel。Execution/Graph 聚焦回归及完整 Rust 架构门禁通过。                               | 通过 |
+| B：语义与能力检查权威不分裂                 | GraphSemanticSnapshot 继续拥有类型、Schema、lineage 和诊断；能力检查查询真实 KernelRegistry，阻断未实现 kernel。Execution/Graph 聚焦回归及完整 Rust 架构门禁通过。                               | 通过 |
 | C：仅 committed catalog 决定可见数据集      | SQLite 保存身份、head、Schema、修订、文件成员和交接记录；激活不以目录扫描登记数据集。重开恢复原内容，失败准备和提交冲突不改变旧快照。                                                            | 通过 |
 | C：外部导入与内部存储分开                   | `DatabaseImportSource` 保留 CSV/Parquet/Excel/SQL；持久化 `DatabaseEngine` 只保留 Dataset。SQLx 使用有背压的 Arrow 批次，Excel 沿用 calamine owner。                                             | 通过 |
 | D：稳定行列身份、显示顺序与编辑查询         | RowId 单调分配，DisplayOrder 独立；ColumnId 不随改名变化。类型化稀疏覆盖通过存在标记区分显式 NULL；过滤和 limit 作用于合并后的视图。插行、删除、筛选进出及跨文件身份回归通过。                   | 通过 |
@@ -41,7 +41,7 @@
 | E：性能验收                                 | 百万行首次/重复预览、窄列/全列扫描、高选择性筛选、编辑后查询、cast/compaction、OLS 输入与矩阵阶段分别测量，见[测量记录](../benchmark/DATA_ENGINE_BENCHMARK.md)。                                 | 通过 |
 
 首条关系执行闭环采用迁移分析明确指定的 Source → Project → Filter → Series → OLS。
-Join、全部时间序列、其他统计模型和函数子图执行属于该文档明确保留的后续范围；未实现能力在 Compile 被拒绝。
+Join、全部时间序列、其他统计模型和函数子图执行属于该文档明确保留的后续范围；未实现能力在就绪检查中被拒绝。
 Julia 插件内的 Polars 独立保留，不构成第二个宿主关系执行权威。
 
 ## 验证记录

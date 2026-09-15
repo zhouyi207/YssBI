@@ -9,7 +9,7 @@
 
 ## Baseline
 
-当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面草稿编辑/编译/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill、lexical Knowledge 和 Session Memory。
+当前 foundation 已提供 Rust-authoritative sessions/turns/events、typed inspections、桌面图编辑/校验/运行与显式 Save、SQLite persistence、Rig driver、Assistant projection、dataset-quality workflow、builtin Skill、lexical Knowledge 和 Session Memory。
 
 以下能力仍 gated：桌面图工作流之外的 Project write、external MCP exposure/client、unknown commit reconciliation、persistent User/Project Memory、vector retrieval、remote Skill 和 autonomous/background execution。
 
