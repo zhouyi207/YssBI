@@ -154,6 +154,13 @@ describe("Rust-generated node-system golden contracts", () => {
         ports[0].extra = true;
       },
     ],
+    [
+      "invalid port direction",
+      (catalog: Record<string, unknown>) => {
+        const item = (catalog.items as Array<Record<string, unknown>>)[0];
+        (item.ports as Array<Record<string, unknown>>)[0].direction = "sideways";
+      },
+    ],
   ])("rejects Catalog %s", (_label, mutate) => {
     const catalog = clone(localizedCatalog) as unknown as Record<string, unknown>;
     mutate(catalog);
@@ -161,19 +168,33 @@ describe("Rust-generated node-system golden contracts", () => {
   });
 
   it.each(localizedCatalog.items.map((item, index) => [item.creation.kind, index] as const))(
-    "rejects unknown, missing, and wrong %s descriptor variants",
+    "validates the %s descriptor from Rust item %i",
     (_kind, index) => {
-      const unknown = clone(localizedCatalog) as unknown as LocalizedCatalogDto;
-      Object.assign(unknown.items[index].creation, { compatibility: true });
-      expect(isLocalizedCatalogDto(unknown)).toBe(false);
+      const original = localizedCatalog.items[index].creation;
+      const rejectsDescriptor = (descriptor: unknown) => {
+        expect(isNodeCreationDescriptorDto(descriptor)).toBe(false);
+        const catalog = clone(localizedCatalog) as unknown as LocalizedCatalogDto;
+        Object.assign(catalog.items[index], { creation: descriptor });
+        expect(isLocalizedCatalogDto(catalog)).toBe(false);
+      };
+      rejectsDescriptor({ ...original, extra: true });
+      rejectsDescriptor({ ...original, kind: "unsupported" });
 
-      const missing = clone(localizedCatalog) as unknown as LocalizedCatalogDto;
-      deleteKey(missing.items[index].creation, "nodeTypeId");
-      expect(isLocalizedCatalogDto(missing)).toBe(false);
+      for (const key of Object.keys(original)) {
+        const missing = clone(original);
+        deleteKey(missing, key);
+        rejectsDescriptor(missing);
+      }
 
-      const wrong = clone(localizedCatalog) as unknown as LocalizedCatalogDto;
-      (wrong.items[index].creation as { kind: string }).kind = "unsupported";
-      expect(isLocalizedCatalogDto(wrong)).toBe(false);
+      if (original.kind === "parameterizedStatic") {
+        for (const requiredParameters of ["columns", [1]]) {
+          rejectsDescriptor({ ...original, requiredParameters });
+        }
+      }
+      if (original.kind === "resourceBound") {
+        rejectsDescriptor({ ...original, createArgs: { ...original.createArgs, extra: true } });
+        rejectsDescriptor({ ...original, createArgs: { kind: "unsupported" } });
+      }
     },
   );
 

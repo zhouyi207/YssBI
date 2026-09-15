@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { EditorGraphMutationDto } from "./editorMutation";
 import { parseClipboardSubgraphDto } from "./clipboardSubgraphWireParser";
 
 const completeSnapshot = {
@@ -108,24 +107,4 @@ describe("parseClipboardSubgraphDto", () => {
     (first.relativePosition as Record<string, unknown>).x = Number.POSITIVE_INFINITY;
     expect(() => parseClipboardSubgraphDto(value)).toThrow();
   });
-
-  it("defines duplicateSubgraph and keeps insertSubgraph as raw snapshotJson wire data", () => {
-    const duplicate: EditorGraphMutationDto = {
-      type: "duplicateSubgraph",
-      payload: { nodeIds: ["node-a"], offset: { x: 20, y: 20 } },
-    };
-    const insert: EditorGraphMutationDto = {
-      type: "insertSubgraph",
-      payload: { snapshotJson: JSON.stringify(completeSnapshot), anchor: { x: 1, y: 2 } },
-    };
-
-    expect(duplicate.payload).toEqual({ nodeIds: ["node-a"], offset: { x: 20, y: 20 } });
-    expect(insert.payload).toEqual({
-      snapshotJson: JSON.stringify(completeSnapshot),
-      anchor: { x: 1, y: 2 },
-    });
-    expect(insert.payload).not.toHaveProperty("snapshot");
-  });
 });
-
-export { completeSnapshot };

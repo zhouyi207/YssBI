@@ -6,7 +6,6 @@ import { CatalogService } from "./catalogService";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-const registryFingerprint = "0000000000000000000000000000000000000000000000000000000000000000";
 const version = { sessionId: "00000000-0000-0000-0000-000000000090", revision: "0" };
 
 describe("CatalogService", () => {
@@ -74,144 +73,16 @@ describe("CatalogService", () => {
     });
   });
 
-  it.each([
-    ["sideways direction", "direction", "sideways"],
-    ["execution kind", "kind", "execution"],
-  ])("rejects Catalog port %s", async (_label, field, malformed) => {
+  it("rejects resource metadata that does not exactly match its descriptor", async () => {
     const catalog = structuredClone(localizedCatalog) as unknown as LocalizedCatalogDto;
-    Object.assign(catalog.items[0].ports[0], { [field]: malformed });
+    const resource = catalog.items.find((item) => item.creation.kind === "resourceBound");
+    if (!resource) throw new Error("Rust fixture must include a resource-bound item");
+    resource.resourcePath = "functions/Mismatched.yssbi-function";
     vi.mocked(invoke).mockResolvedValue(catalog);
 
     await expect(
       CatalogService.getLocalizedCatalog(catalog.projectInstanceId, catalog.locale),
     ).rejects.toThrow("Invalid localized node catalog response");
-  });
-
-  it("rejects resource metadata that does not exactly match its descriptor", async () => {
-    vi.mocked(invoke).mockResolvedValue({
-      projectInstanceId: "project-instance-1",
-      registryFingerprint,
-      resourcePublicationRevision: 8,
-      locale: "en-US",
-      categories: [],
-      items: [
-        {
-          nodeTypeId: "function.call",
-          title: "Call A",
-          documentation: null,
-          categoryId: "functions",
-          iconId: "function",
-          styleId: "call",
-          aliases: [],
-          technicalTerms: [],
-          backendSearchText: [],
-          resourceNames: [],
-          ports: [],
-          parameters: [],
-          resourcePath: "functions/A",
-          resourceRevision: 2,
-          creation: {
-            kind: "resourceBound",
-            nodeTypeId: "function.call",
-            resourcePath: "functions/B",
-            resourceRevision: 2,
-            createArgs: { kind: "function" },
-          },
-        },
-      ],
-    });
-
-    await expect(CatalogService.getLocalizedCatalog("project-instance-1", "en-US")).rejects.toThrow(
-      "Invalid localized node catalog response",
-    );
-  });
-
-  it.each([
-    ["missing static field", { kind: "static" }],
-    ["extra static field", { kind: "static", nodeTypeId: "math.add", extra: true }],
-    [
-      "missing parameterized field",
-      {
-        kind: "parameterizedStatic",
-        nodeTypeId: "yssbi.dataframe.project",
-      },
-    ],
-    [
-      "extra parameterized field",
-      {
-        kind: "parameterizedStatic",
-        nodeTypeId: "yssbi.dataframe.project",
-        requiredParameters: ["columns"],
-        parameters: {},
-      },
-    ],
-    [
-      "wrong parameterized key list",
-      {
-        kind: "parameterizedStatic",
-        nodeTypeId: "yssbi.dataframe.project",
-        requiredParameters: "columns",
-      },
-    ],
-    [
-      "missing resource field",
-      {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/A",
-        resourceRevision: 1,
-      },
-    ],
-    [
-      "extra resource field",
-      {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/A",
-        resourceRevision: 1,
-        createArgs: { kind: "function" },
-        extra: true,
-      },
-    ],
-    [
-      "extra create args field",
-      {
-        kind: "resourceBound",
-        nodeTypeId: "function.call",
-        resourcePath: "functions/A",
-        resourceRevision: 1,
-        createArgs: { kind: "function", extra: true },
-      },
-    ],
-  ])("rejects a descriptor with %s", async (_label, creation) => {
-    vi.mocked(invoke).mockResolvedValue({
-      projectInstanceId: "project-instance-1",
-      registryFingerprint,
-      resourcePublicationRevision: 8,
-      locale: "en-US",
-      categories: [],
-      items: [
-        {
-          nodeTypeId: "function.call",
-          title: "Call A",
-          documentation: null,
-          categoryId: "functions",
-          iconId: "function",
-          styleId: "call",
-          aliases: [],
-          technicalTerms: [],
-          backendSearchText: [],
-          resourceNames: [],
-          ports: [],
-          parameters: [],
-          creation,
-        },
-      ],
-    });
-
-    await expect(CatalogService.getLocalizedCatalog("project-instance-1", "en-US")).rejects.toThrow(
-      "Invalid localized node catalog response",
-    );
   });
 
   it("rejects an unknown item field", async () => {

@@ -25,8 +25,6 @@ export {
 export {
   type CorrelogramBarDTO,
   type PlotCorrelogramBarDTO,
-  hasLjungBoxStats,
-  parseCorrelogramBar,
   parsePlotCorrelogramBar,
   acfSeriesToBars,
   pacfSeriesToBars,

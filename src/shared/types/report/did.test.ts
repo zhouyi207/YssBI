@@ -14,6 +14,16 @@ const success = {
   perm_coef_std: 0.32,
 };
 
+const unavailable = {
+  available: false,
+  unavailableCode: "insufficient_valid_permutations",
+  n_perm: 9,
+  n_perm_valid: 9,
+  min_valid_permutations: 10,
+  n_entities: 8,
+  n_treated_entities: 3,
+};
+
 describe("parseDidPlaceboFakeGroupBlock", () => {
   it("accepts the exact structured success shape", () => {
     expect(parseDidPlaceboFakeGroupBlock(success)).toEqual(success);
@@ -25,49 +35,25 @@ describe("parseDidPlaceboFakeGroupBlock", () => {
     ["insufficient_valid_permutations", 3, 9],
   ] as const)("accepts the %s unavailable shape", (unavailableCode, nTreated, nValid) => {
     const value = {
-      available: false,
+      ...unavailable,
       unavailableCode,
-      n_perm: 9,
       n_perm_valid: nValid,
-      min_valid_permutations: 10,
-      n_entities: 8,
       n_treated_entities: nTreated,
     };
 
     expect(parseDidPlaceboFakeGroupBlock(value)).toEqual(value);
   });
 
-  it("rejects legacy success and failure prose fields", () => {
-    expect(
-      parseDidPlaceboFakeGroupBlock({
-        ...success,
-        method_note: "legacy methodology prose",
-      }),
-    ).toBeNull();
-    expect(
-      parseDidPlaceboFakeGroupBlock({
-        available: false,
-        observed_coef: 1.75,
-        n_perm: 9,
-        n_perm_valid: 0,
-        method_note: "legacy failure prose",
-      }),
-    ).toBeNull();
-  });
-
   it("rejects unknown codes, unknown fields, and inconsistent variants", () => {
     expect(
       parseDidPlaceboFakeGroupBlock({
-        available: false,
+        ...unavailable,
         unavailableCode: "engine_failed",
-        n_perm: 9,
-        n_perm_valid: 0,
-        min_valid_permutations: 10,
-        n_entities: 8,
-        n_treated_entities: 3,
       }),
     ).toBeNull();
-    expect(parseDidPlaceboFakeGroupBlock({ ...success, message: "backend prose" })).toBeNull();
+    for (const value of [success, unavailable]) {
+      expect(parseDidPlaceboFakeGroupBlock({ ...value, extra: true })).toBeNull();
+    }
     expect(parseDidPlaceboFakeGroupBlock({ ...success, available: false })).toBeNull();
   });
 });

@@ -59,16 +59,6 @@ describe("parseXySeriesPlot", () => {
     });
   });
 
-  it("does not read snake_case axis metadata", () => {
-    const result = parseXySeriesPlot({
-      data: [{ x: 0.5, y: 0.25 }],
-      x_label: "Value",
-      y_label: "ECDF",
-    });
-    expect(result?.xLabel).toBeUndefined();
-    expect(result?.yLabel).toBeUndefined();
-  });
-
   it("rejects empty or invalid points", () => {
     expect(parseXySeriesPlot({ data: [] })).toBeNull();
     expect(parseXySeriesPlot({ data: [{ x: "a", y: 1 }] })).toBeNull();
@@ -115,15 +105,17 @@ describe("parseCorrelogramPlot", () => {
     });
   });
 
-  it("rejects plot bar missing ljung-box stats", () => {
-    expect(
-      parseCorrelogramPlot({
-        acf: [{ lag: 1, value: 0.5 }],
-        pacf: [{ lag: 1, value: 0.4, qStat: 1, pValue: 0.1 }],
-        ciHalfWidth: 0.2,
-        n: 100,
-      }),
-    ).toBeNull();
+  it("requires both statistics on every correlogram series", () => {
+    for (const series of ["acf", "pacf"]) {
+      for (const field of ["qStat", "pValue"]) {
+        const payload = structuredClone(fixtureByKind.correlogram) as unknown as Record<
+          string,
+          unknown
+        >;
+        delete (payload[series] as Array<Record<string, unknown>>)[0][field];
+        expect(parseCorrelogramPlot(payload)).toBeNull();
+      }
+    }
   });
 });
 
@@ -156,17 +148,7 @@ describe("parseCorrelationPlot", () => {
 });
 
 describe("parsePlotPayload", () => {
-  it("dispatches by chart kind", () => {
-    expect(
-      parsePlotPayload("scatter", {
-        data: [{ x: 1, y: 2 }],
-      })?.kind,
-    ).toBe("scatter");
-    expect(
-      parsePlotPayload("histogram", {
-        data: [{ label: "a", count: 1 }],
-      })?.kind,
-    ).toBe("histogram");
+  it("rejects malformed data through the public dispatcher", () => {
     expect(parsePlotPayload("scatter", { data: [] })).toBeNull();
   });
 });

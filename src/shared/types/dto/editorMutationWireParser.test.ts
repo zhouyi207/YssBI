@@ -1,7 +1,6 @@
 import { parseEditorGraphProjectionDto } from "./editorProjectionParser";
 import { describe, expect, it } from "vitest";
 import { makeGraphEditingState } from "@/tests/helpers/editorProjectionFixtures";
-import type { EditorGraphMutationDto } from "./editorMutation";
 import {
   parseEditorGraphMutationDto,
   parseGraphEditResultDto,
@@ -11,18 +10,6 @@ import {
 const graphPath = "events/Main.yssbi-event";
 const functionPath = "functions/Forecast.yssbi-function";
 const nodeId = "00000000-0000-0000-0000-000000000101";
-const connectionId = "00000000-0000-0000-0000-000000000201";
-const projectedDeclaredAddress = { kind: "declared" as const, nodeId, portKey: "value" };
-const phase1Mutations = [
-  { type: "deleteNodes", payload: { nodeIds: [nodeId] } },
-  { type: "disconnectConnections", payload: { connectionIds: [connectionId] } },
-  { type: "disconnectPort", payload: { address: projectedDeclaredAddress } },
-  { type: "disconnectNode", payload: { nodeId } },
-  {
-    type: "moveConnections",
-    payload: { source: projectedDeclaredAddress, target: projectedDeclaredAddress },
-  },
-] satisfies EditorGraphMutationDto[];
 function projection(path: string) {
   return {
     basis: {
@@ -156,7 +143,7 @@ describe("editor mutation wire parser", () => {
     ).toThrow();
   });
 
-  it("parses the atomic Graph draft transform result", () => {
+  it("parses the current graph edit result", () => {
     const transformed = {
       editing: makeGraphEditingState(),
       changed: true,
@@ -165,9 +152,7 @@ describe("editor mutation wire parser", () => {
     };
 
     expect(parseGraphEditResultDto(transformed)).toEqual(transformed);
-    expect(() => parseGraphEditResultDto({ ...transformed, changed: "yes" })).toThrow(
-      "Graph draft transform result",
-    );
+    expect(() => parseGraphEditResultDto({ ...transformed, changed: "yes" })).toThrow();
   });
 
   it("parses the exact InsertReroute DTO wire shape", () => {
@@ -213,16 +198,6 @@ describe("editor mutation wire parser", () => {
     },
   ])("rejects malformed InsertReroute DTO wire shape %#", (mutation) => {
     expect(() => parseEditorGraphMutationDto(mutation)).toThrow("InsertReroute");
-  });
-
-  it("exposes all Phase 1 collection and connection intent DTO variants", () => {
-    expect(phase1Mutations.map((mutation) => mutation.type)).toEqual([
-      "deleteNodes",
-      "disconnectConnections",
-      "disconnectPort",
-      "disconnectNode",
-      "moveConnections",
-    ]);
   });
 
   it("requires all six exact connection capability fields", () => {

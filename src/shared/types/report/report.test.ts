@@ -1,46 +1,30 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { normalizeDurbinWatsonResult, normalizeSerialTestsResponse } from "./serialTests";
-import { hasLjungBoxStats, parsePlotCorrelogramBar } from "./correlogram";
+import { normalizeSerialTestsResponse } from "./serialTests";
 import { parseReportPayloadResult } from "./parseReportPayload";
 
 describe("normalizeSerialTestsResponse", () => {
-  it("accepts dw as { d: number }", () => {
-    const result = normalizeSerialTestsResponse({
+  it("preserves the named serial-test statistics", () => {
+    const response = {
       dw: { d: 1.85 },
       q: { stat: 2.1, p_value: 0.3, lags: 5 },
-    });
-    expect(result?.dw.d).toBe(1.85);
-    expect(result?.q?.lags).toBe(5);
+      bg: { stat: 6.4, p_value: 0.04, lags: 3 },
+    };
+    expect(normalizeSerialTestsResponse(response)).toEqual(response);
   });
 
   it("rejects a bare number for dw", () => {
     expect(normalizeSerialTestsResponse({ dw: 1.85 })).toBeNull();
-    expect(normalizeDurbinWatsonResult(1.85)).toBeNull();
   });
 
-  it("rejects malformed bg while keeping dw", () => {
+  it("rejects the response when a supplied BG block is malformed", () => {
     expect(
       normalizeSerialTestsResponse({
         dw: { d: 2 },
         bg: { stat: 1, p_value: 0.5 },
       }),
     ).toBeNull();
-  });
-});
-
-describe("correlogram report DTO", () => {
-  it("parses plot bar with required qStat and pValue", () => {
-    const bar = parsePlotCorrelogramBar({
-      lag: 2,
-      value: 0.3,
-      qStat: 1.2,
-      pValue: 0.04,
-    });
-    expect(bar).not.toBeNull();
-    expect(hasLjungBoxStats(bar!)).toBe(true);
-    expect(parsePlotCorrelogramBar({ lag: 1, value: 0.2 })).toBeNull();
   });
 });
 

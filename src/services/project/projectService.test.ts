@@ -190,7 +190,6 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
     const index = projectIndex();
     const projectName = index.projectName;
     delete index.projectName;
-    index.unknownProjectName = "substitution";
     ipc.response = Object.assign(Object.create({ projectName }), index);
 
     await expect(ProjectService.getProjectIndex("project-a")).rejects.toThrow(
@@ -236,9 +235,8 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
       },
     ],
     [
-      "obsolete id",
+      "missing chart path",
       (row: Record<string, unknown>) => {
-        row.id = row.chartPath;
         delete row.chartPath;
       },
     ],

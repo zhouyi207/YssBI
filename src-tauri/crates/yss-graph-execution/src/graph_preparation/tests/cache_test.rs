@@ -74,17 +74,22 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     let resources = empty_resource_catalog();
     let analysis_basis = basis(&runtime);
 
-    let resolve = |document: &GraphDocument,
-                   resources: &ResourceCatalogSnapshot,
-                   supported: bool| {
-        let analysis =
-            runtime.resolve_graph_document(&graph, document, &analysis_basis, resources, &[], "en-US");
-        let semantics = analysis
-            .semantic_snapshot()
-            .clone()
-            .with_execution_kernel_support(&|_| supported);
-        analysis.with_semantic_snapshot(semantics)
-    };
+    let resolve =
+        |document: &GraphDocument, resources: &ResourceCatalogSnapshot, supported: bool| {
+            let analysis = runtime.resolve_graph_document(
+                &graph,
+                document,
+                &analysis_basis,
+                resources,
+                &[],
+                "en-US",
+            );
+            let semantics = analysis
+                .semantic_snapshot()
+                .clone()
+                .with_execution_kernel_support(&|_| supported);
+            analysis.with_semantic_snapshot(semantics)
+        };
     let first = resolve(&document, &resources, true);
     let first_package = execution
         .prepare_graph_package(&graph, &first, plan_basis.clone())

@@ -18,19 +18,6 @@ export interface PlotCorrelogramBarDTO extends CorrelogramBarDTO {
   pValue: number;
 }
 
-export function hasLjungBoxStats(bar: CorrelogramBarDTO): bar is PlotCorrelogramBarDTO {
-  const candidate = bar as PlotCorrelogramBarDTO;
-  return isFiniteNumber(candidate.qStat) && isFiniteNumber(candidate.pValue);
-}
-
-export function parseCorrelogramBar(raw: unknown): CorrelogramBarDTO | null {
-  if (!isRecord(raw)) return null;
-  const lag = raw.lag;
-  const value = raw.value;
-  if (!isNonNegativeInteger(lag) || !isFiniteNumber(value)) return null;
-  return { lag, value };
-}
-
 export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | null {
   if (!isRecord(raw)) return null;
   const lag = raw.lag;

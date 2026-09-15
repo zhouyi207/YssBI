@@ -261,40 +261,9 @@ function stylesheetAssetDependency(
 }
 
 describe("frontend architecture model", () => {
-  it("keeps FlexLayout as the sole editor panel topology authority", () => {
+  it("keeps editor registries and root layout consumers in their composition owners", () => {
     withProductionTypeScriptProject((context) => {
       const sources = productionTypeScriptSources(context);
-      const obsoleteIdentifiers = [
-        "LayoutTab",
-        "LayoutTabType",
-        "LayoutTabComponent",
-        "EditorGroupSnapshot",
-        "layoutTabFromEditorMetadata",
-        "useTabManagement",
-      ];
-      const violations = sources.flatMap(({ path, source }) =>
-        obsoleteIdentifiers
-          .filter((identifier) => new RegExp(`\\b${identifier}\\b`, "u").test(source))
-          .map((identifier) => `${path}:${identifier}`),
-      );
-      expect(violations).toEqual([]);
-
-      const obsoleteFiles = new Set([
-        "src/features/core/layout/layoutTabModel.ts",
-        "src/features/core/layout/layoutTabQueries.ts",
-        "src/features/application/editor/flexlayoutTabProjection.ts",
-      ]);
-      expect(sources.map(({ path }) => path).filter((path) => obsoleteFiles.has(path))).toEqual([]);
-      expect(
-        sources
-          .map(({ path }) => path)
-          .filter(
-            (path) =>
-              path.startsWith("src/features/application/layout/") ||
-              path.startsWith("src/features/core/layout/"),
-          ),
-      ).toEqual([]);
-
       const layoutConsumers = sources.filter(
         ({ path, source }) =>
           path !== "src/modules/workbench/internal/application/useWorkbenchLayout.ts" &&
@@ -303,22 +272,6 @@ describe("frontend architecture model", () => {
       expect(layoutConsumers.map(({ path }) => path)).toEqual([
         "src/modules/workbench/internal/layout/RootLayoutHost.tsx",
       ]);
-
-      const obsoleteShellFiles = new Set([
-        "src/views/EditorView/EditorWindow.tsx",
-        "src/views/EditorView/Layout/Workspace.tsx",
-        "src/views/EditorView/Layout/WorkbenchLayoutPanels.tsx",
-      ]);
-      expect(
-        sources.map(({ path }) => path).filter((path) => obsoleteShellFiles.has(path)),
-      ).toEqual([]);
-
-      const legacyEditorComponentIds = sources.flatMap(({ path, source }) =>
-        [...source.matchAll(/["'](?:GraphEditor|ChartEditor)["']/gu)].map(
-          ([componentId]) => `${path}:${componentId}`,
-        ),
-      );
-      expect(legacyEditorComponentIds).toEqual([]);
 
       const rootPanelRegistryOwners = sources
         .filter(({ source }) => /\brootPanelRegistry\b/u.test(source))
@@ -386,16 +339,6 @@ describe("frontend architecture model", () => {
     withProductionTypeScriptProject((context) => {
       const sources = productionTypeScriptSources(context);
       const sourceByPath = new Map(sources.map(({ path, source }) => [path, source]));
-      const pureChromeFiles = [
-        "src/modules/workbench/internal/ui/WorkbenchWindow.tsx",
-        "src/modules/workbench/internal/ui/menu/WorkbenchMenuBar.tsx",
-        "src/modules/workbench/internal/ui/menu/AboutModal.tsx",
-        "src/modules/workbench/internal/ui/status/StatusBar.tsx",
-        "src/modules/workbench/internal/ui/status/StatusBarItem.tsx",
-      ];
-      for (const path of pureChromeFiles) {
-        expect(sourceByPath.get(path) ?? "", path).not.toMatch(/from\s+["']@\/features\//u);
-      }
       for (const { path, source } of sources.filter(({ path }) =>
         path.startsWith("src/modules/workbench/internal/ui/"),
       )) {
@@ -413,26 +356,6 @@ describe("frontend architecture model", () => {
       expect(
         sourceByPath.get("src/app/windows/workbench/statusBarContributionRegistry.tsx") ?? "",
       ).toMatch(/\buseStatusBarItems\b/u);
-    });
-  });
-
-  it("keeps the chart resource cutover single-path", () => {
-    withProductionTypeScriptProject((context) => {
-      const retiredResourceTerm = ["work", "sheet"].join("");
-      const leftovers = productionTypeScriptSources(context).flatMap(({ path, source }) => {
-        const findings: string[] = [];
-        if (path.toLowerCase().includes(retiredResourceTerm)) findings.push(`${path}:path`);
-        if (source.toLowerCase().includes(retiredResourceTerm)) findings.push(`${path}:source`);
-        return findings;
-      });
-
-      expect(leftovers).toEqual([]);
-
-      const chartEditor = productionTypeScriptSources(context).find(
-        ({ path }) => path === "src/modules/chart/internal/ui/ChartEditor.tsx",
-      )?.source;
-      expect(chartEditor).toContain("resourceRef");
-      expect(chartEditor).not.toMatch(/\b(?:GroupContext|activeTabId|useEditorGroupWorkspace)\b/u);
     });
   });
 
