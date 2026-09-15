@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next";
 import {
   VscClose,
-  VscCloseAll,
   VscDatabase,
   VscError,
   VscExtensions,
+  VscEye,
+  VscEyeClosed,
   VscGraphLine,
   VscInfo,
   VscInspect,
@@ -25,10 +26,8 @@ import {
 } from "@/shared/ui/actionMenu";
 import type { WorkbenchPanelMetadata, WorkbenchViewId } from "./workbenchPanelModel";
 import type { RootPanelProps } from "./panelContribution";
-import {
-  isWorkbenchActivityViewId,
-  isWorkbenchPersistentViewMetadata,
-} from "./workbenchPanelModel";
+import { hasWorkbenchPanelCloseButton } from "./workbenchActivityGroup";
+import { isWorkbenchActivityViewId } from "./workbenchPanelModel";
 
 export interface WorkbenchTabTarget {
   readonly panelInstanceId: string;
@@ -37,11 +36,12 @@ export interface WorkbenchTabTarget {
 }
 export interface RootPanelTabActions {
   readonly requestClose: (target: WorkbenchTabTarget) => void;
-  readonly requestCloseGroup: (target: WorkbenchTabTarget) => void;
+  readonly requestToggleContent: (target: WorkbenchTabTarget) => void;
   readonly buildEditorContextMenu: (target: WorkbenchTabTarget) => ActionMenuSection[];
 }
 export interface RootPanelTabRendererProps extends RootPanelProps {
   readonly dirty: boolean;
+  readonly contentCollapsed?: boolean;
   readonly actions: RootPanelTabActions;
 }
 const VIEW_ICONS: Record<WorkbenchViewId, IconType> = {
@@ -69,7 +69,12 @@ const VIEW_TITLE_KEYS: Record<WorkbenchViewId, string> = {
   problems: "panel.problems",
 };
 
-export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabRendererProps) {
+export function RootPanelTabRenderer({
+  dirty,
+  contentCollapsed,
+  actions,
+  ...props
+}: RootPanelTabRendererProps) {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const target: WorkbenchTabTarget = {
@@ -105,14 +110,23 @@ export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabR
                 id: "close",
                 label: t("tabBar.contextMenu.close"),
                 icon: <VscClose size={12} />,
+                disabled: !hasWorkbenchPanelCloseButton(contextMenu.target.metadata),
                 onClick: () => actions.requestClose(contextMenu.target),
               },
-              {
-                id: "close-group",
-                label: t("tabBar.closeGroup"),
-                icon: <VscCloseAll size={12} />,
-                onClick: () => actions.requestCloseGroup(contextMenu.target),
-              },
+              ...(contentCollapsed !== undefined
+                ? [
+                    {
+                      id: "toggle-content",
+                      label: t(
+                        contentCollapsed
+                          ? "tabBar.contextMenu.expandContent"
+                          : "tabBar.contextMenu.hideContent",
+                      ),
+                      icon: contentCollapsed ? <VscEye size={12} /> : <VscEyeClosed size={12} />,
+                      onClick: () => actions.requestToggleContent(contextMenu.target),
+                    },
+                  ]
+                : []),
             ],
           },
         ]
@@ -126,10 +140,7 @@ export function RootPanelTabRenderer({ dirty, actions, ...props }: RootPanelTabR
         onContextMenu={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (
-            !isWorkbenchPersistentViewMetadata(metadata) &&
-            !(metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId))
-          )
+          if (!(metadata.role === "view" && isWorkbenchActivityViewId(metadata.viewId)))
             setContextMenu({ x: event.clientX, y: event.clientY, target });
         }}
       >

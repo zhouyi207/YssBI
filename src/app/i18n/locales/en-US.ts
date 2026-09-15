@@ -1700,6 +1700,8 @@ export const enUS = {
   tabBar: {
     contextMenu: {
       close: "Close",
+      hideContent: "Hide Content",
+      expandContent: "Expand Content",
       closeOthers: "Close Others",
       closeSaved: "Close Saved",
       closeAll: "Close All",

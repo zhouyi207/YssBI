@@ -1543,6 +1543,8 @@ export const zhCN = {
   tabBar: {
     contextMenu: {
       close: "关闭",
+      hideContent: "隐藏内容",
+      expandContent: "展开内容",
       closeOthers: "关闭其他",
       closeSaved: "关闭已保存",
       closeAll: "全部关闭",

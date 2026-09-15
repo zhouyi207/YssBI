@@ -49,6 +49,8 @@ const actionMenuIconClass =
  * coordinates. Radix owns focus, keyboard navigation, and dismissal; the
  * hidden trigger only bridges those coordinates into its native positioning
  * model.
+ * Portal events still bubble through React; contain them so menu selection
+ * cannot also trigger the owning tab's click or keyboard actions.
  */
 export function ActionMenu({ position, sections, onClose }: ActionMenuProps) {
   const triggerRef = React.useRef<HTMLSpanElement>(null);
@@ -96,6 +98,8 @@ export function ActionMenu({ position, sections, onClose }: ActionMenuProps) {
         container={getOverlayPortalRoot()}
         className={actionMenuContentClass}
         onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {visibleSections.map((section, sectionIndex) => (

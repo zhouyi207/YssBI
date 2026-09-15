@@ -161,7 +161,9 @@ tab 清理检查 exists，并在 FlexLayout 提交前重验项目身份和资源
 
 ## 2. Root panel 角色与默认 home
 
-root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
+root group 可以混合承载不同角色；Activity group 和 bottom edge 具有成员限制。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
+
+bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标签排序；助手、编辑器、Result 和插件面板不能加入底部组。原生拖放、程序化移动和持久化布局校验共用同一条放置规则。
 
 | 角色             | 内容                                      | deterministic home                  |
 | ---------------- | ----------------------------------------- | ----------------------------------- |
@@ -263,7 +265,9 @@ PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化�
 
 所有 root tab 关闭入口都进入 `requestCloseWorkbenchPanel(s)`：close button、中键、context menu、`Ctrl+W`、view toggle 和 Close Group 不直接调用 FlexLayout close。
 
-Problems、Output、Logs 的原生 tab 使用 `enableClose: false` 隐藏关闭按钮；新建和恢复布局应用同一规则。点击底部 tab 仍可切换、展开和折叠内容，中键、右键菜单及应用关闭命令继续由上述 coordinator 处理。
+Problems、Output、Logs 的原生 tab 使用 `enableClose: false` 隐藏关闭按钮；新建和恢复布局应用同一规则。Details、Problems、Output、Logs 均提供 tab 右键菜单，其中“关闭”复用关闭按钮规则保持禁用，隐藏/展开内容仍可用。点击底部 tab 仍可切换、展开和折叠内容，中键与应用关闭命令继续由上述 coordinator 处理。
+
+工具与 Result tab 的右键菜单不再提供 Close Group；位于边栏时，订阅 root edge 的真实折叠状态，展开时显示本地化的“隐藏内容”，折叠时显示“展开内容”。隐藏只收起所在边栏内容，保留标签、面板实例和内容状态；展开会显示右键目标面板，点击标签也可恢复。中央 tabset 中不显示该切换项。共用 ActionMenu 阻止菜单点击和键盘事件沿 React Portal 冒泡到宿主 tab，避免一次菜单操作又触发原生 tab 切换。
 
 Coordinator 按顺序执行：
 
@@ -346,7 +350,7 @@ value 为：
 }
 ```
 
-root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。恢复时重新施加宿主的浮动、关闭和拖放约束。
+root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。恢复时重新施加宿主的浮动、关闭和拖放约束。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。
 
 窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 和 Inspect 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 

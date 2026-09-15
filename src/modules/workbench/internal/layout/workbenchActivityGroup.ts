@@ -7,6 +7,7 @@ import {
 } from "./workbenchPanelModel";
 import {
   WORKBENCH_ACTIVITY_GROUP_ID,
+  WORKBENCH_BOTTOM_DEFAULT_ORDER,
   WORKBENCH_EDGE_GROUP_IDS,
   WORKBENCH_HOME_EDGE,
 } from "./workbenchLayoutDefaults";
@@ -16,6 +17,11 @@ export function canMoveWorkbenchPanel(
   targetGroupId: string,
   targetPosition?: "grid" | "top" | "bottom" | "left" | "right",
 ): boolean {
+  if (targetGroupId === WORKBENCH_EDGE_GROUP_IDS.bottom || targetPosition === "bottom")
+    return (
+      metadata.role === "view" &&
+      WORKBENCH_BOTTOM_DEFAULT_ORDER.some((viewId) => viewId === metadata.viewId)
+    );
   if (isWorkbenchActivityMetadata(metadata)) return targetGroupId === WORKBENCH_ACTIVITY_GROUP_ID;
   if (isWorkbenchPersistentViewMetadata(metadata))
     return targetPosition === "right" || targetGroupId === WORKBENCH_EDGE_GROUP_IDS.right;

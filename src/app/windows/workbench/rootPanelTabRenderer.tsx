@@ -3,13 +3,14 @@ import { useTranslation } from "react-i18next";
 
 import { buildEditorPanelTabMenu } from "@/features/application/editor/editorPanelTabMenu";
 import { requestCloseEditorPanel } from "@/features/application/editor/editorPanelCloseCommands";
-import {
-  requestCloseWorkbenchGroup,
-  requestCloseWorkbenchPanel,
-} from "@/features/application/editor/workbenchPanelClose";
+import { requestCloseWorkbenchPanel } from "@/features/application/editor/workbenchPanelClose";
 import { useEditorPanelDirty } from "@/features/application/editor/useEditorPanelDirty";
 import {
   RootPanelTabRenderer,
+  showWorkbenchLayoutError,
+  useLayoutPortSnapshot,
+  workbenchLayoutControl,
+  workbenchLayoutRead,
   type RootPanelTabActions,
   type RootPanelTabComponent,
   type WorkbenchTabTarget,
@@ -19,14 +20,26 @@ const WorkbenchRootPanelTabRenderer: RootPanelTabComponent = (props) => {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const dirty = useEditorPanelDirty(metadata.role === "editor" ? metadata : null);
+  const contentCollapsed = useLayoutPortSnapshot(workbenchLayoutRead, () => {
+    const panel = workbenchLayoutRead.getPanel(props.panelInstanceId);
+    return panel?.location.type === "edge"
+      ? workbenchLayoutRead.getEdgeState(panel.location.position).collapsed
+      : undefined;
+  });
 
   const requestClose = useCallback((target: WorkbenchTabTarget) => {
     if (target.metadata.role === "editor") void requestCloseEditorPanel(target.panelInstanceId);
     else void requestCloseWorkbenchPanel(target.panelInstanceId);
   }, []);
 
-  const requestCloseGroup = useCallback((target: WorkbenchTabTarget) => {
-    void requestCloseWorkbenchGroup(target.groupId);
+  const requestToggleContent = useCallback((target: WorkbenchTabTarget) => {
+    const panel = workbenchLayoutRead.getPanel(target.panelInstanceId);
+    if (panel?.groupId !== target.groupId || panel.location.type !== "edge") return;
+    const edge = workbenchLayoutRead.getEdgeState(panel.location.position);
+    const operation = edge.collapsed
+      ? workbenchLayoutControl.reveal(panel.panelInstanceId)
+      : workbenchLayoutControl.setEdgeCollapsed(panel.location.position, true);
+    void operation.catch(showWorkbenchLayoutError);
   }, []);
 
   const buildEditorContextMenu = useCallback(
@@ -39,11 +52,18 @@ const WorkbenchRootPanelTabRenderer: RootPanelTabComponent = (props) => {
   );
 
   const actions = useMemo<RootPanelTabActions>(
-    () => ({ requestClose, requestCloseGroup, buildEditorContextMenu }),
-    [buildEditorContextMenu, requestClose, requestCloseGroup],
+    () => ({ requestClose, requestToggleContent, buildEditorContextMenu }),
+    [buildEditorContextMenu, requestClose, requestToggleContent],
   );
 
-  return <RootPanelTabRenderer {...props} dirty={dirty} actions={actions} />;
+  return (
+    <RootPanelTabRenderer
+      {...props}
+      dirty={dirty}
+      contentCollapsed={contentCollapsed}
+      actions={actions}
+    />
+  );
 };
 
 export const rootPanelTabRenderer = WorkbenchRootPanelTabRenderer;
