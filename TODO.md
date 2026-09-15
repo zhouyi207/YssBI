@@ -7,6 +7,9 @@
 
 只在这里记录仍需完成的工作。完成记录由 Git 和 `docs/version/` 保存；release/subsystem 计划放在 `docs/roadmap/`；实现细节和验证输出不追加到本文件。
 
+
+dataview 切换为 FlexLayout
+
 ## Active tasks
 
 - [ ] 补齐目录中 DataFrame 选列、求和节点的执行实现及选列类型推断；当前 `yssbi.dataframe.series.select` 输出泛型无法解析，且这两个节点均未注册到执行器。
