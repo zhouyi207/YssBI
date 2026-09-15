@@ -5,6 +5,7 @@ import type {
   GraphEditResultDto,
   GraphEditorSessionDto,
   GraphEditingStateDto,
+  GraphEditVersionDto,
   TypeExprDto,
 } from "./editorMutation";
 import type { GraphProjectionReplacementDto } from "./editorProjection";
@@ -404,12 +405,6 @@ export function parseGraphEditingState(value: unknown): GraphEditingStateDto {
   if (
     !isRecord(value) ||
     !hasExactKeys(value, ["version", "dirty", "canUndo", "canRedo"]) ||
-    !isRecord(value.version) ||
-    !hasExactKeys(value.version, ["sessionId", "revision"]) ||
-    !isUuid(value.version.sessionId) ||
-    typeof value.version.revision !== "string" ||
-    !/^(0|[1-9][0-9]{0,19})$/u.test(value.version.revision) ||
-    BigInt(value.version.revision) > 18446744073709551615n ||
     typeof value.dirty !== "boolean" ||
     typeof value.canUndo !== "boolean" ||
     typeof value.canRedo !== "boolean"
@@ -417,11 +412,24 @@ export function parseGraphEditingState(value: unknown): GraphEditingStateDto {
     throw new Error("Graph editing state is malformed");
   }
   return {
-    version: { sessionId: value.version.sessionId, revision: value.version.revision },
+    version: parseGraphEditVersion(value.version),
     dirty: value.dirty,
     canUndo: value.canUndo,
     canRedo: value.canRedo,
   };
+}
+
+export function parseGraphEditVersion(value: unknown): GraphEditVersionDto {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["sessionId", "revision"]) ||
+    !isUuid(value.sessionId) ||
+    typeof value.revision !== "string" ||
+    !/^(0|[1-9][0-9]{0,19})$/u.test(value.revision) ||
+    BigInt(value.revision) > 18446744073709551615n
+  )
+    throw new Error("Graph editing version is malformed");
+  return { sessionId: value.sessionId, revision: value.revision };
 }
 
 export function parseGraphProjectionReplacementDto(value: unknown): GraphProjectionReplacementDto {

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { saveGraph } from "./saveGraph";
-import { applyGraphMutation, resetGraphEditCoordinator } from "./graphEditCoordinator";
+import {
+  applyGraphMutation,
+  enqueueGraphTask,
+  resetGraphEditCoordinator,
+} from "./graphEditCoordinator";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import {
@@ -101,17 +105,31 @@ describe("Graph draft task ordering", () => {
     expect(useGraphEditingStore.getState().sessions[graphPath].document).toEqual(document);
   });
 
+  it("rejects queue overflow while allowing another graph to proceed and releases capacity", async () => {
+    const blocked = deferred<number>();
+    const queued = Array.from({ length: 64 }, () =>
+      enqueueGraphTask(graphPath, () => blocked.promise, -1),
+    );
+    const overflow = vi.fn(async () => 0);
+    await expect(enqueueGraphTask(graphPath, overflow, -1)).rejects.toMatchObject({
+      code: "graph_edit_busy",
+    });
+    await expect(enqueueGraphTask("events/Other.yssbi-event", async () => 7, -1)).resolves.toBe(7);
+    blocked.resolve(1);
+    await Promise.all(queued);
+    await expect(enqueueGraphTask(graphPath, async () => 2, -1)).resolves.toBe(2);
+    expect(overflow).not.toHaveBeenCalled();
+  });
+
   it("releases the save lock before a queued refresh after Save fails", async () => {
     const pending = deferred<GraphSaveResultDto>();
     vi.spyOn(GraphEditingService, "save").mockReturnValueOnce(pending.promise);
     const session = useGraphEditingStore.getState().sessions[graphPath];
-    const hydrate = vi
-      .spyOn(GraphProjectionService, "hydrateGraph")
-      .mockResolvedValueOnce({
-        document: session.document,
-        projection: session.projection,
-        editing: makeGraphEditingState(),
-      });
+    const hydrate = vi.spyOn(GraphProjectionService, "hydrateGraph").mockResolvedValueOnce({
+      document: session.document,
+      projection: session.projection,
+      editing: makeGraphEditingState(),
+    });
     const saving = saveGraph(graphPath, "event");
     const failedSave = expect(saving).rejects.toThrow("save failed");
     await vi.waitFor(() => expect(GraphEditingService.save).toHaveBeenCalledOnce());

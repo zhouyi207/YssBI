@@ -24,6 +24,13 @@ export const GRAPH_EDIT_ERROR_CODES = [
 export type GraphEditErrorCode = (typeof GRAPH_EDIT_ERROR_CODES)[number];
 export type GraphEditRejectionCode = GraphEditErrorCode;
 
+export class GraphEditBusyError extends Error {
+  readonly code = "graph_edit_busy";
+  constructor() {
+    super("Graph editing queue is full");
+  }
+}
+
 type GraphEditErrorMessageKey = `canvas.connection.errors.${GraphEditErrorCode}`;
 
 const ERROR_MESSAGE_KEYS: Record<GraphEditErrorCode, GraphEditErrorMessageKey> = Object.fromEntries(
@@ -31,6 +38,7 @@ const ERROR_MESSAGE_KEYS: Record<GraphEditErrorCode, GraphEditErrorMessageKey> =
 ) as Record<GraphEditErrorCode, GraphEditErrorMessageKey>;
 
 export function graphEditErrorCode(error: unknown): GraphEditErrorCode | null {
+  if (error instanceof GraphEditBusyError) return error.code;
   if (!isApplicationIpcError(error)) return null;
   return error.code in ERROR_MESSAGE_KEYS ? (error.code as GraphEditErrorCode) : null;
 }

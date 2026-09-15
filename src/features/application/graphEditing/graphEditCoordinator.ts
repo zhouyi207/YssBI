@@ -21,7 +21,11 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
-import { graphEditErrorCode, type GraphEditRejectionCode } from "./graphEditError";
+import {
+  GraphEditBusyError,
+  graphEditErrorCode,
+  type GraphEditRejectionCode,
+} from "./graphEditError";
 
 export interface ApplyGraphMutationInput {
   graphPath: string;
@@ -55,7 +59,7 @@ const defaultDependencies: GraphEditCoordinatorDependencies = {
     GraphEditingService.transform(projectInstanceId, graphPath, locale, version, mutation),
 };
 
-const graphTaskTails = new Map<string, Promise<void>>();
+const graphTaskQueues = new Map<string, { tail: Promise<void>; pending: number }>();
 let coordinatorEpoch = 0;
 
 export function publishGraphEditingState(graphPath: string, editing: GraphEditingStateDto): void {
@@ -161,7 +165,10 @@ export function applyGraphMutation(
     input.graphPath,
     () => applyDraftMutation(input, dependencies, requestEpoch),
     { status: "stale" },
-  );
+  ).catch((error: unknown) => {
+    if (error instanceof GraphEditBusyError) return { status: "rejected", code: error.code };
+    throw error;
+  });
 }
 
 export function enqueueGraphTask<T>(
@@ -169,7 +176,12 @@ export function enqueueGraphTask<T>(
   task: () => Promise<T>,
   stale: T,
 ): Promise<T> {
-  const previous = graphTaskTails.get(graphPath);
+  let queue = graphTaskQueues.get(graphPath);
+  if ((queue?.pending ?? 0) >= 64 || (!queue && graphTaskQueues.size >= 128))
+    return Promise.reject(new GraphEditBusyError());
+  queue ??= { tail: Promise.resolve(), pending: 0 };
+  const previous = queue.tail;
+  queue.pending++;
   const epoch = coordinatorEpoch;
   const completion = (async () => {
     await previous;
@@ -179,14 +191,18 @@ export function enqueueGraphTask<T>(
     () => undefined,
     () => undefined,
   );
-  graphTaskTails.set(graphPath, tail);
+  queue.tail = tail;
+  graphTaskQueues.set(graphPath, queue);
+  const owned = queue;
   void tail.finally(() => {
-    if (graphTaskTails.get(graphPath) === tail) graphTaskTails.delete(graphPath);
+    owned.pending--;
+    if (owned.pending === 0 && graphTaskQueues.get(graphPath) === owned)
+      graphTaskQueues.delete(graphPath);
   });
   return completion;
 }
 
 export function resetGraphEditCoordinator(): void {
   coordinatorEpoch += 1;
-  graphTaskTails.clear();
+  graphTaskQueues.clear();
 }

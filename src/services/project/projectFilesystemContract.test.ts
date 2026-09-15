@@ -39,6 +39,7 @@ const lifecycleOwnedNodeCommandIdentityFields = {
   edit_graph: "projectInstanceId",
   resolve_editor_graph: "projectInstanceId",
   change_graph_history: "projectInstanceId",
+  get_graph_edit_receipt: "projectInstanceId",
   subscribe_graph_activity: "projectInstanceId",
   get_execution_run_state: "projectInstanceId",
   update_function_signature: "projectInstanceId",

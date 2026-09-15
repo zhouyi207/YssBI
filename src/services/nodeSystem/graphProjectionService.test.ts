@@ -20,7 +20,7 @@ function wire(data: unknown, locale = "en-US") {
     changed: false,
     resourceRevision: null,
     functionEditorProjection: null,
-    update: { kind: "snapshot", cursor: "test", data },
+    update: { kind: "snapshot", cursor: "test", snapshotBytes: JSON.stringify(data).length, data },
   };
 }
 
