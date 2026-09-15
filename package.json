@@ -23,6 +23,7 @@
     "test": "pnpm test:ts && pnpm test:rs",
     "test:ts": "vitest run",
     "bench:graph": "vitest bench --run src/tests/benchmarks/graphEditorSync.bench.ts",
+    "bench:report-layout": "node docs/reviews/probes/report-layout/compare.mjs",
     "test:rs": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
     "test:architecture": "vitest run src/tests/architecture src/services/nodeSystem/nodeCatalogArchitectureContract.test.ts src/services/userFeedbackArchitectureContract.test.ts",
     "format": "pnpm format:ts && pnpm format:rs",

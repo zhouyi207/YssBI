@@ -1,0 +1,159 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "react": "19.2.8",
+    "jsonRender": "0.20.0",
+    "zod": "4.3.6"
+  },
+  "scope": "Real Rust OLS DTO; production section components; minified bundles excluding shared React. DOM updates use happy-dom, without real layout/paint, IPC or desktop latency.",
+  "results": {
+    "typed": {
+      "adapterLines": 17,
+      "bundledBytes": 1240176,
+      "gzipBytes": 368252,
+      "validation": {
+        "p50Ms": 0.0009000000000014552,
+        "p95Ms": 0.0020000000000095497,
+        "p99Ms": 0.004099999999993997
+      },
+      "emulatedDomUpdate": {
+        "p50Ms": 0.3248999999999569,
+        "p95Ms": 0.5229000000000497,
+        "p99Ms": 0.6066000000000713
+      },
+      "markupHash": "0c5f79dd0670678fd58211c322caf3cf4f07ddc724bfa27847773ac4e39193f1",
+      "invalidSpecs": {
+        "version": {
+          "ok": false,
+          "issue": {
+            "code": "unsupportedVersion",
+            "path": "schemaVersion"
+          }
+        },
+        "result": {
+          "ok": false,
+          "issue": {
+            "code": "sourceMismatch",
+            "path": "source"
+          }
+        },
+        "numericFact": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "$"
+          }
+        },
+        "action": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "$"
+          }
+        },
+        "unknownKind": {
+          "ok": false,
+          "issue": {
+            "code": "unknownSection",
+            "path": "sections[0].kind"
+          }
+        },
+        "duplicateId": {
+          "ok": false,
+          "issue": {
+            "code": "duplicateSection",
+            "path": "sections[1]"
+          }
+        },
+        "nested": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "sections[0]"
+          }
+        },
+        "count": {
+          "ok": false,
+          "issue": {
+            "code": "tooLarge",
+            "path": "sections"
+          }
+        }
+      }
+    },
+    "catalog": {
+      "adapterLines": 60,
+      "bundledBytes": 1726981,
+      "gzipBytes": 467079,
+      "validation": {
+        "p50Ms": 0.0027999999999792635,
+        "p95Ms": 0.0061000000000603904,
+        "p99Ms": 0.01520000000004984
+      },
+      "emulatedDomUpdate": {
+        "p50Ms": 0.3687999999999647,
+        "p95Ms": 0.5841000000000349,
+        "p99Ms": 0.7244000000000597
+      },
+      "markupHash": "0c5f79dd0670678fd58211c322caf3cf4f07ddc724bfa27847773ac4e39193f1",
+      "invalidSpecs": {
+        "version": {
+          "ok": false,
+          "issue": {
+            "code": "unsupportedVersion",
+            "path": "schemaVersion"
+          }
+        },
+        "result": {
+          "ok": false,
+          "issue": {
+            "code": "sourceMismatch",
+            "path": "source"
+          }
+        },
+        "numericFact": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "$"
+          }
+        },
+        "action": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "$"
+          }
+        },
+        "unknownKind": {
+          "ok": false,
+          "issue": {
+            "code": "unknownSection",
+            "path": "sections[0].kind"
+          }
+        },
+        "duplicateId": {
+          "ok": false,
+          "issue": {
+            "code": "duplicateSection",
+            "path": "sections[1]"
+          }
+        },
+        "nested": {
+          "ok": false,
+          "issue": {
+            "code": "invalidShape",
+            "path": "sections[0]"
+          }
+        },
+        "count": {
+          "ok": false,
+          "issue": {
+            "code": "tooLarge",
+            "path": "sections"
+          }
+        }
+      }
+    }
+  }
+}

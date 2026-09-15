@@ -18,7 +18,7 @@ use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::RunExecutionControl;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
-fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
+pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
     let candidate = crate::session::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         Arc::new(yss_project::ProjectState::new()),

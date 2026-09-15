@@ -307,4 +307,4 @@ fn residual_plot(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
