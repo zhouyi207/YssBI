@@ -29,23 +29,23 @@ yss-harness-core
     └─ persistence ports → yss-harness-sqlite
 ```
 
-`yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、configurable Rig driver、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway、`HarnessChannelHub` 和本地 `HarnessGraphClientHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/provider 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
+`yss-application::runtime` 接收 Tauri app 并拥有桌面初始化；其中 `runtime/harness.rs` 构造 SQLite store、configurable Rig driver、时钟和 ID 实现。Application 直接构造内部 `ipc::CommandRuntime`，提供 capability gateway 和 `HarnessChannelHub` 的中立端口，再组成已有 `HarnessPorts`。`yss-application::harness` 拥有知识安装、Host 构造、启动恢复和创建会话时的项目绑定协调；具体状态与恢复规则仍由 Harness Core 实现。Application 安装业务服务后直接安装 IPC 上下文，Host/provider 与订阅方共享同一组 Channel hubs。共享 Harness wire DTO 归 `yss-ipc-contract`。Harness Core 不依赖 Tauri、Rig、SQLite、ProjectState、Graph runtime 或 concrete Database owner。
 
 ## 2. Authority
 
-| 事实                                                 | Authority                                            |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| Project、Graph、Database、Execution、Result 和 SCI   | 原有业务 owners，不转移给 Harness                    |
-| Harness session 和 turn                              | `yss-harness-core` + session persistence port |
-| conversation transcript / final turn state           | persisted turn/event records                         |
-| Statistical Plan 和 Workflow run/step                | Harness workflow runtime + workflow store            |
-| Tool invocation state、idempotency 和 result receipt | Harness tool ledger                                  |
-| approval grant lifecycle                             | Harness approval service/store                       |
-| Session Memory record                                | Harness memory service/store                         |
-| Skill identity/version/source                        | Harness skill registry/source port                   |
-| Knowledge source/citation                            | knowledge source store；lexical index 是 projection  |
-| ordered Assistant stream                             | persisted Harness events + Rust sequence             |
-| rendered conversation/workflow cards                 | React projection，可从 replay 重建                   |
+| 事实                                                 | Authority                                           |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| Project、Graph、Database、Execution、Result 和 SCI   | 原有业务 owners，不转移给 Harness                   |
+| Harness session 和 turn                              | `yss-harness-core` + session persistence port       |
+| conversation transcript / final turn state           | persisted turn/event records                        |
+| Statistical Plan 和 Workflow run/step                | Harness workflow runtime + workflow store           |
+| Tool invocation state、idempotency 和 result receipt | Harness tool ledger                                 |
+| approval grant lifecycle                             | Harness approval service/store                      |
+| Session Memory record                                | Harness memory service/store                        |
+| Skill identity/version/source                        | Harness skill registry/source port                  |
+| Knowledge source/citation                            | knowledge source store；lexical index 是 projection |
+| ordered Assistant stream                             | persisted Harness events + Rust sequence            |
+| rendered conversation/workflow cards                 | React projection，可从 replay 重建                  |
 
 Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、bounded capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
@@ -68,13 +68,13 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 | Capability                | 作用                                                                  |
 | ------------------------- | --------------------------------------------------------------------- |
-| `inspect_project`         | 读取 bounded project metadata/resource identities                     |
+| `inspect_project`         | 读取有界项目资源索引，包含没有打开编辑器面板的图文件                  |
 | `inspect_graph`           | 读取当前图文档、版本/hash、参数、列绑定、端口约束和诊断               |
 | `search_node_catalog`     | 查询 localized node catalog                                           |
 | `inspect_dataset_schema`  | 读取 schema 和 current revision facts                                 |
 | `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                               |
 | `inspect_result`          | 读取 structured result，支持数列/表格的 bounded 分页预览              |
-| `apply_graph_edit`        | 原子应用可撤销的图编辑批次                                            |
+| `apply_graph_edit`        | 原子应用并自动保存可撤销的图编辑批次                                  |
 | `validate_graph`          | 只读校验匹配 hash 的当前图，返回可运行性与阻断诊断                    |
 | `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs |
 | `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                            |
@@ -82,17 +82,29 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 
 Model-facing schema 来自 typed capability contract；Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再通过 Gateway 执行，最后持久化成功 result 或 structured failure。idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 
+`inspect_project` 复用 Project 的 `read_project_index`，与左侧项目树使用同一资源成员来源，
+不从内存中已加载的 GraphDocument 集合推断项目有哪些图。列举资源不改变图的加载状态；返回前重验索引版本，
+读取失败或版本变化返回 typed failure。模型使用返回的图 `resourceId` 作为 `graphPath`，
+再通过 `inspect_graph` 按需读取当前文档；图编辑和执行均不要求先打开编辑器面板。
+
 Application 的 `invoke_automation_capability` 是同步业务入口。`yss-application::ipc` 的 `ApplicationCapabilityGateway` 使用 blocking worker 调用它，避免在 Tokio async worker 中嵌套 DataFusion 的 `Runtime::block_on`。`CapabilityControl` 携带单次调用的 monotonic deadline、turn cancellation 和查询取消标记；profile 把同一预算传入数据库/DataFusion 查询。只读任务在取消、超时或调用 future 被丢弃时通知查询停止；worker panic 转为安全的 `InternalFailure`。已开始提交的写操作等待真实 receipt，不将成功提交改写为超时或取消。
 
-工具生命周期事件由持有 ledger identity 的 Harness executor 产生：`ToolInvocationStarted` 后必须有 `ToolInvocationCompleted` 或带 `failureCode` 的 `ToolInvocationFailed`。失败码区分取消与超时；事件不携带数据行、结果或异常原文。Rig 只执行模型工具映射，不生成另一套工具完成状态。
+工具生命周期事件由持有 ledger identity 的 Harness executor 产生：准入后发送 `ToolInvocationStarted`，结束时发送 `ToolInvocationCompleted` 或带 `failureCode` 的 `ToolInvocationFailed`。失败码区分取消与超时；事件不携带数据行、结果或异常原文。账本或事件持久化失败可能留下待恢复记录；已完成的业务提交仍返回真实结果，不被交付失败改写。Rig 只执行模型工具映射，不生成另一套工具完成状态。
 
 图操作由 `ApplicationCapabilityGateway` 直接调用 Rust Application，读取 Project 当前编辑版本并核对 revision/hash。编辑、只读校验、执行与保存使用同一状态；校验返回就绪状态和诊断，Execute 在后端准备匹配计划。Rust 返回真实 capability result，Graph Activity 通知前端更新编辑投影与运行状态；前端不生成 tool result。
 
 `apply_graph_edit` 自动应用用户要求的编辑，使用 `baseRevision`（后端图修订）和完整 `graphHash` 拒绝过期请求。支持创建/删除/移动/复制节点、参数合并、配置、输入 literal、常量及常量引用、连线/断线和用户端口实例增删。`create_constant` 生成基础标量常量及其 Get 节点；创建节点和端口可声明 `clientId`，后续批次内引用使用 `$clientId`，真实 ID 由 Rust 生成。每批只向后端图历史 添加一次变更；任一操作失败都不安装部分候选。`clientKey` 在 session/turn 内幂等，重复相同请求返回已有 receipt，复用 key 修改请求会被拒绝。
 
+Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复针对 `apply_graph_edit`，不提供执行和保存的跨进程重放。
+
 `GraphEditReceipt` 保存图修订、graph hash、`clientKey` 和创建元素的身份映射，回执不暴露内部 Project 操作 ID；数据层提交使用内部 operation ID 保证准入与提交关联。SQLite adapter 在启动事务中将 `user_version = 0` 升至 1，仅移除既有 `tool_invocation` 图编辑结果中的 `operationId`；调用记录、幂等键和其余回执内容保留，读取仍使用严格类型校验。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
 
-编辑、校验和执行不会隐式保存。显式 `save_graph` 复用正常 Save。图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
+`apply_graph_edit` 默认自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
+它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；
+保存失败返回 `persistence_unavailable`，保留调用前的文件、文档和历史，不产生成功回执。
+成功后 dirty 为 false，批次仍可整体撤销；重试读取原回执，不重复修改或保存。
+校验和执行不隐式保存。显式 `save_graph` 用于用户要求单独保存现有编辑，复用正常 Save。
+图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
 
 SQLite schema version 2 在既有启动事务内迁移旧图工具契约：将旧工具的校验事实迁为 `validate_graph`，移除执行请求／结果中的 artifact ID，同时保留调用记录和幂等键。迁移按固定表、固定类型字段分批处理工具记录、事件、工作流、授权与技能能力列表，不替换消息、指令或图数据中的同名文本。
 
@@ -121,7 +133,7 @@ validate and persist user turn
 
 terminal event 和 persisted terminal state 都由 Harness 产生。取消会封锁或忽略 late model/tool output；frontend stop action 不能把已经完成的业务 commit 改写为“取消成功”。
 
-模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已保存/已运行的真实 receipt 保留；客户端 adoption 确认丢失时显示状态待确认，后续先检查当前事实，不能盲目重试。完整跨进程 commit reconciliation 仍属于 roadmap。
+模型取消或超时后，Rig 停止模型请求并等待已准入工具完成 ledger/终态事件收尾，然后 Harness 结束 turn。共享 cancellation token 支持多个等待者。启动恢复结束遗留 running invocation/turn；中断的 mutation 使用 `outcome_unknown`，不推断已经回滚。已持久化的真实 receipt 保留；内存编辑回执随 Project 编辑会话释放，进程崩溃后不能从当前图内容猜测旧工具是否提交。完整跨进程 commit reconciliation 仍属于 roadmap。
 
 ## 6. Workflow and statistical plan
 

@@ -73,6 +73,8 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## History
 
+- [2026-09-15 Graph 与 JSON 报告实施](reviews/2026-09-15-motion-json-driver-implementation.md)：语义报告试点、同一真实 OLS 样本的 renderer 对比，以及人工验收结果与明确跳过项。
+
 - [2026-09-15 Graph 实时解析优化](reviews/2026-09-15-graph-resolution-optimization.md)：语义快照复用、Schema 增量缓存、批次解析与投影索引的实现和测量边界。
 - [2026-09-15 当前图数据编辑实施记录](reviews/2026-09-15-current-graph-editing.md)：直接编辑后端当前文档、统一历史、显式保存与增量投影的实现、测试和性能测量边界。
 - [2026-09-15 Graph 草稿后端化与 JSON 界面评估](reviews/2026-09-15-motion-json-driver-analysis.md)：两份方案的源码对照、合成传输测量、后端草稿与报告 JSON 的实施建议及性能验收边界。

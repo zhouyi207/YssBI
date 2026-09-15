@@ -24,7 +24,7 @@ Application initialization directly constructs the concrete `CommandRuntime`, ob
 
 `tauri-plugin-tracing` owns `plugin:tracing|...` log commands, SQLite history and log Channels. Structured runtime observations are submitted through Rust tracing or the frontend LogService. Application has no separate operational-diagnostic command registry or stream. See [Runtime Signals](../../../../../docs/architecture/RUNTIME_SIGNALS.md).
 
-`HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal capability calls and delegates draft delivery to the local graph-client adapter. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
+`HarnessRuntimeState` holds the Host/provider and the shared hubs. `ActivityPanelSyncState` remains a response cache; `ApplicationCapabilityGateway` schedules internal Application capabilities and read-only graph receipt recovery. Graph activity is a separate projection channel. Logging, project state, samples, watchers and Plugin Manager remain owned by their existing runtime services.
 
 Native window geometry uses the official Window State plugin registered by the composition root.
 There are no YssBI window-state query/save commands or geometry DTOs. The frontend creates hidden
@@ -54,6 +54,8 @@ remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 `ApplicationCapabilityGateway` is the injected scheduling adapter for the internal Assistant capability port. It moves the synchronous Application use case to the blocking pool, enforces the supplied read-only deadline/cancellation budget, and maps worker failures to typed capability failures. Harness continues to own tool admission, ledger, lifecycle events, and turn state; it never calls Tauri commands as its business bus.
 
 Graph tools call Application directly through the capability gateway. Application reads the Project-owned editing state and validates the current revision/hash before editing, validating, running or saving. Rust returns the capability result; Graph Activity carries editing and execution notifications to frontend consumers.
+
+Assistant `apply_graph_edit` atomically persists its complete current graph through the Project file transaction, retaining undo history. It needs no editor panel or Webview acknowledgement. A successful receipt confirms both the edit and persistence; a file failure leaves the prior graph state intact and returns `persistence_unavailable`. GUI edits, validation and execution keep their existing explicit-save behavior.
 
 ## DTO ownership
 
@@ -257,5 +259,9 @@ The exact command list is executable source in `mod.rs` and must not be copied i
 Graph load/hydrate/edit/history/resolve/save replies use GraphEditorSyncResponseDto. Its immutable session payload contains document, projection and editing state; the envelope retains command outcome and optional save metadata. GraphEditorSyncState binds bounded baselines to window/project/graph/locale and editing session. Set/remove paths are read-projection delivery operations, independent of GraphDocumentPatch business edits.
 
 Initial reads, missing baselines and larger deltas use snapshots. Oversized cache entries remain readable as uncached snapshots. The client preserves untouched references, validates the complete candidate and uses one read-only hydration recovery after a bad delta; it never repeats a write to repair presentation. GraphActivity notifications are coalesced with GUI replies. Lag recovery reads current graph snapshots and known run states from Execution; detailed lost run events are not reconstructed from graph state.
+
+Snapshot and delta frames carry `snapshotBytes`, the Rust-computed serialized size of the complete session. Both transport caches enforce entry and byte limits; the frontend uses this count instead of serializing the full graph on the main thread. Hydration includes the current function editor projection so a recovered function save has the same contract as a normal reply.
+
+`get_graph_edit_receipt` is a read-only, project/graph/editing-version/operation-bound query. It waits behind that graph's active operation and returns the original committed version, command kind and changed flag, or null when no receipt is retained. Null is not proof of rollback. On a missing/malformed command reply, the client queries once and hydrates the latest state only after confirming the original commit. A known business rejection is not converted into success. Save recovery retains the original saved revision and the latest backend dirty/history facts. Released frontend epochs and expired backend editing sessions cannot install a recovered projection.
 
 Graph write and projection encoding work runs on blocking workers. Window destruction, frontend cleanup and project session replacement release graph activity channels. The retired Harness graph-client prepare/claim/adopt commands and wire models are removed.

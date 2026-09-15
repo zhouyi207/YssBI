@@ -76,18 +76,24 @@ GUI / Harness typed command
   → 捕获当前 Project / Graph 编辑版本
   → Application 按图串行编排
   → Graph Document Editor 准备可逆补丁与完整语义投影
-  → Project 原子提交当前文档、revision 和历史
+  → Project 原子提交当前文档、revision、历史和请求回执
   → Execution 更新结果有效性，发布图变更通知
   → 命令返回 snapshot/delta，React 安装只读投影
 ```
 
 普通编辑、undo/redo 与 Save 使用同一后端图身份。GUI 队列保留请求与显示顺序，最终版本校验和写入顺序由 Rust 决定。按图协调只持有操作预约；Resolve、文件 I/O 和交付期间不持有 Project 数据锁，独立图的编辑不共享一个长临界区。
 
+GUI 与 Rust 的每图队列均有容量限制，过载返回 `graph_edit_busy`。每个成功接受的编辑、历史或保存命令推进 revision，包括文档未变化的命令；dirty 仍由内容指纹判断。Project 在同一次提交内保存 operation ID、请求指纹、原始编辑版本及实际回执，最近回执同时限制条目数和序列化预算。重复的相同请求复用原提交，不再修改文档或历史；复用 ID 改写请求会被拒绝。回执淘汰后，旧请求的版本不能再次授权写入。
+
+`get_graph_edit_receipt` 按项目、图、编辑会话、请求版本与 operation ID 查询，等待该图在途提交完成。空结果表示没有保留的回执，不证明操作从未发生。GUI 在传输或响应解析失败时先查询原提交，再读取最新投影；旧保存回执只证明原修订已保存，不能清除后续编辑的 dirty。回执随驻留编辑会话结束而释放，不提供跨进程提交恢复。
+
 GraphDocumentPatch 的 before/after 操作提供可逆历史，一个普通操作或 Harness 批次对应一个事务。历史按条目数和序列化字节数限制，阈值由 [graph_editing.rs](../../src-tauri/crates/yss-project/src/project_state/graph_editing.rs) 拥有。Undo/redo 恢复文档意图后重新 Resolve，不能恢复历史中的类型、诊断或结果 payload。结构有效但暂时不能运行的图仍可编辑，阻断诊断由 Graph Problems 展示。
 
 普通编辑、撤销、运行、兼容节点查询或复制导出不上传完整图文档，而是携带图身份和后端 version。导入或粘贴等本身包含新内容的操作仍交付真实输入。过期版本被拒绝，不自动合并并行修改。
 
 编辑器读取与写入响应使用同一投影同步协议。Rust 按 window/project/graph/locale 缓存有界基线；首次读取、基线失效、后端编辑会话变化或增量不划算时发送 snapshot。小变动使用 set/remove 路径批次，客户端在候选上应用并验证完整结构后发布。未变化的节点、端口及连线复用引用。该协议只交付读投影，不代替 Graph typed 编辑操作。
+
+两端基线均限制为 32 条、32 MiB 序列化预算，单条超过 16 MiB 时只读而不缓存。交付中的 `snapshotBytes` 由 Rust 在编码时计算，前端据此计量，避免主线程为了缓存预算重新编码完整图。增量最多 512 个操作；字节预算与条目限制不代替真实桌面的安装耗时、长任务及帧率验收。
 
 Project 的图活动 Channel 通知后台编辑并交付 Harness 执行事件。通知与命令回执在既有 Graph FIFO 中协调，已覆盖通知不重复查询，密集通知合并。通知滞后时重新读取当前图快照，已知运行的终态从 Execution RunRegistry 查询；无法补回的逐项运行事件不由图投影伪造。普通 GUI 执行保留独立 RunEvent Channel 和终态排空。
 
@@ -189,12 +195,13 @@ Detail 直接编辑节点配置，不提供配置来源选择；静态配置不�
 
 ## 5. 编辑、保存与运行
 
-| 操作               | 修改当前 Project 文档            | 写入文件     | 结果                       |
-| ------------------ | -------------------------------- | ------------ | -------------------------- |
-| Edit / Undo / Redo | 是                               | 否           | 新编辑版本、历史能力及投影 |
-| Resolve            | 否                               | 否           | 当前版本的语义投影         |
-| Save               | 保持捕获正文，更新保存指纹       | 是           | 文件事务回执与编辑状态     |
-| Execute            | 只执行明确的 finalization effect | 不隐式保存图 | run、Results、Output       |
+| 操作                   | 修改当前 Project 文档            | 写入文件     | 结果                       |
+| ---------------------- | -------------------------------- | ------------ | -------------------------- |
+| GUI Edit / Undo / Redo | 是                               | 否           | 新编辑版本、历史能力及投影 |
+| Assistant Edit         | 是                               | 自动保存     | 可撤销批次及持久化提交回执 |
+| Resolve                | 否                               | 否           | 当前版本的语义投影         |
+| Save                   | 保持捕获正文，更新保存指纹       | 是           | 文件事务回执与编辑状态     |
+| Execute                | 只执行明确的 finalization effect | 不隐式保存图 | run、Results、Output       |
 
 ### 编辑解析与运行准备
 
@@ -214,11 +221,16 @@ Save 接收当前编辑 version 与 operation ID，由 Rust 读取匹配的当�
 
 成功后更新保存指纹并清理图历史，失败保留当前内存编辑与历史。前端 saving 只用于交互反馈，后端按图协调及版本校验保护真正的提交。保存后的视图恢复读取最新状态，不能把较新的内存编辑误标为已保存。
 
+Assistant 的 `apply_graph_edit` 默认通过同一文件事务保存整个当前图文档，包含调用前已有的手动编辑。
+Project 在一次提交内安装编辑、保存指纹、历史及幂等回执；写入失败或版本失效时回滚文件，保留调用前的内存文档和历史。
+自动保存保留批次的撤销记录；手动撤销使图重新变为未保存，重做回到已保存内容后清除 dirty。
+助手编辑不要求打开图面板，也不通过 Webview 确认提交。
+
 Chart Save 同样按提交的完整内容覆盖资源，不接受 frontend `expectedRevision`。`ChartDocument` 和图表文件只保存图表配置与格式版本，不携带资源 `revision`；资源版本由 Rust Project 单独管理。前端用 operation ID 和资源路径确认保存回执，通过文档内容判断保存期间是否产生新编辑，成功才清除 dirty。干净图表的刷新依据资源索引；为索引加载文档时，读取请求绑定同一 Project publication revision，由 Rust 校验快照一致性。重命名、删除等资源操作和 Rust 内部事务继续校验资源版本。
 
 ### Execute
 
-`execute_graph_draft` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
+`execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
 
 Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。Input array 与 input slots 按相同顺序传递，每个 slot 携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
@@ -345,6 +357,23 @@ OLS 报告按区域读取：概览与系数首页先加载，展开图形/观测
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
 报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
+
+### OLS 语义报告布局
+
+OLS 报告的章节顺序与显示状态由 `OlsReportSpec` 控制，用户可在「报告布局」中调整并导入／导出 JSON。
+Spec 只含版本、固定报告类型、当前结果引用及带稳定 ID 的平面章节列表；章节词汇、数量和文本长度上限由
+`src/shared/types/domain/olsReportSpec.ts` 定义。它不接受统计值、查询参数、任意 props、嵌套树、脚本、网络请求或 IPC action。
+未知字段、重复 ID／章节类型、越界数量、不支持的版本及不匹配的结果引用都拒绝安装；错误保留上一份有效布局。
+完整报告 payload 的引用还必须与后端 descriptor 匹配，不能通过布局切换到其他结果。
+
+轻量类型化解释器继续调用原有模型概览、系数、残差图、分页观测表和检验组件。Result query coordinator 与
+`ResultStore` 仍拥有数据和能力校验，数值不来自 Spec。观测表和残差图只在展开后读取，检验仍由用户提交参数触发。
+布局编辑文本留在控制器本地，只有应用有效配置才更新报告；稳定章节 ID 在重排时保留已挂载章节的交互状态。
+
+首个试点只保存当前挂载报告视图的布局，不写入 Project 或持久化 Workbench。关闭／重新打开恢复默认布局。
+Spec 不申请结果租约，继续使用真实 Result panel／独立窗口的既有租约与会话清理；隐藏章节不释放面板租约，
+重跑造成当前输出失效不销毁已保留报告快照，结果回收或执行会话结束仍遵循上述 Results 契约。
+与受限 json-render catalog 的对比和真实桌面验收边界见[实施记录](../reviews/2026-09-15-motion-json-driver-implementation.md)。
 
 ## 7. Graph Problems
 

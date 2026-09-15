@@ -75,7 +75,7 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 Project manifest 是 `yss-project` 的私有持久化模块。Chart 文档编辑和函数签名修改保留当前 Application session；只有需要替换运行时资源的操作才调用 `rebuild_application_session`。
 
-节点编辑由 Application 的 graphEditing 发送 typed 命令，Rust Project 直接更新当前文档与可逆历史。前端消费统一 GraphEditOutcome 及只读投影；显式保存通过文件事务写入正文。
+节点编辑由 Application 的 graphEditing 发送 typed 命令，Rust Project 直接更新当前文档与可逆历史。前端消费统一 GraphEditOutcome 及只读投影；手动编辑通过显式保存写入正文，Assistant 编辑批次默认通过同一文件事务保存并保留撤销历史，无需打开图面板。
 
 身份必须按语义分离。Project instance/session、resource path、Graph session、constant/node/pin/connection UUID、run/result、FlexLayout panel/group 都不是可互换的 ID。`events/...`、`functions/...` 和 `databases/...` 等资源路径跨 IPC 时是 opaque value，前端不得从字符串结构推导领域状态。
 
@@ -167,15 +167,15 @@ sequenceDiagram
 
 ## 5. Graph editing and execution overview
 
-Analysis Graph 只表达数据端口和数据依赖。Canvas mutation 更新前端未保存 draft；Rust 以无状态 domain operation 校验 mutation，并在同一 command response 返回 candidate document 与完整 projection，但在 Save 前不改变 committed Project authority。
+Analysis Graph 只表达数据端口和数据依赖。Canvas mutation 向 Application 提交类型化编辑意图，Rust 原子更新 Project 当前文档、可逆历史与编辑版本，并返回只读投影。React 仅保留拖动、输入等临时交互状态。显式 Save 才持久化图正文。
 
 ```text
 Open → Rust current GraphDocument ──→ Resolve / diagnostics / result validity
                       ├──→ Run: prepare immutable plan → Execute
-                      └──→ locked atomic Save → committed Project state
+                      └──→ explicit Save → project files + saved-content fingerprint
 ```
 
-- 编辑解析对完整 draft 求解，交付诊断、可运行性和局部结果有效性；
+- 编辑解析对当前文档求解，按语义与资源依据复用缓存，交付诊断、可运行性和局部结果有效性；
 - Save 校验并原子覆盖完整 document，独立于运行；
 - Execute 捕获当前 document 与语义身份，在内部准备匹配计划并重验 session 与实际依赖；
 - Projection 与执行计划准备消费同一个 `GraphSemanticSnapshot`；

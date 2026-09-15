@@ -62,8 +62,10 @@ add or commit them unless explicitly requested.
   do not introduce a separate Graph draft authority. Other resource-specific
   frontend drafts retain their explicitly documented owner.
 - Do not merge or reconcile parallel committed Rust and React models. Replace
-  graph projections in one direction. Explicit Save persists the current graph;
-  editing, history navigation and execution must not implicitly save its body.
+  graph projections in one direction. GUI edits, history navigation and execution
+  do not implicitly save the graph body. Explicit Save persists the current graph;
+  Assistant edit batches persist their complete current graph atomically and retain
+  undo history, without requiring an editor panel.
 - Dependencies flow toward domain and application logic, never from domain code
   toward UI, Tauri, services, or concrete business infrastructure adapters.
   Generic filesystem primitives are an explicit foundation for Project and Application.
