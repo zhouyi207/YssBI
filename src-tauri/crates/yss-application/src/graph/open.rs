@@ -144,6 +144,7 @@ pub struct OpenGraphApplicationReceipt {
     document: Arc<GraphDocument>,
     analysis: GraphAnalysis,
     projection: EditorProjectionModel,
+    function_editor_projection: Option<yss_function_editor_projection::FunctionEditorProjection>,
     editing: yss_project::GraphEditingState,
 }
 
@@ -154,6 +155,9 @@ impl OpenGraphApplicationReceipt {
         document: Arc<GraphDocument>,
         analysis: GraphAnalysis,
         projection: EditorProjectionModel,
+        function_editor_projection: Option<
+            yss_function_editor_projection::FunctionEditorProjection,
+        >,
         editing: yss_project::GraphEditingState,
     ) -> Self {
         Self {
@@ -162,6 +166,7 @@ impl OpenGraphApplicationReceipt {
             document,
             analysis,
             projection,
+            function_editor_projection,
             editing,
         }
     }
@@ -188,6 +193,12 @@ impl OpenGraphApplicationReceipt {
 
     pub fn editing(&self) -> &yss_project::GraphEditingState {
         &self.editing
+    }
+
+    pub fn function_editor_projection(
+        &self,
+    ) -> Option<&yss_function_editor_projection::FunctionEditorProjection> {
+        self.function_editor_projection.as_ref()
     }
 }
 
@@ -258,6 +269,23 @@ pub(crate) fn open_graph_in_session(
         request.locale(),
     );
 
+    let function_editor_projection = captured
+        .project()
+        .read_resident_graph(request.graph_path())
+        .map_err(|error| map_project_open_error(request.graph_path(), error))?
+        .as_ref()
+        .and_then(|resource| resource.function.as_ref())
+        .map(yss_function_editor_projection::FunctionEditorProjection::try_from)
+        .transpose()
+        .map_err(|error| {
+            map_project_open_error(
+                request.graph_path(),
+                ProjectOperationError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                },
+            )
+        })?;
+
     // This is the final staged commit gate. A replacement that wins before
     // it suppresses the candidate; once it passes, the old Project load has
     // already linearized and the derived projection must not be relabeled by
@@ -286,6 +314,7 @@ pub(crate) fn open_graph_in_session(
         candidate_document,
         analysis,
         projection,
+        function_editor_projection,
         editing.state,
     ))
 }

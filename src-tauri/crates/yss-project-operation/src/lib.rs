@@ -105,6 +105,19 @@ pub struct ProjectOperationReservation {
 }
 
 impl ProjectOperationReservation {
+    /// The owner has atomically stored a bounded receipt and fences expired retries by version.
+    /// Keeping the same ID here as well would grow a second, unbounded graph replay index.
+    pub fn complete_in_owner(mut self) {
+        let mut state = self
+            .ledger
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.owner == self.owner {
+            state.in_flight.remove(&self.operation_id);
+        }
+        self.completed = true;
+    }
+
     pub fn complete(mut self) {
         let mut state = self
             .ledger

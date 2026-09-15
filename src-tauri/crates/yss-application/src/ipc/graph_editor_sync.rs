@@ -47,6 +47,7 @@ impl GraphEditorSyncState {
         if bytes > MAX_CACHED_FRAME_BYTES {
             return Ok(GraphEditorDeliveryDto::Snapshot {
                 cursor: uuid::Uuid::new_v4().to_string(),
+                snapshot_bytes: bytes,
                 data: data.as_ref().clone(),
             });
         }
@@ -71,6 +72,7 @@ impl GraphEditorSyncState {
             let delta = GraphEditorDeliveryDto::Delta {
                 base_cursor,
                 cursor: next_cursor.clone(),
+                snapshot_bytes: bytes,
                 changes,
             };
             serde_json::to_vec(&delta)
@@ -80,6 +82,7 @@ impl GraphEditorSyncState {
         });
         let update = delta.unwrap_or_else(|| GraphEditorDeliveryDto::Snapshot {
             cursor: next_cursor.clone(),
+            snapshot_bytes: bytes,
             data: data.as_ref().clone(),
         });
         let mut retained = self.0.lock().unwrap();

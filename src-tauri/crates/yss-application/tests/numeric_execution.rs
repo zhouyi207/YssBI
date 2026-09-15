@@ -871,6 +871,12 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         yss_data_contract::DataType::Int64,
         yss_data_contract::DataValue::Int64(123),
     );
+    let fixture_capture = project
+        .capture_graph_overwrite_operation(&instance, &path, OperationId::new())
+        .unwrap();
+    project
+        .commit_graph_candidate(fixture_capture.into_authority(), Arc::new(document.clone()))
+        .unwrap();
     for (output, input) in [
         (
             x_output.clone(),
@@ -897,12 +903,20 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
             PortAddress::declared(fit, "response".parse().unwrap()),
         ),
     ] {
+        let version = project
+            .read_graph_editing(&instance, &path)
+            .unwrap()
+            .state
+            .version;
         document = app
-            .transform_graph_document(
-                instance.clone(),
-                path.clone(),
-                "en".into(),
-                document,
+            .edit_graph(
+                yss_application::graph::editing::GraphEditRequest {
+                    project_instance_id: instance.clone(),
+                    graph_path: path.clone(),
+                    version,
+                    operation_id: OperationId::new(),
+                    locale: "en".into(),
+                },
                 yss_graph_editor::EditorGraphMutation::Connect {
                     output,
                     input,
@@ -910,6 +924,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
                 },
             )
             .unwrap()
+            .update
             .document;
     }
     assert!(document.port_bindings.contains_key(&x_output));

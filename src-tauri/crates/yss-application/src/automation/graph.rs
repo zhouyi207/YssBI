@@ -52,10 +52,38 @@ pub fn invoke_graph_capability(
             locale.clone(),
         ))
         .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+    let _editing = if matches!(&request, AutomationCapabilityRequest::ApplyGraphEdit(_)) {
+        Some(
+            captured
+                .coordinate_graph_edit(&path)
+                .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?,
+        )
+    } else {
+        None
+    };
     let current = captured
         .project()
         .read_graph_editing(captured.project_instance_id(), &path)
         .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+    let edit_identity = if let AutomationCapabilityRequest::ApplyGraphEdit(edit) = &request {
+        let identity = graph_edit_identity(&context, edit)?;
+        if let Some(receipt) = captured
+            .project()
+            .graph_edit_command_receipt(
+                captured.project_instance_id(),
+                &path,
+                current.state.version.session_id,
+                identity.0,
+            )
+            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
+        {
+            return graph_edit_replay(receipt, edit, identity.1)
+                .map(AutomationCapabilityResult::GraphEditReceipt);
+        }
+        Some(identity)
+    } else {
+        None
+    };
     let document = (*current.document).clone();
     let hash = graph_hash(&document)?;
     let expected = match &request {
@@ -88,32 +116,50 @@ pub fn invoke_graph_capability(
             )?)
         }
         AutomationCapabilityRequest::ApplyGraphEdit(request) => {
-            let _editing = captured
-                .coordinate_graph_edit(&path)
-                .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?;
             if request.base_revision != current.state.version.revision.get() {
                 return Err(graph_failure(CapabilityFailureCode::GraphDraftChanged));
             }
-            let operation = captured
+            let (operation_id, fingerprint) = edit_identity.expect("edit identity was prepared");
+            let mut operation = captured
                 .project()
                 .capture_graph_edit(
                     captured.project_instance_id(),
                     &path,
                     current.state.version,
-                    OperationId::new(),
+                    operation_id,
+                    fingerprint,
                 )
                 .map_err(|_| graph_failure(CapabilityFailureCode::GraphDraftChanged))?;
             let (transform, mut receipt) =
                 transform_graph_edit(application, &captured, request, document, control)?;
+            operation
+                .set_edit_correlation(yss_project::GraphEditCorrelation {
+                    client_key: receipt.client_key.clone(),
+                    document_hash: receipt.graph_hash.clone(),
+                    created_nodes: receipt
+                        .created_nodes
+                        .iter()
+                        .map(|(alias, id)| Ok((alias.clone(), parse_node_id(id)?)))
+                        .collect::<Result<_, CapabilityFailure>>()?,
+                    created_ports: receipt
+                        .created_ports
+                        .iter()
+                        .map(|(alias, port)| Ok((alias.clone(), parse_edit_port(port.clone())?)))
+                        .collect::<Result<_, CapabilityFailure>>()?,
+                })
+                .map_err(|_| graph_failure(CapabilityFailureCode::ResultTooLarge))?;
             control.check()?;
             let committed = captured
                 .project()
-                .commit_graph_edit(
-                    operation,
-                    Arc::new(transform.document),
-                    yss_project::GraphHistoryAction::Edit(transform.patch),
-                )
-                .map_err(|_| graph_failure(CapabilityFailureCode::GraphDraftChanged))?;
+                .save_graph_edit(operation, Arc::new(transform.document), transform.patch)
+                .map_err(|error| match error {
+                    yss_project::ProjectGraphSaveError::Filesystem(_) => {
+                        graph_failure(CapabilityFailureCode::PersistenceUnavailable)
+                    }
+                    yss_project::ProjectGraphSaveError::Commit(_) => {
+                        graph_failure(CapabilityFailureCode::GraphDraftChanged)
+                    }
+                })?;
             captured
                 .execution()
                 .observe_graph_result_inputs(path.as_str(), transform.result_inputs);
@@ -227,6 +273,104 @@ pub fn invoke_graph_capability(
             .map_err(map_session_revalidation_error)?;
     }
     Ok(result)
+}
+
+fn graph_edit_identity(
+    context: &CapabilityInvocationContext,
+    request: &ApplyGraphEditRequest,
+) -> Result<(OperationId, [u8; 32]), CapabilityFailure> {
+    let digest = yss_canonical_hash::hash_canonical(
+        "yssbi.graph-capability-operation.v1",
+        &(
+            context.principal_id(),
+            context.harness_session_id(),
+            context.invocation_id(),
+            context.project(),
+            &request.graph_path,
+            &request.client_key,
+        ),
+    )
+    .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    let fingerprint =
+        yss_canonical_hash::hash_canonical("yssbi.graph-capability-request.v1", request)
+            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+    let mut bytes: [u8; 16] = digest[..16].try_into().expect("digest has sixteen bytes");
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok((
+        OperationId::from_uuid(uuid::Uuid::from_bytes(bytes)),
+        fingerprint,
+    ))
+}
+
+impl ApplicationState {
+    pub fn recover_automation_graph_edit(
+        &self,
+        context: CapabilityInvocationContext,
+        request: ApplyGraphEditRequest,
+    ) -> Result<Option<GraphEditReceipt>, CapabilityFailure> {
+        AutomationCapabilityRequest::ApplyGraphEdit(request.clone())
+            .validate()
+            .map_err(|error| invalid_request(CapabilityId::ApplyGraphEdit, error))?;
+        let captured = self.capture_session().map_err(map_session_capture_error)?;
+        ensure_project_binding(&captured, &context)?;
+        let path = GraphResourcePath::new(&request.graph_path)
+            .map_err(|_| graph_failure(CapabilityFailureCode::InvalidRequest))?;
+        let _editing = captured
+            .coordinate_graph_edit(&path)
+            .map_err(|_| graph_failure(CapabilityFailureCode::InvocationConflict))?;
+        let snapshot = captured
+            .project()
+            .read_graph_editing(captured.project_instance_id(), &path)
+            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+        let (operation_id, fingerprint) = graph_edit_identity(&context, &request)?;
+        let receipt = captured
+            .project()
+            .graph_edit_command_receipt(
+                captured.project_instance_id(),
+                &path,
+                snapshot.state.version.session_id,
+                operation_id,
+            )
+            .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?;
+        self.revalidate_captured_session(&captured)
+            .map_err(map_session_revalidation_error)?;
+        receipt
+            .map(|receipt| graph_edit_replay(receipt, &request, fingerprint))
+            .transpose()
+    }
+}
+
+fn graph_edit_replay(
+    receipt: yss_project::GraphEditCommandReceipt,
+    request: &ApplyGraphEditRequest,
+    fingerprint: [u8; 32],
+) -> Result<GraphEditReceipt, CapabilityFailure> {
+    if receipt.fingerprint != fingerprint
+        || receipt.request_version.revision.get() != request.base_revision
+    {
+        return Err(graph_failure(CapabilityFailureCode::InvocationConflict));
+    }
+    let correlation = receipt
+        .correlation
+        .ok_or_else(|| graph_failure(CapabilityFailureCode::InvocationConflict))?;
+    Ok(GraphEditReceipt {
+        graph_path: request.graph_path.clone(),
+        from_revision: receipt.commit.from_revision.get(),
+        to_revision: receipt.commit.to_revision.get(),
+        client_key: correlation.client_key,
+        graph_hash: correlation.document_hash,
+        created_nodes: correlation
+            .created_nodes
+            .into_iter()
+            .map(|(alias, node)| (alias, node.to_string()))
+            .collect(),
+        created_ports: correlation
+            .created_ports
+            .into_iter()
+            .map(|(alias, port)| (alias, edit_port(&port)))
+            .collect(),
+    })
 }
 
 pub(crate) fn graph_action_path(request: &AutomationCapabilityRequest) -> Option<&str> {
@@ -386,6 +530,12 @@ fn transform_graph_edit(
         created_nodes,
         created_ports,
     };
+    AutomationCapabilityResult::GraphEditReceipt(receipt.clone()).validate_budget(
+        ToolDescriptor::for_capability(CapabilityId::ApplyGraphEdit)
+            .map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?
+            .result_budget
+            .maximum_bytes as usize,
+    )?;
     Ok((transformed, receipt))
 }
 

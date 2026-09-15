@@ -576,7 +576,7 @@ fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
         CapabilityId::InspectGraph => {
-            "Inspect the current editor draft: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or running."
+            "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or running."
         }
         CapabilityId::SearchNodeCatalog => {
             "Search node IDs, localized names, aliases and technical terms. Use concise terms (e.g. decompose, ols, multiply) or node type IDs. This searches the node catalog."
@@ -591,19 +591,19 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Inspect a bounded structured execution result produced by YssBI. For table/series previews, offset and limit paginate rows; use nextOffset only when hasMore is true. Lists/records indicate truncation explicitly."
         }
         CapabilityId::InspectProject => {
-            "Inspect bounded project metadata and resource identities without reading raw data."
+            "List bounded project metadata and resource identities, including graph files with no open editor panel. Use a graph resourceId as graphPath for inspect_graph and graph edits. Does not read raw dataset rows."
         }
         CapabilityId::ApplyGraphEdit => {
-            "Apply one atomic, undoable batch to the current editor draft after the user requests edits. Use revision as baseRevision and graphHash from inspect_graph; use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/configuration/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters merges supplied keys with existing parameters. This updates the canvas, not the saved file; save_graph is separate."
+            "Apply one atomic, undoable batch to the current Project graph after the user requests edits. No editor panel is required. Use revision as baseRevision and graphHash from inspect_graph; use a unique clientKey per batch. Create nodes with clientId then reference their nodeId as $clientId within that batch. Added port instances support the same $clientId in instanceId. Supports create/delete/move/duplicate nodes, parameters/configuration/literals/constants, connect/disconnect and add/remove input instances. create_constant adds a boolean/integer/decimal/string constant and its Get node; set_literal accepts a plain JSON value or null to clear. set_parameters merges supplied keys with existing parameters. Each successful batch automatically persists the complete current graph and retains undo history. File, document, history and receipt commit together; a save failure does not apply the batch."
         }
         CapabilityId::ValidateGraph => {
-            "Validate the inspected current draft, passing its graphHash. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
+            "Validate the inspected current graph, passing its graphHash. Returns readiness and blocking diagnostics from editor analysis. This optional read-only check does not save, prepare an execution plan, or execute."
         }
         CapabilityId::ExecuteGraph => {
-            "Execute the current draft using its current graphHash. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not save."
+            "Execute the current graph using its current graphHash. Prepares its execution plan automatically; no prior validation call or artifact ID is required. Returns actual run status, failures and result IDs; inspect_result reads those results. Does not save."
         }
         CapabilityId::SaveGraph => {
-            "Save the current draft only when the user requests saving. Pass the current graphHash. Uses the editor save operation and clears its draft undo history as a normal Save does."
+            "Save the current graph only when the user requests saving. Pass the current graphHash. Uses the normal Save operation and clears its undo history."
         }
         CapabilityId::ListGraphResults => {
             "List currently retained result IDs, run IDs and output ports for a graph, including manual runs. Use these IDs with inspect_result; do not ask the user to invent or locate an ID."

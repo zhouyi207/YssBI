@@ -1154,6 +1154,16 @@ pub trait CapabilityGatewayPort: Send + Sync {
         request: AutomationCapabilityRequest,
         control: CapabilityControl,
     ) -> CapabilityFuture<'a>;
+
+    /// Query an already committed batch without invoking a mutation. Read-only gateways
+    /// have no graph receipts; a gateway that applies graph edits supplies its owner lookup.
+    fn recover_graph_edit<'a>(
+        &'a self,
+        _context: CapabilityInvocationContext,
+        _request: ApplyGraphEditRequest,
+    ) -> AgentFuture<'a, Result<Option<GraphEditReceipt>, CapabilityFailure>> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema {

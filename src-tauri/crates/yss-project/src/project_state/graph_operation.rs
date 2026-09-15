@@ -19,6 +19,26 @@ pub struct GraphOperationCapture {
 }
 
 impl GraphOperationCapture {
+    pub(super) fn prepare_edit_command(
+        &mut self,
+        command: super::graph_editing::PreparedGraphCommand,
+    ) {
+        self.authority.edit_command = Some(command);
+    }
+
+    pub fn set_edit_correlation(
+        &mut self,
+        correlation: super::GraphEditCorrelation,
+    ) -> Result<(), ProjectGraphCommitError> {
+        self.authority
+            .edit_command
+            .as_mut()
+            .ok_or_else(|| {
+                ProjectGraphCommitError::InvalidDocument("graph command identity is missing".into())
+            })?
+            .set_correlation(correlation)
+    }
+
     pub fn into_authority(self) -> GraphOperationAuthority {
         self.authority
     }
@@ -35,14 +55,15 @@ pub struct GraphOperationAuthority {
     authority_generation: u64,
     operation_id: yss_project_identity::OperationId,
     reservation: ProjectOperationReservation,
+    edit_command: Option<super::graph_editing::PreparedGraphCommand>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct GraphInvalidationSet {
     pub graph: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct GraphCommitReceipt {
     pub project_instance_id: ProjectInstanceId,
     pub operation_id: yss_project_identity::OperationId,
@@ -257,6 +278,7 @@ impl ProjectState {
                 authority_generation,
                 operation_id,
                 reservation,
+                edit_command: None,
             },
         })
     }
@@ -295,7 +317,9 @@ impl ProjectState {
             authority_generation,
             operation_id,
             reservation,
+            edit_command,
         } = authority;
+        let command_owned = edit_command.is_some();
         self.ensure_project_operational().map_err(|_| {
             ProjectGraphCommitError::LifecycleChanged {
                 graph_path: graph_path.clone(),
@@ -377,7 +401,10 @@ impl ProjectState {
                 });
             }
 
-            if candidate_document.as_ref() == &graph.document {
+            let document_changed = candidate_document.as_ref() != &graph.document;
+            // Every accepted command advances its version, including no-ops and Save.
+            // Once its bounded receipt expires, its old version cannot authorize a second write.
+            if !document_changed && !command_owned {
                 let mut editing = self.graph_editing.lock().unwrap();
                 let metadata = editing.entry(graph_path.clone()).or_insert_with(|| {
                     super::graph_editing::GraphEditingMetadata::new(history.before_hash)
@@ -408,6 +435,18 @@ impl ProjectState {
                     revision,
                 }
             })?;
+            if edit_command.as_ref().is_some_and(|command| {
+                self.graph_editing
+                    .lock()
+                    .unwrap()
+                    .get(&graph_path)
+                    .map(|metadata| metadata.session_id)
+                    != Some(command.version.session_id)
+            }) {
+                return Err(ProjectGraphCommitError::LifecycleChanged {
+                    graph_path: graph_path.clone(),
+                });
+            }
             let after_document = candidate_document.as_ref().clone();
             let mut resource = graph.clone();
             resource.document = after_document;
@@ -424,28 +463,35 @@ impl ProjectState {
             let metadata = editing.entry(graph_path.clone()).or_insert_with(|| {
                 super::graph_editing::GraphEditingMetadata::new(history.before_hash)
             });
+            let kind = history.kind;
             metadata.apply(history);
             let editing_state = metadata.state(next_revision);
+            let receipt = GraphCommitReceipt {
+                project_instance_id: session.instance_id,
+                operation_id,
+                from_revision: revision,
+                to_revision: next_revision,
+                invalidations: GraphInvalidationSet {
+                    graph: document_changed,
+                },
+                editing: editing_state,
+            };
+            if let Some(command) = edit_command {
+                metadata.record_command(command, kind, &receipt);
+            }
             drop(editing);
 
             publication.commit_prepared(publication_advance);
-            Ok((
-                GraphCommitReceipt {
-                    project_instance_id: session.instance_id,
-                    operation_id,
-                    from_revision: revision,
-                    to_revision: next_revision,
-
-                    invalidations: GraphInvalidationSet { graph: true },
-                    editing: editing_state,
-                },
-                reservation,
-            ))
+            Ok((receipt, reservation))
         })();
 
         match result {
             Ok((receipt, reservation)) => {
-                reservation.complete();
+                if command_owned {
+                    reservation.complete_in_owner();
+                } else {
+                    reservation.complete();
+                }
                 Ok(receipt)
             }
             Err(error) => Err(error),
@@ -459,6 +505,38 @@ impl ProjectState {
         capture: GraphOperationCapture,
         candidate_document: Arc<GraphDocument>,
     ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
+        self.save_graph_candidate_with_history(
+            capture,
+            candidate_document,
+            super::GraphHistoryAction::Saved,
+        )
+    }
+
+    /// Persist an assistant edit and its undo entry together, retaining existing history.
+    pub fn save_graph_edit(
+        &self,
+        capture: GraphOperationCapture,
+        candidate_document: Arc<GraphDocument>,
+        patch: yss_graph_document::GraphDocumentPatch,
+    ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
+        self.save_graph_candidate_with_history(
+            capture,
+            candidate_document,
+            super::GraphHistoryAction::SavedEdit(patch),
+        )
+    }
+
+    fn save_graph_candidate_with_history(
+        &self,
+        capture: GraphOperationCapture,
+        candidate_document: Arc<GraphDocument>,
+        action: super::GraphHistoryAction,
+    ) -> Result<GraphCommitReceipt, ProjectGraphSaveError> {
+        let history = super::graph_editing::PreparedGraphEdit::new(
+            &capture.document,
+            &candidate_document,
+            action,
+        )?;
         let graph_path = capture.graph_path.clone();
         let session = capture.authority.session.clone();
         let operation_id = capture.operation_id();
@@ -492,7 +570,11 @@ impl ProjectState {
         )?;
         let committed = prepared.commit()?;
 
-        match self.commit_graph_candidate(capture.into_authority(), candidate_document) {
+        match self.commit_graph_candidate_with_history(
+            capture.into_authority(),
+            candidate_document,
+            history,
+        ) {
             Ok(receipt) => {
                 committed.finalize();
                 Ok(receipt)

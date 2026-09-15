@@ -200,7 +200,7 @@ pub async fn load_project_graph(
                 locale.as_deref().unwrap_or("en-US"),
             ))
             .map_err(open_graph_command_error)?;
-        crate::ipc::schema::graph_editing::encode_graph_session(
+        let mut response = crate::ipc::schema::graph_editing::encode_graph_session(
             &sync,
             binding,
             cursor.as_deref(),
@@ -209,7 +209,9 @@ pub async fn load_project_graph(
                 receipt.projection(),
                 receipt.editing(),
             ),
-        )
+        )?;
+        response.function_editor_projection = receipt.function_editor_projection().cloned();
+        Ok(response)
     })
     .await
     .map_err(CommandError::internal)?

@@ -2,7 +2,6 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::{Duration, Instant};
-use yss_graph_document::GraphDocumentPatch;
 use yss_graph_document::{GraphDocument, GraphResourcePath};
 use yss_graph_document_edit::apply_graph_document_patch;
 use yss_graph_editor::{EditorGraphMutation, MutationConflict};
@@ -11,7 +10,7 @@ use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
 
 use super::edit::{GraphDocumentChange, GraphDocumentEditor};
 use super::resources::ResourceMutationApplicationError;
-use crate::session::ApplicationState;
+use crate::session::{ApplicationSession, ApplicationState};
 
 #[derive(Clone)]
 pub enum GraphActivity {
@@ -162,6 +161,7 @@ impl GraphEditingCoordinator {
     }
 }
 
+#[derive(Clone)]
 pub struct GraphEditRequest {
     pub project_instance_id: ProjectInstanceId,
     pub graph_path: GraphResourcePath,
@@ -183,7 +183,97 @@ pub struct GraphSaveResponse {
     pub graph: GraphEditResponse,
 }
 
+fn command_fingerprint(
+    request: &GraphEditRequest,
+    kind: &str,
+    payload: &impl serde::Serialize,
+) -> Result<[u8; 32], ResourceMutationApplicationError> {
+    yss_canonical_hash::hash_canonical(
+        "yssbi.graph-edit-command.v1",
+        &(
+            &request.project_instance_id,
+            &request.graph_path,
+            request.version,
+            &request.locale,
+            kind,
+            payload,
+        ),
+    )
+    .map_err(|error| {
+        ResourceMutationApplicationError::GraphCommit(
+            yss_project::ProjectGraphCommitError::InvalidDocument(error.to_string()),
+        )
+    })
+}
+
+fn existing_command(
+    captured: &ApplicationSession,
+    request: &GraphEditRequest,
+    fingerprint: [u8; 32],
+) -> Result<Option<yss_project::GraphEditCommandReceipt>, ResourceMutationApplicationError> {
+    let receipt = captured.project().graph_edit_command_receipt(
+        &request.project_instance_id,
+        &request.graph_path,
+        request.version.session_id,
+        request.operation_id,
+    )?;
+    if receipt.as_ref().is_some_and(|receipt| {
+        receipt.fingerprint != fingerprint || receipt.request_version != request.version
+    }) {
+        return Err(ResourceMutationApplicationError::GraphOperation(
+            yss_project::ProjectGraphOperationError::OperationOwnershipChanged {
+                operation_id: request.operation_id,
+            },
+        ));
+    }
+    Ok(receipt)
+}
+
 impl ApplicationState {
+    pub fn graph_edit_receipt(
+        &self,
+        project: &ProjectInstanceId,
+        path: &GraphResourcePath,
+        version: GraphEditVersion,
+        operation_id: OperationId,
+    ) -> Result<Option<yss_project::GraphEditCommandReceipt>, ResourceMutationApplicationError>
+    {
+        let captured = self.capture_resource_session(project)?;
+        let _editing = captured
+            .coordinate_graph_edit(path)
+            .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
+        let receipt = captured.project().graph_edit_command_receipt(
+            project,
+            path,
+            version.session_id,
+            operation_id,
+        )?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(receipt.filter(|receipt| receipt.request_version == version))
+    }
+
+    fn current_graph_response(
+        &self,
+        captured: &Arc<ApplicationSession>,
+        path: &GraphResourcePath,
+        locale: &str,
+    ) -> Result<GraphEditResponse, ResourceMutationApplicationError> {
+        let snapshot = captured
+            .project()
+            .read_graph_editing(captured.project_instance_id(), path)?;
+        let editor =
+            GraphDocumentEditor::new(captured, path, locale, (*snapshot.document).clone())?;
+        let update = editor.finish(self)?;
+        captured
+            .execution()
+            .observe_graph_result_inputs(path.as_str(), update.result_inputs.clone());
+        Ok(GraphEditResponse {
+            update,
+            editing: snapshot.state,
+        })
+    }
+
     pub fn current_graph_document(
         &self,
         project: &ProjectInstanceId,
@@ -215,6 +305,13 @@ impl ApplicationState {
         let _editing = captured
             .coordinate_graph_edit(&request.graph_path)
             .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
+        let fingerprint = command_fingerprint(&request, "edit", &mutation)?;
+        if let Some(receipt) = existing_command(&captured, &request, fingerprint)? {
+            let mut response =
+                self.current_graph_response(&captured, &request.graph_path, &request.locale)?;
+            response.update.changed = receipt.commit.invalidations.graph;
+            return Ok(response);
+        }
         let operation = captured
             .project()
             .capture_graph_edit(
@@ -222,6 +319,7 @@ impl ApplicationState {
                 &request.graph_path,
                 request.version,
                 request.operation_id,
+                fingerprint,
             )
             .map_err(ResourceMutationApplicationError::GraphOperation)?;
         let mut editor = GraphDocumentEditor::new(
@@ -295,6 +393,13 @@ impl ApplicationState {
         let _editing = captured
             .coordinate_graph_edit(&request.graph_path)
             .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
+        let fingerprint = command_fingerprint(&request, if redo { "redo" } else { "undo" }, &())?;
+        if let Some(receipt) = existing_command(&captured, &request, fingerprint)? {
+            let mut response =
+                self.current_graph_response(&captured, &request.graph_path, &request.locale)?;
+            response.update.changed = receipt.commit.invalidations.graph;
+            return Ok(response);
+        }
         let operation = captured
             .project()
             .capture_graph_edit(
@@ -302,6 +407,7 @@ impl ApplicationState {
                 &request.graph_path,
                 request.version,
                 request.operation_id,
+                fingerprint,
             )
             .map_err(ResourceMutationApplicationError::GraphOperation)?;
         let patch = captured.project().graph_history_patch(
@@ -320,9 +426,7 @@ impl ApplicationState {
             GraphDocumentEditor::new(&captured, &request.graph_path, &request.locale, document)?;
         let mut update = editor.finish(self)?;
         update.changed = patch.is_some();
-        let action = if patch.is_none() {
-            GraphHistoryAction::Edit(GraphDocumentPatch::new(Vec::new()))
-        } else if redo {
+        let action = if redo {
             GraphHistoryAction::Redo
         } else {
             GraphHistoryAction::Undo
@@ -352,6 +456,18 @@ impl ApplicationState {
         let _editing = captured
             .coordinate_graph_edit(&request.graph_path)
             .map_err(|_| ResourceMutationApplicationError::EditingBusy)?;
+        let fingerprint = command_fingerprint(&request, "save", &())?;
+        if let Some(receipt) = existing_command(&captured, &request, fingerprint)? {
+            return Ok(GraphSaveResponse {
+                project_instance_id: request.project_instance_id.clone(),
+                resource_revision: receipt.commit.to_revision,
+                graph: self.current_graph_response(
+                    &captured,
+                    &request.graph_path,
+                    &request.locale,
+                )?,
+            });
+        }
         let operation = captured
             .project()
             .capture_graph_edit(
@@ -359,6 +475,7 @@ impl ApplicationState {
                 &request.graph_path,
                 request.version,
                 request.operation_id,
+                fingerprint,
             )
             .map_err(ResourceMutationApplicationError::GraphOperation)?;
         let editor = GraphDocumentEditor::new(

@@ -123,17 +123,17 @@ fn inspect_project(
 ) -> Result<ProjectInspection, CapabilityFailure> {
     let project = captured
         .project()
-        .get_data()
-        .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ProjectSessionUnavailable))?;
+        .read_project_index(captured.project_instance_id())
+        .map_err(map_project_inspection_error)?;
     let mut resources =
         Vec::with_capacity(project.graphs.len() + project.databases.len() + project.charts.len());
     resources.extend(
         project
             .graphs
             .iter()
-            .map(|(path, graph)| ProjectResourceInspection {
+            .map(|graph| ProjectResourceInspection {
                 kind: ProjectResourceKindInspection::Graph,
-                resource_id: path.as_str().to_owned(),
+                resource_id: graph.path.clone(),
                 display_name: graph.name.clone(),
                 revision: None,
             }),
@@ -141,28 +141,41 @@ fn inspect_project(
     resources.extend(
         project
             .databases
-            .values()
+            .iter()
             .map(|database| ProjectResourceInspection {
                 kind: ProjectResourceKindInspection::Database,
-                resource_id: database.id.as_str().to_owned(),
-                display_name: database.name.to_string(),
+                resource_id: database.id.clone(),
+                display_name: database.name.clone().unwrap_or_else(|| database.id.clone()),
                 revision: None,
             }),
     );
-    resources.extend(project.charts.keys().map(|path| ProjectResourceInspection {
-        kind: ProjectResourceKindInspection::Chart,
-        resource_id: path.as_str().to_owned(),
-        display_name: path.display_name().as_str().to_owned(),
-        revision: None,
-    }));
+    resources.extend(
+        project
+            .charts
+            .iter()
+            .map(|chart| ProjectResourceInspection {
+                kind: ProjectResourceKindInspection::Chart,
+                resource_id: chart.chart_path.as_str().to_owned(),
+                display_name: chart.name.clone(),
+                revision: None,
+            }),
+    );
     enforce_result_bound(CapabilityId::InspectProject, resources.len())?;
     resources.sort_by(|left, right| {
         left.kind
             .cmp(&right.kind)
             .then_with(|| left.resource_id.cmp(&right.resource_id))
     });
+    captured
+        .project()
+        .validate_project_index_version(
+            captured.project_instance_id(),
+            project.publication_revision,
+            project.authority_generation(),
+        )
+        .map_err(map_project_inspection_error)?;
     Ok(ProjectInspection {
-        project_name: project.metadata.project_name,
+        project_name: project.project_name,
         resources,
     })
 }
@@ -643,6 +656,23 @@ fn invalid_request(
 
 fn map_session_capture_error(_: SessionCaptureError) -> CapabilityFailure {
     CapabilityFailure::new(CapabilityFailureCode::ProjectSessionUnavailable)
+}
+
+fn map_project_inspection_error(error: yss_project::ProjectOperationError) -> CapabilityFailure {
+    use yss_project::ProjectOperationError;
+    CapabilityFailure::new(match error {
+        ProjectOperationError::StaleProjectLifecycle { .. } => {
+            CapabilityFailureCode::ProjectSessionChanged
+        }
+        ProjectOperationError::CatalogResourceStale { .. } => {
+            CapabilityFailureCode::RevisionConflict
+        }
+        ProjectOperationError::ProjectLifecycleAdmissionClosed { .. }
+        | ProjectOperationError::ProjectRecoveryRequired { .. } => {
+            CapabilityFailureCode::ProjectSessionUnavailable
+        }
+        _ => CapabilityFailureCode::CatalogUnavailable,
+    })
 }
 
 fn map_session_revalidation_error(error: SessionRevalidationError) -> CapabilityFailure {

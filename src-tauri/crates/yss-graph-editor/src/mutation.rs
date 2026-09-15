@@ -130,14 +130,14 @@ impl From<DocumentError> for MutationConflict {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum PortPlacement {
     Append,
     Before(PortInstanceId),
     After(PortInstanceId),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum EditorGraphMutation {
     InsertConstantReference {
         id: yss_graph_document::ConstantId,
@@ -216,7 +216,7 @@ pub enum EditorGraphMutation {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NodePositionMutation {
     pub node_id: NodeId,
     pub position: NodePosition,

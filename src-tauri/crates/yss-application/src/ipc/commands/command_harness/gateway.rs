@@ -29,6 +29,24 @@ impl Drop for CancelQueryOnDrop {
 }
 
 impl CapabilityGatewayPort for ApplicationCapabilityGateway {
+    fn recover_graph_edit<'a>(
+        &'a self,
+        context: CapabilityInvocationContext,
+        request: yss_harness_contract::ApplyGraphEditRequest,
+    ) -> yss_harness_contract::AgentFuture<
+        'a,
+        Result<Option<yss_harness_contract::GraphEditReceipt>, CapabilityFailure>,
+    > {
+        let application = self.application.clone();
+        Box::pin(async move {
+            tauri::async_runtime::spawn_blocking(move || {
+                application.recover_automation_graph_edit(context, request)
+            })
+            .await
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?
+        })
+    }
+
     fn invoke<'a>(
         &'a self,
         context: CapabilityInvocationContext,

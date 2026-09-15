@@ -17,6 +17,18 @@ pub struct GraphEditingStateDto {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphEditCommandReceiptDto {
+    pub project_instance_id: String,
+    pub graph_path: String,
+    pub operation_id: String,
+    pub request_version: GraphEditVersionDto,
+    pub committed_version: GraphEditVersionDto,
+    pub command: &'static str,
+    pub changed: bool,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -67,11 +79,13 @@ pub struct GraphEditorSyncResponseDto {
 pub enum GraphEditorDeliveryDto {
     Snapshot {
         cursor: String,
+        snapshot_bytes: usize,
         data: serde_json::Value,
     },
     Delta {
         base_cursor: String,
         cursor: String,
+        snapshot_bytes: usize,
         changes: Vec<GraphProjectionChangeDto>,
     },
 }

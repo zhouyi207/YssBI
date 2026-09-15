@@ -1,5 +1,6 @@
 //! Editing metadata for resident graphs. The document itself lives only in ProjectData.
-use std::collections::VecDeque;
+use serde::Serialize;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use yss_graph_document::GraphDocumentPatch;
@@ -14,14 +15,17 @@ use crate::ProjectOperationError;
 
 const HISTORY_LIMIT: usize = 50;
 const HISTORY_BYTE_LIMIT: usize = 16 * 1024 * 1024;
+const REQUEST_LIMIT: usize = 128;
+const REQUEST_BYTE_LIMIT: usize = 2 * 1024 * 1024;
+const REQUEST_RESULT_BYTE_LIMIT: usize = 64 * 1024;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct GraphEditVersion {
     pub session_id: uuid::Uuid,
     pub revision: ResourceRevision,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct GraphEditingState {
     pub version: GraphEditVersion,
     pub dirty: bool,
@@ -32,6 +36,79 @@ pub struct GraphEditingState {
 pub struct GraphEditingSnapshot {
     pub document: Arc<GraphDocument>,
     pub state: GraphEditingState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub enum GraphEditCommandKind {
+    Edit,
+    Undo,
+    Redo,
+    Save,
+}
+
+/// Caller aliases describe the committed batch's result, not another graph document.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GraphEditCorrelation {
+    pub client_key: String,
+    pub document_hash: String,
+    pub created_nodes: BTreeMap<String, yss_graph_document::NodeId>,
+    pub created_ports: BTreeMap<String, yss_graph_document::PortAddress>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GraphEditCommandReceipt {
+    pub fingerprint: [u8; 32],
+    pub request_version: GraphEditVersion,
+    pub kind: GraphEditCommandKind,
+    pub commit: GraphCommitReceipt,
+    pub correlation: Option<GraphEditCorrelation>,
+}
+
+pub(super) struct PreparedGraphCommand {
+    pub fingerprint: [u8; 32],
+    pub version: GraphEditVersion,
+    pub correlation: Option<GraphEditCorrelation>,
+    bytes: usize,
+}
+
+impl PreparedGraphCommand {
+    pub fn new(fingerprint: [u8; 32], version: GraphEditVersion, identity_bytes: usize) -> Self {
+        // Conservatively reserve fixed receipt fields, including identities and revision digits.
+        Self {
+            fingerprint,
+            version,
+            correlation: None,
+            bytes: 2048 + identity_bytes,
+        }
+    }
+
+    pub fn set_correlation(
+        &mut self,
+        value: GraphEditCorrelation,
+    ) -> Result<(), ProjectGraphCommitError> {
+        let bytes = serde_json::to_vec(&value)
+            .map_err(|error| ProjectGraphCommitError::InvalidDocument(error.to_string()))?
+            .len();
+        if bytes > REQUEST_RESULT_BYTE_LIMIT {
+            return Err(ProjectGraphCommitError::InvalidDocument(
+                "graph receipt exceeds its budget".into(),
+            ));
+        }
+        if let Some(previous) = &self.correlation {
+            self.bytes -= serde_json::to_vec(previous)
+                .expect("validated receipt")
+                .len();
+        }
+        self.bytes += bytes;
+        self.correlation = Some(value);
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct CommandEntry {
+    receipt: GraphEditCommandReceipt,
+    bytes: usize,
 }
 
 #[derive(Clone)]
@@ -47,6 +124,8 @@ pub(crate) struct GraphEditingMetadata {
     pub(crate) current_hash: [u8; 32],
     undo: VecDeque<HistoryEntry>,
     redo: VecDeque<HistoryEntry>,
+    commands: VecDeque<CommandEntry>,
+    command_bytes: usize,
 }
 
 pub(crate) struct PreparedGraphEditingUpdate {
@@ -62,6 +141,8 @@ impl GraphEditingMetadata {
             current_hash: hash,
             undo: VecDeque::new(),
             redo: VecDeque::new(),
+            commands: VecDeque::new(),
+            command_bytes: 0,
         }
     }
 
@@ -83,10 +164,35 @@ impl GraphEditingMetadata {
         self.redo.clear();
     }
 
+    pub(super) fn record_command(
+        &mut self,
+        command: PreparedGraphCommand,
+        kind: GraphEditCommandKind,
+        commit: &GraphCommitReceipt,
+    ) {
+        self.command_bytes += command.bytes;
+        self.commands.push_back(CommandEntry {
+            bytes: command.bytes,
+            receipt: GraphEditCommandReceipt {
+                fingerprint: command.fingerprint,
+                request_version: command.version,
+                kind,
+                commit: commit.clone(),
+                correlation: command.correlation,
+            },
+        });
+        while self.commands.len() > REQUEST_LIMIT || self.command_bytes > REQUEST_BYTE_LIMIT {
+            if let Some(entry) = self.commands.pop_front() {
+                self.command_bytes -= entry.bytes;
+            }
+        }
+    }
+
     pub(crate) fn apply(&mut self, change: PreparedGraphEdit) {
         self.current_hash = change.after_hash;
+        let saved_edit = matches!(&change.action, GraphHistoryAction::SavedEdit(_));
         match change.action {
-            GraphHistoryAction::Edit(patch) => {
+            GraphHistoryAction::Edit(patch) | GraphHistoryAction::SavedEdit(patch) => {
                 if change.before_hash != change.after_hash {
                     self.redo.clear();
                     if !patch.is_empty() {
@@ -111,6 +217,9 @@ impl GraphEditingMetadata {
                 self.mark_saved();
             }
         }
+        if saved_edit {
+            self.saved_hash = self.current_hash;
+        }
         while self.undo.len() + self.redo.len() > HISTORY_LIMIT
             || self
                 .undo
@@ -129,6 +238,7 @@ impl GraphEditingMetadata {
 
 pub enum GraphHistoryAction {
     Edit(GraphDocumentPatch),
+    SavedEdit(GraphDocumentPatch),
     Undo,
     Redo,
     Saved,
@@ -139,6 +249,7 @@ pub(crate) struct PreparedGraphEdit {
     pub(crate) after_hash: [u8; 32],
     action: GraphHistoryAction,
     bytes: usize,
+    pub(super) kind: GraphEditCommandKind,
 }
 
 impl PreparedGraphEdit {
@@ -151,16 +262,27 @@ impl PreparedGraphEdit {
             document_hash(before).map_err(ProjectGraphCommitError::InvalidDocument)?;
         let after_hash = document_hash(after).map_err(ProjectGraphCommitError::InvalidDocument)?;
         let bytes = match &action {
-            GraphHistoryAction::Edit(patch) => serde_json::to_vec(patch)
-                .map_err(|error| ProjectGraphCommitError::InvalidDocument(error.to_string()))?
-                .len(),
+            GraphHistoryAction::Edit(patch) | GraphHistoryAction::SavedEdit(patch) => {
+                serde_json::to_vec(patch)
+                    .map_err(|error| ProjectGraphCommitError::InvalidDocument(error.to_string()))?
+                    .len()
+            }
             _ => 0,
+        };
+        let kind = match &action {
+            GraphHistoryAction::Edit(_) | GraphHistoryAction::SavedEdit(_) => {
+                GraphEditCommandKind::Edit
+            }
+            GraphHistoryAction::Undo => GraphEditCommandKind::Undo,
+            GraphHistoryAction::Redo => GraphEditCommandKind::Redo,
+            GraphHistoryAction::Saved => GraphEditCommandKind::Save,
         };
         Ok(Self {
             before_hash,
             after_hash,
             action,
             bytes,
+            kind,
         })
     }
 }
@@ -285,6 +407,7 @@ impl ProjectState {
         path: &GraphResourcePath,
         version: GraphEditVersion,
         operation_id: OperationId,
+        fingerprint: [u8; 32],
     ) -> Result<GraphOperationCapture, ProjectGraphOperationError> {
         let current = self.read_graph_editing(project, path).map_err(|source| {
             ProjectGraphOperationError::Internal(super::ProjectGraphOperationSource::new(source))
@@ -296,7 +419,21 @@ impl ProjectState {
                 current: current.state.version.revision,
             });
         }
-        let capture =
+        if self
+            .graph_editing
+            .lock()
+            .unwrap()
+            .get(path)
+            .is_some_and(|metadata| {
+                metadata
+                    .commands
+                    .iter()
+                    .any(|entry| entry.receipt.commit.operation_id == operation_id)
+            })
+        {
+            return Err(ProjectGraphOperationError::OperationOwnershipChanged { operation_id });
+        }
+        let mut capture =
             self.capture_graph_operation(project, path, version.revision, operation_id)?;
         if self
             .graph_editing
@@ -310,7 +447,49 @@ impl ProjectState {
                 graph: path.clone(),
             });
         }
+        let invalid_receipt = |message| {
+            ProjectGraphOperationError::Internal(super::ProjectGraphOperationSource::new(
+                ProjectOperationError::TransactionPrepareFailed { message },
+            ))
+        };
+        let identity_bytes = serde_json::to_vec(project)
+            .map_err(|error| invalid_receipt(error.to_string()))?
+            .len();
+        if identity_bytes > REQUEST_RESULT_BYTE_LIMIT {
+            return Err(invalid_receipt(
+                "graph receipt identity exceeds its budget".into(),
+            ));
+        }
+        capture.prepare_edit_command(PreparedGraphCommand::new(
+            fingerprint,
+            version,
+            identity_bytes,
+        ));
         Ok(capture)
+    }
+
+    pub fn graph_edit_command_receipt(
+        &self,
+        project: &ProjectInstanceId,
+        path: &GraphResourcePath,
+        session_id: uuid::Uuid,
+        operation_id: OperationId,
+    ) -> Result<Option<GraphEditCommandReceipt>, ProjectOperationError> {
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != project.as_str() {
+            return Err(editing_stale());
+        }
+        self.ensure_project_operational()?;
+        let editing = self.graph_editing.lock().unwrap();
+        let metadata = editing.get(path).ok_or_else(editing_stale)?;
+        if metadata.session_id != session_id {
+            return Err(editing_stale());
+        }
+        Ok(metadata
+            .commands
+            .iter()
+            .find(|entry| entry.receipt.commit.operation_id == operation_id)
+            .map(|entry| entry.receipt.clone()))
     }
 
     pub fn commit_graph_edit(
@@ -414,11 +593,17 @@ mod tests {
     ) -> GraphCommitReceipt {
         let snapshot = state.read_graph_editing(project, path).unwrap();
         let capture = state
-            .capture_graph_edit(project, path, snapshot.state.version, OperationId::new())
+            .capture_graph_edit(
+                project,
+                path,
+                snapshot.state.version,
+                OperationId::new(),
+                [0; 32],
+            )
             .unwrap();
         let before = snapshot.document.nodes[&id].clone();
         let mut after = before.clone();
-        after.position.x = 42.0;
+        after.position.x += 42.0;
         let patch =
             GraphDocumentPatch::new(vec![GraphDocumentOperation::UpdateNode { before, after }]);
         let mut document = (*snapshot.document).clone();
@@ -454,7 +639,13 @@ mod tests {
         for redo in [false, true] {
             let snapshot = state.read_graph_editing(project, &path).unwrap();
             let capture = state
-                .capture_graph_edit(project, &path, snapshot.state.version, OperationId::new())
+                .capture_graph_edit(
+                    project,
+                    &path,
+                    snapshot.state.version,
+                    OperationId::new(),
+                    [0; 32],
+                )
                 .unwrap();
             let patch = state
                 .graph_history_patch(project, &path, snapshot.state.version, redo)
@@ -479,14 +670,61 @@ mod tests {
         }
 
         let snapshot = state.read_graph_editing(project, &path).unwrap();
+        let failed_id = OperationId::new();
+        let failed_capture = state
+            .capture_graph_edit(project, &path, snapshot.state.version, failed_id, [3; 32])
+            .unwrap();
+        state.set_filesystem_fault(Some(
+            yss_filesystem::FilesystemFaultPoint::FirstLiveReplacement,
+        ));
+        assert!(
+            state
+                .save_graph_candidate(failed_capture, snapshot.document.clone())
+                .is_err()
+        );
+        state.set_filesystem_fault(None);
+        assert_eq!(std::fs::read(&file).unwrap(), original_file);
+        let preserved = state.read_graph_editing(project, &path).unwrap();
+        assert_eq!(preserved.state, snapshot.state);
+        assert_eq!(preserved.document, snapshot.document);
+        assert!(
+            state
+                .graph_edit_command_receipt(
+                    project,
+                    &path,
+                    snapshot.state.version.session_id,
+                    failed_id
+                )
+                .unwrap()
+                .is_none()
+        );
         let capture = state
-            .capture_graph_edit(project, &path, snapshot.state.version, OperationId::new())
+            .capture_graph_edit(
+                project,
+                &path,
+                snapshot.state.version,
+                OperationId::new(),
+                [0; 32],
+            )
             .unwrap();
         let saved = state
             .save_graph_candidate(capture, snapshot.document)
             .unwrap();
         assert!(!saved.editing.dirty && !saved.editing.can_undo && !saved.editing.can_redo);
         assert_ne!(std::fs::read(&file).unwrap(), original_file);
+        let receipt = state
+            .graph_edit_command_receipt(
+                project,
+                &path,
+                saved.editing.version.session_id,
+                saved.operation_id,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(receipt.commit, saved);
+        assert_eq!(receipt.kind, GraphEditCommandKind::Save);
+        assert_eq!(receipt.request_version, snapshot.state.version);
+        assert!(saved.to_revision > snapshot.state.version.revision);
     }
 
     #[test]
@@ -495,8 +733,9 @@ mod tests {
         let state = fixture.state();
         let project = state.capture_project_session().unwrap().instance_id;
         let original = state.read_graph_editing(&project, &path).unwrap();
+        let stale_id = OperationId::new();
         let stale = state
-            .capture_graph_edit(&project, &path, original.state.version, OperationId::new())
+            .capture_graph_edit(&project, &path, original.state.version, stale_id, [0; 32])
             .unwrap();
         let edited = move_node(state, &project, &path, node);
         assert!(matches!(
@@ -507,6 +746,17 @@ mod tests {
             ),
             Err(ProjectGraphCommitError::StaleAuthority { .. })
         ));
+        assert!(
+            state
+                .graph_edit_command_receipt(
+                    &project,
+                    &path,
+                    original.state.version.session_id,
+                    stale_id
+                )
+                .unwrap()
+                .is_none()
+        );
         state
             .reconcile_project_change(
                 &project,
@@ -529,8 +779,149 @@ mod tests {
         assert!(!reopened.state.dirty);
         assert!(
             state
-                .capture_graph_edit(&project, &path, preserved.state.version, OperationId::new())
+                .graph_edit_command_receipt(
+                    &project,
+                    &path,
+                    preserved.state.version.session_id,
+                    edited.operation_id
+                )
                 .is_err()
+        );
+        assert!(
+            state
+                .capture_graph_edit(
+                    &project,
+                    &path,
+                    preserved.state.version,
+                    OperationId::new(),
+                    [0; 32]
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn command_receipts_are_bounded_and_evicted_requests_cannot_write_again() {
+        let (fixture, path, node) = fixture();
+        let state = fixture.state();
+        let project = state.capture_project_session().unwrap().instance_id;
+        let original = state.read_graph_editing(&project, &path).unwrap();
+        let first = move_node(state, &project, &path, node);
+        for _ in 0..REQUEST_LIMIT {
+            move_node(state, &project, &path, node);
+        }
+        {
+            let editing = state.graph_editing.lock().unwrap();
+            let metadata = &editing[&path];
+            assert_eq!(metadata.commands.len(), REQUEST_LIMIT);
+            assert_eq!(metadata.undo.len(), HISTORY_LIMIT);
+        }
+        assert!(
+            state
+                .graph_edit_command_receipt(
+                    &project,
+                    &path,
+                    original.state.version.session_id,
+                    first.operation_id
+                )
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            state
+                .capture_graph_edit(
+                    &project,
+                    &path,
+                    original.state.version,
+                    first.operation_id,
+                    [0; 32]
+                )
+                .is_err()
+        );
+
+        let large_correlation = GraphEditCorrelation {
+            client_key: "batch".into(),
+            document_hash: "0".repeat(64),
+            created_nodes: (0..512)
+                .map(|index| (format!("node_{index:059}"), NodeId::new()))
+                .collect(),
+            created_ports: BTreeMap::new(),
+        };
+        let mut first_noop = None;
+        for _ in 0..65 {
+            let snapshot = state.read_graph_editing(&project, &path).unwrap();
+            let operation_id = OperationId::new();
+            first_noop.get_or_insert((snapshot.state.version, operation_id));
+            let mut capture = state
+                .capture_graph_edit(
+                    &project,
+                    &path,
+                    snapshot.state.version,
+                    operation_id,
+                    [1; 32],
+                )
+                .unwrap();
+            capture
+                .set_edit_correlation(large_correlation.clone())
+                .unwrap();
+            let committed = state
+                .commit_graph_edit(
+                    capture,
+                    snapshot.document,
+                    GraphHistoryAction::Edit(GraphDocumentPatch::new(Vec::new())),
+                )
+                .unwrap();
+            assert!(!committed.invalidations.graph);
+            assert!(committed.to_revision > snapshot.state.version.revision);
+        }
+        {
+            let editing = state.graph_editing.lock().unwrap();
+            let metadata = &editing[&path];
+            assert!(metadata.command_bytes <= REQUEST_BYTE_LIMIT);
+            assert!(metadata.commands.len() < 65);
+            assert_eq!(metadata.undo.len(), HISTORY_LIMIT);
+            assert!(
+                metadata
+                    .commands
+                    .iter()
+                    .all(|entry| serde_json::to_vec(&entry.receipt).unwrap().len() <= entry.bytes)
+            );
+        }
+        let (version, operation_id) = first_noop.unwrap();
+        assert!(
+            state
+                .graph_edit_command_receipt(&project, &path, version.session_id, operation_id)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            state
+                .capture_graph_edit(&project, &path, version, operation_id, [1; 32])
+                .is_err()
+        );
+
+        let before = state.read_graph_editing(&project, &path).unwrap();
+        let rejected_id = OperationId::new();
+        let mut capture = state
+            .capture_graph_edit(&project, &path, before.state.version, rejected_id, [2; 32])
+            .unwrap();
+        let mut oversized = large_correlation;
+        oversized.client_key = "x".repeat(REQUEST_RESULT_BYTE_LIMIT);
+        assert!(capture.set_edit_correlation(oversized).is_err());
+        drop(capture);
+        let after = state.read_graph_editing(&project, &path).unwrap();
+        assert_eq!(before.state, after.state);
+        assert_eq!(before.document, after.document);
+        assert!(
+            state
+                .graph_edit_command_receipt(
+                    &project,
+                    &path,
+                    before.state.version.session_id,
+                    rejected_id
+                )
+                .unwrap()
+                .is_none()
         );
     }
 

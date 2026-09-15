@@ -44,7 +44,7 @@ pub async fn hydrate_editor_graph(
                 locale,
             ))
             .map_err(open_graph_command_error)?;
-        encode_graph_session(
+        let mut response = encode_graph_session(
             &sync,
             binding,
             cursor.as_deref(),
@@ -53,7 +53,9 @@ pub async fn hydrate_editor_graph(
                 receipt.projection(),
                 receipt.editing(),
             ),
-        )
+        )?;
+        response.function_editor_projection = receipt.function_editor_projection().cloned();
+        Ok(response)
     })
     .await
     .map_err(CommandError::internal)?
@@ -301,6 +303,34 @@ fn map_editor_resource_error(
     error: crate::graph::resources::ResourceMutationApplicationError,
 ) -> CommandError {
     super::common::resource_mutation_to_command_error(error, "graph_edit_changed")
+}
+
+#[tauri::command]
+pub async fn get_graph_edit_receipt(
+    application: State<'_, ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    version: yss_ipc_contract::graph_editing::GraphEditVersionDto,
+    operation_id: yss_project_identity::OperationId,
+) -> Result<Option<yss_ipc_contract::graph_editing::GraphEditCommandReceiptDto>, CommandError> {
+    let application = application.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = parse_graph_path(graph_path)?;
+        let version =
+            crate::ipc::schema::graph_editing::graph_edit_version_from_transport(version)?;
+        application
+            .graph_edit_receipt(&project_instance_id, &path, version, operation_id)
+            .map_err(map_editor_resource_error)
+            .map(|receipt| {
+                receipt.map(|receipt| {
+                    crate::ipc::schema::graph_editing::graph_edit_receipt_to_transport(
+                        &path, &receipt,
+                    )
+                })
+            })
+    })
+    .await
+    .map_err(CommandError::internal)?
 }
 
 #[tauri::command]

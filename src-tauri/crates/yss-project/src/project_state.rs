@@ -23,7 +23,8 @@ mod graph_editing;
 mod graph_lifecycle;
 mod graph_operation;
 pub use graph_editing::{
-    GraphEditVersion, GraphEditingSnapshot, GraphEditingState, GraphHistoryAction,
+    GraphEditCommandKind, GraphEditCommandReceipt, GraphEditCorrelation, GraphEditVersion,
+    GraphEditingSnapshot, GraphEditingState, GraphHistoryAction,
 };
 mod lifecycle;
 mod resource_patch;

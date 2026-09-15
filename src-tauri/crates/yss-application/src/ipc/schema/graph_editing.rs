@@ -1,5 +1,32 @@
 use yss_ipc_contract::graph_editing::*;
 
+pub(crate) fn graph_edit_receipt_to_transport(
+    path: &yss_graph_document::GraphResourcePath,
+    receipt: &yss_project::GraphEditCommandReceipt,
+) -> GraphEditCommandReceiptDto {
+    use yss_project::GraphEditCommandKind;
+    GraphEditCommandReceiptDto {
+        project_instance_id: receipt.commit.project_instance_id.to_string(),
+        graph_path: path.to_string(),
+        operation_id: receipt.commit.operation_id.to_string(),
+        request_version: GraphEditVersionDto {
+            session_id: receipt.request_version.session_id.to_string(),
+            revision: receipt.request_version.revision.get().to_string(),
+        },
+        committed_version: GraphEditVersionDto {
+            session_id: receipt.commit.editing.version.session_id.to_string(),
+            revision: receipt.commit.to_revision.get().to_string(),
+        },
+        command: match receipt.kind {
+            GraphEditCommandKind::Edit => "edit",
+            GraphEditCommandKind::Undo => "undo",
+            GraphEditCommandKind::Redo => "redo",
+            GraphEditCommandKind::Save => "save",
+        },
+        changed: receipt.commit.invalidations.graph,
+    }
+}
+
 pub(crate) fn graph_editor_session_to_transport(
     document: &yss_graph_document::GraphDocument,
     projection: &yss_graph_editor::projection::EditorProjectionModel,
