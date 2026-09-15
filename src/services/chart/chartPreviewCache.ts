@@ -21,11 +21,13 @@ export function chartPreviewCacheKey(
   projectInstanceId: string,
   chartPath: string,
   document: ChartDocument,
+  databaseRevision: number | null,
 ): string {
   return JSON.stringify({
     projectInstanceId,
     chartPath,
     databaseId: document.databaseId,
+    databaseRevision,
     chartType: document.chartType,
     encodings: stableEncodingsKey(document.encodings),
   });
@@ -35,8 +37,9 @@ export function getCachedChartPreview(
   projectInstanceId: string,
   chartPath: string,
   document: ChartDocument,
+  databaseRevision: number | null,
 ): ChartPreviewPayload | undefined {
-  const key = chartPreviewCacheKey(projectInstanceId, chartPath, document);
+  const key = chartPreviewCacheKey(projectInstanceId, chartPath, document, databaseRevision);
   const cached = previewCache.get(key);
   if (!cached) return undefined;
   previewCache.delete(key);
@@ -95,14 +98,15 @@ export async function getChartPreview(
   projectInstanceId: string,
   chartPath: string,
   document: ChartDocument,
+  databaseRevision: number | null,
   loader: PreviewLoader,
 ): Promise<ChartPreviewPayload> {
-  const cached = getCachedChartPreview(projectInstanceId, chartPath, document);
+  const cached = getCachedChartPreview(projectInstanceId, chartPath, document, databaseRevision);
   if (cached) {
     return cached;
   }
 
-  const key = chartPreviewCacheKey(projectInstanceId, chartPath, document);
+  const key = chartPreviewCacheKey(projectInstanceId, chartPath, document, databaseRevision);
   const pending = inFlight.get(key);
   if (pending) return pending;
 

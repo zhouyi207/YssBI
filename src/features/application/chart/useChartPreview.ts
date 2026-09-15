@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { toErrorReference } from "@/features/application/errorReference";
+import { getDatabaseSnapshot, useDatabaseRead } from "@/features/core/database/read";
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -26,26 +27,33 @@ export function useChartPreview(
   const [preview, setPreview] = useState<ChartPreviewPayload>({ kind: "empty" });
   const [loading, setLoading] = useState(false);
 
-  const specKey = useMemo(() => {
-    if (!document) return "";
-    return JSON.stringify({
-      chartPath,
-      databaseId: document.databaseId,
-      chartType: document.chartType,
-      encodings: document.encodings,
-    });
-  }, [document, chartPath]);
+  const databaseRevision = useDatabaseRead((snapshot) =>
+    document?.databaseId ? (snapshot.revisions[document.databaseId] ?? null) : null,
+  );
 
   useEffect(() => {
-    if (!specKey || !document) {
+    if (!document) {
       setPreview({ kind: "empty" });
+      setLoading(false);
       return;
     }
 
     const identity = captureProjectIdentity();
-    const cached = getCachedChartPreview(identity.projectInstanceId, chartPath, document);
+    let active = true;
+    const sourceIsCurrent = () =>
+      isCurrentProjectIdentity(identity) &&
+      (document.databaseId
+        ? (getDatabaseSnapshot().revisions[document.databaseId] ?? null)
+        : null) === databaseRevision;
+    const isCurrent = () => active && sourceIsCurrent();
+    const cached = getCachedChartPreview(
+      identity.projectInstanceId,
+      chartPath,
+      document,
+      databaseRevision,
+    );
     if (cached) {
-      if (!isCurrentProjectIdentity(identity)) return;
+      if (!isCurrent()) return;
       setPreview(cached);
       setLoading(false);
       return;
@@ -53,35 +61,44 @@ export function useChartPreview(
 
     const previewIdentity: ChartPreviewProjectIdentity = {
       projectInstanceId: identity.projectInstanceId,
-      isCurrent: () => isCurrentProjectIdentity(identity),
-      assertCurrent: () => assertCurrentProjectIdentity(identity),
+      isCurrent: sourceIsCurrent,
+      assertCurrent: () => {
+        assertCurrentProjectIdentity(identity);
+        if (!sourceIsCurrent()) throw new Error("chart preview source changed");
+      },
     };
     const timer = window.setTimeout(() => {
       void (async () => {
-        if (!isCurrentProjectIdentity(identity)) return;
+        if (!isCurrent()) return;
         setLoading(true);
         try {
           const result = await getChartPreview(
             identity.projectInstanceId,
             chartPath,
             document,
+            databaseRevision,
             () => fetchChartPreview(document, previewIdentity),
           );
-          if (!isCurrentProjectIdentity(identity)) return;
+          if (!isCurrent()) return;
           setPreview(result);
         } catch (error) {
-          if (!isCurrentProjectIdentity(identity)) return;
+          if (!isCurrent()) return;
           setPreview({
             kind: "error",
             ...toErrorReference(error, "chart_preview_read_failed"),
           });
         } finally {
-          if (isCurrentProjectIdentity(identity)) setLoading(false);
+          if (isCurrent()) setLoading(false);
         }
       })();
     }, 300);
-    return () => window.clearTimeout(timer);
-  }, [specKey, document, chartPath]);
+    setPreview({ kind: "empty" });
+    setLoading(true);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [document, chartPath, databaseRevision]);
 
   return { preview, loading };
 }

@@ -31,14 +31,14 @@ const DOCUMENT: ChartDocument = {
 };
 
 function chartPreviewCacheKey(projectInstanceId: string, document: ChartDocument): string {
-  return chartPreviewCacheKeyForPath(projectInstanceId, CHART_PATH, document);
+  return chartPreviewCacheKeyForPath(projectInstanceId, CHART_PATH, document, 0);
 }
 
 function getCachedChartPreview(
   projectInstanceId: string,
   document: ChartDocument,
 ): ChartPreviewPayload | undefined {
-  return getCachedChartPreviewForPath(projectInstanceId, CHART_PATH, document);
+  return getCachedChartPreviewForPath(projectInstanceId, CHART_PATH, document, 0);
 }
 
 function getChartPreview(
@@ -46,7 +46,7 @@ function getChartPreview(
   document: ChartDocument,
   loader: () => Promise<ChartPreviewPayload>,
 ): Promise<ChartPreviewPayload> {
-  return getChartPreviewForPath(projectInstanceId, CHART_PATH, document, loader);
+  return getChartPreviewForPath(projectInstanceId, CHART_PATH, document, 0, loader);
 }
 
 describe("chartPreviewCacheKey", () => {
@@ -71,6 +71,40 @@ describe("chartPreviewCacheKey", () => {
 });
 
 describe("getChartPreview", () => {
+  it("separates database revisions while an older preview is still in flight", async () => {
+    clearChartPreviewCache();
+    const oldRequest = deferred<ChartPreviewPayload>();
+    const oldCompletion = getChartPreviewForPath(
+      PROJECT_A,
+      CHART_PATH,
+      DOCUMENT,
+      1,
+      () => oldRequest.promise,
+    );
+    const current: ChartPreviewPayload = {
+      kind: "line",
+      pair: {
+        data: [{ x: 2, y: 3 }],
+        xLabel: "x",
+        yLabel: "y",
+        xFormat: "number",
+        yFormat: "number",
+      },
+    };
+    const next = await getChartPreviewForPath(
+      PROJECT_A,
+      CHART_PATH,
+      DOCUMENT,
+      2,
+      async () => current,
+    );
+    expect(next).toBe(current);
+    oldRequest.resolve({ kind: "empty" });
+    await oldCompletion;
+    expect(getCachedChartPreviewForPath(PROJECT_A, CHART_PATH, DOCUMENT, 2)).toBe(current);
+    expect(getCachedChartPreviewForPath(PROJECT_A, CHART_PATH, DOCUMENT, null)).toBeUndefined();
+  });
+
   it("reuses completed previews for the same chart spec", async () => {
     clearChartPreviewCache();
     let calls = 0;
@@ -198,13 +232,13 @@ describe("getChartPreview", () => {
     const from = "opaque chart::before";
     const to = "opaque chart::after";
     const preview: ChartPreviewPayload = { kind: "empty" };
-    await getChartPreviewForPath(PROJECT_A, from, DOCUMENT, async () => preview);
-    await getChartPreviewForPath(PROJECT_A, to, DOCUMENT, async () => preview);
+    await getChartPreviewForPath(PROJECT_A, from, DOCUMENT, 0, async () => preview);
+    await getChartPreviewForPath(PROJECT_A, to, DOCUMENT, 0, async () => preview);
 
     invalidateChartPreviewCacheForMove(PROJECT_A, from, to);
 
-    expect(getCachedChartPreviewForPath(PROJECT_A, from, DOCUMENT)).toBeUndefined();
-    expect(getCachedChartPreviewForPath(PROJECT_A, to, DOCUMENT)).toBeUndefined();
+    expect(getCachedChartPreviewForPath(PROJECT_A, from, DOCUMENT, 0)).toBeUndefined();
+    expect(getCachedChartPreviewForPath(PROJECT_A, to, DOCUMENT, 0)).toBeUndefined();
     const snapshot = getChartPreviewCacheSnapshotForTests();
     expect(snapshot.chartKeys.size).toBe(0);
     expect(snapshot.keyOwnerKeys.size).toBe(0);
@@ -217,6 +251,7 @@ describe("getChartPreview", () => {
         PROJECT_A,
         `opaque chart owner ${index}`,
         { ...DOCUMENT, databaseId: `database-${index}` },
+        0,
         async () => ({ kind: "empty" }),
       );
     }
