@@ -1,4 +1,11 @@
 import {
+  appendAssistantText,
+  finishAssistantText,
+  updateAssistantContent,
+  type AssistantMessageContent,
+  type ProjectionToolCall,
+} from "./assistantMessageContent";
+import {
   useExternalStoreRuntime,
   type AppendMessage,
   type ThreadMessageLike,
@@ -22,28 +29,12 @@ type ProjectionMessageStatus =
   | Readonly<{ type: "complete"; reason: "stop" }>
   | Readonly<{ type: "incomplete"; reason: "cancelled" | "error" }>;
 
-interface ProjectionToolCall {
-  readonly invocationId: string;
-  readonly capabilityId: string;
-  readonly state:
-    | "running"
-    | "completed"
-    | "failed"
-    | "cancelled"
-    | "timed-out"
-    | "interrupted"
-    | "unknown";
-}
-
 interface ProjectionMessage {
   readonly id: string;
   readonly role: "user" | "assistant";
-  readonly text: string;
+  readonly content: AssistantMessageContent;
   readonly createdAt: Date;
   readonly status: ProjectionMessageStatus;
-  readonly citations: readonly HarnessKnowledgeCitation[];
-  readonly plan: unknown | null;
-  readonly tools: readonly ProjectionToolCall[];
 }
 
 export interface AssistantHarnessSnapshot {
@@ -89,28 +80,7 @@ function convertProjectionMessage(message: ProjectionMessage): ThreadMessageLike
   return {
     id: message.id,
     role: message.role,
-    content: [
-      { type: "text", text: message.text },
-      ...message.citations.map((citation) => ({
-        type: "source" as const,
-        sourceType: "document" as const,
-        id: citation.chunkId,
-        title: citation.title,
-        mediaType: "text/markdown",
-      })),
-      ...(message.plan
-        ? [{ type: "data" as const, name: "statistical-plan", data: message.plan }]
-        : []),
-      ...message.tools.map((tool) => ({
-        type: "tool-call" as const,
-        toolCallId: tool.invocationId,
-        toolName: tool.capabilityId,
-        args: {},
-        ...(tool.state !== "running"
-          ? { result: { status: tool.state }, isError: tool.state !== "completed" }
-          : {}),
-      })),
-    ],
+    content: message.content,
     createdAt: message.createdAt,
     ...(message.role === "assistant" ? { status: message.status } : {}),
   };
@@ -384,12 +354,9 @@ class AssistantHarnessProjection {
         {
           id: `user-${event.turnId}`,
           role: "user",
-          text: event.payload.userMessage,
+          content: [{ type: "text", text: event.payload.userMessage }],
           createdAt: new Date(event.occurredAt),
           status: { type: "complete", reason: "stop" },
-          citations: [],
-          plan: null,
-          tools: [],
         },
       ];
       isRunning = true;
@@ -517,10 +484,13 @@ class AssistantHarnessProjection {
       if (!citations.some((citation) => citation.chunkId === event.payload.citation.chunkId)) {
         this.citationsByTurn.set(turnId, [...citations, event.payload.citation]);
       }
-      messages = messages.map((message) =>
-        message.id === `assistant-${turnId}`
-          ? { ...message, citations: this.citationsByTurn.get(turnId) ?? [] }
-          : message,
+      messages = upsertToolMessage(
+        messages,
+        turnId,
+        event.occurredAt,
+        this.citationsByTurn.get(turnId) ?? [],
+        this.plansByTurn.get(turnId) ?? null,
+        this.toolsByTurn.get(turnId) ?? [],
       );
     } else if (event.type === "plan_proposed" && event.turnId) {
       const turnId = event.turnId;
@@ -573,6 +543,30 @@ class AssistantHarnessProjection {
   }
 }
 
+function updateAssistantMessage(
+  messages: readonly ProjectionMessage[],
+  turnId: string,
+  occurredAt: number,
+  citations: readonly HarnessKnowledgeCitation[],
+  plan: unknown | null,
+  tools: readonly ProjectionToolCall[],
+  transform: (content: AssistantMessageContent) => AssistantMessageContent,
+  status?: ProjectionMessageStatus,
+): readonly ProjectionMessage[] {
+  const id = `assistant-${turnId}`;
+  const existing = messages.find((message) => message.id === id);
+  const message: ProjectionMessage = {
+    id,
+    role: "assistant",
+    createdAt: existing?.createdAt ?? new Date(occurredAt),
+    content: transform(updateAssistantContent(existing?.content ?? [], citations, plan, tools)),
+    status: status ?? existing?.status ?? { type: "running" },
+  };
+  return existing
+    ? messages.map((previous) => (previous.id === id ? message : previous))
+    : [...messages, message];
+}
+
 function upsertAssistantMessage(
   messages: readonly ProjectionMessage[],
   turnId: string,
@@ -582,34 +576,15 @@ function upsertAssistantMessage(
   plan: unknown | null,
   tools: readonly ProjectionToolCall[],
 ): readonly ProjectionMessage[] {
-  const id = `assistant-${turnId}`;
-  const existing = messages.find((message) => message.id === id);
-  if (!existing) {
-    return [
-      ...messages,
-      {
-        id,
-        role: "assistant",
-        text: delta,
-        createdAt: new Date(occurredAt),
-        status: { type: "running" },
-        citations,
-        plan,
-        tools,
-      },
-    ];
-  }
-  return messages.map((message) =>
-    message.id === id
-      ? {
-          ...message,
-          text: `${message.text}${delta}`,
-          status: { type: "running" },
-          citations,
-          plan,
-          tools,
-        }
-      : message,
+  return updateAssistantMessage(
+    messages,
+    turnId,
+    occurredAt,
+    citations,
+    plan,
+    tools,
+    (content) => appendAssistantText(content, delta),
+    { type: "running" },
   );
 }
 
@@ -622,33 +597,15 @@ function completeAssistantMessage(
   plan: unknown | null,
   tools: readonly ProjectionToolCall[],
 ): readonly ProjectionMessage[] {
-  const id = `assistant-${turnId}`;
-  if (!messages.some((message) => message.id === id)) {
-    return [
-      ...messages,
-      {
-        id,
-        role: "assistant",
-        text: finalText,
-        createdAt: new Date(occurredAt),
-        status: { type: "complete", reason: "stop" },
-        citations,
-        plan,
-        tools,
-      },
-    ];
-  }
-  return messages.map((message) =>
-    message.id === id
-      ? {
-          ...message,
-          text: finalText,
-          status: { type: "complete", reason: "stop" },
-          citations,
-          plan,
-          tools,
-        }
-      : message,
+  return updateAssistantMessage(
+    messages,
+    turnId,
+    occurredAt,
+    citations,
+    plan,
+    tools,
+    (content) => finishAssistantText(content, finalText),
+    { type: "complete", reason: "stop" },
   );
 }
 
@@ -661,26 +618,15 @@ function failAssistantMessage(
   plan: unknown | null,
   tools: readonly ProjectionToolCall[],
 ): readonly ProjectionMessage[] {
-  const id = `assistant-${turnId}`;
-  if (!messages.some((message) => message.id === id)) {
-    return [
-      ...messages,
-      {
-        id,
-        role: "assistant",
-        text: " ",
-        createdAt: new Date(occurredAt),
-        status: { type: "incomplete", reason },
-        citations,
-        plan,
-        tools,
-      },
-    ];
-  }
-  return messages.map((message) =>
-    message.id === id
-      ? { ...message, status: { type: "incomplete", reason }, citations, plan, tools }
-      : message,
+  return updateAssistantMessage(
+    messages,
+    turnId,
+    occurredAt,
+    citations,
+    plan,
+    tools,
+    (content) => content,
+    { type: "incomplete", reason },
   );
 }
 
@@ -692,23 +638,15 @@ function upsertPlanMessage(
   citations: readonly HarnessKnowledgeCitation[],
   tools: readonly ProjectionToolCall[],
 ): readonly ProjectionMessage[] {
-  const id = `assistant-${turnId}`;
-  if (!messages.some((message) => message.id === id)) {
-    return [
-      ...messages,
-      {
-        id,
-        role: "assistant",
-        text: "",
-        createdAt: new Date(occurredAt),
-        status: { type: "running" },
-        citations,
-        plan,
-        tools,
-      },
-    ];
-  }
-  return messages.map((message) => (message.id === id ? { ...message, plan } : message));
+  return updateAssistantMessage(
+    messages,
+    turnId,
+    occurredAt,
+    citations,
+    plan,
+    tools,
+    (content) => content,
+  );
 }
 
 function upsertToolMessage(
@@ -719,23 +657,15 @@ function upsertToolMessage(
   plan: unknown | null,
   tools: readonly ProjectionToolCall[],
 ): readonly ProjectionMessage[] {
-  const id = `assistant-${turnId}`;
-  if (!messages.some((message) => message.id === id)) {
-    return [
-      ...messages,
-      {
-        id,
-        role: "assistant",
-        text: "",
-        createdAt: new Date(occurredAt),
-        status: { type: "running" },
-        citations,
-        plan,
-        tools,
-      },
-    ];
-  }
-  return messages.map((message) => (message.id === id ? { ...message, tools } : message));
+  return updateAssistantMessage(
+    messages,
+    turnId,
+    occurredAt,
+    citations,
+    plan,
+    tools,
+    (content) => content,
+  );
 }
 
 export function useAssistantHarnessRuntime() {

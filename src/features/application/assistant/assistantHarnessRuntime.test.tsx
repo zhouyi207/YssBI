@@ -112,7 +112,11 @@ it("retains the safe provider failure and accepts a subsequent successful turn",
     return createElement(
       "output",
       { "data-status": snapshot.status, "data-error": snapshot.error?.code ?? "" },
-      snapshot.messages.map((message) => message.text).join("\n"),
+      snapshot.messages
+        .flatMap((message) =>
+          message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+        )
+        .join("\n"),
     );
   }
   const adapter = () => {

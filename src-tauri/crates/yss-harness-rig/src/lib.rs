@@ -2,15 +2,16 @@
 
 #![forbid(unsafe_code)]
 
-use std::future::IntoFuture;
+use futures_util::StreamExt;
 use std::sync::{
     Arc, Mutex, RwLock,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Duration;
 
-use rig_agent::agent::AgentBuilder;
-use rig_agent::completion::{Prompt, PromptError};
+use rig_agent::agent::{AgentBuilder, MultiTurnStreamItem, StreamingError, StreamingResult};
+use rig_agent::completion::PromptError;
+use rig_agent::streaming::{StreamedAssistantContent, StreamingPrompt};
 use rig_agent::tool::{DynamicTool, ToolExecutionError, ToolOutput};
 use rig_core::client::CompletionClient;
 use rig_core::completion::{CompletionError, CompletionModel, Message};
@@ -241,31 +242,30 @@ where
             builder.dynamic_tools(tools).build()
         };
         let maximum_model_turns = self.config.maximum_model_turns;
-        let mut prompt = tokio::spawn(async move {
-            agent
-                .prompt(prepared.prompt)
+        let stream_output = Arc::clone(&output);
+        let stream_cancellation = cancellation.clone();
+        let duration = self.config.maximum_turn_duration;
+        let prompt = tokio::spawn(async move {
+            let deadline = tokio::time::Instant::now() + duration;
+            let stream = tokio::select! {
+                stream = agent
+                .stream_prompt(prepared.prompt)
                 .history(prepared.history)
                 .tool_concurrency(1)
                 .max_turns(maximum_model_turns)
-                .into_future()
-                .await
+                => stream,
+                _ = stream_cancellation.cancelled() => return Err(cancelled()),
+                _ = tokio::time::sleep_until(deadline) => {
+                    stream_cancellation.cancel(CancellationReason::DeadlineElapsed);
+                    return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
+                }
+            };
+            consume_text_stream(stream, stream_output, stream_cancellation, deadline).await
         });
-        let mut result = tokio::select! {
-            result = &mut prompt => result
-                .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure))
-                .and_then(|result| result.map_err(map_prompt_failure)),
-            _ = cancellation.cancelled() => {
-                prompt.abort();
-                let _ = prompt.await;
-                Err(cancelled())
-            },
-            _ = tokio::time::sleep(self.config.maximum_turn_duration) => {
-                cancellation.cancel(CancellationReason::DeadlineElapsed);
-                prompt.abort();
-                let _ = prompt.await;
-                Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed))
-            },
-        };
+        let mut result = prompt
+            .await
+            .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure))
+            .and_then(|result| result);
         // Stopping the model must not drop the ledger update in an admitted capability.
         // The gateway observes the same cancellation token and bounds every read-only query.
         let tasks =
@@ -281,14 +281,91 @@ where
         if cancellation.is_cancelled() {
             return Err(cancelled());
         }
-        output
-            .emit(AgentEvent::TextDelta {
-                delta: final_text.clone(),
-            })
-            .await
-            .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::OutputUnavailable))?;
         Ok(AgentTurnResult { final_text })
     }
+}
+
+async fn flush_text(
+    output: &dyn AgentEventOutput,
+    pending: &mut String,
+) -> Result<(), AgentDriverFailure> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    output
+        .emit(AgentEvent::TextDelta {
+            delta: std::mem::take(pending),
+        })
+        .await
+        .map_err(|_| AgentDriverFailure::new(AgentDriverFailureCode::OutputUnavailable))
+}
+
+async fn consume_text_stream(
+    mut stream: StreamingResult,
+    output: Arc<dyn AgentEventOutput>,
+    cancellation: CancellationToken,
+    deadline: tokio::time::Instant,
+) -> Result<String, AgentDriverFailure> {
+    let mut pending = String::new();
+    let mut transcript = String::new();
+    let mut final_seen = false;
+    let mut separate_turn = false;
+    let mut timer = tokio::time::interval(Duration::from_millis(40));
+    timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let result = loop {
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => break Err(cancelled()),
+            _ = tokio::time::sleep_until(deadline) => {
+                cancellation.cancel(CancellationReason::DeadlineElapsed);
+                break Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
+            }
+            _ = timer.tick() => flush_text(output.as_ref(), &mut pending).await?,
+            item = stream.next() => {
+                let Some(item) = item else {
+                    break if final_seen { Ok(()) } else { Err(invalid_response()) };
+                };
+                let item = match item {
+                    Ok(item) => item,
+                    Err(StreamingError::Completion(error)) => break Err(map_prompt_failure(PromptError::CompletionError(error))),
+                    Err(StreamingError::Prompt(error)) => break Err(map_prompt_failure(*error)),
+                };
+                match item {
+                    MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(text)) => {
+                        if text.text.is_empty() { continue; }
+                        let first = transcript.is_empty();
+                        if separate_turn && !first {
+                            pending.push_str("\n\n");
+                            transcript.push_str("\n\n");
+                        }
+                        separate_turn = false;
+                        if transcript.len().saturating_add(text.text.len()) > 1024 * 1024 {
+                            break Err(invalid_response());
+                        }
+                        pending.push_str(&text.text);
+                        transcript.push_str(&text.text);
+                        if first || pending.len() >= 4096 { flush_text(output.as_ref(), &mut pending).await?; }
+                    }
+                    MultiTurnStreamItem::CompletionCall(_) => {
+                        flush_text(output.as_ref(), &mut pending).await?;
+                        separate_turn = true;
+                    }
+                    MultiTurnStreamItem::FinalResponse(_) => { final_seen = true; }
+                    // No retry hooks are installed: silently retaining rejected text would corrupt the transcript.
+                    MultiTurnStreamItem::ModelTurnRetried { .. } => break Err(invalid_response()),
+                    _ => {
+                        // Rig yields tool calls before executing them on the next poll. Publish
+                        // preceding text now so Gateway tool events cannot overtake it.
+                        flush_text(output.as_ref(), &mut pending).await?;
+                    }
+                }
+            }
+        }
+    };
+    drop(stream);
+    flush_text(output.as_ref(), &mut pending).await?;
+    result?;
+    Ok(transcript)
 }
 
 impl<M> AgentDriverPort for RigAgentDriver<M>
@@ -625,21 +702,45 @@ mod tests {
             &self,
             _request: CompletionRequest,
         ) -> Result<CompletionResponse, CompletionError> {
-            let choice = self
-                .turns
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .pop_front()
-                .ok_or_else(|| CompletionError::ResponseError("script exhausted".to_owned()))?;
-            Ok(CompletionResponse::new(choice, Usage::new(), "test"))
+            panic!("the driver must use the streaming provider interface")
         }
 
         async fn stream(
             &self,
             _request: CompletionRequest,
         ) -> Result<StreamingCompletionResponse, CompletionError> {
-            Err(CompletionError::ResponseError(
-                "streaming is not used by this adapter test".to_owned(),
+            use rig_core::streaming::{RawStreamingChoice, RawStreamingToolCall, StreamFinal};
+            let choice = self
+                .turns
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .pop_front()
+                .ok_or_else(|| CompletionError::ResponseError("script exhausted".to_owned()))?;
+            let mut items = Vec::new();
+            for part in choice {
+                match part {
+                    AssistantContent::Text(text) => {
+                        items.extend(text.text.chars().map(|character| {
+                            Ok(RawStreamingChoice::Message(character.to_string()))
+                        }));
+                    }
+                    AssistantContent::ToolCall(call) => {
+                        items.push(Ok(RawStreamingChoice::ToolCall(RawStreamingToolCall::new(
+                            "call-1",
+                            call.function.name,
+                            call.function.arguments,
+                        ))))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            items.push(Ok(RawStreamingChoice::FinalResponse(StreamFinal::new(
+                "test",
+                Usage::new(),
+            ))));
+            Ok(StreamingCompletionResponse::stream(
+                "test",
+                Box::pin(futures_util::stream::iter(items)),
             ))
         }
     }
@@ -716,14 +817,40 @@ mod tests {
 
     #[tokio::test]
     async fn rig_driver_maps_typed_tool_calls_and_emits_ordered_events() {
+        struct ObservingExecutor(Arc<CollectingOutput>);
+        impl ModelCapabilityExecutor for ObservingExecutor {
+            fn execute<'a>(
+                &'a self,
+                request: ModelCapabilityRequest,
+            ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+                Box::pin(async move {
+                    let text = self
+                        .0
+                        .events
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|event| match event {
+                            AgentEvent::TextDelta { delta } => delta.as_str(),
+                            _ => "",
+                        })
+                        .collect::<String>();
+                    assert_eq!(text, "Checking schema.");
+                    StaticExecutor.execute(request).await
+                })
+            }
+        }
         let model = ScriptedCompletionModel::new([
-            vec![AssistantContent::ToolCall(ToolCall::from_wire(
-                "call-1",
-                ToolFunction::new(
-                    "inspect_dataset_schema".to_owned(),
-                    serde_json::json!({ "databaseId": "database-1" }),
-                ),
-            ))],
+            vec![
+                AssistantContent::text("Checking schema."),
+                AssistantContent::ToolCall(ToolCall::from_wire(
+                    "call-1",
+                    ToolFunction::new(
+                        "inspect_dataset_schema".to_owned(),
+                        serde_json::json!({ "databaseId": "database-1" }),
+                    ),
+                )),
+            ],
             vec![AssistantContent::text(
                 "The schema inspection completed.".to_owned(),
             )],
@@ -736,7 +863,7 @@ mod tests {
                 request(vec![
                     ToolDescriptor::for_capability(CapabilityId::InspectDatasetSchema).unwrap(),
                 ]),
-                Arc::new(StaticExecutor),
+                Arc::new(ObservingExecutor(output.clone())),
                 output.clone(),
                 CancellationToken::default(),
             )
@@ -748,8 +875,117 @@ mod tests {
             .unwrap_or_else(|error| error.into_inner())
             .clone();
 
-        assert_eq!(result.final_text, "The schema inspection completed.");
-        assert!(matches!(events.as_slice(), [AgentEvent::TextDelta { .. }]));
+        assert_eq!(
+            result.final_text,
+            "Checking schema.\n\nThe schema inspection completed."
+        );
+        assert!(events.len() > 1);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| match event {
+                    AgentEvent::TextDelta { delta } => delta.as_str(),
+                    _ => panic!("unexpected event"),
+                })
+                .collect::<String>(),
+            result.final_text
+        );
+    }
+
+    #[tokio::test]
+    async fn text_is_published_while_provider_waits_and_pending_text_survives_cancellation() {
+        use rig_core::message::Text;
+        for cancel in [false, true] {
+            let output = Arc::new(CollectingOutput::default());
+            let token = CancellationToken::default();
+            let (release, wait) = tokio::sync::oneshot::channel::<()>();
+            let initial = futures_util::stream::iter([
+                Ok(MultiTurnStreamItem::StreamAssistantItem(
+                    StreamedAssistantContent::Text(Text::new("开始")),
+                )),
+                Ok(MultiTurnStreamItem::StreamAssistantItem(
+                    StreamedAssistantContent::Text(Text::new("分析")),
+                )),
+            ]);
+            let ending = futures_util::stream::once(async move {
+                let _ = wait.await;
+                Ok(MultiTurnStreamItem::final_response(
+                    vec![AssistantContent::text("开始分析")],
+                    Usage::new(),
+                ))
+            });
+            let task = tokio::spawn(consume_text_stream(
+                Box::pin(initial.chain(ending)),
+                output.clone(),
+                token.clone(),
+                tokio::time::Instant::now() + Duration::from_secs(2),
+            ));
+            tokio::time::timeout(Duration::from_secs(1), async {
+                loop {
+                    if output
+                        .events
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .map(|event| match event {
+                            AgentEvent::TextDelta { delta } => delta.as_str(),
+                            _ => "",
+                        })
+                        .collect::<String>()
+                        == "开始分析"
+                    {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .expect("text must be published before releasing the provider");
+            assert!(!task.is_finished());
+            if cancel {
+                token.cancel(CancellationReason::User);
+            } else {
+                release.send(()).unwrap();
+            }
+            let result = task.await.unwrap();
+            if cancel {
+                assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
+            } else {
+                assert_eq!(result.unwrap(), "开始分析");
+            }
+            let events = output.events.lock().unwrap();
+            assert_eq!(events.len(), 2);
+        }
+        let output = Arc::new(CollectingOutput::default());
+        let cancellation = CancellationToken::default();
+        let cancel_on_last = cancellation.clone();
+        let stream = futures_util::stream::iter(["first", "pending"]).map(move |text| {
+            if text == "pending" {
+                cancel_on_last.cancel(CancellationReason::User);
+            }
+            Ok(MultiTurnStreamItem::StreamAssistantItem(
+                StreamedAssistantContent::Text(Text::new(text)),
+            ))
+        });
+        let result = consume_text_stream(
+            Box::pin(stream),
+            output.clone(),
+            cancellation,
+            tokio::time::Instant::now() + Duration::from_secs(1),
+        )
+        .await;
+        assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
+        assert_eq!(
+            output.events.lock().unwrap().as_slice(),
+            &[
+                AgentEvent::TextDelta {
+                    delta: "first".into()
+                },
+                AgentEvent::TextDelta {
+                    delta: "pending".into()
+                },
+            ]
+        );
     }
 
     #[test]
@@ -839,7 +1075,8 @@ mod tests {
                 &self,
                 _: CompletionRequest,
             ) -> Result<StreamingCompletionResponse, CompletionError> {
-                unreachable!()
+                assert!(!self.panic, "synthetic provider panic");
+                std::future::pending().await
             }
         }
         for (panic, expected) in [
@@ -931,5 +1168,4 @@ mod tests {
         assert_eq!(&record[..2], &[22, 3]);
         assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);
     }
-
 }

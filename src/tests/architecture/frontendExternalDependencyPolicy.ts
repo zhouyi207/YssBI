@@ -14,6 +14,7 @@ import { FRONTEND_LAYERS } from "./frontendArchitecturePolicy";
 
 const DECLARED_RUNTIME_PACKAGES = [
   "@assistant-ui/react",
+  "@assistant-ui/react-markdown",
   "@dnd-kit/core",
   "@fontsource-variable/inter",
   "@tanstack/react-virtual",
@@ -39,6 +40,7 @@ const DECLARED_RUNTIME_PACKAGES = [
   "react-markdown",
   "react-router",
   "rehype-katex",
+  "remark-gfm",
   "remark-math",
   "shadcn",
   "tailwind-merge",
@@ -127,6 +129,7 @@ const VIEW_USES = [
   ...pairedModuleAllowances("views", [
     ["@xyflow/react", [null]],
     ["@assistant-ui/react", [null]],
+    ["@assistant-ui/react-markdown", [null]],
     ["react", [null]],
     ["react-dom", [null]],
     ["react-router", [null]],
@@ -141,6 +144,9 @@ const VIEW_USES = [
     ["zustand", ["react::shallow"]],
   ]),
   allowance("views", "runtime", "katex", [null]),
+  allowance("views", "runtime", "remark-gfm", [null]),
+  allowance("views", "runtime", "remark-math", [null]),
+  allowance("views", "runtime", "rehype-katex", [null]),
   allowance("views", "runtime", "react-icons", [null, "fi", "vsc"]),
   allowance("views", "runtime", "katex", ["dist::katex.min.css"], "stylesheet"),
   allowance("views", "runtime", "@xyflow/react", ["dist::base.css"], "stylesheet"),

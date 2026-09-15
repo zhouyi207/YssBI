@@ -1,13 +1,23 @@
 import {
   AuiIf,
+  ActionBarPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   type DataMessagePartComponent,
-  type ToolCallMessagePartComponent,
+  type SourceMessagePartComponent,
 } from "@assistant-ui/react";
 import { useTranslation } from "react-i18next";
-import { VscDebugStop, VscSend, VscSparkle, VscTrash } from "react-icons/vsc";
+import {
+  VscArrowDown,
+  VscCheck,
+  VscCopy,
+  VscDebugStop,
+  VscReferences,
+  VscSend,
+  VscSparkle,
+  VscTrash,
+} from "react-icons/vsc";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,18 +27,18 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   useAssistantHarnessActions,
   useAssistantHarnessSnapshot,
 } from "@/features/application/assistant/AssistantRuntimeProvider";
+import { AssistantMarkdown } from "./AssistantMarkdown";
+import { AssistantToolCall, AssistantToolGroup } from "./AssistantToolCalls";
 
 function UserMessage() {
   return (
-    <MessagePrimitive.Root className="flex justify-end py-2">
-      <div className="max-w-[88%] rounded-lg bg-primary px-3 py-2 text-xs/relaxed text-primary-foreground">
+    <MessagePrimitive.Root className="flex min-w-0 justify-end py-3">
+      <div className="min-w-0 max-w-[90%] rounded-2xl rounded-br-sm bg-muted px-3.5 py-2.5 text-[13px] leading-7 wrap-anywhere text-foreground">
         <MessagePrimitive.Parts />
       </div>
     </MessagePrimitive.Root>
@@ -43,46 +53,56 @@ const StatisticalPlanCard: DataMessagePartComponent = ({ data }) => {
   const analysisMode = typeof plan.analysisMode === "string" ? plan.analysisMode : "—";
   const workflow = typeof plan.selectedWorkflow === "string" ? plan.selectedWorkflow : "—";
   return (
-    <section className="my-2 rounded-md border border-border bg-muted/40 p-2.5">
+    <section className="my-3 rounded-lg bg-muted/50 p-3">
       <div className="text-[0.6875rem] font-semibold tracking-wide text-muted-foreground uppercase">
         {t("panel.assistantPlan")}
       </div>
-      <p className="mt-1 text-xs/relaxed font-medium">{researchQuestion}</p>
+      <p className="mt-1 text-[13px] leading-6 font-medium wrap-anywhere">{researchQuestion}</p>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[0.6875rem] leading-4">
         <dt className="text-muted-foreground">{t("panel.assistantPlanMode")}</dt>
         <dd>{analysisMode}</dd>
         <dt className="text-muted-foreground">{t("panel.assistantPlanWorkflow")}</dt>
-        <dd className="truncate font-mono">{workflow}</dd>
+        <dd className="min-w-0 wrap-anywhere">{workflow}</dd>
       </dl>
     </section>
   );
 };
 
-const ToolCallCard: ToolCallMessagePartComponent = ({ toolName, result, isError }) => {
+const SourceCard: SourceMessagePartComponent = ({ title }) => {
   const { t } = useTranslation();
-  const status =
-    typeof result === "object" && result !== null && "status" in result ? result.status : null;
-  const state =
-    status === "cancelled"
-      ? t("panel.assistantToolCancelled")
-      : status === "timed-out"
-        ? t("panel.assistantToolTimedOut")
-        : status === "unknown"
-          ? t("panel.assistantToolUnknown")
-          : status === "interrupted"
-            ? t("panel.assistantToolInterrupted")
-            : isError
-              ? t("panel.assistantToolFailed")
-              : result === undefined
-                ? t("panel.assistantToolRunning")
-                : t("panel.assistantToolCompleted");
   return (
-    <div className="my-2 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-2 text-[0.6875rem]">
-      <span className="min-w-0 flex-1 truncate font-mono">{toolName}</span>
-      <span className="shrink-0 text-muted-foreground">{state}</span>
+    <div className="my-2 flex min-w-0 items-start gap-2 text-xs leading-5 text-muted-foreground">
+      <VscReferences className="mt-1 shrink-0" aria-hidden />
+      <span className="wrap-anywhere">
+        {t("panel.assistantSource")}: {title}
+      </span>
     </div>
   );
 };
+
+function MessageActions() {
+  const { t } = useTranslation();
+  return (
+    <ActionBarPrimitive.Root hideWhenRunning className="mt-2 flex items-center">
+      <ActionBarPrimitive.Copy asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={t("panel.assistantCopy")}
+          title={t("panel.assistantCopy")}
+        >
+          <AuiIf condition={(s) => s.message.isCopied}>
+            <VscCheck aria-hidden />
+          </AuiIf>
+          <AuiIf condition={(s) => !s.message.isCopied}>
+            <VscCopy aria-hidden />
+          </AuiIf>
+        </Button>
+      </ActionBarPrimitive.Copy>
+    </ActionBarPrimitive.Root>
+  );
+}
 
 function memoryLabel(value: Readonly<Record<string, unknown>>): string {
   const payload =
@@ -96,15 +116,24 @@ function memoryLabel(value: Readonly<Record<string, unknown>>): string {
 }
 
 function AssistantMessage() {
+  const { t } = useTranslation();
   return (
-    <MessagePrimitive.Root className="flex justify-start py-2">
-      <div className="max-w-[92%] rounded-lg border border-border bg-background/70 px-3 py-2 text-xs/relaxed text-foreground shadow-xs">
+    <MessagePrimitive.Root className="min-w-0 py-4">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <VscSparkle aria-hidden />
+        {t("panel.assistant")}
+      </div>
+      <div className="min-w-0 text-foreground">
         <MessagePrimitive.Parts
           components={{
+            Text: AssistantMarkdown,
+            Source: SourceCard,
             data: { by_name: { "statistical-plan": StatisticalPlanCard } },
-            tools: { Fallback: ToolCallCard },
+            tools: { Fallback: AssistantToolCall },
+            ToolGroup: AssistantToolGroup,
           }}
         />
+        <MessageActions />
       </div>
     </MessagePrimitive.Root>
   );
@@ -129,37 +158,54 @@ export function AssistantThread() {
             : t("panel.assistantStatusError");
 
   return (
-    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col bg-(--workbench-bg)">
+    <ThreadPrimitive.Root className="flex h-full min-h-0 min-w-0 flex-col bg-(--workbench-bg)">
       <ThreadPrimitive.ViewportProvider>
-        <ScrollArea className="min-h-0 flex-1" orientation="vertical">
-          <div className="flex min-h-full min-w-0 flex-col p-3">
-            <AuiIf condition={(state) => state.thread.isEmpty}>
-              <Empty className="min-h-56 flex-1 px-4 py-8">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <VscSparkle aria-hidden />
-                  </EmptyMedia>
-                  <EmptyTitle>{t("panel.assistantEmptyTitle")}</EmptyTitle>
-                  <EmptyDescription>{t("panel.assistantEmptyDescription")}</EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            </AuiIf>
-            <ThreadPrimitive.Messages
-              components={{ UserMessage, AssistantMessage, SystemMessage: AssistantMessage }}
-            />
-          </div>
-        </ScrollArea>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <ThreadPrimitive.Viewport
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+            autoScroll
+          >
+            <div className="mx-auto flex min-h-full w-full min-w-0 max-w-3xl flex-col px-4 py-3">
+              <AuiIf condition={(state) => state.thread.isEmpty}>
+                <Empty className="min-h-56 flex-1 px-4 py-8">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <VscSparkle aria-hidden />
+                    </EmptyMedia>
+                    <EmptyTitle>{t("panel.assistantEmptyTitle")}</EmptyTitle>
+                    <EmptyDescription>{t("panel.assistantEmptyDescription")}</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              </AuiIf>
+              <ThreadPrimitive.Messages>
+                {({ message }) =>
+                  message.role === "user" ? <UserMessage /> : <AssistantMessage />
+                }
+              </ThreadPrimitive.Messages>
+            </div>
+          </ThreadPrimitive.Viewport>
+          <ThreadPrimitive.ScrollToBottom asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="absolute right-4 bottom-2 rounded-full bg-background shadow-sm disabled:hidden"
+              aria-label={t("panel.assistantScrollToBottom")}
+              title={t("panel.assistantScrollToBottom")}
+            >
+              <VscArrowDown aria-hidden />
+            </Button>
+          </ThreadPrimitive.ScrollToBottom>
+        </div>
 
-        <Separator />
-        <div className="shrink-0 p-2">
-          <ComposerPrimitive.Root className="rounded-md border border-border bg-background/80 shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
+        <div className="mx-auto w-full max-w-3xl shrink-0 px-3 pt-1 pb-3">
+          <ComposerPrimitive.Root className="rounded-xl border border-border bg-background shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20">
             <ComposerPrimitive.Input
               aria-label={t("panel.assistantComposerLabel")}
-              className="max-h-32 min-h-16 w-full resize-none bg-transparent px-2.5 py-2 text-xs/relaxed outline-none placeholder:text-muted-foreground"
+              className="max-h-40 min-h-20 w-full resize-none bg-transparent px-3 py-3 text-[13px] leading-6 outline-none placeholder:text-muted-foreground"
               placeholder={t("panel.assistantComposerPlaceholder")}
               submitMode="ctrlEnter"
             />
-            <Separator />
             <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
               {snapshot.memoryCount > 0 ? (
                 <Popover>
@@ -224,16 +270,18 @@ export function AssistantThread() {
                   </Button>
                 </ComposerPrimitive.Cancel>
               </AuiIf>
-              <ComposerPrimitive.Send asChild>
-                <Button
-                  type="submit"
-                  size="icon-sm"
-                  aria-label={t("panel.assistantSend")}
-                  title={t("panel.assistantSend")}
-                >
-                  <VscSend data-icon="inline-start" aria-hidden />
-                </Button>
-              </ComposerPrimitive.Send>
+              <AuiIf condition={(state) => !state.thread.isRunning}>
+                <ComposerPrimitive.Send asChild>
+                  <Button
+                    type="submit"
+                    size="icon-sm"
+                    aria-label={t("panel.assistantSend")}
+                    title={t("panel.assistantSend")}
+                  >
+                    <VscSend data-icon="inline-start" aria-hidden />
+                  </Button>
+                </ComposerPrimitive.Send>
+              </AuiIf>
             </div>
           </ComposerPrimitive.Root>
         </div>

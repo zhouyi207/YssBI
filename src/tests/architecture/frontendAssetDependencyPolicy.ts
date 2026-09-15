@@ -14,6 +14,14 @@ import type {
 export const FRONTEND_ASSET_DEPENDENCY_POLICY: AssetDependencyPolicy = {
   uses: [
     {
+      sourceLayer: "views",
+      mode: "runtime",
+      dependencyKind: "side-effect-import",
+      resourceKind: "stylesheet",
+      consumerSourceFile: "src/modules/assistant/internal/ui/AssistantMarkdown.tsx",
+      repositoryRelativeAssetPath: "src/modules/assistant/internal/ui/assistant.css",
+    },
+    {
       sourceLayer: "app-composition",
       mode: "runtime",
       dependencyKind: "side-effect-import",
