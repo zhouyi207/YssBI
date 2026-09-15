@@ -11,14 +11,13 @@ import {
 
 function parsedCatalog(): LocalizedCatalogDto {
   const wire: unknown = catalogSearchWire;
-  expect(isLocalizedCatalogDto(wire)).toBe(true);
   if (!isLocalizedCatalogDto(wire)) {
     throw new Error("focused Rust Catalog fixture must pass the production strict guard");
   }
   return wire;
 }
 
-describe("Task 17 focused Catalog search wire golden", () => {
+describe("Catalog search wire contract", () => {
   it("is an exact strict localized Catalog response containing real Rust item wires", () => {
     const catalog = parsedCatalog();
 

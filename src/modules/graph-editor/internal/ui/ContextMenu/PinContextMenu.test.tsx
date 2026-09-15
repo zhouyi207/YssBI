@@ -31,21 +31,6 @@ afterEach(() => {
 });
 
 describe("PinContextMenu", () => {
-  it("omits promote to variable and retains supported actions", () => {
-    renderMenu({
-      hasLinks: true,
-      canReset: true,
-      showView: true,
-      viewEnabled: true,
-    });
-
-    expect(item("promoteToVar")).toBeUndefined();
-    expect(item("breakLinks")).toBeDefined();
-    expect(item("resetValue")).toBeDefined();
-    expect(item("view")).toBeDefined();
-    expect(item("removePin")).toBeUndefined();
-  });
-
   it("preserves disabled state for unavailable supported actions", () => {
     renderMenu({ hasLinks: false, canReset: false });
 

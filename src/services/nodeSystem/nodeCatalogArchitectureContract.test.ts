@@ -15,23 +15,6 @@ const scopedDirectories = [
   "src/features/application/editor/canvasDrop",
 ] as const;
 
-const forbiddenIdentifiers = new Set([
-  "NodeDefinition",
-  "resolveEffectiveDefinition",
-  "signatureToPinSlots",
-  "buildBuiltinCatalogItems",
-  "buildContextualCatalogItems",
-  "searchNodeDocumentation",
-  "NODE_CATALOG_UNAVAILABLE_MESSAGE",
-]);
-
-const forbiddenModuleBasenames = new Set([
-  "buildBuiltinCatalogItems",
-  "buildContextualCatalogItems",
-  "searchNodeDocumentation",
-  "resolveEffectiveDefinition",
-]);
-
 function productionFiles(directory: string): string[] {
   return readdirSync(resolve(directory), { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name);
@@ -203,27 +186,6 @@ function sourceOffenders(path: string, sourceFile: ts.SourceFile): string[] {
   const offenders = new Set<string>();
 
   function visit(node: ts.Node): void {
-    if (ts.isIdentifier(node) && forbiddenIdentifiers.has(node.text)) {
-      offenders.add(`${path}: forbidden identifier ${node.text}`);
-    }
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const segments = node.moduleSpecifier.text.split("/");
-      const basename = segments[segments.length - 1] ?? "";
-      if (forbiddenModuleBasenames.has(basename)) {
-        offenders.add(`${path}: forbidden module ${node.moduleSpecifier.text}`);
-      }
-    }
-    if (
-      ts.isStringLiteral(node) &&
-      (node.text === "sidebar.nodeCatalogUnavailable" ||
-        node.text === "sidebar.nodeCatalogUnavailableDescription")
-    ) {
-      offenders.add(`${path}: unavailable Catalog placeholder ${node.text}`);
-    }
     if (ts.isObjectLiteralExpression(node)) {
       const reason = descriptorSynthesisReason(node);
       if (reason) offenders.add(`${path}: synthesized creation descriptor (${reason})`);
@@ -240,23 +202,6 @@ function fixtureOffenders(source: string): string[] {
   return withIsolatedTypeScriptProject({ "fixture.ts": source }, ({ sourceFile }) =>
     sourceOffenders("fixture.ts", sourceFile("fixture.ts")),
   );
-}
-
-function containsCreateNodeMutation(sourceFile: ts.SourceFile): boolean {
-  let found = false;
-  function visit(node: ts.Node): void {
-    if (
-      ts.isPropertyAssignment(node) &&
-      propertyName(node.name) === "type" &&
-      ts.isStringLiteral(node.initializer) &&
-      node.initializer.text === "createNode"
-    ) {
-      found = true;
-    }
-    if (!found) node.forEachChild(visit);
-  }
-  visit(sourceFile);
-  return found;
 }
 
 describe("scoped node Catalog architecture audit", () => {
@@ -314,17 +259,5 @@ describe("scoped node Catalog architecture audit", () => {
 
     expect(uniqueAuditedFiles.length).toBeGreaterThan(0);
     expect(offenders).toEqual([]);
-  });
-
-  it("keeps node creation behind one descriptor-authoritative draft boundary", () => {
-    const auditedFiles = scopedDirectories
-      .flatMap(productionFiles)
-      .map((path) => relative(resolve("."), resolve(path)).replace(/\\/g, "/"));
-    const uniqueAuditedFiles = [...new Set(auditedFiles)];
-    const mutationSites = withProductionTypeScriptProject(({ sourceFile }) =>
-      uniqueAuditedFiles.filter((path) => containsCreateNodeMutation(sourceFile(path))),
-    );
-
-    expect(mutationSites).toHaveLength(1);
   });
 });

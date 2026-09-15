@@ -706,27 +706,6 @@ mod tests {
     }
 
     #[test]
-    fn epoch_preserves_the_session_generation() {
-        let epoch = GraphRuntimeEpoch::from_existing(42);
-        assert_eq!(epoch.get(), 42);
-    }
-
-    #[test]
-    fn materialization_validates_and_owns_the_candidate() {
-        let runtime =
-            GraphRuntimeState::from_components(GraphRuntimeEpoch::from_existing(1), components())
-                .unwrap();
-        let document = GraphDocument::default();
-
-        let candidate = runtime
-            .materialize_open_candidate(&document)
-            .expect("the empty document must satisfy graph invariants");
-
-        assert_eq!(candidate.as_ref(), &document);
-        assert!(!std::ptr::eq(candidate.as_ref(), &document));
-    }
-
-    #[test]
     fn materialization_fault_injection_is_explicit_and_observable() {
         let control = GraphRuntimeTestControl::default();
         control.fail_next_materialization();

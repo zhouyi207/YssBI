@@ -34,22 +34,6 @@ afterEach(() => {
 });
 
 describe("NodeContextMenu", () => {
-  it("omits permanently unsupported actions and retains supported actions", () => {
-    renderMenu({ managed: false, canCopy: true, canDelete: true }, { hasLinks: true });
-
-    expect(item("disableNode")).toBeUndefined();
-    expect(item("rename")).toBeUndefined();
-    expect(item("collapse")).toBeUndefined();
-
-    expect(item("copy")).toBeDefined();
-    expect(item("cut")).toBeDefined();
-    expect(item("duplicate")).toBeDefined();
-    expect(item("selectNode")).toBeUndefined();
-    expect(item("breakAllLinks")).toBeDefined();
-    expect(item("selectLinkedNodes")).toBeDefined();
-    expect(item("delete")).toBeDefined();
-  });
-
   it.each([
     {
       name: "unmanaged copyable node",

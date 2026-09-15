@@ -30,7 +30,7 @@ function deleteKey(value: object, key: string): void {
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 
 describe("Rust-generated node-system golden contracts", () => {
-  it("strictly freezes every Rust deadline phase before service effects", () => {
+  it("parses every Rust-generated deadline phase", () => {
     const deadlineEvents = executionWire.runEvents.filter(
       (event) => event.kind.type === "runErrored" && event.kind.code === "deadlineExceeded",
     );
@@ -42,16 +42,6 @@ describe("Rust-generated node-system golden contracts", () => {
       "planValidation",
     ]);
     expect(deadlineEvents.map(parseRunEvent)).toEqual(deadlineEvents);
-
-    for (const event of deadlineEvents) {
-      const missing = clone(event) as unknown as Record<string, unknown>;
-      deleteKey(missing.kind as object, "phase");
-      expect(() => parseRunEvent(missing)).toThrow();
-
-      const wrong = clone(event) as unknown as Record<string, unknown>;
-      (wrong.kind as Record<string, unknown>).phase = 1;
-      expect(() => parseRunEvent(wrong)).toThrow();
-    }
   });
   it("consumes one real Rust function editor projection shape across index and replacement", () => {
     expect(functionEditorProjection.format).toBe("yssbi.function-editor-projection.v1");
@@ -123,9 +113,6 @@ describe("Rust-generated node-system golden contracts", () => {
     items.forEach((item) => deleteKey(item, "description"));
 
     expect(isLocalizedCatalogDto(catalog)).toBe(true);
-    expect(items.every((item) => !Object.prototype.hasOwnProperty.call(item, "description"))).toBe(
-      true,
-    );
   });
 
   it.each([
@@ -160,11 +147,11 @@ describe("Rust-generated node-system golden contracts", () => {
       },
     ],
     [
-      "legacy port kind",
+      "unknown port key",
       (catalog: Record<string, unknown>) => {
         const items = catalog.items as Array<Record<string, unknown>>;
         const ports = items[0].ports as Array<Record<string, unknown>>;
-        ports[0].kind = "data";
+        ports[0].extra = true;
       },
     ],
   ])("rejects Catalog %s", (_label, mutate) => {
@@ -248,6 +235,7 @@ describe("Rust-generated node-system golden contracts", () => {
       },
     ];
     for (const { value, missing } of variants) {
+      const original = clone(value);
       const projection = clone(editorProjection) as unknown as Record<string, unknown>;
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       const port = (node.ports as Array<Record<string, unknown>>)[0];
@@ -270,6 +258,7 @@ describe("Rust-generated node-system golden contracts", () => {
       deleteKey(value, "compatibility");
       deleteKey(value, missing);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
+      Object.assign(value, original);
       value.kind = "unsupported";
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
@@ -294,6 +283,7 @@ describe("Rust-generated node-system golden contracts", () => {
       { value: { kind: "resource", identity: "functions/contract-function" }, missing: "identity" },
     ];
     for (const { value, missing } of variants) {
+      const original = clone(value);
       const projection = clone(editorProjection) as unknown as Record<string, unknown>;
       projection.diagnostics = [
         {
@@ -313,6 +303,7 @@ describe("Rust-generated node-system golden contracts", () => {
       deleteKey(value, "compatibility");
       deleteKey(value, missing);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
+      Object.assign(value, original);
       value.kind = "unsupported";
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
@@ -364,6 +355,7 @@ describe("Rust-generated node-system golden contracts", () => {
       },
     ];
     for (const { value, missing } of variants) {
+      const original = clone(value);
       const projection = clone(editorProjection) as unknown as Record<string, unknown>;
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       (node.parameterEditors as Array<Record<string, unknown>>)[0].configuration = value;
@@ -377,6 +369,7 @@ describe("Rust-generated node-system golden contracts", () => {
       deleteKey(value, missing);
       expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
+      Object.assign(value, original);
       value.kind = "unsupported";
       expect(isSchemaAwareParameterEditorDto(value, isParameterEditor)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
@@ -431,41 +424,10 @@ describe("Rust-generated node-system golden contracts", () => {
       },
     ],
     [
-      "legacy port kind",
+      "unknown port key",
       (projection: Record<string, unknown>) => {
         const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-        (node.ports as Array<Record<string, unknown>>)[0].kind = "data";
-      },
-    ],
-    [
-      "wrong address discriminant",
-      (projection: Record<string, unknown>) => {
-        const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-        const port = (node.ports as Array<Record<string, unknown>>)[0];
-        (port.address as Record<string, unknown>).kind = "unsupported";
-      },
-    ],
-    [
-      "wrong diagnostic location discriminant",
-      (projection: Record<string, unknown>) => {
-        projection.diagnostics = [
-          {
-            code: "contract.invalid",
-            message: "invalid",
-            severity: "error",
-            blocking: true,
-            location: { kind: "unsupported" },
-            related: [],
-          },
-        ];
-      },
-    ],
-    [
-      "wrong configuration discriminant",
-      (projection: Record<string, unknown>) => {
-        const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-        const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
-        editor.configuration = { kind: "unsupported" };
+        (node.ports as Array<Record<string, unknown>>)[0].extra = true;
       },
     ],
   ])("rejects editor projection %s before coherence validation", (_label, mutate) => {

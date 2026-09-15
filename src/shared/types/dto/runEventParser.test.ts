@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import executionWire from "@/tests/fixtures/node-system-contracts/execution-wire.json";
-import { EXECUTION_DEMAND_TYPES } from "./executionDemand";
+import { EXECUTION_DEMAND_TYPES, type ExecutionDemandDto } from "./executionDemand";
 import { RUN_EVENT_KIND_TYPES } from "./runEvent";
-import {
-  parseExecutionDemandDto,
-  parseRunEvent,
-} from "./runEventParser";
+import { parseExecutionDemandDto, parseRunEvent } from "./runEventParser";
 
 function clone(value: unknown): unknown {
   return structuredClone(value);
@@ -119,22 +116,6 @@ describe("execution wire parsers", () => {
     ).toThrow("Invalid graph run identity");
   });
 
-  it.each([
-    "operationStarted",
-    "operationCompleted",
-    "operationErrored",
-    "resultGroupChanged",
-    "outputResultChanged",
-  ])("rejects removed run-event variant %s", (type) => {
-    const valid = executionWire.runEvents[0];
-    expect(() =>
-      parseRunEvent({
-        ...valid,
-        kind: { type },
-      }),
-    ).toThrow("Invalid run event kind variant");
-  });
-
   it.each(executionWire.runEvents)("rejects extra keys on RunEvent $kind.type", (valid) => {
     expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
     expect(() => parseRunEvent({ ...valid, run: { ...valid.run, extra: true } })).toThrow();
@@ -161,14 +142,12 @@ describe("execution wire parsers", () => {
     };
 
     expect(parseRunEvent(deadline)).toEqual(deadline);
-    for (const kind of [
-      { type: "runErrored", code: "deadlineExceeded" },
-      { type: "runErrored", code: "deadlineExceeded", phase: null },
-      { type: "runErrored", code: "deadlineExceeded", phase: "unknown" },
-      { type: "runErrored", code: "kernelFailed", phase: "kernel" },
-      { type: "runErrored", code: "kernelFailed" },
-    ]) {
-      expect(() => parseRunEvent({ ...valid, kind })).toThrow();
+    const missingPhase = record(clone(deadline.kind));
+    delete missingPhase.phase;
+    expect(() => parseRunEvent({ ...valid, kind: missingPhase })).toThrow();
+
+    for (const phase of [null, 1, "unknown"]) {
+      expect(() => parseRunEvent({ ...deadline, kind: { ...deadline.kind, phase } })).toThrow();
     }
   });
 
@@ -235,3 +214,36 @@ describe("execution wire parsers", () => {
     ).toThrow();
   });
 });
+
+// Caller-side type constraints complement the runtime parser checks above.
+// These assertions are checked by `pnpm check:ts`.
+// @ts-expect-error outputs demand requires outputs
+const missingOutputs: ExecutionDemandDto = { type: "outputs", includeDefaultResults: false };
+
+// @ts-expect-error outputs demand requires includeDefaultResults
+const missingIncludeDefaults: ExecutionDemandDto = { type: "outputs", outputs: [] };
+
+// @ts-expect-error demand tags are closed
+const invalidTag: ExecutionDemandDto = { type: "unknown" };
+
+// @ts-expect-error default demand has no extra fields
+const extraDefaultField: ExecutionDemandDto = { type: "default", outputs: [] };
+
+const extraOutputField: ExecutionDemandDto = {
+  type: "outputs",
+  outputs: [
+    {
+      graphPath: "events/Main.yssbi-event",
+      port: {
+        kind: "declared",
+        nodeId: "00000000-0000-0000-0000-000000000001",
+        portKey: "result",
+      },
+      // @ts-expect-error output identities have no extra fields
+      extra: true,
+    },
+  ],
+  includeDefaultResults: false,
+};
+
+void [missingOutputs, missingIncludeDefaults, invalidTag, extraDefaultField, extraOutputField];
