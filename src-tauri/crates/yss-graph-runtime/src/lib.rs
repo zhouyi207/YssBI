@@ -471,6 +471,27 @@ impl GraphRuntimeState {
         localized
     }
 
+    /// Creation discovery excludes leaves without an installed implementation.
+    /// Structural and transparent nodes do not require a leaf kernel.
+    pub fn retain_available_catalog_items(
+        &self,
+        catalog: &mut LocalizedCatalog,
+        supports: impl Fn(&str) -> bool,
+    ) {
+        let available: std::collections::BTreeSet<&str> = self
+            .registry()
+            .iter()
+            .filter(|(_, node)| {
+                node.implementation()
+                    .is_none_or(|implementation| supports(implementation.implementation_identity()))
+            })
+            .map(|(id, _)| id.as_str())
+            .collect();
+        catalog
+            .items
+            .retain(|item| available.contains(item.node_type_id.as_ref()));
+    }
+
     pub fn compatible_catalog_with_resources(
         &self,
         graph_path: &GraphResourcePath,

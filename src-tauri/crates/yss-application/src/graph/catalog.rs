@@ -500,9 +500,14 @@ pub(crate) fn localized_node_catalog_from_facts(
     locale: &str,
 ) -> Result<CatalogQueryResult, CatalogQueryApplicationError> {
     let context = GraphResolutionContext::from_project_facts(captured, project)?;
-    let localized = captured
+    let mut localized = captured
         .graph()
         .localized_catalog_with_resources(context.project.resources().entries(), locale);
+    captured
+        .graph()
+        .retain_available_catalog_items(&mut localized, |id| {
+            captured.execution().kernels().supports(id)
+        });
 
     context.revalidate(captured)?;
     revalidate_application_session(application, captured)?;
@@ -525,7 +530,7 @@ pub(crate) fn compatible_node_catalog_in_session(
         capture_compatible_project_facts(captured, request.graph_path(), request.document())?;
     let mut context = GraphResolutionContext::from_project_facts(captured, localized)?;
     context.include_functions(captured, graph.document())?;
-    let localized = captured
+    let mut localized = captured
         .graph()
         .compatible_catalog_with_resources(
             graph.path(),
@@ -536,6 +541,11 @@ pub(crate) fn compatible_node_catalog_in_session(
             request.locale(),
         )
         .map_err(map_graph_catalog_error)?;
+    captured
+        .graph()
+        .retain_available_catalog_items(&mut localized, |id| {
+            captured.execution().kernels().supports(id)
+        });
 
     context.revalidate(captured)?;
     revalidate_application_session(application, captured)?;

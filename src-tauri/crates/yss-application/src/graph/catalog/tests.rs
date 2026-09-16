@@ -209,6 +209,22 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
 
     assert_eq!(catalog.project_instance_id, project_instance_id);
     assert_eq!(catalog.resource_publication_revision, 0);
+    for id in ["length", "count", "sum", "mean"] {
+        assert!(
+            !catalog
+                .catalog
+                .items
+                .iter()
+                .any(|item| item.node_type_id.as_ref() == format!("yssbi.dataframe.series.{id}"))
+        );
+    }
+    assert!(
+        catalog
+            .catalog
+            .items
+            .iter()
+            .any(|item| item.node_type_id.as_ref() == "yssbi.numeric.add")
+    );
     let resource = catalog
         .catalog
         .items
@@ -636,8 +652,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
                 .catalog
                 .items
                 .iter()
-                .any(|item| item.node_type_id.as_ref()
-                    == "yssbi.dataframe.series.inverse_standardize"),
+                .any(|item| item.node_type_id.as_ref() == "yssbi.statistics.ols.fit"),
             numeric
         );
         assert!(

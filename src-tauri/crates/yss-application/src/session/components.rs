@@ -41,7 +41,7 @@ impl NodeComponents {
                 continue;
             };
             let kernel = implementation.implementation_identity();
-            // Definition-only nodes remain visible and are blocked explicitly by graph diagnostics.
+            // Keep definitions for existing graphs; creation discovery filters missing kernels.
             let Some(contract) = kernels.contract(kernel) else {
                 continue;
             };
