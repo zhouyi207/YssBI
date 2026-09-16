@@ -41,10 +41,6 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     (
-        "src-tauri/crates/yss-graph-execution/src/value.rs",
-        RustLayer::Execution,
-    ),
-    (
         "src-tauri/crates/yss-graph-execution/src/identity.rs",
         RustLayer::Execution,
     ),
@@ -159,9 +155,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-ipc-contract/src/graph_editing.rs",
         fully_qualified_owner: "yss_ipc_contract::graph_editing",
-        canonical_origin_targets: &[
-            "yss_function_editor_projection::FunctionEditorProjection",
-        ],
+        canonical_origin_targets: &["yss_function_editor_projection::FunctionEditorProjection"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Transport,
@@ -213,9 +207,9 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         ],
     },
     InternalDependencyCapability {
-        source_layer: RustLayer::Execution,
-        repository_relative_source_file: "src-tauri/crates/yss-graph-execution/src/statistics.rs",
-        fully_qualified_owner: "yss_graph_execution::statistics",
+        source_layer: RustLayer::NodeKernel,
+        repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/statistics.rs",
+        fully_qualified_owner: "yss_node_kernel::builtins::statistics",
         canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
     },
     InternalDependencyCapability {
@@ -234,7 +228,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "ols_bench",
         canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
     },
-
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/mod.rs",
@@ -378,7 +371,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::ipc::channel::graph_activity::GraphActivityChannels::default",
             "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
             "yss_application::ipc::graph_editor_sync::GraphEditorSyncState::default",
-
             "yss_application::session::slot::ApplicationState",
             "yss_ipc_channel::harness::HarnessChannelHub",
             "yss_application::ipc::activity_panel_sync::ActivityPanelSyncState",
@@ -389,9 +381,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::Commands,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_harness/gateway.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_harness::gateway",
-        canonical_origin_targets: &[
-            "yss_application::session::slot::ApplicationState",
-        ],
+        canonical_origin_targets: &["yss_application::session::slot::ApplicationState"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::Commands,
@@ -575,7 +565,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
             "yss_ipc_contract::graph_editing::GraphEditVersionDto",
-
             "yss_application::graph::catalog::CatalogQueryApplicationError",
             "yss_application::graph::catalog::CompatibleCatalogRequest",
             "yss_application::graph::catalog::GraphCatalogQueryError",
@@ -604,7 +593,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::common",
         canonical_origin_targets: &[
             "yss_project::project_state::graph_operation::ProjectGraphCommitError::InvalidDocument",
-
             "yss_application::ipc::error::CommandError",
             "yss_ipc_contract::error::GraphMutationErrorDetailsDto",
             "yss_ipc_contract::error::GraphMutationErrorDetailsDto::VALUE",
@@ -658,6 +646,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/commands/command_node_system/editor.rs",
         fully_qualified_owner: "yss_application::ipc::commands::command_node_system::editor",
         canonical_origin_targets: &[
+            "yss_application::ipc::schema::graph_editing::graph_edit_receipt_to_transport",
+            "yss_ipc_contract::graph_editing::GraphEditCommandReceiptDto",
             "yss_application::ipc::graph_editor_sync::Binding",
             "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
             "yss_application::ipc::schema::graph_editing::encode_graph_edit",
@@ -675,7 +665,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_execution::run_registry::RunState::Succeeded",
             "yss_graph_execution::run_registry::RunState::Failed",
             "yss_graph_execution::run_registry::RunState::Cancelled",
-
             "yss_application::session::slot::ApplicationState",
             "yss_application::session::slot::SessionCaptureError",
             "yss_application::graph::open::OpenGraphApplicationError",
@@ -721,7 +710,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::ipc::schema::graph_editing::graph_edit_version_from_transport",
             "yss_ipc_contract::graph_editing::GraphEditVersionDto",
-
             "yss_application::session::slot::ApplicationState",
             "yss_application::session::slot::SessionCaptureError",
             "yss_application::session::slot::SessionCaptureError::Inactive",
@@ -809,7 +797,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::graph::editing::GraphEditRequest",
             "yss_ipc_contract::graph_editing::GraphEditVersionDto",
             "yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto",
-
             "yss_application::session::slot::ApplicationState",
             "yss_application::graph::resources::ResourceMutationApplicationError",
             "yss_application::graph::resources::ResourceMutationApplicationError::GraphOperation",
@@ -861,7 +848,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::ipc::commands::execution_dto::runtime_value_to_json",
             "yss_application::ipc::error::CommandError",
             "yss_graph_execution::result::ResultId",
-            "yss_graph_execution::value::RuntimeValue",
+            "yss_node_kernel::value::RuntimeValue",
             "yss_ipc_contract::graph::PortAddressDto",
         ],
     },
@@ -936,7 +923,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_graph_execution::result::ResultId",
             "yss_graph_execution::result::StoredResult",
             "yss_graph_execution::result::StoredResultSnapshot",
-            "yss_graph_execution::value::RuntimeValue",
+            "yss_node_kernel::value::RuntimeValue",
             "yss_ipc_contract::graph::PortAddressDto",
             "yss_graph_execution::plan::result_category::PlotDataKind::Scatter",
             "yss_graph_execution::plan::result_category::PlotDataKind::Line",
@@ -1068,7 +1055,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::ipc::graph_editor_sync::GraphEditorSyncState",
             "yss_ipc_contract::graph_editing::GraphEditorSyncResponseDto",
             "yss_application::ipc::schema::graph_editing::encode_graph_session",
-
             "yss_application::ipc::activity_panel_sync::ActivityPanelSyncState",
             "yss_application::ipc::activity_panel_sync::ActivityPanelUpdateDto",
             "yss_application::ipc::schema::activity_panel::ActivityPanelId",
@@ -1388,7 +1374,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::graph::editing::GraphEditResponse",
             "yss_project::project_state::graph_editing::GraphEditVersion",
             "yss_project::project_state::graph_editing::GraphEditingState",
-
+            "yss_project::project_state::graph_editing::GraphEditCommandKind",
+            "yss_project::project_state::graph_editing::GraphEditCommandReceipt",
             "yss_graph_editor::projection::model::EditorProjectionModel",
             "yss_application::graph::edit::GraphDraftSave",
             "yss_application::graph::edit::GraphDocumentChange",
@@ -1436,7 +1423,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_project::project_writers::ProjectSaveResult",
         ],
     },
-
     InternalDependencyCapability {
         source_layer: RustLayer::Transport,
         repository_relative_source_file: "src-tauri/crates/yss-application/src/ipc/channel/execution.rs",
@@ -1676,6 +1662,8 @@ fn non_build_memberships(
         "yss-ipc-contract" | "yss-ipc-event" | "yss-ipc-channel"
     ) {
         layers.insert(RustLayer::Transport);
+    } else if package == "yss-node-kernel" {
+        layers.insert(RustLayer::NodeKernel);
     } else if package == "yss-graph-execution" {
         layers.insert(RustLayer::Execution);
     } else if package == "tauri-plugin-tracing"
@@ -1781,7 +1769,7 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                 || (package_name == "yss-sci-runtime"
                     && !(matches!(
                         dependency.owning_package.as_str(),
-                        "yss-sci-runtime" | "yss-graph-execution"
+                        "yss-sci-runtime" | "yss-graph-execution" | "yss-node-kernel"
                     ) || (dependency.owning_package == "yss-application"
                         && source_layer == RustLayer::Commands
                         && dependency
@@ -1793,9 +1781,14 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                 dependency.owning_package == "yss-filesystem" && package_name != "yss-filesystem";
             let crosses_node_boundary =
                 source_layer == RustLayer::Node && package_name.starts_with("yss-graph-");
+            let crosses_kernel_boundary = dependency.owning_package == "yss-node-kernel"
+                && (package_name.starts_with("yss-graph-")
+                    || package_name.starts_with("yss-project")
+                    || package_name == "yss-application");
             if !crosses_scientific_boundary
                 && !crosses_filesystem_boundary
                 && !crosses_node_boundary
+                && !crosses_kernel_boundary
                 && target_layer.is_some_and(|target| {
                     internal_layer_dependency_is_allowed(source_layer, target)
                         // Node declarations remain available to pure document and transport owners.
@@ -1820,6 +1813,8 @@ pub(super) fn rust_dependency_findings_with_capabilities(
                         "rust.internal.filesystem-boundary"
                     } else if crosses_node_boundary {
                         "rust.internal.node-boundary"
+                    } else if crosses_kernel_boundary {
+                        "rust.internal.kernel-boundary"
                     } else if crosses_scientific_boundary {
                         "rust.internal.scientific-boundary"
                     } else {
@@ -1902,6 +1897,7 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                     | RustLayer::Node
                     | RustLayer::Graph
                     | RustLayer::Execution
+                    | RustLayer::NodeKernel
                     | RustLayer::DatabaseCore
                     | RustLayer::PureLeaf
             )
@@ -1910,7 +1906,11 @@ fn internal_layer_dependency_is_allowed(source: RustLayer, target: RustLayer) ->
                 RustLayer::PureLeaf | RustLayer::Filesystem
             )
             | (RustLayer::Graph, RustLayer::Node | RustLayer::PureLeaf)
-            | (RustLayer::Execution, RustLayer::PureLeaf)
+            | (
+                RustLayer::Execution,
+                RustLayer::NodeKernel | RustLayer::PureLeaf
+            )
+            | (RustLayer::NodeKernel, RustLayer::PureLeaf)
             | (RustLayer::SciCore, RustLayer::PureLeaf)
             | (RustLayer::DatabaseCore, RustLayer::PureLeaf)
             | (

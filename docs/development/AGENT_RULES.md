@@ -73,8 +73,13 @@ add or commit them unless explicitly requested.
   sessions, with zero dependencies on repository crates. Project path conventions,
   document validation, index invalidation and business failures belong to Project
   or its application adapters, never to FS.
-- Only `yss-graph-execution` and Application's `ipc/commands` modules consume
-  `yss-sci-runtime`. Other Application modules and desktop composition do not
+- `yss-node-kernel` owns graph-independent invocation values, kernel contracts,
+  the frozen kernel registry and built-in node adapters. It does not depend on
+  Graph, Project, Application or Tauri; resource authorization, graph addresses,
+  execution plans, result storage and graph error locations stay with their owners.
+  Application composes one frozen registry shared by readiness checks and execution.
+- Only `yss-node-kernel`, `yss-graph-execution` result analyses (and its focused SCI benchmark), and Application's
+  `ipc/commands` modules consume `yss-sci-runtime`. Other Application modules and desktop composition do not
   construct or inject a scientific backend. Runtime exposes stateless functions and calls `yss-sci`, which calls
   `yss-sci-linalg`. Only Linalg depends on faer and owns matrix/vector wrappers;
   runtime uses neutral inputs/results. Julia plugin crates own their Bayes

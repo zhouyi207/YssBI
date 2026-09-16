@@ -1211,7 +1211,7 @@ fn rust_production_sources_are_classified_once() {
         RustLayer::ALL
             .iter()
             .all(|layer| classification.values().any(|actual| actual == layer)),
-        "the real production graph must exercise all sixteen Rust layers"
+        "the real production graph must exercise every Rust layer"
     );
 }
 
@@ -1689,7 +1689,7 @@ fn chart_resource_cutover_does_not_keep_a_retired_rust_path() {
 }
 
 #[test]
-fn node_definitions_do_not_depend_on_graph_instances_or_analysis() {
+fn node_definitions_and_kernels_do_not_depend_on_graph_instances_or_analysis() {
     let facts = production_facts();
     for dependency in &workspace_facts().dependency_declarations {
         if dependency.owning_package.starts_with("yss-node-") {
@@ -1705,7 +1705,12 @@ fn node_definitions_do_not_depend_on_graph_instances_or_analysis() {
         if !source.starts_with("src-tauri/crates/yss-node-") {
             continue;
         }
-        assert_eq!(*layer, RustLayer::Node, "{source}");
+        let expected = if source.starts_with("src-tauri/crates/yss-node-kernel/") {
+            RustLayer::NodeKernel
+        } else {
+            RustLayer::Node
+        };
+        assert_eq!(*layer, expected, "{source}");
     }
     // GraphDocument is a PureLeaf; the Node boundary must still reject instance ownership.
     let source = "src-tauri/crates/yss-node-protocol/src/lib.rs";
@@ -1725,9 +1730,18 @@ fn node_definitions_do_not_depend_on_graph_instances_or_analysis() {
         line: 1,
         column: 1,
     };
-    let findings = rust_dependency_findings(&[dependency], &facts.classification).unwrap();
+    let findings = rust_dependency_findings(&[dependency.clone()], &facts.classification).unwrap();
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].key.rule_id, "rust.internal.node-boundary");
+    let kernel_dependency = CanonicalDependency {
+        owning_package: "yss-node-kernel".into(),
+        source_file: "src-tauri/crates/yss-node-kernel/src/lib.rs".into(),
+        owner: "yss_node_kernel".into(),
+        ..dependency
+    };
+    let findings = rust_dependency_findings(&[kernel_dependency], &facts.classification).unwrap();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].key.rule_id, "rust.internal.kernel-boundary");
 }
 
 #[test]
@@ -1852,7 +1866,7 @@ fn scientific_computation_dependencies_follow_the_runtime_boundary() {
     }
     assert_eq!(
         runtime_consumers,
-        BTreeSet::from(["yss-graph-execution", "yss-application"])
+        BTreeSet::from(["yss-node-kernel", "yss-graph-execution", "yss-application"])
     );
     let facts = production_facts();
     assert_eq!(
@@ -1871,10 +1885,10 @@ fn scientific_computation_dependencies_follow_the_runtime_boundary() {
         .dependencies
         .iter()
         .find(|dependency| {
-            dependency.source_file == "src-tauri/crates/yss-graph-execution/src/statistics.rs"
+            dependency.source_file == "src-tauri/crates/yss-node-kernel/src/builtins/statistics.rs"
                 && dependency.canonical_origin_target == "yss_sci_runtime::computation::ols"
         })
-        .expect("Execution must call the runtime OLS entry point");
+        .expect("The OLS kernel must call the runtime OLS entry point");
     for (package, source, layer) in [
         ("yssbi", "src-tauri/src/lib.rs", RustLayer::CompositionRoot),
         (

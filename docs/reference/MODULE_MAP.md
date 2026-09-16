@@ -58,6 +58,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-julia-worker` | `plugins/julia/native/crates/yss-julia-worker` | [Cargo.toml](../../plugins/julia/native/crates/yss-julia-worker/Cargo.toml) | [README](../../plugins/julia/native/crates/yss-julia-worker/README.md) |
 | `yss-math-expr` | `src-tauri/crates/yss-math-expr` | [Cargo.toml](../../src-tauri/crates/yss-math-expr/Cargo.toml) | — |
 | `yss-node-catalog` | `src-tauri/crates/yss-node-catalog` | [Cargo.toml](../../src-tauri/crates/yss-node-catalog/Cargo.toml) | [README](../../src-tauri/crates/yss-node-catalog/README.md) |
+| `yss-node-kernel` | `src-tauri/crates/yss-node-kernel` | [Cargo.toml](../../src-tauri/crates/yss-node-kernel/Cargo.toml) | [README](../../src-tauri/crates/yss-node-kernel/README.md) |
 | `yss-node-protocol` | `src-tauri/crates/yss-node-protocol` | [Cargo.toml](../../src-tauri/crates/yss-node-protocol/Cargo.toml) | — |
 | `yss-node-registry` | `src-tauri/crates/yss-node-registry` | [Cargo.toml](../../src-tauri/crates/yss-node-registry/Cargo.toml) | — |
 | `yss-plugin-protocol` | `src-tauri/crates/yss-plugin-protocol` | [Cargo.toml](../../src-tauri/crates/yss-plugin-protocol/Cargo.toml) | [README](../../src-tauri/crates/yss-plugin-protocol/README.md) |

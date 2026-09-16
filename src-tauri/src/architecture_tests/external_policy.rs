@@ -29,6 +29,12 @@ pub(super) struct ExternalDependencyPolicy {
 
 const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-node-kernel",
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-filesystem",
         mode: RustDependencyMode::Runtime,
         package_name: "notify",
@@ -644,6 +650,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         owning_package: "yss-harness-rig",
         mode: RustDependencyMode::Runtime,
         package_name: "rig-agent",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-harness-rig",
+        mode: RustDependencyMode::Runtime,
+        package_name: "futures-util",
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
@@ -2004,6 +2016,11 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::Execution,
+        mode: RustDependencyMode::Runtime,
+        package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::NodeKernel,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
     },

@@ -183,6 +183,12 @@
         "target": null
       },
       {
+        "name": "yss-node-kernel",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
@@ -926,6 +932,12 @@
         "target": null
       },
       {
+        "name": "yss-node-kernel",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
         "name": "yss-node-protocol",
         "kind": "normal",
         "optional": false,
@@ -1339,6 +1351,42 @@
       },
       {
         "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
+  },
+  {
+    "name": "yss-node-kernel",
+    "manifest": "src-tauri/crates/yss-node-kernel/Cargo.toml",
+    "dependencies": [
+      {
+        "name": "yss-canonical-hash",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-relational-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      },
+      {
+        "name": "yss-sci-runtime",
         "kind": "normal",
         "optional": false,
         "target": null

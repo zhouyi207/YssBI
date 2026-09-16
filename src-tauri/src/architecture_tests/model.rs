@@ -37,6 +37,7 @@ pub(super) enum RustLayer {
     Project,
     Graph,
     Execution,
+    NodeKernel,
     SciCore,
     DatabaseCore,
     BackendAdapter,
@@ -47,7 +48,7 @@ pub(super) enum RustLayer {
 }
 
 impl RustLayer {
-    pub(super) const ALL: [Self; 16] = [
+    pub(super) const ALL: [Self; 17] = [
         Self::CompositionRoot,
         Self::BuildScript,
         Self::Commands,
@@ -57,6 +58,7 @@ impl RustLayer {
         Self::Project,
         Self::Graph,
         Self::Execution,
+        Self::NodeKernel,
         Self::SciCore,
         Self::DatabaseCore,
         Self::BackendAdapter,

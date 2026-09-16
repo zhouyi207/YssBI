@@ -57,6 +57,7 @@ Application
 Project
 Graph
 Execution
+Node Kernel
 SCI Core
 Database Core
 Backend Adapter
@@ -67,6 +68,8 @@ Pure Leaf
 ```
 
 `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog` 的全部生产模块归 Node。Graph 可以消费节点定义、注册表和目录；其他层按原有纯契约权限消费 Node Protocol。`rust.internal.node-boundary` 禁止 Node 引用任何 Graph crate，包括按 Pure Leaf 分类的图文档，精确 capability 也不能绕过此约束。Cargo 声明检查同时覆盖 Node 的开发依赖。
+
+`yss-node-kernel` 的生产模块归 Node Kernel。Application 负责装配，Execution 消费中立内核契约；Node Kernel 只使用中性契约和精确授权的 SCI Runtime 入口。`rust.internal.kernel-boundary` 禁止其依赖 Graph、Project 或 Application，包括按 Pure Leaf 分类的图/项目身份类型；Tauri 仍没有该层的依赖权限。
 
 Frontend 当前 taxonomy：
 
@@ -134,7 +137,7 @@ Layer policy 只允许显式 dependency direction/capability。除 import graph 
 
 Graph mutation DTO 可映射 `SetConfiguration`、`SetConstant` 和 `InsertConstantReference`。`yss-graph-document` 按 Pure Leaf 分类，常量定义及只读校验归属该层；Project 可校验持久化数据，不依赖 Graph 编辑或分析层。JSON 门禁仅允许 `model.rs` 的值类型别名，以及 `constant_value.rs` 解析常量字面量所需的精确 `serde_json` 操作，不开放其他 JSON 业务逻辑。
 
-科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Execution 的统计节点和结果分析、Application 内 `ipc/commands` 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition Root 和其他 Application 模块不能直接访问 SCI runtime；结果用例通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
+科学计算输入、结果、控制与 OLS 配置按 Pure Leaf 归属 `yss-sci-contract`；runtime 的 `computation` 函数按 SCI Core 分类，依赖中性契约与模型。Node Kernel 的统计适配、Execution 的结果分析、Application 内 `ipc/commands` 的独立统计命令只获对应 runtime 函数的精确调用权限。Composition Root 和其他 Application 模块不能直接访问 SCI runtime；结果用例通过 Execution 分析已保存结果。行为契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md)。
 
 Activity panel command 的 capability 只开放 Project/Nodes/Commands/Plugins 的 Application 文档查询、Plugin Manager 只读列表与
 Activity DTO，以及按游标返回增量的传输缓存。Composition root 只获缓存的构造权限，
@@ -179,7 +182,7 @@ profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polar
 
 图编辑器投影归 `yss-graph-editor::projection`，按 Graph 分类；其错误类型使用该包显式声明的 `thiserror`。
 IPC 的 editor projection 与 graph draft mapper 只获对应 Graph 投影类型的精确读取权限。
-执行计划构建及缓存位于 `yss-graph-execution::graph_preparation`，直接使用已有执行计划和参数契约。该文件按 Execution 分类，只允许读取列明的 Graph Analysis 语义事实；调度器、kernel 等其他 Execution 文件不因此获得 Graph Runtime、编辑器或 Project 状态访问权限。旧包的分类、依赖声明权限和测试库存已移除。诊断定义统一归 `yss-graph-diagnostics`。
+执行计划构建及缓存位于 `yss-graph-execution::graph_preparation`，直接使用已有执行计划和参数契约。该文件按 Execution 分类，只允许读取列明的 Graph Analysis 语义事实；其他 Execution 文件不因此获得 Graph Runtime、编辑器或 Project 状态访问权限。中立 kernel 已归 Node Kernel 层。诊断定义统一归 `yss-graph-diagnostics`。
 Application 的 `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite` 仅用于测试，声明为 dev-dependencies。
 
 `yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。

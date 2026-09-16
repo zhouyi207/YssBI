@@ -1007,6 +1007,7 @@ fn project_macro_declares_symbol(item: &syn::ItemMacro, symbol: &str) -> bool {
         macro_name.as_str(),
         "fingerprint"
             | "index_type"
+            | "kernel_id"
             | "opaque_id"
             | "opaque_resource_type"
             | "parameter_id"
