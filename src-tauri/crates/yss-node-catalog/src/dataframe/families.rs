@@ -57,7 +57,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["限制", "选取行", "前几行"],
         InterfaceKind::Limit,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.rename",
         "Rename DataFrame",
         "重命名数据框",
@@ -65,7 +65,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["重命名列", "列名", "数据框"],
         InterfaceKind::Rename,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.project",
         "Project DataFrame",
         "投影数据框",
@@ -73,7 +73,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["选择列", "投影", "数据框"],
         InterfaceKind::Project,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.filter.rows",
         "Filter Rows",
         "筛选行",
@@ -129,7 +129,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["计数", "长度", "序列"],
         InterfaceKind::SeriesLength,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.series.count",
         "DataSeries Count",
         "序列非空计数",
@@ -201,7 +201,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["不等于", "!=", "逐元素"],
         InterfaceKind::NumericCompare,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.series.compare.string.equal",
         "String DataSeries Equal",
         "字符串序列等于",
@@ -209,7 +209,7 @@ pub(super) const NODES: &[NodeSpec] = &[
         &["字符串等于", "文本 ==", "逐元素"],
         InterfaceKind::StringCompare,
     ),
-    builtin_spec(
+    spec(
         "yssbi.dataframe.series.compare.string.not_equal",
         "String DataSeries Not Equal",
         "字符串序列不等于",
@@ -300,25 +300,6 @@ pub(super) const NODES: &[NodeSpec] = &[
 ];
 
 const fn spec(
-    id: &'static str,
-    title: &'static str,
-    zh_title: &'static str,
-    aliases: &'static [&'static str],
-    zh_aliases: &'static [&'static str],
-    interface: InterfaceKind,
-) -> NodeSpec {
-    NodeSpec {
-        id,
-        title,
-        zh_title,
-        aliases,
-        zh_aliases,
-        interface,
-        kernel: id,
-    }
-}
-
-const fn builtin_spec(
     id: &'static str,
     title: &'static str,
     zh_title: &'static str,
