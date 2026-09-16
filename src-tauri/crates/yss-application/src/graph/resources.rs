@@ -203,19 +203,23 @@ impl ApplicationState {
         project_instance_id: ProjectInstanceId,
         graph_path: GraphResourcePath,
         lifecycle_token: u64,
-    ) -> Result<(), ResourceMutationApplicationError> {
+        discard_version: Option<yss_project::GraphEditVersion>,
+    ) -> Result<bool, ResourceMutationApplicationError> {
         let captured = self.capture_resource_session(&project_instance_id)?;
-        captured.project().unload_graph_resource_for_lifecycle(
+        let removed = captured.project().unload_graph_resource_for_lifecycle(
             &project_instance_id,
             &graph_path,
             lifecycle_token,
+            discard_version,
         )?;
         self.revalidate_captured_session(&captured)
             .map_err(ResourceMutationApplicationError::SessionChanged)?;
-        captured
-            .execution()
-            .invalidate_graph_results(graph_path.as_str());
-        Ok(())
+        if removed {
+            captured
+                .execution()
+                .invalidate_graph_results(graph_path.as_str());
+        }
+        Ok(removed)
     }
 
     pub fn update_function_signature(

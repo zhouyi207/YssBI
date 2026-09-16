@@ -59,7 +59,8 @@ pub fn unload_project_graph(
     project_instance_id: String,
     graph_path: String,
     lifecycle_token: u64,
-) -> Result<(), CommandError> {
+    discard_version: Option<yss_ipc_contract::graph_editing::GraphEditVersionDto>,
+) -> Result<bool, CommandError> {
     let project_instance_id =
         yss_project_identity::ProjectInstanceId::from_existing(project_instance_id);
     application
@@ -67,9 +68,11 @@ pub fn unload_project_graph(
             project_instance_id,
             parse_graph_path(graph_path)?,
             lifecycle_token,
+            discard_version
+                .map(crate::ipc::schema::graph_editing::graph_edit_version_from_transport)
+                .transpose()?,
         )
-        .map_err(map_resource_mutation_error)?;
-    Ok(())
+        .map_err(map_resource_mutation_error)
 }
 
 #[tauri::command]

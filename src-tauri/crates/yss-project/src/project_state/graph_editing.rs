@@ -301,35 +301,25 @@ impl ProjectState {
         to: &GraphResourcePath,
         current: &GraphDocument,
         saved: &GraphDocument,
+        documents_changed: bool,
     ) -> Result<Option<PreparedGraphEditingUpdate>, ProjectOperationError> {
         let Some(mut metadata) = self.graph_editing.lock().unwrap().get(source).cloned() else {
             return Ok(None);
         };
-        let remap_node = |node: &mut yss_graph_document::DocumentNode| {
-            for value in node.parameters.values_mut() {
-                if value.as_str() == Some(from.as_str()) {
-                    *value = serde_json::Value::String(to.as_str().into());
-                }
-            }
-        };
+        let mut history_changed = false;
         for entry in metadata.undo.iter_mut().chain(metadata.redo.iter_mut()) {
-            for operation in &mut entry.patch.operations {
-                use yss_graph_document::GraphDocumentOperation;
-                match operation {
-                    GraphDocumentOperation::InsertNode { node }
-                    | GraphDocumentOperation::RemoveNode { node } => remap_node(node),
-                    GraphDocumentOperation::UpdateNode { before, after } => {
-                        remap_node(before);
-                        remap_node(after);
-                    }
-                    _ => {}
-                }
+            if !super::graph_references::remap_patch(&mut entry.patch, from, to) {
+                continue;
             }
+            history_changed = true;
             entry.bytes = serde_json::to_vec(&entry.patch)
                 .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 })?
                 .len();
+        }
+        if source == target && !history_changed && !documents_changed {
+            return Ok(None);
         }
         metadata.current_hash = document_hash(current)
             .map_err(|message| ProjectOperationError::TransactionPrepareFailed { message })?;
@@ -614,6 +604,54 @@ mod tests {
     }
 
     #[test]
+    fn unload_retains_dirty_graph_and_discard_requires_the_confirmed_version() {
+        let (fixture, path, node) = fixture();
+        let state = fixture.state();
+        let session = state.capture_project_session().unwrap();
+        let project = &session.instance_id;
+        let file = session.root.as_path().join(path.as_str());
+        let saved = std::fs::read(&file).unwrap();
+        let first = move_node(state, project, &path, node);
+        assert!(
+            !state
+                .unload_graph_resource_for_lifecycle(project, &path, 100, None)
+                .unwrap()
+        );
+        let retained = state.read_graph_editing(project, &path).unwrap();
+        assert!(retained.state.dirty && retained.state.can_undo);
+        let latest = move_node(state, project, &path, node);
+        assert!(matches!(
+            state.unload_graph_resource_for_lifecycle(
+                project,
+                &path,
+                101,
+                Some(first.editing.version)
+            ),
+            Err(ProjectOperationError::ResourceRevisionConflict { .. })
+        ));
+        assert_eq!(
+            state
+                .read_graph_editing(project, &path)
+                .unwrap()
+                .state
+                .version,
+            latest.editing.version
+        );
+        assert!(
+            state
+                .unload_graph_resource_for_lifecycle(
+                    project,
+                    &path,
+                    102,
+                    Some(latest.editing.version)
+                )
+                .unwrap()
+        );
+        assert!(state.read_resident_graph(&path).unwrap().is_none());
+        assert_eq!(std::fs::read(&file).unwrap(), saved);
+    }
+
+    #[test]
     fn memory_edits_undo_redo_and_explicit_save_share_the_current_document() {
         let (fixture, path, node) = fixture();
         let state = fixture.state();
@@ -768,6 +806,18 @@ mod tests {
         assert_eq!(preserved.document.nodes[&node].position.x, 42.0);
 
         state.unload_graph_resource(&path).unwrap();
+        assert_eq!(
+            state.read_graph_editing(&project, &path).unwrap().state,
+            preserved.state
+        );
+        state
+            .unload_graph_resource_for_lifecycle(
+                &project,
+                &path,
+                u64::MAX - 2,
+                Some(preserved.state.version),
+            )
+            .unwrap();
         state
             .load_graph_document(&project, &path, u64::MAX - 1)
             .unwrap();

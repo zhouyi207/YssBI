@@ -22,6 +22,7 @@ mod graph_editing;
 #[path = "project_state/graph_lifecycle.rs"]
 mod graph_lifecycle;
 mod graph_operation;
+mod graph_references;
 pub use graph_editing::{
     GraphEditCommandKind, GraphEditCommandReceipt, GraphEditCorrelation, GraphEditVersion,
     GraphEditingSnapshot, GraphEditingState, GraphHistoryAction,

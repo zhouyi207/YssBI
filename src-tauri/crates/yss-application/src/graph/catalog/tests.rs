@@ -164,6 +164,136 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
 }
 
 #[test]
+fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
+    use yss_graph_document::{
+        ConnectionId, DocumentConnection, DynamicMemberLocator, DynamicPortBinding,
+        FunctionParameterId, InputState, LastKnownPortMetadata, OrderKey, PortInstanceId,
+    };
+    use yss_project_identity::{OperationId, ResourceRevision};
+    let function = GraphResourcePath::new("functions/F.yssbi-function").unwrap();
+    let caller = GraphResourcePath::new("events/Caller.yssbi-event").unwrap();
+    let source = NodeId::new();
+    let call = NodeId::new();
+    let mut document = compatible_draft(source);
+    document.nodes.insert(
+        call,
+        DocumentNode {
+            id: call,
+            node_type: "yssbi.project.function.call".parse().unwrap(),
+            position: NodePosition { x: 100., y: 0. },
+            user_label: None,
+            parameters: [(
+                "target".parse().unwrap(),
+                serde_json::json!(function.as_str()),
+            )]
+            .into(),
+        },
+    );
+    let addresses = [0, 1]
+        .map(|_| PortAddress::instance(call, "arguments".parse().unwrap(), PortInstanceId::new()));
+    for (index, address) in addresses.iter().enumerate() {
+        document.port_bindings.insert(
+            address.clone(),
+            DynamicPortBinding::Resolved {
+                origin: DynamicMemberLocator::FunctionParameter {
+                    function: function.clone(),
+                    parameter: FunctionParameterId::new(format!("p{index}")),
+                },
+                order: OrderKey::new(index.to_string()),
+                last_known: LastKnownPortMetadata::default(),
+            },
+        );
+    }
+    let connection = ConnectionId::new();
+    document.connections.insert(
+        connection,
+        DocumentConnection {
+            id: connection,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: addresses[0].clone(),
+            order: None,
+        },
+    );
+    document.input_states.insert(
+        addresses[1].clone(),
+        InputState {
+            literal_override: Some(yss_node_protocol::TypedValue {
+                value_type: yss_node_protocol::TypeExpr::Concrete("core.numeric".parse().unwrap()),
+                value: yss_node_protocol::Value::Integer(3),
+            }),
+        },
+    );
+    let mut definition = GraphResourceDocument::new("F", GraphResourceKind::Function);
+    definition.function.as_mut().unwrap().signature.parameters = (0..2)
+        .map(|i| yss_project_history::FunctionParameter {
+            id: FunctionParameterId::new(format!("p{i}")),
+            name: format!("p{i}"),
+            type_name: "Numeric".into(),
+        })
+        .collect();
+    let mut resource = GraphResourceDocument::new("Caller", GraphResourceKind::Event);
+    resource.document = document.clone();
+    let mut project = ProjectData::new();
+    project.graphs.insert(function.clone(), definition);
+    project.graphs.insert(caller.clone(), resource);
+    let session = staged_session(
+        project,
+        "rename-bound-ports",
+        GraphRuntimeTestControl::default(),
+    );
+    let instance = session.session.project_instance_id().clone();
+    session
+        .application
+        .unload_graph_resource(instance.clone(), caller.clone(), 100, None)
+        .unwrap();
+    session
+        .application
+        .rename_graph_resource(
+            instance.clone(),
+            function,
+            ResourceRevision::INITIAL,
+            "G".into(),
+            200,
+            OperationId::new(),
+        )
+        .unwrap();
+    assert!(
+        session
+            .session
+            .project()
+            .read_resident_graph(&caller)
+            .unwrap()
+            .is_none()
+    );
+    let saved = session
+        .session
+        .project()
+        .read_graph_resource_snapshot(&instance, &caller)
+        .unwrap();
+    assert_eq!(saved.document.connections, document.connections);
+    assert_eq!(saved.document.input_states, document.input_states);
+    let projection = session
+        .application
+        .resolve_graph_document(instance, caller, saved.document, "en-US".into())
+        .unwrap();
+    let projected = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id == call)
+        .unwrap();
+    for address in addresses {
+        assert!(projected.ports.iter().any(|port| port.address == address));
+    }
+    assert!(projected.port_instance_additions.is_empty());
+    assert!(
+        projected
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.code.as_ref() != "graph.port.orphan")
+    );
+}
+
+#[test]
 fn localized_catalog_rejects_stale_project_identity() {
     let session = staged_session(
         ProjectData::new(),

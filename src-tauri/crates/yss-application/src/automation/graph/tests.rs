@@ -191,7 +191,7 @@ fn assistant_discovers_edits_and_saves_graphs_without_open_editor_panels() {
     f.application
         .as_ref()
         .unwrap()
-        .unload_graph_resource(project.clone(), path.clone(), 100)
+        .unload_graph_resource(project.clone(), path.clone(), 100, None)
         .unwrap();
     assert!(!captured.project().has_resident_graph(&path).unwrap());
 

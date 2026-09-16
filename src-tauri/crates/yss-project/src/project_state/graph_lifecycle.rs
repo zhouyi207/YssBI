@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{ProjectState, ResourceLifecycleOperation};
 
+use super::graph_references::remap_document;
 use crate::ProjectOperationError;
 use yss_filesystem::{FilesystemTransaction, StagedFilesystemMutation};
 use yss_graph_document::{
-    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphResourcePath,
-    NodeId, PortAddress, PortInstanceId, PortRef,
+    ConnectionId, GraphDocument, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
 use yss_project_model::{GraphResourceDocument, ProjectDataPatch};
@@ -370,6 +370,7 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         token: u64,
+        discard_version: Option<super::GraphEditVersion>,
     ) -> Result<bool, ProjectOperationError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -400,16 +401,37 @@ impl ProjectState {
             .project_data
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let graph_removed = data.graphs.remove(graph_path).is_some();
-        self.graph_editing.lock().unwrap().remove(graph_path);
+        let revision = self
+            .graph_resource_revisions
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(graph_path)
+            .copied()
+            .unwrap_or(ResourceRevision::INITIAL);
+        let mut editing = self.graph_editing.lock().unwrap();
+        let current = editing
+            .get(graph_path)
+            .map(|metadata| metadata.state(revision));
+        if let Some(expected) = discard_version {
+            if current.as_ref().map(|state| state.version) != Some(expected) {
+                return Err(ProjectOperationError::ResourceRevisionConflict {
+                    message: "graph changed after discard confirmation".into(),
+                });
+            }
+        } else if current.is_some_and(|state| state.dirty) {
+            return Ok(false);
+        }
+        let graph_removed = data.graphs.contains_key(graph_path);
         let publication_advance = graph_removed
             .then(|| publication.prepare_authority_generation())
             .transpose()?;
         lifecycle.commit_guard(&mut guard, ResourceLifecycleIntent::Unload)?;
+        data.graphs.remove(graph_path);
+        editing.remove(graph_path);
         if let Some(publication_advance) = publication_advance {
             publication.commit_prepared(publication_advance);
         }
-        Ok(graph_removed)
+        Ok(true)
     }
 
     pub(super) fn install_validated_resident_graph(
@@ -498,6 +520,7 @@ impl ProjectState {
             &project_instance_id,
             graph_path,
             self.next_lifecycle_token(graph_path)?,
+            None,
         )?;
         Ok(())
     }
@@ -567,24 +590,20 @@ impl ProjectState {
             lifecycle_token,
         )?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
+        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         let current_data = &snapshot.data;
-        let mut source = if let Some(resource) = current_data.graphs.get(graph_path) {
-            resource.clone()
-        } else {
-            let persisted = crate::project_io::load_project_graph_document_from_file(
-                session.root.as_path().to_string_lossy().as_ref(),
-                graph_path,
-            )
-            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            })?;
-            GraphResourceDocument {
-                name: persisted.name,
-                kind: persisted.kind,
-                document: persisted.document,
-                function: persisted.function,
-            }
-        };
+        let mut persisted_source = crate::project_io::load_project_graph_from_file(
+            session.root.as_path().to_string_lossy().as_ref(),
+            graph_path,
+        )
+        .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
+            message: error.to_string(),
+        })?;
+        let mut source = current_data
+            .graphs
+            .get(graph_path)
+            .unwrap_or(&persisted_source)
+            .clone();
         let current_revision = snapshot
             .graph_resource_revisions
             .get(graph_path)
@@ -628,27 +647,12 @@ impl ProjectState {
                 retained: error.retained,
             })?;
         let mut editing_updates = Vec::new();
-        source.name = requested.as_str().to_owned();
-        remap_document_references(&mut source.document, graph_path.as_str(), target.as_str());
-        if let Some(function) = source.function.as_mut() {
-            function.revision = next_revision;
-        }
-
-        let mut persisted_source = source.clone();
-        if self.is_graph_modified(graph_path) {
-            persisted_source.document = crate::project_io::load_project_graph_document_from_file(
-                session.root.as_path().to_string_lossy().as_ref(),
-                graph_path,
-            )
-            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                message: error.to_string(),
-            })?
-            .document;
-            remap_document_references(
-                &mut persisted_source.document,
-                graph_path.as_str(),
-                target.as_str(),
-            );
+        for resource in [&mut source, &mut persisted_source] {
+            resource.name = requested.as_str().to_owned();
+            remap_document(&mut resource.document, graph_path, &target);
+            if let Some(function) = resource.function.as_mut() {
+                function.revision = next_revision;
+            }
         }
         if let Some(update) = self.prepare_graph_editing_remap(
             graph_path,
@@ -657,6 +661,7 @@ impl ProjectState {
             &target,
             &source.document,
             &persisted_source.document,
+            true,
         )? {
             editing_updates.push(update);
         }
@@ -667,59 +672,61 @@ impl ProjectState {
             message: error.to_string(),
         })?;
 
+        let index = crate::scan_graph_resource_index(session.root.as_path()).map_err(|error| {
+            ProjectOperationError::TransactionPrepareFailed {
+                message: error.to_string(),
+            }
+        })?;
+        let paths = index
+            .entries()
+            .iter()
+            .map(|entry| entry.path.clone())
+            .chain(current_data.graphs.keys().cloned())
+            .collect::<std::collections::BTreeSet<_>>();
         let mut referenced = Vec::new();
-        for (path, resource) in &current_data.graphs {
-            if path == graph_path || !document_references(&resource.document, graph_path.as_str()) {
+        for path in paths {
+            if &path == graph_path {
                 continue;
             }
-            let mut changed = resource.clone();
-            if !remap_document_references(
-                &mut changed.document,
-                graph_path.as_str(),
-                target.as_str(),
-            ) {
-                continue;
-            }
-            super::normalize_function_resource_revision(
-                path,
-                &mut changed,
-                snapshot.graph_resource_revisions.get(path).copied(),
-            )?;
-            let mut persisted_changed = changed.clone();
-            if self.is_graph_modified(path) {
-                persisted_changed.document =
-                    crate::project_io::load_project_graph_document_from_file(
-                        session.root.as_path().to_string_lossy().as_ref(),
-                        path,
-                    )
-                    .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
-                        message: error.to_string(),
-                    })?
-                    .document;
-                remap_document_references(
-                    &mut persisted_changed.document,
-                    graph_path.as_str(),
-                    target.as_str(),
-                );
-            }
-            if let Some(update) = self.prepare_graph_editing_remap(
-                path,
-                path,
+            let mut persisted = crate::project_io::load_project_graph_from_file(
+                session.root.as_path().to_string_lossy().as_ref(),
+                &path,
+            )
+            .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?;
+            let mut changed = current_data.graphs.get(&path).unwrap_or(&persisted).clone();
+            let current_changed = remap_document(&mut changed.document, graph_path, &target);
+            let saved_changed = remap_document(&mut persisted.document, graph_path, &target);
+            let editing_update = self.prepare_graph_editing_remap(
+                &path,
+                &path,
                 graph_path,
                 &target,
                 &changed.document,
-                &persisted_changed.document,
-            )? {
+                &persisted.document,
+                current_changed || saved_changed,
+            )?;
+            if !current_changed && !saved_changed && editing_update.is_none() {
+                continue;
+            }
+            for resource in [&mut changed, &mut persisted] {
+                super::normalize_function_resource_revision(
+                    &path,
+                    resource,
+                    snapshot.graph_resource_revisions.get(&path).copied(),
+                )?;
+            }
+            if let Some(update) = editing_update {
                 editing_updates.push(update);
             }
-            let contents = crate::project_io::serialize_graph_resource_document(&persisted_changed)
+            let contents = crate::project_io::serialize_graph_resource_document(&persisted)
                 .map_err(|error| ProjectOperationError::TransactionPrepareFailed {
                     message: error.to_string(),
                 })?;
-            referenced.push((path.clone(), changed, contents));
+            referenced.push((path, changed, contents));
         }
 
-        let filesystem_lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_resource_lifecycle_operation(&ownership.operation)?;
         let expected_revisions = std::iter::once((
             yss_project_history::ResourceKey::Graph(graph_path.clone()),
@@ -781,6 +788,7 @@ impl ProjectState {
                     .collect(),
                 loaded_referenced_graphs: referenced
                     .iter()
+                    .filter(|(path, _, _)| current_data.graphs.contains_key(path))
                     .map(|(path, _, _)| path.clone())
                     .collect(),
             },
@@ -886,13 +894,6 @@ fn duplicate_document(
                     serde_json::Value::String(id.to_string()),
                 );
             }
-            for value in node.parameters.values_mut() {
-                if value.as_str().is_some_and(|value| {
-                    crate::graph_resource_index::normalize_resource_path(value) == source.as_str()
-                }) {
-                    *value = serde_json::Value::String(target.as_str().to_owned());
-                }
-            }
             (node.id, node)
         })
         .collect::<BTreeMap<_, _>>();
@@ -913,7 +914,7 @@ fn duplicate_document(
         .map(|(address, binding)| {
             (
                 duplicate_address(address, &node_ids, &instance_ids),
-                duplicate_binding(binding, source, target),
+                binding.clone(),
             )
         })
         .collect::<BTreeMap<_, _>>();
@@ -927,6 +928,7 @@ fn duplicate_document(
             )
         })
         .collect::<BTreeMap<_, _>>();
+    remap_document(&mut duplicate, source, target);
     duplicate
 }
 
@@ -955,82 +957,9 @@ fn duplicate_address(
     PortAddress { node_id, port }
 }
 
-fn duplicate_binding(
-    binding: &DynamicPortBinding,
-    source: &GraphResourcePath,
-    target: &GraphResourcePath,
-) -> DynamicPortBinding {
-    match binding {
-        DynamicPortBinding::UserCreated { order } => DynamicPortBinding::UserCreated {
-            order: order.clone(),
-        },
-        DynamicPortBinding::Resolved {
-            origin,
-            order,
-            last_known,
-        } => DynamicPortBinding::Resolved {
-            origin: duplicate_locator(origin, source, target),
-            order: order.clone(),
-            last_known: last_known.clone(),
-        },
-        DynamicPortBinding::Orphan {
-            origin,
-            order,
-            last_known,
-        } => DynamicPortBinding::Orphan {
-            origin: duplicate_locator(origin, source, target),
-            order: order.clone(),
-            last_known: last_known.clone(),
-        },
-    }
-}
-
-fn duplicate_locator(
-    locator: &DynamicMemberLocator,
-    source: &GraphResourcePath,
-    target: &GraphResourcePath,
-) -> DynamicMemberLocator {
-    match locator {
-        DynamicMemberLocator::FunctionParameter {
-            function,
-            parameter,
-        } => DynamicMemberLocator::FunctionParameter {
-            function: if crate::graph_resource_index::normalize_resource_path(function.as_str())
-                == source.as_str()
-            {
-                target.clone()
-            } else {
-                function.clone()
-            },
-            parameter: parameter.clone(),
-        },
-        DynamicMemberLocator::SchemaField { source, field } => DynamicMemberLocator::SchemaField {
-            source: source.clone(),
-            field: field.clone(),
-        },
-    }
-}
-
-fn remap_document_references(document: &mut GraphDocument, from: &str, to: &str) -> bool {
-    let mut changed = false;
-    for node in document.nodes.values_mut() {
-        for value in node.parameters.values_mut() {
-            if value.as_str() == Some(from) {
-                *value = serde_json::Value::String(to.to_owned());
-                changed = true;
-            }
-        }
-    }
-    changed
-}
-
-fn document_references(document: &GraphDocument, target: &str) -> bool {
-    document.nodes.values().any(|node| {
-        node.parameters
-            .values()
-            .any(|value| value.as_str() == Some(target))
-    })
-}
+#[cfg(test)]
+#[path = "graph_reference_tests.rs"]
+mod reference_tests;
 
 #[cfg(test)]
 mod tests {

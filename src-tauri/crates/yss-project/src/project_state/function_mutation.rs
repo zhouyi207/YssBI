@@ -263,7 +263,7 @@ mod tests {
         let state = fixture.state();
         let project = ProjectInstanceId::from_existing(state.project_instance_id());
         let after = FunctionSignature {
-            return_type: Some("Int64".into()),
+            return_type: Some(yss_data_contract::ValueType::number().to_string()),
             ..FunctionSignature::default()
         };
         let request = MutationRequest::new(
@@ -360,7 +360,7 @@ mod tests {
             FunctionDocumentPatch::new(
                 FunctionSignature::default(),
                 FunctionSignature {
-                    return_type: Some("Int64".into()),
+                    return_type: Some(yss_data_contract::ValueType::number().to_string()),
                     ..FunctionSignature::default()
                 },
             ),
