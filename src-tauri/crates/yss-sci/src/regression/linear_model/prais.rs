@@ -5,10 +5,7 @@
 //! - Cochrane-Orcutt (corc): drops first observation
 
 use crate::ts::serial_correlation::durbin_watson;
-use statrs::{
-    distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
-    statistics::Statistics,
-};
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -93,18 +90,22 @@ pub struct PraisResult {
 }
 
 /// Estimate ρ from residuals using rhotype(regress): u_t = ρ u_{t-1} + e_t
-fn estimate_rho_regress(residuals: &[f64]) -> f64 {
+fn estimate_rho_regress(residuals: &[f64]) -> Result<f64, String> {
     let n = residuals.len();
     if n < 2 {
-        return 0.0;
+        return Ok(0.0);
     }
     let sum_uu: f64 = (1..n).map(|t| residuals[t] * residuals[t - 1]).sum();
     let sum_u2: f64 = (0..n - 1).map(|t| residuals[t] * residuals[t]).sum();
     if sum_u2 <= 1e-20 {
-        return 0.0;
+        return Ok(0.0);
     }
     let rho = sum_uu / sum_u2;
-    rho.clamp(-0.999, 0.999)
+    if !rho.is_finite() {
+        return Err("Prais: nonfinite AR(1) estimate".into());
+    }
+    // Keep the fitted AR(1) process stationary, including boundary estimates.
+    Ok(rho.clamp(-0.999, 0.999))
 }
 
 impl Prais {
@@ -118,6 +119,12 @@ impl Prais {
             return Err("Prais: need at least one regressor".to_string());
         }
 
+        if self.config.max_iter == 0 || !self.config.tol.is_finite() || self.config.tol <= 0.0 {
+            return Err("Prais: max_iter and tolerance must be positive and finite".into());
+        }
+        if self.exog.nrows() != n || self.endog.iter().any(|v| !v.is_finite()) {
+            return Err("Prais: invalid response or design dimensions".into());
+        }
         let y_nd = &self.endog;
         let x_nd = &self.exog;
         let y = y_nd.as_ref().to_owned();
@@ -152,7 +159,7 @@ impl Prais {
 
         loop {
             let rho_old = rho;
-            rho = estimate_rho_regress(&residuals);
+            rho = estimate_rho_regress(&residuals)?;
 
             iteration_log.push(format!("Prais iteration {}: rho = {:.4}", iterations, rho));
 
@@ -161,44 +168,32 @@ impl Prais {
                 return Err("Prais: ρ too close to ±1, transformation unstable".to_string());
             }
 
-            let (y_star, x_star) = if self.config.transform == PraisTransform::CochraneOrcutt {
-                let mut y_star = Vec::with_capacity(n - 1);
-                let mut x_star = Vec::with_capacity((n - 1) * k);
-                for t in 1..n {
-                    y_star.push(y_nd[t] - rho * y_nd[t - 1]);
-                    for j in 0..k {
-                        x_star.push(x_nd[(t, j)] - rho * x_nd[(t - 1, j)]);
-                    }
+            let drop_first = self.config.transform == PraisTransform::CochraneOrcutt;
+            let n_star = n - usize::from(drop_first);
+            let transform = |i: usize, value: f64, previous: f64| {
+                if i == 0 && !drop_first {
+                    scale * value
+                } else {
+                    value - rho * previous
                 }
-                (
-                    (y_star).into_iter().collect::<Col<f64>>(),
-                    yss_sci_linalg::MatRef::from_row_major_slice(&(x_star), n - 1, k).to_owned(),
-                )
-            } else {
-                let mut y_star = Vec::with_capacity(n);
-                let mut x_star = Vec::with_capacity(n * k);
-                y_star.push(scale * y_nd[0]);
-                for j in 0..k {
-                    x_star.push(scale * x_nd[(0, j)]);
-                }
-                for t in 1..n {
-                    y_star.push(y_nd[t] - rho * y_nd[t - 1]);
-                    for j in 0..k {
-                        x_star.push(x_nd[(t, j)] - rho * x_nd[(t - 1, j)]);
-                    }
-                }
-                (
-                    (y_star).into_iter().collect::<Col<f64>>(),
-                    yss_sci_linalg::MatRef::from_row_major_slice(&(x_star), n, k).to_owned(),
-                )
             };
-
-            let n_star = y_star.nrows();
-            let x_star_matrix = x_star.as_ref().to_owned();
-            let y_star_vector = y_star.as_ref().to_owned();
+            let y_star_vector = Col::from_fn(n_star, |i| {
+                let t = i + usize::from(drop_first);
+                transform(i, y_nd[t], y_nd[t.saturating_sub(1)])
+            });
+            let x_star_matrix = Mat::from_fn(n_star, k, |i, j| {
+                let t = i + usize::from(drop_first);
+                transform(i, x_nd[(t, j)], x_nd[(t.saturating_sub(1), j)])
+            });
 
             let (rank, cond_no_val) =
-                matrix_rank(x_star_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
+                matrix_rank(x_star_matrix.as_ref()).map_err(|e| e.to_string())?;
+            if rank == 0 || rank < x_star_matrix.ncols() {
+                return Err("Prais: transformed design is rank deficient".to_string());
+            }
+            if n_star <= rank {
+                return Err("Prais: insufficient residual degrees of freedom".to_string());
+            }
             cond_no = cond_no_val;
 
             let xtx_s = x_star_matrix.transpose() * x_star_matrix.as_ref();
@@ -220,8 +215,12 @@ impl Prais {
 
             iterations += 1;
 
-            let converged =
-                (rho - rho_old).abs() < self.config.tol || iterations >= self.config.max_iter;
+            let converged = (rho - rho_old).abs() < self.config.tol;
+            if !converged && iterations >= self.config.max_iter {
+                return Err(format!(
+                    "Prais: did not converge after {iterations} iterations"
+                ));
+            }
 
             if converged {
                 let df_residual = n_star - rank;
@@ -234,15 +233,16 @@ impl Prais {
 
                 // All statistics based on ρ-transformed variables (Stata convention)
                 let ss_residual: f64 = res_trans.iter().map(|r| r * r).sum();
-                let y_star_mean = y_star_vector.iter().mean();
-                let ss_total: f64 = if self.config.constant {
-                    y_star_vector
-                        .iter()
-                        .map(|v| (v - y_star_mean).powi(2))
-                        .sum()
-                } else {
-                    y_star_vector.iter().map(|v| v.powi(2)).sum()
-                };
+                let intercept = self.config.constant.then(|| {
+                    Col::from_fn(n_star, |i| {
+                        if i == 0 && self.config.transform == PraisTransform::PraisWinsten {
+                            scale
+                        } else {
+                            1.0 - rho
+                        }
+                    })
+                });
+                let ss_total = super::transformed_total_ss(&y_star_vector, intercept.as_ref());
                 let ss_model = ss_total - ss_residual;
                 let r2 = 1.0 - ss_residual / ss_total;
                 let ms_model = ss_model / df_model.max(1) as f64;
@@ -346,7 +346,7 @@ mod tests {
         let endog = (y).into_iter().collect::<Col<f64>>();
         let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();
 
-        let prais = Prais {
+        let mut prais = Prais {
             endog: endog.clone(),
             exog: exog.clone(),
             config: PraisConfig {
@@ -362,6 +362,18 @@ mod tests {
         assert!(r.iterations >= 1);
         assert_eq!(r.num_observation, n);
         assert!(r.r2 >= 0.0 && r.r2 <= 1.0);
+        prais.endog = prais.endog.map(|v| v + 100.0);
+        let shifted = prais.fit().unwrap();
+        assert!((shifted.r2 - r.r2).abs() < 1e-8);
+        assert_eq!(estimate_rho_regress(&[1.0, 2.0, 4.0]).unwrap(), 0.999);
+        assert!(estimate_rho_regress(&[f64::INFINITY, 1.0]).is_err());
+        prais.config.max_iter = 1;
+        assert!(prais.fit().unwrap_err().contains("did not converge"));
+        prais.config.max_iter = 0;
+        assert!(prais.fit().is_err());
+        prais.config.max_iter = 50;
+        prais.config.tol = f64::NAN;
+        assert!(prais.fit().is_err());
     }
 
     #[test]

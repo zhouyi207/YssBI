@@ -32,10 +32,19 @@ explicitly, and unimplemented covariance modes retain their diagnostic failure.
 rank and inference statistics. It does not carry a second copy of coefficients
 inside a nested model. Runtime reports project these computed values.
 
-The OLS numerical method and rank threshold remain unchanged: SVD rank diagnostics
-and Cholesky of the cross product. Model-level rank handling, rank-failure
-propagation and iteration-stop semantics remain separate numerical follow-up
-work, tracked in the repository's tolerance analysis and TODO.
+The OLS numerical method uses SVD rank diagnostics and Cholesky of the cross
+product. OLS, WLS, GLS, Prais and the IV estimators propagate rank computation
+errors and reject rank-deficient designs or insufficient residual degrees of
+freedom. Collinearity removal also propagates decomposition failure rather than
+using it to choose columns to drop.
+
+WLS, GLS and Prais compute total variation in the transformed space, centering
+along the transformed intercept when one is configured. Their shared
+`transformed_total_ss` preserves translation invariance with an intercept; without
+one it returns the uncentered squared norm. Prais only reports a fitted result
+when the AR coefficient change meets its tolerance. Exhausted iterations and
+invalid iteration settings return errors. Finite AR estimates remain clipped to
+`[-0.999, 0.999]` to retain a stationary transform; nonfinite estimates are errors.
 
 Model APIs use `yss_sci_linalg::Mat` and `Col`; serialized results retain their existing
 field and row/column meanings. Call sites use the shared OLS configuration. Structural migration does not imply that every model has

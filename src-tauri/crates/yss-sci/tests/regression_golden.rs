@@ -459,7 +459,7 @@ fn test_wls_golden() {
     // 模型摘要
     assert_eq!(w.num_observation, 150);
     assert!(
-        approx_eq(w.ss_model, 316.2887714961151, TOL, TOL_REL),
+        approx_eq(w.ss_model, 275.1579690774291, TOL, TOL_REL),
         "ss_model: got {}",
         w.ss_model
     );
@@ -469,7 +469,7 @@ fn test_wls_golden() {
         w.ss_residual
     );
     assert!(
-        approx_eq(w.ss_total, 359.2749482383761, TOL, TOL_REL),
+        approx_eq(w.ss_total, 318.14414581969004, TOL, TOL_REL),
         "ss_total: got {}",
         w.ss_total
     );
@@ -477,7 +477,7 @@ fn test_wls_golden() {
     assert_eq!(w.df_residual, 146);
     assert_eq!(w.df_total, 149);
     assert!(
-        approx_eq(w.ms_model, 105.4295904987051, TOL, TOL_REL),
+        approx_eq(w.ms_model, 91.71932302580969, TOL, TOL_REL),
         "ms_model: got {}",
         w.ms_model
     );
@@ -487,22 +487,22 @@ fn test_wls_golden() {
         w.ms_residual
     );
     assert!(
-        approx_eq(w.ms_total, 2.411241263344806, TOL, TOL_REL),
+        approx_eq(w.ms_total, 2.1351956095281213, TOL, TOL_REL),
         "ms_total: got {}",
         w.ms_total
     );
     assert!(
-        approx_eq(w.r2, 0.8803529804874122, TOL, TOL_REL),
+        approx_eq(w.r2, 0.8648845898719644, TOL, TOL_REL),
         "r2: got {}",
         w.r2
     );
     assert!(
-        approx_eq(w.r2_adjusted, 0.8778944800864685, TOL, TOL_REL),
+        approx_eq(w.r2_adjusted, 0.8621082458282376, TOL, TOL_REL),
         "r2_adjusted: got {}",
         w.r2_adjusted
     );
     assert!(
-        approx_eq(w.fvalue, 358.0853516027606, TOL, TOL_REL),
+        approx_eq(w.fvalue, 311.51924122163445, TOL, TOL_REL),
         "fvalue: got {}",
         w.fvalue
     );

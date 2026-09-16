@@ -1,7 +1,4 @@
-use statrs::{
-    distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
-    statistics::Statistics,
-};
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -66,8 +63,14 @@ impl GLS {
         l.as_ref().solve_lower_triangular_in_place(endog.as_mut());
         l.as_ref().solve_lower_triangular_in_place(exog.as_mut());
 
-        let (rank, cond_no) = matrix_rank(exog.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(exog.as_ref()).map_err(|e| e.to_string())?;
         let n = exog.nrows();
+        if rank == 0 || rank < exog.ncols() {
+            return Err("Design matrix is rank deficient".to_string());
+        }
+        if n <= rank {
+            return Err("Insufficient residual degrees of freedom".to_string());
+        }
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
@@ -82,12 +85,12 @@ impl GLS {
         let betas = xtx_inv.as_ref() * xty.as_ref();
         let y_hat = exog.as_ref() * betas.as_ref();
 
-        let y_mean = endog.iter().mean();
-        let ss_total = if self.config.constant {
-            endog.iter().map(|v| (v - y_mean).powi(2)).sum::<f64>()
-        } else {
-            endog.iter().map(|v| v.powi(2)).sum::<f64>()
-        };
+        let intercept = self.config.constant.then(|| {
+            let mut c = Col::from_fn(endog.nrows(), |_| 1.0);
+            l.as_ref().solve_lower_triangular_in_place(c.as_mut());
+            c
+        });
+        let ss_total = super::transformed_total_ss(&endog, intercept.as_ref());
         let ss_residual = (endog.as_ref() - y_hat.as_ref())
             .iter()
             .map(|v| v.powi(2))

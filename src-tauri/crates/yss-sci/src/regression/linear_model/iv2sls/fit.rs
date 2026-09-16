@@ -161,7 +161,13 @@ impl IV2SLS {
         }
         let x = yss_sci_linalg::MatRef::from_row_major_slice(&(x_raw), n, k_x).to_owned();
 
-        let (rank, cond_no) = matrix_rank(x.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(|e| e.to_string())?;
+        if rank == 0 || rank < x.ncols() {
+            return Err("Design matrix is rank deficient".to_string());
+        }
+        if n <= rank {
+            return Err("Insufficient residual degrees of freedom".to_string());
+        }
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;

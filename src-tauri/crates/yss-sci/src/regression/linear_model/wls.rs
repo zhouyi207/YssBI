@@ -1,10 +1,7 @@
 use crate::regression::covariance::compute_cov_beta;
 use yss_sci_contract::regression::CovParams;
 
-use statrs::{
-    distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
-    statistics::Statistics,
-};
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -70,8 +67,14 @@ impl WLS {
             row *= yss_sci_linalg::Scale(sw);
         }
 
-        let (rank, cond_no) = matrix_rank(zz.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(zz.as_ref()).map_err(|e| e.to_string())?;
         let n = zz.nrows();
+        if rank == 0 || rank < zz.ncols() {
+            return Err("Design matrix is rank deficient".to_string());
+        }
+        if n <= rank {
+            return Err("Insufficient residual degrees of freedom".to_string());
+        }
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
@@ -91,12 +94,8 @@ impl WLS {
         let betas = xtx_inv.as_ref() * xtz.as_ref();
         let z_hat = zz.as_ref() * betas.as_ref();
 
-        let z_mean = z.iter().mean();
-        let ss_total = if self.config.constant {
-            z.iter().map(|v| (v - z_mean).powi(2)).sum::<f64>()
-        } else {
-            z.iter().map(|v| v.powi(2)).sum::<f64>()
-        };
+        let ss_total =
+            super::transformed_total_ss(&z, self.config.constant.then_some(&sqrt_weights));
         let ss_residual = (z.as_ref() - z_hat.as_ref())
             .iter()
             .map(|v| v.powi(2))

@@ -28,13 +28,15 @@ let reconstructed = &a * &x;
   Views borrow the decomposition without copying its factors. `matrix_rank`
   requests singular values only, avoiding square left-vector allocation for tall
   matrices. Its tolerance is `max(rows, cols) * f64::EPSILON * largest_value`;
-  empty matrices return `(0, 1)` and zero matrices `(0, infinity)`.
+  empty matrices return `(0, 1)` and zero matrices `(0, infinity)`. The relative
+  tolerance factor is evaluated first to avoid intermediate overflow. Nonfinite
+  inputs or singular values return `DecompositionFailed`, never a zero rank.
 - Symmetric eigenvalues are ascending and use the lower triangle. General
   eigenvalues are complex and unordered; vector column `i` matches eigenvalue `i`.
   Normalization and phase are not portable promises. Callers sort when required.
 - RHS dimensions are programmer preconditions; nonsquare matrices and numerical
-  decomposition failures use `LinalgError`. SCI callers retain their existing
-  rank-failure fallback.
+  decomposition failures use `LinalgError`. Callers must distinguish a failed
+  decomposition from a successfully computed zero rank.
 - Borrowed wrappers preserve logical indices and may be strided or reversed.
   Owned matrices are column major and may have padding. Serialized row order must
   be assembled explicitly; native storage must not be treated as a flat row-major

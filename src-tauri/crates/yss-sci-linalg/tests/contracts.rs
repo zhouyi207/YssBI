@@ -101,6 +101,19 @@ fn svd_orientation_rank_and_empty_matrix_conventions_are_stable() {
 }
 
 #[test]
+fn rank_handles_extreme_scale_and_rejects_nonfinite_input() {
+    let (rank, condition) = matrix_rank(mat![[1e308, 0.0], [0.0, 1e308]].as_ref()).unwrap();
+    assert_eq!(rank, 2);
+    near(condition, 1.0);
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert_eq!(
+            matrix_rank(mat![[1.0, value], [0.0, 1.0]].as_ref()),
+            Err(LinalgError::DecompositionFailed)
+        );
+    }
+}
+
+#[test]
 fn rank_of_a_tall_design_does_not_require_square_singular_vectors() {
     let design = Mat::from_fn(100_000, 2, |row, column| {
         if column == 0 {

@@ -7,6 +7,7 @@ use yss_sci_linalg::{Col, Mat};
 #[derive(Debug, Clone, PartialEq)]
 pub enum OlsFitError {
     NotPositiveDefinite,
+    Rank(yss_sci_linalg::LinalgError),
     Covariance(String),
     Inference(String),
 }
@@ -14,6 +15,7 @@ pub enum OlsFitError {
 impl std::fmt::Display for OlsFitError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Rank(error) => write!(formatter, "OLS: rank computation failed: {error}"),
             Self::NotPositiveDefinite => formatter.write_str("OLS: X'X matrix is not positive definite (likely rank-deficient or has multicollinearity). Check your input variables."),
             Self::Covariance(message) | Self::Inference(message) => formatter.write_str(message),
         }

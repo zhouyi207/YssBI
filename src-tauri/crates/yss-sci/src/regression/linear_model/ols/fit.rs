@@ -16,7 +16,17 @@ impl OLS {
         let y = self.endog.as_ref().to_owned();
         let x = self.exog.as_ref().to_owned();
 
-        let (rank, cond_no) = matrix_rank(x.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(OlsFitError::Rank)?;
+        if rank == 0 || rank < x.ncols() {
+            return Err(OlsFitError::Inference(
+                "OLS: design matrix is rank deficient".into(),
+            ));
+        }
+        if x.nrows() <= rank {
+            return Err(OlsFitError::Inference(
+                "OLS: insufficient residual degrees of freedom".into(),
+            ));
+        }
 
         // 普通最小二乘
         let xtx = x.transpose() * x.as_ref();

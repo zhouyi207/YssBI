@@ -61,12 +61,21 @@ pub fn matrix_rank(matrix: MatRef<'_, f64>) -> Result<(usize, f64), LinalgError>
     if rows == 0 || cols == 0 {
         return Ok((0, 1.0));
     }
+    if (0..cols).any(|j| (0..rows).any(|i| !matrix[(i, j)].is_finite())) {
+        return Err(LinalgError::DecompositionFailed);
+    }
     let values = matrix
         .singular_values()
         .map_err(|_| LinalgError::DecompositionFailed)?;
+    if values
+        .iter()
+        .any(|value| !value.is_finite() || *value < 0.0)
+    {
+        return Err(LinalgError::DecompositionFailed);
+    }
     let largest = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let smallest = values.iter().copied().fold(f64::INFINITY, f64::min);
-    if !largest.is_finite() || largest <= 0.0 {
+    if largest == 0.0 {
         return Ok((0, f64::INFINITY));
     }
     let condition = if smallest > 0.0 {
@@ -74,7 +83,7 @@ pub fn matrix_rank(matrix: MatRef<'_, f64>) -> Result<(usize, f64), LinalgError>
     } else {
         f64::INFINITY
     };
-    let tolerance = largest * rows.max(cols) as f64 * f64::EPSILON;
+    let tolerance = largest * (rows.max(cols) as f64 * f64::EPSILON);
     Ok((
         values.iter().filter(|&&value| value > tolerance).count(),
         condition,

@@ -275,7 +275,13 @@ impl IVLIML {
         let betas_vector = xt_ikmz_x_inv.as_ref() * xt_ikmz_y_vector.as_ref();
         let betas_nd = betas_vector.as_ref().to_owned();
 
-        let (rank, cond_no) = matrix_rank(x.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, cond_no) = matrix_rank(x.as_ref()).map_err(|e| e.to_string())?;
+        if rank == 0 || rank < x.ncols() {
+            return Err("Design matrix is rank deficient".to_string());
+        }
+        if n <= rank {
+            return Err("Insufficient residual degrees of freedom".to_string());
+        }
         let df_residual = n - rank;
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;

@@ -33,7 +33,6 @@ pub fn drop_collinear_columns(
     col_is_dummy: &[bool],
     intercept_col: Option<usize>,
 ) -> Result<(Mat<f64>, Vec<usize>), String> {
-    let _n = exog.nrows();
     let k = exog.ncols();
     if k == 0 {
         return Ok((exog.clone(), Vec::new()));
@@ -60,13 +59,9 @@ pub fn drop_collinear_columns(
     loop {
         let keep_vec: Vec<usize> = keep.iter().copied().collect();
         let x_sub = Mat::from_fn(exog.nrows(), keep_vec.len(), |i, j| exog[(i, keep_vec[j])]);
-        let x_matrix = x_sub.as_ref().to_owned();
-        let (rank, _) = matrix_rank(x_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
+        let (rank, _) = matrix_rank(x_sub.as_ref()).map_err(|e| e.to_string())?;
 
         if rank == keep.len() {
-            break;
-        }
-        if rank >= keep.len() {
             break;
         }
 
@@ -82,17 +77,9 @@ pub fn drop_collinear_columns(
                 return Err("drop_collinear_columns: cannot drop all columns".to_string());
             }
             let x_new = Mat::from_fn(exog.nrows(), keep_new.len(), |i, j| exog[(i, keep_new[j])]);
-            let x_new_matrix = x_new.as_ref().to_owned();
-            let (rank_new, _) = matrix_rank(x_new_matrix.as_ref()).unwrap_or((0, f64::INFINITY));
+            let (rank_new, _) = matrix_rank(x_new.as_ref()).map_err(|e| e.to_string())?;
 
-            if rank_new == keep_new.len() {
-                // Full rank achieved with this removal
-                keep.remove(&j);
-                omitted.push(j);
-                dropped = true;
-                break;
-            }
-            if rank_new == rank {
+            if rank_new == keep_new.len() || rank_new == rank {
                 // Column j is in the span of others; dropping it reduces deficiency
                 keep.remove(&j);
                 omitted.push(j);
@@ -108,8 +95,7 @@ pub fn drop_collinear_columns(
     }
 
     let keep_vec: Vec<usize> = keep.iter().copied().collect();
-    let reduced =
-        Mat::from_fn(exog.nrows(), keep_vec.len(), |i, j| exog[(i, keep_vec[j])]).to_owned();
+    let reduced = Mat::from_fn(exog.nrows(), keep_vec.len(), |i, j| exog[(i, keep_vec[j])]);
     Ok((reduced, omitted))
 }
 
@@ -117,6 +103,15 @@ pub fn drop_collinear_columns(
 mod tests {
     use super::*;
     use yss_sci_linalg::mat;
+
+    #[test]
+    fn invalid_design_does_not_become_column_removal() {
+        let x = mat![[1.0, f64::NAN], [1.0, 2.0]];
+        assert_eq!(
+            drop_collinear_columns(&x, &[false, false], Some(0)).unwrap_err(),
+            "matrix decomposition failed"
+        );
+    }
 
     #[test]
     fn test_full_rank_no_drop() {
