@@ -854,7 +854,7 @@ mod tests {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
             id,
-            StoredResult::new(crate::value::RuntimeValue::Integer(id.get() as i64)),
+            StoredResult::new(yss_node_kernel::RuntimeValue::Integer(id.get() as i64)),
             ResultCategory::Value,
             ReadyPinResult::new(
                 output,
@@ -1185,7 +1185,7 @@ mod tests {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
             id,
-            StoredResult::new(crate::value::RuntimeValue::Decimal(id.get() as f64)),
+            StoredResult::new(yss_node_kernel::RuntimeValue::Decimal(id.get() as f64)),
             ResultCategory::Value,
             ReadyPinResult::new(
                 output(),
@@ -1335,7 +1335,7 @@ mod tests {
         let other_result = |id, run| {
             ReadyResult::from_scheduler(
                 ResultId::from_existing(id),
-                StoredResult::new(crate::value::RuntimeValue::Decimal(1.0)),
+                StoredResult::new(yss_node_kernel::RuntimeValue::Decimal(1.0)),
                 ResultCategory::Value,
                 ReadyPinResult::new(
                     other.clone(),

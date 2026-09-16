@@ -247,7 +247,7 @@ pub mod test_support {
         SuccessfulExecutionCandidate::from_scheduler(
             vec![ReadyResult::from_scheduler(
                 result_id,
-                StoredResult::new(crate::value::RuntimeValue::Decimal(3.5)),
+                StoredResult::new(yss_node_kernel::RuntimeValue::Decimal(3.5)),
                 crate::plan::ResultCategory::Value,
                 pin,
             )]

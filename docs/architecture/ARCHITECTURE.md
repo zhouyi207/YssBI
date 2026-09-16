@@ -200,15 +200,18 @@ Database 用例由 Application 组合 Project declaration authority 和 session-
 文件替换要求临时文件与目标位于同一文件系统。`replace_atomic` 在 Unix 重命名后同步父目录，返回错误时目标可能已经更新；调用方统一保守地报告发布结果不确定，不自动重试、不回滚或删除目标，只清理临时路径。不能通过临时文件消失推断持久化成功。
 数据库导出返回 `database_export_publication_uncertain`，插件 JSON/文件导出返回 `plugin_file_publication_uncertain`，Julia assets 返回 `julia_worker_asset_publication_uncertain` 并停止本次 worker 准备；写入前及内容写入失败继续使用原有失败码。替换失败不提交成功响应或后续内存更新，调用方需检查目标后决定后续操作。该协议不提供多文件事务或跨平台完整断电保证；`replace_atomic` 不同步文件内容，内容同步仍属于调用方。
 
-科学计算使用独立的中性契约，只有 Execution 和 IPC Command 直接调用 SCI runtime：
+科学计算使用独立的中性契约。Node Kernel 负责节点适配，Execution 保留结果分析和独立 OLS benchmark 的入口，IPC Command 提供独立统计命令：
 
 ```text
-Application → yss-graph-execution → yss-sci-runtime (stateless functions)
+Application → yss-graph-execution → yss-node-kernel → yss-sci-runtime (stateless functions)
+Execution result analysis / OLS benchmark → yss-sci-runtime
 IPC Command → yss-sci-runtime
 yss-sci-runtime → yss-sci algorithms → yss-sci-linalg Mat / Col / views / checked factors → faer
 yss-sci algorithms → shared model options/results in yss-sci-contract
 Plugin Manager → framed IPC → Julia extension → Bayes worker port → Julia adapter
 ```
+
+`yss-node-kernel` 拥有中立调用契约、运行值及冻结注册表；Application 装配后向 Execution 注入同一注册表。图计划、资源授权、结果存储和节点错误定位仍由 Execution/Application 的现有所有者负责，kernel 不反向依赖 Graph、Project 或 Application。具体调用边界见 [Node Kernel](../../src-tauri/crates/yss-node-kernel/README.md)。
 
 Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative DTO 转换为 presentation model。Julia process/runtime、Bayes model validation、worker protocol、artifact 和 result 随独立插件编译；`yss-bayes-runtime` 是插件内部的科学编排，不是宿主 bridge。宿主 Application 只实现通用数据快照和结果提交端口，不包含 Julia/Bayes 专用 command。已提交插件结果位于项目 `extension-results/`，包含内容哈希、包摘要、操作身份、输入快照来源和通用文件；卸载插件不删除它们。
 

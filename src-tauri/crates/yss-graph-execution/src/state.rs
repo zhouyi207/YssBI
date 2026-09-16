@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Instant, SystemTime, SystemTimeError, UNIX_EPOCH};
+#[cfg(test)]
+use yss_node_kernel::KernelId;
 
 use thiserror::Error;
 
@@ -11,7 +13,7 @@ use crate::finalization::{
     SuccessfulExecutionCandidate,
 };
 use crate::identity::{ExecutionSessionId, RuntimeGeneration};
-use crate::kernels::{KernelInvocation, KernelRegistry};
+use crate::kernel_invocation::parameter_value;
 use crate::package_preparation::PreparedExecutionPlan;
 use crate::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
@@ -24,8 +26,8 @@ use crate::result::{
 use crate::result_store::ResultStore;
 use crate::run_registry::RunRegistry;
 use crate::run_registry::{RunRegistryError, RunState};
-use crate::value::RuntimeValue;
-use yss_relational_contract::NumericOperation;
+use yss_node_kernel::RuntimeValue;
+use yss_node_kernel::{KernelControl, KernelError, KernelRegistry};
 
 #[derive(Clone)]
 pub struct RunExecutionControl {
@@ -80,7 +82,7 @@ pub enum ExecutePreparedError {
     #[error("execution deadline was exceeded")]
     DeadlineExceeded { phase: RunPhase },
     #[error("prepared execution kernel failed")]
-    Kernel(#[source] KernelExecutionError),
+    Kernel(#[source] OperationExecutionError),
     #[error("execution result identity space is exhausted")]
     ResultIdentityExhausted,
     #[error("execution result timestamp is unavailable")]
@@ -88,35 +90,26 @@ pub enum ExecutePreparedError {
 }
 
 #[derive(Debug, Error)]
-pub enum KernelExecutionError {
-    #[error("prepared execution kernel was cancelled")]
-    Cancelled,
-    #[error("prepared execution kernel deadline was exceeded")]
-    DeadlineExceeded,
-    #[error("prepared execution kernel failed")]
+pub enum OperationExecutionError {
+    #[error(transparent)]
+    Kernel(#[from] KernelError),
+    #[error("prepared graph execution contains inconsistent values")]
     Failed,
     #[error("requested graph output is unavailable in the prepared plan")]
     DemandOutputUnavailable,
-    #[error("numeric input has an incompatible runtime type")]
-    InvalidNumericInput,
-    #[error("division by zero")]
-    DivisionByZero,
-    #[error("numeric result is not finite")]
-    NonFiniteResult,
-    #[error("execution kernel is not registered")]
-    KernelNotFound,
     #[error("node execution failed")]
     AtNode {
         source: crate::plan::PlanSourceIdentity,
         #[source]
-        error: Box<KernelExecutionError>,
+        error: Box<OperationExecutionError>,
     },
 }
 
-impl KernelExecutionError {
+impl OperationExecutionError {
     fn at_node(self, source: &crate::plan::PlanSourceIdentity) -> Self {
         match self {
-            Self::Cancelled | Self::DeadlineExceeded | Self::AtNode { .. } => self,
+            Self::Kernel(KernelError::Cancelled | KernelError::DeadlineExceeded)
+            | Self::AtNode { .. } => self,
             error => Self::AtNode {
                 source: source.clone(),
                 error: Box::new(error),
@@ -132,11 +125,11 @@ impl KernelExecutionError {
                     ..error.failure()
                 };
             }
-            Self::DivisionByZero => RunFailureCode::DivisionByZero,
-            Self::NonFiniteResult => RunFailureCode::NonFiniteResult,
-            Self::InvalidNumericInput => RunFailureCode::InvalidNumericInput,
-            Self::KernelNotFound => RunFailureCode::KernelNotFound,
-            Self::DeadlineExceeded => RunFailureCode::DeadlineExceeded,
+            Self::Kernel(KernelError::DivisionByZero) => RunFailureCode::DivisionByZero,
+            Self::Kernel(KernelError::NonFiniteResult) => RunFailureCode::NonFiniteResult,
+            Self::Kernel(KernelError::InvalidNumericInput) => RunFailureCode::InvalidNumericInput,
+            Self::Kernel(KernelError::KernelNotFound) => RunFailureCode::KernelNotFound,
+            Self::Kernel(KernelError::DeadlineExceeded) => RunFailureCode::DeadlineExceeded,
             _ => RunFailureCode::KernelFailed,
         };
         RunFailure {
@@ -217,7 +210,7 @@ trait PreparedPlanExecutor: Send + Sync {
     fn execute(
         &self,
         execution: PreparedPlanExecution<'_>,
-    ) -> Result<SchedulerOutput, KernelExecutionError>;
+    ) -> Result<SchedulerOutput, OperationExecutionError>;
 }
 
 struct NeutralPlanExecutor {
@@ -228,7 +221,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
     fn execute(
         &self,
         execution: PreparedPlanExecution<'_>,
-    ) -> Result<SchedulerOutput, KernelExecutionError> {
+    ) -> Result<SchedulerOutput, OperationExecutionError> {
         let PreparedPlanExecution {
             package,
             bindings: _bindings,
@@ -261,11 +254,11 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     .get(reference.index() as usize)
                     .and_then(|producer| *producer)
                 else {
-                    return Err(KernelExecutionError::Failed);
+                    return Err(OperationExecutionError::Failed);
                 };
                 remaining_dependencies[operation_index] = remaining_dependencies[operation_index]
                     .checked_add(1)
-                    .ok_or(KernelExecutionError::Failed)?;
+                    .ok_or(OperationExecutionError::Failed)?;
                 dependents[producer].push(operation_index);
             }
         }
@@ -277,11 +270,13 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     .then_some(operation_index)
             })
             .collect::<VecDeque<_>>();
+        let kernel_control =
+            KernelControl::new(Arc::clone(&control.cancellation), control.deadline);
         let mut completed_count = 0usize;
         let mut results = Vec::new();
         while let Some(operation_index) = ready.pop_front() {
             let operation = &operations[operation_index];
-            check_kernel_control(control)?;
+            check_execution_control(control)?;
             let inputs = operation
                 .inputs()
                 .iter()
@@ -291,12 +286,14 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                             .get(reference.index() as usize)
                             .and_then(Option::as_ref)
                             .cloned()
-                            .ok_or(KernelExecutionError::Failed),
+                            .ok_or(OperationExecutionError::Failed),
                         crate::plan::PlanInputSource::Parameter(handle) => {
                             let Some(payload) = package.parameters().entries().get(handle) else {
-                                return Err(KernelExecutionError::Failed);
+                                return Err(OperationExecutionError::Failed);
                             };
                             parameter_value(payload.value(), resources)
+                                .map(std::borrow::Cow::into_owned)
+                                .map_err(OperationExecutionError::from)
                         }
                     }?;
                     apply_input_coercions(value, &binding.contract().coercions)
@@ -304,42 +301,24 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|error| error.at_node(operation.source()))?;
 
-            let mut output_values = self
-                .kernels
-                .execute(
-                    operation.kernel_id(),
-                    &KernelInvocation {
-                        inputs: &inputs,
-                        input_slots: operation.inputs(),
-                        parameters: operation
-                            .parameters()
-                            .iter()
-                            .map(|(key, handle)| {
-                                package
-                                    .parameters()
-                                    .entries()
-                                    .get(handle)
-                                    .map(|payload| (key.clone(), payload.value()))
-                                    .ok_or(KernelExecutionError::Failed)
-                            })
-                            .collect::<Result<BTreeMap<_, _>, _>>()
-                            .map_err(|error| error.at_node(operation.source()))?,
-                        resources,
-                        outputs: operation.outputs(),
-                        specialization: operation.specialization(),
-                        control,
-                    },
-                )
-                .map_err(|error| error.at_node(operation.source()))?;
-            for output in operation.outputs() {
-                let value = output_values
-                    .remove(output.output())
-                    .ok_or(KernelExecutionError::Failed)?;
+            let output_values = crate::kernel_invocation::invoke(
+                &self.kernels,
+                operation,
+                &inputs,
+                package.parameters(),
+                resources,
+                &kernel_control,
+            )
+            .map_err(|error| OperationExecutionError::from(error).at_node(operation.source()))?;
+            if output_values.len() != operation.outputs().len() {
+                return Err(OperationExecutionError::Failed);
+            }
+            for (output, value) in operation.outputs().iter().zip(output_values) {
                 let Some(slot) = values.get_mut(output.value().index() as usize) else {
-                    return Err(KernelExecutionError::Failed);
+                    return Err(OperationExecutionError::Failed);
                 };
                 if slot.replace(value.clone()).is_some() {
-                    return Err(KernelExecutionError::Failed);
+                    return Err(OperationExecutionError::Failed);
                 }
                 results.push(SchedulerResult {
                     value: StoredResult::new(value.clone()),
@@ -347,17 +326,14 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     output: output.output().clone(),
                 });
             }
-            if !output_values.is_empty() {
-                return Err(KernelExecutionError::Failed);
-            }
             completed_count = completed_count
                 .checked_add(1)
-                .ok_or(KernelExecutionError::Failed)?;
+                .ok_or(OperationExecutionError::Failed)?;
             for dependent in &dependents[operation_index] {
                 let remaining = &mut remaining_dependencies[*dependent];
                 *remaining = remaining
                     .checked_sub(1)
-                    .ok_or(KernelExecutionError::Failed)?;
+                    .ok_or(OperationExecutionError::Failed)?;
                 if *remaining == 0 {
                     ready.push_back(*dependent);
                 }
@@ -370,7 +346,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 .filter(|required| **required)
                 .count()
         {
-            return Err(KernelExecutionError::Failed);
+            return Err(OperationExecutionError::Failed);
         }
 
         let observations = selection
@@ -378,14 +354,14 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
             .into_iter()
             .map(|selected| {
                 let crate::plan::PlanInputSource::Value(value) = selected.source else {
-                    return Err(KernelExecutionError::Failed);
+                    return Err(OperationExecutionError::Failed);
                 };
                 let output = operations
                     .iter()
                     .flat_map(|operation| operation.outputs())
                     .find(|output| output.value() == value)
                     .map(|output| output.output().clone())
-                    .ok_or(KernelExecutionError::Failed)?;
+                    .ok_or(OperationExecutionError::Failed)?;
                 Ok(SchedulerObservation {
                     output,
                     requester: selected.requester,
@@ -411,7 +387,7 @@ struct ExecutionSelection {
 
 fn execution_producers(
     package: &crate::plan::ExecutionPlanPackage,
-) -> Result<Vec<Option<usize>>, KernelExecutionError> {
+) -> Result<Vec<Option<usize>>, OperationExecutionError> {
     let operations = package.plan().operations();
     let value_count = operations
         .iter()
@@ -423,10 +399,10 @@ fn execution_producers(
     for (operation_index, operation) in operations.iter().enumerate() {
         for output in operation.outputs() {
             let Some(producer) = producers.get_mut(output.value().index() as usize) else {
-                return Err(KernelExecutionError::Failed);
+                return Err(OperationExecutionError::Failed);
             };
             if producer.replace(operation_index).is_some() {
-                return Err(KernelExecutionError::Failed);
+                return Err(OperationExecutionError::Failed);
             }
         }
     }
@@ -437,7 +413,7 @@ fn select_execution(
     package: &crate::plan::ExecutionPlanPackage,
     demand: &crate::plan::PlanExecutionDemand,
     producers: &[Option<usize>],
-) -> Result<ExecutionSelection, KernelExecutionError> {
+) -> Result<ExecutionSelection, OperationExecutionError> {
     let operations = package.plan().operations();
     let consumed = operations
         .iter()
@@ -477,7 +453,7 @@ fn select_execution(
                     .find(|output| output.output() == requested)
                     .map(|output| (output.value(), output.contract().category))
             }) else {
-                return Err(KernelExecutionError::DemandOutputUnavailable);
+                return Err(OperationExecutionError::DemandOutputUnavailable);
             };
             selected.insert(requested.clone(), (value, category));
         }
@@ -504,7 +480,7 @@ fn select_execution(
     };
     if include_defaults && !operations.is_empty() && selected.is_empty() && observations.is_empty()
     {
-        return Err(KernelExecutionError::Failed);
+        return Err(OperationExecutionError::Failed);
     }
 
     let mut required_operations = vec![false; operations.len()];
@@ -525,7 +501,7 @@ fn select_execution(
             .get(value.index() as usize)
             .and_then(|producer| *producer)
         else {
-            return Err(KernelExecutionError::Failed);
+            return Err(OperationExecutionError::Failed);
         };
         if std::mem::replace(&mut required_operations[producer], true) {
             continue;
@@ -544,60 +520,24 @@ fn select_execution(
     })
 }
 
-pub(crate) fn check_kernel_control(
+pub(crate) fn check_execution_control(
     control: &RunExecutionControl,
-) -> Result<(), KernelExecutionError> {
+) -> Result<(), OperationExecutionError> {
     if control.cancellation.load(Ordering::Acquire) {
-        return Err(KernelExecutionError::Cancelled);
+        return Err(OperationExecutionError::Kernel(KernelError::Cancelled));
     }
     if Instant::now() >= control.deadline {
-        return Err(KernelExecutionError::DeadlineExceeded);
+        return Err(OperationExecutionError::Kernel(
+            KernelError::DeadlineExceeded,
+        ));
     }
     Ok(())
-}
-
-pub(crate) fn parameter_value(
-    value: &crate::plan::PlanParameterValue,
-    resources: &PreparedRunResources,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    match value {
-        crate::plan::PlanParameterValue::Scalar(scalar) => Ok(match scalar {
-            crate::plan::PlanParameterScalar::Null => RuntimeValue::Null,
-            crate::plan::PlanParameterScalar::Bool(value) => RuntimeValue::Bool(*value),
-            crate::plan::PlanParameterScalar::Integer(value) => RuntimeValue::Integer(*value),
-            crate::plan::PlanParameterScalar::Unsigned(value) => RuntimeValue::Unsigned(*value),
-            crate::plan::PlanParameterScalar::Decimal(value) => {
-                RuntimeValue::Decimal(value.value())
-            }
-            crate::plan::PlanParameterScalar::String(value) => RuntimeValue::String(value.clone()),
-        }),
-        crate::plan::PlanParameterValue::Literal(value) => Ok(value.as_ref().clone()),
-        crate::plan::PlanParameterValue::Resource(resource) => resources
-            .value(resource)
-            .cloned()
-            .ok_or(KernelExecutionError::Failed),
-        crate::plan::PlanParameterValue::List(values) => values
-            .iter()
-            .map(|value| parameter_value(value, resources))
-            .collect::<Result<Vec<_>, _>>()
-            .map(|values| RuntimeValue::List(values.into_boxed_slice())),
-        crate::plan::PlanParameterValue::Record(fields) => fields
-            .iter()
-            .map(|(field, value)| {
-                Ok((
-                    field.as_str().to_owned().into_boxed_str(),
-                    parameter_value(value, resources)?,
-                ))
-            })
-            .collect::<Result<std::collections::BTreeMap<_, _>, KernelExecutionError>>()
-            .map(RuntimeValue::Record),
-    }
 }
 
 fn apply_input_coercions(
     mut value: RuntimeValue,
     coercions: &[crate::plan::PlanInputCoercionKind],
-) -> Result<RuntimeValue, KernelExecutionError> {
+) -> Result<RuntimeValue, OperationExecutionError> {
     for coercion in coercions {
         value = match coercion {
             crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => match value {
@@ -605,7 +545,9 @@ fn apply_input_coercions(
                 RuntimeValue::Series(_) | RuntimeValue::List(_) => value,
                 value => value
                     .coerce_to(&yss_data_contract::DataType::Float64)
-                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+                    .map_err(|_| {
+                        OperationExecutionError::Kernel(KernelError::InvalidNumericInput)
+                    })?,
             },
             // Broadcast is a kernel-owned shape operation. Keeping the scalar
             // value here makes the coercion explicit without fabricating a
@@ -614,226 +556,6 @@ fn apply_input_coercions(
         };
     }
     Ok(value)
-}
-
-#[derive(Clone, Copy)]
-enum BuiltinKernel {
-    Statistical(crate::statistics::StatisticalKernel),
-    Relational(crate::relational::RelationalKernel),
-    Decompose,
-    Constant,
-    Numeric(NumericOperation),
-    And,
-    Or,
-    Not,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    Convert,
-    Identity,
-}
-
-pub(crate) fn register_builtin_kernels(builder: &mut crate::kernels::KernelRegistryBuilder) {
-    use crate::statistics::StatisticalKernel::{OlsFit, OlsSummary};
-    use BuiltinKernel::*;
-    use NumericOperation::{Add, Divide, Multiply, Subtract};
-    let entries: &[(
-        &str,
-        BuiltinKernel,
-        &[&str],
-        std::ops::RangeInclusive<usize>,
-    )] = &[
-        (
-            "yssbi.statistics.ols.fit",
-            Statistical(OlsFit),
-            &["configuration"],
-            3..=3,
-        ),
-        (
-            "yssbi.statistics.ols.summary",
-            Statistical(OlsSummary),
-            &["configuration"],
-            2..=2,
-        ),
-        (
-            "yssbi.dataframe.source.get",
-            Relational(crate::relational::RelationalKernel::Source),
-            &["dataframe"],
-            1..=1,
-        ),
-        (
-            "yssbi.dataframe.project",
-            Relational(crate::relational::RelationalKernel::Project),
-            &["columns"],
-            1..=1,
-        ),
-        (
-            "yssbi.dataframe.filter.rows",
-            Relational(crate::relational::RelationalKernel::Filter),
-            &["predicate"],
-            1..=1,
-        ),
-        (
-            "yssbi.dataframe.series.select",
-            Relational(crate::relational::RelationalKernel::Series),
-            &["column"],
-            1..=1,
-        ),
-        ("yssbi.dataframe.decompose", Decompose, &[], 0..=usize::MAX),
-        (
-            "yssbi.dataframe.limit",
-            Relational(crate::relational::RelationalKernel::Limit),
-            &["rows"],
-            1..=1,
-        ),
-        (
-            "yssbi.dataframe.rename",
-            Relational(crate::relational::RelationalKernel::Rename),
-            &["from", "to"],
-            1..=1,
-        ),
-        ("yssbi.constant.get", Constant, &["value"], 1..=1),
-        ("yssbi.numeric.add", Numeric(Add), &[], 1..=1),
-        ("yssbi.numeric.subtract", Numeric(Subtract), &[], 1..=1),
-        ("yssbi.numeric.multiply", Numeric(Multiply), &[], 1..=1),
-        ("yssbi.numeric.divide", Numeric(Divide), &[], 1..=1),
-        ("yssbi.logic.and", And, &[], 1..=1),
-        ("yssbi.logic.or", Or, &[], 1..=1),
-        ("yssbi.logic.not", Not, &[], 1..=1),
-        ("yssbi.compare.equal", Equal, &[], 1..=1),
-        ("yssbi.compare.not_equal", NotEqual, &[], 1..=1),
-        ("yssbi.compare.less", Less, &[], 1..=1),
-        ("yssbi.compare.less_equal", LessEqual, &[], 1..=1),
-        ("yssbi.compare.greater", Greater, &[], 1..=1),
-        ("yssbi.compare.greater_equal", GreaterEqual, &[], 1..=1),
-        ("yssbi.value.convert", Convert, &["target_type"], 1..=1),
-        ("yssbi.debug.view", Identity, &[], 0..=0),
-        ("yssbi.core.reroute", Identity, &[], 1..=1),
-    ];
-    for (id, kind, parameters, outputs) in entries {
-        let kind = *kind;
-        let contract = crate::kernels::KernelContract::new(
-            parameters.iter().map(|field| {
-                crate::plan::PlanParameterFieldId::new((*field).into())
-                    .expect("built-in parameter identity")
-            }),
-            outputs.clone(),
-        )
-        .expect("built-in kernel contract");
-        builder
-            .register(
-                crate::plan::KernelId::new((*id).into()).expect("built-in kernel identity"),
-                std::num::NonZeroU32::new(1).expect("built-in implementation revision"),
-                contract,
-                move |invocation| execute_kernel(kind, invocation),
-            )
-            .expect("built-in kernels have distinct identities");
-    }
-}
-
-fn execute_kernel(
-    kind: BuiltinKernel,
-    invocation: &KernelInvocation<'_>,
-) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
-    let KernelInvocation {
-        inputs,
-        resources,
-        outputs,
-        specialization,
-        ..
-    } = invocation;
-    let value = match kind {
-        BuiltinKernel::Statistical(kind) => {
-            return crate::statistics::execute(kind, invocation);
-        }
-        BuiltinKernel::Relational(kind) => crate::relational::execute(kind, invocation),
-        BuiltinKernel::Decompose => return crate::relational::decompose(invocation),
-        BuiltinKernel::Constant => invocation
-            .parameter("value")
-            .map(|value| parameter_value(value, resources))
-            .transpose()?
-            .ok_or(KernelExecutionError::Failed),
-        BuiltinKernel::Numeric(operation) => crate::numeric::execute(operation, invocation),
-        BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
-        BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
-        BuiltinKernel::Not => unary_bool(inputs, |value| !value),
-        BuiltinKernel::Equal => Ok(RuntimeValue::Bool(inputs.first() == inputs.get(1))),
-        BuiltinKernel::NotEqual => Ok(RuntimeValue::Bool(inputs.first() != inputs.get(1))),
-        BuiltinKernel::Less
-        | BuiltinKernel::LessEqual
-        | BuiltinKernel::Greater
-        | BuiltinKernel::GreaterEqual => compare_numeric(kind, inputs),
-        BuiltinKernel::Convert => {
-            let target = specialization
-                .output_types()
-                .first()
-                .map(crate::plan::PlanTypeBinding::data_type)
-                .ok_or(KernelExecutionError::Failed)?;
-            inputs
-                .first()
-                .cloned()
-                .ok_or(KernelExecutionError::Failed)?
-                .coerce_to(target)
-                .map_err(|_| KernelExecutionError::Failed)
-        }
-        BuiltinKernel::Identity if outputs.is_empty() => return Ok(BTreeMap::new()),
-        BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelExecutionError::Failed),
-    }?;
-    let [output] = outputs else {
-        return Err(KernelExecutionError::Failed);
-    };
-    Ok(BTreeMap::from([(output.output().clone(), value)]))
-}
-
-pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionError> {
-    match value {
-        Some(RuntimeValue::Integer(value)) => Ok(*value as f64),
-        Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
-        Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
-        _ => Err(KernelExecutionError::InvalidNumericInput),
-    }
-}
-
-fn binary_bool(
-    inputs: &[RuntimeValue],
-    operation: impl FnOnce(bool, bool) -> bool,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    let Some(RuntimeValue::Bool(left)) = inputs.first() else {
-        return Err(KernelExecutionError::Failed);
-    };
-    let Some(RuntimeValue::Bool(right)) = inputs.get(1) else {
-        return Err(KernelExecutionError::Failed);
-    };
-    Ok(RuntimeValue::Bool(operation(*left, *right)))
-}
-
-fn unary_bool(
-    inputs: &[RuntimeValue],
-    operation: impl FnOnce(bool) -> bool,
-) -> Result<RuntimeValue, KernelExecutionError> {
-    let Some(RuntimeValue::Bool(value)) = inputs.first() else {
-        return Err(KernelExecutionError::Failed);
-    };
-    Ok(RuntimeValue::Bool(operation(*value)))
-}
-
-fn compare_numeric(
-    kind: BuiltinKernel,
-    inputs: &[RuntimeValue],
-) -> Result<RuntimeValue, KernelExecutionError> {
-    let left = numeric_input(inputs.first())?;
-    let right = numeric_input(inputs.get(1))?;
-    let value = match kind {
-        BuiltinKernel::Less => left < right,
-        BuiltinKernel::LessEqual => left <= right,
-        BuiltinKernel::Greater => left > right,
-        BuiltinKernel::GreaterEqual => left >= right,
-        _ => return Err(KernelExecutionError::Failed),
-    };
-    Ok(RuntimeValue::Bool(value))
 }
 
 struct RunLifecycleGuard<'a> {
@@ -1221,7 +943,7 @@ impl ExecutionRuntimeState {
             demand,
         }) {
             Ok(output) => output,
-            Err(KernelExecutionError::Cancelled) => {
+            Err(OperationExecutionError::Kernel(KernelError::Cancelled)) => {
                 let result = terminate_run(
                     &mut lifecycle,
                     run_id,
@@ -1232,7 +954,7 @@ impl ExecutionRuntimeState {
                 self.remove_active_control(run_id);
                 return result;
             }
-            Err(KernelExecutionError::DeadlineExceeded) => {
+            Err(OperationExecutionError::Kernel(KernelError::DeadlineExceeded)) => {
                 let result = terminate_run(
                     &mut lifecycle,
                     run_id,
@@ -1285,7 +1007,7 @@ impl ExecutionRuntimeState {
                 let result = terminate_run(
                     &mut lifecycle,
                     run_id,
-                    ExecutePreparedError::Kernel(KernelExecutionError::Failed),
+                    ExecutePreparedError::Kernel(OperationExecutionError::Failed),
                 );
                 self.remove_active_control(run_id);
                 return result;
@@ -1549,8 +1271,8 @@ mod tests {
     use crate::identity::ExecutionSessionId;
     use crate::package_preparation::PreparedExecutionPlan;
     use crate::plan::{
-        ExecutionPlan, ExecutionPlanPackage, KernelId, PlanBasis, PlanExecutionDemand, PlanGraphId,
-        PlanId, PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding, PlanOutputRef,
+        ExecutionPlan, ExecutionPlanPackage, PlanBasis, PlanExecutionDemand, PlanGraphId, PlanId,
+        PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding, PlanOutputRef,
         PlanParameterBundleBuilder, PlanParameterHandle, PlanParameterPayload, PlanParameterScalar,
         PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProjectSessionId,
         PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
@@ -1569,7 +1291,7 @@ mod tests {
         let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
-            crate::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource.clone(), version.clone())]),
             BTreeMap::from([(resource, PlanResourceObservedState::Present(version))]),
         );
@@ -1605,7 +1327,7 @@ mod tests {
             [RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing("v1".into()),
-                crate::value::RuntimeValue::Integer(4),
+                yss_node_kernel::RuntimeValue::Integer(4),
             )],
         )
     }
@@ -1626,7 +1348,7 @@ mod tests {
         let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([4; 32]),
-            crate::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
@@ -1707,17 +1429,17 @@ mod tests {
         fn execute(
             &self,
             execution: PreparedPlanExecution<'_>,
-        ) -> Result<SchedulerOutput, KernelExecutionError> {
+        ) -> Result<SchedulerOutput, OperationExecutionError> {
             let bindings = execution.bindings;
             let resources = execution.resources;
             assert_eq!(bindings.len(), 1);
             assert_eq!(
                 resources.value(&PlanResourceId::from_existing("databases/answer".into())),
-                Some(&crate::value::RuntimeValue::Integer(4))
+                Some(&yss_node_kernel::RuntimeValue::Integer(4))
             );
             Ok(SchedulerOutput::new(
                 vec![SchedulerResult {
-                    value: StoredResult::new(crate::value::RuntimeValue::Integer(5)),
+                    value: StoredResult::new(yss_node_kernel::RuntimeValue::Integer(5)),
                     category: crate::plan::ResultCategory::Value,
                     output: operation_output("test-executor", ValueRef::new(0))
                         .output()
@@ -1733,7 +1455,7 @@ mod tests {
         ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             crate::identity::RuntimeGeneration::INITIAL,
-            crate::kernels::KernelRegistry::default().into(),
+            yss_node_kernel::KernelRegistry::default().into(),
         )
     }
 
@@ -1798,7 +1520,7 @@ mod tests {
             operation_source("producer"),
             crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.get".into()),
             BTreeMap::from([(
-                crate::plan::PlanParameterFieldId::from_existing("value".into()),
+                yss_node_kernel::KernelParameterKey::from_existing("value".into()),
                 parameter_handle.clone(),
             )]),
             Box::new([]),
@@ -1828,11 +1550,9 @@ mod tests {
             .expect("the executor must wait for the producer instead of reading by plan order");
 
         assert_eq!(candidate.results().len(), 2);
-        assert!(
-            candidate.results().iter().all(|result| {
-                result.value().value() == &crate::value::RuntimeValue::Integer(7)
-            })
-        );
+        assert!(candidate.results().iter().all(|result| {
+            result.value().value() == &yss_node_kernel::RuntimeValue::Integer(7)
+        }));
         let outputs = candidate
             .results()
             .iter()
@@ -1896,7 +1616,7 @@ mod tests {
             operation_source("selected"),
             crate::plan::PlanNodeTypeId::from_existing("yssbi.constant.get".into()),
             BTreeMap::from([(
-                crate::plan::PlanParameterFieldId::from_existing("value".into()),
+                yss_node_kernel::KernelParameterKey::from_existing("value".into()),
                 parameter_handle.clone(),
             )]),
             Box::new([]),
@@ -1942,7 +1662,7 @@ mod tests {
 
         assert_eq!(
             executed.handoff().results()[0].value().value(),
-            &crate::value::RuntimeValue::Integer(7)
+            &yss_node_kernel::RuntimeValue::Integer(7)
         );
     }
 
@@ -1965,7 +1685,7 @@ mod tests {
         assert_eq!(handoff.results()[0].result_id(), ResultId::from_existing(1));
         assert_eq!(
             handoff.results()[0].value().value(),
-            &crate::value::RuntimeValue::Integer(5)
+            &yss_node_kernel::RuntimeValue::Integer(5)
         );
         assert_eq!(
             handoff.results()[0].category(),

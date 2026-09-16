@@ -36,7 +36,8 @@ GraphEditVersion 包含后端编辑会话 ID 与 Project resource revision，编
 | yss-graph-diagnostics                                                     | 图诊断代码、模板与定义校验                                                       |
 | yss-project                                                               | committed authority、资源版本、文件事务与 publication                            |
 | yss-application                                                           | 一致事实 capture/revalidation、Graph↔Project↔Execution 编排                      |
-| yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、KernelRegistry、ResultStore、运行事件                |
+| yss-graph-execution                                                       | 计划构建与缓存、demand/DAG、内核调用适配、ResultStore、运行事件                  |
+| yss-node-kernel                                                           | 中立内核调用契约、运行值、冻结 KernelRegistry 与内置执行适配                     |
 | yss-application::ipc / yss-ipc-event / yss-ipc-channel / yss-ipc-contract | 命令适配、事件发送、通道交付及共享 wire 协议                                     |
 
 完整清单见 [Module Map](../reference/MODULE_MAP.md)。
@@ -53,13 +54,13 @@ IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成�
 `yss-graph-runtime` 负责编辑解析；`yss-graph-execution::graph_preparation` 消费只读的 `GraphAnalysis`，
 直接构建已有 `ExecutionPlan`、`PlanParameterBundle` 和输出契约。计划缓存归执行会话，资源授权依据
 在每次准备时重新绑定。Application 组织资源和会话校验，不再持有一套图包到执行包的转换。
-调度器与 kernel 继续消费中性执行计划；运行准备不读取 UI 投影或 Project 可变状态。
+调度器消费执行计划；`kernel_invocation` 将已求值输入、已解析参数及输出类型/字段投影为中立内核调用，kernel 不消费 Graph 计划。运行准备不读取 UI 投影或 Project 可变状态。
 
 Application 的图用例集中在 `graph/`，包括编辑、解析、资源、运行与结果查询；`session/` 独立拥有整个
 Project/Database/Graph/Execution 会话的组装和替换。`chart/` 按资源操作、数据库查询及纯图表投影组织，
 Chart 预览和图结果复用前端渲染器，各自保留数据持有与失效规则。
 
-执行能力由冻结的 `KernelRegistry` 拥有。`NodeComponents` 在组装时检查定义与已安装实现的参数字段及
+执行能力由 `yss-node-kernel` 的冻结 `KernelRegistry` 拥有。`NodeComponents` 在组装时检查定义与已安装实现的参数字段及
 输出数量，随后冻结 kernel 表；未安装的实现由编辑解析产生 `graph.node.kernel_unavailable` 阻断。
 编辑阶段的支持检查与实际调度读取同一会话的注册表。注册的标识、显式实现 revision 和调用契约共同
 形成能力指纹；实现行为改变时必须更新 revision，配置改变通过新的会话配置生效。
@@ -232,7 +233,11 @@ Chart Save 同样按提交的完整内容覆盖资源，不接受 frontend `expe
 
 `execute_graph` 接收编辑版本、`semanticInputHash` 与 demand，并从 Project 读取该版本的 document。Application 先校验文档并向 Project 准备资源授权，再捕获、解析及重验依赖，确认语义身份和可运行性；随后捕获结果发布依据、调用 Execution 准备计划及资源绑定。运行不隐式保存，也不回退磁盘旧文档。草稿或依赖变化返回 `graph_draft_changed`，阻断诊断返回 `graph_not_ready`，内部解析和计划构建故障保留诊断编号。
 
-Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。Input array 与 input slots 按相同顺序传递，每个 slot 携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
+Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
+
+Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 只传运行值、输入组、有序输出类型与字段、取消/deadline 和预算。Literal 与资源运行值可以借用，不为创建调用复制完整 payload。内核返回局部输出顺序的值列表，注册表检查输出数量；Execution 将其映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
+
+内核的 `KernelError` 不携带图地址、运行阶段或项目状态；Execution 的 `OperationExecutionError` 负责节点定位，并保持已有 RunFailure 错误码和取消/超时终态。RuntimeValue、KernelId、KernelParameterKey 和 KernelFingerprint 由 Node Kernel 拥有，ResultStore 与结果租约仍属于 Execution。
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
@@ -252,13 +257,13 @@ Demand selection 和 DAG scheduler 保留。`KernelRegistry` 按 KernelId 向已
 标量除零在节点求值时拒绝；数据内的 NULL、除零、非有限值或溢出在批流实际消费时返回类型化错误。
 分页、统计输入消费沿用各自的取消、deadline 和内存边界，不将非法计算值写成正常结果。
 
-OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Execution 直接调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由 Execution 转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
+OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Node Kernel 的统计适配调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由内核转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
-只有 `yss-graph-execution` 和 `yss-application::ipc` 直接依赖 runtime。独立统计命令在 IPC 层转换中性请求/结果并调用 runtime；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和 Application 不再注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
+`yss-node-kernel` 的统计适配、`yss-graph-execution` 的结果分析及独立 OLS benchmark、`yss-application::ipc` 的独立统计命令直接调用 runtime。独立统计命令在 IPC 层转换中性请求/结果；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和普通 Application 模块不注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
-Execution 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
+Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
 计划准备将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，

@@ -5,11 +5,11 @@ use serde::Serialize;
 use yss_graph_document::GraphResourcePath;
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{ResultId, StoredResultSnapshot};
-use yss_graph_execution::value::RuntimeValue;
 use yss_ipc_contract::execution::{
     ExecutionDemandDto, GraphOutputRefDto, MAX_SAFE_PREVIEW_GENERATION,
 };
 use yss_ipc_contract::graph::PortAddressDto;
+use yss_node_kernel::RuntimeValue;
 
 fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
     let port: yss_graph_document::PortAddress = value.port.try_into().map_err(|_| ())?;

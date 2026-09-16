@@ -9267,6 +9267,7 @@ dependencies = [
  "yss-ipc-event",
  "yss-math-expr",
  "yss-node-catalog",
+ "yss-node-kernel",
  "yss-node-protocol",
  "yss-node-registry",
  "yss-plugin-protocol",
@@ -9615,6 +9616,7 @@ dependencies = [
  "yss-graph-runtime",
  "yss-graph-type-mapping",
  "yss-node-catalog",
+ "yss-node-kernel",
  "yss-node-protocol",
  "yss-node-registry",
  "yss-relational-contract",
@@ -9810,6 +9812,18 @@ dependencies = [
  "yss-node-protocol",
  "yss-node-registry",
  "yss-sci-contract",
+]
+
+[[package]]
+name = "yss-node-kernel"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-canonical-hash",
+ "yss-data-contract",
+ "yss-relational-contract",
+ "yss-sci-contract",
+ "yss-sci-runtime",
 ]
 
 [[package]]

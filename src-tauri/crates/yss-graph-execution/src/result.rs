@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::identity::ExecutionSessionId;
 use crate::plan::{PlanNodeId, PlanOutputRef, PlanPortAddress, ResultCategory};
-use crate::value::RuntimeValue;
+use yss_node_kernel::RuntimeValue;
 
 use super::run_registry::RunId;
 

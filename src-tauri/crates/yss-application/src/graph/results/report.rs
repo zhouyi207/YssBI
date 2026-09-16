@@ -1,6 +1,6 @@
 use thiserror::Error;
 use yss_graph_execution::result::ResultReference;
-use yss_graph_execution::value::RuntimeValue;
+use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::RelationColumn;
 use yss_sci_contract::regression::report::OlsModelSummary;
 use yss_sci_contract::scientific::{AcfPacfResult, OlsResult, ScientificComputationError};

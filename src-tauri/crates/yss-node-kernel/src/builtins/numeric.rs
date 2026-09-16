@@ -1,37 +1,37 @@
-use crate::kernels::KernelInvocation;
+use crate::KernelInvocation;
 use yss_data_contract::DataType;
 use yss_relational_contract::{NumericOperation, NumericType, RelationLiteral, SeriesOperand};
 
-use crate::state::{KernelExecutionError, check_kernel_control, numeric_input};
-use crate::value::RuntimeValue;
+use super::numeric_input;
+use crate::KernelError;
+use crate::RuntimeValue;
 
 pub(crate) fn execute(
     operation: NumericOperation,
     invocation: &KernelInvocation<'_>,
-) -> Result<RuntimeValue, KernelExecutionError> {
+) -> Result<RuntimeValue, KernelError> {
     let inputs = invocation.inputs;
     if inputs.len() < 2 || (operation != NumericOperation::Add && inputs.len() != 2) {
-        return Err(KernelExecutionError::InvalidNumericInput);
+        return Err(KernelError::InvalidNumericInput);
     }
     let output_type = invocation
-        .specialization
-        .output_types()
+        .outputs
         .first()
-        .map(crate::plan::PlanTypeBinding::data_type)
-        .ok_or(KernelExecutionError::Failed)?;
+        .map(|output| &output.data_type)
+        .ok_or(KernelError::Failed)?;
     let DataType::DataSeries(element) = output_type else {
         return scalar(operation, inputs.iter(), output_type);
     };
     let numeric_type = match element.as_ref() {
         DataType::Int64 => NumericType::Int64,
         DataType::Float64 => NumericType::Float64,
-        _ => return Err(KernelExecutionError::InvalidNumericInput),
+        _ => return Err(KernelError::InvalidNumericInput),
     };
     if operation == NumericOperation::Divide
         && !matches!(inputs[1], RuntimeValue::Series(_) | RuntimeValue::List(_))
         && numeric_input(inputs.get(1))? == 0.0
     {
-        return Err(KernelExecutionError::DivisionByZero);
+        return Err(KernelError::DivisionByZero);
     }
     if let Some(RuntimeValue::Series(first)) = inputs
         .iter()
@@ -46,22 +46,21 @@ pub(crate) fn execute(
                 }
                 RuntimeValue::Unsigned(value) if numeric_type == NumericType::Int64 => {
                     Ok(SeriesOperand::Scalar(RelationLiteral::Integer(
-                        i64::try_from(*value)
-                            .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+                        i64::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)?,
                     )))
                 }
                 RuntimeValue::Decimal(_) | RuntimeValue::Unsigned(_) => Ok(SeriesOperand::Scalar(
                     RelationLiteral::Decimal(numeric_input(Some(value))?.to_string().into()),
                 )),
                 // A materialized list carries no proof of alignment with a live row domain.
-                _ => Err(KernelExecutionError::InvalidNumericInput),
+                _ => Err(KernelError::InvalidNumericInput),
             })
             .collect::<Result<Vec<_>, _>>()?;
         return first
             .relation()
             .numeric_series(operation, &operands, numeric_type)
             .map(RuntimeValue::Series)
-            .map_err(crate::relational::kernel_error);
+            .map_err(super::relational::kernel_error);
     }
 
     let rows = inputs
@@ -70,11 +69,11 @@ pub(crate) fn execute(
             RuntimeValue::List(values) => Some(values.len()),
             _ => None,
         })
-        .ok_or(KernelExecutionError::InvalidNumericInput)?;
+        .ok_or(KernelError::InvalidNumericInput)?;
     for input in inputs {
         match input {
             RuntimeValue::List(values) if values.len() == rows => {}
-            RuntimeValue::List(_) => return Err(KernelExecutionError::InvalidNumericInput),
+            RuntimeValue::List(_) => return Err(KernelError::InvalidNumericInput),
             value => {
                 numeric_input(Some(value))?;
             }
@@ -82,17 +81,17 @@ pub(crate) fn execute(
     }
     let bytes = rows
         .checked_mul(std::mem::size_of::<RuntimeValue>())
-        .ok_or(KernelExecutionError::Failed)?;
-    if bytes > crate::relational::MAX_NUMERIC_INPUT_BYTES {
-        return Err(KernelExecutionError::Failed);
+        .ok_or(KernelError::Failed)?;
+    if bytes > invocation.control.max_input_bytes {
+        return Err(KernelError::Failed);
     }
     let mut result = Vec::new();
     result
         .try_reserve_exact(rows)
-        .map_err(|_| KernelExecutionError::Failed)?;
+        .map_err(|_| KernelError::Failed)?;
     for row in 0..rows {
         if row % 1024 == 0 {
-            check_kernel_control(invocation.control)?;
+            invocation.check_control()?;
         }
         let values = inputs.iter().map(|input| match input {
             RuntimeValue::List(values) => &values[row],
@@ -100,17 +99,17 @@ pub(crate) fn execute(
         });
         result.push(scalar(operation, values, element)?);
     }
-    check_kernel_control(invocation.control)?;
+    invocation.check_control()?;
     Ok(RuntimeValue::List(result.into_boxed_slice()))
 }
 
-fn integer(value: Option<&RuntimeValue>) -> Result<i64, KernelExecutionError> {
+fn integer(value: Option<&RuntimeValue>) -> Result<i64, KernelError> {
     match value {
         Some(RuntimeValue::Integer(value)) => Ok(*value),
         Some(RuntimeValue::Unsigned(value)) => {
-            i64::try_from(*value).map_err(|_| KernelExecutionError::InvalidNumericInput)
+            i64::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)
         }
-        _ => Err(KernelExecutionError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidNumericInput),
     }
 }
 
@@ -118,7 +117,7 @@ fn scalar<'a>(
     operation: NumericOperation,
     mut values: impl Iterator<Item = &'a RuntimeValue>,
     output_type: &DataType,
-) -> Result<RuntimeValue, KernelExecutionError> {
+) -> Result<RuntimeValue, KernelError> {
     match output_type {
         DataType::Int64 => {
             let mut result = integer(values.next())?;
@@ -129,10 +128,10 @@ fn scalar<'a>(
                     NumericOperation::Subtract => result.checked_sub(right),
                     NumericOperation::Multiply => result.checked_mul(right),
                     NumericOperation::Divide => {
-                        return Err(KernelExecutionError::InvalidNumericInput);
+                        return Err(KernelError::InvalidNumericInput);
                     }
                 }
-                .ok_or(KernelExecutionError::NonFiniteResult)?;
+                .ok_or(KernelError::NonFiniteResult)?;
             }
             Ok(RuntimeValue::Integer(result))
         }
@@ -145,16 +144,16 @@ fn scalar<'a>(
                     NumericOperation::Subtract => result - right,
                     NumericOperation::Multiply => result * right,
                     NumericOperation::Divide if right == 0.0 => {
-                        return Err(KernelExecutionError::DivisionByZero);
+                        return Err(KernelError::DivisionByZero);
                     }
                     NumericOperation::Divide => result / right,
                 };
                 if !result.is_finite() {
-                    return Err(KernelExecutionError::NonFiniteResult);
+                    return Err(KernelError::NonFiniteResult);
                 }
             }
             Ok(RuntimeValue::Decimal(result))
         }
-        _ => Err(KernelExecutionError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidNumericInput),
     }
 }

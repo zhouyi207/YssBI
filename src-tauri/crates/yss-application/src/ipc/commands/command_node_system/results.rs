@@ -8,7 +8,7 @@ use crate::session::{ApplicationState, SessionCaptureError};
 use serde::Serialize;
 use tauri::State;
 use yss_graph_execution::result::{ResultId, ResultRetentionError};
-use yss_graph_execution::value::RuntimeValue;
+use yss_node_kernel::RuntimeValue;
 
 pub(super) const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 

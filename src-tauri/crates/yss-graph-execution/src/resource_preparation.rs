@@ -7,7 +7,7 @@ use crate::plan::{
     PlanProjectSessionId, PlanResourceId, PlanResourceObservedState, PlanResourceRequirement,
     PlanResourceVersion, ResourceAccess, ResourceKind,
 };
-use crate::value::RuntimeValue;
+use yss_node_kernel::RuntimeValue;
 
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum ResourcePreparationError {
@@ -342,7 +342,7 @@ mod tests {
         let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([3; 32]),
-            crate::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource, version)]),
             BTreeMap::from([(
                 PlanResourceId::from_existing("databases/answer".into()),
@@ -366,7 +366,7 @@ mod tests {
         ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
-            crate::kernels::KernelRegistry::default().into(),
+            yss_node_kernel::KernelRegistry::default().into(),
         )
         .prepare_package(package, RuntimeGeneration::INITIAL)
         .expect("test package is valid")

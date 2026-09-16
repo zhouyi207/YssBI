@@ -1,5 +1,7 @@
 //! An ordinary numeric extension using only public composition and registration APIs.
 
+use yss_node_kernel::KernelId;
+
 use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, atomic::AtomicBool};
@@ -9,19 +11,19 @@ use crate::ApplicationState;
 use crate::session::{NodeComponents, NodeCompositionError};
 use yss_graph_analysis_contract::GraphAnalysisBasis;
 use yss_graph_document::{DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition};
-use yss_graph_execution::kernels::{
-    KernelContract, KernelInvocation, KernelRegistrationError, KernelRegistryBuilder,
-};
 use yss_graph_execution::package_preparation::PackagePreparationError;
 use yss_graph_execution::plan::{
-    KernelId, PlanBasis, PlanExecutionDemand, PlanParameterScalar, PlanParameterValue,
-    PlanProjectSessionId, PlanRegistryFingerprint,
+    PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use yss_graph_execution::resource_preparation::RunResourceBindings;
-use yss_graph_execution::state::{ExecutePreparedError, KernelExecutionError, RunExecutionControl};
-use yss_graph_execution::value::RuntimeValue;
+use yss_graph_execution::state::{ExecutePreparedError, RunExecutionControl};
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_node_catalog::{BuiltinCatalog, register_builtin_nodes};
+use yss_node_kernel::KernelError;
+use yss_node_kernel::RuntimeValue;
+use yss_node_kernel::{
+    KernelContract, KernelInvocation, KernelRegistrationError, KernelRegistryBuilder,
+};
 use yss_node_protocol::*;
 use yss_node_registry::{
     LeafImplementation, NodeRegistry, NodeRegistryBuilder, ProviderRegistration, RegisteredNode,
@@ -119,29 +121,16 @@ fn definitions() -> (Arc<NodeRegistry>, Arc<BuiltinCatalog>) {
     (Arc::new(builder.freeze().unwrap()), Arc::new(catalog))
 }
 
-fn increment(
-    invocation: &KernelInvocation<'_>,
-) -> Result<BTreeMap<yss_graph_execution::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError>
-{
-    let (
-        [RuntimeValue::Integer(input)],
-        Some(PlanParameterValue::Scalar(PlanParameterScalar::Integer(step))),
-        [output],
-    ) = (
-        invocation.inputs,
-        invocation.parameter("step"),
-        invocation.outputs,
-    )
+fn increment(invocation: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
+    let ([RuntimeValue::Integer(input)], Some(RuntimeValue::Integer(step))) =
+        (invocation.inputs, invocation.parameter("step"))
     else {
-        return Err(KernelExecutionError::InvalidNumericInput);
+        return Err(KernelError::InvalidNumericInput);
     };
     let result = input
         .checked_add(*step)
-        .ok_or(KernelExecutionError::NonFiniteResult)?;
-    Ok(BTreeMap::from([(
-        output.output().clone(),
-        RuntimeValue::Integer(result),
-    )]))
+        .ok_or(KernelError::NonFiniteResult)?;
+    Ok(vec![RuntimeValue::Integer(result)])
 }
 
 fn kernels(revision: Option<u32>) -> KernelRegistryBuilder {
@@ -152,10 +141,7 @@ fn kernels(revision: Option<u32>) -> KernelRegistryBuilder {
                 KernelId::new(ID.into()).unwrap(),
                 NonZeroU32::new(revision).unwrap(),
                 KernelContract::new(
-                    [
-                        yss_graph_execution::plan::PlanParameterFieldId::new("step".into())
-                            .unwrap(),
-                    ],
+                    [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
                     1..=1,
                 )
                 .unwrap(),
@@ -214,8 +200,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         resource_versions: BTreeMap::new(),
         resource_observations: BTreeMap::new(),
     };
-    let resolve = |basis: &GraphAnalysisBasis,
-                   kernels: &yss_graph_execution::kernels::KernelRegistry| {
+    let resolve = |basis: &GraphAnalysisBasis, kernels: &yss_node_kernel::KernelRegistry| {
         let analysis = session.graph().resolve_graph_document(
             &graph,
             &document,
@@ -348,7 +333,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
 fn conflicting_registrations_and_node_kernel_contracts_are_rejected() {
     let mut builder = kernels(Some(1));
     let contract = KernelContract::new(
-        [yss_graph_execution::plan::PlanParameterFieldId::new("step".into()).unwrap()],
+        [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
         1..=1,
     )
     .unwrap();
@@ -364,7 +349,7 @@ fn conflicting_registrations_and_node_kernel_contracts_are_rejected() {
     for contract in [
         KernelContract::new([], 1..=1).unwrap(),
         KernelContract::new(
-            [yss_graph_execution::plan::PlanParameterFieldId::new("step".into()).unwrap()],
+            [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
             2..=2,
         )
         .unwrap(),

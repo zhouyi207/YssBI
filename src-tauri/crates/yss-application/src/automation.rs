@@ -7,7 +7,6 @@ use yss_database_runtime::session_api::{catalog_snapshot, revalidate_catalog_sna
 use yss_graph_document::{PortAddress, PortRef};
 use yss_graph_execution::plan::{PlotDataKind, ResultCategory, StatisticalReportKind};
 use yss_graph_execution::result::ResultId;
-use yss_graph_execution::value::RuntimeValue;
 use yss_harness_contract::{
     AutomationCapabilityRequest, AutomationCapabilityResult, CapabilityContractError,
     CapabilityControl, CapabilityFailure, CapabilityFailureCode, CapabilityId,
@@ -19,6 +18,7 @@ use yss_harness_contract::{
     ResultValueInspection, SearchNodeCatalogRequest,
 };
 use yss_node_catalog::LocalizedCatalogItem;
+use yss_node_kernel::RuntimeValue;
 
 use crate::graph::catalog::{
     CatalogQueryApplicationError, LocalizedCatalogRequest, localized_node_catalog_in_session,

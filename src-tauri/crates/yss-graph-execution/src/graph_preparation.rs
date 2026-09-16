@@ -9,6 +9,8 @@ use yss_graph_analysis::{
     GraphSemanticSnapshot, GraphStatisticalReportKind,
 };
 use yss_graph_document::{GraphResourcePath, PortAddress};
+use yss_node_kernel::KernelId;
+use yss_node_kernel::KernelParameterKey;
 use yss_node_protocol::{PortDirection, Value};
 
 use crate::plan::*;
@@ -28,6 +30,8 @@ pub enum GraphPlanError {
     Identity(#[from] InvalidPlanIdentity),
     #[error("graph parameter identity is invalid")]
     ParameterIdentity(#[from] InvalidPlanParameterId),
+    #[error("kernel identity is invalid")]
+    KernelIdentity(#[from] yss_node_kernel::InvalidKernelIdentity),
     #[error("graph parameter is not a finite decimal")]
     Decimal(#[from] CanonicalDecimalError),
     #[error("graph parameter handle is duplicated")]
@@ -35,7 +39,7 @@ pub enum GraphPlanError {
     #[error("resolved graph type is unsupported by execution")]
     UnsupportedResolvedType,
     #[error("graph constant cannot be represented at runtime")]
-    ConstantValue(#[from] crate::value::RuntimeValueError),
+    ConstantValue(#[from] yss_node_kernel::RuntimeValueError),
 }
 
 #[derive(Debug)]
@@ -156,7 +160,7 @@ fn build_template(
                     PlanParameterValue::Literal(Arc::new(constant_runtime_value(constant)?)),
                 ),
             );
-            handles.insert(PlanParameterFieldId::from_existing("value".into()), handle);
+            handles.insert(KernelParameterKey::from_existing("value".into()), handle);
         } else {
             for parameter in &node.parameters {
                 let Some(value) = &parameter.effective_value else {
@@ -178,7 +182,7 @@ fn build_template(
                     ),
                 );
                 handles.insert(
-                    PlanParameterFieldId::new(parameter.key.as_str().into())?,
+                    KernelParameterKey::new(parameter.key.as_str().into())?,
                     handle,
                 );
             }
@@ -377,7 +381,7 @@ fn parameter_value(value: &serde_json::Value) -> Result<PlanParameterValue, Grap
                 .iter()
                 .map(|(key, value)| {
                     Ok((
-                        PlanParameterFieldId::new(key.clone().into())?,
+                        KernelParameterKey::new(key.clone().into())?,
                         parameter_value(value)?,
                     ))
                 })
@@ -422,7 +426,7 @@ fn protocol_value(value: &Value) -> Result<PlanParameterValue, GraphPlanError> {
                 .iter()
                 .map(|(key, value)| {
                     Ok((
-                        PlanParameterFieldId::new(key.clone())?,
+                        KernelParameterKey::new(key.clone())?,
                         protocol_value(value)?,
                     ))
                 })
@@ -435,7 +439,7 @@ fn plan_specialization(
     value: &yss_graph_analysis::GraphKernelSpecialization,
 ) -> Result<PlanKernelSpecialization, GraphPlanError> {
     let implementation =
-        KernelId::new(value.implementation.clone()).map_err(GraphPlanError::Identity)?;
+        KernelId::new(value.implementation.clone()).map_err(GraphPlanError::KernelIdentity)?;
     let bindings = |values: &[yss_graph_analysis::GraphPortTypeBinding]| {
         values
             .iter()
@@ -482,8 +486,8 @@ fn plan_coercion_kind(kind: yss_node_protocol::InputCoercionKind) -> PlanInputCo
 
 fn constant_runtime_value(
     constant: &yss_graph_document::GraphConstant,
-) -> Result<crate::value::RuntimeValue, GraphPlanError> {
-    use crate::value::RuntimeValue;
+) -> Result<yss_node_kernel::RuntimeValue, GraphPlanError> {
+    use yss_node_kernel::RuntimeValue;
     use yss_tabular_contract::TabularScalar;
     let Some(snapshot) = &constant.tabular else {
         return RuntimeValue::try_from(&constant.data_value).map_err(GraphPlanError::ConstantValue);

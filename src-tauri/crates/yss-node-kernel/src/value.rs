@@ -1,3 +1,5 @@
+//! Runtime values shared by kernels and their callers, independent of graph identities.
+
 use std::collections::BTreeMap;
 
 use thiserror::Error;

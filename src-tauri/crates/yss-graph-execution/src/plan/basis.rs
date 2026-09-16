@@ -72,7 +72,7 @@ pub type PlanResourceObservationSet = BTreeMap<PlanResourceId, PlanResourceObser
 pub struct PlanBasis {
     project_session: PlanProjectSessionId,
     registry_fingerprint: PlanRegistryFingerprint,
-    kernel_fingerprint: super::identity::KernelFingerprint,
+    kernel_fingerprint: yss_node_kernel::KernelFingerprint,
     resource_versions: PlanResourceVersionSet,
     resource_observations: PlanResourceObservationSet,
 }
@@ -81,7 +81,7 @@ impl PlanBasis {
     pub fn new(
         project_session: PlanProjectSessionId,
         registry_fingerprint: PlanRegistryFingerprint,
-        kernel_fingerprint: super::identity::KernelFingerprint,
+        kernel_fingerprint: yss_node_kernel::KernelFingerprint,
         resource_versions: PlanResourceVersionSet,
         resource_observations: PlanResourceObservationSet,
     ) -> Self {
@@ -106,7 +106,7 @@ impl PlanBasis {
         &self.resource_versions
     }
 
-    pub const fn kernel_fingerprint(&self) -> super::identity::KernelFingerprint {
+    pub const fn kernel_fingerprint(&self) -> yss_node_kernel::KernelFingerprint {
         self.kernel_fingerprint
     }
 

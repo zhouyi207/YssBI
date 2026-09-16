@@ -9,7 +9,7 @@ use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{
     ResultReference, ResultRetentionError, StoredResult, StoredResultSnapshot,
 };
-use yss_graph_execution::value::RuntimeValue;
+use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 use yss_tabular_contract::TabularScalar;
 

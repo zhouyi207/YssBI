@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
+use yss_node_kernel::KernelParameterKey;
 
 use super::identity::PlanResourceId;
 
@@ -49,7 +50,6 @@ macro_rules! parameter_id {
 }
 
 parameter_id!(PlanParameterSchemaId);
-parameter_id!(PlanParameterFieldId);
 parameter_id!(PlanParameterHandle);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,11 +86,11 @@ pub enum PlanParameterScalar {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlanParameterValue {
-    Literal(std::sync::Arc<crate::value::RuntimeValue>),
+    Literal(std::sync::Arc<yss_node_kernel::RuntimeValue>),
     Scalar(PlanParameterScalar),
     Resource(PlanResourceId),
     List(Box<[PlanParameterValue]>),
-    Record(BTreeMap<PlanParameterFieldId, PlanParameterValue>),
+    Record(BTreeMap<KernelParameterKey, PlanParameterValue>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

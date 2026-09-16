@@ -13,10 +13,9 @@ pub use basis::{
     PlanResourceVersionSet, ResourceAccess, ResourceKind,
 };
 pub use identity::{
-    InvalidPlanIdentity, KernelFingerprint, KernelId, PlanGraphId, PlanId, PlanInputGroupId,
-    PlanNodeId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanProjectSessionId,
-    PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
-    PlanSourceIdentity,
+    InvalidPlanIdentity, PlanGraphId, PlanId, PlanInputGroupId, PlanNodeId, PlanNodeTypeId,
+    PlanOutputRef, PlanPortAddress, PlanProjectSessionId, PlanProvenance, PlanRegistryFingerprint,
+    PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
 };
 pub use model::{
     ExecutionPlan, PlanExecutionDemand, PlanFieldLineage, PlanInputBinding, PlanInputCoercion,
@@ -27,9 +26,8 @@ pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::ExecutionPlanPackage;
 pub use parameter::{
     CanonicalDecimal, CanonicalDecimalError, InvalidPlanParameterId, PlanParameterBundle,
-    PlanParameterBundleBuilder, PlanParameterBundleError, PlanParameterFieldId,
-    PlanParameterHandle, PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId,
-    PlanParameterValue,
+    PlanParameterBundleBuilder, PlanParameterBundleError, PlanParameterHandle,
+    PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue,
 };
 pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
 pub use validation::PlanValidationError;
@@ -43,7 +41,7 @@ mod tests {
         PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
-            crate::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         )

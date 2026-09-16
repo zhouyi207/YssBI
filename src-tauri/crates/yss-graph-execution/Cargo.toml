@@ -10,6 +10,7 @@ default = []
 test-support = []
 
 [dependencies]
+yss-node-kernel = { path = "../yss-node-kernel" }
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 yss-sci-contract = { path = "../yss-sci-contract" }

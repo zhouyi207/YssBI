@@ -56,6 +56,7 @@ members = [
   "crates/yss-node-protocol",
   "crates/yss-graph-resource-contract",
   "crates/yss-node-registry",
+  "crates/yss-node-kernel",
   "crates/yss-graph-runtime",
   "crates/yss-graph-type-mapping",
   "crates/yss-sci-linalg",

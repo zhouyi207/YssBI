@@ -13,10 +13,10 @@ use yss_graph_execution::plan::{
 };
 use yss_graph_execution::resource_preparation::{RunResourceBinding, RunResourceBindings};
 use yss_graph_execution::state::RunExecutionControl;
-use yss_graph_execution::value::RuntimeValue;
 use yss_graph_resource_contract::{
     ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint, ResourceCatalogSnapshot,
 };
+use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{
     NumericOperation, NumericType, RelationBatchStream, RelationBinding, RelationColumn,
     RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle, RelationPage,
@@ -179,7 +179,7 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
         let basis = PlanBasis::new(
             session.clone(),
             PlanRegistryFingerprint::from_bytes([0; 32]),
-            yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::from([(resource.clone(), version.clone())]),
             BTreeMap::from([(
                 resource.clone(),

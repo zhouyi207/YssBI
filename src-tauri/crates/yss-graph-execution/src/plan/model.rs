@@ -1,11 +1,13 @@
 use super::identity::{
-    KernelId, PlanInputGroupId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
+    PlanInputGroupId, PlanNodeTypeId, PlanOutputRef, PlanPortAddress, PlanSourceIdentity,
 };
 use super::observation::{PlanObservationIntent, ValueRef};
-use super::parameter::{PlanParameterFieldId, PlanParameterHandle};
+use super::parameter::PlanParameterHandle;
 use super::result_category::ResultCategory;
 use std::collections::BTreeMap;
 use yss_data_contract::DataType;
+use yss_node_kernel::KernelId;
+use yss_node_kernel::KernelParameterKey;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanInputSource {
@@ -57,7 +59,7 @@ impl PlanInputBinding {
 pub struct PlanOperation {
     source: PlanSourceIdentity,
     node_type: PlanNodeTypeId,
-    parameters: BTreeMap<PlanParameterFieldId, PlanParameterHandle>,
+    parameters: BTreeMap<KernelParameterKey, PlanParameterHandle>,
     inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
     outputs: Box<[PlanOutputBinding]>,
@@ -204,7 +206,7 @@ impl PlanOperation {
     pub fn new(
         source: PlanSourceIdentity,
         node_type: PlanNodeTypeId,
-        parameters: BTreeMap<PlanParameterFieldId, PlanParameterHandle>,
+        parameters: BTreeMap<KernelParameterKey, PlanParameterHandle>,
         inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
         outputs: Box<[PlanOutputBinding]>,
@@ -233,7 +235,7 @@ impl PlanOperation {
         self.specialization.implementation()
     }
 
-    pub fn parameters(&self) -> &BTreeMap<PlanParameterFieldId, PlanParameterHandle> {
+    pub fn parameters(&self) -> &BTreeMap<KernelParameterKey, PlanParameterHandle> {
         &self.parameters
     }
 

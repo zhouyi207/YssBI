@@ -1,49 +1,23 @@
-//! Frozen execution capabilities. Registration and dispatch share this owner.
-
+//! Frozen execution capabilities shared by composition, readiness checks and dispatch.
+use crate::{
+    KernelError, KernelFingerprint, KernelId, KernelInvocation, KernelParameterKey, RuntimeValue,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-use crate::plan::{KernelFingerprint, KernelId, PlanOutputRef, PlanParameterFieldId};
-use crate::state::{KernelExecutionError, RunExecutionControl, check_kernel_control};
-use crate::value::RuntimeValue;
-
-pub struct KernelInvocation<'a> {
-    pub inputs: &'a [RuntimeValue],
-    pub input_slots: &'a [crate::plan::PlanInputBinding],
-    pub parameters: BTreeMap<PlanParameterFieldId, &'a crate::plan::PlanParameterValue>,
-    pub(crate) resources: &'a crate::resource_preparation::PreparedRunResources,
-    pub outputs: &'a [crate::plan::PlanOutputBinding],
-    pub specialization: &'a crate::plan::PlanKernelSpecialization,
-    pub control: &'a RunExecutionControl,
-}
-
-impl KernelInvocation<'_> {
-    pub fn parameter(&self, key: &str) -> Option<&crate::plan::PlanParameterValue> {
-        self.parameters
-            .iter()
-            .find(|(field, _)| field.as_str() == key)
-            .map(|(_, value)| *value)
-    }
-
-    /// Long-running extensions must also check this inside their work loops.
-    pub fn check_control(&self) -> Result<(), KernelExecutionError> {
-        check_kernel_control(self.control)
-    }
-}
-
 /// The lowered parameter fields and output arity accepted by an implementation.
 /// Graph remains the authority for port types and parameter value validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KernelContract {
-    parameters: BTreeSet<PlanParameterFieldId>,
+    parameters: BTreeSet<KernelParameterKey>,
     outputs: RangeInclusive<usize>,
 }
 
 impl KernelContract {
     pub fn new(
-        parameters: impl IntoIterator<Item = PlanParameterFieldId>,
+        parameters: impl IntoIterator<Item = KernelParameterKey>,
         outputs: RangeInclusive<usize>,
     ) -> Result<Self, KernelRegistrationError> {
         if outputs.is_empty() {
@@ -90,7 +64,7 @@ pub enum KernelRegistrationError {
     #[error("execution kernel is already registered: {0}")]
     DuplicateKernel(KernelId),
     #[error("kernel parameter field is duplicated: {0:?}")]
-    DuplicateParameter(PlanParameterFieldId),
+    DuplicateParameter(KernelParameterKey),
     #[error("kernel output arity is empty")]
     InvalidOutputArity,
 }
@@ -103,9 +77,8 @@ pub enum KernelBindingError {
     Outputs,
 }
 
-type KernelFn = dyn Fn(&KernelInvocation<'_>) -> Result<BTreeMap<PlanOutputRef, RuntimeValue>, KernelExecutionError>
-    + Send
-    + Sync;
+type KernelFn =
+    dyn Fn(&KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> + Send + Sync;
 
 struct RegisteredKernel {
     revision: NonZeroU32,
@@ -125,7 +98,7 @@ impl KernelRegistryBuilder {
 
     pub fn with_builtins() -> Self {
         let mut builder = Self::new();
-        crate::state::register_builtin_kernels(&mut builder);
+        crate::builtins::register_builtin_kernels(&mut builder);
         builder
     }
 
@@ -135,9 +108,7 @@ impl KernelRegistryBuilder {
         id: KernelId,
         revision: NonZeroU32,
         contract: KernelContract,
-        execute: impl Fn(
-            &KernelInvocation<'_>,
-        ) -> Result<BTreeMap<PlanOutputRef, RuntimeValue>, KernelExecutionError>
+        execute: impl Fn(&KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError>
         + Send
         + Sync
         + 'static,
@@ -209,18 +180,15 @@ impl KernelRegistry {
         self.kernels.contains_key(id)
     }
 
-    pub(crate) fn execute(
+    pub fn execute(
         &self,
         id: &KernelId,
         invocation: &KernelInvocation<'_>,
-    ) -> Result<BTreeMap<PlanOutputRef, RuntimeValue>, KernelExecutionError> {
-        let kernel = self
-            .kernels
-            .get(id)
-            .ok_or(KernelExecutionError::KernelNotFound)?;
+    ) -> Result<Vec<RuntimeValue>, KernelError> {
+        let kernel = self.kernels.get(id).ok_or(KernelError::KernelNotFound)?;
         invocation.check_control()?;
-        if invocation.inputs.len() != invocation.input_slots.len() {
-            return Err(KernelExecutionError::Failed);
+        if invocation.inputs.len() != invocation.input_groups.len() {
+            return Err(KernelError::Failed);
         }
         if !kernel
             .contract
@@ -229,10 +197,13 @@ impl KernelRegistry {
             .eq(invocation.parameters.keys())
             || !kernel.contract.outputs.contains(&invocation.outputs.len())
         {
-            return Err(KernelExecutionError::Failed);
+            return Err(KernelError::Failed);
         }
         let result = (kernel.execute)(invocation)?;
         invocation.check_control()?;
+        if result.len() != invocation.outputs.len() {
+            return Err(KernelError::Failed);
+        }
         Ok(result)
     }
 }

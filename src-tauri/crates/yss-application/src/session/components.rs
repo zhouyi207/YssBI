@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use yss_graph_execution::kernels::{KernelBindingError, KernelRegistry, KernelRegistryBuilder};
 use yss_graph_runtime::GraphRuntimeComponents;
 use yss_node_catalog::{BuiltinCatalog, BuiltinInitializationError};
+use yss_node_kernel::{KernelBindingError, KernelRegistry, KernelRegistryBuilder};
 use yss_node_protocol::{NodeTypingSpec, PortCardinality, PortDirection};
 use yss_node_registry::NodeRegistry;
 

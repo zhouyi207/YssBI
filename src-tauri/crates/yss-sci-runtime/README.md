@@ -1,7 +1,8 @@
 # yss-sci-runtime
 
 Stateless scientific computation entry points over `yss-sci`, called directly
-only by `yss-graph-execution` and `yss-application::ipc::commands`.
+by `yss-node-kernel`, `yss-graph-execution` result analyses and its focused SCI benchmark,
+and `yss-application::ipc::commands`.
 
 Runtime calls SCI with ordinary vectors, slices and contract records. It has no
 faer or `yss-sci-linalg` dependency and does not construct numerical matrices or own
@@ -9,7 +10,7 @@ estimators. Arrow remains the tabular exchange representation; SCI converts
 numeric inputs into Linalg matrices and returns computed results.
 
 `ols` and `acf_pacf` accept neutral requests and `ScientificExecutionControl` from
-`yss-sci-contract`. Execution passes its run cancellation and deadline to OLS;
+`yss-sci-contract`. The OLS kernel forwards the execution cancellation and deadline;
 result analyses and standalone IPC ACF/PACF use the existing 60-second deadline.
 Application declares this dependency for its IPC commands. Desktop composition
 and other application modules do not call it or construct/inject a backend object.

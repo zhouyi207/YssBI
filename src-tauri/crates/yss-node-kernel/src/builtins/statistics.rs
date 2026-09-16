@@ -1,6 +1,7 @@
-use crate::kernels::KernelInvocation;
-use crate::state::{KernelExecutionError, numeric_input, parameter_value};
-use crate::value::RuntimeValue;
+use super::numeric_input;
+use crate::KernelError;
+use crate::KernelInvocation;
+use crate::RuntimeValue;
 use std::collections::BTreeMap;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 use yss_sci_contract::scientific::{
@@ -16,48 +17,40 @@ pub(crate) enum StatisticalKernel {
 pub(crate) fn execute(
     kind: StatisticalKernel,
     invocation: &KernelInvocation<'_>,
-) -> Result<BTreeMap<crate::plan::PlanOutputRef, RuntimeValue>, KernelExecutionError> {
+) -> Result<Vec<RuntimeValue>, KernelError> {
     let values = match kind {
         StatisticalKernel::OlsFit | StatisticalKernel::OlsSummary => {
-            let configuration = parameter_value(
-                invocation
-                    .parameter("configuration")
-                    .ok_or(KernelExecutionError::Failed)?,
-                invocation.resources,
-            )?;
+            let configuration = invocation
+                .parameter("configuration")
+                .ok_or(KernelError::Failed)?;
             let RuntimeValue::Record(configuration) = configuration else {
-                return Err(KernelExecutionError::InvalidNumericInput);
+                return Err(KernelError::InvalidNumericInput);
             };
             let constant = match configuration.get("constant") {
                 Some(RuntimeValue::Bool(value)) => *value,
-                _ => return Err(KernelExecutionError::InvalidNumericInput),
+                _ => return Err(KernelError::InvalidNumericInput),
             };
-            let covariance = covariance(&configuration)?;
-            let response = invocation
-                .inputs
-                .first()
-                .ok_or(KernelExecutionError::Failed)?;
+            let covariance = covariance(configuration)?;
+            let response = invocation.inputs.first().ok_or(KernelError::Failed)?;
             let predictors = invocation
-                .input_slots
+                .input_groups
                 .iter()
                 .zip(invocation.inputs)
-                .filter(|(slot, _)| slot.contract().group.is_some())
+                .filter(|(slot, _)| slot.is_some())
                 .map(|(_, value)| value)
                 .collect::<Vec<_>>();
             let (response, predictors) = if let RuntimeValue::Series(response) = response {
                 let mut series = vec![response.clone()];
                 for predictor in predictors {
                     let RuntimeValue::Series(predictor) = predictor else {
-                        return Err(KernelExecutionError::InvalidNumericInput);
+                        return Err(KernelError::InvalidNumericInput);
                     };
                     series.push(predictor.clone());
                 }
                 let mut columns =
-                    crate::relational::numeric_columns(&series, invocation)?.into_iter();
+                    super::relational::numeric_columns(&series, invocation)?.into_iter();
                 (
-                    columns
-                        .next()
-                        .ok_or(KernelExecutionError::InvalidNumericInput)?,
+                    columns.next().ok_or(KernelError::InvalidNumericInput)?,
                     columns.collect(),
                 )
             } else {
@@ -84,14 +77,10 @@ pub(crate) fn execute(
                 ),
             )
             .map_err(|error| match error {
-                ScientificComputationError::Cancelled => KernelExecutionError::Cancelled,
-                ScientificComputationError::DeadlineExceeded => {
-                    KernelExecutionError::DeadlineExceeded
-                }
-                ScientificComputationError::InvalidInput { .. } => {
-                    KernelExecutionError::InvalidNumericInput
-                }
-                _ => KernelExecutionError::Failed,
+                ScientificComputationError::Cancelled => KernelError::Cancelled,
+                ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
+                ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
+                _ => KernelError::Failed,
             })?;
             match kind {
                 StatisticalKernel::OlsFit => vec![
@@ -110,28 +99,21 @@ pub(crate) fn execute(
         }
     };
     if values.len() != invocation.outputs.len() {
-        return Err(KernelExecutionError::Failed);
+        return Err(KernelError::Failed);
     }
-    Ok(invocation
-        .outputs
-        .iter()
-        .zip(values)
-        .map(|(output, value)| (output.output().clone(), value))
-        .collect())
+    Ok(values)
 }
 
-fn covariance(
-    values: &BTreeMap<Box<str>, RuntimeValue>,
-) -> Result<OlsCovariance, KernelExecutionError> {
+fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance, KernelError> {
     let integer = |key: &str| match values.get(key) {
         Some(RuntimeValue::Integer(value)) => {
-            usize::try_from(*value).map_err(|_| KernelExecutionError::InvalidNumericInput)
+            usize::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)
         }
-        _ => Err(KernelExecutionError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidNumericInput),
     };
     let string = |key: &str| match values.get(key) {
         Some(RuntimeValue::String(value)) => Ok(value.clone()),
-        _ => Err(KernelExecutionError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidNumericInput),
     };
     Ok(match string("covariance")?.as_ref() {
         "nonrobust" => OlsCovariance::NonRobust,
@@ -144,7 +126,7 @@ fn covariance(
                 // Configuration fields also accept the protocol's decimal JSON spelling.
                 Some(RuntimeValue::String(value)) => value
                     .parse()
-                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+                    .map_err(|_| KernelError::InvalidNumericInput)?,
                 value => numeric_input(value)?,
             },
         },
@@ -152,22 +134,21 @@ fn covariance(
             kernel: string("kernel")?.into_string(),
             bandwidth: Some(
                 i64::try_from(integer("bandwidth")?)
-                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+                    .map_err(|_| KernelError::InvalidNumericInput)?,
             ),
         },
         "newey" => OlsCovariance::Newey {
             lag: Some(
-                i64::try_from(integer("lag")?)
-                    .map_err(|_| KernelExecutionError::InvalidNumericInput)?,
+                i64::try_from(integer("lag")?).map_err(|_| KernelError::InvalidNumericInput)?,
             ),
         },
-        _ => return Err(KernelExecutionError::InvalidNumericInput),
+        _ => return Err(KernelError::InvalidNumericInput),
     })
 }
 
-fn numeric_series(value: &RuntimeValue) -> Result<Vec<f64>, KernelExecutionError> {
+fn numeric_series(value: &RuntimeValue) -> Result<Vec<f64>, KernelError> {
     let RuntimeValue::List(values) = value else {
-        return Err(KernelExecutionError::InvalidNumericInput);
+        return Err(KernelError::InvalidNumericInput);
     };
     values
         .iter()
@@ -175,9 +156,9 @@ fn numeric_series(value: &RuntimeValue) -> Result<Vec<f64>, KernelExecutionError
         .collect()
 }
 
-fn numeric_list(values: Vec<f64>) -> Result<RuntimeValue, KernelExecutionError> {
+fn numeric_list(values: Vec<f64>) -> Result<RuntimeValue, KernelError> {
     if values.iter().any(|value| !value.is_finite()) {
-        return Err(KernelExecutionError::NonFiniteResult);
+        return Err(KernelError::NonFiniteResult);
     }
     Ok(RuntimeValue::List(
         values.into_iter().map(RuntimeValue::Decimal).collect(),

@@ -16,10 +16,10 @@ use yss_graph_execution::{
     plan::{PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint},
     resource_preparation::{ResourceProviderFactory, RunResourceBindings},
     state::{ExecutionRuntimeState, RunExecutionControl},
-    value::RuntimeValue,
 };
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use yss_graph_runtime::{GraphRuntimeComponents, GraphRuntimeEpoch, GraphRuntimeState};
+use yss_node_kernel::RuntimeValue;
 
 #[test]
 fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
@@ -133,7 +133,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         ResourceCatalogFingerprint::from_bytes([1; 32]),
     );
     let basis = GraphAnalysisBasis {
-        kernel_fingerprint: yss_graph_execution::kernels::KernelRegistry::default()
+        kernel_fingerprint: yss_node_kernel::KernelRegistry::default()
             .fingerprint()
             .as_bytes(),
         registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
@@ -203,14 +203,14 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         let execution_basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
-            yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
         let execution = ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
-            yss_graph_execution::kernels::KernelRegistry::default().into(),
+            yss_node_kernel::KernelRegistry::default().into(),
         );
         let package = execution
             .prepare_graph_package(&graph, &analysis, execution_basis)

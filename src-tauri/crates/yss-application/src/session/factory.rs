@@ -413,7 +413,7 @@ mod tests {
             Arc::new(ExecutionRuntimeState::new(
                 execution_session_id,
                 runtime_generation,
-                yss_graph_execution::kernels::KernelRegistry::default().into(),
+                yss_node_kernel::KernelRegistry::default().into(),
             )),
             database,
         )

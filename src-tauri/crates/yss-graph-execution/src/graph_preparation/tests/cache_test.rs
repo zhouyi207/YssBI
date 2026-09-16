@@ -20,7 +20,7 @@ fn empty_resource_catalog() -> ResourceCatalogSnapshot {
 }
 fn basis(runtime: &GraphRuntimeState) -> GraphAnalysisBasis {
     GraphAnalysisBasis {
-        kernel_fingerprint: crate::kernels::KernelRegistry::default()
+        kernel_fingerprint: yss_node_kernel::KernelRegistry::default()
             .fingerprint()
             .as_bytes(),
         registry_fingerprint: RegistryFingerprint::from_bytes(runtime.registry_fingerprint()),
@@ -37,7 +37,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     let execution = ExecutionRuntimeState::new(
         ExecutionSessionId::new(uuid::Uuid::nil()),
         RuntimeGeneration::INITIAL,
-        Arc::new(crate::kernels::KernelRegistry::default()),
+        Arc::new(yss_node_kernel::KernelRegistry::default()),
     );
     let plan_basis = PlanBasis::new(
         PlanProjectSessionId::from_existing("cache-session".into()),

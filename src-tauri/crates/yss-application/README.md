@@ -19,6 +19,9 @@ flowchart TD
     APP --> PROJECT["Project：项目与资源"]
     APP --> GRAPH["Graph：编辑与解析"]
     APP --> EXEC["yss-graph-execution"]
+    APP --> KERNEL["yss-node-kernel"]
+    EXEC --> KERNEL
+    KERNEL --> SCI["yss-sci-runtime"]
     APP --> DATA["Database：数据与存储"]
     APP --> CONTRACT["共享契约与通用类型"]
     APP --> HARNESS["yss-harness-core"]
@@ -33,17 +36,17 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 
 ## 直接依赖
 
-当前 [Cargo.toml](Cargo.toml) 声明 **49 个内部正式依赖、10 个外部正式依赖，以及 11 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
+当前 [Cargo.toml](Cargo.toml) 声明 **50 个内部正式依赖、10 个外部正式依赖，以及 11 条开发依赖**。这里统计直接声明，不累计传递依赖，也不把开发依赖重复计入正式依赖。调整 manifest 时同步更新本节。
 
 ### 内部正式依赖
 
 | 类别                 | Crates                                                                                                                                                                                                                                                          | 使用目的                                                   |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Node：3 个           | `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog`                                                                                                                                                                                                    | 节点能力声明、注册校验和本地化目录                         |
+| Node：4 个           | `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog`、`yss-node-kernel`                                                                                                                                                                                 | 节点声明与目录，以及中立运行值和执行能力注册               |
 | Graph 与执行：10 个  | `yss-graph-analysis`、`yss-graph-analysis-contract`、`yss-graph-document`、`yss-graph-document-edit`、`yss-graph-editor`、`yss-graph-execution`、`yss-graph-resource-contract`、`yss-graph-runtime`、`yss-graph-type-mapping`、`yss-function-editor-projection` | 组织图编辑、解析、运行准备与执行                           |
 | Project 与资源：9 个 | `yss-project`、`yss-project-history`、`yss-project-identity`、`yss-project-model`、`yss-project-progress`、`yss-project-registry`、`yss-project-registry-contract`、`yss-project-registry-sqlite`、`yss-resource-naming`                                        | 项目生命周期、资源操作、身份与版本、文件提交、函数签名展示 |
 | 数据：11 个          | `yss-data-contract`、`yss-database-contract`、`yss-database-runtime`、`yss-database-schema`、`yss-dataset-profile`、`yss-dataset-store`、`yss-relational-contract`、`yss-sql-source`、`yss-tabular-arrow`、`yss-tabular-contract`、`yss-tabular-io`             | 数据导入导出、编辑、查询、快照和项目资源发布               |
-| 自动化与插件：6 个   | `yss-harness-contract`、`yss-plugin-protocol`、`yss-harness-core`、`yss-harness-sqlite`、`yss-harness-rig`、`yss-plugin-runtime`                                                                                                            | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
+| 自动化与插件：6 个   | `yss-harness-contract`、`yss-plugin-protocol`、`yss-harness-core`、`yss-harness-sqlite`、`yss-harness-rig`、`yss-plugin-runtime`                                                                                                                                | 协调 Harness 生命周期，为 Assistant 和插件提供宿主业务能力 |
 | IPC 支持：3 个       | `yss-ipc-event`、`yss-ipc-channel`、`yss-ipc-contract`                                                                                                                                                                                                          | 命令事件、通道交付及共享 wire 类型                         |
 | 科学计算：2 个       | `yss-sci-contract`、`yss-sci-runtime`                                                                                                                                                                                                                           | 使用统计结果、报告和错误类型                               |
 | 图表文档：1 个       | `yss-chart-document`                                                                                                                                                                                                                                            | 图表文档操作与查询                                         |
@@ -69,9 +72,9 @@ Application 的 `runtime` 和 `ipc` 模块使用 Tauri；`ipc` 消费 Event、Ch
 
 ### 开发依赖与示例
 
-| 声明方式                                | Crates                                                                                                                                                 | 用途                                                         |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`sqlx`、`tracing-subscriber`                                                                                   | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
+| 声明方式                                | Crates                                                                                                                                          | 用途                                                         |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 仅开发依赖                              | `yss-datafusion`、`yss-project-layout`、`sqlx`、`tracing-subscriber`                                                                            | 测试中的查询引擎、项目文件布局、注册存储、异步执行与日志环境 |
 | 正式依赖在开发配置中开启 `test-support` | `yss-database-runtime`、`yss-graph-execution`、`yss-graph-runtime`、`yss-project`、`yss-filesystem`、`yss-project-identity`、`yss-harness-core` | 构造测试会话和验证跨 crate 契约，共七条声明                  |
 
 Application 自身的 `test-support` feature 只开放跨 crate contract 测试所需的构造与 publication seam，转发范围以 manifest 为准。
@@ -109,6 +112,7 @@ Application 自身的 `test-support` feature 只开放跨 crate contract 测试�
 `ApplicationState::initialize_with_nodes`。slot 持有这份冻结配置，项目切换继续使用相同定义和实现，
 不会退回默认 kernel 表。组装检查参数字段与输出数量，编辑解析阻断未安装的实现；实现 revision 和
 契约组成能力指纹，计划准备、资源准备和执行入口都核对该指纹。
+`kernel_builder` 来自 `yss-node-kernel`，执行函数接收已解析的中立调用并返回局部输出值；Graph 地址、资源授权和结果定位由 Execution 适配。
 [普通数值扩展示例](src/session/components/tests.rs)覆盖注册冲突、绑定不匹配、会话替换及旧产物拒绝。
 
 `ApplicationState` 持有 `ApplicationSessionSlot`，用作应用会话入口。一个 `ApplicationSession` 将以下运行时和身份绑定在一起：
@@ -154,7 +158,7 @@ ProjectManagement 与 Harness Host 独立于可替换的 `ApplicationSession`。
 5. 协调 Project finalization 与 Graph Execution 的结果发布，生成应用运行事件。
 6. 由调用方提供的 sink 交付事件；Tauri Channel 编码与发送归 IPC 层。
 
-`yss-graph-runtime` 负责编辑解析，`yss-graph-execution` 负责计划构建与缓存、节点计算、运行状态和结果生命周期。运行准备仅消费 Graph Analysis 的只读事实；调度器和 kernel 仍消费中性执行计划。Application 的 `graph/` 聚合图用例、运行和结果查询，完整应用会话独立归 `session/`。编辑、Save、Execute 及 Results 的完整契约见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。
+`yss-graph-runtime` 负责编辑解析，`yss-graph-execution` 负责计划构建与缓存、调度、运行状态和结果生命周期；`yss-node-kernel` 持有具体节点适配和中立调用契约。运行准备仅消费 Graph Analysis 的只读事实，Execution 将计划转换成不含图地址的 kernel 输入。Application 的 `graph/` 聚合图用例、运行和结果查询，完整应用会话独立归 `session/`。编辑、Save、Execute 及 Results 的完整契约见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。
 
 ### 图表
 

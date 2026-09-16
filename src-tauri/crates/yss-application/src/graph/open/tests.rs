@@ -105,7 +105,7 @@ fn staged_session(project: TestProject, control: GraphRuntimeTestControl) -> Sta
     let execution = Arc::new(ExecutionRuntimeState::new(
         execution_session_id,
         RuntimeGeneration::from_existing(1),
-        yss_graph_execution::kernels::KernelRegistry::default().into(),
+        yss_node_kernel::KernelRegistry::default().into(),
     ));
     let session = Arc::new(ApplicationSession::new_for_test(
         ApplicationSessionEpoch::from_existing(1),

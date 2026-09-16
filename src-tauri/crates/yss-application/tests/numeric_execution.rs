@@ -14,8 +14,8 @@ use yss_graph_execution::resource_preparation::{ResourceProviderFactory, RunReso
 use yss_graph_execution::state::{
     ExecutePreparedError, ExecutionRuntimeState, RunExecutionControl,
 };
-use yss_graph_execution::value::RuntimeValue;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+use yss_node_kernel::RuntimeValue;
 
 fn analyze_document(
     document: &GraphDocument,
@@ -38,7 +38,7 @@ fn analyze_document(
             registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
                 graph_runtime.registry_fingerprint(),
             ),
-            kernel_fingerprint: yss_graph_execution::kernels::KernelRegistry::default()
+            kernel_fingerprint: yss_node_kernel::KernelRegistry::default()
                 .fingerprint()
                 .as_bytes(),
             resource_versions: BTreeMap::new(),
@@ -65,7 +65,7 @@ fn execute(
     let state = ExecutionRuntimeState::new(
         ExecutionSessionId::new(uuid::Uuid::new_v4()),
         RuntimeGeneration::INITIAL,
-        yss_graph_execution::kernels::KernelRegistry::default().into(),
+        yss_node_kernel::KernelRegistry::default().into(),
     );
     let basis = PlanBasis::new(
         session.clone(),
@@ -523,7 +523,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     let runtime = ExecutionRuntimeState::new(
         ExecutionSessionId::new(uuid::Uuid::new_v4()),
         RuntimeGeneration::INITIAL,
-        yss_graph_execution::kernels::KernelRegistry::default().into(),
+        yss_node_kernel::KernelRegistry::default().into(),
     );
     let resource = PlanResourceId::from_existing("data".into());
     let version = PlanResourceVersion::from_existing("7".into());
@@ -535,7 +535,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
             PlanBasis::new(
                 session.clone(),
                 PlanRegistryFingerprint::from_bytes([0; 32]),
-                yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+                yss_node_kernel::KernelRegistry::default().fingerprint(),
                 BTreeMap::from([(resource.clone(), version.clone())]),
                 BTreeMap::from([(
                     resource.clone(),

@@ -60,26 +60,6 @@ plan_id!(PlanPortAddress);
 plan_id!(PlanInputGroupId);
 plan_id!(PlanResourceId);
 plan_id!(PlanResourceVersion);
-plan_id!(KernelId);
-
-impl std::borrow::Borrow<str> for KernelId {
-    fn borrow(&self) -> &str {
-        self.as_str()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct KernelFingerprint([u8; 32]);
-
-impl KernelFingerprint {
-    pub const fn from_bytes(value: [u8; 32]) -> Self {
-        Self(value)
-    }
-    pub const fn as_bytes(self) -> [u8; 32] {
-        self.0
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlanId(u64);
 

@@ -1,9 +1,10 @@
 use std::sync::Arc;
+use yss_node_kernel::KernelParameterKey;
 
 use crate::identity::RuntimeGeneration;
 use crate::plan::{
-    ExecutionPlanPackage, PlanParameterFieldId, PlanParameterHandle, PlanParameterPayload,
-    PlanParameterValue, PlanResourceId, PlanValidationError,
+    ExecutionPlanPackage, PlanParameterHandle, PlanParameterPayload, PlanParameterValue,
+    PlanResourceId, PlanValidationError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,7 +27,7 @@ pub enum ParameterPreparationError {
     #[error("prepared parameter field identity is invalid")]
     InvalidField {
         handle: PlanParameterHandle,
-        field: PlanParameterFieldId,
+        field: KernelParameterKey,
     },
 }
 
@@ -34,8 +35,8 @@ pub enum ParameterPreparationError {
 pub enum PackagePreparationError {
     #[error("execution kernel capabilities changed")]
     KernelCapabilitiesChanged {
-        expected: crate::plan::KernelFingerprint,
-        actual: crate::plan::KernelFingerprint,
+        expected: yss_node_kernel::KernelFingerprint,
+        actual: yss_node_kernel::KernelFingerprint,
     },
     #[error("execution runtime generation changed")]
     RuntimeGenerationChanged {
@@ -205,7 +206,7 @@ mod tests {
         let basis = PlanBasis::new(
             PlanProjectSessionId::from_existing("session".into()),
             PlanRegistryFingerprint::from_bytes([1; 32]),
-            crate::kernels::KernelRegistry::default().fingerprint(),
+            yss_node_kernel::KernelRegistry::default().fingerprint(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
@@ -230,7 +231,7 @@ mod tests {
         let state = crate::state::ExecutionRuntimeState::new(
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::from_existing(3),
-            crate::kernels::KernelRegistry::default().into(),
+            yss_node_kernel::KernelRegistry::default().into(),
         );
         let prepared = state
             .prepare_package(package(), RuntimeGeneration::from_existing(3))

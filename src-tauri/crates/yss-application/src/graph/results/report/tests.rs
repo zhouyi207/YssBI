@@ -143,7 +143,7 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
     let basis = PlanBasis::new(
         session.clone(),
         PlanRegistryFingerprint::from_bytes([0; 32]),
-        yss_graph_execution::kernels::KernelRegistry::default().fingerprint(),
+        yss_node_kernel::KernelRegistry::default().fingerprint(),
         BTreeMap::new(),
         BTreeMap::new(),
     );

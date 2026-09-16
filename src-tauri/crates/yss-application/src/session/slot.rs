@@ -1254,7 +1254,7 @@ mod tests {
         let execution = Arc::new(ExecutionRuntimeState::new(
             execution_session_id,
             RuntimeGeneration::from_existing(epoch),
-            yss_graph_execution::kernels::KernelRegistry::default().into(),
+            yss_node_kernel::KernelRegistry::default().into(),
         ));
         let resource_provider_factory = Arc::new(ResourceProviderFactory::new(
             project_session_id.as_str().into(),
