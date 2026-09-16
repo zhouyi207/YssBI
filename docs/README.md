@@ -63,6 +63,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 ## Decisions, roadmap, and reference
 
 - [SCI 节点整理与实施计划](sci/README.md)：[方法对照表](sci/METHOD_INVENTORY.csv)、[节点台账](sci/NODE_INVENTORY.csv)、[OLS 首批规格](sci/OLS_SPEC.md)及分批实施与验收。
+- [节点组件与图操作 API 重构要求](sci/NODE_REFACTOR_REQUIREMENTS.md)：独立组件与节点装配、基础与复合类型、定义与展示分离、端口级直接操作、Command 提交与 undo/redo 的目标契约。
 - [Decision 0001：Statistical Harness](decisions/0001-statistical-harness.md)
 - [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
 - [v0.3 roadmap](roadmap/v0_3.md)
