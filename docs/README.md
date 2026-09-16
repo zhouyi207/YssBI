@@ -44,6 +44,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Project runtime authority](../src-tauri/crates/yss-project/README.md)
 - [Filesystem primitives and watcher lifecycle](../src-tauri/crates/yss-filesystem/README.md)
 - [Node definitions, registry and catalog](../src-tauri/crates/yss-node-catalog/README.md)
+- [Node kernel contracts and implementations](../src-tauri/crates/yss-node-kernel/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
 - [Dataset snapshot store](../src-tauri/crates/yss-dataset-store/README.md)
 - [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
@@ -61,6 +62,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Decisions, roadmap, and reference
 
+- [SCI 节点整理与实施计划](sci/README.md)：[方法对照表](sci/METHOD_INVENTORY.csv)、[节点台账](sci/NODE_INVENTORY.csv)、[OLS 首批规格](sci/OLS_SPEC.md)及分批实施与验收。
 - [Decision 0001：Statistical Harness](decisions/0001-statistical-harness.md)
 - [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
 - [v0.3 roadmap](roadmap/v0_3.md)

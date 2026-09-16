@@ -7,12 +7,11 @@
 
 只在这里记录仍需完成的工作。完成记录由 Git 和 `docs/version/` 保存；release/subsystem 计划放在 `docs/roadmap/`；实现细节和验证输出不追加到本文件。
 
-
-dataview 切换为 FlexLayout
+在这里有个很明显的问题，那就是 节点 catelog ai 获取不到，因为目前都是注册之后直接解析的，ai 不知道要创建哪些节点，这个是个大问题
 
 ## Active tasks
 
-- [ ] 补齐目录中 DataFrame 选列、求和节点的执行实现及选列类型推断；当前 `yssbi.dataframe.series.select` 输出泛型无法解析，且这两个节点均未注册到执行器。
+- [ ] 补齐目录中 DataFrame 序列求和节点的执行实现；当前 `yssbi.dataframe.series.sum` 尚未注册到执行器。
 - [ ] 按 [Tolerance 分析](docs/reviews/2026-09-07-tolerance-analysis.md) 处理数值策略：优先修复判秩失败回退和 Prais 迭代上限被当作成功，再统一模型级秩不足策略、模型参数与报告，最后评估 SVD 重复计算。
 - [ ] 清理 Rust Clippy 基线：统计代码的既有诊断分布在 `yss-sci` 和迁出的 `yss-sci-runtime::data`，`yss-ipc-command` 也有既有诊断。数值循环/模型参数重构需结合 SCI golden tests；传输参数和 wire 枚举须保持 IPC 契约，不能为消除 lint 随意改协议。
 - [ ] 评估前端既有的 14 条 Oxlint 警告；涉及遍历集合副本和测试 observer 的条目应先确认快照/回调语义，再决定简化或注明必要原因。
@@ -24,9 +23,7 @@ dataview 切换为 FlexLayout
 - [v0.3](docs/roadmap/v0_3.md)
 - [v1.0](docs/roadmap/v1_0.md)
 
-
 数据驱动：Immer 库处理 json
-
 
 1. json-render：最贴近你的目标
 
@@ -36,7 +33,6 @@ JSON Spec → Component Registry → React Components
 
 而且它明确支持“AI 只能使用你注册过的组件”，非常适合你以后 YssBI 让 AI 生成 UI。
 
-
 2. Zod：强烈建议一起使用
 
 你的 JSON Renderer 最大风险不是渲染，而是：
@@ -45,13 +41,11 @@ JSON 是不是合法？
 
 尤其以后 AI 生成：
 
-
 3. Zustand + Immer：负责“JSON 局部变化”
 
 这个还是保留。
 
 整个架构建议是：
-
 
 4. JSON Patch：我也很推荐
 
