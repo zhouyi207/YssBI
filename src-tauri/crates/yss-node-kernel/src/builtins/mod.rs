@@ -116,15 +116,8 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
-                    Numeric(_)
-                    | Convert
-                    | Equal
-                    | NotEqual
-                    | Less
-                    | LessEqual
-                    | Greater
-                    | GreaterEqual
-                    | Relational(relational::RelationalKernel::Filter) => 2,
+                    Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual => 3,
+                    Numeric(_) | Convert | Relational(relational::RelationalKernel::Filter) => 2,
                     _ => 1,
                 })
                 .expect("built-in implementation revision"),
@@ -155,8 +148,19 @@ fn execute_kernel(
         BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
         BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
         BuiltinKernel::Not => unary_bool(inputs, |value| !value),
-        BuiltinKernel::Equal => Ok(RuntimeValue::Bool(inputs.first() == inputs.get(1))),
-        BuiltinKernel::NotEqual => Ok(RuntimeValue::Bool(inputs.first() != inputs.get(1))),
+        BuiltinKernel::Equal | BuiltinKernel::NotEqual => {
+            let [left, right] = inputs else {
+                return Err(KernelError::Failed);
+            };
+            let equal = left.semantic_eq(right);
+            Ok(RuntimeValue::Bool(
+                if matches!(kind, BuiltinKernel::Equal) {
+                    equal
+                } else {
+                    !equal
+                },
+            ))
+        }
         BuiltinKernel::Less
         | BuiltinKernel::LessEqual
         | BuiltinKernel::Greater
@@ -222,13 +226,17 @@ fn compare_numeric(
     kind: BuiltinKernel,
     inputs: &[RuntimeValue],
 ) -> Result<RuntimeValue, KernelError> {
-    let left = numeric_input(inputs.first())?;
-    let right = numeric_input(inputs.get(1))?;
+    let [left, right] = inputs else {
+        return Err(KernelError::InvalidNumericInput);
+    };
+    let ordering = left
+        .numeric_cmp(right)
+        .ok_or(KernelError::InvalidNumericInput)?;
     let value = match kind {
-        BuiltinKernel::Less => left < right,
-        BuiltinKernel::LessEqual => left <= right,
-        BuiltinKernel::Greater => left > right,
-        BuiltinKernel::GreaterEqual => left >= right,
+        BuiltinKernel::Less => ordering.is_lt(),
+        BuiltinKernel::LessEqual => ordering.is_le(),
+        BuiltinKernel::Greater => ordering.is_gt(),
+        BuiltinKernel::GreaterEqual => ordering.is_ge(),
         _ => return Err(KernelError::Failed),
     };
     Ok(RuntimeValue::Bool(value))

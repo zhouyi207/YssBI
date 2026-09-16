@@ -6,7 +6,7 @@ $$
 \text{Result} = (A \neq B)
 $$
 
-Compares scalar `Float64` operands. Output is a single `Boolean`.
+Returns the opposite of **Equal**, using the same value comparison rules. Numeric representations compare by exact numeric value. Output is a single `Boolean`.
 
 ## Usage
 

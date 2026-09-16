@@ -63,6 +63,52 @@ impl TryFrom<&DataValue> for RuntimeValue {
 }
 
 impl RuntimeValue {
+    pub(crate) fn numeric_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use RuntimeValue::{Decimal, Integer, Unsigned};
+        // i128 represents every supported integer. A finite float is truncated
+        // before comparison, so integers never round through f64. Saturation
+        // beyond i128 is safe here: both integer variants are strictly inside it.
+        fn integer_decimal(integer: i128, decimal: f64) -> Option<std::cmp::Ordering> {
+            decimal.is_finite().then(|| {
+                integer.cmp(&(decimal as i128)).then_with(|| {
+                    0.0_f64
+                        .partial_cmp(&decimal.fract())
+                        .expect("finite fraction")
+                })
+            })
+        }
+        match (self, other) {
+            (Integer(a), Integer(b)) => Some(a.cmp(b)),
+            (Unsigned(a), Unsigned(b)) => Some(a.cmp(b)),
+            (Integer(a), Unsigned(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
+            (Unsigned(a), Integer(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
+            (Integer(a), Decimal(b)) => integer_decimal(i128::from(*a), *b),
+            (Unsigned(a), Decimal(b)) => integer_decimal(i128::from(*a), *b),
+            (Decimal(a), Integer(b)) => integer_decimal(i128::from(*b), *a).map(|o| o.reverse()),
+            (Decimal(a), Unsigned(b)) => integer_decimal(i128::from(*b), *a).map(|o| o.reverse()),
+            (Decimal(a), Decimal(b)) if a.is_finite() && b.is_finite() => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn semantic_eq(&self, other: &Self) -> bool {
+        use RuntimeValue::{Decimal, Integer, Unsigned};
+        match (self, other) {
+            (Integer(_) | Unsigned(_) | Decimal(_), Integer(_) | Unsigned(_) | Decimal(_)) => {
+                self.numeric_cmp(other) == Some(std::cmp::Ordering::Equal)
+            }
+            (Self::List(a), Self::List(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a.semantic_eq(b))
+            }
+            (Self::Record(a), Self::Record(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .all(|(key, a)| b.get(key).is_some_and(|b| a.semantic_eq(b)))
+            }
+            _ => self == other,
+        }
+    }
+
     pub fn coerce_to(self, target: &ValueType) -> Result<Self, RuntimeValueError> {
         use yss_data_contract::SemanticType;
         match target {

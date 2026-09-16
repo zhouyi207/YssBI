@@ -6,7 +6,7 @@ $$
 \text{Result} = (A = B)
 $$
 
-Compares scalar `Float64` operands using value equality. Output is a single `Boolean` (not a `DataSeries`).
+Compares two values with a shared input type. Numeric values compare exactly across signed integer, unsigned integer and floating representations, without epsilon or lossy integer conversion. Lists and records compare their contents using the same rules; other values compare by value or resource identity. Output is a single `Boolean` (not a `DataSeries`).
 
 ## Usage
 
