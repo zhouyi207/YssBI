@@ -17,7 +17,6 @@ pub use operation_error::ProjectOperationError;
 mod resource_lifecycle_operation;
 
 pub mod database_authority;
-mod graph_type_migration;
 pub mod project_activation;
 pub mod project_io;
 pub mod project_lifecycle;

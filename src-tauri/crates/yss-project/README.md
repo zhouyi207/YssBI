@@ -77,9 +77,7 @@ writer 不再重复构造 delta。刷新文档时可绑定 Project publication r
 
 ## 当前文档编辑
 
-图文件的 `typeSchemaVersion` 由 `graph_type_migration.rs` 拥有。旧文件在读取时将常量类型、
-字面量类型声明及函数签名中的已知旧基础类型升级为七种 Semantic，实际数据值保持原样。
-转换只访问类型位置，不替换用户数据中的同名字符串；加载不回写文件，显式保存才输出新版本。
-未知版本或无法解释的声明继续拒绝，不猜测类别或等级。
+图文件通过 `GraphResourceFile` 直接序列化、反序列化当前类型契约。项目尚未发布，不提供旧类型
+声明迁移或兼容转换，也不维护单独的类型迁移版本字段。
 
 `read_graph_editing` 返回文档只读快照和编辑身份。`capture_graph_edit` 检查编辑会话与资源修订，`commit_graph_edit` 在同一 publication 边界安装候选文档、revision 及可逆历史。内容指纹用于 dirty 判断；历史没有完整文档或解析投影副本。保存、重命名与图卸载在各自事务中同步维护这些元数据。详情见 [Graph 与 Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md)。

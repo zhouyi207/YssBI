@@ -72,8 +72,8 @@ seven-way Semantic contract; `DataSeries.inner` contains the element value type 
 retains its independent structure. Schema field scalar types are Semantic names or null when
 unresolved. Physical integer/float/boolean/string tags remain in `dataValue`, not in graph type
 declarations. Changing only a constant's Semantic preserves its physical value and embedded
-snapshot; incompatible choices are rejected by Rust. Persisted legacy declarations are upgraded
-by Project's versioned file reader, not by accepting old aliases in live IPC parsers.
+snapshot; incompatible choices are rejected by Rust. Project files and live IPC use the current
+type contract directly, without migration or compatibility conversion for legacy declarations.
 
 Project queries use `get_project_databases` for database declarations. Variable commands, variable resource deltas and variable collections are removed; Project index contains graph, chart and database resources.
 
