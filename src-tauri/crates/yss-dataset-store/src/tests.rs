@@ -35,12 +35,250 @@ fn control() -> RelationControl {
 }
 
 #[test]
+fn semantic_edits_persist_restore_and_guard_numeric_execution() {
+    use arrow::array::Int64Array;
+    use yss_relational_contract::{
+        NumericOperation, NumericType, RelationExecutor, RelationLiteral, SeriesOperand,
+    };
+    use yss_tabular_arrow::{ColumnSemantic, SemanticType, SemanticValue, column_semantic};
+    let directory = Directory::new();
+    let store = DatasetStore::create(directory.path()).unwrap();
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new("code", DataType::Int64, true)])),
+        vec![Arc::new(Int64Array::from(vec![Some(2), Some(1), None]))],
+    )
+    .unwrap();
+    let original = store
+        .commit(
+            store
+                .prepare_import(identity(), "Codes", "import", batch.schema(), [Ok(batch)])
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let engine = yss_datafusion::DataFusionRuntime::new(64 * 1024 * 1024, 8192).unwrap();
+    let mut semantic = ColumnSemantic::new(SemanticType::Ordinal);
+    semantic.values = vec![
+        SemanticValue {
+            value: "2".into(),
+            label: "Low".into(),
+        },
+        SemanticValue {
+            value: "1".into(),
+            label: "High".into(),
+        },
+    ];
+    let ordered = store
+        .commit(
+            store
+                .prepare_column_semantic(
+                    &original,
+                    &engine,
+                    "ordinal",
+                    "code",
+                    &semantic,
+                    &control(),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    assert_eq!(
+        ordered.metadata().generation_id,
+        original.metadata().generation_id
+    );
+    assert_eq!(
+        ordered.metadata().data_revision,
+        original.metadata().data_revision
+    );
+    assert!(ordered.metadata().schema_revision > original.metadata().schema_revision);
+    assert_eq!(
+        ordered.metadata().schema.field(0).data_type(),
+        &DataType::Int64
+    );
+    assert_eq!(
+        column_semantic(ordered.metadata().schema.field(0)).unwrap(),
+        semantic
+    );
+    let ordered_relation = ordered
+        .query(&engine, "ordinal")
+        .unwrap()
+        .relation()
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(ordered_relation.page(0, 3, &control()).unwrap().data).unwrap(),
+        serde_json::json!({"columns": {"code": [2, 1, null]}})
+    );
+    let greater = yss_relational_contract::RelationPredicate {
+        column: "code".into(),
+        comparison: yss_relational_contract::RelationComparison::Greater,
+        value: Some(RelationLiteral::Integer(2)),
+    };
+    let ranked = ordered_relation
+        .filter(&greater)
+        .unwrap()
+        .page(0, 3, &control())
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&ranked.data).unwrap(),
+        serde_json::json!({"columns": {"code": [1]}})
+    );
+    let mut invalid = semantic.clone();
+    invalid.values.pop();
+    assert!(
+        store
+            .prepare_column_semantic(
+                &ordered,
+                &engine,
+                "missing-level",
+                "code",
+                &invalid,
+                &control()
+            )
+            .is_err()
+    );
+    semantic.kind = SemanticType::Binary;
+    semantic.positive_value = Some("1".into());
+    let binary = store
+        .commit(
+            store
+                .prepare_column_semantic(&ordered, &engine, "binary", "code", &semantic, &control())
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let binary_page = binary
+        .query(&engine, "binary-view")
+        .unwrap()
+        .relation()
+        .unwrap()
+        .page(0, 3, &control())
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(binary_page.data).unwrap(),
+        serde_json::json!({"columns": {"code": [2, 1, null]}})
+    );
+    assert!(
+        store
+            .prepare_cell_edit(
+                &binary,
+                &engine,
+                "third-value",
+                DatasetCellEdit {
+                    row_id: 0,
+                    column: "code",
+                    value: serde_json::json!(3)
+                },
+                &control()
+            )
+            .is_err()
+    );
+    let cast = store
+        .commit(
+            store
+                .prepare_cast_column(
+                    &binary,
+                    &engine,
+                    "physical",
+                    DatasetColumnCast {
+                        column: "code",
+                        data_type: DataType::Utf8,
+                        force: false,
+                    },
+                    &control(),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    assert_eq!(
+        column_semantic(cast.metadata().schema.field(0)).unwrap(),
+        semantic
+    );
+    let reopened = DatasetStore::open(directory.path())
+        .unwrap()
+        .snapshot(&cast.metadata().id)
+        .unwrap();
+    assert_eq!(
+        column_semantic(reopened.metadata().schema.field(0)).unwrap(),
+        semantic
+    );
+    let restored = store
+        .commit(store.prepare_restore(&cast, &original, "undo").unwrap())
+        .unwrap()
+        .snapshot;
+    assert_eq!(
+        column_semantic(restored.metadata().schema.field(0))
+            .unwrap()
+            .kind,
+        SemanticType::Numeric
+    );
+    let identifier = store
+        .commit(
+            store
+                .prepare_column_semantic(
+                    &restored,
+                    &engine,
+                    "identifier",
+                    "code",
+                    &ColumnSemantic::new(SemanticType::Identifier),
+                    &control(),
+                )
+                .unwrap(),
+        )
+        .unwrap()
+        .snapshot;
+    let query = identifier.query(&engine, "test").unwrap();
+    assert!(matches!(
+        &query.column_stats(&control()).unwrap()[0],
+        yss_dataset_profile::ColumnStats::String(_)
+    ));
+    let relation = query.relation().unwrap();
+    assert!(relation.filter(&greater).is_err());
+    let series = relation.select_series("code").unwrap();
+    assert!(
+        engine
+            .numeric_columns(std::slice::from_ref(&series), &control())
+            .is_err()
+    );
+    assert!(
+        relation
+            .numeric_series(
+                NumericOperation::Add,
+                &[
+                    SeriesOperand::Series(series),
+                    SeriesOperand::Scalar(RelationLiteral::Integer(1))
+                ],
+                NumericType::Int64
+            )
+            .is_err()
+    );
+    let original_rows = original
+        .query(&engine, "original")
+        .unwrap()
+        .relation()
+        .unwrap()
+        .page(0, 3, &control())
+        .unwrap();
+    let current_rows = relation.page(0, 3, &control()).unwrap();
+    assert_eq!(original_rows.data, current_rows.data);
+}
+
+#[test]
 fn datetime_column_cast_retains_clock_values_and_forced_nulls_in_persisted_data() {
     use arrow::array::StringArray;
     let directory = Directory::new();
     let store = DatasetStore::create(directory.path()).unwrap();
     let batch = RecordBatch::try_new(
-        Arc::new(Schema::new(vec![Field::new("at", DataType::Utf8, true)])),
+        Arc::new(Schema::new(vec![
+            yss_tabular_arrow::with_column_semantic(
+                Field::new("at", DataType::Utf8, true),
+                &yss_tabular_arrow::ColumnSemantic::new(
+                    yss_tabular_arrow::SemanticType::Identifier,
+                ),
+            )
+            .unwrap(),
+        ])),
         vec![Arc::new(StringArray::from(vec![
             "2026-09-11T10:00:00+08:00",
             "2026-09-11T10:00:00-05:00",

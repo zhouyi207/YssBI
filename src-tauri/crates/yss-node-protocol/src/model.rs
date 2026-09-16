@@ -390,7 +390,7 @@ mod tests {
     }
 
     fn data_input() -> PortSpec {
-        let value_type = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let value_type = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         PortSpec {
             key: key("value"),
             title: "Value".into(),
@@ -440,7 +440,7 @@ mod tests {
             .default_value
             .as_mut()
             .unwrap()
-            .value_type = TypeExpr::Concrete(TypeId::new("core.string").unwrap());
+            .value_type = TypeExpr::Concrete(TypeId::new("core.text").unwrap());
         assert!(matches!(
             NodeInterfaceProtocol::new(vec![port], vec![]),
             Err(ProtocolError::InvalidPortContract { .. })

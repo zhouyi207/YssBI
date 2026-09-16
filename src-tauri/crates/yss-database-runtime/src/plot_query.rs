@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::error::{DatabaseError, DatabaseErrorCode, DatabaseOperation};
 use crate::runtime::DatabaseRuntimeSession;
 use crate::session_api::{self, DatabaseQueryBasis};
-use yss_data_contract::DataType;
+use yss_data_contract::SemanticType;
 use yss_database_contract::DatabaseId;
 use yss_tabular_contract::TabularColumnName;
 
@@ -120,7 +120,12 @@ pub fn read_numeric_column_pair(
             .columns()
             .iter()
             .find(|column| column.name() == name)
-            .map(|field| numeric_kind(field.data_type()))
+            .and_then(|field| {
+                numeric_kind(
+                    field.semantic().map(|semantic| semantic.kind),
+                    field.physical_type(),
+                )
+            })
             .ok_or_else(|| {
                 materialization_error(
                     database,
@@ -282,23 +287,14 @@ fn materialization_error(
     }
 }
 
-fn numeric_kind(data_type: &DataType) -> NumericColumnKind {
-    match data_type {
-        DataType::Date => NumericColumnKind::Date,
-        DataType::Datetime => NumericColumnKind::Datetime,
-        DataType::Boolean
-        | DataType::Int64
-        | DataType::Float64
-        | DataType::String
-        | DataType::Time
-        | DataType::Categorical
-        | DataType::Array(_)
-        | DataType::Object
-        | DataType::DataFrame
-        | DataType::DataSeries(_)
-        | DataType::Struct(_)
-        | DataType::OneOf(_)
-        | DataType::Any => NumericColumnKind::Number,
+fn numeric_kind(semantic: Option<SemanticType>, physical: &str) -> Option<NumericColumnKind> {
+    match semantic {
+        Some(SemanticType::Numeric) => Some(NumericColumnKind::Number),
+        Some(SemanticType::Datetime) if matches!(physical, "Date" | "Date32" | "Date64") => {
+            Some(NumericColumnKind::Date)
+        }
+        Some(SemanticType::Datetime) => Some(NumericColumnKind::Datetime),
+        _ => None,
     }
 }
 

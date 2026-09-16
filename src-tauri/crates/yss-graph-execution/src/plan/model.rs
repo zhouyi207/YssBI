@@ -5,7 +5,7 @@ use super::observation::{PlanObservationIntent, ValueRef};
 use super::parameter::PlanParameterHandle;
 use super::result_category::ResultCategory;
 use std::collections::BTreeMap;
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_node_kernel::KernelId;
 use yss_node_kernel::KernelParameterKey;
 
@@ -25,7 +25,7 @@ pub struct PlanInputBinding {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanInputContract {
     pub group: Option<PlanInputGroupId>,
-    pub expected_type: DataType,
+    pub expected_type: ValueType,
     pub coercions: Box<[PlanInputCoercionKind]>,
 }
 
@@ -109,11 +109,11 @@ impl PlanKernelSpecialization {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanTypeBinding {
     port: PlanPortAddress,
-    data_type: DataType,
+    data_type: ValueType,
 }
 
 impl PlanTypeBinding {
-    pub fn new(port: PlanPortAddress, data_type: DataType) -> Self {
+    pub fn new(port: PlanPortAddress, data_type: ValueType) -> Self {
         Self { port, data_type }
     }
 
@@ -121,14 +121,13 @@ impl PlanTypeBinding {
         &self.port
     }
 
-    pub fn data_type(&self) -> &DataType {
+    pub fn data_type(&self) -> &ValueType {
         &self.data_type
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlanInputCoercionKind {
-    WidenInt64ToFloat64,
     BroadcastScalarToSeries,
 }
 
@@ -161,7 +160,7 @@ pub struct PlanOutputBinding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanOutputContract {
-    pub data_type: DataType,
+    pub data_type: ValueType,
     pub schema: Option<Box<[PlanOutputField]>>,
     pub category: ResultCategory,
     pub source: PlanSourceIdentity,
@@ -170,7 +169,7 @@ pub struct PlanOutputContract {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanOutputField {
     pub name: Box<str>,
-    pub data_type: DataType,
+    pub data_type: ValueType,
     pub lineage: Option<PlanFieldLineage>,
 }
 

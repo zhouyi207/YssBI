@@ -8,11 +8,17 @@ mod scalar;
 mod temporal;
 pub use edit_type::editable_data_type;
 mod schema;
+mod semantic;
+pub use semantic::{
+    ColumnSemantic, NumericConstraints, SemanticType, SemanticValue, cast_column_semantic,
+    column_semantic, is_numeric_field, lossless_cast, validate_semantic_array,
+    with_column_semantic,
+};
 
 pub use scalar::{array_to_json, json_to_array, normalize_batch_categories, to_record_batch};
 pub use schema::{
     CategoryDomain, DatasetRowColumns, column_identity, data_type_name, database_schema_fact,
-    dataset_row_columns, semantic_data_type, validate_storage_schema, with_column_metadata,
+    dataset_row_columns, physical_type_name, validate_storage_schema, with_column_metadata,
     with_row_columns, without_row_metadata,
 };
 pub use temporal::{

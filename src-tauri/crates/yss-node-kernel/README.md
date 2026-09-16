@@ -11,6 +11,10 @@
 
 `KernelInvocation` 接收已求值输入、输入组、有序输出类型/字段、已解析参数及 `KernelControl`。参数可以借用现有 literal 和已授权的资源运行值，避免仅为构造调用就复制完整数据。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`。
 
+输出契约通过 `ValueType` 引用七种 Semantic，数值端口统一为 Numeric。四则运算根据实际标量或
+Arrow 字段的 Physical 选择整数/浮点表示，除法使用浮点表示，有损提升会被拒绝。
+Graph 的广播说明不提前改写标量值。数值、转换、比较和关系筛选适配的行为变化会推进实现 revision。
+
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
 `KernelError` 只表达计算错误、取消和超时。Execution 的 `OperationExecutionError` 负责图来源与阶段，并继续投影已有 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
@@ -34,7 +38,7 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 `KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明实际参数键集合及输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
-`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、参数键和输出数量。本次迁移保持原有内置 manifest 和计算行为，尚未接入的分布采样等节点仍返回缺少执行能力的诊断。
+`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、参数键和输出数量。尚未接入的分布采样等节点仍返回缺少执行能力的诊断。
 
 新增节点时在对应方法族模块实现适配，再加入内置装配或由应用 provider 注册；实际算法放回 SCI 或相应数据所有者。执行函数只使用已经解析的类型和资源，不重新求解图类型，也不自行读取项目资源。
 

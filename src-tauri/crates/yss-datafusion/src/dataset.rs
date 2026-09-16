@@ -306,7 +306,7 @@ impl DatasetQuery {
         if target != yss_tabular_arrow::timezone_free_data_type(&target) {
             return Err(RelationError::InvalidInput);
         }
-        let expression = if target.is_temporal() {
+        let expression = {
             use datafusion::logical_expr::{ColumnarValue, Volatility, create_udf};
             let source = self
                 .schema
@@ -316,20 +316,17 @@ impl DatasetQuery {
                 .clone();
             let result_type = target.clone();
             let function = create_udf(
-                &format!("yss_calendar_cast_{target:?}_{force}"),
+                &format!("yss_physical_cast_{target:?}_{force}"),
                 vec![source],
                 target,
                 Volatility::Immutable,
                 Arc::new(move |arguments| {
                     let arrays = ColumnarValue::values_to_arrays(arguments)?;
-                    let array = yss_tabular_arrow::cast_temporal_without_timezone(
-                        arrays[0].as_ref(),
-                        &result_type,
-                        force,
-                    )
-                    .map_err(|error| {
-                        datafusion::common::DataFusionError::External(Box::new(error))
-                    })?;
+                    let array =
+                        yss_tabular_arrow::lossless_cast(arrays[0].as_ref(), &result_type, force)
+                            .map_err(|error| {
+                            datafusion::common::DataFusionError::External(Box::new(error))
+                        })?;
                     if arguments
                         .iter()
                         .all(|value| matches!(value, ColumnarValue::Scalar(_)))
@@ -343,10 +340,6 @@ impl DatasetQuery {
                 }),
             );
             function.call(vec![column(None, name)])
-        } else if force {
-            datafusion::logical_expr::expr_fn::try_cast(column(None, name), target)
-        } else {
-            datafusion::logical_expr::expr_fn::cast(column(None, name), target)
         };
         let frame = self
             .frame

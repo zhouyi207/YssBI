@@ -41,6 +41,45 @@ rewritten merely by opening or displaying them. Internal RowId and DisplayOrder
 columns stay non-null. Row IDs increase monotonically; insertion creates an independent order
 key between adjacent rows. Renaming a column changes its label and keeps its identity.
 
+## Field meaning and physical conversion
+
+Data Detail edits Physical and Semantic independently. Exact Arrow fields own Physical, including
+integer width/sign, decimal precision/scale, timestamp unit and dictionary encoding. The separate
+`yssbi.semantic` field metadata serializes the `yss-data-contract::ColumnSemantic` contract:
+Numeric, Categorical, Ordinal, Binary, Datetime, Text or Identifier. It does not add a
+Shape/Physical/Semantic hierarchy to graph port types.
+
+Numeric admits supported numeric Arrow representations and optional exact minimum/maximum and
+integer constraints. Text admits string representations (including string dictionaries); Datetime
+admits timezone-free date, time and timestamp representations. Categorical, Ordinal, Binary and
+Identifier can use multiple scalar representations, subject to actual values and supported casts.
+Category/level/binary codes are exact strings in metadata and on the wire, so wide integers do not
+pass through JavaScript numbers. Semantic maps physical values to internal meanings; labels are
+part of that internal mapping. DataView keeps the original cell values and physical type labels,
+without substituting semantic labels, ordinal ranks or binary event codes. Semantic-only edits do
+not reset the displayed page or selection. Ordinal values explicitly list the
+levels from lowest to highest; Binary requires two distinct allowed values and an optional positive
+value from that domain. Null is missing, while an empty string remains an actual text value.
+Identifier does not imply uniqueness.
+
+Unannotated columns use conservative initial meanings based on the source representation and its
+explicit dictionary metadata. Plain strings stay Text regardless of observed cardinality. Existing
+projects are not rewritten on read. Semantic edits validate the effective snapshot in bounded
+batches, publish only schema metadata, and leave physical values and generation files unchanged.
+Subsequent edits and imports validate declared constraints too. Casts retain the current meaning,
+translate explicit codes without changing their order/labels, and reject incompatible combinations,
+overflow, precision loss and identifier representation loss. Explicit forced casts retain the existing
+invalid-to-null policy; they cannot bypass semantic constraints. Calendar text conversion retains
+the existing wall-clock/timezone-removal rule described above.
+
+These mutations share dataset revision admission, publication, undo/redo and recovery. Numeric
+profiles and series arithmetic/materialization consult field meaning, so an integer Identifier,
+category or binary code is not treated as a numeric measure. Ordered relation filters use the
+declared Ordinal order; ordering Categorical, Binary and Identifier values is rejected. Equality and
+missing-value filters keep their normal meaning. Projection, filtering and renaming retain metadata.
+
+## Snapshots and storage
+
 Imported string dictionaries use managed Int32 keys. Existing category domains remain metadata;
 when an external Arrow/Parquet source has no domain metadata, import collects its actual dictionary
 labels under a byte budget. Keys can differ across batches without changing category identity.

@@ -424,16 +424,24 @@ fn transform_graph_edit(
             client_id,
         } = operation
         {
-            use yss_data_contract::{DataType, DataValue};
+            use yss_data_contract::{DataValue, ValueType};
             let (data_type, data_value) = match value {
-                GraphConstantLiteral::Boolean(value) => {
-                    (DataType::Boolean, DataValue::Boolean(value))
-                }
-                GraphConstantLiteral::Integer(value) => (DataType::Int64, DataValue::Int64(value)),
-                GraphConstantLiteral::Decimal(value) => {
-                    (DataType::Float64, DataValue::Float64(value))
-                }
-                GraphConstantLiteral::String(value) => (DataType::String, DataValue::String(value)),
+                GraphConstantLiteral::Boolean(value) => (
+                    ValueType::Scalar(yss_data_contract::SemanticType::Binary),
+                    DataValue::Boolean(value),
+                ),
+                GraphConstantLiteral::Integer(value) => (
+                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                    DataValue::Int64(value),
+                ),
+                GraphConstantLiteral::Decimal(value) => (
+                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                    DataValue::Float64(value),
+                ),
+                GraphConstantLiteral::String(value) => (
+                    ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                    DataValue::String(value),
+                ),
             };
             let id = yss_graph_document::ConstantId::new();
             let mutation = EditorGraphMutation::SetConstant {

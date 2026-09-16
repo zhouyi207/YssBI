@@ -115,7 +115,19 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         builder
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
-                std::num::NonZeroU32::new(1).expect("built-in implementation revision"),
+                std::num::NonZeroU32::new(match kind {
+                    Numeric(_)
+                    | Convert
+                    | Equal
+                    | NotEqual
+                    | Less
+                    | LessEqual
+                    | Greater
+                    | GreaterEqual
+                    | Relational(relational::RelationalKernel::Filter) => 2,
+                    _ => 1,
+                })
+                .expect("built-in implementation revision"),
                 contract,
                 move |invocation| execute_kernel(kind, invocation),
             )
@@ -172,8 +184,12 @@ fn execute_kernel(
 
 pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelError> {
     match value {
-        Some(RuntimeValue::Integer(value)) => Ok(*value as f64),
-        Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
+        Some(RuntimeValue::Integer(value)) if (*value as f64) as i128 == i128::from(*value) => {
+            Ok(*value as f64)
+        }
+        Some(RuntimeValue::Unsigned(value)) if (*value as f64) as u128 == u128::from(*value) => {
+            Ok(*value as f64)
+        }
         Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
         _ => Err(KernelError::InvalidNumericInput),
     }

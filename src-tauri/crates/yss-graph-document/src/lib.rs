@@ -63,7 +63,7 @@ mod tests {
             input,
             InputState {
                 literal_override: Some(TypedValue {
-                    value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+                    value_type: TypeExpr::Concrete(TypeId::new("core.numeric").unwrap()),
                     value: Value::Integer(7),
                 }),
             },
@@ -91,7 +91,7 @@ mod tests {
                     },
                     {
                         "literal_override": {
-                            "value_type": { "Concrete": "core.int64" },
+                            "value_type": { "Concrete": "core.numeric" },
                             "value": { "Integer": 7 }
                         }
                     }

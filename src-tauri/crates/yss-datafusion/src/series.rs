@@ -77,7 +77,8 @@ pub(crate) fn arithmetic(
         .map(|operand| match operand {
             SeriesOperand::Series(series) => {
                 let input = series.plan().field().data_type();
-                if !input.is_numeric() || (output_type == NumericType::Int64 && !input.is_integer())
+                if !yss_tabular_arrow::is_numeric_field(series.plan().field())
+                    || (output_type == NumericType::Int64 && !input.is_integer())
                 {
                     return Err(RelationError::InvalidInput);
                 }
@@ -107,13 +108,29 @@ pub(crate) fn arithmetic(
     };
     // One native UDF retains strict numeric errors while Arrow supplies batch arithmetic
     // and DataFusion supplies scalar broadcasting, projection and controlled execution.
+    let input_types = operands
+        .iter()
+        .map(|operand| match operand {
+            SeriesOperand::Series(series) => series.plan().field().data_type().clone(),
+            SeriesOperand::Scalar(RelationLiteral::Integer(_)) => DataType::Int64,
+            _ => DataType::Float64,
+        })
+        .collect();
+    let result_type = data_type.clone();
     let function = create_udf(
         name,
-        vec![data_type.clone(); operands.len()],
+        input_types,
         data_type.clone(),
         Volatility::Immutable,
         Arc::new(move |arguments| {
             let arrays = ColumnarValue::values_to_arrays(arguments)?;
+            let arrays = arrays
+                .iter()
+                .map(|array| {
+                    yss_tabular_arrow::lossless_cast(array.as_ref(), &result_type, false)
+                        .map_err(|_| failure(RelationError::InvalidInput))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             if arrays.len() < 2
                 || arrays
                     .iter()

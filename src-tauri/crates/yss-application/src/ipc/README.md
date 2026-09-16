@@ -67,6 +67,14 @@ Use stable camelCase fields and strict frontend parsers for public DTOs. A contr
 
 Graph documents carry an optional `constants` map keyed by stable UUID. Each constant contains `id`, `name`, `dataType`, Rust-tagged `dataValue`, and optional tabular snapshot, description and tags. `setConstant { id, constant }` replaces a definition or deletes it with `null`; `insertConstantReference { id, position }` inserts its Get node. These are Graph draft mutations and use the existing Transform, Resolve, Save and history contracts. Node parameter editor `graphConstant` selects a definition in the current graph. Clipboard snapshots optionally carry referenced constant definitions in `constants`.
 
+Graph value types use `ValueType`: `{ kind: "Scalar", inner: "Numeric" }` references the shared
+seven-way Semantic contract; `DataSeries.inner` contains the element value type and DataFrame
+retains its independent structure. Schema field scalar types are Semantic names or null when
+unresolved. Physical integer/float/boolean/string tags remain in `dataValue`, not in graph type
+declarations. Changing only a constant's Semantic preserves its physical value and embedded
+snapshot; incompatible choices are rejected by Rust. Persisted legacy declarations are upgraded
+by Project's versioned file reader, not by accepting old aliases in live IPC parsers.
+
 Project queries use `get_project_databases` for database declarations. Variable commands, variable resource deltas and variable collections are removed; Project index contains graph, chart and database resources.
 
 Node parameter editors carry one effective `value`, display/editor metadata, and optional schema-aware `configuration`. Rust resolves that value from the node document or its protocol default. The wire has no project-setting inheritance source or override options; parameter edits update the Graph draft document directly.
@@ -87,6 +95,19 @@ integrity failures and unavailable resources. The frontend localizes these categ
 `get_database_rows` returns `{ rows, rowIds }` with both arrays required and the same length.
 The frontend keeps these stable row identities and rejects bare row arrays or incomplete pages;
 it does not substitute an empty identity array for an obsolete response shape.
+Rows contain the original physical values, using the existing exact display encoding. Semantic
+maps, ordinal ranks and binary event encodings are internal interpretations and never replace
+the values or physical type labels shown in DataView.
+
+Database column projections carry `name`, the existing `type` display label, exact `physical`,
+and `semantic: { kind, values, positiveValue, numeric }`. Semantic is one of the seven field
+meanings specified by the [dataset contract](../../../yss-dataset-store/README.md#field-meaning-and-physical-conversion).
+Codes and numeric bounds are strings, preserving wide integers and decimal precision. The
+`set_column_semantic` mutation takes `projectInstanceId`, `operationId`, `expectedRevision`,
+`id`, `colName` and that Semantic configuration. It returns the existing database mutation
+aggregate; no data values or Physical changes accompany the semantic edit. `cast_column`
+converts Physical while retaining and validating Semantic. Both commands perform scanning and
+conversion on the blocking pool, then publish the normal revision-checked resource changes.
 
 `get_result_page` 在 blocking worker 上调用 Application 的页面查询；命令不直接执行关系查询或持有数据库锁。
 `ResultPage.totalCount` 为可空整数，未知总数使用 null；`hasMore` 与 `nextOffset` 决定是否可继续翻页。

@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
-use yss_data_contract::DataType as SemanticType;
+use yss_data_contract::ValueType as GraphValueType;
 use yss_database_contract::DatabaseId;
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
 use yss_tabular_contract::TabularColumnName;
@@ -149,44 +149,9 @@ pub fn validate_storage_schema(schema: &Schema) -> Result<(), TabularArrowError>
             return Err(TabularArrowError::InvalidSchema);
         }
         CategoryDomain::from_field(field)?;
+        crate::column_semantic(field)?;
     }
     Ok(())
-}
-
-/// This is a one-way semantic projection. In particular Int64/Float64 do not describe the
-/// storage width, sign, decimal precision, temporal unit, or dictionary encoding.
-pub fn semantic_data_type(dtype: &DataType) -> SemanticType {
-    match dtype {
-        DataType::Boolean => SemanticType::Boolean,
-        DataType::Int8
-        | DataType::Int16
-        | DataType::Int32
-        | DataType::Int64
-        | DataType::UInt8
-        | DataType::UInt16
-        | DataType::UInt32
-        | DataType::UInt64 => SemanticType::Int64,
-        DataType::Float16
-        | DataType::Float32
-        | DataType::Float64
-        | DataType::Decimal32(_, _)
-        | DataType::Decimal64(_, _)
-        | DataType::Decimal128(_, _)
-        | DataType::Decimal256(_, _) => SemanticType::Float64,
-        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => SemanticType::String,
-        DataType::Date32 | DataType::Date64 => SemanticType::Date,
-        DataType::Timestamp(_, _) => SemanticType::Datetime,
-        DataType::Time32(_) | DataType::Time64(_) => SemanticType::Time,
-        DataType::Dictionary(_, value)
-            if matches!(
-                value.as_ref(),
-                DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View
-            ) =>
-        {
-            SemanticType::Categorical
-        }
-        _ => SemanticType::Any,
-    }
 }
 
 pub fn data_type_name(dtype: &DataType) -> String {
@@ -214,6 +179,15 @@ pub fn data_type_name(dtype: &DataType) -> String {
     }
 }
 
+pub fn physical_type_name(dtype: &DataType) -> String {
+    match dtype {
+        DataType::Boolean => "Bool".into(),
+        DataType::Date32 => "Date".into(),
+        DataType::Timestamp(_, _) => data_type_name(dtype),
+        _ => dtype.to_string(),
+    }
+}
+
 pub fn database_schema_fact(
     database: &DatabaseId,
     schema: &Schema,
@@ -228,13 +202,16 @@ pub fn database_schema_fact(
             })
         })
         .map(|field| {
+            let semantic = crate::column_semantic(field)?;
             Ok(DatabaseColumnFact::new(
                 TabularColumnName::try_from(field.name().as_str())
                     .map_err(|_| TabularArrowError::InvalidSchema)?,
-                semantic_data_type(field.data_type()),
+                GraphValueType::Scalar(semantic.kind),
                 field.is_nullable(),
             )
-            .with_display_type(data_type_name(field.data_type())))
+            .with_display_type(data_type_name(field.data_type()))
+            .with_physical_type(physical_type_name(field.data_type()))
+            .with_semantic(semantic))
         })
         .collect::<Result<Box<[_]>, _>>()?;
     Ok(DatabaseSchemaFact::from_columns(

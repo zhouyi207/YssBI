@@ -3,9 +3,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
 use yss_node_protocol::{
-    InputCoercionKind, NodeTypingSpec, NumericPromotionRule, PortDirection, PortKey, PortSelector,
-    ResolvedType, ShapeRule, TypeConflict, TypeDomain, TypeExpr, TypeParameterId, TypeState,
-    TypeUnknownReason,
+    InputCoercionKind, NodeTypingSpec, PortDirection, PortKey, PortSelector, ResolvedType,
+    ShapeRule, TypeConflict, TypeDomain, TypeExpr, TypeParameterId, TypeState, TypeUnknownReason,
 };
 use yss_node_registry::{NodeRegistry, TypeRegistry};
 
@@ -126,12 +125,6 @@ pub(crate) fn resolve_node_types(
             coercions.extend(cached.coercions);
             cache.reused_nodes = cache.reused_nodes.saturating_add(1);
         } else {
-            coercions.extend(input_assignment_coercions(
-                &port_snapshot,
-                &states,
-                registry.types(),
-                &generic_bindings,
-            ));
             apply_node_rule(
                 &protocol.typing,
                 document_node,
@@ -207,38 +200,6 @@ pub(crate) fn resolve_node_types(
         .nodes
         .retain(|node_id, _| document.nodes.contains_key(node_id));
     diagnostics
-}
-
-fn input_assignment_coercions(
-    ports: &[GraphPortSemanticFact],
-    states: &BTreeMap<PortAddress, TypeState>,
-    types: &TypeRegistry,
-    generic_bindings: &BTreeMap<TypeParameterId, TypeDomain>,
-) -> Vec<GraphInputCoercion> {
-    ports
-        .iter()
-        .filter(|port| port.direction == PortDirection::Input && !port.orphan)
-        .filter_map(|port| {
-            let source = states.get(&port.address)?.exact()?;
-            let accepted = expand_pattern(&port.accepted_type, types, generic_bindings)?;
-            if accepted.iter().any(|target| target == source) {
-                return None;
-            }
-            let source_numeric = numeric_type(source)?;
-            accepted
-                .iter()
-                .filter_map(numeric_type)
-                .any(|target| {
-                    source_numeric.shape == target.shape
-                        && source_numeric.element == NumericElement::Int64
-                        && target.element == NumericElement::Float64
-                })
-                .then(|| GraphInputCoercion {
-                    address: port.address.clone(),
-                    kind: InputCoercionKind::WidenInt64ToFloat64,
-                })
-        })
-        .collect()
 }
 
 fn initialize_unresolved_ports(nodes: &mut [GraphNodeSemanticFact]) {
@@ -419,7 +380,7 @@ fn is_assignable(source: &ResolvedType, target: &ResolvedType) -> bool {
     }
     match (source, target) {
         (ResolvedType::Nominal(source), ResolvedType::Nominal(target)) => {
-            source.as_str() == "core.int64" && target.as_str() == "core.float64"
+            source.as_str() == "core.numeric" && target.as_str() == "core.numeric"
         }
         (
             ResolvedType::Applied {
@@ -552,12 +513,9 @@ fn apply_node_rule(
                     .map(|field| field.scalar_type)
             });
             let nominal = match scalar {
-                Some(yss_node_protocol::RelationalScalarType::Boolean) => Some("core.bool"),
-                Some(yss_node_protocol::RelationalScalarType::Int64) => Some("core.int64"),
-                Some(yss_node_protocol::RelationalScalarType::Float64) => Some("core.float64"),
-                Some(yss_node_protocol::RelationalScalarType::String) => Some("core.string"),
-                Some(yss_node_protocol::RelationalScalarType::Date) => Some("core.date"),
-                Some(yss_node_protocol::RelationalScalarType::DateTime) => Some("core.datetime"),
+                Some(yss_node_protocol::RelationalScalarType::Known(semantic)) => {
+                    Some(semantic.type_id())
+                }
                 _ => None,
             };
             let state = nominal
@@ -586,11 +544,10 @@ fn apply_node_rule(
         NodeTypingSpec::NumericFold {
             inputs,
             output,
-            promotion,
             shape,
         } => {
             let selected = selected_ports(ports, inputs);
-            let state = numeric_fold_state(&selected, states, *promotion, *shape);
+            let state = numeric_fold_state(&selected, states, *shape);
             if let Some(output) = declared_port(ports, output) {
                 if let Some(result) = state.exact() {
                     coercions.extend(numeric_coercions(&selected, states, result));
@@ -598,10 +555,10 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
-        NodeTypingSpec::ShapePreservingFloat { input, output } => {
+        NodeTypingSpec::ShapePreservingNumeric { input, output } => {
             let state = declared_port(ports, input)
                 .and_then(|port| states.get(&port.address))
-                .map(shape_preserving_float_state)
+                .map(shape_preserving_numeric_state)
                 .unwrap_or(TypeState::Unknown(TypeUnknownReason::UnconnectedInput));
             if let Some(output) = declared_port(ports, output) {
                 states.insert(output.address.clone(), state);
@@ -679,21 +636,13 @@ enum NumericShape {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
-enum NumericElement {
-    Int64,
-    Float64,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct NumericType {
     shape: NumericShape,
-    element: NumericElement,
 }
 
 fn numeric_fold_state(
     ports: &[&GraphPortSemanticFact],
     states: &BTreeMap<PortAddress, TypeState>,
-    promotion: NumericPromotionRule,
     _shape: ShapeRule,
 ) -> TypeState {
     if ports.is_empty() {
@@ -729,48 +678,31 @@ fn numeric_fold_state(
             .flat_map(|left| {
                 candidates
                     .iter()
-                    .map(move |right| join_numeric(*left, *right, promotion))
+                    .map(move |right| join_numeric(*left, *right))
             })
             .collect();
     }
     state_from_candidates(accumulated.into_iter().map(resolved_numeric_type))
 }
 
-fn join_numeric(
-    left: NumericType,
-    right: NumericType,
-    promotion: NumericPromotionRule,
-) -> NumericType {
+fn join_numeric(left: NumericType, right: NumericType) -> NumericType {
     NumericType {
         shape: if left.shape == NumericShape::Series || right.shape == NumericShape::Series {
             NumericShape::Series
         } else {
             NumericShape::Scalar
         },
-        element: if promotion == NumericPromotionRule::Float64
-            || left.element == NumericElement::Float64
-            || right.element == NumericElement::Float64
-        {
-            NumericElement::Float64
-        } else {
-            NumericElement::Int64
-        },
     }
 }
 
-fn shape_preserving_float_state(input: &TypeState) -> TypeState {
+fn shape_preserving_numeric_state(input: &TypeState) -> TypeState {
     let Some(domain) = input.domain() else {
         return input.clone();
     };
     let candidates = domain
         .iter()
         .filter_map(numeric_type)
-        .map(|value| {
-            resolved_numeric_type(NumericType {
-                shape: value.shape,
-                element: NumericElement::Float64,
-            })
-        })
+        .map(|value| resolved_numeric_type(NumericType { shape: value.shape }))
         .collect::<Vec<_>>();
     if candidates.is_empty() {
         TypeState::Conflict(TypeConflict::IncompatibleInputs)
@@ -795,12 +727,6 @@ fn numeric_coercions(
         let Some(input) = numeric_type(input) else {
             continue;
         };
-        if input.element == NumericElement::Int64 && result.element == NumericElement::Float64 {
-            coercions.push(GraphInputCoercion {
-                address: port.address.clone(),
-                kind: InputCoercionKind::WidenInt64ToFloat64,
-            });
-        }
         if input.shape == NumericShape::Scalar && result.shape == NumericShape::Series {
             coercions.push(GraphInputCoercion {
                 address: port.address.clone(),
@@ -813,41 +739,26 @@ fn numeric_coercions(
 
 fn numeric_type(value: &ResolvedType) -> Option<NumericType> {
     match value {
-        ResolvedType::Nominal(id) => numeric_element(id.as_str()).map(|element| NumericType {
+        ResolvedType::Nominal(id) if id.as_str() == "core.numeric" => Some(NumericType {
             shape: NumericShape::Scalar,
-            element,
         }),
         ResolvedType::Applied {
             constructor,
             arguments,
-        } if constructor.as_str() == yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID => {
-            let [ResolvedType::Nominal(element)] = arguments.as_ref() else {
-                return None;
-            };
-            numeric_element(element.as_str()).map(|element| NumericType {
+        } if constructor.as_str() == yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID
+            && matches!(arguments.as_ref(), [ResolvedType::Nominal(id)] if id.as_str() == "core.numeric") =>
+        {
+            Some(NumericType {
                 shape: NumericShape::Series,
-                element,
             })
         }
-        ResolvedType::Applied { .. } => None,
-    }
-}
-
-fn numeric_element(value: &str) -> Option<NumericElement> {
-    match value {
-        "core.int64" => Some(NumericElement::Int64),
-        "core.float64" => Some(NumericElement::Float64),
         _ => None,
     }
 }
 
 fn resolved_numeric_type(value: NumericType) -> ResolvedType {
     let element = ResolvedType::Nominal(
-        yss_node_protocol::TypeId::new(match value.element {
-            NumericElement::Int64 => "core.int64",
-            NumericElement::Float64 => "core.float64",
-        })
-        .expect("built-in numeric type ID is valid"),
+        yss_node_protocol::TypeId::new("core.numeric").expect("semantic type ID"),
     );
     match value.shape {
         NumericShape::Scalar => element,
@@ -855,7 +766,7 @@ fn resolved_numeric_type(value: NumericType) -> ResolvedType {
             constructor: yss_node_protocol::TypeConstructorId::new(
                 yss_node_protocol::DATA_SERIES_CONSTRUCTOR_ID,
             )
-            .expect("built-in DataSeries constructor ID is valid"),
+            .expect("series constructor"),
             arguments: Box::new([element]),
         },
     }
@@ -998,7 +909,7 @@ fn node_input_fingerprint(
     protocol_fingerprint: Option<&yss_node_registry::ProtocolFingerprint>,
     ports: &[GraphPortSemanticFact],
     states: &BTreeMap<PortAddress, TypeState>,
-    constant_type: Option<&yss_data_contract::DataType>,
+    constant_type: Option<&yss_data_contract::ValueType>,
 ) -> [u8; 32] {
     let ports = ports
         .iter()
@@ -1078,40 +989,25 @@ mod tests {
         let values = [
             NumericType {
                 shape: NumericShape::Scalar,
-                element: NumericElement::Int64,
             },
             NumericType {
                 shape: NumericShape::Scalar,
-                element: NumericElement::Float64,
             },
             NumericType {
                 shape: NumericShape::Series,
-                element: NumericElement::Int64,
             },
             NumericType {
                 shape: NumericShape::Series,
-                element: NumericElement::Float64,
             },
         ];
         for left in values {
-            assert_eq!(join_numeric(left, left, NumericPromotionRule::Widen), left);
+            assert_eq!(join_numeric(left, left), left);
             for right in values {
-                assert_eq!(
-                    join_numeric(left, right, NumericPromotionRule::Widen),
-                    join_numeric(right, left, NumericPromotionRule::Widen)
-                );
+                assert_eq!(join_numeric(left, right), join_numeric(right, left));
                 for third in values {
                     assert_eq!(
-                        join_numeric(
-                            join_numeric(left, right, NumericPromotionRule::Widen),
-                            third,
-                            NumericPromotionRule::Widen,
-                        ),
-                        join_numeric(
-                            left,
-                            join_numeric(right, third, NumericPromotionRule::Widen),
-                            NumericPromotionRule::Widen,
-                        )
+                        join_numeric(join_numeric(left, right), third,),
+                        join_numeric(left, join_numeric(right, third),)
                     );
                 }
             }

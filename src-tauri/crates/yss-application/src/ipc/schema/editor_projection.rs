@@ -296,13 +296,8 @@ fn map_relational_scalar_type(
     scalar_type: yss_node_protocol::RelationalScalarType,
 ) -> RelationalScalarTypeDto {
     match scalar_type {
-        yss_node_protocol::RelationalScalarType::Boolean => RelationalScalarTypeDto::Boolean,
-        yss_node_protocol::RelationalScalarType::Int64 => RelationalScalarTypeDto::Int64,
-        yss_node_protocol::RelationalScalarType::Float64 => RelationalScalarTypeDto::Float64,
-        yss_node_protocol::RelationalScalarType::String => RelationalScalarTypeDto::String,
-        yss_node_protocol::RelationalScalarType::Date => RelationalScalarTypeDto::Date,
-        yss_node_protocol::RelationalScalarType::DateTime => RelationalScalarTypeDto::DateTime,
-        yss_node_protocol::RelationalScalarType::Unknown => RelationalScalarTypeDto::Unknown,
+        yss_node_protocol::RelationalScalarType::Known(semantic) => Some(semantic),
+        yss_node_protocol::RelationalScalarType::Unknown => None,
     }
 }
 
@@ -462,18 +457,24 @@ mod tests {
                     },
                     input: None,
                     accepted_type: EditorAcceptedType {
-                        display: "core.bool".into(),
-                        domain: Some(Box::new([yss_data_contract::DataType::Boolean])),
+                        display: "core.binary".into(),
+                        domain: Some(Box::new([yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Binary,
+                        )])),
                     },
                     type_state: EditorPortTypeState::Exact {
-                        display: "core.bool".into(),
-                        data_type: Some(yss_data_contract::DataType::Boolean),
+                        display: "core.binary".into(),
+                        data_type: Some(yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Binary,
+                        )),
                     },
                     resolved_schema: Some(EditorSchemaSummary {
                         kind: EditorSchemaSummaryKind::Derived,
                         fields: Box::new([EditorSchemaField {
                             name: "sales".into(),
-                            scalar_type: RelationalScalarType::Float64,
+                            scalar_type: RelationalScalarType::Known(
+                                yss_node_protocol::SemanticType::Numeric,
+                            ),
                         }]),
                     }),
                     status: EditorPortStatus::Resolved,
@@ -487,7 +488,9 @@ mod tests {
                     },
                     editor: ParameterEditorKind::Select,
                     presentation: ParameterPresentation::DetailPanel,
-                    value_type: Some(yss_data_contract::DataType::String),
+                    value_type: Some(yss_data_contract::ValueType::Scalar(
+                        yss_data_contract::SemanticType::Text,
+                    )),
                     multiline: false,
                     value: Some(json!(["sales"])),
                     configuration: Some(EditorParameterConfiguration::ProjectColumns {
@@ -495,7 +498,9 @@ mod tests {
                         unavailable_reason: None,
                         options: Box::new([EditorColumnOption {
                             name: "sales".into(),
-                            data_type: RelationalScalarType::Float64,
+                            data_type: RelationalScalarType::Known(
+                                yss_node_protocol::SemanticType::Numeric,
+                            ),
                         }]),
                         value: Box::new(["sales".into()]),
                     }),

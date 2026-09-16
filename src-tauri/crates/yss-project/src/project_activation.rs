@@ -208,7 +208,7 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_data_contract::{DataType, DataValue};
+    use yss_data_contract::{DataValue, ValueType};
 
     #[test]
     fn activation_rejects_invalid_tabular_value_instead_of_silently_publishing_it() {
@@ -223,7 +223,7 @@ mod tests {
             yss_graph_document::GraphConstant {
                 id,
                 name: "invalid table".into(),
-                data_type: DataType::DataFrame,
+                data_type: ValueType::DataFrame,
                 data_value: DataValue::DataFrame("not-json".into()),
                 tabular: None,
                 description: String::new(),

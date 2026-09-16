@@ -3,7 +3,7 @@ use serde::Deserializer as _;
 use serde::de::{MapAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
-use yss_data_contract::{DataType, DataValue};
+use yss_data_contract::{DataValue, ValueType};
 use yss_tabular_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
 
 const CONSTANT_HANDLE_PREFIX: &str = "constant:";
@@ -12,22 +12,16 @@ const CONSTANT_HANDLE_PREFIX: &str = "constant:";
 ///
 /// Compound defaults are deliberately empty. Populating arrays or objects with
 /// sample data would invent user data and can violate the declared element type.
-pub fn default_value_for(data_type: &DataType) -> DataValue {
+pub fn default_value_for(data_type: &ValueType) -> DataValue {
+    use yss_data_contract::SemanticType;
     match data_type {
-        DataType::Boolean => DataValue::Boolean(false),
-        DataType::Int64 => DataValue::Int64(0),
-        DataType::Float64 => DataValue::Float64(0.0),
-        DataType::String
-        | DataType::Date
-        | DataType::Datetime
-        | DataType::Time
-        | DataType::Categorical => DataValue::String(String::new()),
-        DataType::Array(_) => DataValue::Array(Vec::new()),
-        DataType::Object => DataValue::Object(std::collections::HashMap::new()),
-        DataType::OneOf(types) => types.first().map_or(DataValue::Null, default_value_for),
-        DataType::Any | DataType::DataFrame | DataType::DataSeries(_) | DataType::Struct(_) => {
-            DataValue::Null
-        }
+        ValueType::Scalar(SemanticType::Binary) => DataValue::Boolean(false),
+        ValueType::Scalar(SemanticType::Numeric) => DataValue::Int64(0),
+        ValueType::Scalar(_) => DataValue::String(String::new()),
+        ValueType::Array(_) => DataValue::Array(Vec::new()),
+        ValueType::Object => DataValue::Object(std::collections::HashMap::new()),
+        ValueType::OneOf(types) => types.first().map_or(DataValue::Null, default_value_for),
+        _ => DataValue::Null,
     }
 }
 
@@ -169,13 +163,13 @@ fn classify_payload(
 fn ingest(constant: &GraphConstant) -> Result<TabularInput, ConstantValueError> {
     let canonical_handle = constant_handle(&constant.id);
     match (&constant.data_type, &constant.data_value) {
-        (DataType::DataFrame, DataValue::Null) | (DataType::DataSeries(_), DataValue::Null) => {
+        (ValueType::DataFrame, DataValue::Null) | (ValueType::DataSeries(_), DataValue::Null) => {
             Ok(TabularInput::Clear)
         }
-        (DataType::DataFrame, DataValue::DataFrame(payload)) => {
+        (ValueType::DataFrame, DataValue::DataFrame(payload)) => {
             classify_payload(payload, &canonical_handle)
         }
-        (DataType::DataSeries(_), DataValue::DataSeries(value)) => {
+        (ValueType::DataSeries(_), DataValue::DataSeries(value)) => {
             classify_payload(&value.id, &canonical_handle)
         }
         _ => Err(ConstantValueError::ValueKindMismatch),
@@ -183,47 +177,42 @@ fn ingest(constant: &GraphConstant) -> Result<TabularInput, ConstantValueError> 
 }
 
 fn validate_snapshot(
-    data_type: &DataType,
+    data_type: &ValueType,
     snapshot: &TabularSnapshot,
 ) -> Result<(), ConstantValueError> {
-    if matches!(data_type, DataType::DataSeries(_)) && snapshot.columns().len() != 1 {
+    if matches!(data_type, ValueType::DataSeries(_)) && snapshot.columns().len() != 1 {
         return Err(ConstantValueError::Contract(
             TabularContractError::SeriesColumnCount {
                 actual: snapshot.columns().len(),
             },
         ));
     }
-    if let DataType::DataSeries(element) = data_type {
-        let valid = snapshot.columns()[0]
-            .values()
-            .iter()
-            .all(|value| match value {
-                TabularScalar::Null => true,
-                TabularScalar::Bool(_) => {
-                    matches!(element.as_ref(), DataType::Boolean | DataType::Any)
-                }
-                TabularScalar::Integer(_) => matches!(
-                    element.as_ref(),
-                    DataType::Int64 | DataType::Float64 | DataType::Any
+    if let ValueType::DataSeries(element) = data_type {
+        use yss_data_contract::SemanticType;
+        let valid = snapshot.columns()[0].values().iter().all(|value| {
+            if matches!(value, TabularScalar::Null) || *element.as_ref() == ValueType::Any {
+                return true;
+            }
+            let ValueType::Scalar(semantic) = element.as_ref() else {
+                return false;
+            };
+            match semantic {
+                SemanticType::Numeric => matches!(
+                    value,
+                    TabularScalar::Integer(_)
+                        | TabularScalar::Unsigned(_)
+                        | TabularScalar::Decimal(_)
                 ),
-                TabularScalar::Unsigned(value) => {
-                    matches!(element.as_ref(), DataType::Float64 | DataType::Any)
-                        || (matches!(element.as_ref(), DataType::Int64)
-                            && i64::try_from(*value).is_ok())
+                SemanticType::Binary => matches!(value, TabularScalar::Bool(_)),
+                SemanticType::Text | SemanticType::Datetime => {
+                    matches!(value, TabularScalar::String(_))
                 }
-                TabularScalar::Decimal(_) => {
-                    matches!(element.as_ref(), DataType::Float64 | DataType::Any)
-                }
-                TabularScalar::String(_) => matches!(
-                    element.as_ref(),
-                    DataType::String
-                        | DataType::Date
-                        | DataType::Datetime
-                        | DataType::Time
-                        | DataType::Categorical
-                        | DataType::Any
-                ),
-            });
+                SemanticType::Categorical | SemanticType::Identifier => true,
+                // An ordinal sequence requires an explicit level mapping, which a bare literal
+                // does not supply. Dataset-backed series retain that mapping in field metadata.
+                SemanticType::Ordinal => false,
+            }
+        });
         if !valid {
             return Err(ConstantValueError::ValueKindMismatch);
         }
@@ -244,18 +233,18 @@ pub fn validate_constant_definitions(
     for (id, constant) in constants {
         let valid = if matches!(
             constant.data_type,
-            DataType::DataFrame | DataType::DataSeries(_)
+            ValueType::DataFrame | ValueType::DataSeries(_)
         ) {
             match (&constant.data_value, &constant.tabular) {
                 (DataValue::Null, None) => true,
                 (DataValue::DataFrame(handle), Some(snapshot))
-                    if constant.data_type == DataType::DataFrame =>
+                    if constant.data_type == ValueType::DataFrame =>
                 {
                     *handle == constant_handle(id)
                         && validate_snapshot(&constant.data_type, snapshot).is_ok()
                 }
                 (DataValue::DataSeries(series), Some(snapshot))
-                    if matches!(constant.data_type, DataType::DataSeries(_)) =>
+                    if matches!(constant.data_type, ValueType::DataSeries(_)) =>
                 {
                     series.id == constant_handle(id)
                         && validate_snapshot(&constant.data_type, snapshot).is_ok()
@@ -265,7 +254,7 @@ pub fn validate_constant_definitions(
         } else {
             !matches!(
                 constant.data_type,
-                DataType::Any | DataType::OneOf(_) | DataType::Struct(_)
+                ValueType::Any | ValueType::OneOf(_) | ValueType::Struct(_)
             ) && constant.tabular.is_none()
                 && value_matches_type(&constant.data_value, &constant.data_type)
         };
@@ -286,11 +275,11 @@ pub fn validate_constant_definitions(
 pub fn normalize_constant_value(constant: &mut GraphConstant) -> Result<(), ConstantValueError> {
     if !matches!(
         constant.data_type,
-        DataType::DataFrame | DataType::DataSeries(_)
+        ValueType::DataFrame | ValueType::DataSeries(_)
     ) {
         if matches!(
             constant.data_type,
-            DataType::Any | DataType::OneOf(_) | DataType::Struct(_)
+            ValueType::Any | ValueType::OneOf(_) | ValueType::Struct(_)
         ) || !value_matches_type(&constant.data_value, &constant.data_type)
         {
             return Err(ConstantValueError::ValueKindMismatch);
@@ -318,10 +307,10 @@ pub fn normalize_constant_value(constant: &mut GraphConstant) -> Result<(), Cons
         constant.data_value.clone()
     } else {
         match (&constant.data_type, &constant.data_value) {
-            (DataType::DataFrame, DataValue::DataFrame(_)) => {
+            (ValueType::DataFrame, DataValue::DataFrame(_)) => {
                 DataValue::DataFrame(constant_handle(&constant.id))
             }
-            (DataType::DataSeries(_), DataValue::DataSeries(value)) => {
+            (ValueType::DataSeries(_), DataValue::DataSeries(value)) => {
                 let mut value = value.clone();
                 value.id = constant_handle(&constant.id);
                 DataValue::DataSeries(value)
@@ -335,31 +324,37 @@ pub fn normalize_constant_value(constant: &mut GraphConstant) -> Result<(), Cons
     Ok(())
 }
 
-fn value_matches_type(value: &DataValue, data_type: &DataType) -> bool {
+fn value_matches_type(value: &DataValue, data_type: &ValueType) -> bool {
+    use yss_data_contract::SemanticType;
     match (value, data_type) {
         (DataValue::Null, _) => true,
-        (DataValue::Boolean(_), DataType::Boolean | DataType::Any)
-        | (DataValue::Int64(_), DataType::Int64 | DataType::Any)
+        (DataValue::Boolean(_), ValueType::Scalar(SemanticType::Binary) | ValueType::Any)
+        | (DataValue::Int64(_), ValueType::Scalar(SemanticType::Numeric) | ValueType::Any)
         | (
             DataValue::String(_),
-            DataType::String
-            | DataType::Date
-            | DataType::Datetime
-            | DataType::Time
-            | DataType::Categorical
-            | DataType::Any,
+            ValueType::Scalar(SemanticType::Text | SemanticType::Datetime) | ValueType::Any,
         ) => true,
-        (DataValue::Float64(value), DataType::Float64 | DataType::Any) => value.is_finite(),
-        (DataValue::Array(values), DataType::Array(element)) => values
+        (DataValue::Float64(value), ValueType::Scalar(SemanticType::Numeric) | ValueType::Any) => {
+            value.is_finite()
+        }
+        (
+            DataValue::Boolean(_) | DataValue::Int64(_) | DataValue::String(_),
+            ValueType::Scalar(SemanticType::Categorical | SemanticType::Identifier),
+        ) => true,
+        (
+            DataValue::Float64(value),
+            ValueType::Scalar(SemanticType::Categorical | SemanticType::Identifier),
+        ) => value.is_finite(),
+        (DataValue::Array(values), ValueType::Array(element)) => values
             .iter()
             .all(|value| value_matches_type(value, element)),
-        (DataValue::Array(values), DataType::Any) => values
+        (DataValue::Array(values), ValueType::Any) => values
             .iter()
-            .all(|value| value_matches_type(value, &DataType::Any)),
-        (DataValue::Object(values), DataType::Object | DataType::Any) => values
+            .all(|value| value_matches_type(value, &ValueType::Any)),
+        (DataValue::Object(values), ValueType::Object | ValueType::Any) => values
             .values()
-            .all(|value| value_matches_type(value, &DataType::Any)),
-        (_, DataType::OneOf(types)) => types
+            .all(|value| value_matches_type(value, &ValueType::Any)),
+        (_, ValueType::OneOf(types)) => types
             .iter()
             .any(|data_type| value_matches_type(value, data_type)),
         _ => false,
@@ -372,7 +367,7 @@ mod tests {
     use yss_data_contract::DataSeriesValue;
     use yss_tabular_contract::TabularColumnName;
 
-    fn constant(data_type: DataType, data_value: DataValue) -> GraphConstant {
+    fn constant(data_type: ValueType, data_value: DataValue) -> GraphConstant {
         GraphConstant {
             id: ConstantId::new(),
             name: "value".into(),
@@ -387,19 +382,24 @@ mod tests {
     #[test]
     fn compound_defaults_are_empty_instead_of_inventing_user_data() {
         assert_eq!(
-            default_value_for(&DataType::Array(Box::new(DataType::String))),
+            default_value_for(&ValueType::Array(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Text
+            )))),
             DataValue::Array(Vec::new())
         );
         assert_eq!(
-            default_value_for(&DataType::Object),
+            default_value_for(&ValueType::Object),
             DataValue::Object(std::collections::HashMap::new())
         );
         assert_eq!(
-            default_value_for(&DataType::OneOf(vec![DataType::Boolean, DataType::Int64])),
+            default_value_for(&ValueType::OneOf(vec![
+                ValueType::Scalar(yss_data_contract::SemanticType::Binary),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
+            ])),
             DataValue::Boolean(false)
         );
         assert_eq!(
-            default_value_for(&DataType::OneOf(Vec::new())),
+            default_value_for(&ValueType::OneOf(Vec::new())),
             DataValue::Null
         );
     }
@@ -407,7 +407,7 @@ mod tests {
     #[test]
     fn normalize_enforces_current_constant_canonical_handle() {
         let mut constant = constant(
-            DataType::DataFrame,
+            ValueType::DataFrame,
             DataValue::DataFrame(r#"{"value":[1,2]}"#.into()),
         );
 
@@ -435,10 +435,12 @@ mod tests {
     #[test]
     fn data_series_normalization_preserves_non_handle_metadata() {
         let mut constant = constant(
-            DataType::DataSeries(Box::new(DataType::Int64)),
+            ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric,
+            ))),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
                 r#"{"value":[1,2]}"#,
-                DataType::Int64,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             )),
         );
 
@@ -447,13 +449,16 @@ mod tests {
             panic!("normalization must retain the data-series value kind");
         };
         assert_eq!(value.id, constant_handle(&constant.id));
-        assert_eq!(value.element_type, Some(DataType::Int64));
+        assert_eq!(
+            value.element_type,
+            Some(ValueType::Scalar(yss_data_contract::SemanticType::Numeric))
+        );
     }
 
     #[test]
     fn invalid_tabular_payload_leaves_value_and_snapshot_unchanged() {
         let mut constant = constant(
-            DataType::DataFrame,
+            ValueType::DataFrame,
             DataValue::DataFrame(r#"{"value":[1]}"#.into()),
         );
         normalize_constant_value(&mut constant).expect("initial value");
@@ -474,7 +479,7 @@ mod tests {
     #[test]
     fn duplicate_column_contract_error_is_preserved() {
         let mut constant = constant(
-            DataType::DataFrame,
+            ValueType::DataFrame,
             DataValue::DataFrame(r#"{"value":[1],"value":[2]}"#.into()),
         );
 

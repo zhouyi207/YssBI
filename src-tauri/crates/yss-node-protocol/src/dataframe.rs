@@ -218,19 +218,24 @@ pub fn filter_comparison_is_compatible(
     let Some(literal) = literal else {
         return false;
     };
+    use crate::SemanticType;
+    let equality = matches!(operator, FilterOperator::Equal | FilterOperator::NotEqual);
     match (scalar_type, literal) {
-        (RelationalScalarType::Boolean, FilterLiteral::Boolean(_)) => {
-            matches!(operator, FilterOperator::Equal | FilterOperator::NotEqual)
-        }
-        (RelationalScalarType::Int64, FilterLiteral::Integer(_))
-        | (RelationalScalarType::String, FilterLiteral::String(_)) => true,
-        (RelationalScalarType::Float64, FilterLiteral::Integer(value)) => {
-            let converted = *value as f64;
-            converted.is_finite() && converted as i128 == i128::from(*value)
-        }
-        (RelationalScalarType::Float64, FilterLiteral::Decimal(value)) => {
+        (RelationalScalarType::Known(SemanticType::Numeric), FilterLiteral::Integer(_)) => true,
+        (RelationalScalarType::Known(SemanticType::Numeric), FilterLiteral::Decimal(value)) => {
             value.as_str().parse::<f64>().is_ok_and(f64::is_finite)
         }
+        (
+            RelationalScalarType::Known(SemanticType::Text | SemanticType::Datetime),
+            FilterLiteral::String(_),
+        ) => true,
+        (RelationalScalarType::Known(SemanticType::Ordinal), _) => true,
+        (
+            RelationalScalarType::Known(
+                SemanticType::Categorical | SemanticType::Binary | SemanticType::Identifier,
+            ),
+            _,
+        ) => equality,
         _ => false,
     }
 }
@@ -352,37 +357,37 @@ mod tests {
             FilterLiteral::Decimal(CanonicalDecimal::new(format!("1{}", "0".repeat(400))).unwrap());
 
         assert!(filter_comparison_is_compatible(
-            RelationalScalarType::Int64,
+            RelationalScalarType::Known(crate::SemanticType::Numeric),
             FilterOperator::GreaterThan,
             Some(&integer),
         ));
         assert!(filter_comparison_is_compatible(
-            RelationalScalarType::Float64,
+            RelationalScalarType::Known(crate::SemanticType::Numeric),
             FilterOperator::Equal,
             Some(&integer),
         ));
-        assert!(!filter_comparison_is_compatible(
-            RelationalScalarType::Float64,
+        assert!(filter_comparison_is_compatible(
+            RelationalScalarType::Known(crate::SemanticType::Numeric),
             FilterOperator::Equal,
             Some(&inexact_integer),
         ));
         assert!(filter_comparison_is_compatible(
-            RelationalScalarType::Float64,
+            RelationalScalarType::Known(crate::SemanticType::Numeric),
             FilterOperator::LessThan,
             Some(&decimal),
         ));
         assert!(!filter_comparison_is_compatible(
-            RelationalScalarType::Float64,
+            RelationalScalarType::Known(crate::SemanticType::Numeric),
             FilterOperator::LessThan,
             Some(&huge_decimal),
         ));
         assert!(filter_comparison_is_compatible(
-            RelationalScalarType::Date,
+            RelationalScalarType::Known(crate::SemanticType::Datetime),
             FilterOperator::IsNull,
             None,
         ));
-        assert!(!filter_comparison_is_compatible(
-            RelationalScalarType::DateTime,
+        assert!(filter_comparison_is_compatible(
+            RelationalScalarType::Known(crate::SemanticType::Datetime),
             FilterOperator::Equal,
             Some(&FilterLiteral::String("2026-08-03".into())),
         ));
@@ -392,7 +397,7 @@ mod tests {
             None,
         ));
         assert!(!filter_comparison_is_compatible(
-            RelationalScalarType::Boolean,
+            RelationalScalarType::Known(crate::SemanticType::Binary),
             FilterOperator::LessThan,
             Some(&FilterLiteral::Boolean(false)),
         ));

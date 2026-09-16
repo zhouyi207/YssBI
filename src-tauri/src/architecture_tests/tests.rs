@@ -1970,7 +1970,7 @@ fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources(
     fixture.write(
         "src-tauri/src/graph/value/aliases.rs",
         r#"
-pub type PersistedDataType = yss_data_contract::DataType;
+pub type PersistedDataType = yss_data_contract::ValueType;
 pub type PersistedDataValue = yss_data_contract::DataValue;
 pub type PersistedDataSeriesValue = yss_data_contract::DataSeriesValue;
 pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
@@ -1978,7 +1978,7 @@ pub type PersistedTimeSeriesState = yss_data_contract::TimeSeriesState;
 pub type PersistedDummyInfo = yss_data_contract::DummyInfo;
 
 #[cfg(test)]
-pub type TestOnlyAlias = yss_data_contract::DataType;
+pub type TestOnlyAlias = yss_data_contract::ValueType;
 "#,
     );
     fixture.write(
@@ -2033,7 +2033,7 @@ pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
             "src-tauri/crates/yss-sci-runtime/src/api/computation.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
             "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|yss_data_contract::DataSeriesValue",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|yss_data_contract::DataType",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|yss_data_contract::ValueType",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|yss_data_contract::DataValue",
             "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|yss_data_contract::DummyInfo",
             "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|yss_data_contract::TimeSeriesState",

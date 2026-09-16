@@ -97,7 +97,7 @@ mod tests {
     }
 
     #[test]
-    fn numeric_type_class_contains_only_int64_and_float64() {
+    fn numeric_type_class_contains_the_numeric_semantic() {
         let registry = build_builtin_node_system()
             .expect("production built-in registry must assemble")
             .registry;
@@ -113,7 +113,7 @@ mod tests {
             .map(|(id, _)| id.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(members, ["core.float64", "core.int64"]);
+        assert_eq!(members, ["core.numeric"]);
     }
 
     #[test]

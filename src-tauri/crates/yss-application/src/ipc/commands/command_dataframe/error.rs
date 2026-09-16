@@ -278,6 +278,7 @@ fn internal_error_code(operation: DatabaseApplicationOperation) -> &'static str 
         | DatabaseApplicationOperation::AddColumn
         | DatabaseApplicationOperation::DeleteColumn
         | DatabaseApplicationOperation::CastColumn
+        | DatabaseApplicationOperation::SetColumnSemantic
         | DatabaseApplicationOperation::RenameColumn
         | DatabaseApplicationOperation::UndoEdit
         | DatabaseApplicationOperation::RedoEdit
@@ -304,6 +305,7 @@ fn operation_name(operation: DatabaseApplicationOperation) -> &'static str {
         DatabaseApplicationOperation::AddColumn => "addColumn",
         DatabaseApplicationOperation::DeleteColumn => "deleteColumn",
         DatabaseApplicationOperation::CastColumn => "castColumn",
+        DatabaseApplicationOperation::SetColumnSemantic => "setColumnSemantic",
         DatabaseApplicationOperation::RenameColumn => "renameColumn",
         DatabaseApplicationOperation::UndoEdit => "undoEdit",
         DatabaseApplicationOperation::RedoEdit => "redoEdit",

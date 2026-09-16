@@ -1,7 +1,7 @@
 use super::*;
 use crate::graph::inputs::{ProjectGraphResourceSnapshot, build_resource_catalog};
 use std::num::NonZeroU64;
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_database_contract::{
     DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
     DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseSessionIdentity,
@@ -51,9 +51,9 @@ fn project_and_database_snapshots_map_to_complete_graph_catalog_and_settings() {
             vec![FunctionParameterContract::new(
                 yss_graph_document::FunctionParameterId::new("x"),
                 "X",
-                DataType::Float64,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             )],
-            Some(DataType::Float64),
+            Some(ValueType::Scalar(yss_data_contract::SemanticType::Numeric)),
         ),
     );
     let mut databases = BTreeMap::new();

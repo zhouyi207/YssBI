@@ -29,6 +29,42 @@ impl From<crate::database::samples::SampleDataset> for SampleDatasetDto {
 #[cfg(test)]
 mod sample_tests {
     #[test]
+    fn column_metadata_wire_preserves_independent_types_and_exact_codes() {
+        use yss_data_contract::{ColumnSemantic, SemanticType, SemanticValue, ValueType};
+        let semantic = ColumnSemantic {
+            kind: SemanticType::Binary,
+            values: vec![
+                SemanticValue {
+                    value: "0".into(),
+                    label: "No".into(),
+                },
+                SemanticValue {
+                    value: "9007199254740993".into(),
+                    label: "Yes".into(),
+                },
+            ],
+            positive_value: Some("9007199254740993".into()),
+            numeric: None,
+        };
+        let column = yss_database_schema::DatabaseColumnFact::new(
+            "code".try_into().unwrap(),
+            ValueType::Scalar(yss_data_contract::SemanticType::Categorical),
+            true,
+        )
+        .with_display_type("Int64")
+        .with_physical_type("Int64".into())
+        .with_semantic(semantic.clone());
+        let wire = serde_json::to_value(super::column_info_from_schema(&[column])).unwrap();
+        assert_eq!(wire[0]["physical"], "Int64");
+        assert_eq!(wire[0]["semantic"]["kind"], "Binary");
+        assert_eq!(wire[0]["semantic"]["positiveValue"], "9007199254740993");
+        let restored: super::ColumnSemanticDto =
+            serde_json::from_value(wire[0]["semantic"].clone()).unwrap();
+        assert_eq!(ColumnSemantic::from(restored), semantic);
+        assert!(serde_json::from_value::<super::ColumnSemanticDto>(serde_json::json!({ "kind": "Int64", "values": [], "positiveValue": null, "numeric": null })).is_err());
+    }
+
+    #[test]
     fn sample_projection_exposes_only_display_metadata() {
         let sample =
             serde_json::from_value::<crate::database::samples::SampleDataset>(serde_json::json!({
@@ -55,11 +91,86 @@ fn default_true() -> bool {
 
 /// 列信息（供项目加载和数据库 schema 同步返回）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SemanticValueDto {
+    pub value: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NumericConstraintsDto {
+    pub integer: bool,
+    pub minimum: Option<String>,
+    pub maximum: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ColumnSemanticDto {
+    pub kind: yss_data_contract::SemanticType,
+    pub values: Vec<SemanticValueDto>,
+    pub positive_value: Option<String>,
+    pub numeric: Option<NumericConstraintsDto>,
+}
+
+impl From<&yss_data_contract::ColumnSemantic> for ColumnSemanticDto {
+    fn from(semantic: &yss_data_contract::ColumnSemantic) -> Self {
+        Self {
+            kind: semantic.kind,
+            values: semantic
+                .values
+                .iter()
+                .map(|value| SemanticValueDto {
+                    value: value.value.clone(),
+                    label: value.label.clone(),
+                })
+                .collect(),
+            positive_value: semantic.positive_value.clone(),
+            numeric: semantic
+                .numeric
+                .as_ref()
+                .map(|numeric| NumericConstraintsDto {
+                    integer: numeric.integer,
+                    minimum: numeric.minimum.clone(),
+                    maximum: numeric.maximum.clone(),
+                }),
+        }
+    }
+}
+
+impl From<ColumnSemanticDto> for yss_data_contract::ColumnSemantic {
+    fn from(semantic: ColumnSemanticDto) -> Self {
+        Self {
+            kind: semantic.kind,
+            values: semantic
+                .values
+                .into_iter()
+                .map(|value| yss_data_contract::SemanticValue {
+                    value: value.value,
+                    label: value.label,
+                })
+                .collect(),
+            positive_value: semantic.positive_value,
+            numeric: semantic
+                .numeric
+                .map(|numeric| yss_data_contract::NumericConstraints {
+                    integer: numeric.integer,
+                    minimum: numeric.minimum,
+                    maximum: numeric.maximum,
+                }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColumnInfoDTO {
     pub name: String,
     #[serde(rename = "type")]
     pub dtype: String,
+    pub physical: String,
+    pub semantic: Option<ColumnSemanticDto>,
 }
 
 pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<ColumnInfoDTO> {
@@ -68,6 +179,8 @@ pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<Col
         .map(|column| ColumnInfoDTO {
             name: column.name().as_str().to_string(),
             dtype: column.display_type().to_owned(),
+            physical: column.physical_type().to_owned(),
+            semantic: column.semantic().map(ColumnSemanticDto::from),
         })
         .collect()
 }
@@ -280,8 +393,8 @@ mod tests {
         assert_eq!(
             wire,
             json!([
-                { "name": "value", "type": "UInt64" },
-                { "name": "label", "type": "String" },
+                { "name": "value", "type": "UInt64", "physical": "UInt64", "semantic": { "kind": "Numeric", "values": [], "positiveValue": null, "numeric": null } },
+                { "name": "label", "type": "String", "physical": "Utf8", "semantic": { "kind": "Text", "values": [], "positiveValue": null, "numeric": null } },
             ])
         );
     }

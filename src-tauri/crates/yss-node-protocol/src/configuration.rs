@@ -44,7 +44,7 @@ impl ConfigurationSchema {
                 return Err("duplicate configuration field");
             }
             if !matches!(&field.parameter.value_type, crate::TypeExpr::Concrete(id)
-                if matches!(id.as_str(), "core.bool" | "core.int64" | "core.float64" | "core.string"))
+                if matches!(id.as_str(), "core.binary" | "core.numeric" | "core.text"))
             {
                 return Err("configuration fields require a scalar value type");
             }
@@ -163,7 +163,7 @@ impl ConfigurationSchema {
 }
 
 fn normalize_number(value: JsonValue, value_type: &crate::TypeExpr) -> JsonValue {
-    if matches!(value_type, crate::TypeExpr::Concrete(id) if id.as_str() == "core.float64")
+    if matches!(value_type, crate::TypeExpr::Concrete(id) if id.as_str() == "core.numeric")
         && let Some(number) = value
             .as_str()
             .and_then(|value| value.parse::<f64>().ok())

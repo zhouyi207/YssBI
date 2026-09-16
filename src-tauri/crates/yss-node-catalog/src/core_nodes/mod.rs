@@ -5,18 +5,13 @@ mod support;
 mod value;
 
 use super::builtin::{BuiltinAssemblyError, ProviderFragment};
-use support::{category, empty_classes, i18n, semantic};
+use support::{category, i18n, semantic};
 
-use yss_node_protocol::{TypeConstructorId, TypeId};
-use yss_node_registry::{TypeConstructorRegistration, TypeRegistration};
+use yss_node_protocol::TypeConstructorId;
+use yss_node_registry::TypeConstructorRegistration;
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut fragment = ProviderFragment::default();
-    fragment.types.push(TypeRegistration {
-        id: semantic("core.categorical", TypeId::new)?,
-        title_key: i18n("types.categorical.title")?,
-        classes: empty_classes(),
-    });
     fragment
         .type_constructors
         .push(TypeConstructorRegistration {

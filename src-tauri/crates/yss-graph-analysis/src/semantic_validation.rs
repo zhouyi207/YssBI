@@ -311,7 +311,7 @@ mod tests {
         crate::tests::set_constant(
             &mut document,
             source,
-            yss_data_contract::DataType::Int64,
+            yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(0),
         );
         let consumer = node(&mut document, "yssbi.numeric.subtract");
@@ -338,7 +338,7 @@ mod tests {
                 address,
                 InputState {
                     literal_override: Some(TypedValue {
-                        value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+                        value_type: TypeExpr::Concrete(TypeId::new("core.text").unwrap()),
                         value: Value::String("invalid".into()),
                     }),
                 },
@@ -419,8 +419,12 @@ mod tests {
             );
             let mut cache = crate::GraphSemanticCache::default();
             let initial = resources(vec![ColumnSchema {
+                semantic: None,
+                physical_type: None,
                 name: "amount".into(),
-                data_type: yss_data_contract::DataType::Int64,
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ),
             }]);
             let ready = crate::resolve_graph_semantics_with_cache(
                 &document, &registry, &initial, &mut cache,
@@ -453,7 +457,10 @@ mod tests {
                     assert_eq!(columns[0].name.as_ref(), "amount");
                     assert_eq!(
                         columns[0].literal_types.as_ref(),
-                        &[GraphFilterLiteralType::Integer]
+                        &[
+                            GraphFilterLiteralType::Integer,
+                            GraphFilterLiteralType::Decimal
+                        ]
                     );
                     assert!(columns[0].operators.contains(&FilterOperator::GreaterThan));
                     assert!(value.is_some());
@@ -461,8 +468,12 @@ mod tests {
                 other => panic!("missing schema editor: {other:?}"),
             }
             let changed = resources(vec![ColumnSchema {
+                semantic: None,
+                physical_type: None,
                 name: "replacement".into(),
-                data_type: yss_data_contract::DataType::String,
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Text,
+                ),
             }]);
             let blocked = crate::resolve_graph_semantics_with_cache(
                 &document, &registry, &changed, &mut cache,

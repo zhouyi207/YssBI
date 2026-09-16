@@ -47,6 +47,23 @@ Node 描述一种节点的端口、参数、类型约束及执行语义，不拥
 Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph-type-mapping` 留在 Graph。
 节点目录接收调用方提供的资源创建描述，不读取项目状态，也不解析图中连接。
 
+数据 Detail 中的 Physical 与七种 Semantic 是独立的字段元数据，契约由
+[Dataset store](../../src-tauri/crates/yss-dataset-store/README.md#field-meaning-and-physical-conversion) 维护。
+七种基础语义统一由 `yss-data-contract::SemanticType` 定义，`ValueType::Scalar` 引用它。
+DataSeries、DataFrame 及内部结构/专用产物描述保留各自职责，Physical 不进入端口类型层级。
+旧 `DataType` 枚举已删除，Graph 不再将 Int64、Float64、Boolean、String、Date、Time 注册为基础语义。
+分解 DataFrame 或选列得到 `DataSeries<Numeric>`、`DataSeries<Identifier>` 等精确语义；类别、等级、
+二元映射及精确 Physical 保留在数据元数据中，并参与捕获资源的依赖身份。
+NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播和精度校验由执行适配与内核根据实际
+输入完成。非 Numeric 语义不能因底层为整数或浮点数进入数值计算。节点不改写用户设置，数据视图
+保持原始值；Schema revision 和完整元数据的依赖身份负责解析与结果失效。
+
+常量、函数签名、编辑器投影和前端解析器共享该契约。标量类型 wire 为
+`{ "kind": "Scalar", "inner": "Numeric" }`，数列在 `DataSeries.inner` 中引用它。
+`DataValue` / `RuntimeValue` 的整数、浮点、布尔和字符串载体保留实际表示，不定义第二套基础语义。
+旧项目文件的已知类型声明在 Project 文件读取边界升级，显式保存时写入类型契约版本；加载不改写
+源文件、原始值或用户参数文本。实时命令只接受当前契约。
+
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
 生成节点、端口、Schema、诊断与解析结果。Application 捕获输入、调用该能力并重验会话与资源身份；
 IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成第二份语义 authority。

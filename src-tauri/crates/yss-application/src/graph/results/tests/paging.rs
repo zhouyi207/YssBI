@@ -152,8 +152,12 @@ fn invalidation_discards_in_flight_page_success_and_failure() {
                 GraphResourceId::new("data"),
                 DataSchema {
                     columns: vec![ColumnSchema {
+                        semantic: None,
+                        physical_type: None,
                         name: "x".into(),
-                        data_type: yss_data_contract::DataType::Float64,
+                        data_type: yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Numeric,
+                        ),
                     }],
                 },
             )]),

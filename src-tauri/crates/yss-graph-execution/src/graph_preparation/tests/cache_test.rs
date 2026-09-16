@@ -68,7 +68,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     set_constant(
         &mut document,
         node_id,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(7),
     );
     let resources = empty_resource_catalog();
@@ -130,7 +130,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
     set_constant(
         &mut document,
         node_id,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(8),
     );
     let semantic_change = resolve(&document, &resources, true);
@@ -154,7 +154,9 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
                         vec![yss_graph_resource_contract::FunctionParameterContract::new(
                             yss_graph_document::FunctionParameterId::new("parameter"),
                             label,
-                            yss_data_contract::DataType::Int64,
+                            yss_data_contract::ValueType::Scalar(
+                                yss_data_contract::SemanticType::Numeric,
+                            ),
                         )],
                         None,
                     ),

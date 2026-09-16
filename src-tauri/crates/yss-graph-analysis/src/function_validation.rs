@@ -327,12 +327,12 @@ mod tests {
                 FunctionParameterContract::new(
                     FunctionParameterId::new("z"),
                     "Value",
-                    yss_data_contract::DataType::Int64,
+                    yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 ),
                 FunctionParameterContract::new(
                     FunctionParameterId::new("a"),
                     "Value",
-                    yss_data_contract::DataType::Float64,
+                    yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 ),
             ],
             None,

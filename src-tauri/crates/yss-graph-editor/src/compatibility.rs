@@ -1,6 +1,6 @@
 use crate::mutation::{EditorMutationError, EditorMutationErrorCode};
 use std::collections::{BTreeMap, BTreeSet};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_document::{
     DocumentNode, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
     GraphResourceKind, GraphResourcePath, LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
@@ -382,7 +382,7 @@ pub(crate) fn refine_source_type(
             })?;
         }
         CatalogMutationResource::Database { .. } => {
-            source.value_type = editor_type_expr(&DataType::DataFrame).map_err(|error| {
+            source.value_type = editor_type_expr(&ValueType::DataFrame).map_err(|error| {
                 connection_type_unavailable(format!(
                     "database resource '{}' has an invalid authoritative type: {error}",
                     resource_path.as_str()
@@ -536,7 +536,7 @@ fn catalog_query_candidate_ports(
         ResourceBoundCreateArgs::Database => {
             catalog.database_schema(&GraphResourceId::new(resource.resource_path.as_str()))?;
             let value_type =
-                yss_graph_type_mapping::type_expr_from_data_type(&DataType::DataFrame).ok()?;
+                yss_graph_type_mapping::type_expr_from_data_type(&ValueType::DataFrame).ok()?;
             override_data_candidate_types(&mut candidates, value_type);
         }
         ResourceBoundCreateArgs::Function => {
@@ -774,7 +774,7 @@ fn resource_type_override(
 ) -> Result<Option<TypeExpr>, String> {
     match resource {
         Some(CatalogMutationResource::Database { .. }) => {
-            editor_type_expr(&DataType::DataFrame).map(Some)
+            editor_type_expr(&ValueType::DataFrame).map(Some)
         }
         _ => Ok(None),
     }
@@ -785,7 +785,7 @@ pub(crate) fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
         .map_err(|error| error.to_string())
 }
 
-fn editor_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
+fn editor_type_expr(data_type: &ValueType) -> Result<TypeExpr, String> {
     yss_graph_type_mapping::type_expr_from_data_type(data_type).map_err(|error| error.to_string())
 }
 

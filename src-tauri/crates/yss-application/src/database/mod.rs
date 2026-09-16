@@ -307,6 +307,7 @@ impl ApplicationState {
         operation_id: OperationId,
         mutation: DatabaseMutation,
     ) -> Result<DatabaseMutationResult<EditState>, DatabaseUseCaseError> {
+        let operation = mutation.operation();
         let captured = self.capture_database_session(&project_instance_id)?;
         let declaration = captured
             .project()
@@ -314,7 +315,7 @@ impl ApplicationState {
             .map_err(|error| {
                 DatabaseUseCaseError::Database(DatabaseOperationError::from_project_filesystem(
                     error,
-                    DatabaseApplicationOperation::EditCell,
+                    operation,
                     &project_instance_id,
                     Some(&id),
                 ))
@@ -336,7 +337,7 @@ impl ApplicationState {
             operation_id,
             runtime_database_mutation(&id, mutation)?,
             declaration,
-            DatabaseApplicationOperation::EditCell,
+            operation,
         )?;
         Ok(DatabaseMutationResult {
             data: receipt.edit_state().clone(),
@@ -877,6 +878,12 @@ fn runtime_database_mutation(
                 .map_err(|_| invalid("dtype"))?,
             force,
         }),
+        DatabaseMutation::SetColumnSemantic { column, semantic } => {
+            Ok(DatabaseMutationOperation::SetColumnSemantic {
+                name: column.into_boxed_str(),
+                semantic,
+            })
+        }
         DatabaseMutation::RenameColumn { old_name, new_name } => {
             Ok(DatabaseMutationOperation::RenameColumn {
                 old_name: old_name.into_boxed_str(),
@@ -955,6 +962,10 @@ pub enum DatabaseMutation {
         dtype: String,
         force: bool,
     },
+    SetColumnSemantic {
+        column: String,
+        semantic: yss_data_contract::ColumnSemantic,
+    },
     RenameColumn {
         old_name: String,
         new_name: String,
@@ -972,6 +983,7 @@ impl DatabaseMutation {
             Self::AddColumn { .. } => DatabaseApplicationOperation::AddColumn,
             Self::DeleteColumn { .. } => DatabaseApplicationOperation::DeleteColumn,
             Self::CastColumn { .. } => DatabaseApplicationOperation::CastColumn,
+            Self::SetColumnSemantic { .. } => DatabaseApplicationOperation::SetColumnSemantic,
             Self::RenameColumn { .. } => DatabaseApplicationOperation::RenameColumn,
             Self::Undo => DatabaseApplicationOperation::UndoEdit,
             Self::Redo => DatabaseApplicationOperation::RedoEdit,

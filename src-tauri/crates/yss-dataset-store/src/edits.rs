@@ -43,6 +43,53 @@ fn user_column<'a>(
 }
 
 impl DatasetStore {
+    pub fn prepare_column_semantic(
+        self: &Arc<Self>,
+        before: &Arc<DatasetSnapshot>,
+        engine: &Arc<DataFusionRuntime>,
+        operation: &str,
+        name: &str,
+        semantic: &yss_tabular_arrow::ColumnSemantic,
+        control: &RelationControl,
+    ) -> Result<PreparedDataset, DatasetStoreError> {
+        let field =
+            yss_tabular_arrow::with_column_semantic(user_column(before, name)?.clone(), semantic)
+                .map_err(|_| DatasetStoreError::InvalidValue)?;
+        let query = before.query(engine, "dataset-semantic")?;
+        let mut invalid = false;
+        let result = query.visit_batches(control, &mut |batch| {
+            let values = batch
+                .column_by_name(name)
+                .ok_or(yss_relational_contract::RelationError::InvalidInput)?;
+            yss_tabular_arrow::validate_semantic_array(&field, values.as_ref()).map_err(|_| {
+                invalid = true;
+                yss_relational_contract::RelationError::InvalidInput
+            })
+        });
+        if invalid {
+            return Err(DatasetStoreError::InvalidValue);
+        }
+        result?;
+        let mut prepared = self.prepare_change(before, operation, false, true)?;
+        prepared.metadata.schema = Arc::new(Schema::new_with_metadata(
+            before
+                .metadata
+                .schema
+                .fields()
+                .iter()
+                .map(|current| {
+                    if current.name() == name {
+                        Arc::new(field.clone())
+                    } else {
+                        current.clone()
+                    }
+                })
+                .collect::<Vec<_>>(),
+            before.metadata.schema.metadata().clone(),
+        ));
+        Ok(prepared)
+    }
+
     pub fn prepare_compaction(
         self: &Arc<Self>,
         before: &Arc<DatasetSnapshot>,
@@ -77,8 +124,17 @@ impl DatasetStore {
         let field = user_column(before, name)?;
         let query = before.query(engine, "dataset-cast")?;
         let categories = if matches!(data_type, DataType::Dictionary(..)) {
+            let mut labels = query.distinct_labels(name, control)?;
+            for value in yss_tabular_arrow::column_semantic(field)
+                .map_err(|_| DatasetStoreError::InvalidSchema)?
+                .values
+            {
+                if !labels.contains(&value.value) {
+                    labels.push(value.value);
+                }
+            }
             Some(yss_tabular_arrow::CategoryDomain {
-                labels: query.distinct_labels(name, control)?,
+                labels,
                 ordered: false,
             })
         } else {
@@ -86,12 +142,16 @@ impl DatasetStore {
         };
         let id = yss_tabular_arrow::column_identity(field)
             .map_err(|_| DatasetStoreError::InvalidSchema)?;
-        let field = yss_tabular_arrow::with_column_metadata(
+        let target = yss_tabular_arrow::with_column_metadata(
             field.clone().with_data_type(data_type),
             id,
             categories.as_ref(),
         )
         .map_err(|_| DatasetStoreError::InvalidSchema)?;
+        let semantic = yss_tabular_arrow::cast_column_semantic(field, &target)
+            .map_err(|_| DatasetStoreError::InvalidValue)?;
+        let field = yss_tabular_arrow::with_column_semantic(target, &semantic)
+            .map_err(|_| DatasetStoreError::InvalidValue)?;
         let schema = Arc::new(Schema::new_with_metadata(
             before
                 .metadata
@@ -156,6 +216,18 @@ impl DatasetStore {
         let mut writer = crate::prepare::GenerationWriter::new(&prepared)?;
         let mut write_error = None;
         let result = query.visit_batches(control, &mut |batch| {
+            for (field, array) in prepared
+                .metadata
+                .schema
+                .fields()
+                .iter()
+                .zip(batch.columns())
+            {
+                if yss_tabular_arrow::validate_semantic_array(field, array.as_ref()).is_err() {
+                    write_error = Some(DatasetStoreError::InvalidValue);
+                    return Err(yss_relational_contract::RelationError::InvalidInput);
+                }
+            }
             writer.write(&batch).map_err(|error| {
                 write_error = Some(error);
                 yss_relational_contract::RelationError::QueryFailed
@@ -271,10 +343,6 @@ impl DatasetStore {
         {
             return Err(DatasetStoreError::RowNotFound);
         }
-        let value = match value {
-            Value::String(value) if value.is_empty() => Value::Null,
-            value => value,
-        };
         let value = yss_tabular_arrow::json_to_array(field, &[value])
             .map_err(|_| DatasetStoreError::InvalidValue)?;
         if value.get_array_memory_size() > control.max_input_bytes {

@@ -157,7 +157,7 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
     set_constant(
         &mut graph.document,
         source_node,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(0),
     );
     graph.document
@@ -297,7 +297,7 @@ fn compatible_catalog_filters_against_unsaved_draft_source() {
 #[test]
 fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     use crate::graph::run::{ExecutionApplicationError, RunGraphRequest, run_graph};
-    use yss_data_contract::{DataType, DataValue};
+    use yss_data_contract::{DataValue, ValueType};
     use yss_graph_document::{ConnectionId, DocumentConnection};
     use yss_graph_editor::EditorGraphMutation;
     use yss_graph_execution::result::{ConnectionCacheState, ResultCacheState};
@@ -317,7 +317,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
     set_constant(
         &mut document,
         source,
-        DataType::DataFrame,
+        ValueType::DataFrame,
         DataValue::DataFrame(
             r#"{"species":["setosa","versicolor"],"sepal":[5.1,7.0],"petal":[1.4,4.7]}"#.into(),
         ),
@@ -555,7 +555,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
 
 #[test]
 fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_a_connection() {
-    use yss_data_contract::{DataType, DataValue};
+    use yss_data_contract::{DataValue, ValueType};
     use yss_graph_document::{ConnectionId, DocumentConnection};
 
     let graph = GraphResourcePath::new("events/Columns.yssbi-event").unwrap();
@@ -571,7 +571,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     set_constant(
         &mut document,
         source,
-        DataType::DataFrame,
+        ValueType::DataFrame,
         DataValue::DataFrame(r#"{"amount":[1.5,2.5],"label":["a","b"]}"#.into()),
     );
     yss_graph_document::normalize_constant_value(document.constants.values_mut().next().unwrap())
@@ -819,7 +819,7 @@ fn localized_catalog_rejects_a_project_database_schema_mismatch() {
 fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
-    data_type: yss_data_contract::DataType,
+    data_type: yss_data_contract::ValueType,
     data_value: yss_data_contract::DataValue,
 ) {
     let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());

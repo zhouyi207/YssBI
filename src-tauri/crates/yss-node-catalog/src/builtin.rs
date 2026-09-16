@@ -437,7 +437,7 @@ fn assemble_builtin_parts()
         let protocol = if matches!(spec.id, "equal" | "not_equal") {
             equality_protocol(id)?
         } else {
-            binary_protocol(id, "logic", "core.float64", "core.bool")?
+            binary_protocol(id, "logic", "core.numeric", "core.binary")?
         };
         nodes.push(leaf(protocol, spec.kernel));
     }
@@ -452,7 +452,7 @@ fn assemble_builtin_parts()
             spec.zh_aliases,
         );
         nodes.push(leaf(
-            binary_protocol(id, "logic", "core.bool", "core.bool")?,
+            binary_protocol(id, "logic", "core.binary", "core.binary")?,
             spec.kernel,
         ));
     }
@@ -465,28 +465,32 @@ fn assemble_builtin_parts()
         &["取反", "!"],
     );
     nodes.push(leaf(
-        unary_protocol("yssbi.logic.not", "logic", "core.bool", "core.bool")?,
+        unary_protocol("yssbi.logic.not", "logic", "core.binary", "core.binary")?,
         "logic.not",
     ));
 
     project::register(nodes, messages)?;
 
-    fragment.types.extend(
-        ["bool", "string", "int64", "float64", "object"]
-            .into_iter()
-            .map(|name| {
-                Ok(TypeRegistration {
-                    id: sid(leak(format!("core.{name}")), TypeId::new)?,
-                    title_key: iid(leak(format!("types.{name}.title")))?,
-                    classes: if matches!(name, "int64" | "float64") {
-                        BTreeSet::from([sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?])
-                    } else {
-                        BTreeSet::new()
-                    },
-                })
-            })
-            .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?,
-    );
+    for semantic in SemanticType::ALL {
+        let name = semantic
+            .type_id()
+            .strip_prefix("core.")
+            .expect("core semantic ID");
+        fragment.types.push(TypeRegistration {
+            id: sid(semantic.type_id(), TypeId::new)?,
+            title_key: iid(leak(format!("types.{name}.title")))?,
+            classes: if semantic == SemanticType::Numeric {
+                BTreeSet::from([sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?])
+            } else {
+                BTreeSet::new()
+            },
+        });
+    }
+    fragment.types.push(TypeRegistration {
+        id: sid("core.object", TypeId::new)?,
+        title_key: iid("types.object.title")?,
+        classes: BTreeSet::new(),
+    });
     fragment.categories.extend(
         [
             ("constants", 10),
@@ -586,7 +590,7 @@ fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyEr
                 PortDirection::Input,
                 TypeExpr::Generic(value.clone()),
             )?,
-            data_port("result", "Result", PortDirection::Output, "core.bool")?,
+            data_port("result", "Result", PortDirection::Output, "core.binary")?,
         ],
         vec![value],
         vec![],
@@ -733,12 +737,14 @@ fn i18n_requirements(
 
 fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
-        ("types.bool.title", "Boolean", "布尔"),
-        ("types.string.title", "String", "字符串"),
+        ("types.binary.title", "Binary", "二元"),
+        ("types.text.title", "Text", "文本"),
         ("types.object.title", "Object", "对象"),
         ("parameters.configuration.title", "Configuration", "配置"),
-        ("types.int64.title", "Int64", "64 位整数"),
-        ("types.float64.title", "Float64", "64 位浮点数"),
+        ("types.numeric.title", "Numeric", "数值"),
+        ("types.datetime.title", "Datetime", "日期时间"),
+        ("types.ordinal.title", "Ordinal", "有序分类"),
+        ("types.identifier.title", "Identifier", "标识"),
         ("categories.constants.title", "Constants", "常量"),
         ("categories.numeric.title", "Numeric", "数值"),
         ("categories.logic.title", "Logic", "逻辑"),

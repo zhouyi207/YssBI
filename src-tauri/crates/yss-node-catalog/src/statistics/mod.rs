@@ -397,7 +397,7 @@ fn positive_integer_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.int64")?,
+        concrete("core.numeric")?,
         ParameterEditorSpec::Number,
         Value::Integer(default),
         vec![ParameterConstraint::IntegerRange {
@@ -412,7 +412,7 @@ fn decimal_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.float64")?,
+        concrete("core.numeric")?,
         ParameterEditorSpec::Number,
         Value::Decimal(assembled_decimal("statistics.parameter", default)?),
         vec![],
@@ -424,7 +424,7 @@ fn toggle_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.bool")?,
+        concrete("core.binary")?,
         ParameterEditorSpec::Toggle,
         Value::Bool(default),
         vec![],
@@ -436,7 +436,7 @@ fn select_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Select,
         Value::String(default.into()),
         vec![ParameterConstraint::Required],
@@ -609,7 +609,7 @@ fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyErro
     concrete(id)
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.float64")?))
+    Ok(data_series_type(concrete("core.numeric")?))
 }
 fn summary_result_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
     if spec.id == "yssbi.statistics.wls.summary" {

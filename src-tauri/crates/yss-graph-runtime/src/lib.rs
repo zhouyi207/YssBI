@@ -725,7 +725,7 @@ mod tests {
 
     #[test]
     fn function_signature_resolves_stable_projected_call_ports() {
-        use yss_data_contract::DataType;
+        use yss_data_contract::ValueType;
         use yss_graph_resource_contract::{
             FunctionCatalogEntry, FunctionParameterContract, FunctionSignature,
             ResourceCatalogFingerprint,
@@ -761,15 +761,19 @@ mod tests {
                         FunctionParameterContract::new(
                             yss_graph_document::FunctionParameterId::new("series"),
                             "Series",
-                            DataType::DataSeries(Box::new(DataType::Float64)),
+                            ValueType::DataSeries(Box::new(ValueType::Scalar(
+                                yss_data_contract::SemanticType::Numeric,
+                            ))),
                         ),
                         FunctionParameterContract::new(
                             yss_graph_document::FunctionParameterId::new("horizon"),
                             "Horizon",
-                            DataType::Int64,
+                            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                         ),
                     ],
-                    Some(DataType::DataSeries(Box::new(DataType::Float64))),
+                    Some(ValueType::DataSeries(Box::new(ValueType::Scalar(
+                        yss_data_contract::SemanticType::Numeric,
+                    )))),
                 )),
             )]),
             BTreeMap::new(),

@@ -134,13 +134,13 @@ fn division_graph(denominator: i64) -> (GraphDocument, NodeId) {
     set_constant(
         &mut document,
         left,
-        yss_data_contract::DataType::Float64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Float64(0.0),
     );
     set_constant(
         &mut document,
         right,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(denominator),
     );
     for (source, input) in [(left, "left"), (right, "right")] {
@@ -168,7 +168,12 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
     document
         .constants
         .values_mut()
-        .find(|constant| constant.data_type == yss_data_contract::DataType::Float64)
+        .find(|constant| {
+            matches!(
+                constant.data_value,
+                yss_data_contract::DataValue::Float64(_)
+            )
+        })
         .unwrap()
         .data_value = yss_data_contract::DataValue::Float64(8.0);
     let multiply = NodeId::new();
@@ -204,9 +209,15 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
     let value = wide
         .constants
         .values_mut()
-        .find(|constant| constant.data_type == yss_data_contract::DataType::Float64)
+        .find(|constant| {
+            matches!(
+                constant.data_value,
+                yss_data_contract::DataValue::Float64(_)
+            )
+        })
         .unwrap();
-    value.data_type = yss_data_contract::DataType::Int64;
+    value.data_type =
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
     value.data_value = yss_data_contract::DataValue::Int64(9_007_199_254_740_993);
     assert_eq!(
         execute(&wide, "yssbi.numeric.multiply").unwrap(),
@@ -216,19 +227,19 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
 
 #[test]
 fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
-    use yss_data_contract::{DataSeriesValue, DataType, DataValue};
+    use yss_data_contract::{DataSeriesValue, DataValue, ValueType};
     let evaluate = |operator: &str,
-                    element: DataType,
+                    element: ValueType,
                     values: &str,
-                    scalar_type: DataType,
+                    scalar_type: ValueType,
                     scalar_value: DataValue,
                     scalar_left: bool| {
         let (mut document, operation) = division_graph(123);
         let node_type = format!("yssbi.numeric.{operator}");
         document.nodes.get_mut(&operation).unwrap().node_type = node_type.parse().unwrap();
         for constant in document.constants.values_mut() {
-            if constant.data_type == DataType::Float64 {
-                constant.data_type = DataType::DataSeries(Box::new(element.clone()));
+            if matches!(constant.data_value, DataValue::Float64(_)) {
+                constant.data_type = ValueType::DataSeries(Box::new(element.clone()));
                 constant.data_value = DataValue::DataSeries(DataSeriesValue::with_element_type(
                     values,
                     element.clone(),
@@ -255,9 +266,9 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     assert_eq!(
         evaluate(
             "multiply",
-            DataType::Float64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[0.2,0.5,1.0]}"#,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             DataValue::Int64(123),
             false
         )
@@ -267,9 +278,9 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     assert_eq!(
         evaluate(
             "multiply",
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
-            DataType::Float64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             DataValue::Float64(0.5),
             false
         )
@@ -279,9 +290,9 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     assert_eq!(
         evaluate(
             "subtract",
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
-            DataType::Float64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             DataValue::Float64(0.5),
             true
         )
@@ -291,12 +302,14 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     assert_eq!(
         evaluate(
             "multiply",
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
-            DataType::DataSeries(Box::new(DataType::Int64)),
+            ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric
+            ))),
             DataValue::DataSeries(DataSeriesValue::with_element_type(
                 r#"{"value":[2]}"#,
-                DataType::Int64
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
             )),
             false
         )
@@ -308,9 +321,9 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
     assert_eq!(
         evaluate(
             "divide",
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             DataValue::Int64(0),
             false
         )
@@ -337,7 +350,7 @@ fn zero_divisor_reports_the_reason_and_divide_node() {
 fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
-    data_type: yss_data_contract::DataType,
+    data_type: yss_data_contract::ValueType,
     data_value: yss_data_contract::DataValue,
 ) {
     let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
@@ -504,12 +517,27 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
             GraphResourceId::new("data"),
             DataSchema {
                 columns: [
-                    ("count", yss_data_contract::DataType::Int64),
-                    ("label.列", yss_data_contract::DataType::String),
-                    ("flag", yss_data_contract::DataType::Boolean),
+                    (
+                        "count",
+                        yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Numeric,
+                        ),
+                    ),
+                    (
+                        "label.列",
+                        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                    ),
+                    (
+                        "flag",
+                        yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Binary,
+                        ),
+                    ),
                 ]
                 .into_iter()
                 .map(|(name, data_type)| ColumnSchema {
+                    semantic: None,
+                    physical_type: None,
                     name: name.into(),
                     data_type,
                 })
@@ -862,13 +890,13 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     set_constant(
         &mut document,
         half,
-        yss_data_contract::DataType::Float64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Float64(0.5),
     );
     set_constant(
         &mut document,
         factor,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(123),
     );
     let fixture_capture = project

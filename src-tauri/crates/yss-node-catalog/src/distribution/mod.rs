@@ -9,16 +9,16 @@ use yss_node_registry::CategoryRegistration;
 const CATEGORY: &str = "distribution";
 
 #[derive(Clone, Copy)]
-enum ScalarType {
+enum NumericRepresentation {
     Float64,
     Int64,
 }
 
-impl ScalarType {
+impl NumericRepresentation {
     fn type_id(self) -> &'static str {
         match self {
-            Self::Float64 => "core.float64",
-            Self::Int64 => "core.int64",
+            Self::Float64 => "core.numeric",
+            Self::Int64 => "core.numeric",
         }
     }
 }
@@ -27,7 +27,7 @@ impl ScalarType {
 struct DistributionParameter {
     key: &'static str,
     title: &'static str,
-    value_type: ScalarType,
+    value_type: NumericRepresentation,
 }
 
 #[derive(Clone, Copy)]
@@ -39,15 +39,15 @@ struct DistributionSpec {
     aliases: &'static [&'static str],
     zh_aliases: &'static [&'static str],
     parameters: &'static [DistributionParameter],
-    output: ScalarType,
+    output: NumericRepresentation,
 }
 
-const F: ScalarType = ScalarType::Float64;
-const I: ScalarType = ScalarType::Int64;
+const F: NumericRepresentation = NumericRepresentation::Float64;
+const I: NumericRepresentation = NumericRepresentation::Int64;
 const fn setting(
     key: &'static str,
     title: &'static str,
-    value_type: ScalarType,
+    value_type: NumericRepresentation,
 ) -> DistributionParameter {
     DistributionParameter {
         key,
@@ -519,14 +519,14 @@ fn configuration_field(
 ) -> Result<ConfigurationFieldSpec, BuiltinAssemblyError> {
     let value_type = concrete(field.value_type.type_id())?;
     let value = match field.value_type {
-        ScalarType::Int64 => Value::Integer(match field.key {
+        NumericRepresentation::Int64 => Value::Integer(match field.key {
             "sample_count" => 100,
             "population_size" | "trial_count" => 10,
             "success_population" => 5,
             "lower_bound" => 0,
             _ => 1,
         }),
-        ScalarType::Float64 => Value::Decimal(assembled_decimal(
+        NumericRepresentation::Float64 => Value::Decimal(assembled_decimal(
             spec.id,
             match field.key {
                 "mean" | "location" | "mu" | "minimum" | "lower_bound" => "0",
@@ -538,6 +538,11 @@ fn configuration_field(
     let constraints = if field.key == "sample_count" {
         vec![ParameterConstraint::IntegerRange {
             min: Some(1),
+            max: None,
+        }]
+    } else if matches!(field.value_type, NumericRepresentation::Int64) {
+        vec![ParameterConstraint::IntegerRange {
+            min: None,
             max: None,
         }]
     } else {

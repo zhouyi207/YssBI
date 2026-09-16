@@ -313,7 +313,7 @@ fn output_contract(
     port: &GraphPortSemanticFact,
     graph: &PlanGraphId,
 ) -> Result<PlanOutputContract, GraphPlanError> {
-    use yss_data_contract::DataType;
+    use yss_data_contract::ValueType;
     use yss_node_protocol::RelationalScalarType;
     Ok(PlanOutputContract {
         data_type: yss_graph_type_mapping::data_type_from_resolved_type(
@@ -327,13 +327,8 @@ fn output_contract(
                 .map(|field| PlanOutputField {
                     name: field.name.0.clone(),
                     data_type: match field.scalar_type {
-                        RelationalScalarType::Boolean => DataType::Boolean,
-                        RelationalScalarType::Int64 => DataType::Int64,
-                        RelationalScalarType::Float64 => DataType::Float64,
-                        RelationalScalarType::String => DataType::String,
-                        RelationalScalarType::Date => DataType::Date,
-                        RelationalScalarType::DateTime => DataType::Datetime,
-                        RelationalScalarType::Unknown => DataType::Any,
+                        RelationalScalarType::Known(semantic) => ValueType::Scalar(semantic),
+                        RelationalScalarType::Unknown => ValueType::Any,
                     },
                     lineage: field.lineage.as_ref().map(|lineage| PlanFieldLineage {
                         source_identity: lineage.source.clone(),
@@ -475,9 +470,6 @@ fn plan_specialization(
 
 fn plan_coercion_kind(kind: yss_node_protocol::InputCoercionKind) -> PlanInputCoercionKind {
     match kind {
-        yss_node_protocol::InputCoercionKind::WidenInt64ToFloat64 => {
-            PlanInputCoercionKind::WidenInt64ToFloat64
-        }
         yss_node_protocol::InputCoercionKind::BroadcastScalarToSeries => {
             PlanInputCoercionKind::BroadcastScalarToSeries
         }
@@ -510,7 +502,7 @@ fn constant_runtime_value(
     };
     if matches!(
         constant.data_type,
-        yss_data_contract::DataType::DataSeries(_)
+        yss_data_contract::ValueType::DataSeries(_)
     ) {
         return snapshot
             .columns()

@@ -1,4 +1,4 @@
-use super::{TypeConstructorId, TypeExpr, TypeId, normalize_type_expr};
+use super::{TypeConstructorId, TypeExpr, TypeId};
 
 pub const DATA_SERIES_CONSTRUCTOR_ID: &str = "core.data_series";
 pub const NUMERIC_TYPE_CLASS_ID: &str = "core.numeric";
@@ -12,9 +12,7 @@ pub fn data_series_type(element: TypeExpr) -> TypeExpr {
 }
 
 pub fn numeric_data_series_type() -> TypeExpr {
-    normalize_type_expr(TypeExpr::Union(vec![
-        data_series_type(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
-        data_series_type(TypeExpr::Concrete(TypeId::new("core.float64").unwrap())),
-    ]))
-    .expect("canonical numeric DataSeries union")
+    data_series_type(TypeExpr::Concrete(
+        TypeId::new(super::SemanticType::Numeric.type_id()).expect("Numeric semantic ID"),
+    ))
 }

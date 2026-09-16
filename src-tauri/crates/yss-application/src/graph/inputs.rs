@@ -127,6 +127,8 @@ pub fn build_resource_catalog(
                     .columns()
                     .iter()
                     .map(|column| ColumnSchema {
+                        semantic: column.semantic().cloned(),
+                        physical_type: Some(column.physical_type().to_owned()),
                         name: column.name().as_str().to_owned(),
                         data_type: column.data_type().clone(),
                     })

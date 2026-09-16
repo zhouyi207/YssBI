@@ -153,7 +153,7 @@ fn constant_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
             key: sid("constant", ParameterKey::new)?,
             title_key: iid("parameters.constant.title")?,
             description_key: Some(iid("parameters.constant.description")?),
-            value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)?),
+            value_type: TypeExpr::Concrete(sid("core.text", TypeId::new)?),
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::GraphConstant,
@@ -270,7 +270,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
         description_key: Some(iid(Box::leak(
             format!("parameters.{key}.description").into_boxed_str(),
         ))?),
-        value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)?),
+        value_type: TypeExpr::Concrete(sid("core.text", TypeId::new)?),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Resource { kind },

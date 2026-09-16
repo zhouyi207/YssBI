@@ -188,6 +188,12 @@ impl DataFusionRuntime {
         let first = series.first().ok_or(RelationError::InvalidInput)?;
         if series
             .iter()
+            .any(|series| !yss_tabular_arrow::is_numeric_field(series.plan().field()))
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if series
+            .iter()
             .any(|series| series.relation() != first.relation())
         {
             return Err(RelationError::UnalignedSeries);

@@ -240,10 +240,10 @@ fn interface(
                             Ok(ConfigurationFieldSpec {
                                 parameter: parameter(
                                     key,
-                                    concrete("core.int64")?,
+                                    concrete("core.numeric")?,
                                     ParameterEditorSpec::Number,
                                     Some(ParameterValue {
-                                        value_type: concrete("core.int64")?,
+                                        value_type: concrete("core.numeric")?,
                                         value: Value::Integer(default),
                                     }),
                                     vec![],
@@ -263,7 +263,7 @@ fn interface(
                     generic_series_type("element")?,
                     None,
                 )?,
-                data_output("value", "Value", concrete("core.int64")?, None)?,
+                data_output("value", "Value", concrete("core.numeric")?, None)?,
             ],
             vec![],
         )),
@@ -314,8 +314,8 @@ fn interface(
         InverseStandardize => Ok((
             vec![
                 data_input("standardized", "Standardized", float_series_type()?, None)?,
-                scalar_input("mean", "Mean", "core.float64")?,
-                scalar_input("standard_deviation", "Standard Deviation", "core.float64")?,
+                scalar_input("mean", "Mean", "core.numeric")?,
+                scalar_input("standard_deviation", "Standard Deviation", "core.numeric")?,
                 data_output("series", "DataSeries", float_series_type()?, None)?,
             ],
             vec![],
@@ -528,7 +528,7 @@ fn port(
 fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Resource {
             kind: ResourceDisplayKind::Database,
         },
@@ -540,7 +540,7 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
 fn column_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Select,
         None,
         vec![ParameterConstraint::Required],
@@ -566,7 +566,7 @@ fn text_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Text { multiline },
         None,
         vec![],
@@ -576,7 +576,7 @@ fn text_parameter(
 fn required_text_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Text { multiline: false },
         None,
         vec![ParameterConstraint::Required],
@@ -586,7 +586,7 @@ fn required_text_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAs
 fn select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.string")?,
+        concrete("core.text")?,
         ParameterEditorSpec::Select,
         None,
         vec![ParameterConstraint::Required],
@@ -599,10 +599,10 @@ fn positive_integer_parameter(
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     parameter(
         key,
-        concrete("core.int64")?,
+        concrete("core.numeric")?,
         ParameterEditorSpec::Number,
         Some(ParameterValue {
-            value_type: concrete("core.int64")?,
+            value_type: concrete("core.numeric")?,
             value: Value::Integer(default),
         }),
         vec![ParameterConstraint::IntegerRange {
@@ -723,25 +723,25 @@ fn numeric_series_type() -> TypeExpr {
     numeric_data_series_type()
 }
 fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("core.float64")
+    concrete("core.numeric")
 }
 fn numeric_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalized_union(
         "dataframe numeric scalar union",
-        vec![concrete("core.int64")?, concrete("core.float64")?],
+        vec![concrete("core.numeric")?, concrete("core.numeric")?],
     )
 }
 fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.int64")?))
+    Ok(data_series_type(concrete("core.numeric")?))
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.float64")?))
+    Ok(data_series_type(concrete("core.numeric")?))
 }
 fn string_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.string")?))
+    Ok(data_series_type(concrete("core.text")?))
 }
 fn bool_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.bool")?))
+    Ok(data_series_type(concrete("core.binary")?))
 }
 fn numeric_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalized_union(
@@ -752,7 +752,7 @@ fn numeric_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 fn string_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     normalized_union(
         "dataframe string series/scalar union",
-        vec![string_series_type()?, concrete("core.string")?],
+        vec![string_series_type()?, concrete("core.text")?],
     )
 }
 fn normalized_union(

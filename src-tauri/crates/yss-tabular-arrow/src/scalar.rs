@@ -171,6 +171,7 @@ pub fn json_to_array(field: &Field, values: &[Value]) -> Result<ArrayRef, Tabula
         }
         _ => return Err(TabularArrowError::UnsupportedType),
     };
+    crate::validate_semantic_array(field, array.as_ref())?;
     Ok(array)
 }
 

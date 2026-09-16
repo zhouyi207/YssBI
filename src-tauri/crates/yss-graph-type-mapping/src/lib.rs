@@ -4,7 +4,7 @@
 #![deny(unused_must_use)]
 
 use thiserror::Error;
-use yss_data_contract::{DataType, DataTypeParseError};
+use yss_data_contract::{ValueType, ValueTypeParseError};
 use yss_node_protocol::{
     InvalidSemanticId, RelationalScalarType, ResolvedType, TypeConstructorId, TypeExpr, TypeId,
 };
@@ -12,86 +12,65 @@ use yss_node_protocol::{
 #[derive(Debug, Error)]
 pub enum GraphTypeMappingError {
     #[error("data type name is invalid: {0}")]
-    InvalidDataTypeName(#[from] DataTypeParseError),
+    InvalidDataTypeName(#[from] ValueTypeParseError),
     #[error("graph type identifier is invalid: {0}")]
     InvalidGraphTypeIdentifier(#[from] InvalidSemanticId),
 }
 
 pub fn type_expr_from_data_type_name(type_name: &str) -> Result<TypeExpr, GraphTypeMappingError> {
-    type_expr_from_data_type(&type_name.parse::<DataType>()?)
+    type_expr_from_data_type(&type_name.parse::<ValueType>()?)
 }
 
-pub fn type_expr_from_data_type(data_type: &DataType) -> Result<TypeExpr, GraphTypeMappingError> {
+pub fn type_expr_from_data_type(data_type: &ValueType) -> Result<TypeExpr, GraphTypeMappingError> {
     match data_type {
-        DataType::Boolean => concrete_type("core.bool"),
-        DataType::Int64 => concrete_type("core.int64"),
-        DataType::Float64 => concrete_type("core.float64"),
-        DataType::String => concrete_type("core.string"),
-        DataType::Date => concrete_type("core.date"),
-        DataType::Datetime => concrete_type("core.datetime"),
-        DataType::Time => concrete_type("core.time"),
-        DataType::Categorical => concrete_type("core.categorical"),
-        DataType::Object => concrete_type("core.object"),
-        DataType::DataFrame => concrete_type("tabular.dataframe"),
-        DataType::Struct(semantic_id) => concrete_type(semantic_id),
-        DataType::Array(element) => applied_type("core.array", element),
-        DataType::DataSeries(element) => applied_type("core.data_series", element),
-        DataType::OneOf(values) => values
+        ValueType::Scalar(semantic) => concrete_type(semantic.type_id()),
+        ValueType::Object => concrete_type("core.object"),
+        ValueType::DataFrame => concrete_type("tabular.dataframe"),
+        ValueType::Struct(semantic_id) => concrete_type(semantic_id),
+        ValueType::Array(element) => applied_type("core.array", element),
+        ValueType::DataSeries(element) => applied_type("core.data_series", element),
+        ValueType::OneOf(values) => values
             .iter()
             .map(type_expr_from_data_type)
             .collect::<Result<Vec<_>, _>>()
             .map(TypeExpr::Union),
-        DataType::Any => Ok(TypeExpr::Unknown),
+        ValueType::Any => Ok(TypeExpr::Unknown),
     }
 }
 
-pub fn relational_scalar_type_from_data_type(data_type: &DataType) -> RelationalScalarType {
+pub fn relational_scalar_type_from_data_type(data_type: &ValueType) -> RelationalScalarType {
     match data_type {
-        DataType::Boolean => RelationalScalarType::Boolean,
-        DataType::Int64 => RelationalScalarType::Int64,
-        DataType::Float64 => RelationalScalarType::Float64,
-        DataType::String | DataType::Categorical => RelationalScalarType::String,
-        DataType::Date => RelationalScalarType::Date,
-        DataType::Datetime => RelationalScalarType::DateTime,
-        DataType::Time
-        | DataType::Array(_)
-        | DataType::Object
-        | DataType::DataFrame
-        | DataType::DataSeries(_)
-        | DataType::Struct(_)
-        | DataType::OneOf(_)
-        | DataType::Any => RelationalScalarType::Unknown,
+        ValueType::Scalar(semantic) => RelationalScalarType::Known(*semantic),
+        _ => RelationalScalarType::Unknown,
     }
 }
 
-pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<DataType> {
+pub fn data_type_from_resolved_type(value: &ResolvedType) -> Option<ValueType> {
     match value {
-        ResolvedType::Nominal(id) => Some(match id.as_str() {
-            "core.bool" => DataType::Boolean,
-            "core.int64" => DataType::Int64,
-            "core.float64" => DataType::Float64,
-            "core.string" => DataType::String,
-            "core.date" => DataType::Date,
-            "core.datetime" => DataType::Datetime,
-            "core.time" => DataType::Time,
-            "core.categorical" => DataType::Categorical,
-            "core.object" => DataType::Object,
-            "tabular.dataframe" => DataType::DataFrame,
-            semantic_id => DataType::Struct(semantic_id.to_owned()),
-        }),
+        ResolvedType::Nominal(id) => Some(
+            yss_data_contract::SemanticType::ALL
+                .into_iter()
+                .find(|semantic| semantic.type_id() == id.as_str())
+                .map(ValueType::Scalar)
+                .unwrap_or_else(|| match id.as_str() {
+                    "core.object" => ValueType::Object,
+                    "tabular.dataframe" => ValueType::DataFrame,
+                    id => ValueType::Struct(id.to_owned()),
+                }),
+        ),
         ResolvedType::Applied {
             constructor,
             arguments,
         } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
             data_type_from_resolved_type(&arguments[0])
-                .map(|element| DataType::DataSeries(Box::new(element)))
+                .map(|element| ValueType::DataSeries(Box::new(element)))
         }
         ResolvedType::Applied {
             constructor,
             arguments,
         } if constructor.as_str() == "core.array" && arguments.len() == 1 => {
             data_type_from_resolved_type(&arguments[0])
-                .map(|element| DataType::Array(Box::new(element)))
+                .map(|element| ValueType::Array(Box::new(element)))
         }
         ResolvedType::Applied { .. } => None,
     }
@@ -103,7 +82,7 @@ fn concrete_type(semantic_id: &str) -> Result<TypeExpr, GraphTypeMappingError> {
         .map_err(Into::into)
 }
 
-fn applied_type(constructor: &str, element: &DataType) -> Result<TypeExpr, GraphTypeMappingError> {
+fn applied_type(constructor: &str, element: &ValueType) -> Result<TypeExpr, GraphTypeMappingError> {
     Ok(TypeExpr::Applied {
         constructor: TypeConstructorId::new(constructor)?,
         arguments: vec![type_expr_from_data_type(element)?],
@@ -116,23 +95,47 @@ mod tests {
         GraphTypeMappingError, relational_scalar_type_from_data_type, type_expr_from_data_type,
         type_expr_from_data_type_name,
     };
-    use yss_data_contract::DataType;
+    use yss_data_contract::ValueType;
     use yss_node_protocol::TypeExpr;
 
     #[test]
     fn maps_scalar_composite_union_and_unknown_types() {
         for (data_type, semantic_id) in [
-            (DataType::Boolean, "core.bool"),
-            (DataType::Int64, "core.int64"),
-            (DataType::Float64, "core.float64"),
-            (DataType::String, "core.string"),
-            (DataType::Date, "core.date"),
-            (DataType::Datetime, "core.datetime"),
-            (DataType::Time, "core.time"),
-            (DataType::Categorical, "core.categorical"),
-            (DataType::Object, "core.object"),
-            (DataType::DataFrame, "tabular.dataframe"),
-            (DataType::Struct("domain.record".into()), "domain.record"),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Binary),
+                "core.binary",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                "core.numeric",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                "core.numeric",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                "core.text",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
+                "core.datetime",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
+                "core.datetime",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Datetime),
+                "core.datetime",
+            ),
+            (
+                ValueType::Scalar(yss_data_contract::SemanticType::Categorical),
+                "core.categorical",
+            ),
+            (ValueType::Object, "core.object"),
+            (ValueType::DataFrame, "tabular.dataframe"),
+            (ValueType::Struct("domain.record".into()), "domain.record"),
         ] {
             assert_eq!(
                 type_expr_from_data_type(&data_type).unwrap(),
@@ -141,29 +144,38 @@ mod tests {
             );
         }
         assert_eq!(
-            type_expr_from_data_type(&DataType::Array(Box::new(DataType::Int64))).unwrap(),
+            type_expr_from_data_type(&ValueType::Array(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric
+            ))))
+            .unwrap(),
             TypeExpr::Applied {
                 constructor: "core.array".parse().unwrap(),
-                arguments: vec![TypeExpr::Concrete("core.int64".parse().unwrap())],
+                arguments: vec![TypeExpr::Concrete("core.numeric".parse().unwrap())],
             }
         );
         assert_eq!(
-            type_expr_from_data_type(&DataType::DataSeries(Box::new(DataType::Float64))).unwrap(),
+            type_expr_from_data_type(&ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric
+            ))))
+            .unwrap(),
             TypeExpr::Applied {
                 constructor: "core.data_series".parse().unwrap(),
-                arguments: vec![TypeExpr::Concrete("core.float64".parse().unwrap())],
+                arguments: vec![TypeExpr::Concrete("core.numeric".parse().unwrap())],
             }
         );
         assert_eq!(
-            type_expr_from_data_type(&DataType::OneOf(vec![DataType::String, DataType::Float64,]))
-                .unwrap(),
+            type_expr_from_data_type(&ValueType::OneOf(vec![
+                ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            ]))
+            .unwrap(),
             TypeExpr::Union(vec![
-                TypeExpr::Concrete("core.string".parse().unwrap()),
-                TypeExpr::Concrete("core.float64".parse().unwrap()),
+                TypeExpr::Concrete("core.text".parse().unwrap()),
+                TypeExpr::Concrete("core.numeric".parse().unwrap()),
             ])
         );
         assert_eq!(
-            type_expr_from_data_type(&DataType::Any).unwrap(),
+            type_expr_from_data_type(&ValueType::Any).unwrap(),
             TypeExpr::Unknown
         );
     }
@@ -171,10 +183,10 @@ mod tests {
     #[test]
     fn parses_names_and_reports_typed_failures() {
         assert_eq!(
-            type_expr_from_data_type_name("DataSeries<Float64>").unwrap(),
+            type_expr_from_data_type_name("DataSeries<Numeric>").unwrap(),
             TypeExpr::Applied {
                 constructor: "core.data_series".parse().unwrap(),
-                arguments: vec![TypeExpr::Concrete("core.float64".parse().unwrap())],
+                arguments: vec![TypeExpr::Concrete("core.numeric".parse().unwrap())],
             }
         );
         assert!(matches!(
@@ -188,7 +200,7 @@ mod tests {
             "data type name is invalid: unknown data type"
         );
         assert!(matches!(
-            type_expr_from_data_type(&DataType::Struct("Invalid Type".into())),
+            type_expr_from_data_type(&ValueType::Struct("Invalid Type".into())),
             Err(GraphTypeMappingError::InvalidGraphTypeIdentifier(_))
         ));
     }
@@ -196,11 +208,15 @@ mod tests {
     #[test]
     fn maps_persisted_types_to_relational_schema_scalars() {
         assert_eq!(
-            relational_scalar_type_from_data_type(&DataType::Datetime),
-            yss_node_protocol::RelationalScalarType::DateTime
+            relational_scalar_type_from_data_type(&ValueType::Scalar(
+                yss_data_contract::SemanticType::Datetime
+            )),
+            yss_node_protocol::RelationalScalarType::Known(
+                yss_node_protocol::SemanticType::Datetime
+            )
         );
         assert_eq!(
-            relational_scalar_type_from_data_type(&DataType::DataFrame),
+            relational_scalar_type_from_data_type(&ValueType::DataFrame),
             yss_node_protocol::RelationalScalarType::Unknown
         );
     }

@@ -1,6 +1,6 @@
 use yss_data_contract::{
-    CategoricalRole, DataSeriesValue, DataType, DataTypeParseError, DataValue, DummyInfo,
-    TimeSeriesState,
+    CategoricalRole, DataSeriesValue, DataValue, DummyInfo, TimeSeriesState, ValueType,
+    ValueTypeParseError,
 };
 
 #[test]
@@ -13,7 +13,7 @@ fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
 
     let full = DataValue::DataSeries(DataSeriesValue {
         id: "series-id".to_owned(),
-        element_type: Some(DataType::String),
+        element_type: Some(ValueType::Scalar(yss_data_contract::SemanticType::Text)),
         dummy_info: Some(DummyInfo {
             drop_category: Some("baseline".to_owned()),
             role: CategoricalRole::Individual,
@@ -23,7 +23,7 @@ fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
     let expected = serde_json::json!({
         "DataSeries": {
             "id": "series-id",
-            "elementType": {"kind": "String"},
+            "elementType": {"kind": "Scalar", "inner": "Text"},
             "dummyInfo": {
                 "dropCategory": "baseline",
                 "role": "individual"
@@ -41,13 +41,13 @@ fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
         full
     );
 
-    assert_eq!("".parse::<DataType>(), Err(DataTypeParseError::Empty));
+    assert_eq!("".parse::<ValueType>(), Err(ValueTypeParseError::Empty));
     assert_eq!(
-        "Array<Int64".parse::<DataType>(),
-        Err(DataTypeParseError::MalformedComposite)
+        "Array<Int64".parse::<ValueType>(),
+        Err(ValueTypeParseError::MalformedComposite)
     );
     assert_eq!(
-        "Unknown".parse::<DataType>(),
-        Err(DataTypeParseError::UnknownKind)
+        "Unknown".parse::<ValueType>(),
+        Err(ValueTypeParseError::UnknownKind)
     );
 }

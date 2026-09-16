@@ -189,7 +189,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         "result",
         "Result",
         PortDirection::Output,
-        concrete("core.string")?,
+        concrete("core.text")?,
         PortCardinality::Declared,
         None,
     )?);
@@ -216,9 +216,9 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                                 key: sid("maximum_lag", ParameterKey::new)?,
                                 title_key: i18n_key("parameters.plot.maximum_lag.title")?,
                                 description_key: None,
-                                value_type: concrete("core.int64")?,
+                                value_type: concrete("core.numeric")?,
                                 default_value: Some(ParameterValue {
-                                    value_type: concrete("core.int64")?,
+                                    value_type: concrete("core.numeric")?,
                                     value: Value::Integer(20),
                                 }),
                                 constraints: vec![ParameterConstraint::IntegerRange {

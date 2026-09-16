@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::collections::BTreeMap;
-use yss_data_contract::{DataSeriesValue, DataType, DataValue};
+use yss_data_contract::{DataSeriesValue, DataValue, ValueType};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, GraphConstant, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
@@ -70,10 +70,12 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
         let mut constant = GraphConstant {
             id,
             name: node.to_string(),
-            data_type: DataType::DataSeries(Box::new(DataType::Float64)),
+            data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric,
+            ))),
             data_value: DataValue::DataSeries(DataSeriesValue::with_element_type(
                 serde_json::json!({ "value": values }).to_string(),
-                DataType::Float64,
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             )),
             tabular: None,
             description: String::new(),

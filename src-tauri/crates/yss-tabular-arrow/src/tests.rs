@@ -9,6 +9,136 @@ use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, Tabu
 use super::*;
 
 #[test]
+fn column_semantics_enforce_explicit_domains_and_numeric_constraints() {
+    let field = Field::new("code", DataType::Int64, true);
+    let values = vec![
+        SemanticValue {
+            value: "2".into(),
+            label: "Low".into(),
+        },
+        SemanticValue {
+            value: "1".into(),
+            label: "High".into(),
+        },
+    ];
+    let mut semantic = ColumnSemantic::new(SemanticType::Ordinal);
+    semantic.values = values.clone();
+    let ordered = with_column_semantic(field.clone(), &semantic).unwrap();
+    assert_eq!(ordered.data_type(), &DataType::Int64);
+    assert_eq!(column_semantic(&ordered).unwrap().values, values);
+    assert!(json_to_array(&ordered, &[json!(1), json!(2), json!(null)]).is_ok());
+    assert!(json_to_array(&ordered, &[json!(3)]).is_err());
+    semantic.kind = SemanticType::Binary;
+    semantic.positive_value = Some("1".into());
+    let binary = with_column_semantic(field.clone(), &semantic).unwrap();
+    assert!(json_to_array(&binary, &[json!(null), json!(2), json!(1)]).is_ok());
+    semantic.values[1].value = "2".into();
+    assert!(with_column_semantic(field, &semantic).is_err());
+
+    let mut numeric = ColumnSemantic::new(SemanticType::Numeric);
+    numeric.numeric = Some(NumericConstraints {
+        integer: true,
+        minimum: Some("1".into()),
+        maximum: Some("9007199254740993".into()),
+    });
+    let integer =
+        with_column_semantic(Field::new("wide", DataType::Int64, true), &numeric).unwrap();
+    assert!(json_to_array(&integer, &[json!("9007199254740993"), json!(null)]).is_ok());
+    assert!(json_to_array(&integer, &[json!("9007199254740994")]).is_err());
+    assert!(json_to_array(&integer, &[json!(0)]).is_err());
+    numeric.numeric = Some(NumericConstraints {
+        integer: true,
+        ..Default::default()
+    });
+    let float =
+        with_column_semantic(Field::new("number", DataType::Float64, true), &numeric).unwrap();
+    assert!(json_to_array(&float, &[json!(1.5)]).is_err());
+    assert!(json_to_array(&float, &[json!(1e20), json!(null)]).is_ok());
+    let text = Field::new("text", DataType::Utf8, true);
+    assert_eq!(column_semantic(&text).unwrap().kind, SemanticType::Text);
+    assert_eq!(
+        array_to_json(
+            json_to_array(&text, &[json!(""), json!("001"), json!(null)])
+                .unwrap()
+                .as_ref()
+        )
+        .unwrap(),
+        vec![json!(""), json!("001"), json!(null)]
+    );
+}
+
+#[test]
+fn physical_casts_reject_precision_loss_and_preserve_semantics() {
+    use arrow::array::{Float64Array, Int64Array, TimestampNanosecondArray};
+    assert!(
+        lossless_cast(
+            &StringArray::from(vec!["2026-09-16T12:00:00.000000001+08:00"]),
+            &DataType::Timestamp(TimeUnit::Microsecond, None),
+            false
+        )
+        .is_err()
+    );
+    assert!(
+        lossless_cast(
+            &StringArray::from(vec!["2026-09-16T12:00:00+08:00"]),
+            &DataType::Date32,
+            false
+        )
+        .is_err()
+    );
+    assert!(
+        lossless_cast(
+            &StringArray::from(vec!["2026-09-16T12:00:00+08:00"]),
+            &DataType::Timestamp(TimeUnit::Second, None),
+            false
+        )
+        .is_ok()
+    );
+    assert!(lossless_cast(&Float64Array::from(vec![9.25]), &DataType::Int64, false).is_err());
+    assert!(
+        lossless_cast(
+            &Int64Array::from(vec![9_007_199_254_740_993]),
+            &DataType::Float64,
+            false
+        )
+        .is_err()
+    );
+    assert!(lossless_cast(&StringArray::from(vec!["001"]), &DataType::Int64, false).is_err());
+    assert!(
+        lossless_cast(
+            &TimestampNanosecondArray::from(vec![1]),
+            &DataType::Timestamp(TimeUnit::Microsecond, None),
+            false
+        )
+        .is_err()
+    );
+    assert_eq!(
+        array_to_json(
+            lossless_cast(&Int64Array::from(vec![1, 2]), &DataType::Float64, false)
+                .unwrap()
+                .as_ref()
+        )
+        .unwrap(),
+        vec![json!(1.0), json!(2.0)]
+    );
+    let source = with_column_semantic(
+        Field::new("id", DataType::Int64, true),
+        &ColumnSemantic::new(SemanticType::Identifier),
+    )
+    .unwrap();
+    let target = source.clone().with_data_type(DataType::Utf8);
+    assert_eq!(
+        cast_column_semantic(&source, &target).unwrap().kind,
+        SemanticType::Identifier
+    );
+    assert!(!is_numeric_field(&source));
+    assert_eq!(
+        physical_type_name(&DataType::Decimal128(30, 4)),
+        "Decimal128(30, 4)"
+    );
+}
+
+#[test]
 fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
     use arrow::array::{StructArray, TimestampNanosecondArray, TimestampSecondArray};
     let timestamps =
@@ -103,7 +233,7 @@ fn storage_schema_preserves_identity_exact_types_and_category_domain() {
     assert!(facts.columns()[2].nullable());
     assert_eq!(
         facts.columns()[2].data_type(),
-        &yss_data_contract::DataType::Datetime
+        &yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Datetime)time
     );
     assert!(
         validate_storage_schema(&Schema::new(vec![field.clone(), field.with_name("other")]))

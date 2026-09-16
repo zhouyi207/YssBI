@@ -90,6 +90,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         add_column,
         delete_column,
         cast_column,
+        set_column_semantic,
         rename_column,
         undo_edit,
         redo_edit,

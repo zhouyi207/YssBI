@@ -290,6 +290,15 @@ impl DatabaseInstance {
                         },
                         &control,
                     )?,
+                    DatabaseMutationOperation::SetColumnSemantic { name, semantic } => store
+                        .prepare_column_semantic(
+                            snapshot,
+                            engine,
+                            operation_id,
+                            name,
+                            semantic,
+                            &control,
+                        )?,
                     _ => return Err(DatasetStoreError::InvalidValue),
                 }
             }

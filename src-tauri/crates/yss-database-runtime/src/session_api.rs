@@ -181,6 +181,10 @@ pub enum DatabaseMutationOperation {
         data_type: DataType,
         force: bool,
     },
+    SetColumnSemantic {
+        name: Box<str>,
+        semantic: yss_data_contract::ColumnSemantic,
+    },
     RenameDatabase {
         name: Box<str>,
     },
@@ -451,6 +455,7 @@ fn schema_effect(operation: &DatabaseMutationOperation) -> DatabaseMutationSchem
         DatabaseMutationOperation::AddColumn { .. }
         | DatabaseMutationOperation::DeleteColumn { .. }
         | DatabaseMutationOperation::CastColumn { .. }
+        | DatabaseMutationOperation::SetColumnSemantic { .. }
         | DatabaseMutationOperation::RenameColumn { .. } => DatabaseMutationSchemaEffect::Schema,
         DatabaseMutationOperation::EditCell { .. }
         | DatabaseMutationOperation::DeleteDatabase

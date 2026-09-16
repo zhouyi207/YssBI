@@ -117,54 +117,127 @@ impl RelationPlan for DataFusionRelation {
                 return Err(RelationError::InvalidInput);
             }
             (comparison, Some(value)) => {
-                let value = match value {
-                    RelationLiteral::Boolean(value) => ScalarValue::Boolean(Some(*value)),
-                    RelationLiteral::Integer(value) => ScalarValue::Int64(Some(*value)),
-                    RelationLiteral::Decimal(value) => {
-                        if matches!(
-                            field.data_type(),
-                            DataType::Decimal32(..)
-                                | DataType::Decimal64(..)
-                                | DataType::Decimal128(..)
-                                | DataType::Decimal256(..)
-                        ) {
-                            let array = yss_tabular_arrow::json_to_array(
-                                field,
-                                &[serde_json::Value::String(value.to_string())],
+                let ordering = matches!(
+                    comparison,
+                    RelationComparison::Less
+                        | RelationComparison::LessEqual
+                        | RelationComparison::Greater
+                        | RelationComparison::GreaterEqual
+                );
+                let semantic = yss_tabular_arrow::column_semantic(field)
+                    .map_err(|_| RelationError::InvalidInput)?;
+                if ordering
+                    && matches!(
+                        semantic.kind,
+                        yss_tabular_arrow::SemanticType::Categorical
+                            | yss_tabular_arrow::SemanticType::Binary
+                            | yss_tabular_arrow::SemanticType::Identifier
+                    )
+                {
+                    return Err(RelationError::InvalidInput);
+                }
+                if ordering && semantic.kind == yss_tabular_arrow::SemanticType::Ordinal {
+                    let value = match value {
+                        RelationLiteral::Boolean(value) => serde_json::json!(value),
+                        RelationLiteral::Integer(value) => serde_json::json!(value),
+                        RelationLiteral::Decimal(value) | RelationLiteral::String(value) => {
+                            serde_json::json!(value)
+                        }
+                    };
+                    let array = yss_tabular_arrow::json_to_array(field, &[value])
+                        .map_err(|_| RelationError::InvalidInput)?;
+                    let array = arrow::compute::cast(array.as_ref(), &DataType::Utf8)
+                        .map_err(|_| RelationError::InvalidInput)?;
+                    let text = array
+                        .as_any()
+                        .downcast_ref::<arrow::array::StringArray>()
+                        .ok_or(RelationError::InvalidInput)?
+                        .value(0);
+                    let rank = semantic
+                        .values
+                        .iter()
+                        .position(|value| value.value == text)
+                        .ok_or(RelationError::InvalidInput)?;
+                    let selected = semantic
+                        .values
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| match comparison {
+                            RelationComparison::Less => *index < rank,
+                            RelationComparison::LessEqual => *index <= rank,
+                            RelationComparison::Greater => *index > rank,
+                            RelationComparison::GreaterEqual => *index >= rank,
+                            _ => false,
+                        })
+                        .map(|(_, value)| {
+                            Expr::Literal(ScalarValue::Utf8(Some(value.value.clone())), None)
+                        })
+                        .collect();
+                    datafusion::logical_expr::expr_fn::cast(column, DataType::Utf8)
+                        .in_list(selected, false)
+                } else {
+                    let value = match value {
+                        RelationLiteral::Boolean(value) => ScalarValue::Boolean(Some(*value)),
+                        RelationLiteral::Integer(value) if field.data_type().is_floating() => {
+                            let exact = yss_tabular_arrow::lossless_cast(
+                                &arrow::array::Int64Array::from(vec![*value]),
+                                field.data_type(),
+                                false,
                             )
                             .map_err(|_| RelationError::InvalidInput)?;
-                            ScalarValue::try_from_array(array.as_ref(), 0)
+                            ScalarValue::try_from_array(exact.as_ref(), 0)
                                 .map_err(|_| RelationError::InvalidInput)?
-                        } else {
-                            ScalarValue::Float64(Some(
-                                value
-                                    .parse::<f64>()
-                                    .ok()
-                                    .filter(|v| v.is_finite())
-                                    .ok_or(RelationError::InvalidInput)?,
-                            ))
                         }
-                    }
-                    RelationLiteral::String(value) => {
-                        let scalar = ScalarValue::Utf8(Some(value.to_string()));
-                        if field.data_type().is_temporal() {
-                            scalar
-                                .cast_to(field.data_type())
-                                .map_err(|_| RelationError::InvalidInput)?
-                        } else {
-                            scalar
+                        RelationLiteral::Integer(value) => ScalarValue::Int64(Some(*value)),
+                        RelationLiteral::Decimal(value) => {
+                            if matches!(
+                                field.data_type(),
+                                DataType::Decimal32(..)
+                                    | DataType::Decimal64(..)
+                                    | DataType::Decimal128(..)
+                                    | DataType::Decimal256(..)
+                            ) {
+                                let array = yss_tabular_arrow::json_to_array(
+                                    field,
+                                    &[serde_json::Value::String(value.to_string())],
+                                )
+                                .map_err(|_| RelationError::InvalidInput)?;
+                                ScalarValue::try_from_array(array.as_ref(), 0)
+                                    .map_err(|_| RelationError::InvalidInput)?
+                            } else {
+                                ScalarValue::Float64(Some(
+                                    value
+                                        .parse::<f64>()
+                                        .ok()
+                                        .filter(|v| v.is_finite())
+                                        .ok_or(RelationError::InvalidInput)?,
+                                ))
+                            }
                         }
+                        RelationLiteral::String(value) => {
+                            if field.data_type().is_temporal() {
+                                let array = yss_tabular_arrow::json_to_array(
+                                    field,
+                                    &[serde_json::Value::String(value.to_string())],
+                                )
+                                .map_err(|_| RelationError::InvalidInput)?;
+                                ScalarValue::try_from_array(array.as_ref(), 0)
+                                    .map_err(|_| RelationError::InvalidInput)?
+                            } else {
+                                ScalarValue::Utf8(Some(value.to_string()))
+                            }
+                        }
+                    };
+                    let value = Expr::Literal(value, None);
+                    match comparison {
+                        RelationComparison::Equal => column.eq(value),
+                        RelationComparison::NotEqual => column.not_eq(value),
+                        RelationComparison::Less => column.lt(value),
+                        RelationComparison::LessEqual => column.lt_eq(value),
+                        RelationComparison::Greater => column.gt(value),
+                        RelationComparison::GreaterEqual => column.gt_eq(value),
+                        _ => return Err(RelationError::InvalidInput),
                     }
-                };
-                let value = Expr::Literal(value, None);
-                match comparison {
-                    RelationComparison::Equal => column.eq(value),
-                    RelationComparison::NotEqual => column.not_eq(value),
-                    RelationComparison::Less => column.lt(value),
-                    RelationComparison::LessEqual => column.lt_eq(value),
-                    RelationComparison::Greater => column.gt(value),
-                    RelationComparison::GreaterEqual => column.gt_eq(value),
-                    _ => return Err(RelationError::InvalidInput),
                 }
             }
         };

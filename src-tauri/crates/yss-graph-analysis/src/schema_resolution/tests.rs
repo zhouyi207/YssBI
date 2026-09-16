@@ -3,6 +3,87 @@ use crate::{GraphSemanticCache, resolve_graph_semantics, resolve_graph_semantics
 use yss_graph_document::{ConnectionId, DocumentConnection, DocumentNode, NodePosition};
 use yss_graph_resource_contract::{ColumnSchema, DataSchema, ResourceCatalogFingerprint};
 
+#[test]
+fn dataframe_decomposition_uses_all_seven_semantics_and_tracks_metadata_changes() {
+    use yss_data_contract::{ColumnSemantic, SemanticType};
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("databases/typed"))],
+    );
+    let decompose = node(&mut document, "yssbi.dataframe.decompose", &[]);
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(decompose, "dataframe"),
+    );
+    let columns = SemanticType::ALL
+        .into_iter()
+        .map(|semantic| ColumnSchema {
+            name: semantic.as_str().into(),
+            data_type: ValueType::Scalar(semantic),
+            physical_type: Some(
+                match semantic {
+                    SemanticType::Text => "Utf8",
+                    SemanticType::Datetime => "Date",
+                    _ => "Int64",
+                }
+                .into(),
+            ),
+            semantic: Some(ColumnSemantic::new(semantic)),
+        })
+        .collect::<Vec<_>>();
+    let resources = |columns| {
+        ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::from([(
+                GraphResourceId::new("databases/typed"),
+                DataSchema { columns },
+            )]),
+            ResourceCatalogFingerprint::from_bytes([0; 32]),
+        )
+    };
+    let first = resources(columns.clone());
+    let mut cache = GraphSemanticCache::default();
+    let snapshot = assert_matches_full(&document, &builtin.registry, &first, &mut cache);
+    let outputs = snapshot
+        .node(decompose)
+        .unwrap()
+        .ports
+        .iter()
+        .filter(|port| port.direction == yss_node_protocol::PortDirection::Output)
+        .collect::<Vec<_>>();
+    assert_eq!(outputs.len(), 7);
+    for (port, semantic) in outputs.into_iter().zip(SemanticType::ALL) {
+        assert_eq!(
+            port.type_state.exact(),
+            Some(&yss_node_protocol::ResolvedType::Applied {
+                constructor: "core.data_series".parse().unwrap(),
+                arguments: Box::new([yss_node_protocol::ResolvedType::Nominal(
+                    semantic.type_id().parse().unwrap()
+                )]),
+            })
+        );
+    }
+    let observed = first.tracked();
+    observed
+        .database_schema(&GraphResourceId::new("databases/typed"))
+        .unwrap();
+    let dependencies = observed.dependencies();
+    let mut changed = columns;
+    changed[0].physical_type = Some("Float64".into());
+    changed[0].semantic.as_mut().unwrap().numeric = Some(yss_data_contract::NumericConstraints {
+        integer: true,
+        minimum: None,
+        maximum: None,
+    });
+    let second = resources(changed);
+    assert!(!second.matches_dependencies(&dependencies));
+    assert_matches_full(&document, &builtin.registry, &second, &mut cache);
+}
+
 fn node(
     document: &mut GraphDocument,
     kind: &str,
@@ -43,13 +124,15 @@ fn connect(document: &mut GraphDocument, output: PortAddress, input: PortAddress
     id
 }
 
-fn catalog(a: Option<DataType>) -> ResourceCatalogSnapshot {
+fn catalog(a: Option<ValueType>) -> ResourceCatalogSnapshot {
     let mut databases = BTreeMap::from([(
         GraphResourceId::new("databases/b"),
         DataSchema {
             columns: vec![ColumnSchema {
+                semantic: None,
+                physical_type: None,
                 name: "amount".into(),
-                data_type: DataType::Int64,
+                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             }],
         },
     )]);
@@ -58,6 +141,8 @@ fn catalog(a: Option<DataType>) -> ResourceCatalogSnapshot {
             GraphResourceId::new("databases/a"),
             DataSchema {
                 columns: vec![ColumnSchema {
+                    semantic: None,
+                    physical_type: None,
                     name: "amount".into(),
                     data_type,
                 }],
@@ -122,7 +207,9 @@ fn schema_cache_stops_invalidation_when_upstream_schema_is_unchanged() {
     let a = branch(&mut document, "databases/a");
     branch(&mut document, "databases/b");
     let mut cache = GraphSemanticCache::default();
-    let resources = catalog(Some(DataType::Int64));
+    let resources = catalog(Some(ValueType::Scalar(
+        yss_data_contract::SemanticType::Numeric,
+    )));
     assert_matches_full(&document, &registry, &resources, &mut cache);
     document
         .nodes
@@ -135,7 +222,9 @@ fn schema_cache_stops_invalidation_when_upstream_schema_is_unchanged() {
     assert_matches_full(
         &document,
         &registry,
-        &catalog(Some(DataType::String)),
+        &catalog(Some(ValueType::Scalar(
+            yss_data_contract::SemanticType::Text,
+        ))),
         &mut cache,
     );
     assert_eq!(
@@ -158,7 +247,9 @@ fn schema_cache_preserves_absent_reads_and_recovers_from_missing_resources() {
     let recovered = assert_matches_full(
         &document,
         &registry,
-        &catalog(Some(DataType::Int64)),
+        &catalog(Some(ValueType::Scalar(
+            yss_data_contract::SemanticType::Numeric,
+        ))),
         &mut cache,
     );
     assert_eq!(cache.schemas.reused_outputs, 0);
@@ -175,7 +266,9 @@ fn schema_cache_tracks_rewiring_cycles_and_deleted_outputs() {
     let mut document = GraphDocument::default();
     let a = branch(&mut document, "databases/a");
     let b = branch(&mut document, "databases/b");
-    let resources = catalog(Some(DataType::Int64));
+    let resources = catalog(Some(ValueType::Scalar(
+        yss_data_contract::SemanticType::Numeric,
+    )));
     let mut cache = GraphSemanticCache::default();
     assert_matches_full(&document, &registry, &resources, &mut cache);
     let edge = document
@@ -220,7 +313,7 @@ fn schema_cache_rechecks_tabular_constant_cells_without_recomputing_unchanged_do
         let mut constant = GraphConstant {
             id,
             name: "Table".into(),
-            data_type: DataType::DataFrame,
+            data_type: ValueType::DataFrame,
             data_value: DataValue::DataFrame(json.into()),
             tabular: None,
             description: String::new(),

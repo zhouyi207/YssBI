@@ -129,15 +129,14 @@ fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), Builti
     let target = parameter(
         ID,
         "target_type",
-        concrete("core.string")?,
+        concrete("core.text")?,
         None,
         vec![
             ParameterConstraint::Required,
             ParameterConstraint::OneOf(vec![
-                Value::String("core.bool".into()),
-                Value::String("core.int64".into()),
-                Value::String("core.float64".into()),
-                Value::String("core.string".into()),
+                Value::String("core.binary".into()),
+                Value::String("core.numeric".into()),
+                Value::String("core.text".into()),
             ]),
         ],
         ParameterEditorSpec::Select,
@@ -219,19 +218,18 @@ fn register_series_convert(
 
 fn scalar_conversion_types() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Union(vec![
-        concrete("core.bool")?,
-        concrete("core.int64")?,
-        concrete("core.float64")?,
-        concrete("core.string")?,
+        concrete("core.binary")?,
+        concrete("core.numeric")?,
+        concrete("core.text")?,
     ]))
 }
 
 fn core_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {
     match kind {
-        "bool" => Ok("core.bool"),
-        "int64" => Ok("core.int64"),
-        "float64" => Ok("core.float64"),
-        "string" => Ok("core.string"),
+        "bool" => Ok("core.binary"),
+        "int64" => Ok("core.numeric"),
+        "float64" => Ok("core.numeric"),
+        "string" => Ok("core.text"),
         "categorical" => Ok("core.categorical"),
         _ => Err(invalid_conversion_type(kind)),
     }
@@ -239,10 +237,10 @@ fn core_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {
 
 fn technical_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {
     match kind {
-        "bool" => Ok("Boolean"),
-        "int64" => Ok("Int64"),
-        "float64" => Ok("Float64"),
-        "string" => Ok("String"),
+        "bool" => Ok("Binary"),
+        "int64" => Ok("Numeric"),
+        "float64" => Ok("Numeric"),
+        "string" => Ok("Text"),
         "categorical" => Ok("Categorical"),
         _ => Err(invalid_conversion_type(kind)),
     }

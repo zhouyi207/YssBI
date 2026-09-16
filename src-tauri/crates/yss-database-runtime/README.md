@@ -23,7 +23,9 @@ DataFrame or host Polars conversion path in this runtime.
 Column reads apply projection and bounds before materialization. DataView pages include stable
 row IDs; relation reads hide internal identity/order fields. Display DTOs convert unsafe
 JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
-an independent exact display label; neither reconstructs the stored Arrow schema.
+an independent display label, exact Physical label and the field's Semantic configuration;
+none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints
+are owned by the [dataset metadata contract](../yss-dataset-store/README.md#field-meaning-and-physical-conversion).
 
 Profile queries aggregate the fixed effective snapshot in DataFusion. Numeric summaries ignore
 non-finite values while reporting nulls separately; category ties sort deterministically and
@@ -44,7 +46,9 @@ contract without accessing the history container. `DatabaseInstance` keeps its r
 private to this crate. Cell edits, inserts,
 deletes, column operations and undo/redo prepare new immutable views. Row IDs are never reused;
 order keys determine display position. Edit targets parse directly into Arrow types, independently
-of Graph's coarse vocabulary. Casts preserve the original generation for exact undo.
+of Graph's semantic vocabulary. Casts preserve the original generation for exact undo. Semantic
+changes validate current values, retain the physical representation, advance the schema revision,
+and use the same history/publication path. Casts retain Semantic and reject precision loss.
 
 The handoff prepares Project authority and storage work, registers the runtime transition,
 revalidates the captured session, commits the catalog using the expected head, installs the

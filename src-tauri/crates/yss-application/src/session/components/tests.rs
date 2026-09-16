@@ -33,7 +33,7 @@ use yss_node_registry::{
 const ID: &str = "example.numeric.increment";
 
 fn definition() -> NodeProtocol {
-    let integer = TypeExpr::Concrete("core.int64".parse().unwrap());
+    let integer = TypeExpr::Concrete("core.numeric".parse().unwrap());
     let ports = [
         ("input", PortDirection::Input),
         ("result", PortDirection::Output),

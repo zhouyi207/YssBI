@@ -156,6 +156,10 @@ impl DatasetStore {
             }
             let batch = yss_tabular_arrow::timezone_free_batch(&batch)
                 .map_err(|_| DatasetStoreError::InvalidSchema)?;
+            for (field, array) in batch.schema().fields().iter().zip(batch.columns()) {
+                yss_tabular_arrow::validate_semantic_array(field, array.as_ref())
+                    .map_err(|_| DatasetStoreError::InvalidValue)?;
+            }
             for (index, domain) in &mut domains {
                 let data = batch.column(*index).to_data();
                 let dictionary = data

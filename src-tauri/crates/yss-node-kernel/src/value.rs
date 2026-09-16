@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use yss_data_contract::{DataType, DataValue};
+use yss_data_contract::{DataValue, ValueType};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
@@ -63,46 +63,50 @@ impl TryFrom<&DataValue> for RuntimeValue {
 }
 
 impl RuntimeValue {
-    pub fn coerce_to(self, target: &DataType) -> Result<Self, RuntimeValueError> {
+    pub fn coerce_to(self, target: &ValueType) -> Result<Self, RuntimeValueError> {
+        use yss_data_contract::SemanticType;
         match target {
-            DataType::Any => Ok(self),
-            DataType::Boolean => match self {
-                Self::Bool(_) => Ok(self),
-                Self::Integer(value) => Ok(Self::Bool(value != 0)),
-                Self::Decimal(value) => Ok(Self::Bool(value != 0.0)),
-                Self::String(value) => Ok(Self::Bool(!value.is_empty())),
-                Self::Null => Ok(Self::Bool(false)),
-                _ => Err(RuntimeValueError::InvalidCoercion),
-            },
-            DataType::Int64 => match self {
-                Self::Integer(_) => Ok(self),
-                Self::Unsigned(value) => i64::try_from(value)
-                    .map(Self::Integer)
-                    .map_err(|_| RuntimeValueError::InvalidCoercion),
-                Self::Decimal(value) if value.is_finite() => Ok(Self::Integer(value as i64)),
+            ValueType::Any => Ok(self),
+            ValueType::Scalar(SemanticType::Numeric) => match self {
+                Self::Integer(_) | Self::Unsigned(_) => Ok(self),
+                Self::Decimal(value) if value.is_finite() => Ok(Self::Decimal(value)),
                 Self::Bool(value) => Ok(Self::Integer(i64::from(value))),
+                Self::String(value) => {
+                    if let Ok(integer) = value.parse::<i64>() {
+                        return Ok(Self::Integer(integer));
+                    }
+                    if let Ok(integer) = value.parse::<u64>() {
+                        return Ok(Self::Unsigned(integer));
+                    }
+                    value
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|value| value.is_finite())
+                        .map(Self::Decimal)
+                        .ok_or(RuntimeValueError::InvalidCoercion)
+                }
                 _ => Err(RuntimeValueError::InvalidCoercion),
             },
-            DataType::Float64 => match self {
-                Self::Decimal(_) => Ok(self),
-                Self::Integer(value) => Ok(Self::Decimal(value as f64)),
-                Self::Unsigned(value) => Ok(Self::Decimal(value as f64)),
-                Self::Bool(value) => Ok(Self::Decimal(if value { 1.0 } else { 0.0 })),
+            ValueType::Scalar(SemanticType::Binary) => match self {
+                Self::Bool(_) | Self::Null => Ok(self),
+                Self::Integer(0) | Self::Unsigned(0) => Ok(Self::Bool(false)),
+                Self::Integer(1) | Self::Unsigned(1) => Ok(Self::Bool(true)),
+                Self::Decimal(0.0) => Ok(Self::Bool(false)),
+                Self::Decimal(1.0) => Ok(Self::Bool(true)),
+                Self::String(value) if value.as_ref() == "true" => Ok(Self::Bool(true)),
+                Self::String(value) if value.as_ref() == "false" => Ok(Self::Bool(false)),
                 _ => Err(RuntimeValueError::InvalidCoercion),
             },
-            DataType::String
-            | DataType::Date
-            | DataType::Datetime
-            | DataType::Time
-            | DataType::Categorical => Ok(Self::String(match self {
-                Self::String(value) => value,
-                Self::Bool(value) => value.to_string().into_boxed_str(),
-                Self::Integer(value) => value.to_string().into_boxed_str(),
-                Self::Unsigned(value) => value.to_string().into_boxed_str(),
-                Self::Decimal(value) => value.to_string().into_boxed_str(),
-                Self::Null => "null".into(),
-                _ => return Err(RuntimeValueError::InvalidCoercion),
-            })),
+            ValueType::Scalar(SemanticType::Text) => match self {
+                Self::String(_) | Self::Null => Ok(self),
+                Self::Bool(value) => Ok(Self::String(value.to_string().into())),
+                Self::Integer(value) => Ok(Self::String(value.to_string().into())),
+                Self::Unsigned(value) => Ok(Self::String(value.to_string().into())),
+                Self::Decimal(value) if value.is_finite() => {
+                    Ok(Self::String(value.to_string().into()))
+                }
+                _ => Err(RuntimeValueError::InvalidCoercion),
+            },
             _ => Err(RuntimeValueError::InvalidCoercion),
         }
     }

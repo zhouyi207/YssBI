@@ -2,7 +2,6 @@ pub(crate) use crate::builtin::BuiltinAssemblyError;
 pub(crate) use crate::builtin::ProviderFragment;
 use crate::builtin::{assembled_interface, assembled_parameters, sid};
 use crate::{Aliases, Text};
-use std::collections::BTreeSet;
 use std::sync::Arc;
 use yss_node_protocol::*;
 use yss_node_registry::{CategoryRegistration, RegisteredNode, TransparentNodeRole};
@@ -228,10 +227,6 @@ pub(crate) fn category(
         parent: None,
         order,
     })
-}
-
-pub(crate) fn empty_classes() -> BTreeSet<TypeClassId> {
-    BTreeSet::new()
 }
 
 pub(crate) fn i18n(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {

@@ -1,7 +1,7 @@
 pub(super) fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
-    data_type: yss_data_contract::DataType,
+    data_type: yss_data_contract::ValueType,
     data_value: yss_data_contract::DataValue,
 ) {
     let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
@@ -250,13 +250,13 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
     set_constant(
         &mut document,
         integer,
-        yss_data_contract::DataType::Int64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(0),
     );
     set_constant(
         &mut document,
         float,
-        yss_data_contract::DataType::Float64,
+        yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Float64(0.0),
     );
     let mut operands = Vec::new();
@@ -350,21 +350,12 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
                 .and_then(yss_graph_type_mapping::data_type_from_resolved_type)
         );
     }
-    assert_eq!(
-        operation.inputs()[0].contract().coercions.as_ref(),
-        [PlanInputCoercionKind::WidenInt64ToFloat64]
-    );
+    assert!(operation.inputs()[0].contract().coercions.is_empty());
     assert_eq!(
         operation.specialization().output_types()[0].data_type(),
         &yss_graph_type_mapping::data_type_from_resolved_type(&semantic_output).unwrap()
     );
-    assert_eq!(
-        operation.specialization().coercions(),
-        [PlanInputCoercion::new(
-            plan_port(&operands[0]),
-            PlanInputCoercionKind::WidenInt64ToFloat64
-        )]
-    );
+    assert!(operation.specialization().coercions().is_empty());
 }
 
 #[test]
@@ -440,7 +431,7 @@ fn normalized_add_literals_resolve_and_prepare_as_typed_scalars() {
 
     assert!(matches!(
         output_type,
-        Some(yss_node_protocol::ResolvedType::Nominal(id)) if id.as_str() == "core.float64"
+        Some(yss_node_protocol::ResolvedType::Nominal(id)) if id.as_str() == "core.numeric"
     ));
     assert!(prepared_values.iter().any(|value| matches!(
         value,

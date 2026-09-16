@@ -548,7 +548,7 @@ fn validate_typing(
             input: input_key,
             output: output_key,
         }
-        | NodeTypingSpec::ShapePreservingFloat {
+        | NodeTypingSpec::ShapePreservingNumeric {
             input: input_key,
             output: output_key,
         } => {

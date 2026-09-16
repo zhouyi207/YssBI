@@ -1,4 +1,5 @@
 #![deny(unused_must_use)]
+pub use yss_data_contract::SemanticType;
 
 mod configuration;
 mod data_series;
@@ -41,8 +42,8 @@ pub use types::{
     type_exprs_compatibility,
 };
 pub use typing::{
-    InputCoercionKind, NodeTypingSpec, NumericPromotionRule, PortSelector, ResolvedType, ShapeRule,
-    TypeConflict, TypeDomain, TypeState, TypeUnknownReason,
+    InputCoercionKind, NodeTypingSpec, PortSelector, ResolvedType, ShapeRule, TypeConflict,
+    TypeDomain, TypeState, TypeUnknownReason,
 };
 pub use validation::{
     LiteralValidationIssue, LocatedParameterIssue, ParameterIssueKind, ParameterValidation,

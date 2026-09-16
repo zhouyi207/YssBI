@@ -1,6 +1,6 @@
 use super::model::*;
 use std::collections::{BTreeMap, BTreeSet};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_analysis::{
     GraphDiagnosticFact, GraphNodeSemanticFact, GraphParameterConfigurationFact,
     GraphParameterFact, GraphPortBacking, GraphPortInstanceAdditionFact, GraphPortSemanticFact,
@@ -457,6 +457,9 @@ fn resolved_domain_display(value: &TypeDomain) -> String {
 }
 
 fn resolved_type_display(value: &ResolvedType) -> String {
+    if let Some(value_type) = yss_graph_type_mapping::data_type_from_resolved_type(value) {
+        return value_type.to_string();
+    }
     match value {
         ResolvedType::Nominal(id) => id.as_str().to_owned(),
         ResolvedType::Applied {
@@ -561,44 +564,37 @@ fn diagnostics_by_node<'a>(
     by_node
 }
 
-fn data_type_for(value: &TypeExpr) -> Option<DataType> {
+fn data_type_for(value: &TypeExpr) -> Option<ValueType> {
     match value {
-        TypeExpr::Concrete(id) => Some(match id.as_str() {
-            "core.bool" => DataType::Boolean,
-            "core.int64" => DataType::Int64,
-            "core.float64" => DataType::Float64,
-            "core.string" => DataType::String,
-            "core.date" => DataType::Date,
-            "core.datetime" => DataType::Datetime,
-            "core.time" => DataType::Time,
-            "core.categorical" => DataType::Categorical,
-            "core.object" => DataType::Object,
-            "tabular.dataframe" => DataType::DataFrame,
-            semantic_id => DataType::Struct(semantic_id.to_owned()),
-        }),
+        TypeExpr::Concrete(id) => yss_graph_type_mapping::data_type_from_resolved_type(
+            &yss_node_protocol::ResolvedType::Nominal(id.clone()),
+        ),
         TypeExpr::Applied {
             constructor,
             arguments,
         } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
-            data_type_for(&arguments[0]).map(|element| DataType::DataSeries(Box::new(element)))
+            data_type_for(&arguments[0]).map(|element| ValueType::DataSeries(Box::new(element)))
         }
         TypeExpr::Applied {
             constructor,
             arguments,
         } if constructor.as_str() == "core.array" && arguments.len() == 1 => {
-            data_type_for(&arguments[0]).map(|element| DataType::Array(Box::new(element)))
+            data_type_for(&arguments[0]).map(|element| ValueType::Array(Box::new(element)))
         }
         TypeExpr::Applied { .. } => None,
         TypeExpr::Union(values) if !values.is_empty() => values
             .iter()
             .map(data_type_for)
             .collect::<Option<Vec<_>>>()
-            .map(DataType::one_of),
+            .map(ValueType::one_of),
         TypeExpr::Class(_) | TypeExpr::Generic(_) | TypeExpr::Unknown | TypeExpr::Union(_) => None,
     }
 }
 
 fn type_display(value: &TypeExpr) -> String {
+    if let Some(value_type) = data_type_for(value) {
+        return value_type.to_string();
+    }
     match value {
         TypeExpr::Concrete(id) => id.as_str().to_owned(),
         TypeExpr::Class(id) => id.as_str().to_owned(),

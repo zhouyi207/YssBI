@@ -3,7 +3,7 @@ use crate::{GraphDependencyKey, GraphDependencyManifest};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_document::{FunctionParameterId, GraphResourcePath};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -29,11 +29,11 @@ impl fmt::Display for GraphResourceId {
 pub struct FunctionParameterContract {
     id: FunctionParameterId,
     name: Box<str>,
-    data_type: DataType,
+    data_type: ValueType,
 }
 
 impl FunctionParameterContract {
-    pub fn new(id: FunctionParameterId, name: impl Into<Box<str>>, data_type: DataType) -> Self {
+    pub fn new(id: FunctionParameterId, name: impl Into<Box<str>>, data_type: ValueType) -> Self {
         Self {
             id,
             name: name.into(),
@@ -49,7 +49,7 @@ impl FunctionParameterContract {
         &self.name
     }
 
-    pub fn data_type(&self) -> &DataType {
+    pub fn data_type(&self) -> &ValueType {
         &self.data_type
     }
 }
@@ -57,11 +57,11 @@ impl FunctionParameterContract {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionSignature {
     parameters: Box<[FunctionParameterContract]>,
-    result: Option<DataType>,
+    result: Option<ValueType>,
 }
 
 impl FunctionSignature {
-    pub fn new(parameters: Vec<FunctionParameterContract>, result: Option<DataType>) -> Self {
+    pub fn new(parameters: Vec<FunctionParameterContract>, result: Option<ValueType>) -> Self {
         Self {
             parameters: parameters.into_boxed_slice(),
             result,
@@ -72,7 +72,7 @@ impl FunctionSignature {
         &self.parameters
     }
 
-    pub fn result(&self) -> Option<&DataType> {
+    pub fn result(&self) -> Option<&ValueType> {
         self.result.as_ref()
     }
 }
@@ -310,7 +310,7 @@ mod tests {
     };
     use crate::{ColumnSchema, DataSchema};
     use std::collections::BTreeMap;
-    use yss_data_contract::DataType;
+    use yss_data_contract::ValueType;
     use yss_graph_document::GraphResourcePath;
 
     #[test]
@@ -324,6 +324,8 @@ mod tests {
                     a.clone(),
                     DataSchema {
                         columns: vec![ColumnSchema {
+                            semantic: None,
+                            physical_type: None,
                             name: "value".into(),
                             data_type: a_type,
                         }],
@@ -333,6 +335,8 @@ mod tests {
                     b.clone(),
                     DataSchema {
                         columns: vec![ColumnSchema {
+                            semantic: None,
+                            physical_type: None,
                             name: "value".into(),
                             data_type: b_type,
                         }],
@@ -348,19 +352,39 @@ mod tests {
                 ResourceCatalogFingerprint::from_bytes([9; 32]),
             )
         };
-        let tracked = catalog(DataType::Int64, DataType::Int64, false).tracked();
+        let tracked = catalog(
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            false,
+        )
+        .tracked();
         assert!(tracked.database_schema(&a).is_some());
         assert!(tracked.database_schema(&missing).is_none());
         let dependencies = tracked.dependencies();
         assert_eq!(dependencies.entries().len(), 2);
         assert!(
-            catalog(DataType::Int64, DataType::String, false).matches_dependencies(&dependencies)
+            catalog(
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                false
+            )
+            .matches_dependencies(&dependencies)
         );
         assert!(
-            !catalog(DataType::String, DataType::Int64, false).matches_dependencies(&dependencies)
+            !catalog(
+                ValueType::Scalar(yss_data_contract::SemanticType::Text),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                false
+            )
+            .matches_dependencies(&dependencies)
         );
         assert!(
-            !catalog(DataType::Int64, DataType::Int64, true).matches_dependencies(&dependencies)
+            !catalog(
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+                true
+            )
+            .matches_dependencies(&dependencies)
         );
     }
 
@@ -372,14 +396,18 @@ mod tests {
             vec![FunctionParameterContract::new(
                 yss_graph_document::FunctionParameterId::new("series"),
                 "Series",
-                DataType::DataSeries(Box::new(DataType::Float64)),
+                ValueType::DataSeries(Box::new(ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ))),
             )],
-            Some(DataType::Float64),
+            Some(ValueType::Scalar(yss_data_contract::SemanticType::Numeric)),
         ));
         let database = DataSchema {
             columns: vec![ColumnSchema {
+                semantic: None,
+                physical_type: None,
                 name: "sales".to_owned(),
-                data_type: DataType::Float64,
+                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             }],
         };
         let fingerprint = ResourceCatalogFingerprint::from_bytes([7; 32]);

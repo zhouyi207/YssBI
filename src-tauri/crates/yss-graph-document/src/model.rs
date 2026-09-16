@@ -173,7 +173,7 @@ pub struct InputState {
 pub struct GraphConstant {
     pub id: crate::ConstantId,
     pub name: String,
-    pub data_type: yss_data_contract::DataType,
+    pub data_type: yss_data_contract::ValueType,
     pub data_value: yss_data_contract::DataValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tabular: Option<yss_tabular_contract::TabularSnapshot>,

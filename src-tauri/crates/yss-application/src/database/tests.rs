@@ -325,25 +325,39 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
             .unwrap(),
         serde_json::json!(9.25)
     );
+    assert!(
+        app.mutate_database_for_application(
+            instance.clone(),
+            id.clone(),
+            revision(&app, &id),
+            OperationId::new(),
+            DatabaseMutation::CastColumn {
+                column: "y".into(),
+                dtype: "Int8".into(),
+                force: false,
+            }
+        )
+        .is_err()
+    );
     edit(
         &app,
         &id,
         DatabaseMutation::CastColumn {
             column: "y".into(),
-            dtype: "Int8".into(),
+            dtype: "Float32".into(),
             force: false,
         },
     );
     assert_eq!(
         serde_json::to_value(&rows(&app, &id).rows.columns()[1].values()[1]).unwrap(),
-        serde_json::json!(9)
+        serde_json::json!(9.25)
     );
     assert_eq!(
         app.query_database_meta_for_application(instance.clone(), id.clone())
             .unwrap()
             .columns[1]
             .display_type(),
-        "Int8"
+        "Float32"
     );
     edit(&app, &id, DatabaseMutation::Undo);
     assert_eq!(
@@ -355,6 +369,40 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
     assert_eq!(rows(&app, &id).row_ids, vec![0, 4, 1, 2, 3]);
     edit(&app, &id, DatabaseMutation::Undo);
     assert_eq!(rows(&app, &id).row_ids, vec![0, 1, 2, 3]);
+    let original_view = serde_json::to_value(rows(&app, &id).rows).unwrap();
+    edit(
+        &app,
+        &id,
+        DatabaseMutation::SetColumnSemantic {
+            column: "x".into(),
+            semantic: yss_data_contract::ColumnSemantic::new(
+                yss_data_contract::SemanticType::Identifier,
+            ),
+        },
+    );
+    let semantic_kind = || {
+        app.query_database_meta_for_application(instance.clone(), id.clone())
+            .unwrap()
+            .columns[0]
+            .semantic()
+            .unwrap()
+            .kind
+    };
+    assert_eq!(semantic_kind(), yss_data_contract::SemanticType::Identifier);
+    assert_eq!(
+        serde_json::to_value(rows(&app, &id).rows).unwrap(),
+        original_view
+    );
+    let column = &app
+        .query_database_meta_for_application(instance.clone(), id.clone())
+        .unwrap()
+        .columns[0];
+    assert_eq!(column.display_type(), "Int64");
+    assert_eq!(column.physical_type(), "Int64");
+    edit(&app, &id, DatabaseMutation::Undo);
+    assert_eq!(semantic_kind(), yss_data_contract::SemanticType::Numeric);
+    edit(&app, &id, DatabaseMutation::Redo);
+    assert_eq!(semantic_kind(), yss_data_contract::SemanticType::Identifier);
     let store = yss_dataset_store::DatasetStore::open(&root).unwrap();
     let generation = store
         .snapshot(&database_id(&id))
@@ -397,6 +445,23 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
             .activate_project_from_path(&created.metadata_path)
             .unwrap();
         let reopened = application(reopened);
+        assert_eq!(
+            reopened
+                .query_database_meta_for_application(
+                    reopened
+                        .capture_session()
+                        .unwrap()
+                        .project_instance_id()
+                        .clone(),
+                    id.clone()
+                )
+                .unwrap()
+                .columns[0]
+                .semantic()
+                .unwrap()
+                .kind,
+            yss_data_contract::SemanticType::Identifier
+        );
         assert_eq!(
             serde_json::to_value(
                 rows(&reopened, &id).rows.columns()[1].values()[1].display_value()

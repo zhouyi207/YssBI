@@ -1,6 +1,6 @@
 use crate::{CatalogMutationValidationSnapshot, EditorGraphMutation, EditorMutationErrorCode};
 use std::collections::BTreeMap;
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     FunctionParameterId, GraphDocument, GraphResourcePath, LastKnownPortMetadata, NodeId,
@@ -57,7 +57,7 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
         set_constant(
             &mut document,
             node,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(1),
         );
     }
@@ -117,7 +117,7 @@ fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
     set_constant(
         &mut document,
         source,
-        DataType::String,
+        ValueType::Scalar(yss_data_contract::SemanticType::Text),
         yss_data_contract::DataValue::String(String::new()),
     );
     let target = insert_node(
@@ -171,7 +171,7 @@ fn move_connections_uses_current_document_authority() {
     set_constant(
         &mut document,
         source,
-        DataType::Int64,
+        ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(0),
     );
     let target = insert_node(
@@ -222,7 +222,7 @@ fn create_and_connect_plans_one_atomic_patch() {
     set_constant(
         &mut document,
         source,
-        DataType::Int64,
+        ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(0),
     );
     let source_output = declared(source, "value");
@@ -312,7 +312,9 @@ fn remove_port_instance_cleans_up_an_orphaned_derived_port() {
             last_known: LastKnownPortMetadata {
                 label: "Value".into(),
                 value_type: Some(TypeExpr::Concrete(
-                    "core.int64".parse().expect("fixture type ID must be valid"),
+                    "core.numeric"
+                        .parse()
+                        .expect("fixture type ID must be valid"),
                 )),
             },
         },
@@ -349,7 +351,7 @@ fn constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomica
             constant: Some(GraphConstant {
                 id,
                 name: " Count ".into(),
-                data_type: DataType::Int64,
+                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 data_value: yss_data_contract::DataValue::Int64(42),
                 tabular: None,
                 description: String::new(),
@@ -399,7 +401,7 @@ fn constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomica
 fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
-    data_type: yss_data_contract::DataType,
+    data_type: yss_data_contract::ValueType,
     data_value: yss_data_contract::DataValue,
 ) {
     let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
@@ -434,7 +436,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     set_constant(
         &mut source,
         node,
-        DataType::Int64,
+        ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
         yss_data_contract::DataValue::Int64(42),
     );
     let snapshot = crate::export_subgraph(&source, &registry, &catalog, vec![node]).unwrap();

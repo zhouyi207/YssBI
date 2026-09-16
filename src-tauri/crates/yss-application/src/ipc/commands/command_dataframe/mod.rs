@@ -537,9 +537,9 @@ pub fn delete_column(
 }
 
 #[tauri::command]
-pub fn cast_column(
+pub async fn cast_column(
     app: AppHandle,
-    application: State<crate::session::ApplicationState>,
+    application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -548,19 +548,54 @@ pub fn cast_column(
     new_dtype: String,
     force: Option<bool>,
 ) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
-    mutate_database_from_application(
-        &app,
-        application.inner(),
-        project_instance_id,
-        id,
-        expected_revision,
-        operation_id,
-        DatabaseMutation::CastColumn {
-            column: col_name,
-            dtype: new_dtype,
-            force: force.unwrap_or(false),
-        },
-    )
+    let application = application.inner().clone();
+    run_on_blocking_pool(move || {
+        mutate_database_from_application(
+            &app,
+            &application,
+            project_instance_id,
+            id,
+            expected_revision,
+            operation_id,
+            DatabaseMutation::CastColumn {
+                column: col_name,
+                dtype: new_dtype,
+                force: force.unwrap_or(false),
+            },
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+// Keep the same flat, revision-checked database command wire; Tauri injects app and state.
+#[allow(clippy::too_many_arguments)]
+pub async fn set_column_semantic(
+    app: AppHandle,
+    application: State<'_, crate::session::ApplicationState>,
+    project_instance_id: ProjectInstanceId,
+    id: String,
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+    col_name: String,
+    semantic: crate::ipc::schema::ColumnSemanticDto,
+) -> Result<ResourceMutationCommandResultDto<EditState>, CommandError> {
+    let application = application.inner().clone();
+    run_on_blocking_pool(move || {
+        mutate_database_from_application(
+            &app,
+            &application,
+            project_instance_id,
+            id,
+            expected_revision,
+            operation_id,
+            DatabaseMutation::SetColumnSemantic {
+                column: col_name,
+                semantic: semantic.into(),
+            },
+        )
+    })
+    .await
 }
 
 #[tauri::command]

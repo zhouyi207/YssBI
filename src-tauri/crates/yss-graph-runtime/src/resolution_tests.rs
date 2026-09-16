@@ -1,5 +1,5 @@
 use super::*;
-use yss_data_contract::{DataType, DataValue};
+use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{ConstantId, DocumentNode, GraphConstant, NodePosition};
 use yss_graph_editor::NodePositionMutation;
 use yss_graph_editor::projection::{EditorProjectionInput, build_editor_projection};
@@ -58,7 +58,7 @@ fn constant_document() -> (GraphDocument, NodeId, ConstantId) {
         GraphConstant {
             id,
             name: "Threshold".into(),
-            data_type: DataType::Int64,
+            data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             data_value: DataValue::Int64(1),
             tabular: None,
             description: String::new(),
@@ -159,7 +159,7 @@ fn snapshot_rechecks_used_and_absent_resources_without_invalidating_unread_catal
         "yssbi.dataframe.source.get",
         &[("dataframe", serde_json::json!("databases/used"))],
     );
-    let catalog = |entries: &[(&str, DataType)]| {
+    let catalog = |entries: &[(&str, ValueType)]| {
         ResourceCatalogSnapshot::new(
             BTreeMap::new(),
             entries
@@ -169,6 +169,8 @@ fn snapshot_rechecks_used_and_absent_resources_without_invalidating_unread_catal
                         GraphResourceId::new(*name),
                         DataSchema {
                             columns: vec![ColumnSchema {
+                                semantic: None,
+                                physical_type: None,
                                 name: "amount".into(),
                                 data_type: data_type.clone(),
                             }],
@@ -183,16 +185,25 @@ fn snapshot_rechecks_used_and_absent_resources_without_invalidating_unread_catal
     let unrelated = resolve(
         &runtime,
         &document,
-        &catalog(&[("databases/unread", DataType::Int64)]),
+        &catalog(&[(
+            "databases/unread",
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+        )]),
     );
     assert_reused(&missing, &unrelated, constant, true);
     let present = resolve(
         &runtime,
         &document,
-        &catalog(&[("databases/used", DataType::Int64)]),
+        &catalog(&[(
+            "databases/used",
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+        )]),
     );
     assert_reused(&unrelated, &present, constant, false);
-    let changed_catalog = catalog(&[("databases/used", DataType::String)]);
+    let changed_catalog = catalog(&[(
+        "databases/used",
+        ValueType::Scalar(yss_data_contract::SemanticType::Text),
+    )]);
     let changed = resolve(&runtime, &document, &changed_catalog);
     assert_reused(&present, &changed, constant, false);
     assert_eq!(
@@ -220,7 +231,7 @@ fn function_labels_and_bodies_refresh_even_when_execution_identity_is_unchanged(
                     vec![FunctionParameterContract::new(
                         yss_graph_document::FunctionParameterId::new("arg"),
                         label,
-                        DataType::Int64,
+                        ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                     )],
                     None,
                 )),
@@ -446,8 +457,10 @@ fn benchmark_repeated_resolution_and_projection() {
             DataSchema {
                 columns: (0..12)
                     .map(|index| ColumnSchema {
+                        semantic: None,
+                        physical_type: None,
                         name: format!("column{index}"),
-                        data_type: DataType::Int64,
+                        data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                     })
                     .collect(),
             },

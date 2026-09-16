@@ -6,7 +6,7 @@
 //! owners.
 
 use serde::{Deserialize, Serialize};
-use yss_data_contract::{DataType, DataTypeParseError};
+use yss_data_contract::{ValueType, ValueTypeParseError};
 use yss_project_history::FunctionDocument;
 use yss_project_identity::ResourceRevision;
 
@@ -15,7 +15,7 @@ use yss_project_identity::ResourceRevision;
 pub struct FunctionEditorPin {
     pub id: Box<str>,
     pub name: Box<str>,
-    pub data_type: DataType,
+    pub data_type: ValueType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,7 +29,7 @@ pub struct FunctionEditorProjection {
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FunctionEditorProjectionError {
     #[error("function editor projection type is invalid")]
-    InvalidType(#[source] DataTypeParseError),
+    InvalidType(#[source] ValueTypeParseError),
     #[error("function editor projection Struct type key is empty")]
     EmptyStructType,
 }
@@ -76,21 +76,23 @@ impl TryFrom<&FunctionDocument> for FunctionEditorProjection {
 
 pub fn parse_function_data_type(
     type_name: &str,
-) -> Result<DataType, FunctionEditorProjectionError> {
+) -> Result<ValueType, FunctionEditorProjectionError> {
     let data_type = type_name
         .parse()
-        .map_err(|error: DataTypeParseError| FunctionEditorProjectionError::InvalidType(error))?;
+        .map_err(|error: ValueTypeParseError| FunctionEditorProjectionError::InvalidType(error))?;
     validate_function_data_type(&data_type)?;
     Ok(data_type)
 }
 
-fn validate_function_data_type(data_type: &DataType) -> Result<(), FunctionEditorProjectionError> {
+fn validate_function_data_type(data_type: &ValueType) -> Result<(), FunctionEditorProjectionError> {
     match data_type {
-        DataType::Struct(key) if key.trim().is_empty() => {
+        ValueType::Struct(key) if key.trim().is_empty() => {
             Err(FunctionEditorProjectionError::EmptyStructType)
         }
-        DataType::Array(inner) | DataType::DataSeries(inner) => validate_function_data_type(inner),
-        DataType::OneOf(inner) => inner.iter().try_for_each(validate_function_data_type),
+        ValueType::Array(inner) | ValueType::DataSeries(inner) => {
+            validate_function_data_type(inner)
+        }
+        ValueType::OneOf(inner) => inner.iter().try_for_each(validate_function_data_type),
         _ => Ok(()),
     }
 }
@@ -119,11 +121,14 @@ mod tests {
     #[test]
     fn document_projection_has_one_typed_revision_and_stable_wire_shape() {
         let projection =
-            FunctionEditorProjection::try_from(&function_document("Int32", Some("Float64")))
+            FunctionEditorProjection::try_from(&function_document("Numeric", Some("Numeric")))
                 .unwrap();
 
         assert_eq!(projection.function_revision, ResourceRevision::new(7));
-        assert_eq!(projection.inputs[0].data_type, DataType::Int64);
+        assert_eq!(
+            projection.inputs[0].data_type,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
+        );
         assert_eq!(
             serde_json::to_value(&projection).unwrap(),
             json!({
@@ -131,12 +136,12 @@ mod tests {
                 "inputs": [{
                     "id": "value",
                     "name": "Value",
-                    "dataType": { "kind": "Int64" }
+                    "dataType": {"kind": "Scalar", "inner": "Numeric"}
                 }],
                 "outputs": [{
                     "id": "return",
-                    "name": "Float64",
-                    "dataType": { "kind": "Float64" }
+                    "name": "Numeric",
+                    "dataType": {"kind": "Scalar", "inner": "Numeric"}
                 }]
             })
         );

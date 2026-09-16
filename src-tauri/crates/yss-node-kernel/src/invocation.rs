@@ -5,7 +5,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::time::Instant;
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 
 use crate::{KernelError, KernelParameterKey, RuntimeValue};
 
@@ -41,13 +41,13 @@ impl KernelControl {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KernelField {
     pub name: Box<str>,
-    pub data_type: DataType,
+    pub data_type: ValueType,
 }
 
 /// Already resolved output metadata, in invocation-local output order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KernelOutputSpec {
-    pub data_type: DataType,
+    pub data_type: ValueType,
     pub fields: Option<Box<[KernelField]>>,
 }
 

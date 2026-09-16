@@ -115,7 +115,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                     value: value.filter(|value| prepare_filter_predicate_json(value).is_ok()),
                 });
             }
-            "core.string"
+            "core.text"
                 if matches!(parameter.editor, ParameterEditorSpec::Select)
                     && parameter.key.as_str() == "column"
                     && schema.is_some() =>

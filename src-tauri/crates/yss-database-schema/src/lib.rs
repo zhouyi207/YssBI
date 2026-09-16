@@ -4,7 +4,7 @@
 //! contracts, and transport adapters. Physical adapters map their exact storage schemas into
 //! this semantic vocabulary; these facts are never used to reconstruct storage types.
 
-use yss_data_contract::DataType;
+use yss_data_contract::{ColumnSemantic, ValueType};
 use yss_database_contract::DatabaseId;
 use yss_tabular_contract::TabularColumnName;
 
@@ -41,18 +41,22 @@ impl DatabaseSchemaRevision {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DatabaseColumnFact {
     name: TabularColumnName,
-    data_type: DataType,
+    data_type: ValueType,
     nullable: bool,
     display_type: Box<str>,
+    semantic: Option<ColumnSemantic>,
+    physical_type: Option<Box<str>>,
 }
 
 impl DatabaseColumnFact {
-    pub fn new(name: TabularColumnName, data_type: DataType, nullable: bool) -> Self {
+    pub fn new(name: TabularColumnName, data_type: ValueType, nullable: bool) -> Self {
         Self {
             name,
             display_type: data_type.to_string().into(),
             data_type,
             nullable,
+            semantic: None,
+            physical_type: None,
         }
     }
 
@@ -60,7 +64,7 @@ impl DatabaseColumnFact {
         &self.name
     }
 
-    pub fn data_type(&self) -> &DataType {
+    pub fn data_type(&self) -> &ValueType {
         &self.data_type
     }
 
@@ -71,6 +75,24 @@ impl DatabaseColumnFact {
 
     pub fn display_type(&self) -> &str {
         &self.display_type
+    }
+
+    pub fn with_semantic(mut self, semantic: ColumnSemantic) -> Self {
+        self.semantic = Some(semantic);
+        self
+    }
+
+    pub fn semantic(&self) -> Option<&ColumnSemantic> {
+        self.semantic.as_ref()
+    }
+
+    pub fn with_physical_type(mut self, physical_type: String) -> Self {
+        self.physical_type = Some(physical_type.into());
+        self
+    }
+
+    pub fn physical_type(&self) -> &str {
+        self.physical_type.as_deref().unwrap_or(&self.display_type)
     }
 
     pub const fn nullable(&self) -> bool {

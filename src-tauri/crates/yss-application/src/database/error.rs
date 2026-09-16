@@ -23,6 +23,7 @@ pub enum DatabaseApplicationOperation {
     AddColumn,
     DeleteColumn,
     CastColumn,
+    SetColumnSemantic,
     RenameColumn,
     UndoEdit,
     RedoEdit,

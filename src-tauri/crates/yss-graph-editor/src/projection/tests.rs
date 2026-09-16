@@ -27,7 +27,7 @@ fn connection_id(value: u128) -> ConnectionId {
 }
 
 fn bool_type() -> TypeExpr {
-    TypeExpr::Concrete(TypeId::new("core.bool").expect("test type id is valid"))
+    TypeExpr::Concrete(TypeId::new("core.binary").expect("test type id is valid"))
 }
 
 fn diagnostic_codes(diagnostics: &[EditorDiagnosticModel]) -> Vec<&str> {
@@ -62,10 +62,10 @@ fn port(
         literal_allowed: false,
         accepted_type: bool_type(),
         accepted_domain: Some(TypeDomain::singleton(ResolvedType::Nominal(
-            TypeId::new("core.bool").expect("test type id is valid"),
+            TypeId::new("core.binary").expect("test type id is valid"),
         ))),
         type_state: TypeState::Exact(ResolvedType::Nominal(
-            TypeId::new("core.bool").expect("test type id is valid"),
+            TypeId::new("core.binary").expect("test type id is valid"),
         )),
         schema: None,
         schema_state: yss_graph_analysis::GraphSchemaState::NotApplicable,

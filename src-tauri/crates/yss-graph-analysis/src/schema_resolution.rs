@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{GraphSchemaIssue, GraphSchemaState};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_document::{
     DynamicMemberLocator, GraphDocument, NodeId, PortAddress, PortRef, SchemaFieldIdentity,
     SchemaSourceIdentity,
@@ -354,7 +354,7 @@ impl EditorSchemaResolver<'_> {
                 if output == key =>
             {
                 let constant = super::referenced_constant(self.document, node, parameter)?;
-                matches!(constant.data_type, DataType::DataFrame).then(|| SchemaExpr::Derived {
+                matches!(constant.data_type, ValueType::DataFrame).then(|| SchemaExpr::Derived {
                     resolver: "yssbi.constant.schema"
                         .parse()
                         .expect("constant schema resolver ID"),
@@ -506,30 +506,37 @@ impl EditorSchemaResolver<'_> {
                     .iter()
                     .filter_map(|value| match value {
                         TabularScalar::Null => None,
-                        TabularScalar::Bool(_) => Some(RelationalScalarType::Boolean),
-                        TabularScalar::Integer(_) => Some(RelationalScalarType::Int64),
-                        TabularScalar::Unsigned(value) if i64::try_from(*value).is_ok() => {
-                            Some(RelationalScalarType::Int64)
-                        }
-                        TabularScalar::Unsigned(_) | TabularScalar::Decimal(_) => {
-                            Some(RelationalScalarType::Float64)
-                        }
-                        TabularScalar::String(_) => Some(RelationalScalarType::String),
+                        TabularScalar::Bool(_) => Some(RelationalScalarType::Known(
+                            yss_node_protocol::SemanticType::Binary,
+                        )),
+                        TabularScalar::Integer(_) => Some(RelationalScalarType::Known(
+                            yss_node_protocol::SemanticType::Numeric,
+                        )),
+                        TabularScalar::Unsigned(value) if i64::try_from(*value).is_ok() => Some(
+                            RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
+                        ),
+                        TabularScalar::Unsigned(_) | TabularScalar::Decimal(_) => Some(
+                            RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
+                        ),
+                        TabularScalar::String(_) => Some(RelationalScalarType::Known(
+                            yss_node_protocol::SemanticType::Text,
+                        )),
                     })
                     .reduce(|left, right| {
                         if left == right {
                             left
-                        } else if matches!(
-                            (left, right),
-                            (RelationalScalarType::Int64, RelationalScalarType::Float64)
-                                | (RelationalScalarType::Float64, RelationalScalarType::Int64)
-                        ) {
-                            RelationalScalarType::Float64
                         } else {
                             RelationalScalarType::Unknown
                         }
                     })
                     .unwrap_or(RelationalScalarType::Unknown);
+                let scalar_type = match &constant.data_type {
+                    ValueType::DataSeries(element) => {
+                        yss_graph_type_mapping::relational_scalar_type_from_data_type(element)
+                    }
+                    _ => scalar_type,
+                };
+
                 SchemaField {
                     name: SchemaColumnRef(column.name().as_str().into()),
                     scalar_type,
@@ -630,15 +637,10 @@ impl EditorSchemaResolver<'_> {
 
 fn field_series_type(scalar_type: RelationalScalarType) -> TypeExpr {
     let element = match scalar_type {
-        RelationalScalarType::Boolean => DataType::Boolean,
-        RelationalScalarType::Int64 => DataType::Int64,
-        RelationalScalarType::Float64 => DataType::Float64,
-        RelationalScalarType::String => DataType::String,
-        RelationalScalarType::Date => DataType::Date,
-        RelationalScalarType::DateTime => DataType::Datetime,
-        RelationalScalarType::Unknown => DataType::Any,
+        RelationalScalarType::Known(semantic) => ValueType::Scalar(semantic),
+        RelationalScalarType::Unknown => return TypeExpr::Unknown,
     };
-    yss_graph_type_mapping::type_expr_from_data_type(&DataType::DataSeries(Box::new(element)))
+    yss_graph_type_mapping::type_expr_from_data_type(&ValueType::DataSeries(Box::new(element)))
         .unwrap_or(TypeExpr::Unknown)
 }
 

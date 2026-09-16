@@ -951,7 +951,7 @@ mod tests {
     pub(super) fn set_constant(
         document: &mut GraphDocument,
         node: NodeId,
-        data_type: yss_data_contract::DataType,
+        data_type: yss_data_contract::ValueType,
         data_value: yss_data_contract::DataValue,
     ) {
         let id = yss_graph_document::ConstantId::from_uuid(node.as_uuid());
@@ -977,7 +977,7 @@ mod tests {
 
     use super::*;
     use std::collections::BTreeMap;
-    use yss_data_contract::DataType;
+    use yss_data_contract::ValueType;
     use yss_graph_analysis_contract::GraphAnalysisBasis;
     use yss_graph_document::{DocumentConnection, DocumentNode, NodePosition, ParameterValues};
     use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
@@ -1043,17 +1043,11 @@ mod tests {
                 },
             );
             match *node_type {
-                "core.int64" => set_constant(
+                "core.numeric" => set_constant(
                     &mut document,
                     source_id,
-                    DataType::Int64,
+                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                     yss_data_contract::DataValue::Int64(0),
-                ),
-                "core.float64" => set_constant(
-                    &mut document,
-                    source_id,
-                    DataType::Float64,
-                    yss_data_contract::DataValue::Float64(0.0),
                 ),
                 _ => {}
             }
@@ -1102,28 +1096,31 @@ mod tests {
 
     #[test]
     fn add_resolver_promotes_shape_and_element_independently_of_operand_order() {
-        let scalar_int_float = [("core.int64", "value"), ("core.float64", "value")];
+        let scalar_int_float = [("core.numeric", "value"), ("core.numeric", "value")];
         assert_eq!(
             add_result_type(&scalar_int_float, false),
-            TypeState::Exact(resolved_scalar("core.float64"))
+            TypeState::Exact(resolved_scalar("core.numeric"))
         );
         assert_eq!(
             add_result_type(&scalar_int_float, true),
-            TypeState::Exact(resolved_scalar("core.float64"))
+            TypeState::Exact(resolved_scalar("core.numeric"))
         );
         assert_eq!(
-            add_result_type(&[("core.int64", "value"), ("core.int64", "value"),], false,),
-            TypeState::Exact(resolved_scalar("core.int64"))
+            add_result_type(
+                &[("core.numeric", "value"), ("core.numeric", "value"),],
+                false,
+            ),
+            TypeState::Exact(resolved_scalar("core.numeric"))
         );
         assert_eq!(
             add_result_type(
                 &[
                     ("yssbi.data_series.convert.string_to_int64", "output"),
-                    ("core.float64", "value"),
+                    ("core.numeric", "value"),
                 ],
                 false,
             ),
-            TypeState::Exact(resolved_series("core.float64"))
+            TypeState::Exact(resolved_series("core.numeric"))
         );
         assert_eq!(
             add_result_type(
@@ -1133,7 +1130,7 @@ mod tests {
                 ],
                 false,
             ),
-            TypeState::Exact(resolved_series("core.float64"))
+            TypeState::Exact(resolved_series("core.numeric"))
         );
 
         let builtin = build_builtin_node_system().expect("built-in node system is valid");
@@ -1217,7 +1214,7 @@ mod tests {
         set_constant(
             &mut document,
             source,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(1),
         );
         let resources = empty_resources();
@@ -1228,7 +1225,7 @@ mod tests {
         set_constant(
             &mut document,
             source,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(2),
         );
         let incremental = resolve_graph_semantics_with_cache(
@@ -1254,7 +1251,7 @@ mod tests {
             yss_graph_document::GraphConstant {
                 id,
                 name: "Threshold".into(),
-                data_type: DataType::Int64,
+                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 data_value: yss_data_contract::DataValue::Int64(42),
                 tabular: None,
                 description: String::new(),
@@ -1282,9 +1279,10 @@ mod tests {
             &resources,
             &mut cache,
         );
-        document.constants.get_mut(&id).unwrap().data_type = DataType::Float64;
+        document.constants.get_mut(&id).unwrap().data_type =
+            ValueType::Scalar(yss_data_contract::SemanticType::Identifier);
         document.constants.get_mut(&id).unwrap().data_value =
-            yss_data_contract::DataValue::Float64(42.0);
+            yss_data_contract::DataValue::Int64(42);
         let float = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
@@ -1307,17 +1305,17 @@ mod tests {
 
         assert_eq!(
             output_type(&integer),
-            TypeState::Exact(resolved_scalar("core.int64"))
+            TypeState::Exact(resolved_scalar("core.numeric"))
         );
         assert_eq!(
             output_type(&float),
-            TypeState::Exact(resolved_scalar("core.float64"))
+            TypeState::Exact(resolved_scalar("core.identifier"))
         );
         assert_eq!(cache.reused_nodes(), 0);
     }
 
     #[test]
-    fn widened_output_preserves_existing_connection_and_reports_the_mismatch() {
+    fn physical_numeric_change_preserves_semantic_connection() {
         let builtin = build_builtin_node_system().expect("built-in node system is valid");
         let left = NodeId::new();
         let right = NodeId::new();
@@ -1345,7 +1343,7 @@ mod tests {
         set_constant(
             &mut document,
             right,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(0),
         );
         for (index, source) in [left, right].into_iter().enumerate() {
@@ -1394,13 +1392,13 @@ mod tests {
         set_constant(
             &mut document,
             right,
-            DataType::Float64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Float64(0.0),
         );
         let widened = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
 
         assert!(document.connections.contains_key(&downstream_connection));
-        assert!(widened.diagnostics().iter().any(|diagnostic| {
+        assert!(!widened.diagnostics().iter().any(|diagnostic| {
             diagnostic.code.as_str() == GraphDiagnosticKind::TypeConnectionMismatch.code()
                 && diagnostic.primary == GraphDiagnosticLocation::Connection(downstream_connection)
         }));
@@ -1413,12 +1411,12 @@ mod tests {
                 .find(|port| port.address
                     == PortAddress::declared(add, PortKey::new("result").unwrap()))
                 .map(|port| &port.type_state),
-            Some(&TypeState::Exact(resolved_series("core.float64")))
+            Some(&TypeState::Exact(resolved_series("core.numeric")))
         );
     }
 
     #[test]
-    fn exact_int_to_float_assignment_is_recorded_in_the_node_specialization() {
+    fn physical_numeric_promotion_is_not_a_graph_semantic_coercion() {
         let builtin = build_builtin_node_system().expect("built-in node system is valid");
         let source = NodeId::new();
         let target = NodeId::new();
@@ -1441,7 +1439,7 @@ mod tests {
         set_constant(
             &mut document,
             source,
-            DataType::Int64,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             yss_data_contract::DataValue::Int64(0),
         );
         let mean = PortAddress::declared(target, PortKey::new("mean").unwrap());
@@ -1462,13 +1460,7 @@ mod tests {
             .and_then(|node| node.specialization.as_ref())
             .expect("the exact target node is specialized");
 
-        assert_eq!(
-            specialization.coercions.as_ref(),
-            [GraphInputCoercion {
-                address: mean,
-                kind: InputCoercionKind::WidenInt64ToFloat64,
-            }]
-        );
+        assert!(specialization.coercions.is_empty());
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_analysis::GraphDiagnosticLocation;
 use yss_graph_analysis_contract::{DiagnosticArguments, ResourceVersionSet};
 use yss_graph_document::{ConnectionId, GraphResourcePath, NodeId, NodePosition, PortAddress};
@@ -104,18 +104,18 @@ pub enum EditorEffectiveInputBinding {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditorAcceptedType {
     pub display: Box<str>,
-    pub domain: Option<Box<[DataType]>>,
+    pub domain: Option<Box<[ValueType]>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EditorPortTypeState {
     Exact {
         display: Box<str>,
-        data_type: Option<DataType>,
+        data_type: Option<ValueType>,
     },
     Constrained {
         display: Box<str>,
-        domain: Box<[DataType]>,
+        domain: Box<[ValueType]>,
     },
     Unknown {
         reason: TypeUnknownReason,
@@ -159,7 +159,7 @@ pub struct EditorParameterModel {
     pub display: EditorParameterDisplay,
     pub editor: ParameterEditorKind,
     pub presentation: ParameterPresentation,
-    pub value_type: Option<DataType>,
+    pub value_type: Option<ValueType>,
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<EditorParameterConfiguration>,

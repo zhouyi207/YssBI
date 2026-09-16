@@ -80,12 +80,6 @@ pub enum PortSelector {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NumericPromotionRule {
-    Widen,
-    Float64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ShapeRule {
     AnySeriesElseScalar,
 }
@@ -101,10 +95,10 @@ pub enum NodeTypingSpec {
     NumericFold {
         inputs: Box<[PortSelector]>,
         output: PortKey,
-        promotion: NumericPromotionRule,
+
         shape: ShapeRule,
     },
-    ShapePreservingFloat {
+    ShapePreservingNumeric {
         input: PortKey,
         output: PortKey,
     },
@@ -125,6 +119,5 @@ pub enum NodeTypingSpec {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputCoercionKind {
-    WidenInt64ToFloat64,
     BroadcastScalarToSeries,
 }

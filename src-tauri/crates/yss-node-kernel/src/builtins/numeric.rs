@@ -1,5 +1,5 @@
 use crate::KernelInvocation;
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_relational_contract::{NumericOperation, NumericType, RelationLiteral, SeriesOperand};
 
 use super::numeric_input;
@@ -19,14 +19,22 @@ pub(crate) fn execute(
         .first()
         .map(|output| &output.data_type)
         .ok_or(KernelError::Failed)?;
-    let DataType::DataSeries(element) = output_type else {
-        return scalar(operation, inputs.iter(), output_type);
+    let representation = if operation == NumericOperation::Divide || inputs.iter().any(needs_float)
+    {
+        NumericType::Float64
+    } else {
+        NumericType::Int64
     };
-    let numeric_type = match element.as_ref() {
-        DataType::Int64 => NumericType::Int64,
-        DataType::Float64 => NumericType::Float64,
-        _ => return Err(KernelError::InvalidNumericInput),
+    let ValueType::DataSeries(element) = output_type else {
+        if *output_type != ValueType::Scalar(yss_data_contract::SemanticType::Numeric) {
+            return Err(KernelError::InvalidNumericInput);
+        }
+        return scalar(operation, inputs.iter(), representation);
     };
+    if **element != ValueType::Scalar(yss_data_contract::SemanticType::Numeric) {
+        return Err(KernelError::InvalidNumericInput);
+    }
+    let numeric_type = representation;
     if operation == NumericOperation::Divide
         && !matches!(inputs[1], RuntimeValue::Series(_) | RuntimeValue::List(_))
         && numeric_input(inputs.get(1))? == 0.0
@@ -97,7 +105,7 @@ pub(crate) fn execute(
             RuntimeValue::List(values) => &values[row],
             value => value,
         });
-        result.push(scalar(operation, values, element)?);
+        result.push(scalar(operation, values, representation)?);
     }
     invocation.check_control()?;
     Ok(RuntimeValue::List(result.into_boxed_slice()))
@@ -116,10 +124,10 @@ fn integer(value: Option<&RuntimeValue>) -> Result<i64, KernelError> {
 fn scalar<'a>(
     operation: NumericOperation,
     mut values: impl Iterator<Item = &'a RuntimeValue>,
-    output_type: &DataType,
+    representation: NumericType,
 ) -> Result<RuntimeValue, KernelError> {
-    match output_type {
-        DataType::Int64 => {
+    match representation {
+        NumericType::Int64 => {
             let mut result = integer(values.next())?;
             for right in values {
                 let right = integer(Some(right))?;
@@ -135,7 +143,7 @@ fn scalar<'a>(
             }
             Ok(RuntimeValue::Integer(result))
         }
-        DataType::Float64 => {
+        NumericType::Float64 => {
             let mut result = numeric_input(values.next())?;
             for right in values {
                 let right = numeric_input(Some(right))?;
@@ -154,6 +162,14 @@ fn scalar<'a>(
             }
             Ok(RuntimeValue::Decimal(result))
         }
-        _ => Err(KernelError::InvalidNumericInput),
+    }
+}
+
+fn needs_float(value: &RuntimeValue) -> bool {
+    match value {
+        RuntimeValue::Decimal(_) => true,
+        RuntimeValue::List(values) => values.iter().any(needs_float),
+        RuntimeValue::Series(series) => !series.plan().field().data_type().is_integer(),
+        _ => false,
     }
 }

@@ -289,27 +289,8 @@ pub struct SchemaColumnRef(pub Box<str>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelationalScalarType {
-    Boolean,
-    Int64,
-    Float64,
-    String,
-    Date,
-    DateTime,
+    Known(crate::SemanticType),
     Unknown,
-}
-
-impl RelationalScalarType {
-    pub fn from_database_dtype(value: &str) -> Self {
-        match value.to_ascii_uppercase().as_str() {
-            "BOOLEAN" => Self::Boolean,
-            "TINYINT" | "SMALLINT" | "INTEGER" | "BIGINT" | "INT64" => Self::Int64,
-            "FLOAT" | "DOUBLE" | "REAL" | "FLOAT64" => Self::Float64,
-            "VARCHAR" | "TEXT" | "STRING" => Self::String,
-            "DATE" => Self::Date,
-            "TIMESTAMP" | "DATETIME" => Self::DateTime,
-            _ => Self::Unknown,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -382,56 +363,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn database_dtype_aliases_normalize_to_relational_scalar_types() {
-        for (aliases, expected) in [
-            (&["BOOLEAN"][..], RelationalScalarType::Boolean),
-            (
-                &["TINYINT", "SMALLINT", "INTEGER", "BIGINT", "INT64"][..],
-                RelationalScalarType::Int64,
-            ),
-            (
-                &["FLOAT", "DOUBLE", "REAL", "FLOAT64"][..],
-                RelationalScalarType::Float64,
-            ),
-            (
-                &["VARCHAR", "TEXT", "STRING"][..],
-                RelationalScalarType::String,
-            ),
-            (&["DATE"][..], RelationalScalarType::Date),
-            (
-                &["TIMESTAMP", "DATETIME"][..],
-                RelationalScalarType::DateTime,
-            ),
-        ] {
-            for alias in aliases {
-                assert_eq!(RelationalScalarType::from_database_dtype(alias), expected);
-                assert_eq!(
-                    RelationalScalarType::from_database_dtype(&alias.to_ascii_lowercase()),
-                    expected
-                );
-            }
-        }
-        assert_eq!(
-            RelationalScalarType::from_database_dtype("DECIMAL(18,2)"),
-            RelationalScalarType::Unknown
-        );
-    }
-
-    #[test]
     fn schema_field_lineage_is_optional_and_round_trips() {
         let without_lineage = SchemaField {
             name: SchemaColumnRef("amount".into()),
-            scalar_type: RelationalScalarType::Float64,
+            scalar_type: RelationalScalarType::Known(crate::SemanticType::Numeric),
             lineage: None,
         };
         assert_eq!(
             serde_json::to_value(&without_lineage).unwrap(),
-            serde_json::json!({"name": "amount", "scalar_type": "Float64"})
+            serde_json::json!({"name": "amount", "scalar_type": {"Known": "Numeric"}})
         );
 
         let with_lineage = SchemaField {
             name: SchemaColumnRef("amount".into()),
-            scalar_type: RelationalScalarType::Float64,
+            scalar_type: RelationalScalarType::Known(crate::SemanticType::Numeric),
             lineage: Some(SchemaFieldLineage {
                 source: "databases/main".into(),
                 field: "amount".into(),

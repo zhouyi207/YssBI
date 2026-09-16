@@ -1,6 +1,6 @@
 use crate::graph::PortAddressDto;
 use serde::{Deserialize, Serialize};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_analysis_contract::ResourceVersionSet;
 use yss_node_protocol::ParameterPresentation;
 use yss_node_registry::RegistryFingerprint;
@@ -219,7 +219,7 @@ pub enum EffectiveInputBindingKindDto {
 #[serde(rename_all = "camelCase")]
 pub struct AcceptedTypeDto {
     pub display: Box<str>,
-    pub domain: Option<Vec<DataType>>,
+    pub domain: Option<Vec<ValueType>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -232,11 +232,11 @@ pub struct AcceptedTypeDto {
 pub enum PortTypeStateDto {
     Exact {
         display: Box<str>,
-        data_type: Option<DataType>,
+        data_type: Option<ValueType>,
     },
     Constrained {
         display: Box<str>,
-        domain: Vec<DataType>,
+        domain: Vec<ValueType>,
     },
     Unknown {
         reason_code: Box<str>,
@@ -260,17 +260,7 @@ pub struct SchemaFieldDto {
     pub scalar_type: RelationalScalarTypeDto,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum RelationalScalarTypeDto {
-    Boolean,
-    Int64,
-    Float64,
-    String,
-    Date,
-    DateTime,
-    Unknown,
-}
+pub type RelationalScalarTypeDto = Option<yss_data_contract::SemanticType>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -297,7 +287,7 @@ pub struct ParameterEditorDto {
     pub display: ParameterDisplayDto,
     pub editor: ParameterEditorKindDto,
     pub presentation: ParameterPresentationDto,
-    pub value_type: Option<DataType>,
+    pub value_type: Option<ValueType>,
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<SchemaAwareParameterEditorDto>,

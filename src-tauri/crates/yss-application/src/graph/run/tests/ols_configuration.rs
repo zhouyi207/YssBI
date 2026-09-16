@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant},
 };
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 use yss_graph_analysis_contract::GraphAnalysisBasis;
 use yss_graph_document::{
     DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues,
@@ -61,11 +61,13 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         let mut constant = yss_graph_document::GraphConstant {
             id,
             name: (*name).into(),
-            data_type: DataType::DataSeries(Box::new(DataType::Float64)),
+            data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric,
+            ))),
             data_value: yss_data_contract::DataValue::DataSeries(
                 yss_data_contract::DataSeriesValue::with_element_type(
                     serde_json::json!({"value": values}).to_string(),
-                    DataType::Float64,
+                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 ),
             ),
             tabular: None,

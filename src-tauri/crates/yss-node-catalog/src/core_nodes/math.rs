@@ -151,11 +151,6 @@ fn register_arithmetic_operator(
             ])
         },
         output: semantic("result", PortKey::new)?,
-        promotion: if spec.operation == "divide" {
-            NumericPromotionRule::Float64
-        } else {
-            NumericPromotionRule::Widen
-        },
         shape: ShapeRule::AnySeriesElseScalar,
     };
     fragment.nodes.push(leaf(protocol, id));
@@ -178,8 +173,8 @@ fn register_unary(
     })?;
     let numeric = numeric_value_type()?;
     let output = TypeExpr::Union(vec![
-        concrete("core.float64")?,
-        data_series("core.float64")?,
+        concrete("core.numeric")?,
+        data_series("core.numeric")?,
     ]);
     let mut protocol = protocol(
         id,
@@ -192,7 +187,7 @@ fn register_unary(
         vec![],
         pure(),
     )?;
-    protocol.typing = NodeTypingSpec::ShapePreservingFloat {
+    protocol.typing = NodeTypingSpec::ShapePreservingNumeric {
         input: semantic("input", PortKey::new)?,
         output: semantic("result", PortKey::new)?,
     };
@@ -213,7 +208,7 @@ fn numeric_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 
 fn float_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Union(vec![
-        concrete("core.float64")?,
-        data_series("core.float64")?,
+        concrete("core.numeric")?,
+        data_series("core.numeric")?,
     ]))
 }

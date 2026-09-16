@@ -540,15 +540,6 @@ fn apply_input_coercions(
 ) -> Result<RuntimeValue, OperationExecutionError> {
     for coercion in coercions {
         value = match coercion {
-            crate::plan::PlanInputCoercionKind::WidenInt64ToFloat64 => match value {
-                // Element casts, like broadcasting, belong to the consuming numeric kernel.
-                RuntimeValue::Series(_) | RuntimeValue::List(_) => value,
-                value => value
-                    .coerce_to(&yss_data_contract::DataType::Float64)
-                    .map_err(|_| {
-                        OperationExecutionError::Kernel(KernelError::InvalidNumericInput)
-                    })?,
-            },
             // Broadcast is a kernel-owned shape operation. Keeping the scalar
             // value here makes the coercion explicit without fabricating a
             // DataSeries length in the scheduler.
@@ -1397,7 +1388,9 @@ mod tests {
             ),
             value,
             crate::plan::PlanOutputContract {
-                data_type: yss_data_contract::DataType::Int64,
+                data_type: yss_data_contract::ValueType::Scalar(
+                    yss_data_contract::SemanticType::Numeric,
+                ),
                 schema: None,
                 category: crate::plan::ResultCategory::Value,
                 source: PlanSourceIdentity::new(
@@ -1417,7 +1410,7 @@ mod tests {
             Box::new([]),
             Box::new([crate::plan::PlanTypeBinding::new(
                 PlanPortAddress::from_existing(format!("{node}:result").into_boxed_str()),
-                yss_data_contract::DataType::Int64,
+                yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             )]),
             Box::new([]),
         )
@@ -1498,7 +1491,9 @@ mod tests {
                 PlanInputSource::Value(ValueRef::new(1)),
                 crate::plan::PlanInputContract {
                     group: None,
-                    expected_type: yss_data_contract::DataType::Int64,
+                    expected_type: yss_data_contract::ValueType::Scalar(
+                        yss_data_contract::SemanticType::Numeric,
+                    ),
                     coercions: Box::new([]),
                 },
             )]),
@@ -1508,7 +1503,7 @@ mod tests {
                 KernelId::from_existing("yssbi.core.reroute".into()),
                 Box::new([crate::plan::PlanTypeBinding::new(
                     PlanPortAddress::from_existing("consumer:value".into()),
-                    yss_data_contract::DataType::Int64,
+                    yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 )]),
                 operation_specialization("yssbi.core.reroute", "consumer")
                     .output_types()

@@ -206,9 +206,6 @@ fn resolve_json_literal_type(
             element_types.dedup();
             let element = match element_types.as_slice() {
                 [element] => element.clone(),
-                [first, second] if is_int_float_pair(first, second) => {
-                    TypeExpr::Concrete(TypeId::new("core.float64").ok()?)
-                }
                 _ => return None,
             };
             Some(TypeExpr::Applied {
@@ -234,11 +231,9 @@ fn resolve_json_literal_type(
 fn infer_unconstrained_literal_type(raw: &serde_json::Value) -> Option<TypeExpr> {
     let concrete = |id| TypeId::new(id).ok().map(TypeExpr::Concrete);
     match raw {
-        serde_json::Value::Bool(_) => concrete("core.bool"),
-        serde_json::Value::Number(value) if value.as_i64().is_some() => concrete("core.int64"),
-        serde_json::Value::Number(value) if value.is_u64() => None,
-        serde_json::Value::Number(_) => concrete("core.float64"),
-        serde_json::Value::String(_) => concrete("core.string"),
+        serde_json::Value::Bool(_) => concrete("core.binary"),
+        serde_json::Value::Number(_) => concrete("core.numeric"),
+        serde_json::Value::String(_) => concrete("core.text"),
         serde_json::Value::Array(values) => {
             let mut element_types = values
                 .iter()
@@ -259,15 +254,6 @@ fn infer_unconstrained_literal_type(raw: &serde_json::Value) -> Option<TypeExpr>
     }
 }
 
-fn is_int_float_pair(first: &TypeExpr, second: &TypeExpr) -> bool {
-    matches!(
-        (first, second),
-        (TypeExpr::Concrete(first), TypeExpr::Concrete(second))
-            if first.as_str() == "core.float64" && second.as_str() == "core.int64"
-                || first.as_str() == "core.int64" && second.as_str() == "core.float64"
-    )
-}
-
 fn protocol_value_matches_type(
     value: &Value,
     value_type: &TypeExpr,
@@ -275,10 +261,12 @@ fn protocol_value_matches_type(
 ) -> bool {
     match value_type {
         TypeExpr::Concrete(type_id) => match type_id.as_str() {
-            "core.bool" => matches!(value, Value::Bool(_)),
-            "core.int64" => matches!(value, Value::Integer(_)),
-            "core.float64" => matches!(value, Value::Integer(_) | Value::Decimal(_)),
-            "core.string" => matches!(value, Value::String(_)),
+            "core.binary" => matches!(value, Value::Bool(_)),
+            "core.numeric" => matches!(
+                value,
+                Value::Integer(_) | Value::Unsigned(_) | Value::Decimal(_)
+            ),
+            "core.text" => matches!(value, Value::String(_)),
             "core.bytes" => matches!(value, Value::Bytes(_)),
             "core.object" => matches!(value, Value::Object(_)),
             _ => nominal
@@ -461,10 +449,9 @@ fn valid_opaque_resource_id(value: &str) -> bool {
 pub(crate) fn parameter_value_matches_type(value: &serde_json::Value, expected: &TypeExpr) -> bool {
     match expected {
         TypeExpr::Concrete(id) => match id.as_str() {
-            "core.bool" => value.is_boolean(),
-            "core.int64" => value.as_i64().is_some(),
-            "core.float64" => value.is_number(),
-            "core.string" => value.is_string(),
+            "core.binary" => value.is_boolean(),
+            "core.numeric" => value.is_number(),
+            "core.text" => value.is_string(),
             "core.object" => value.is_object(),
             _ => true,
         },
@@ -572,10 +559,7 @@ mod tests {
         }
 
         fn type_implements_class(&self, type_id: &TypeId, class: &TypeClassId) -> Option<bool> {
-            Some(
-                class.as_str() == "core.numeric"
-                    && matches!(type_id.as_str(), "core.int64" | "core.float64"),
-            )
+            Some(class.as_str() == "core.numeric" && type_id.as_str() == "core.numeric")
         }
     }
 
@@ -587,7 +571,7 @@ mod tests {
                 .expect("numeric class accepts an integer literal");
         assert_eq!(
             scalar.value_type,
-            TypeExpr::Concrete(TypeId::new("core.int64").unwrap())
+            TypeExpr::Concrete(TypeId::new("core.numeric").unwrap())
         );
         let series_pattern = TypeExpr::Applied {
             constructor: TypeConstructorId::new("core.data_series").unwrap(),
@@ -603,14 +587,14 @@ mod tests {
             series.value_type,
             TypeExpr::Applied {
                 constructor: TypeConstructorId::new("core.data_series").unwrap(),
-                arguments: vec![TypeExpr::Concrete(TypeId::new("core.float64").unwrap())],
+                arguments: vec![TypeExpr::Concrete(TypeId::new("core.numeric").unwrap())],
             }
         );
     }
 
     #[test]
     fn typed_literal_rejects_value_that_disagrees_with_its_declared_type() {
-        let declared = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let declared = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let wire = serde_json::to_value(TypedValue {
             value_type: declared.clone(),
             value: Value::String("not-an-integer".into()),
@@ -627,7 +611,7 @@ mod tests {
     fn typed_literal_rejects_nested_list_element_mismatch() {
         let list = TypeExpr::Applied {
             constructor: crate::TypeConstructorId::new("core.list").unwrap(),
-            arguments: vec![TypeExpr::Concrete(TypeId::new("core.int64").unwrap())],
+            arguments: vec![TypeExpr::Concrete(TypeId::new("core.numeric").unwrap())],
         };
         let wire = serde_json::to_value(TypedValue {
             value_type: list.clone(),
@@ -658,7 +642,7 @@ mod tests {
 
     #[test]
     fn typed_literal_accepts_bytes_objects_and_recursive_collections() {
-        let int64 = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let int64 = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let cases = [
             (
                 TypeExpr::Concrete(TypeId::new("core.bytes").unwrap()),
@@ -703,8 +687,8 @@ mod tests {
     #[test]
     fn typed_literal_accepts_union_value_type_when_every_option_fits_the_port_oneof() {
         let oneof = TypeExpr::Union(vec![
-            TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
-            TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+            TypeExpr::Concrete(TypeId::new("core.numeric").unwrap()),
+            TypeExpr::Concrete(TypeId::new("core.text").unwrap()),
         ]);
         let wire = serde_json::to_value(TypedValue {
             value_type: oneof.clone(),
@@ -746,7 +730,7 @@ mod tests {
 
     #[test]
     fn typed_literal_fails_closed_for_unknown_type_shapes() {
-        let int64 = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let int64 = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let cases = [
             TypeExpr::Applied {
                 constructor: TypeConstructorId::new("acme.unknown").unwrap(),
@@ -767,7 +751,7 @@ mod tests {
 
         let generic = TypeExpr::Generic(TypeParameterId::new("item").unwrap());
         let concrete_wire = serde_json::to_value(TypedValue {
-            value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            value_type: TypeExpr::Concrete(TypeId::new("core.numeric").unwrap()),
             value: Value::Integer(1),
         })
         .unwrap();
@@ -776,9 +760,9 @@ mod tests {
 
     #[test]
     fn typed_literal_rejects_type_that_disagrees_with_the_port() {
-        let declared = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+        let declared = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let wire = serde_json::to_value(TypedValue {
-            value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+            value_type: TypeExpr::Concrete(TypeId::new("core.text").unwrap()),
             value: Value::String("value".into()),
         })
         .unwrap();

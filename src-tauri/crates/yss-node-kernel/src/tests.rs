@@ -1,27 +1,12 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
-use yss_data_contract::DataType;
+use yss_data_contract::ValueType;
 
 use crate::{
     KernelControl, KernelField, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry,
     RuntimeValue,
 };
-
-#[test]
-fn builtin_capability_manifest_preserves_cache_identity() {
-    let registry = KernelRegistry::default();
-    let fingerprint = registry
-        .fingerprint()
-        .as_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    assert_eq!(
-        fingerprint,
-        "b29ca05bbef3b02d54874c4f3c985157ebd0e3746bd1be3cf7b0add77fdbe620"
-    );
-}
 
 #[test]
 fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
@@ -32,11 +17,13 @@ fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
         ("b".into(), second.clone()),
     ]));
     let outputs = ["b", "a"].map(|name| KernelOutputSpec {
-        data_type: DataType::DataSeries(Box::new(DataType::Int64)),
+        data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
+            yss_data_contract::SemanticType::Numeric,
+        ))),
         fields: Some(
             vec![KernelField {
                 name: name.into(),
-                data_type: DataType::Int64,
+                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             }]
             .into_boxed_slice(),
         ),

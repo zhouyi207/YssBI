@@ -1,4 +1,4 @@
-use crate::data_type::DataType;
+use crate::value_type::ValueType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -27,7 +27,7 @@ pub struct DummyInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataSeriesValue {
     pub id: String,
-    pub element_type: Option<DataType>,
+    pub element_type: Option<ValueType>,
     pub dummy_info: Option<DummyInfo>,
     pub time_series_state: Option<TimeSeriesState>,
 }
@@ -42,7 +42,7 @@ impl DataSeriesValue {
         }
     }
 
-    pub fn with_element_type(id: impl Into<String>, element_type: DataType) -> Self {
+    pub fn with_element_type(id: impl Into<String>, element_type: ValueType) -> Self {
         Self {
             id: id.into(),
             element_type: Some(element_type),
@@ -96,7 +96,7 @@ impl<'de> Deserialize<'de> for DataSeriesValue {
             Full {
                 id: String,
                 #[serde(rename = "elementType")]
-                element_type: Option<DataType>,
+                element_type: Option<ValueType>,
                 #[serde(rename = "dummyInfo")]
                 dummy_info: Option<DummyInfo>,
                 #[serde(rename = "timeSeriesState", default)]

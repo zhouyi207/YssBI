@@ -22,8 +22,7 @@ use yss_project_layout::{
 };
 use yss_project_model::{GraphResourceDocument, ProjectData};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct GraphResourceFile {
     pub kind: GraphResourceKind,
     pub name: String,

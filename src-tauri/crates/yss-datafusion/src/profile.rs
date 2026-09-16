@@ -36,6 +36,16 @@ fn conditional_count(condition: Expr) -> Result<Expr, RelationError> {
     ))
 }
 fn kind(field: &Field) -> ProfileColumnKind {
+    if let Ok(semantic) = yss_tabular_arrow::column_semantic(field) {
+        use yss_tabular_arrow::SemanticType;
+        return match semantic.kind {
+            SemanticType::Numeric => ProfileColumnKind::Numeric,
+            SemanticType::Categorical | SemanticType::Ordinal => ProfileColumnKind::Categorical,
+            SemanticType::Binary => ProfileColumnKind::Boolean,
+            SemanticType::Datetime => ProfileColumnKind::Temporal,
+            SemanticType::Text | SemanticType::Identifier => ProfileColumnKind::String,
+        };
+    }
     match field.data_type() {
         data_type if data_type.is_numeric() => ProfileColumnKind::Numeric,
         DataType::Dictionary(..) => ProfileColumnKind::Categorical,
