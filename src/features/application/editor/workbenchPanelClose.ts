@@ -31,6 +31,9 @@ import { showBlockingIpcError, showBlockingMessage } from "./blockingErrorDialog
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { resolveResourceDisplayName } from "./resolveResourceDisplayName";
 import { saveGraph } from "@/features/application/graphEditing/saveGraph";
+import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
+import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 
 type EditorDocument = {
   readonly key: string;
@@ -38,6 +41,7 @@ type EditorDocument = {
   readonly resourceKind: EditorResourceKind;
   readonly name: string;
   readonly dirty: boolean;
+  readonly version?: GraphEditVersionDto;
 };
 
 type CloseSnapshot = {
@@ -149,6 +153,10 @@ function documentsThatLoseTheirLastPanel(snapshot: CloseSnapshot): EditorDocumen
       resourceKind: metadata.resourceKind,
       name: resolveResourceDisplayName(ref, panel.title ?? metadata.resourceRef),
       dirty: isResourceDocumentDirty(ref),
+      version:
+        metadata.resourceKind === "chart"
+          ? undefined
+          : useGraphEditingStore.getState().sessions[metadata.resourceRef]?.version,
     });
   }
   return [...documents.values()];
@@ -241,6 +249,7 @@ function evictChartDocument(chartPath: string): void {
 function finalizeClosedPanels(
   snapshot: CloseSnapshot,
   closedPanels: readonly WorkbenchPanelInfo[] = snapshot.panels,
+  discarded: ReadonlyMap<string, GraphEditVersionDto> = new Map(),
 ): void {
   const remainingEditors = workbenchLayoutRead
     .listPanels()
@@ -290,13 +299,14 @@ function finalizeClosedPanels(
       continue;
     }
 
-    clearResourceDocumentState({ id: metadata.resourceRef, kind: metadata.resourceKind });
-    void unloadGraphDocument(metadata.resourceRef).catch(() => {
-      logger.graph.warn(
-        "Failed to release graph cache after its last editor closed",
-        "workbenchPanelClose",
-      );
-    });
+    void unloadGraphDocument(metadata.resourceRef, discarded.get(metadata.resourceRef)).catch(
+      () => {
+        logger.graph.warn(
+          "Failed to release graph cache after its last editor closed",
+          "workbenchPanelClose",
+        );
+      },
+    );
   }
 }
 
@@ -333,13 +343,33 @@ export function requestCloseWorkbenchGroup(groupId: string): Promise<boolean> {
 async function requestCloseWorkbenchPanelsNow(
   panelInstanceIds: readonly string[],
 ): Promise<boolean> {
-  const snapshot = captureCloseSnapshot(panelInstanceIds);
+  let snapshot = captureCloseSnapshot(panelInstanceIds);
   if (!snapshot) return false;
+
+  try {
+    const graphs = documentsThatLoseTheirLastPanel(snapshot).filter(
+      (document) => document.resourceKind !== "chart",
+    );
+    const settled = await Promise.all(
+      graphs.map((document) => enqueueGraphTask(document.resourceRef, async () => true, false)),
+    );
+    if (settled.some((current) => !current) || !isCloseSnapshotCurrent(snapshot)) return false;
+  } catch {
+    showCloseFailedMessage();
+    return false;
+  }
+  snapshot = captureCloseSnapshot(panelInstanceIds);
+  if (!snapshot) return false;
+  const discarded = new Map<string, GraphEditVersionDto>();
 
   for (const document of documentsThatLoseTheirLastPanel(snapshot)) {
     if (!document.dirty) continue;
     const decision = await uiStore.confirm3(closeDialogOptions(document));
     if (!isCloseSnapshotCurrent(snapshot) || decision === "cancel") return false;
+    if (decision === "discard" && document.resourceKind !== "chart") {
+      if (!document.version) return false;
+      discarded.set(document.resourceRef, document.version);
+    }
     if (decision === "confirm") {
       const identity = snapshot.projectIdentity;
       if (!identity || !(await saveEditorDocument(document, identity))) return false;
@@ -357,7 +387,7 @@ async function requestCloseWorkbenchPanelsNow(
     const absent = physicallyAbsentPanels(snapshot);
     if (isCloseSnapshotCurrent(snapshot) && absent.length > 0) {
       try {
-        finalizeClosedPanels(snapshot, absent);
+        finalizeClosedPanels(snapshot, absent, discarded);
       } catch {
         // Physical removal already happened; never attempt a layout rollback here.
       }
@@ -366,7 +396,7 @@ async function requestCloseWorkbenchPanelsNow(
     return false;
   }
   if (!isCloseSnapshotCurrent(snapshot) || outcome === "stale") return false;
-  finalizeClosedPanels(snapshot);
+  finalizeClosedPanels(snapshot, snapshot.panels, discarded);
   return true;
 }
 

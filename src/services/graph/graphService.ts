@@ -1,5 +1,6 @@
 import { invokeCommand } from "@/services/ipc";
 import type { ResourceMutationResultDto } from "@/shared/types/dto";
+import type { GraphEditVersionDto } from "@/shared/types/domain/editorMutation";
 
 /**
  * Graph Service - 管理 Event、Function 资源生命周期与函数引用查询
@@ -63,8 +64,14 @@ export class GraphService {
     graphPath: string,
     lifecycleToken: number,
     projectInstanceId: string,
-  ): Promise<void> {
-    await invokeCommand("unload_project_graph", { graphPath, lifecycleToken, projectInstanceId });
+    discardVersion?: GraphEditVersionDto,
+  ): Promise<boolean> {
+    return invokeCommand<boolean>("unload_project_graph", {
+      graphPath,
+      lifecycleToken,
+      projectInstanceId,
+      discardVersion,
+    });
   }
 
   static async duplicateGraph(

@@ -19,6 +19,11 @@ import {
 import { unloadGraphDocument } from "./graphDocumentUnload";
 import { projectPublicationCoordinator } from "@/features/application/editorMutation/projectPublicationCoordinator";
 
+vi.mock("@/features/application/graphProjection/graphActivity", () => ({
+  ensureGraphActivity: async () => undefined,
+  resetGraphActivity: () => undefined,
+}));
+
 vi.mock("@/features/application/editor/graphDocumentRetention", () => ({
   shouldRetainGraphDocument: () => false,
 }));
@@ -69,7 +74,7 @@ describe("graph document lifecycle ownership", () => {
       resources: [buildGraphResourceMeta("event", graphPath, "Main")],
       graphOrder: [graphPath],
     });
-    vi.mocked(GraphService.unloadProjectGraph).mockResolvedValue();
+    vi.mocked(GraphService.unloadProjectGraph).mockResolvedValue(true);
   });
 
   it("starts a new load when an initial pending load is unloaded and immediately reopened", async () => {
@@ -83,7 +88,9 @@ describe("graph document lifecycle ownership", () => {
 
     const initial = useProjectIOStore.getState().loadGraph(graphPath);
     await vi.waitFor(() => expect(GraphProjectionService.loadGraph).toHaveBeenCalledOnce());
-    await unloadGraphDocument(graphPath);
+    const unloading = unloadGraphDocument(graphPath);
+    oldLoad.resolve(makeGraphEditorSession(oldFixture.projection));
+    await unloading;
     const reopened = useProjectIOStore.getState().loadGraph(graphPath);
 
     expect(graphProjectionLifecycle.loadGraphProjection).toHaveBeenCalledTimes(2);
@@ -91,7 +98,6 @@ describe("graph document lifecycle ownership", () => {
       vi.mocked(graphProjectionLifecycle.loadGraphProjection).mock.calls[1]?.[1] ?? 0,
     );
 
-    oldLoad.resolve(makeGraphEditorSession(oldFixture.projection));
     await expect(initial).resolves.toBe(false);
     reopenedLoad.resolve(makeGraphEditorSession(reopenedFixture.projection));
     await expect(reopened).resolves.toBe(true);
@@ -107,18 +113,20 @@ describe("graph document lifecycle ownership", () => {
     const reopened = makeEditorProjectionFixture({ graphPath, title: "Reopened" });
     useGraphProjectionStore.getState().replaceProjection(graphPath, current.projection);
     markResourceLoaded({ id: graphPath, kind: "event" });
-    const pendingUnload = deferred<void>();
+    const pendingUnload = deferred<boolean>();
     vi.mocked(GraphService.unloadProjectGraph).mockReturnValue(pendingUnload.promise);
     vi.mocked(GraphProjectionService.loadGraph).mockResolvedValue(
       makeGraphEditorSession(reopened.projection),
     );
 
     const unloading = unloadGraphDocument(graphPath);
-    await expect(useProjectIOStore.getState().loadGraph(graphPath)).resolves.toBe(true);
+    await vi.waitFor(() => expect(GraphService.unloadProjectGraph).toHaveBeenCalledOnce());
+    const loading = useProjectIOStore.getState().loadGraph(graphPath);
+    pendingUnload.resolve(true);
+    await expect(loading).resolves.toBe(true);
     markResourceLoaded({ id: graphPath, kind: "event" });
     expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);
 
-    pendingUnload.resolve();
     await unloading;
 
     expect(getDocumentState({ id: graphPath, kind: "event" })?.loaded).toBe(true);

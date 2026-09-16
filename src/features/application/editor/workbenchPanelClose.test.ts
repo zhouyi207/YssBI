@@ -1,5 +1,6 @@
 import { resultReferenceFixture, resultLeaseIdFixture } from "@/tests/helpers/resultFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useGraphEditingStore } from "@/features/core/graphEditing";
 
 import type {
   EditorResourceKind,
@@ -367,6 +368,22 @@ function resultPanel(panelInstanceId: string, groupId = "group-a"): WorkbenchPan
 
 function seedPanels(panels: readonly WorkbenchPanelInfo[]): void {
   mocks.panels.push(...panels);
+  for (const panel of panels) {
+    const metadata = panel.metadata;
+    if (
+      metadata.role === "editor" &&
+      (metadata.resourceKind === "event" || metadata.resourceKind === "function")
+    ) {
+      useGraphEditingStore.setState((state) => ({
+        sessions: {
+          ...state.sessions,
+          [metadata.resourceRef]: {
+            version: { sessionId: "edit-session", revision: "1" },
+          } as never,
+        },
+      }));
+    }
+  }
 }
 
 function markDirty(resourceRef: string, resourceKind: EditorResourceKind): void {
@@ -375,6 +392,7 @@ function markDirty(resourceRef: string, resourceKind: EditorResourceKind): void 
 
 beforeEach(() => {
   mocks.reset();
+  useGraphEditingStore.getState().clear();
 });
 
 describe("workbench panel close coordinator", () => {
@@ -473,17 +491,16 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(graphPath);
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(chartPath);
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith("sales");
-    expect(mocks.clearResourceDocumentState).toHaveBeenCalledTimes(2);
-    expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
-      id: graphPath,
-      kind: "event",
-    });
+    expect(mocks.clearResourceDocumentState).toHaveBeenCalledTimes(1);
     expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
       id: chartPath,
       kind: "chart",
     });
     expect(mocks.unloadGraphDocument).toHaveBeenCalledOnce();
-    expect(mocks.unloadGraphDocument).toHaveBeenCalledWith(graphPath);
+    expect(mocks.unloadGraphDocument).toHaveBeenCalledWith(graphPath, {
+      sessionId: "edit-session",
+      revision: "1",
+    });
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalledWith(chartPath);
   });
 
@@ -576,8 +593,7 @@ describe("workbench panel close coordinator", () => {
     await queuedReplacement;
 
     await expect(closing).resolves.toBe(false);
-    expect(mocks.commitRemove).toHaveBeenCalledOnce();
-    expect(mocks.commitRemove.mock.calls[0][1]).toEqual(expect.any(Function));
+    expect(mocks.commitRemove).not.toHaveBeenCalled();
     expect(mocks.panels.map((panel) => panel.panelInstanceId)).toEqual(["editor-a"]);
     expect(mocks.releasePane).not.toHaveBeenCalled();
   });
@@ -678,11 +694,8 @@ describe("workbench panel close coordinator", () => {
     expect(mocks.deactivateGraphPanelSession).toHaveBeenCalledWith("group-a", firstPath);
     expect(mocks.clearDetailFocusForClosedPanel).toHaveBeenCalledWith(firstPath);
     expect(mocks.clearDetailFocusForClosedPanel).not.toHaveBeenCalledWith(secondPath);
-    expect(mocks.clearResourceDocumentState).toHaveBeenCalledWith({
-      id: firstPath,
-      kind: "event",
-    });
-    expect(mocks.unloadGraphDocument).toHaveBeenCalledWith(firstPath);
+    expect(mocks.clearResourceDocumentState).not.toHaveBeenCalled();
+    expect(mocks.unloadGraphDocument).toHaveBeenCalledWith(firstPath, undefined);
     expect(mocks.unloadGraphDocument).not.toHaveBeenCalledWith(secondPath);
     expect(mocks.showBlockingMessage).toHaveBeenCalledOnce();
     expect(mocks.showBlockingMessage).toHaveBeenCalledWith("The panel could not be closed.");
