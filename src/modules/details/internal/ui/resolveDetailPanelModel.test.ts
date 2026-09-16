@@ -71,8 +71,12 @@ describe("resolveDetailPanelModel", () => {
         "fn-1": {
           id: "fn-1",
           name: "Add",
-          functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Float64" })],
-          functionOutputs: [createDataSignaturePin("out-1", "R", { kind: "Float64" })],
+          functionInputs: [
+            createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" }),
+          ],
+          functionOutputs: [
+            createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" }),
+          ],
         },
       },
     });
@@ -82,8 +86,8 @@ describe("resolveDetailPanelModel", () => {
       path: "fn-1",
       fn: {
         name: "Add",
-        inputs: [createDataSignaturePin("in-1", "A", { kind: "Float64" })],
-        outputs: [createDataSignaturePin("out-1", "R", { kind: "Float64" })],
+        inputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
+        outputs: [createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" })],
       },
     });
   });

@@ -1,6 +1,6 @@
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 
-import { DEFAULT_ARRAY_VALUE, DEFAULT_OBJECT_VALUE } from "@/shared/types/domain/dataType";
+import { DEFAULT_ARRAY_VALUE, DEFAULT_OBJECT_VALUE } from "@/shared/types/domain/valueType";
 
 import type { DataValue } from "@/shared/types/domain/dataValue";
 
@@ -20,7 +20,7 @@ export function isJsonLiteralContent(value: string): boolean {
   return t.startsWith("[") || t.startsWith("{");
 }
 
-export function getConstantLiteralPayload(dataType: DataType, dataValue: DataValue): string {
+export function getConstantLiteralPayload(dataType: ValueType, dataValue: DataValue): string {
   if (dataType.kind === "DataFrame" && dataValue.kind === "DataFrame") {
     return dataValue.value;
   }
@@ -32,7 +32,7 @@ export function getConstantLiteralPayload(dataType: DataType, dataValue: DataVal
   return "";
 }
 
-export function isConstantValueEmpty(dataType: DataType, dataValue: DataValue): boolean {
+export function isConstantValueEmpty(dataType: ValueType, dataValue: DataValue): boolean {
   if (dataValue.kind === "Null") return true;
 
   switch (dataType.kind) {
@@ -133,7 +133,7 @@ function summarizeDataSeriesJson(json: string): string | null {
 }
 
 export function formatConstantValueSummary(
-  dataType: DataType,
+  dataType: ValueType,
 
   dataValue: DataValue,
 
@@ -195,7 +195,7 @@ function prettyJsonString(json: string, fallback: string): string {
   return JSON.stringify(parsed, null, 2);
 }
 
-export function dataValueToEditableJson(dataType: DataType, dataValue: DataValue): string {
+export function dataValueToEditableJson(dataType: ValueType, dataValue: DataValue): string {
   if (dataType.kind === "Array") {
     if (dataValue.kind === "Array" && dataValue.value.length > 0) {
       const raw = dataValue.value.map((item) => dataValueToRaw(item));
@@ -240,7 +240,7 @@ export function dataValueToEditableJson(dataType: DataType, dataValue: DataValue
 export function parseArrayValueFromJson(
   json: string,
 
-  innerType: DataType,
+  innerType: ValueType,
 ): { ok: true; value: DataValue } | { ok: false; error: string } {
   let parsed: unknown;
 
@@ -355,6 +355,6 @@ export function parseDataSeriesValueFromJson(
   return { ok: true, value: { kind: "DataSeries", value: compact } };
 }
 
-export function isJsonEditableConstantType(dataType: DataType): boolean {
+export function isJsonEditableConstantType(dataType: ValueType): boolean {
   return ["Array", "Object", "DataFrame", "DataSeries"].includes(dataType.kind);
 }

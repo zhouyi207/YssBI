@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import type { DataValue } from "@/shared/types/domain/dataValue";
 import {
   dataValueToEditableJson,
@@ -27,7 +27,7 @@ import {
 interface ConstantValueEditorModalProps {
   open: boolean;
   onClose: () => void;
-  dataType: DataType;
+  dataType: ValueType;
   dataValue: DataValue;
   onSave: (value: DataValue) => void;
 }

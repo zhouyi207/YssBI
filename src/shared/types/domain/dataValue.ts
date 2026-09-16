@@ -4,26 +4,22 @@
  * 数据值定义及领域内辅助函数
  */
 
-import type { DataType } from "./dataType";
-import { dataTypeFromKey, getDefaultValue } from "./dataType";
+import type { ValueType } from "./valueType";
+import { dataTypeFromKey, getDefaultValue, isBackendDataType } from "./valueType";
 
 export type DataSeriesValuePayload = {
   id: string;
-  elementType?: import("./dataType").DataType;
+  elementType?: import("./valueType").ValueType;
 };
 
 /**
- * 数据值（可辨识联合，与 DataType 对应）
+ * 数据值（可辨识联合，与 ValueType 对应）
  */
 export type DataValue =
   | { kind: "Boolean"; value: boolean }
   | { kind: "Int64"; value: number }
   | { kind: "Float64"; value: number }
   | { kind: "String"; value: string }
-  | { kind: "Date"; value: string }
-  | { kind: "Datetime"; value: string }
-  | { kind: "Time"; value: string }
-  | { kind: "Categorical"; value: string }
   | { kind: "Array"; value: DataValue[] }
   | { kind: "Object"; value: Record<string, unknown> }
   | { kind: "DataFrame"; value: string }
@@ -35,7 +31,7 @@ export type SerializedDataSeriesValue =
   | string
   | {
       id: string;
-      elementType?: DataType;
+      elementType?: ValueType;
       dummyInfo?: unknown;
       timeSeriesState?: unknown;
     };
@@ -57,22 +53,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function dataTypeFromBackend(value: unknown): DataType {
+function dataTypeFromBackend(value: unknown): ValueType {
+  if (isBackendDataType(value)) return value;
   if (typeof value === "string") return dataTypeFromKey(value);
-  if (!isRecord(value) || typeof value.kind !== "string") return { kind: "Any" };
-  if (value.kind === "Array" && value.inner !== undefined) {
-    return { kind: "Array", inner: dataTypeFromBackend(value.inner) };
-  }
-  if (value.kind === "DataSeries" && value.inner !== undefined) {
-    return { kind: "DataSeries", inner: dataTypeFromBackend(value.inner) };
-  }
-  if (value.kind === "OneOf" && Array.isArray(value.inner)) {
-    return { kind: "OneOf", inner: value.inner.map(dataTypeFromBackend) };
-  }
-  if (value.kind === "Struct" && typeof value.inner === "string") {
-    return { kind: "Struct", inner: value.inner };
-  }
-  return dataTypeFromKey(value.kind);
+  return { kind: "Any" };
 }
 
 export function deserializeDataValue(value: unknown): DataValue {
@@ -142,10 +126,6 @@ export function dataValueToRaw(dv: DataValue): unknown {
     case "Int64":
     case "Float64":
     case "String":
-    case "Date":
-    case "Datetime":
-    case "Time":
-    case "Categorical":
     case "DataFrame":
       return dv.value;
     case "DataSeries":
@@ -178,8 +158,8 @@ export function inferDataValueFromJson(raw: unknown): DataValue {
   return { kind: "Null" };
 }
 
-/** 从原始值 + DataType 创建 DataValue */
-export function dataValueFromRaw(raw: unknown, dataType: DataType): DataValue {
+/** 从原始值 + ValueType 创建 DataValue */
+export function dataValueFromRaw(raw: unknown, dataType: ValueType): DataValue {
   const def = getDefaultValue(dataType);
   if (raw === null || raw === undefined) {
     return rawToDataValue(def, dataType);
@@ -187,25 +167,22 @@ export function dataValueFromRaw(raw: unknown, dataType: DataType): DataValue {
   return rawToDataValue(raw, dataType);
 }
 
-function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
-  const k = dataType.kind;
-  switch (k) {
-    case "Boolean":
-      return { kind: "Boolean", value: Boolean(raw) };
-    case "Int64":
-      return { kind: "Int64", value: Math.floor(Number(raw)) };
-    case "Float64":
-      return { kind: "Float64", value: Number(raw) };
-    case "String":
+function rawToDataValue(raw: unknown, dataType: ValueType): DataValue {
+  if (dataType.kind === "Scalar") {
+    if (raw == null) return { kind: "Null" };
+    if (dataType.inner === "Numeric") {
+      const value = Number(raw);
+      return Number.isSafeInteger(value) ? { kind: "Int64", value } : { kind: "Float64", value };
+    }
+    if (dataType.inner === "Binary")
+      return typeof raw === "boolean"
+        ? { kind: "Boolean", value: raw }
+        : inferDataValueFromJson(raw);
+    if (dataType.inner === "Text" || dataType.inner === "Datetime")
       return { kind: "String", value: String(raw) };
-    case "Date":
-      return { kind: "Date", value: raw != null ? String(raw) : "" };
-    case "Datetime":
-      return { kind: "Datetime", value: raw != null ? String(raw) : "" };
-    case "Time":
-      return { kind: "Time", value: raw != null ? String(raw) : "" };
-    case "Categorical":
-      return { kind: "Categorical", value: raw != null ? String(raw) : "" };
+    return inferDataValueFromJson(raw);
+  }
+  switch (dataType.kind) {
     case "Array":
       return {
         kind: "Array",
@@ -240,7 +217,7 @@ function rawToDataValue(raw: unknown, dataType: DataType): DataValue {
           value: {
             id,
             ...(payload.elementType
-              ? { elementType: payload.elementType as import("./dataType").DataType }
+              ? { elementType: payload.elementType as import("./valueType").ValueType }
               : {}),
           },
         };
@@ -270,12 +247,6 @@ export function serializeDataValue(dv: DataValue): SerializedDataValue {
     case "Float64":
       return { Float64: dv.value };
     case "String":
-      return { String: dv.value };
-    // 后端 DataValue 无 Date/Datetime/Time/Categorical 变体，统一以 String 承载
-    case "Date":
-    case "Datetime":
-    case "Time":
-    case "Categorical":
       return { String: dv.value };
     case "Array":
       return { Array: dv.value.map(serializeDataValue) };

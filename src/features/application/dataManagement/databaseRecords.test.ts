@@ -16,7 +16,14 @@ describe("normalizeDatabaseRecord", () => {
     const existing: DatabaseRecord = {
       id: "df-1",
       name: "Kept Name",
-      columns: [{ name: "a", type: "Int64" }],
+      columns: [
+        {
+          name: "a",
+          type: "Int64",
+          physical: "Int64",
+          semantic: { kind: "Identifier", values: [], positiveValue: null, numeric: null },
+        },
+      ],
       rowCount: 42,
       columnCount: 1,
       loadFailed: true,
@@ -30,6 +37,13 @@ describe("normalizeDatabaseRecord", () => {
     expect(record.columns).toEqual(existing.columns);
     expect(record.rowCount).toBe(42);
     expect(record.loadFailed).toBe(true);
+    const loaded = normalizeDatabaseRecord("df-1", { columns: existing.columns });
+    expect(loaded.columns).toEqual(existing.columns);
+    expect(() =>
+      normalizeDatabaseRecord("df-1", {
+        columns: [{ ...existing.columns![0], semantic: { kind: "Scalar", inner: "Numeric" } }],
+      }),
+    ).toThrow("Invalid column semantic metadata");
   });
 
   it("falls back to existing name when incoming has no name or engine", () => {

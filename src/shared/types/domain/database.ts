@@ -1,6 +1,59 @@
+export const SEMANTIC_TYPES = [
+  "Numeric",
+  "Categorical",
+  "Ordinal",
+  "Binary",
+  "Datetime",
+  "Text",
+  "Identifier",
+] as const;
+
+export type SemanticType = (typeof SEMANTIC_TYPES)[number];
+
+export interface SemanticValue {
+  value: string;
+  label: string;
+}
+
+export interface ColumnSemantic {
+  kind: SemanticType;
+  values: readonly SemanticValue[];
+  positiveValue: string | null;
+  numeric: { integer: boolean; minimum: string | null; maximum: string | null } | null;
+}
+
+export function isColumnSemantic(value: unknown): value is ColumnSemantic {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const numeric = candidate.numeric;
+  return (
+    SEMANTIC_TYPES.includes(candidate.kind as SemanticType) &&
+    Array.isArray(candidate.values) &&
+    candidate.values.every(
+      (entry) =>
+        entry &&
+        typeof entry === "object" &&
+        typeof entry.value === "string" &&
+        typeof entry.label === "string",
+    ) &&
+    (candidate.positiveValue === null || typeof candidate.positiveValue === "string") &&
+    (numeric === null ||
+      (typeof numeric === "object" &&
+        numeric !== null &&
+        "integer" in numeric &&
+        typeof numeric.integer === "boolean" &&
+        "minimum" in numeric &&
+        (numeric.minimum === null || typeof numeric.minimum === "string") &&
+        "maximum" in numeric &&
+        (numeric.maximum === null || typeof numeric.maximum === "string")))
+  );
+}
+
 export interface ColumnInfo {
   name: string;
   type: string;
+  physical?: string;
+  semantic?: ColumnSemantic | null;
 }
 
 /** Read-only projection of an installed sample; resource paths stay in Rust. */

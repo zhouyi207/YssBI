@@ -8,16 +8,18 @@ describe("functionResourceView", () => {
       "functions/Add.yssbi-function",
       { id: "functions/Add.yssbi-function", name: "Add" },
       {
-        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Float64" })],
-        functionOutputs: [createDataSignaturePin("out-1", "R", { kind: "Float64" })],
+        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
+        functionOutputs: [
+          createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" }),
+        ],
       },
     );
 
     expect(view).toEqual({
       id: "functions/Add.yssbi-function",
       name: "Add",
-      functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Float64" })],
-      functionOutputs: [createDataSignaturePin("out-1", "R", { kind: "Float64" })],
+      functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
+      functionOutputs: [createDataSignaturePin("out-1", "R", { kind: "Scalar", inner: "Numeric" })],
     });
   });
 
@@ -28,7 +30,7 @@ describe("functionResourceView", () => {
         path: "fn-1",
         name: "Add",
         type: "function" as const,
-        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Int64" })],
+        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
         functionOutputs: [],
       },
     };
@@ -37,7 +39,7 @@ describe("functionResourceView", () => {
       "fn-1": {
         id: "fn-1",
         name: "Add",
-        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Int64" })],
+        functionInputs: [createDataSignaturePin("in-1", "A", { kind: "Scalar", inner: "Numeric" })],
         functionOutputs: [],
       },
     });

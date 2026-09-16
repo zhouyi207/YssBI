@@ -25,16 +25,22 @@ const operationId = "00000000-0000-0000-0000-000000000501";
 const projectInstanceId = "00000000-0000-0000-0000-000000000601";
 
 const beforeSignature: FunctionSignatureDto = {
-  parameters: [{ id: "value", name: "Value", type_name: "Int64" }],
-  return_type: "Float64",
+  parameters: [{ id: "value", name: "Value", type_name: "Numeric" }],
+  return_type: "Numeric",
 };
 const afterSignature: FunctionSignatureDto = {
-  parameters: [{ id: "value", name: "Renamed", type_name: "Float64" }],
-  return_type: "Int64",
+  parameters: [{ id: "value", name: "Renamed", type_name: "Numeric" }],
+  return_type: "Numeric",
 };
 const authoritativeFunctionProjection = {
   functionRevision: 3,
-  inputs: [{ id: "value", name: "Observed value", dataType: { kind: "Float64" as const } }],
+  inputs: [
+    {
+      id: "value",
+      name: "Observed value",
+      dataType: { kind: "Scalar" as const, inner: "Numeric" as const },
+    },
+  ],
   outputs: [
     {
       id: "computed",
@@ -72,8 +78,12 @@ function installState(): void {
         type: "function",
         functionRevision: 2,
         functionSignature: beforeSignature,
-        functionInputs: [{ id: "value", name: "Value", dataType: { kind: "Int64" } }],
-        functionOutputs: [{ id: "return", name: "Result", dataType: { kind: "Float64" } }],
+        functionInputs: [
+          { id: "value", name: "Value", dataType: { kind: "Scalar", inner: "Numeric" } },
+        ],
+        functionOutputs: [
+          { id: "return", name: "Result", dataType: { kind: "Scalar", inner: "Numeric" } },
+        ],
       },
     },
   });
@@ -269,8 +279,12 @@ describe("executeFunctionSignatureMutation", () => {
         functionPath,
         locale: "zh-CN",
         patch: {
-          inputs: [{ id: "value", name: "Renamed", dataType: { kind: "Float64" } }],
-          outputs: [{ id: "return", name: "Result", dataType: { kind: "Int64" } }],
+          inputs: [
+            { id: "value", name: "Renamed", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
+          outputs: [
+            { id: "return", name: "Result", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
         },
       },
       dependencies(mutateSignature),
@@ -342,8 +356,12 @@ describe("executeFunctionSignatureMutation", () => {
         functionPath,
         locale: "en-US",
         patch: {
-          inputs: [{ id: "value", name: "Renamed", dataType: { kind: "Float64" } }],
-          outputs: [{ id: "return", name: "Result", dataType: { kind: "Int64" } }],
+          inputs: [
+            { id: "value", name: "Renamed", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
+          outputs: [
+            { id: "return", name: "Result", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
         },
       },
       dependencies(
@@ -386,8 +404,12 @@ describe("executeFunctionSignatureMutation", () => {
         functionPath,
         locale: "en-US",
         patch: {
-          inputs: [{ id: "value", name: "Renamed", dataType: { kind: "Float64" } }],
-          outputs: [{ id: "return", name: "Result", dataType: { kind: "Int64" } }],
+          inputs: [
+            { id: "value", name: "Renamed", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
+          outputs: [
+            { id: "return", name: "Result", dataType: { kind: "Scalar", inner: "Numeric" } },
+          ],
         },
       },
       dependencies(vi.fn(() => pendingResult)),

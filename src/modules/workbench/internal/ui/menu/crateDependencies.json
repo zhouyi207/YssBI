@@ -1396,7 +1396,14 @@
   {
     "name": "yss-node-protocol",
     "manifest": "src-tauri/crates/yss-node-protocol/Cargo.toml",
-    "dependencies": []
+    "dependencies": [
+      {
+        "name": "yss-data-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
+      }
+    ]
   },
   {
     "name": "yss-node-registry",

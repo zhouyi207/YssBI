@@ -8,10 +8,10 @@ describe("pinSemantics", () => {
         typeState: {
           status: "exact",
           display: "ignored",
-          dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+          dataType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
         },
       }),
-    ).toBe("DataSeries<Float64>");
+    ).toBe("DataSeries<Numeric>");
   });
 
   it("requires structured dataType for data pin labels", () => {
@@ -25,7 +25,7 @@ describe("pinSemantics", () => {
   });
 
   it("maps scalar dataType kinds to pin input keys", () => {
-    expect(scalarPinInputKey({ kind: "Int64" })).toBe("Int64");
+    expect(scalarPinInputKey({ kind: "Scalar", inner: "Numeric" })).toBe("number");
     expect(scalarPinInputKey({ kind: "DataFrame" })).toBeNull();
   });
 });

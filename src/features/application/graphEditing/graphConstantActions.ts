@@ -1,7 +1,7 @@
 import { useGraphEditingStore, getGraphDocumentProjection } from "@/features/core/graphEditing";
 import type { GraphConstantDto } from "@/shared/types/domain/editorMutation";
-import type { DataType } from "@/shared/types/domain/dataType";
-import { getDefaultValue } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
+import { getDefaultValue } from "@/shared/types/domain/valueType";
 import type { DataValue } from "@/shared/types/domain/dataValue";
 import {
   deserializeDataValue,
@@ -42,7 +42,12 @@ export function createGraphConstant(graphPath: string, baseName: string) {
         type: "setConstant",
         payload: {
           id,
-          constant: { id, name, dataType: { kind: "Int64" }, dataValue: { Int64: 0 } },
+          constant: {
+            id,
+            name,
+            dataType: { kind: "Scalar", inner: "Numeric" },
+            dataValue: { Int64: 0 },
+          },
         },
       };
     },
@@ -52,7 +57,7 @@ export function createGraphConstant(graphPath: string, baseName: string) {
 export function updateGraphConstant(
   graphPath: string,
   id: string,
-  patch: { name?: string; dataType?: DataType; dataValue?: DataValue },
+  patch: { name?: string; dataType?: ValueType; dataValue?: DataValue },
 ) {
   return applyGraphMutation({
     graphPath,
@@ -80,7 +85,7 @@ export function updateGraphConstant(
           };
         }
         constant.dataValue = value;
-      } else if (patch.dataType) {
+      } else if (patch.dataType && patch.dataType.kind !== current.dataType.kind) {
         constant.dataValue = serializeDataValue(
           dataValueFromRaw(getDefaultValue(patch.dataType), patch.dataType),
         );

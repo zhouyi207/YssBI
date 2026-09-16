@@ -5,6 +5,8 @@ import {
   captureRevisionedProjectCommandSnapshot,
 } from "@/features/application/projectCommandContext";
 import type { DatabaseMutationCommandResult } from "@/services/database/databaseService";
+import { DatabaseService } from "@/services/database/databaseService";
+import type { ColumnSemantic } from "@/shared/types/domain/database";
 
 interface DatabaseCommandAuthority {
   projectInstanceId: string;
@@ -57,4 +59,30 @@ export async function executeDatabaseMutation<T>(
     expectedRevision,
   });
   return settle(context, aggregate);
+}
+
+export function changeColumnPhysical(id: string, column: string, physical: string) {
+  return executeDatabaseMutation(id, (authority) =>
+    DatabaseService.castColumn(
+      authority.projectInstanceId,
+      authority.operationId,
+      authority.expectedRevision,
+      id,
+      column,
+      physical,
+    ),
+  );
+}
+
+export function changeColumnSemantic(id: string, column: string, semantic: ColumnSemantic) {
+  return executeDatabaseMutation(id, (authority) =>
+    DatabaseService.setColumnSemantic(
+      authority.projectInstanceId,
+      authority.operationId,
+      authority.expectedRevision,
+      id,
+      column,
+      semantic,
+    ),
+  );
 }

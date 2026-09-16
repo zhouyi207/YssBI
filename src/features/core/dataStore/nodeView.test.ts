@@ -53,8 +53,12 @@ function pin(id: string, direction: "input" | "output", label: string): PinData 
             effective: "unbound",
           }
         : null,
-    acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
-    typeState: { status: "exact", display: "Float64", dataType: { kind: "Float64" } },
+    acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
+    typeState: {
+      status: "exact",
+      display: "Float64",
+      dataType: { kind: "Scalar", inner: "Numeric" },
+    },
     resolvedSchema: null,
     status: "resolved",
   };

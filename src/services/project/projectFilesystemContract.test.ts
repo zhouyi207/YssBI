@@ -64,6 +64,7 @@ const projectDatabaseIdentityFields = {
   add_column: "projectInstanceId",
   delete_column: "projectInstanceId",
   cast_column: "projectInstanceId",
+  set_column_semantic: "projectInstanceId",
   rename_column: "projectInstanceId",
   undo_edit: "projectInstanceId",
   redo_edit: "projectInstanceId",

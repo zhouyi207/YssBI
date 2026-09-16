@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { dataTypeFromBackend, dataTypeToBackend } from "./dataType";
+import { dataTypeFromBackend, dataTypeToBackend } from "./valueType";
 
-describe("DataType DTO conversion", () => {
+describe("ValueType DTO conversion", () => {
   it("preserves Struct inner keys from backend payloads", () => {
     expect(dataTypeFromBackend({ kind: "Struct", inner: "OLSModel" })).toEqual({
       kind: "Struct",

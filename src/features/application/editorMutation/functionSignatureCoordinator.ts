@@ -8,7 +8,7 @@ import {
   ProjectPublicationError,
   projectPublicationCoordinator,
 } from "./projectPublicationCoordinator";
-import { dataTypeDisplay } from "@/shared/types/domain/dataType";
+import { dataTypeDisplay } from "@/shared/types/domain/valueType";
 import type { FunctionSignaturePatch } from "@/shared/types";
 import type {
   FunctionDocumentPatchDto,

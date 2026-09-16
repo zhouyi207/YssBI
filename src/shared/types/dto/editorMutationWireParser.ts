@@ -10,7 +10,7 @@ import type {
 } from "./editorMutation";
 import type { GraphProjectionReplacementDto } from "./editorProjection";
 import { isRustDataValueWire } from "./dataValue";
-import { isBackendDataType } from "../domain/dataType";
+import { isBackendDataType } from "../domain/valueType";
 import {
   isEditorGraphProjectionDto,
   isFunctionEditorProjectionDto,

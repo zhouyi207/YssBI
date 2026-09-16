@@ -11,7 +11,7 @@ import {
   isComplexType,
   CONSTANT_SELECTABLE_DATA_TYPE_KINDS,
   DATA_SERIES_ELEMENT_TYPE_KINDS,
-} from "@/shared/types/domain/dataType";
+} from "@/shared/types/domain/valueType";
 import { dataValueToRaw, dataValueFromRaw } from "@/shared/types/domain/dataValue";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
 import { DetailCommitInput, DetailForm } from "../shared/DetailForm";
@@ -24,7 +24,7 @@ interface ConstantValueFieldsProps {
   constant: {
     id: string;
     name: string;
-    dataType: import("@/shared/types/domain/dataType").DataType;
+    dataType: import("@/shared/types/domain/valueType").ValueType;
     dataValue: import("@/shared/types/domain/dataValue").DataValue;
   };
   onUpdate: (
@@ -35,7 +35,7 @@ interface ConstantValueFieldsProps {
 export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsProps) {
   const { t } = useTranslation();
   const [valueEditorOpen, setValueEditorOpen] = useState(false);
-  const numeric = constant.dataType.kind === "Int64" || constant.dataType.kind === "Float64";
+  const numeric = dataTypeKind(constant.dataType) === "Numeric";
 
   const valueSummary = formatConstantValueSummary(
     constant.dataType,
@@ -59,7 +59,8 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
             onChange={(val) =>
               onUpdate({
                 dataType: dataTypeFromKey(val, {
-                  kind: val === "DataSeries" ? "Float64" : "Int64",
+                  kind: "Scalar",
+                  inner: "Numeric",
                 }),
               })
             }
@@ -68,7 +69,7 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
         {(constant.dataType.kind === "Array" || constant.dataType.kind === "DataSeries") && (
           <DetailFieldRow label={t("detail.fields.elementType")}>
             <Select
-              value={constant.dataType.inner.kind}
+              value={dataTypeKind(constant.dataType.inner)}
               options={DATA_SERIES_ELEMENT_TYPE_KINDS.map((kind) => ({ label: kind, value: kind }))}
               onChange={(value) =>
                 onUpdate({
@@ -83,7 +84,7 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
         )}
         {isPrimitiveType(constant.dataType) && (
           <DetailFieldRow label={t("detail.fields.value")}>
-            {constant.dataType.kind === "Boolean" ? (
+            {dataTypeKind(constant.dataType) === "Binary" ? (
               <div className="flex items-center justify-end gap-2">
                 <Checkbox
                   id={`constant-bool-${constant.id}`}

@@ -167,7 +167,7 @@ export interface InputStateDto {
 export interface GraphConstantDto {
   id: string;
   name: string;
-  dataType: import("./dataType").DataType;
+  dataType: import("./valueType").ValueType;
   dataValue: import("./dataValue").SerializedDataValue;
   tabular?: { columns: Record<string, Array<null | boolean | number | string>> };
   description?: string;

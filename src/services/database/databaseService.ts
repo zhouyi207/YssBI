@@ -1,4 +1,5 @@
 import { invokeCommand } from "@/services/ipc";
+import type { ColumnSemantic } from "@/shared/types/domain/database";
 import type {
   ColumnDistribution,
   ColumnStats,
@@ -333,6 +334,24 @@ export class DatabaseService {
       id,
       oldName,
       newName,
+    });
+  }
+
+  static async setColumnSemantic(
+    projectInstanceId: string,
+    operationId: string,
+    expectedRevision: number,
+    id: string,
+    colName: string,
+    semantic: ColumnSemantic,
+  ): Promise<DatabaseMutationCommandResult<EditState>> {
+    return await invokeCommand("set_column_semantic", {
+      projectInstanceId,
+      operationId,
+      expectedRevision,
+      id,
+      colName,
+      semantic,
     });
   }
 

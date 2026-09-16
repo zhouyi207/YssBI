@@ -5,6 +5,7 @@ import {
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { logger } from "@/features/application/observability/appLogger";
 import { databasePublication } from "@/features/core/database/publication";
+import { isColumnSemantic } from "@/shared/types/domain/database";
 import type {
   ColumnInfo as DatabaseColumn,
   DatabaseEngineDTO as DatabaseEngine,
@@ -22,7 +23,15 @@ function normalizeColumns(raw: unknown): DatabaseColumn[] | undefined {
   for (const item of raw) {
     if (!isRecord(item)) continue;
     if (typeof item.name === "string" && typeof item.type === "string") {
-      columns.push({ name: item.name, type: item.type });
+      if (item.semantic != null && !isColumnSemantic(item.semantic)) {
+        throw new TypeError("Invalid column semantic metadata");
+      }
+      columns.push({
+        name: item.name,
+        type: item.type,
+        ...(typeof item.physical === "string" ? { physical: item.physical } : {}),
+        ...(item.semantic != null ? { semantic: item.semantic } : {}),
+      });
     }
   }
   return columns.length > 0 ? columns : undefined;

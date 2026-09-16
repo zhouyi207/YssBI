@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { usePinInput } from "@/features/application/editor/usePinInput";
-import type { DataType } from "@/shared/types/domain";
+import type { ValueType } from "@/shared/types/domain";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
@@ -8,7 +8,7 @@ export interface PinInputProps {
   pinId: string;
   nodeId: string;
   graphPath: string;
-  dataType?: DataType;
+  dataType?: ValueType;
   value?: unknown;
 }
 
@@ -16,10 +16,6 @@ const INPUT_CLASS =
   "nodrag nowheel h-[18px] box-border rounded-sm px-1.5 text-[10px] leading-[18px] placeholder:text-muted-foreground";
 
 const MIN_WIDTH = 28;
-
-function isValidIntInput(s: string): boolean {
-  return /^-?\d*$/.test(s);
-}
 
 function isValidFloatInput(s: string): boolean {
   return /^-?\d*\.?\d*$/.test(s);
@@ -86,7 +82,7 @@ export const PinInput: React.FC<PinInputProps> = ({
     initialValue,
   });
 
-  const isNumeric = inputKey === "Int64" || inputKey === "Float64";
+  const isNumeric = inputKey === "number";
 
   const [inputText, setInputText] = useState(() => (isNumeric ? String(value ?? 0) : ""));
 
@@ -104,46 +100,7 @@ export const PinInput: React.FC<PinInputProps> = ({
   const { ref, width } = useAutoWidth(measureKey, placeholder);
 
   switch (inputKey) {
-    case "Int64":
-      return (
-        <Input
-          ref={ref}
-          type="text"
-          inputMode="numeric"
-          value={inputText}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (raw === "" || raw === "-") {
-              setInputText(raw);
-              handleChange(raw);
-              return;
-            }
-            if (!isValidIntInput(raw)) return;
-            setInputText(raw);
-            const parsed = parseInt(raw, 10);
-            if (!isNaN(parsed)) handleChange(parsed);
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => {
-            if (cancelBlurCommit()) {
-              setInputText(String(initialValue ?? 0));
-              return;
-            }
-            const parsed = parseInt(inputText, 10);
-            const final = isNaN(parsed) ? 0 : parsed;
-            handleChange(final);
-            setInputText(String(final));
-            handleBlur();
-          }}
-          onClick={stop}
-          onPointerDown={stop}
-          style={{ width }}
-          className={`${INPUT_CLASS} text-center`}
-        />
-      );
-
-    case "Float64":
+    case "number":
       return (
         <Input
           ref={ref}

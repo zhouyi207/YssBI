@@ -1,3 +1,4 @@
+import { SEMANTIC_TYPES } from "./database";
 import { isSchemaAwareParameterEditorDto } from "@/shared/types/domain/parameterEditorValidators";
 import type {
   DiagnosticLocationDto,
@@ -5,21 +6,13 @@ import type {
   FunctionEditorProjectionDto,
   PortAddressDto,
 } from "@/shared/types/domain/editorProjection";
-import { isBackendDataType } from "@/shared/types/domain/dataType";
+import { isBackendDataType } from "@/shared/types/domain/valueType";
 
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const portDirections = new Set(["input", "output"]);
 const bindingKinds = new Set(["connections", "literal", "protocolDefault", "unbound"]);
-const scalarTypes = new Set([
-  "boolean",
-  "int64",
-  "float64",
-  "string",
-  "date",
-  "dateTime",
-  "unknown",
-]);
+const scalarTypes = new Set<unknown>([...SEMANTIC_TYPES, null]);
 const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
 const parameterEditorKinds = new Set([

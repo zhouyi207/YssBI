@@ -70,7 +70,7 @@ function makePin(id: string, nodeId: string, name: string, direction: "input" | 
     nodeId,
     name,
     direction,
-    dataType: { kind: "Float64" as const },
+    dataType: { kind: "Scalar" as const, inner: "Numeric" as const },
     connections: {
       current: 0,
       maximum: null,

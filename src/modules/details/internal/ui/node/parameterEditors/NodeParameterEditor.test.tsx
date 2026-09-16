@@ -99,7 +99,7 @@ afterEach(() => {
 describe("NodeParameterEditor ordinary controls", () => {
   it("can choose the first schema option when a required parameter is unset", async () => {
     renderEditor({
-      ...parameter("select", null, { kind: "String" }),
+      ...parameter("select", null, { kind: "Scalar", inner: "Text" }),
       configuration: { kind: "selectOptions", options: ["amount", "quantity"] },
     });
     const select = container.querySelector("select");
@@ -116,7 +116,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("commits a toggle immediately through setNodeParameters", async () => {
-    renderEditor(parameter("toggle", false, { kind: "Boolean" }));
+    renderEditor(parameter("toggle", false, { kind: "Scalar", inner: "Binary" }));
 
     const toggle = container.querySelector('[role="switch"]');
     if (!toggle) throw new Error("missing switch");
@@ -132,7 +132,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("describes an invalid numeric draft with a field-level error", () => {
-    renderEditor(parameter("number", 1, { kind: "Int64" }));
+    renderEditor(parameter("number", 1, { kind: "Scalar", inner: "Numeric" }));
 
     setControlValue(input(), "1.5");
     act(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
@@ -144,8 +144,8 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it.each([
-    [{ kind: "Int64" }, "1.5", false],
-    [{ kind: "Float64" }, "1.5", true],
+    [{ kind: "Scalar", inner: "Numeric" }, "1.5", false],
+    [{ kind: "Scalar", inner: "Numeric" }, "1.5", true],
   ] as const)(
     "uses projected %s semantics for numeric commits",
     async (valueType, draft, shouldCommit) => {
@@ -174,7 +174,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   it.each(["text", "select"] as const)(
     "edits %s without an option list as text",
     async (editor) => {
-      renderEditor(parameter(editor, "old", { kind: "String" }));
+      renderEditor(parameter(editor, "old", { kind: "Scalar", inner: "Text" }));
       const input = container.querySelector("input");
       if (!(input instanceof HTMLInputElement)) throw new Error("missing input");
 
@@ -194,7 +194,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   );
 
   it("does not write a text draft per keystroke", () => {
-    renderEditor(parameter("text", "old", { kind: "String" }));
+    renderEditor(parameter("text", "old", { kind: "Scalar", inner: "Text" }));
 
     setControlValue(input(), "new");
 
@@ -203,7 +203,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("commits a numeric draft on blur", async () => {
-    renderEditor(parameter("number", 1, { kind: "Float64" }));
+    renderEditor(parameter("number", 1, { kind: "Scalar", inner: "Numeric" }));
 
     setControlValue(input(), "2.5");
     act(() => input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
@@ -218,7 +218,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("resets an invalid numeric blur and syncs a later projected value", () => {
-    const initial = parameter("number", 1, { kind: "Int64" });
+    const initial = parameter("number", 1, { kind: "Scalar", inner: "Numeric" });
     renderEditor(initial);
 
     setControlValue(input(), "1.5");
@@ -231,7 +231,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("synchronously blocks blur from committing an active draft when a newer projection renders", async () => {
-    renderEditor(parameter("text", "old", { kind: "String" }));
+    renderEditor(parameter("text", "old", { kind: "Scalar", inner: "Text" }));
     setControlValue(input(), "draft");
 
     act(() => {
@@ -241,7 +241,7 @@ describe("NodeParameterEditor ordinary controls", () => {
             graphPath={graphPath}
             nodeId={nodeId}
             locale="en-US"
-            parameter={parameter("text", "projected", { kind: "String" })}
+            parameter={parameter("text", "projected", { kind: "Scalar", inner: "Text" })}
             diagnostics={[]}
             formatFallback={String}
           />,
@@ -263,7 +263,7 @@ describe("NodeParameterEditor ordinary controls", () => {
           resolveMutation = resolve;
         }),
     );
-    renderEditor(parameter("text", "old", { kind: "String" }));
+    renderEditor(parameter("text", "old", { kind: "Scalar", inner: "Text" }));
     setControlValue(input(), "draft");
 
     act(() => {
@@ -277,7 +277,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("does not submit an invalid numeric draft on blur", () => {
-    renderEditor(parameter("number", 1, { kind: "Int64" }));
+    renderEditor(parameter("number", 1, { kind: "Scalar", inner: "Numeric" }));
     setControlValue(input(), "1.5");
 
     act(() => input().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
@@ -289,7 +289,7 @@ describe("NodeParameterEditor ordinary controls", () => {
     "restores the latest projection when mutation resolves %s",
     async (status) => {
       setNodeParameters.mockResolvedValueOnce({ status });
-      const initial = parameter("text", "old", { kind: "String" });
+      const initial = parameter("text", "old", { kind: "Scalar", inner: "Text" });
       renderEditor(initial);
       setControlValue(input(), "draft");
       act(() =>
@@ -311,11 +311,11 @@ describe("NodeParameterEditor ordinary controls", () => {
           rejectMutation = reject;
         }),
     );
-    renderEditor(parameter("text", "old", { kind: "String" }));
+    renderEditor(parameter("text", "old", { kind: "Scalar", inner: "Text" }));
     setControlValue(input(), "draft");
     act(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
 
-    renderEditor(parameter("text", "latest projection", { kind: "String" }));
+    renderEditor(parameter("text", "latest projection", { kind: "Scalar", inner: "Text" }));
     expect(input().value).toBe("latest projection");
     rejectMutation(new Error("backend rejected value"));
     await flushPromises();
@@ -325,7 +325,7 @@ describe("NodeParameterEditor ordinary controls", () => {
 
   it("restores the toggle state when its mutation rejects", async () => {
     setNodeParameters.mockRejectedValueOnce(new Error("toggle rejected"));
-    renderEditor(parameter("toggle", false, { kind: "Boolean" }));
+    renderEditor(parameter("toggle", false, { kind: "Scalar", inner: "Binary" }));
 
     const toggle = container.querySelector('[role="switch"]');
     if (!toggle) throw new Error("missing switch");
@@ -336,7 +336,7 @@ describe("NodeParameterEditor ordinary controls", () => {
   });
 
   it("renders multiline text in a textarea and commits it on blur", async () => {
-    renderEditor(parameter("text", "old", { kind: "String" }, true));
+    renderEditor(parameter("text", "old", { kind: "Scalar", inner: "Text" }, true));
     const textarea = container.querySelector("textarea");
     if (!(textarea instanceof HTMLTextAreaElement)) throw new Error("missing textarea");
 

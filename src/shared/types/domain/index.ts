@@ -25,7 +25,7 @@ export * from "./functionSignaturePin";
 
 export * from "./graph";
 export * from "./graphResourcePath";
-export * from "./dataType";
+export * from "./valueType";
 export * from "./typeSystem";
 export * from "./dataValue";
 export * from "./project";
@@ -43,11 +43,7 @@ export type * from "./executionDemand";
 export type { ExecutionDemandDto, GraphOutputRefDto } from "./executionDemand";
 export { EXECUTION_DEMAND_TYPES } from "./executionDemand";
 export type * from "./runEvent";
-export {
-  RUN_ERROR_CODES,
-  RUN_EVENT_KIND_TYPES,
-  RUN_PHASES,
-} from "./runEvent";
+export { RUN_ERROR_CODES, RUN_EVENT_KIND_TYPES, RUN_PHASES } from "./runEvent";
 export type { ErrorReference } from "./errorReference";
 export type * from "./clipboardSubgraph";
 export type * from "./plotPayload";

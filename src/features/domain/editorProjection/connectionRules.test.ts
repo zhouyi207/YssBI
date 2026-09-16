@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { PinDirection } from "@/shared/types/domain/pin";
-import { dataTypeDisplay, type DataType } from "@/shared/types/domain/dataType";
+import { dataTypeDisplay, type ValueType } from "@/shared/types/domain/valueType";
 import type { TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import {
   isPinCompatible,
@@ -10,12 +10,15 @@ import {
   type ConnectionCandidatePin,
 } from "./connectionRules";
 
-const FLOAT64: DataType = { kind: "Float64" };
-const STRING: DataType = { kind: "String" };
-const SERIES_FLOAT64: DataType = { kind: "DataSeries", inner: { kind: "Float64" } };
-const MODEL: DataType = { kind: "Struct", inner: "Model" };
-const OLS_MODEL: DataType = { kind: "Struct", inner: "OLSModel" };
-const OLS_RESULT: DataType = { kind: "Struct", inner: "OLSResult" };
+const FLOAT64: ValueType = { kind: "Scalar", inner: "Numeric" };
+const STRING: ValueType = { kind: "Scalar", inner: "Text" };
+const SERIES_FLOAT64: ValueType = {
+  kind: "DataSeries",
+  inner: { kind: "Scalar", inner: "Numeric" },
+};
+const MODEL: ValueType = { kind: "Struct", inner: "Model" };
+const OLS_MODEL: ValueType = { kind: "Struct", inner: "OLSModel" };
+const OLS_RESULT: ValueType = { kind: "Struct", inner: "OLSResult" };
 
 const TYPE_SYSTEM: TypeSystemSnapshot = {
   structTypes: {
@@ -26,7 +29,7 @@ const TYPE_SYSTEM: TypeSystemSnapshot = {
 };
 
 function pin(
-  partial: Partial<ConnectionCandidatePin> & { direction: PinDirection; dataType?: DataType },
+  partial: Partial<ConnectionCandidatePin> & { direction: PinDirection; dataType?: ValueType },
 ): ConnectionCandidatePin {
   const { dataType, ...projected } = partial;
   const acceptedType =
@@ -56,38 +59,36 @@ function pin(
   };
 }
 
-describe("dataTypeDisplay Number alias", () => {
-  it("uses Number only for the exact scalar numeric union", () => {
-    expect(
-      dataTypeDisplay({
-        kind: "OneOf",
-        inner: [{ kind: "Float64" }, { kind: "Int64" }],
-      }),
-    ).toBe("Number");
-    expect(
-      dataTypeDisplay({
-        kind: "OneOf",
-        inner: [{ kind: "Float64" }, { kind: "String" }],
-      }),
-    ).toBe("Float64 | String");
+describe("semantic type display", () => {
+  it("displays all seven meanings independently of physical representation", () => {
+    for (const inner of [
+      "Numeric",
+      "Categorical",
+      "Ordinal",
+      "Binary",
+      "Datetime",
+      "Text",
+      "Identifier",
+    ] as const) {
+      expect(dataTypeDisplay({ kind: "Scalar", inner })).toBe(inner);
+      expect(
+        getDataTypeCompatibility({ kind: "Scalar", inner }, { kind: "Scalar", inner: "Numeric" }),
+      ).toBe(inner === "Numeric" ? "compatible" : "incompatible");
+    }
   });
-
-  it("uses DataSeries<Number> only for the exact outer numeric series union", () => {
+  it("keeps series structure and semantic unions explicit", () => {
+    expect(
+      dataTypeDisplay({ kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } }),
+    ).toBe("DataSeries<Numeric>");
     expect(
       dataTypeDisplay({
         kind: "OneOf",
         inner: [
-          { kind: "DataSeries", inner: { kind: "Int64" } },
-          { kind: "DataSeries", inner: { kind: "Float64" } },
+          { kind: "Scalar", inner: "Numeric" },
+          { kind: "Scalar", inner: "Text" },
         ],
       }),
-    ).toBe("DataSeries<Number>");
-    expect(
-      dataTypeDisplay({
-        kind: "DataSeries",
-        inner: { kind: "OneOf", inner: [{ kind: "Int64" }, { kind: "Float64" }] },
-      }),
-    ).not.toBe("DataSeries<Number>");
+    ).toBe("Numeric | Text");
   });
 });
 
@@ -95,8 +96,14 @@ describe("getDataTypeCompatibility", () => {
   it("requires every source union member to be assignable", () => {
     expect(
       getDataTypeCompatibility(
-        { kind: "OneOf", inner: [{ kind: "Int64" }, { kind: "String" }] },
-        { kind: "Int64" },
+        {
+          kind: "OneOf",
+          inner: [
+            { kind: "Scalar", inner: "Numeric" },
+            { kind: "Scalar", inner: "Text" },
+          ],
+        },
+        { kind: "Scalar", inner: "Numeric" },
       ),
     ).toBe("incompatible");
   });
@@ -104,25 +111,41 @@ describe("getDataTypeCompatibility", () => {
   it("accepts when every source union member is assignable", () => {
     expect(
       getDataTypeCompatibility(
-        { kind: "OneOf", inner: [{ kind: "Int64" }, { kind: "Float64" }] },
-        { kind: "OneOf", inner: [{ kind: "Float64" }, { kind: "Int64" }] },
+        {
+          kind: "OneOf",
+          inner: [
+            { kind: "Scalar", inner: "Numeric" },
+            { kind: "Scalar", inner: "Numeric" },
+          ],
+        },
+        {
+          kind: "OneOf",
+          inner: [
+            { kind: "Scalar", inner: "Numeric" },
+            { kind: "Scalar", inner: "Numeric" },
+          ],
+        },
       ),
     ).toBe("compatible");
   });
 
   it("returns indeterminate when either projected type is missing", () => {
-    expect(getDataTypeCompatibility(null, { kind: "Float64" })).toBe("indeterminate");
-    expect(getDataTypeCompatibility({ kind: "Float64" }, undefined)).toBe("indeterminate");
+    expect(getDataTypeCompatibility(null, { kind: "Scalar", inner: "Numeric" })).toBe(
+      "indeterminate",
+    );
+    expect(getDataTypeCompatibility({ kind: "Scalar", inner: "Numeric" }, undefined)).toBe(
+      "indeterminate",
+    );
   });
 
   it("accepts homogeneous numeric series into DataSeries Number union", () => {
     const target = {
       kind: "OneOf",
       inner: [
-        { kind: "DataSeries", inner: { kind: "Int64" } },
-        { kind: "DataSeries", inner: { kind: "Float64" } },
+        { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
+        { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
       ],
-    } satisfies DataType;
+    } satisfies ValueType;
 
     expect(getDataTypeCompatibility(SERIES_FLOAT64, target)).toBe("compatible");
   });
@@ -145,8 +168,8 @@ describe("getPinCompatibility", () => {
       id: "input",
       nodeId: "target",
       direction: "input",
-      acceptedType: { display: "core.float64", domain: [FLOAT64] },
-      typeState: { status: "exact", display: "core.float64", dataType: FLOAT64 },
+      acceptedType: { display: "core.numeric", domain: [FLOAT64] },
+      typeState: { status: "exact", display: "core.numeric", dataType: FLOAT64 },
       dataType: FLOAT64,
     });
 

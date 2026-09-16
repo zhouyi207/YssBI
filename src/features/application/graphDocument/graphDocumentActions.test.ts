@@ -17,7 +17,9 @@ describe("graphDocumentActions", () => {
   });
 
   it("delegates signature edits to the revisioned authoritative coordinator", async () => {
-    const inputs = [createDataSignaturePin("input-1", "Value", { kind: "Int64" })];
+    const inputs = [
+      createDataSignaturePin("input-1", "Value", { kind: "Scalar", inner: "Numeric" }),
+    ];
     commitFunctionSignature.mockResolvedValueOnce({ status: "applied" });
 
     await graphDocumentActions.updateFunctionSignature("functions/Compute.yssbi-function", {

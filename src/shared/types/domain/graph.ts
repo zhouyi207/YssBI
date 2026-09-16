@@ -1,4 +1,4 @@
-import type { DataType } from "./dataType";
+import type { ValueType } from "./valueType";
 
 export type GraphType = "event" | "function";
 
@@ -6,7 +6,7 @@ export type GraphType = "event" | "function";
 export interface FunctionSignaturePin {
   id: string;
   name: string;
-  dataType: DataType;
+  dataType: ValueType;
 }
 
 export type FunctionPinSpec = FunctionSignaturePin;

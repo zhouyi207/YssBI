@@ -2023,6 +2023,28 @@ export const enUS = {
     comingSoon: "{{type}} import is not available yet",
   },
   detail: {
+    data: {
+      applyPhysical: "Apply Physical conversion",
+      applySemantic: "Apply Semantic",
+      categoryHint:
+        "Map original values to internal semantic labels. The data view keeps original values; codes do not imply an order.",
+      ordinalHint:
+        "List levels from lowest to highest. Use the arrows to set their explicit order.",
+      binaryHint:
+        "Configure exactly two distinct allowed values. Missing values are not a category.",
+      value: "Stored value {{index}}",
+      label: "Label {{index}}",
+      labelPlaceholder: "Semantic label",
+      removeValue: "Remove value {{index}}",
+      addValue: "Add value",
+      positive: "Event / positive value",
+      noPositive: "Unspecified",
+      integer: "Integers only",
+      minimum: "Minimum",
+      maximum: "Maximum",
+      updateFailed:
+        "Could not apply settings. Check the value range, precision, allowed values, and compatibility between the current Semantic and Physical settings.",
+    },
     inspect: {
       emptyTitle: "No node selected",
       empty: "Select a Canvas node to edit its configuration",

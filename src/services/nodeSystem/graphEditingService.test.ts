@@ -33,7 +33,12 @@ it("parses a graph save receipt and rejects a response from another project", as
     changed: false,
     resourceRevision: 3,
     functionEditorProjection: null,
-    update: { kind: "snapshot", cursor: "saved", data: { document, projection, editing } },
+    update: {
+      kind: "snapshot",
+      cursor: "saved",
+      snapshotBytes: JSON.stringify({ document, projection, editing }).length,
+      data: { document, projection, editing },
+    },
   };
   vi.mocked(invoke)
     .mockResolvedValueOnce(wire)

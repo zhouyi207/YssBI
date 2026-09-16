@@ -55,7 +55,7 @@ describe("Rust-generated node-system golden contracts", () => {
       throw new Error("expected function replacement");
     }
     expect(row.functionEditorProjection).toEqual(replacement.functionEditorProjection);
-    expect(row.functionEditorProjection.outputs[0].name).toBe("Array<String>");
+    expect(row.functionEditorProjection.outputs[0].name).toBe("Array<Text>");
   });
 
   it("consumes the exact production ResourceMutationCommitted event shapes", () => {
@@ -348,7 +348,7 @@ describe("Rust-generated node-system golden contracts", () => {
           kind: "projectColumns",
           available: true,
           unavailableReason: null,
-          options: [{ name: "value", dataType: "boolean" }],
+          options: [{ name: "value", dataType: "Binary" }],
           value: ["value"],
         },
         missing: "options",
@@ -361,7 +361,7 @@ describe("Rust-generated node-system golden contracts", () => {
           columns: [
             {
               name: "value",
-              dataType: "boolean",
+              dataType: "Binary",
               operators: ["equal"],
               literalTypes: ["boolean"],
             },

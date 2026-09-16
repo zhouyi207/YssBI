@@ -1,4 +1,4 @@
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from "@/shared/types/domain/typeSystem";
 import { structCanAccept } from "@/shared/types/domain/typeSystem";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
@@ -23,12 +23,13 @@ function someCompatibility(results: TypeCompatibility[]): TypeCompatibility {
 }
 
 export function getDataTypeCompatibility(
-  source: DataType | null | undefined,
-  target: DataType | null | undefined,
+  source: ValueType | null | undefined,
+  target: ValueType | null | undefined,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): TypeCompatibility {
   if (!source || !target) return "indeterminate";
-  if (source.kind === "Int64" && target.kind === "Float64") return "compatible";
+  if (source.kind === "Scalar" && target.kind === "Scalar")
+    return source.inner === target.inner ? "compatible" : "incompatible";
   if (source.kind === "OneOf") {
     return everyCompatibility(
       source.inner.map((member) => getDataTypeCompatibility(member, target, typeSystem)),
@@ -62,7 +63,7 @@ export function isPinCompatible(
   return getPinCompatibility(source, target, typeSystem) !== "incompatible";
 }
 
-function effectiveDomain(pin: ConnectionCandidatePin): readonly DataType[] | null {
+function effectiveDomain(pin: ConnectionCandidatePin): readonly ValueType[] | null {
   switch (pin.typeState.status) {
     case "exact":
       return pin.typeState.dataType ? [pin.typeState.dataType] : null;

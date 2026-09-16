@@ -1,3 +1,4 @@
+import { SEMANTIC_TYPES } from "./database";
 import type {
   FilterLiteralDto,
   FilterOperatorDto,
@@ -6,15 +7,7 @@ import type {
   SchemaAwareParameterEditorDto,
 } from "@/shared/types/domain/editorProjection";
 
-const relationalScalarTypes = new Set<RelationalScalarTypeDto>([
-  "boolean",
-  "int64",
-  "float64",
-  "string",
-  "date",
-  "dateTime",
-  "unknown",
-]);
+const relationalScalarTypes = new Set<RelationalScalarTypeDto>([...SEMANTIC_TYPES, null]);
 const filterOperators = new Set<FilterOperatorDto>([
   "equal",
   "notEqual",

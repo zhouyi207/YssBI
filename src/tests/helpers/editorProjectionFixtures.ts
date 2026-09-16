@@ -3,7 +3,7 @@ import type {
   GraphEditorSessionDto,
   GraphEditingStateDto,
 } from "@/shared/types/dto/editorMutation";
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { portAddressKey } from "@/features/domain/editorProjection";
 
@@ -17,10 +17,13 @@ export interface EditorProjectionFixtureOptions {
 
 export function makeProjectedPinData(
   overrides: Partial<PinData> &
-    Pick<PinData, "id" | "nodeId" | "direction"> & { dataType?: DataType },
+    Pick<PinData, "id" | "nodeId" | "direction"> & { dataType?: ValueType },
 ): PinData {
   const { dataType: overriddenDataType, ...projectedOverrides } = overrides;
-  const dataType: DataType | undefined = overriddenDataType ?? { kind: "Float64" };
+  const dataType: ValueType | undefined = overriddenDataType ?? {
+    kind: "Scalar",
+    inner: "Numeric",
+  };
   const label = overrides.name ?? overrides.id;
   const base: PinData = {
     id: overrides.id,
@@ -164,11 +167,11 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 canMove: true,
               },
               input: null,
-              acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+              acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
               typeState: {
                 status: "exact",
                 display: "Float64",
-                dataType: { kind: "Float64" },
+                dataType: { kind: "Scalar", inner: "Numeric" },
               },
               resolvedSchema: null,
               status: "resolved",
@@ -192,11 +195,11 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
                 protocolDefault: null,
                 effective: "connections",
               },
-              acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+              acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
               typeState: {
                 status: "exact",
                 display: "Float64",
-                dataType: { kind: "Float64" },
+                dataType: { kind: "Scalar", inner: "Numeric" },
               },
               resolvedSchema: null,
               status: "resolved",

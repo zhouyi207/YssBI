@@ -49,14 +49,14 @@ function projectIndex(): Record<string, unknown> {
             {
               id: "sales",
               name: "Observed sales",
-              dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+              dataType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
             },
           ],
           outputs: [
             {
               id: "return",
               name: "Array<String>",
-              dataType: { kind: "Array", inner: { kind: "String" } },
+              dataType: { kind: "Array", inner: { kind: "Scalar", inner: "Text" } },
             },
           ],
         },
@@ -99,14 +99,14 @@ describe("ProjectService.getProjectIndex function editor projection parser", () 
         {
           id: "sales",
           name: "Observed sales",
-          dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+          dataType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
         },
       ],
       outputs: [
         {
           id: "return",
           name: "Array<String>",
-          dataType: { kind: "Array", inner: { kind: "String" } },
+          dataType: { kind: "Array", inner: { kind: "Scalar", inner: "Text" } },
         },
       ],
     });

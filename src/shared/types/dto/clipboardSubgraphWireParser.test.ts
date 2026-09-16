@@ -54,7 +54,7 @@ const completeSnapshot = {
       address: { nodeId: "node/1", port: { kind: "declared", key: "input" } },
       state: {
         literalOverride: {
-          value_type: { Concrete: "core.int64" },
+          value_type: { Concrete: "core.numeric" },
           value: { Integer: 42 },
         },
       },

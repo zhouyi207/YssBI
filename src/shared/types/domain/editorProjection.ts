@@ -1,4 +1,4 @@
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import type { FunctionSignaturePin } from "@/shared/types/domain/graph";
 
 export interface FunctionEditorProjectionDto {
@@ -152,12 +152,12 @@ export type EffectiveInputBindingKindDto =
 
 export interface AcceptedTypeDto {
   display: string;
-  domain: DataType[] | null;
+  domain: ValueType[] | null;
 }
 
 export type PortTypeStateDto =
-  | { status: "exact"; display: string; dataType: DataType | null }
-  | { status: "constrained"; display: string; domain: DataType[] }
+  | { status: "exact"; display: string; dataType: ValueType | null }
+  | { status: "constrained"; display: string; domain: ValueType[] }
   | { status: "unknown"; reasonCode: string }
   | { status: "conflict"; diagnosticCode: string };
 
@@ -171,14 +171,7 @@ export interface SchemaFieldDto {
   scalarType: RelationalScalarTypeDto;
 }
 
-export type RelationalScalarTypeDto =
-  | "boolean"
-  | "int64"
-  | "float64"
-  | "string"
-  | "date"
-  | "dateTime"
-  | "unknown";
+export type RelationalScalarTypeDto = import("./database").SemanticType | null;
 
 export type SchemaSummaryKindDto = "input" | "project" | "append" | "rename" | "filter" | "derived";
 
@@ -190,7 +183,7 @@ export interface ParameterEditorDto {
   display: ParameterDisplayDto;
   editor: ParameterEditorKindDto;
   presentation: ParameterPresentationDto;
-  valueType: DataType | null;
+  valueType: ValueType | null;
   multiline: boolean;
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;

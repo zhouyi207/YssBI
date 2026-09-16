@@ -31,8 +31,10 @@ describe("FunctionDetailPanel", () => {
       graphPath: "functions/Compute.yssbi-function",
       fn: {
         name: "Compute",
-        inputs: [createDataSignaturePin("input-1", "Value", { kind: "Int64" })],
-        outputs: [createDataSignaturePin("output-1", "Result", { kind: "Float64" })],
+        inputs: [createDataSignaturePin("input-1", "Value", { kind: "Scalar", inner: "Numeric" })],
+        outputs: [
+          createDataSignaturePin("output-1", "Result", { kind: "Scalar", inner: "Numeric" }),
+        ],
       },
       onSignatureChange,
     }) as ReactElement;
@@ -42,17 +44,17 @@ describe("FunctionDetailPanel", () => {
 
     const pinEditors = findAllByType(element, PinEditor);
     (pinEditors[0].props as { onChange: (pins: unknown[]) => void }).onChange([
-      createDataSignaturePin("input-2", "Next", { kind: "String" }),
+      createDataSignaturePin("input-2", "Next", { kind: "Scalar", inner: "Text" }),
     ]);
     (pinEditors[1].props as { onChange: (pins: unknown[]) => void }).onChange([
-      createDataSignaturePin("output-2", "Done", { kind: "Boolean" }),
+      createDataSignaturePin("output-2", "Done", { kind: "Scalar", inner: "Binary" }),
     ]);
 
     expect(onSignatureChange).toHaveBeenNthCalledWith(1, {
-      inputs: [createDataSignaturePin("input-2", "Next", { kind: "String" })],
+      inputs: [createDataSignaturePin("input-2", "Next", { kind: "Scalar", inner: "Text" })],
     });
     expect(onSignatureChange).toHaveBeenNthCalledWith(2, {
-      outputs: [createDataSignaturePin("output-2", "Done", { kind: "Boolean" })],
+      outputs: [createDataSignaturePin("output-2", "Done", { kind: "Scalar", inner: "Binary" })],
     });
   });
 });

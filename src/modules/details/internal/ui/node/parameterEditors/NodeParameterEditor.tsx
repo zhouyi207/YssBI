@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { setNodeParameters } from "@/features/application/editor/setNodeParameters";
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import type { DiagnosticDto, ParameterEditorDto } from "@/shared/types/domain/editorProjection";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import { DetailReadonlyField } from "../../shared/DetailForm";
@@ -31,17 +31,15 @@ type NumberDraftError = "required" | "notFinite" | "notInteger" | "outOfRange" |
 
 function parseNumberDraft(
   draft: string,
-  valueType: DataType | null,
+  valueType: ValueType | null,
 ): { ok: true; value: number } | { ok: false; error: NumberDraftError } {
   const trimmed = draft.trim();
   if (trimmed.length === 0) return { ok: false, error: "required" };
   const value = Number(trimmed);
   if (!Number.isFinite(value)) return { ok: false, error: "notFinite" };
-  if (valueType?.kind === "Int64") {
-    if (!Number.isInteger(value)) return { ok: false, error: "notInteger" };
-    if (!Number.isSafeInteger(value)) return { ok: false, error: "outOfRange" };
-  }
-  if (valueType?.kind !== "Int64" && valueType?.kind !== "Float64") {
+  if (Number.isInteger(value) && !Number.isSafeInteger(value))
+    return { ok: false, error: "outOfRange" };
+  if (valueType?.kind !== "Scalar" || valueType.inner !== "Numeric") {
     return { ok: false, error: "unsupportedType" };
   }
   return { ok: true, value };
@@ -260,7 +258,9 @@ export function ParameterValueEditor({
   if (
     parameter.editor === "number" ||
     parameter.editor === "text" ||
-    (parameter.editor === "select" && parameter.valueType?.kind === "String")
+    (parameter.editor === "select" &&
+      parameter.valueType?.kind === "Scalar" &&
+      parameter.valueType.inner === "Text")
   ) {
     return (
       <OrdinaryValueEditor

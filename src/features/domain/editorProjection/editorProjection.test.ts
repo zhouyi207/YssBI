@@ -89,8 +89,12 @@ function validProjection(): EditorGraphProjectionDto {
               protocolDefault: 0,
               effective: "connections",
             },
-            acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
-            typeState: { status: "exact", display: "Float64", dataType: { kind: "Float64" } },
+            acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
+            typeState: {
+              status: "exact",
+              display: "Float64",
+              dataType: { kind: "Scalar", inner: "Numeric" },
+            },
             resolvedSchema: { kind: "input", fields: [] },
             status: "resolved",
           },
@@ -109,7 +113,7 @@ function validProjection(): EditorGraphProjectionDto {
             display: { title: "公式", description: "模型公式" },
             editor: "text",
             presentation: "inlineAndDetail",
-            valueType: { kind: "Int64" },
+            valueType: { kind: "Scalar", inner: "Numeric" },
             multiline: true,
             value: "y ~ x",
             configuration: null,
@@ -217,7 +221,7 @@ describe("validateEditorGraphProjection", () => {
     [
       "valueType with an extra key",
       (editor: Record<string, unknown>) => {
-        editor.valueType = { kind: "Boolean", extra: true };
+        editor.valueType = { kind: "Scalar", inner: "Binary", extra: true };
       },
     ],
     [
@@ -301,7 +305,7 @@ describe("validateEditorGraphProjection", () => {
       columns: [
         {
           name: "amount",
-          dataType: "float64",
+          dataType: "Numeric",
           operators: ["equal", "greaterThan", "isNull"],
           literalTypes: ["integer", "decimal"],
         },

@@ -43,7 +43,8 @@
           "presentation": "detailPanel",
           "value": "00000000-0000-0000-0000-000000000004",
           "valueType": {
-            "kind": "String"
+            "kind": "Scalar",
+            "inner": "Text"
           }
         }
       ],
@@ -72,10 +73,11 @@
           "input": null,
           "orphan": false,
           "acceptedType": {
-            "display": "core.bool",
+            "display": "core.binary",
             "domain": [
               {
-                "kind": "Boolean"
+                "kind": "Scalar",
+                "inner": "Binary"
               }
             ]
           },
@@ -83,9 +85,10 @@
           "typeState": {
             "status": "exact",
             "dataType": {
-              "kind": "Boolean"
+              "kind": "Scalar",
+              "inner": "Binary"
             },
-            "display": "core.bool"
+            "display": "core.binary"
           },
           "status": "resolved"
         }

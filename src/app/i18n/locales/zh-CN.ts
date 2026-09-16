@@ -1851,6 +1851,26 @@ export const zhCN = {
     comingSoon: "{{type}} 导入功能开发中…",
   },
   detail: {
+    data: {
+      applyPhysical: "应用 Physical 转换",
+      applySemantic: "应用 Semantic",
+      categoryHint:
+        "填写原始取值到内部语义标签的映射。数据视图保留原始值，编码大小不表示大小关系。",
+      ordinalHint: "按从低到高的顺序列出等级；使用箭头明确调整顺序。",
+      binaryHint: "必须配置两个不同的允许值；缺失值不计为类别。",
+      value: "第 {{index}} 项的存储值",
+      label: "第 {{index}} 项的标签",
+      labelPlaceholder: "语义标签",
+      removeValue: "删除第 {{index}} 项",
+      addValue: "添加取值",
+      positive: "事件 / 正类",
+      noPositive: "未指定",
+      integer: "仅允许整数",
+      minimum: "最小值",
+      maximum: "最大值",
+      updateFailed:
+        "无法应用设置。请检查值域、精度、允许取值及当前 Semantic 与 Physical 的兼容性。",
+    },
     inspect: {
       emptyTitle: "未选择节点",
       empty: "选择一个 Canvas 节点以编辑其配置",

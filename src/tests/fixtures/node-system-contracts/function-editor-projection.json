@@ -7,7 +7,8 @@
         {
           "dataType": {
             "inner": {
-              "kind": "Float64"
+              "kind": "Scalar",
+              "inner": "Numeric"
             },
             "kind": "DataSeries"
           },
@@ -19,12 +20,13 @@
         {
           "dataType": {
             "inner": {
-              "kind": "String"
+              "kind": "Scalar",
+              "inner": "Text"
             },
             "kind": "Array"
           },
           "id": "return",
-          "name": "Array<String>"
+          "name": "Array<Text>"
         }
       ]
     },
@@ -34,10 +36,10 @@
         {
           "id": "sales",
           "name": "Observed sales",
-          "type_name": "DataSeries<Float64>"
+          "type_name": "DataSeries<Numeric>"
         }
       ],
-      "return_type": "Array<String>"
+      "return_type": "Array<Text>"
     },
     "name": "Forecast",
     "path": "functions/forecast.yssbi-function",
@@ -51,7 +53,8 @@
         {
           "dataType": {
             "inner": {
-              "kind": "Float64"
+              "kind": "Scalar",
+              "inner": "Numeric"
             },
             "kind": "DataSeries"
           },
@@ -63,12 +66,13 @@
         {
           "dataType": {
             "inner": {
-              "kind": "String"
+              "kind": "Scalar",
+              "inner": "Text"
             },
             "kind": "Array"
           },
           "id": "return",
-          "name": "Array<String>"
+          "name": "Array<Text>"
         }
       ]
     },

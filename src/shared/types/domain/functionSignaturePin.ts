@@ -2,69 +2,45 @@
  * Function signature pin — structured data-only contract.
  */
 
-import type { DataType } from "./dataType";
+import type { ValueType } from "./valueType";
 import type { FunctionSignaturePin } from "./graph";
 import { dataTypeContainerOverlay } from "./pinSemantics";
 
-export type SignatureScalarKind = "Boolean" | "Int64" | "Float64" | "String" | "Object";
-
+import { SEMANTIC_TYPES, type SemanticType } from "./database";
+export type SignatureScalarKind = SemanticType | "Object" | "DataFrame";
 export type SignatureContainerOverlay = import("./pinSemantics").PinContainerOverlay;
-
-/** PinEditor 下拉选项（展示标签）→ 标量 DataType kind */
-export const SIGNATURE_EDITOR_TYPE_OPTIONS = ["int", "float", "bool", "string", "object"] as const;
-
-export type SignatureEditorTypeOption = (typeof SIGNATURE_EDITOR_TYPE_OPTIONS)[number];
-
-const EDITOR_TO_SCALAR: Record<SignatureEditorTypeOption, SignatureScalarKind> = {
-  int: "Int64",
-  float: "Float64",
-  bool: "Boolean",
-  string: "String",
-  object: "Object",
-};
-
-const SCALAR_TO_EDITOR: Record<SignatureScalarKind, SignatureEditorTypeOption> = {
-  Boolean: "bool",
-  Int64: "int",
-  Float64: "float",
-  String: "string",
-  Object: "object",
-};
+export const SIGNATURE_EDITOR_TYPE_OPTIONS = [...SEMANTIC_TYPES, "DataFrame"] as const;
+export type SignatureEditorTypeOption = SignatureScalarKind;
 
 export function signatureContainerOverlay(
-  dataType: DataType,
+  dataType: ValueType,
 ): SignatureContainerOverlay | undefined {
   return dataTypeContainerOverlay(dataType);
 }
 
-export function signatureScalarKind(dataType: DataType): SignatureScalarKind {
+export function signatureScalarKind(dataType: ValueType): SignatureScalarKind {
   if (dataType.kind === "Array" || dataType.kind === "DataSeries") {
     return signatureScalarKind(dataType.inner);
   }
-  if (
-    dataType.kind === "Boolean" ||
-    dataType.kind === "Int64" ||
-    dataType.kind === "Float64" ||
-    dataType.kind === "String" ||
-    dataType.kind === "Object"
-  ) {
-    return dataType.kind;
-  }
-  return "Object";
+  if (dataType.kind === "Scalar") return dataType.inner;
+  return dataType.kind === "DataFrame" ? "DataFrame" : "Object";
 }
 
 export function buildSignatureDataType(
   scalar: SignatureScalarKind,
   container?: SignatureContainerOverlay,
-): DataType {
-  const base: DataType = { kind: scalar };
+): ValueType {
+  const base: ValueType =
+    scalar === "Object" || scalar === "DataFrame"
+      ? { kind: scalar }
+      : { kind: "Scalar", inner: scalar };
   if (container === "array") return { kind: "Array", inner: base };
   if (container === "dataseries") return { kind: "DataSeries", inner: base };
   return base;
 }
 
-export function signatureEditorTypeOption(pin: { dataType: DataType }): SignatureEditorTypeOption {
-  return SCALAR_TO_EDITOR[signatureScalarKind(pin.dataType)];
+export function signatureEditorTypeOption(pin: { dataType: ValueType }): SignatureEditorTypeOption {
+  return signatureScalarKind(pin.dataType);
 }
 
 export function applySignatureEditorType(
@@ -75,7 +51,7 @@ export function applySignatureEditorType(
   return {
     id: pin.id,
     name: pin.name,
-    dataType: buildSignatureDataType(EDITOR_TO_SCALAR[option], container),
+    dataType: buildSignatureDataType(option, container),
   };
 }
 
@@ -83,7 +59,7 @@ export function cycleSignatureContainer(pin: FunctionSignaturePin): FunctionSign
   const scalar = signatureScalarKind(pin.dataType);
   const overlay = signatureContainerOverlay(pin.dataType);
   const next: SignatureContainerOverlay | undefined =
-    overlay === undefined ? "array" : overlay === "array" ? "dataseries" : undefined;
+    overlay === "dataseries" ? undefined : "dataseries";
   return {
     id: pin.id,
     name: pin.name,
@@ -94,11 +70,11 @@ export function cycleSignatureContainer(pin: FunctionSignaturePin): FunctionSign
 export function createDataSignaturePin(
   id: string,
   name: string,
-  dataType: DataType,
+  dataType: ValueType,
 ): FunctionSignaturePin {
   return { id, name, dataType };
 }
 
 export function createDefaultDataSignaturePin(id: string, name: string): FunctionSignaturePin {
-  return createDataSignaturePin(id, name, { kind: "Int64" });
+  return createDataSignaturePin(id, name, { kind: "Scalar", inner: "Numeric" });
 }

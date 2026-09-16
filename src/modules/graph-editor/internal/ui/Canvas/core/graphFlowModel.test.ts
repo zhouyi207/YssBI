@@ -51,12 +51,12 @@ describe("graph flow projection adapter", () => {
     expect(resolveFlowConnection(model, "left", "out", "moveConnections")).toMatchObject({
       kind: "invalid",
     });
-    model.pins.right.acceptedType.domain = [{ kind: "String" }];
+    model.pins.right.acceptedType.domain = [{ kind: "Scalar", inner: "Text" }];
     expect(resolveFlowConnection(model, "left", "right", "moveConnections")).toEqual({
       kind: "invalid",
       reason: "type-mismatch",
     });
-    model.pins.right.acceptedType.domain = [{ kind: "Float64" }];
+    model.pins.right.acceptedType.domain = [{ kind: "Scalar", inner: "Numeric" }];
     model.pins.right.connections.maximum = 0;
     expect(resolveFlowConnection(model, "left", "right", "moveConnections")).toEqual({
       kind: "invalid",

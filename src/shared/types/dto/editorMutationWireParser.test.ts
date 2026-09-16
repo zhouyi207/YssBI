@@ -42,7 +42,7 @@ function projectionWithParameterEditor(): Record<string, unknown> {
       display: { title: "Value", description: null },
       editor: "number",
       presentation: "inlineAndDetail",
-      valueType: { kind: "Int64" },
+      valueType: { kind: "Scalar", inner: "Numeric" },
       multiline: false,
       value: 1,
       configuration: null,
@@ -81,7 +81,7 @@ function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
             canMove: false,
           },
           input: null,
-          acceptedType: { display: "Float64", domain: [{ kind: "Float64" }] },
+          acceptedType: { display: "Float64", domain: [{ kind: "Scalar", inner: "Numeric" }] },
           typeState,
           resolvedSchema: null,
           status: "resolved",
@@ -106,12 +106,14 @@ function projectionWithTypeState(typeState: unknown): Record<string, unknown> {
 function functionEditorProjection(revision = 5) {
   return {
     functionRevision: revision,
-    inputs: [{ id: "sales", name: "Observed sales", dataType: { kind: "Float64" } }],
+    inputs: [
+      { id: "sales", name: "Observed sales", dataType: { kind: "Scalar", inner: "Numeric" } },
+    ],
     outputs: [
       {
         id: "return",
         name: "Array<String>",
-        dataType: { kind: "Array", inner: { kind: "String" } },
+        dataType: { kind: "Array", inner: { kind: "Scalar", inner: "Text" } },
       },
     ],
   };
@@ -204,7 +206,7 @@ describe("editor mutation wire parser", () => {
     const valid = projectionWithTypeState({
       status: "exact",
       display: "Float64",
-      dataType: { kind: "Float64" },
+      dataType: { kind: "Scalar", inner: "Numeric" },
     });
     const node = (valid.nodes as Array<Record<string, unknown>>)[0];
     const port = (node.ports as Array<Record<string, unknown>>)[0];
@@ -279,7 +281,7 @@ describe("editor mutation wire parser", () => {
     [
       "valueType with an extra key",
       (editor: Record<string, unknown>) => {
-        editor.valueType = { kind: "Int64", extra: true };
+        editor.valueType = { kind: "Scalar", inner: "Numeric", extra: true };
       },
     ],
     [
@@ -325,7 +327,7 @@ describe("editor mutation wire parser", () => {
       projection: projectionWithTypeState({
         status: "exact",
         display: "Not parsed by the frontend",
-        dataType: { kind: "DataSeries", inner: { kind: "Float64" } },
+        dataType: { kind: "DataSeries", inner: { kind: "Scalar", inner: "Numeric" } },
       }),
     };
 

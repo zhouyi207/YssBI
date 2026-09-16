@@ -1,18 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { executeGraphEdit } from "@/features/application/graphEditing";
 import { logger } from "@/features/core/observability/logger";
-import type { DataType } from "@/shared/types/domain/dataType";
+import type { ValueType } from "@/shared/types/domain/valueType";
 import { scalarPinInputKey } from "@/shared/types/domain/pinSemantics";
 
 /**
  * Get default value for a scalar pin dataType.
  */
-function getDefaultValue(dataType: DataType | undefined): unknown {
+function getDefaultValue(dataType: ValueType | undefined): unknown {
   const key = scalarPinInputKey(dataType);
   switch (key) {
-    case "Int64":
-      return 0;
-    case "Float64":
+    case "number":
       return 0;
     case "bool":
       return false;
@@ -36,7 +34,7 @@ export function usePinInput({
   pinId: string;
   nodeId: string;
   graphPath: string;
-  dataType?: DataType;
+  dataType?: ValueType;
   initialValue?: unknown;
 }) {
   const inputKey = scalarPinInputKey(dataType);

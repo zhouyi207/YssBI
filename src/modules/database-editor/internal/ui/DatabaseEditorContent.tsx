@@ -27,6 +27,9 @@ export function DatabaseEditorContent({
     databaseId ? snapshot.databases[databaseId] : null,
   );
   const columns = database?.columns ?? [];
+  const physicalSchema = JSON.stringify(
+    columns.map((column) => [column.name, column.physical ?? column.type]),
+  );
   const dataLoader = useDataLoader(databaseId);
   const exportDatabase = useDatabaseExport(databaseId);
   const selection = useSelection({
@@ -47,7 +50,7 @@ export function DatabaseEditorContent({
       setLoadedRows([]);
     }
     clearSelection();
-  }, [databaseId, loadInitialRows, setLoadedRows, clearSelection]);
+  }, [databaseId, physicalSchema, loadInitialRows, setLoadedRows, clearSelection]);
 
   useEffect(() => {
     clearSelection();

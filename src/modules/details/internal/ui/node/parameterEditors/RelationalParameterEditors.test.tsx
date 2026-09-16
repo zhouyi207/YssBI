@@ -104,8 +104,8 @@ describe("ProjectColumnsEditor", () => {
       available: true,
       unavailableReason: null,
       options: [
-        { name: "a", dataType: "string" },
-        { name: "b", dataType: "int64" },
+        { name: "a", dataType: "Text" },
+        { name: "b", dataType: "Numeric" },
       ],
       value: [],
     };
@@ -130,8 +130,8 @@ describe("ProjectColumnsEditor", () => {
       available: true,
       unavailableReason: null,
       options: [
-        { name: "a", dataType: "string" },
-        { name: "b", dataType: "int64" },
+        { name: "a", dataType: "Text" },
+        { name: "b", dataType: "Numeric" },
       ],
       value: ["a", "b"],
     };
@@ -182,7 +182,7 @@ describe("FilterPredicateEditor", () => {
       columns: [
         {
           name: "amount",
-          dataType: type === "integer" ? "int64" : "float64",
+          dataType: "Numeric",
           operators: ["equal", "greaterThan", "isNull"],
           literalTypes: [type],
         },
@@ -216,7 +216,7 @@ describe("FilterPredicateEditor", () => {
       columns: [
         {
           name: "created",
-          dataType: "dateTime",
+          dataType: "Datetime",
           operators: ["isNull", "isNotNull"],
           literalTypes: [],
         },
@@ -242,7 +242,7 @@ describe("FilterPredicateEditor", () => {
       columns: [
         {
           name: "opaque",
-          dataType: "unknown",
+          dataType: null,
           operators: [],
           literalTypes: [],
         },
@@ -281,7 +281,7 @@ describe("FilterPredicateEditor", () => {
       columns: [
         {
           name: "active",
-          dataType: "boolean",
+          dataType: "Binary",
           operators: ["equal", "notEqual"],
           literalTypes: ["boolean"],
         },
@@ -315,13 +315,13 @@ describe("FilterPredicateEditor", () => {
       columns: [
         {
           name: "active",
-          dataType: "boolean",
+          dataType: "Binary",
           operators: ["equal", "notEqual"],
           literalTypes: ["boolean"],
         },
         {
           name: "opaque",
-          dataType: "unknown",
+          dataType: null,
           operators: [],
           literalTypes: [],
         },

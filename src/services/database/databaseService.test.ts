@@ -151,6 +151,22 @@ describe("DatabaseService revisioned mutation contract", () => {
       [projectInstanceId, operationId, expectedRevision, "sales", "Renamed"],
       { name: "Renamed" },
     ],
+    [
+      "setColumnSemantic",
+      "set_column_semantic",
+      [
+        projectInstanceId,
+        operationId,
+        expectedRevision,
+        "sales",
+        "id",
+        { kind: "Identifier", values: [], positiveValue: null, numeric: null },
+      ],
+      {
+        colName: "id",
+        semantic: { kind: "Identifier", values: [], positiveValue: null, numeric: null },
+      },
+    ],
   ] as const)(
     "passes exact revision authority through %s",
     async (method, command, args, extra) => {

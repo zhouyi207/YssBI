@@ -6,6 +6,7 @@ import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManage
 import { chartUi } from "@/features/core/chart/ui";
 import { Select } from "@/shared/ui";
 import type { ChartType, ChartDocument } from "@/shared/types/domain/chart";
+import type { ColumnInfo } from "@/shared/types/domain/database";
 import { DetailPanelShell } from "../shared/DetailPanelShell";
 import { DetailFieldRow } from "../shared/DetailFieldRow";
 import { DetailColumnList } from "../shared/DetailColumnList";
@@ -48,9 +49,7 @@ export function ChartDetailPanel({ chartPath, name, document }: ChartDetailPanel
 
   const columns = useMemo(() => {
     const db = document.databaseId
-      ? (databases[document.databaseId] as
-          | { columns?: Array<{ name: string; type: string }> }
-          | undefined)
+      ? (databases[document.databaseId] as { columns?: ColumnInfo[] } | undefined)
       : undefined;
     return db?.columns ?? [];
   }, [document.databaseId, databases]);
@@ -67,7 +66,11 @@ export function ChartDetailPanel({ chartPath, name, document }: ChartDetailPanel
     };
   }, [document.databaseId, databases]);
 
-  const numericColumns = columns.filter((c) => isNumericType(c.type));
+  const numericColumns = columns.filter((c) =>
+    c.semantic
+      ? c.semantic.kind === "Numeric" || c.semantic.kind === "Datetime"
+      : isNumericType(c.type),
+  );
   const allColumnOptions = columns.map((c) => ({ label: c.name, value: c.name }));
   const numericColumnOptions = numericColumns.map((c) => ({ label: c.name, value: c.name }));
 

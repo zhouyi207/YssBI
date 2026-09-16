@@ -9,36 +9,45 @@ import {
 
 describe("functionSignaturePin", () => {
   it("creates typed data signature pins", () => {
-    expect(createDataSignaturePin("a", "A", { kind: "Float64" })).toEqual({
+    expect(createDataSignaturePin("a", "A", { kind: "Scalar", inner: "Numeric" })).toEqual({
       id: "a",
       name: "A",
-      dataType: { kind: "Float64" },
+      dataType: { kind: "Scalar", inner: "Numeric" },
     });
   });
 
   it("builds container types from scalar + overlay", () => {
-    expect(buildSignatureDataType("Float64", "dataseries")).toEqual({
+    expect(buildSignatureDataType("Numeric", "dataseries")).toEqual({
       kind: "DataSeries",
-      inner: { kind: "Float64" },
+      inner: { kind: "Scalar", inner: "Numeric" },
     });
   });
 
   it("cycles container overlay on data pins", () => {
-    const pin = { id: "a", name: "V", dataType: { kind: "Int64" as const } };
-    const withArray = cycleSignatureContainer(pin);
-    expect(withArray.dataType).toEqual({ kind: "Array", inner: { kind: "Int64" } });
-    const withSeries = cycleSignatureContainer(withArray);
+    const pin = {
+      id: "a",
+      name: "V",
+      dataType: { kind: "Scalar" as const, inner: "Numeric" as const },
+    };
+    const withSeries = cycleSignatureContainer(pin);
     expect(withSeries.dataType).toEqual({
       kind: "DataSeries",
-      inner: { kind: "Int64" },
+      inner: { kind: "Scalar", inner: "Numeric" },
     });
     const scalar = cycleSignatureContainer(withSeries);
-    expect(scalar.dataType).toEqual({ kind: "Int64" });
+    expect(scalar.dataType).toEqual({ kind: "Scalar", inner: "Numeric" });
   });
 
   it("maps editor type options to structured dataType", () => {
-    const pin = { id: "a", name: "V", dataType: { kind: "Int64" as const } };
-    expect(applySignatureEditorType(pin, "float").dataType).toEqual({ kind: "Float64" });
-    expect(signatureEditorTypeOption(pin)).toBe("int");
+    const pin = {
+      id: "a",
+      name: "V",
+      dataType: { kind: "Scalar" as const, inner: "Numeric" as const },
+    };
+    expect(applySignatureEditorType(pin, "Numeric").dataType).toEqual({
+      kind: "Scalar",
+      inner: "Numeric",
+    });
+    expect(signatureEditorTypeOption(pin)).toBe("Numeric");
   });
 });

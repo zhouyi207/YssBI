@@ -56,7 +56,7 @@ describe("ConstantValueEditorModal validation", () => {
         <ConstantValueEditorModal
           open
           onClose={onClose}
-          dataType={{ kind: "Array", inner: { kind: "Int64" } }}
+          dataType={{ kind: "Array", inner: { kind: "Scalar", inner: "Numeric" } }}
           dataValue={{ kind: "Array", value: [] }}
           onSave={onSave}
         />,
