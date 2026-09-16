@@ -2,8 +2,6 @@ import { create } from "zustand";
 import type {
   EditorGraphProjectionDto,
   GraphDocumentDto,
-  GraphSaveResultDto,
-  GraphEditResultDto,
   GraphEditorSessionDto,
   GraphEditVersionDto,
 } from "@/shared/types/domain/editorMutation";
@@ -25,14 +23,21 @@ export interface GraphEditorState {
 interface GraphEditingStore {
   readonly sessions: Readonly<Record<string, GraphEditorState>>;
   install(graphPath: string, session: GraphEditorSessionDto): void;
-  hydrate(graphPath: string, session: GraphEditorSessionDto): void;
-  replaceResolvedProjection(graphPath: string, projection: EditorGraphProjectionDto): void;
-  applyTransform(graphPath: string, update: GraphEditResultDto): void;
+  hydrate(graphPath: string, session: GraphEditorSessionDto, saving?: boolean): void;
   beginSave(graphPath: string): boolean;
-  completeSave(graphPath: string, saved: GraphSaveResultDto): void;
   failSave(graphPath: string): void;
   clearGraph(graphPath: string): void;
   clear(): void;
+}
+
+export function canAcceptGraphSession(
+  previous: GraphEditorState | undefined,
+  input: GraphEditorSessionDto,
+): boolean {
+  return (
+    previous?.version.sessionId !== input.editing.version.sessionId ||
+    BigInt(previous.version.revision) <= BigInt(input.editing.version.revision)
+  );
 }
 
 let nextViewSessionId = 0;
@@ -45,11 +50,7 @@ function installSession(
   renew = false,
 ): Partial<GraphEditingStore> | GraphEditingStore {
   const previous = state.sessions[graphPath];
-  if (
-    previous?.version.sessionId === input.editing.version.sessionId &&
-    BigInt(previous.version.revision) > BigInt(input.editing.version.revision)
-  )
-    return state;
+  if (!canAcceptGraphSession(previous, input)) return state;
   if (
     !renew &&
     previous &&
@@ -88,43 +89,13 @@ function installSession(
 export const useGraphEditingStore = create<GraphEditingStore>((set, get) => ({
   sessions: {},
   install: (path, input) => set((state) => installSession(state, path, input, false, true)),
-  hydrate: (path, input) => set((state) => installSession(state, path, input)),
-  applyTransform: (path, input) => set((state) => installSession(state, path, input)),
-  replaceResolvedProjection: (path, projection) =>
-    set((state) => {
-      const current = state.sessions[path];
-      if (!current) return state;
-      return {
-        sessions: {
-          ...state.sessions,
-          [path]: {
-            ...current,
-            projection,
-            semanticInputHash: projection.basis.semanticInputHash,
-            projectionGeneration: current.projectionGeneration + 1,
-          },
-        },
-      };
-    }),
+  hydrate: (path, input, saving) => set((state) => installSession(state, path, input, saving)),
   beginSave: (path) => {
     const current = get().sessions[path];
     if (!current || current.saving) return false;
     set((state) => ({ sessions: { ...state.sessions, [path]: { ...current, saving: true } } }));
     return true;
   },
-  completeSave: (path, saved) =>
-    set((state) =>
-      installSession(
-        state,
-        path,
-        {
-          document: saved.document,
-          projection: saved.projectionReplacement.projection,
-          editing: saved.editing,
-        },
-        false,
-      ),
-    ),
   failSave: (path) =>
     set((state) => {
       const current = state.sessions[path];

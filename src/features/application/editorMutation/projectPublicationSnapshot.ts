@@ -12,7 +12,12 @@ import {
   prepareGraphProjectionReplacements,
   useGraphProjectionStore,
 } from "@/features/core/dataStore/graphProjectionStore";
-import { isGraphModified, isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
+import {
+  canAcceptGraphSession,
+  isGraphModified,
+  isGraphSaving,
+  useGraphEditingStore,
+} from "@/features/core/graphEditing";
 import {
   assertCurrentProjectIdentity,
   isCurrentProjectIdentity,
@@ -362,9 +367,14 @@ export function prepareProjectSnapshotCommit(
   const documents = remappedDocuments;
   const authoritativeGraphPaths = new Set(plan.index.graphs.map((graph) => graph.path));
   const replacements = [...plan.graphSessions]
-    .filter(([path]) => {
+    .filter(([path, session]) => {
       const previousPath = [...plan.pathRemaps].find(([, to]) => to === path)?.[0] ?? path;
-      return !isGraphModified(previousPath) && !isGraphSaving(previousPath);
+      return (
+        !isGraphModified(previousPath) &&
+        !isGraphSaving(previousPath) &&
+        canAcceptGraphSession(useGraphEditingStore.getState().sessions[previousPath], session) &&
+        canAcceptGraphSession(useGraphEditingStore.getState().sessions[path], session)
+      );
     })
     .map(([graphPath, session]) => ({ graphPath, projection: session.projection }));
   const retainedGraphEntities = Object.fromEntries(

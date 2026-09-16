@@ -6,6 +6,7 @@ import type {
   GraphEditResultDto,
   GraphEditVersionDto,
   GraphEditingStateDto,
+  GraphEditorSessionDto,
 } from "@/shared/types/domain/editorMutation";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
 import {
@@ -13,6 +14,7 @@ import {
   commitPreparedGraphProjectionReplacements,
 } from "@/features/core/dataStore/graphProjectionStore";
 import {
+  canAcceptGraphSession,
   getGraphDocumentProjection,
   isGraphSaving,
   useGraphEditingStore,
@@ -62,7 +64,7 @@ const defaultDependencies: GraphEditCoordinatorDependencies = {
 const graphTaskQueues = new Map<string, { tail: Promise<void>; pending: number }>();
 let coordinatorEpoch = 0;
 
-export function publishGraphEditingState(graphPath: string, editing: GraphEditingStateDto): void {
+function publishGraphEditingState(graphPath: string, editing: GraphEditingStateDto): void {
   const kind = getGraphResourceKind(graphPath);
   if (!kind) return;
   const revision = Number(editing.version.revision);
@@ -71,21 +73,25 @@ export function publishGraphEditingState(graphPath: string, editing: GraphEditin
   markResourceDirty({ id: graphPath, kind }, editing.dirty);
 }
 
-export function installGraphEditProjection(graphPath: string, result: GraphEditResultDto): void {
+export function installGraphSession(
+  graphPath: string,
+  result: GraphEditorSessionDto,
+  mode: "load" | "update" | "save" = "update",
+): boolean {
+  if (!canAcceptGraphSession(useGraphEditingStore.getState().sessions[graphPath], result))
+    return false;
   const prepared = prepareGraphProjectionReplacements([
     { graphPath, projection: result.projection },
   ]);
-  if (!prepared.prepared)
-    throw new Error(`Graph draft projection '${graphPath}' could not be installed`);
-  useGraphEditingStore.getState().applyTransform(graphPath, result);
-  const draft = useGraphEditingStore.getState().sessions[graphPath];
+  if (!prepared.prepared) throw new Error(`Graph projection '${graphPath}' could not be installed`);
+  if (mode === "load") useGraphEditingStore.getState().install(graphPath, result);
+  else
+    useGraphEditingStore.getState().hydrate(graphPath, result, mode === "save" ? false : undefined);
   commitPreparedGraphProjectionReplacements(prepared.plan);
   publishGraphEditingState(graphPath, result.editing);
   const kind = getGraphResourceKind(graphPath);
-  if (kind) {
-    markResourceDirty({ id: graphPath, kind }, draft.saveDirty);
-    markResourceStale({ id: graphPath, kind }, false);
-  }
+  if (kind) markResourceStale({ id: graphPath, kind }, false);
+  return true;
 }
 
 async function applyDraftMutation(
@@ -94,7 +100,7 @@ async function applyDraftMutation(
   requestEpoch: number,
 ): Promise<ApplyGraphMutationOutcome> {
   if (requestEpoch !== coordinatorEpoch) return { status: "stale" };
-  if (isGraphSaving(input.graphPath)) return { status: "saving" };
+  // Saving gates admission, not execution of edits already accepted by this FIFO.
 
   const identity = captureProjectIdentity();
   const document = getGraphDocumentProjection(input.graphPath);
@@ -137,20 +143,12 @@ async function applyDraftMutation(
   ) {
     return { status: "stale", result };
   }
-  if (!result.changed) {
-    const prepared = prepareGraphProjectionReplacements([
-      { graphPath: input.graphPath, projection: result.projection },
-    ]);
-    if (!prepared.prepared) throw new Error("Resolved Graph projection could not be installed");
-    useGraphEditingStore.getState().applyTransform(input.graphPath, result);
-    commitPreparedGraphProjectionReplacements(prepared.plan);
-    return { status: "noop", result };
-  }
+  if (!installGraphSession(input.graphPath, result)) return { status: "stale", result };
+  if (!result.changed) return { status: "noop", result };
 
   const insertedNodeIds = Object.keys(result.document.nodes).filter(
     (nodeId) => !(nodeId in document.nodes),
   );
-  installGraphEditProjection(input.graphPath, result);
   return { status: "applied", result, insertedNodeIds };
 }
 

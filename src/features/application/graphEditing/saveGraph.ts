@@ -1,9 +1,8 @@
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
-import { enqueueGraphTask } from "@/features/application/graphEditing/graphEditCoordinator";
 import {
-  prepareGraphProjectionReplacements,
-  commitPreparedGraphProjectionReplacements,
-} from "@/features/core/dataStore/graphProjectionStore";
+  enqueueGraphTask,
+  installGraphSession,
+} from "@/features/application/graphEditing/graphEditCoordinator";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import {
   captureProjectIdentity,
@@ -51,10 +50,18 @@ export async function saveGraph(
           throw new Error("Graph save result targets another graph");
         }
 
-        const prepared = prepareGraphProjectionReplacements([saved.projectionReplacement]);
-        if (!prepared.prepared) throw new Error("Saved Graph projection could not be installed");
-        useGraphEditingStore.getState().completeSave(graphPath, saved);
-        commitPreparedGraphProjectionReplacements(prepared.plan);
+        if (
+          !installGraphSession(
+            graphPath,
+            {
+              document: saved.document,
+              projection: saved.projectionReplacement.projection,
+              editing: saved.editing,
+            },
+            "save",
+          )
+        )
+          return false;
         useResourceStore
           .getState()
           .patchResource({ id: graphPath, kind: graphKind }, { revision: saved.resourceRevision });

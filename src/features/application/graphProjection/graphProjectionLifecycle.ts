@@ -1,7 +1,7 @@
 import { currentProjectionLocale } from "./projectionLocale";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
 import { isGraphModified, isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
-import { markResourceStale, markResourceDirty } from "@/features/core/resource";
+import { markResourceStale } from "@/features/core/resource";
 import { GraphProjectionService } from "@/services/nodeSystem/graphProjectionService";
 import { clearGraphSyncBaselines } from "@/services/nodeSystem/graphEditorSync";
 import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
@@ -13,7 +13,7 @@ import { logger } from "@/features/application/observability/appLogger";
 import { refreshCurrentGraphProjection } from "@/features/application/graphEditing/refreshGraphProjection";
 import {
   enqueueGraphTask,
-  publishGraphEditingState,
+  installGraphSession,
 } from "@/features/application/graphEditing/graphEditCoordinator";
 import {
   captureProjectIdentity,
@@ -73,24 +73,15 @@ async function requestGraphProjection(
   ) {
     return false;
   }
-  const result = useGraphProjectionStore
-    .getState()
-    .replaceProjection(graphPath, session.projection);
-  if (!result.applied) {
+  try {
+    return installGraphSession(graphPath, session, operation === "load" ? "load" : "update");
+  } catch (error) {
     logger.graph.error(
-      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(result.error, "Unknown projection contract error")}`,
+      `Graph projection ${operation} contract invalid for '${graphPath}': ${formatErrorMessage(error)}`,
       "GraphProjectionLifecycle",
     );
     return false;
   }
-  useGraphEditingStore
-    .getState()
-    [operation === "hydrate" ? "hydrate" : "install"](graphPath, session);
-  const kind = getGraphResourceKind(graphPath);
-  if (kind) markResourceDirty({ id: graphPath, kind }, session.editing.dirty);
-  publishGraphEditingState(graphPath, session.editing);
-  setGraphProjectionStale(graphPath, false);
-  return true;
 }
 
 export function beginGraphLoadLifecycle(graphPath: string): number {

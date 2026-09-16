@@ -104,9 +104,7 @@ for (const count of [100, 1000, 5000]) {
   cases.set(binding.projectInstanceId, { wire, nodeId: firstId, revision: 0 });
   const install = async () => {
     const reply = await invokeGraphSync("hydrate_editor_graph", binding, binding);
-    useGraphEditingStore
-      .getState()
-      .applyTransform(binding.graphPath, { ...reply.data, changed: reply.changed });
+    useGraphEditingStore.getState().hydrate(binding.graphPath, reply.data);
     const outcome = useGraphProjectionStore
       .getState()
       .replaceProjection(binding.graphPath, reply.data.projection);

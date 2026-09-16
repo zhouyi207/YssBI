@@ -1,17 +1,11 @@
 import {
-  prepareGraphProjectionReplacements,
-  commitPreparedGraphProjectionReplacements,
-} from "@/features/core/dataStore/graphProjectionStore";
-import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { currentProjectionLocale } from "@/features/application/graphProjection/projectionLocale";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
-import { enqueueGraphTask, publishGraphEditingState } from "./graphEditCoordinator";
-import { isGraphModified, isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
-import { markResourceDirty } from "@/features/core/resource";
-import { getGraphResourceKind } from "@/features/core/resource/resourceSelectors";
+import { enqueueGraphTask, installGraphSession } from "./graphEditCoordinator";
+import { isGraphSaving, useGraphEditingStore } from "@/features/core/graphEditing";
 
 export type HistoryDirection = "undo" | "redo";
 
@@ -29,7 +23,6 @@ async function installHistoryProjection(
   graphPath: string,
   direction: HistoryDirection,
 ): Promise<boolean> {
-  if (isGraphSaving(graphPath)) return false;
   const identity = captureProjectIdentity();
   const session = useGraphEditingStore.getState().sessions[graphPath];
   if (!session) return false;
@@ -39,8 +32,7 @@ async function installHistoryProjection(
     return (
       isCurrentProjectIdentity(identity) &&
       current?.sessionId === session.sessionId &&
-      current.projectionGeneration === session.projectionGeneration &&
-      !current.saving
+      current.projectionGeneration === session.projectionGeneration
     );
   };
   let update;
@@ -57,17 +49,7 @@ async function installHistoryProjection(
     throw error;
   }
   if (!isCurrent()) return false;
-  const prepared = prepareGraphProjectionReplacements([
-    { graphPath, projection: update.projection },
-  ]);
-  if (!prepared.prepared)
-    throw new Error(`Graph draft ${direction} projection could not be installed`);
-  useGraphEditingStore.getState().applyTransform(graphPath, update);
-  publishGraphEditingState(graphPath, update.editing);
-  commitPreparedGraphProjectionReplacements(prepared.plan);
-  const kind = getGraphResourceKind(graphPath);
-  if (kind) markResourceDirty({ id: graphPath, kind }, isGraphModified(graphPath));
-  return true;
+  return installGraphSession(graphPath, update);
 }
 
 export async function executeHistoryMutation(

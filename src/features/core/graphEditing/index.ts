@@ -1,4 +1,5 @@
 export {
+  canAcceptGraphSession,
   getGraphDocumentProjection,
   isGraphModified,
   isGraphSaving,

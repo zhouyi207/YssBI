@@ -1,14 +1,10 @@
-import {
-  prepareGraphProjectionReplacements,
-  commitPreparedGraphProjectionReplacements,
-} from "@/features/core/dataStore/graphProjectionStore";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { GraphEditingService } from "@/services/nodeSystem/graphEditingService";
-import { publishGraphEditingState } from "./graphEditCoordinator";
+import { installGraphSession } from "./graphEditCoordinator";
 
 // The projection lifecycle calls this inside the graph's shared task queue.
 export async function refreshCurrentGraphProjection(
@@ -35,14 +31,7 @@ export async function refreshCurrentGraphProjection(
       session.version,
     );
     if (!isCurrent()) return false;
-    const prepared = prepareGraphProjectionReplacements([
-      { graphPath, projection: update.projection },
-    ]);
-    if (!prepared.prepared) throw new Error("Resolved Graph projection could not be installed");
-    useGraphEditingStore.getState().applyTransform(graphPath, update);
-    publishGraphEditingState(graphPath, update.editing);
-    commitPreparedGraphProjectionReplacements(prepared.plan);
-    return true;
+    return installGraphSession(graphPath, update);
   } catch (error) {
     if (!isCurrent()) return false;
     throw error;
