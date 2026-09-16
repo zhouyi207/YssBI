@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyGraphMutation } from "@/features/application/graphEditing/graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing/graphEditingStore";
 import { setNodeParameters } from "./setNodeParameters";
 
 vi.mock("@/features/application/graphEditing/graphEditCoordinator", () => ({
@@ -34,29 +33,19 @@ describe("setNodeParameters", () => {
     expect(applyGraphMutation).toHaveBeenCalledWith({
       graphPath: "events/Main.yssbi-event",
       locale: "en-US",
-      mutation: {
-        type: "setParameters",
-        payload: { nodeId: "node-1", parameters },
-      },
+      mutation: expect.any(Function),
+    });
+    const { mutation } = vi.mocked(applyGraphMutation).mock.calls[0][0];
+    if (typeof mutation !== "function") throw new Error("Expected a queued mutation factory");
+    expect(mutation({ nodes: {} } as never)).toEqual({
+      type: "setParameters",
+      payload: { nodeId: "node-1", parameters },
     });
   });
 
   it("preserves draft parameters outside the edited field", async () => {
     const outcome = { status: "applied" as const, result: {} as never, insertedNodeIds: [] };
     vi.mocked(applyGraphMutation).mockResolvedValue(outcome);
-    vi.spyOn(useGraphEditingStore, "getState").mockReturnValue({
-      sessions: {
-        "events/Main.yssbi-event": {
-          document: {
-            nodes: {
-              "node-1": {
-                parameters: { constant: true, tolerance: 1e-7, max_iterations: 100 },
-              },
-            },
-          },
-        },
-      },
-    } as never);
 
     await setNodeParameters({
       graphPath: "events/Main.yssbi-event",
@@ -65,16 +54,22 @@ describe("setNodeParameters", () => {
       parameters: { tolerance: 1e-6 },
     });
 
-    expect(applyGraphMutation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mutation: {
-          type: "setParameters",
-          payload: {
-            nodeId: "node-1",
-            parameters: { constant: true, tolerance: 1e-6, max_iterations: 100 },
+    const { mutation } = vi.mocked(applyGraphMutation).mock.calls[0][0];
+    if (typeof mutation !== "function") throw new Error("Expected a queued mutation factory");
+    expect(
+      mutation({
+        nodes: {
+          "node-1": {
+            parameters: { constant: true, tolerance: 1e-7, max_iterations: 100 },
           },
         },
-      }),
-    );
+      } as never),
+    ).toEqual({
+      type: "setParameters",
+      payload: {
+        nodeId: "node-1",
+        parameters: { constant: true, tolerance: 1e-6, max_iterations: 100 },
+      },
+    });
   });
 });

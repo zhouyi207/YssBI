@@ -2,7 +2,6 @@ import {
   applyGraphMutation,
   type ApplyGraphMutationOutcome,
 } from "@/features/application/graphEditing/graphEditCoordinator";
-import { useGraphEditingStore } from "@/features/core/graphEditing/graphEditingStore";
 
 export interface SetNodeParametersInput {
   graphPath: string;
@@ -14,20 +13,20 @@ export interface SetNodeParametersInput {
 export function setNodeParameters(
   input: SetNodeParametersInput,
 ): Promise<ApplyGraphMutationOutcome> {
-  const document = useGraphEditingStore.getState().sessions[input.graphPath]?.document;
-  const merged = { ...document?.nodes[input.nodeId]?.parameters, ...input.parameters };
-  const parameters = Object.fromEntries(
-    Object.entries(merged).filter(([, value]) => value !== null && value !== undefined),
-  );
   return applyGraphMutation({
     graphPath: input.graphPath,
     locale: input.locale,
-    mutation: {
+    mutation: (document) => ({
       type: "setParameters",
       payload: {
         nodeId: input.nodeId,
-        parameters,
+        parameters: Object.fromEntries(
+          Object.entries({
+            ...document.nodes[input.nodeId]?.parameters,
+            ...input.parameters,
+          }).filter(([, value]) => value !== null && value !== undefined),
+        ),
       },
-    },
+    }),
   });
 }
