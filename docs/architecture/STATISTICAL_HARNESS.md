@@ -97,7 +97,7 @@ Application 的 `invoke_automation_capability` 是同步业务入口。`yss-appl
 
 Capability invocation identity 由 ledger 已保存的 idempotency key 确定，Application 将 principal、Harness／Project 会话、调用身份及 client key 映射为稳定的内部 operation ID。Project 将请求指纹、实际提交版本和创建元素映射与图编辑一起提交。若 gateway 回复丢失或 ledger 收尾失败，`recover_graph_edit` 仅查询该回执，不执行编辑；恢复后补写原工具记录并返回原节点／端口 ID。回执有条目及字节上限；未知、过期或会话已结束的结果保留不确定性。此恢复针对 `apply_graph_edit`，不提供执行和保存的跨进程重放。
 
-`GraphEditReceipt` 保存图修订、graph hash、`clientKey` 和创建元素的身份映射，回执不暴露内部 Project 操作 ID；数据层提交使用内部 operation ID 保证准入与提交关联。SQLite adapter 在启动事务中将 `user_version = 0` 升至 1，仅移除既有 `tool_invocation` 图编辑结果中的 `operationId`；调用记录、幂等键和其余回执内容保留，读取仍使用严格类型校验。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
+`GraphEditReceipt` 保存图修订、graph hash、`clientKey` 和创建元素的身份映射，回执不暴露内部 Project 操作 ID；数据层提交使用内部 operation ID 保证准入与提交关联。Harness 的 session、turn、tool 等编号由宿主使用通用 UUID 生成器生成，各自的类型和前缀保持独立。
 
 `apply_graph_edit` 默认自动保存整个当前图文档，包括调用前已有的手动编辑，无需打开编辑器。
 它复用 Project 的文件事务，将文件、当前文档、保存指纹、可撤销历史及编辑回执作为一次提交；
@@ -106,9 +106,7 @@ Capability invocation identity 由 ledger 已保存的 idempotency key 确定，
 校验和执行不隐式保存。显式 `save_graph` 用于用户要求单独保存现有编辑，复用正常 Save。
 图工具与桌面编辑共享 Project 编辑状态和历史，调用始终校验项目会话与编辑版本。
 
-SQLite schema version 2 在既有启动事务内迁移旧图工具契约：将旧工具的校验事实迁为 `validate_graph`，移除执行请求／结果中的 artifact ID，同时保留调用记录和幂等键。迁移按固定表、固定类型字段分批处理工具记录、事件、工作流、授权与技能能力列表，不替换消息、指令或图数据中的同名文本。
-
-Schema version 3 将保留的图校验／检查记录中的旧诊断代码和模板键迁为 `graph.*`、`diagnostics.graph.*`。迁移只读取对应结果的诊断字段，消息和用户数据保持原值；当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
+SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护迁移版本字段。空数据库在事务中创建全部当前表；已有数据库的 DDL 必须与 adapter 拥有的 schema 一致，JSON 列由 `json_valid` 约束保护，读取再使用当前类型校验。不兼容结构返回 `InvalidRecord`，保留原表与记录，不自动重建。需要重新初始化时，应先备份并移走应用数据目录下的 `db/statistical-harness.sqlite` 及其 SQLite sidecar 文件，再启动应用；此操作不由初始化代码自动执行。当前诊断词汇统一由 `yss-graph-diagnostics` 提供。
 
 节点搜索对 node ID、标题、别名、技术词及资源名分词排序，完整匹配优先，混合语言短语允许部分词命中。profile 的 null 指标表示未计算；复杂常量只暴露类型和 metadata，不复制 tabular 数据。已有图的校验和运行不要求重新设计统计方案。
 

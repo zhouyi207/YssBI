@@ -2,8 +2,6 @@
 
 #![forbid(unsafe_code)]
 
-mod migrations;
-
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -70,88 +68,100 @@ impl SqliteHarnessStore {
 
     async fn ensure_schema(&self) -> Result<(), PersistenceFailure> {
         let mut transaction = self.pool.begin().await.map_err(|_| unavailable())?;
-        for statement in SCHEMA {
-            sqlx::query(*statement)
-                .execute(&mut *transaction)
-                .await
-                .map_err(|_| unavailable())?;
+        let mut existing: Vec<String> = sqlx::query_scalar(
+            "SELECT sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND sql IS NOT NULL",
+        )
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|_| unavailable())?;
+        if existing.is_empty() {
+            for statement in SCHEMA {
+                sqlx::query(*statement)
+                    .execute(&mut *transaction)
+                    .await
+                    .map_err(|_| unavailable())?;
+            }
+        } else {
+            // This adapter owns the entire schema. Reject incompatible databases
+            // without rewriting payloads or implicitly rebuilding durable history.
+            existing.sort();
+            let mut expected: Vec<String> = SCHEMA.iter().map(|sql| (*sql).to_owned()).collect();
+            expected.sort();
+            if existing != expected {
+                return Err(invalid_record());
+            }
         }
-        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-            .fetch_one(&mut *transaction)
-            .await
-            .map_err(|_| unavailable())?;
-        migrations::migrate(&mut transaction, version).await?;
         transaction.commit().await.map_err(|_| unavailable())
     }
 }
 
 const SCHEMA: &[&str] = &[
-    r#"CREATE TABLE IF NOT EXISTS assistant_session (
+    r#"CREATE TABLE assistant_session (
         id TEXT PRIMARY KEY NOT NULL,
         state TEXT NOT NULL,
-        payload_json TEXT NOT NULL
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS assistant_turn (
+    r#"CREATE TABLE assistant_turn (
         id TEXT PRIMARY KEY NOT NULL,
         session_id TEXT NOT NULL,
         state TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS assistant_event (
+    r#"CREATE TABLE assistant_event (
         session_id TEXT NOT NULL,
         sequence INTEGER NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         PRIMARY KEY(session_id, sequence),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS workflow_definition (
+    r#"CREATE TABLE workflow_definition (
         id TEXT NOT NULL,
         version TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         PRIMARY KEY(id, version)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS workflow_run (
+    r#"CREATE TABLE workflow_run (
         id TEXT PRIMARY KEY NOT NULL,
         state TEXT NOT NULL,
-        payload_json TEXT NOT NULL
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS tool_invocation (
+    r#"CREATE TABLE tool_invocation (
         id TEXT PRIMARY KEY NOT NULL,
         idempotency_key TEXT NOT NULL UNIQUE,
         session_id TEXT NOT NULL,
         state TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS memory_record (
+    r#"CREATE TABLE memory_record (
         id TEXT PRIMARY KEY NOT NULL,
         session_id TEXT NOT NULL,
         status TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(session_id) REFERENCES assistant_session(id)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS knowledge_source (
+    r#"CREATE TABLE knowledge_source (
         id TEXT PRIMARY KEY NOT NULL,
         status TEXT NOT NULL,
-        payload_json TEXT NOT NULL
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS knowledge_document (
+    r#"CREATE TABLE knowledge_document (
         id TEXT PRIMARY KEY NOT NULL,
         source_id TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         FOREIGN KEY(source_id) REFERENCES knowledge_source(id)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS skill_installation (
+    r#"CREATE TABLE skill_installation (
         id TEXT NOT NULL,
         version TEXT NOT NULL,
-        payload_json TEXT NOT NULL,
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
         PRIMARY KEY(id, version)
     )"#,
-    r#"CREATE TABLE IF NOT EXISTS approval_grant (
+    r#"CREATE TABLE approval_grant (
         id TEXT PRIMARY KEY NOT NULL,
         consumed_at INTEGER,
-        payload_json TEXT NOT NULL
+        payload_json TEXT NOT NULL CHECK(json_valid(payload_json))
     )"#,
 ];
 
@@ -1050,216 +1060,59 @@ mod tests {
     use yss_project_identity::{ProjectInstanceId, ProjectSessionId};
 
     #[tokio::test]
-    async fn migrates_persisted_graph_tools_without_losing_idempotency() {
-        let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
-        let session = HarnessSessionRecord {
-            id: HarnessSessionId::try_new("session-1").unwrap(),
-            principal_id: PrincipalId::try_new("user-1").unwrap(),
-            project: ProjectSessionBinding::new(
-                ProjectInstanceId::from_existing("project-1".into()),
-                ProjectSessionId::new("project-session-1"),
-            ),
-            state: HarnessSessionState::Active,
-            created_at: UnixMillis::from_existing(10),
-            updated_at: UnixMillis::from_existing(10),
-        };
-        store.create_session(&session).await.unwrap();
-        let legacy = serde_json::json!({
-            "id": "tool-1",
-            "idempotencyKey": "idem-1",
-            "sessionId": session.id,
-            "turnId": "turn-1",
-            "workflowRunId": null,
-            "workflowStepId": null,
-            "project": session.project,
-            "capabilityId": "apply_graph_edit",
-            "request": {
-                "type": "apply_graph_edit",
-                "payload": {
-                    "graphPath": "events/Main.yssbi-event",
-                    "baseRevision": 0,
-                    "graphHash": "0".repeat(64),
-                    "clientKey": "edit-1",
-                    "locale": "en-US",
-                    "operations": [{
-                        "type": "delete_nodes",
-                        "payload": {"nodeIds": ["00000000-0000-0000-0000-000000000001"]}
-                    }]
-                }
-            },
-            "state": "succeeded",
-            "result": {
-                "type": "graph_edit_receipt",
-                "payload": {
-                    "graphPath": "events/Main.yssbi-event",
-                    "fromRevision": 0,
-                    "toRevision": 1,
-                    "operationId": "00000000-0000-0000-0000-000000000501",
-                    "clientKey": "edit-1",
-                    "graphHash": "1".repeat(64),
-                    "createdNodes": {},
-                    "createdPorts": {}
-                }
-            },
-            "failure": null,
-            "startedAt": 12,
-            "deadline": 42,
-            "finishedAt": 15
-        });
-        sqlx::query(
-            "INSERT INTO tool_invocation (id, idempotency_key, session_id, state, payload_json)
-             VALUES ('tool-1', 'idem-1', 'session-1', 'succeeded', ?)",
-        )
-        .bind(legacy.to_string())
-        .execute(&store.pool)
-        .await
-        .unwrap();
-        sqlx::query("PRAGMA user_version = 0")
-            .execute(&store.pool)
+    async fn rejects_incompatible_schema_without_rewriting_records() {
+        let options = SqliteConnectOptions::from_str("sqlite::memory:").unwrap();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
             .await
             .unwrap();
-        let mut expected = legacy.clone();
-        expected["result"]["payload"]
-            .as_object_mut()
-            .unwrap()
-            .remove("operationId");
-        let expected: ToolInvocationRecord = serde_json::from_value(expected).unwrap();
-        assert!(serde_json::from_value::<ToolInvocationRecord>(legacy).is_err());
-
-        for _ in 0..2 {
-            store.ensure_schema().await.unwrap();
-            assert!(matches!(
-                store.begin(&expected).await.unwrap(),
-                ToolInvocationBegin::Existing(record) if *record == expected
-            ));
-        }
-        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-            .fetch_one(&store.pool)
+        sqlx::query("CREATE TABLE assistant_session (id TEXT PRIMARY KEY NOT NULL, state TEXT NOT NULL, payload_json TEXT NOT NULL)")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO assistant_session VALUES ('old', 'active', 'unchanged')")
+            .execute(&pool)
             .await
             .unwrap();
-        assert_eq!(version, 3);
-
-        for (id, kind, result_kind) in [
-            ("tool-2", "compile_graph", "graph_compilation"),
-            ("tool-3", "execute_graph", "graph_execution"),
-        ] {
-            let mut old = serde_json::to_value(&expected).unwrap();
-            old["id"] = id.into();
-            old["idempotencyKey"] = id.into();
-            old["capabilityId"] = kind.into();
-            old["request"] = serde_json::json!({"type": kind, "payload": {
-                "graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64)
-            }});
-            let result = if kind == "compile_graph" {
-                serde_json::json!({"graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64),
-                "artifactId": null, "ready": false, "diagnostics": [{
-                    "code": "compiler.node.unknown", "messageKey": "diagnostics.compiler.node.unknown",
-                    "blocking": true, "severity": "error", "location": "node:missing",
-                    "arguments": {"node_type": "tests.missing"}
-                }]})
-            } else {
-                old["request"]["payload"]["artifactId"] = "a".repeat(64).into();
-                serde_json::json!({"graphPath": "events/Main.yssbi-event", "graphHash": "1".repeat(64),
-                    "artifactId": "a".repeat(64), "runId": 7, "status": "succeeded", "failureCode": null,
-                    "failureLocation": null, "results": []})
-            };
-            old["result"] = serde_json::json!({"type": result_kind, "payload": result});
-            assert!(serde_json::from_value::<ToolInvocationRecord>(old.clone()).is_err());
-            sqlx::query("INSERT INTO tool_invocation (id, idempotency_key, session_id, state, payload_json) VALUES (?, ?, 'session-1', 'succeeded', ?)")
-                .bind(id).bind(id).bind(old.to_string()).execute(&store.pool).await.unwrap();
-            sqlx::query("PRAGMA user_version = 1")
-                .execute(&store.pool)
+        let store = SqliteHarnessStore { pool, path: None };
+        assert_eq!(
+            store.ensure_schema().await.unwrap_err().code,
+            PersistenceFailureCode::InvalidRecord
+        );
+        let payload: String =
+            sqlx::query_scalar("SELECT payload_json FROM assistant_session WHERE id = 'old'")
+                .fetch_one(&store.pool)
                 .await
                 .unwrap();
-            let mut new = old;
-            if kind == "compile_graph" {
-                new["capabilityId"] = "validate_graph".into();
-                new["request"]["type"] = "validate_graph".into();
-                new["result"]["type"] = "graph_validation".into();
-                new["result"]["payload"]["diagnostics"][0]["code"] = "graph.node.unknown".into();
-                new["result"]["payload"]["diagnostics"][0]["messageKey"] =
-                    "diagnostics.graph.node.unknown".into();
-            }
-            new["request"]["payload"]
-                .as_object_mut()
-                .unwrap()
-                .remove("artifactId");
-            new["result"]["payload"]
-                .as_object_mut()
-                .unwrap()
-                .remove("artifactId");
-            let new: ToolInvocationRecord = serde_json::from_value(new).unwrap();
-            for _ in 0..2 {
-                store.ensure_schema().await.unwrap();
-                assert!(
-                    matches!(store.begin(&new).await.unwrap(), ToolInvocationBegin::Existing(record) if *record == new)
-                );
-            }
-            if kind == "compile_graph" {
-                let mut version_two = serde_json::to_value(&new).unwrap();
-                version_two["result"]["payload"]["diagnostics"][0]["code"] =
-                    "compiler.node.unknown".into();
-                version_two["result"]["payload"]["diagnostics"][0]["messageKey"] =
-                    "diagnostics.compiler.node.unknown".into();
-                sqlx::query("UPDATE tool_invocation SET payload_json = ? WHERE id = ?")
-                    .bind(version_two.to_string())
-                    .bind(id)
-                    .execute(&store.pool)
-                    .await
-                    .unwrap();
-                sqlx::query("PRAGMA user_version = 2")
-                    .execute(&store.pool)
-                    .await
-                    .unwrap();
-                store.ensure_schema().await.unwrap();
-                assert!(
-                    matches!(store.begin(&new).await.unwrap(), ToolInvocationBegin::Existing(record) if *record == new)
-                );
-            }
-        }
-        let event = HarnessEventEnvelope {
-            sequence: 1,
-            session_id: session.id.clone(),
-            turn_id: None,
-            occurred_at: UnixMillis::from_existing(20),
-            event: HarnessEvent::Agent(yss_harness_contract::AgentEvent::ToolInvocationFailed {
-                invocation_id: ToolInvocationId::try_new("tool-2").unwrap(),
-                capability_id: yss_harness_contract::CapabilityId::ValidateGraph,
-                failure_code: yss_harness_contract::CapabilityFailureCode::GraphValidationFailed,
-            }),
-        };
-        store.append_event(&event).await.unwrap();
-        let mut old_event = serde_json::to_value(&event).unwrap();
-        old_event["event"]["payload"]["payload"]["capability_id"] = "compile_graph".into();
-        old_event["event"]["payload"]["payload"]["failure_code"] = "graph_compile_failed".into();
-        sqlx::query("UPDATE assistant_event SET payload_json = ? WHERE sequence = 1")
-            .bind(old_event.to_string())
-            .execute(&store.pool)
-            .await
-            .unwrap();
-        let text = HarnessEventEnvelope {
-            sequence: 2,
-            event: HarnessEvent::TurnStarted {
-                user_message: "compile_graph graph_compilation artifactId".into(),
-            },
-            ..event.clone()
-        };
-        store.append_event(&text).await.unwrap();
-        sqlx::query("PRAGMA user_version = 1")
+        assert_eq!(payload, "unchanged");
+        let tables: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table'")
+                .fetch_one(&store.pool)
+                .await
+                .unwrap();
+        assert_eq!(tables, 1);
+    }
+
+    #[tokio::test]
+    async fn current_schema_reopens_and_rejects_malformed_json() {
+        let store = SqliteHarnessStore::connect_in_memory().await.unwrap();
+        store.ensure_schema().await.unwrap();
+        assert!(
+            sqlx::query("INSERT INTO assistant_session VALUES ('bad', 'active', 'not json')")
+                .execute(&store.pool)
+                .await
+                .is_err()
+        );
+        sqlx::query("INSERT INTO assistant_session VALUES ('valid', 'active', '{}')")
             .execute(&store.pool)
             .await
             .unwrap();
         store.ensure_schema().await.unwrap();
-        let values: Vec<String> =
-            sqlx::query_scalar("SELECT payload_json FROM assistant_event ORDER BY sequence")
-                .fetch_all(&store.pool)
+        let payload: String =
+            sqlx::query_scalar("SELECT payload_json FROM assistant_session WHERE id = 'valid'")
+                .fetch_one(&store.pool)
                 .await
                 .unwrap();
-        let restored = values
-            .iter()
-            .map(|value| serde_json::from_str::<HarnessEventEnvelope>(value).unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(restored, [event, text]);
+        assert_eq!(payload, "{}");
     }
 
     #[tokio::test]
