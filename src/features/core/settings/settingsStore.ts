@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { parseSettingsPatch } from "@/shared/types/settings/parseSettings";
 import type {
   AiSettings,
   AppearanceSettings,
@@ -10,13 +11,12 @@ import { getThemeModeForPreset } from "@/shared/theme/colorThemePresets";
 import { logger } from "@/features/core/observability/logger";
 
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
-const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";
 
-let suppressClientSettingsCrossWindowBroadcast = false;
-let publishClientSettings: ((settings: AppSettings) => void) | null = null;
+let pendingSettings: PartialAppSettings = {};
+let publishClientSettings: ((settings: PartialAppSettings) => void) | null = null;
 
 export function setClientSettingsPublisher(
-  publisher: ((settings: AppSettings) => void) | null,
+  publisher: ((settings: PartialAppSettings) => void) | null,
 ): void {
   publishClientSettings = publisher;
 }
@@ -64,13 +64,14 @@ function loadLocalSettings(): AppSettings {
   }
 
   try {
-    localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return mergeSettings({});
-    return mergeSettings(JSON.parse(raw) as PartialAppSettings);
-  } catch (error) {
+    const parsed = parseSettingsPatch(JSON.parse(raw));
+    if (!parsed) throw new Error("Invalid settings fields");
+    return mergeSettings(parsed);
+  } catch {
     logger.app.warn(
-      `Failed to load local settings: ${error instanceof Error ? error.message : String(error)}`,
+      "Failed to load local settings: invalid or unavailable stored settings",
       "Settings",
     );
     return mergeSettings({});
@@ -91,35 +92,22 @@ function saveLocalSettings(settings: AppSettings): void {
   }
 }
 
-function persistClientSettings(settings: AppSettings): void {
-  saveLocalSettings(settings);
-  if (suppressClientSettingsCrossWindowBroadcast) return;
-  publishClientSettings?.(settings);
+function mergePatches(base: PartialAppSettings, patch: PartialAppSettings): PartialAppSettings {
+  return {
+    ai: { ...base.ai, ...patch.ai },
+    appearance: { ...base.appearance, ...patch.appearance },
+  };
 }
 
-/** 应用其他窗口写入的客户端设置，避免相同快照回声与多余渲染。 */
-export function applyClientSettingsFromRemote(incoming: AppSettings): void {
-  const merged = mergeSettings(incoming);
-  const cur = useSettingsStore.getState();
-  const currentPayload: AppSettings = {
-    ai: cur.ai,
-    appearance: cur.appearance,
-  };
-  if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
-    return;
-  }
-
-  suppressClientSettingsCrossWindowBroadcast = true;
-  try {
-    saveLocalSettings(merged);
-    useSettingsStore.setState({
-      ai: merged.ai,
-      appearance: merged.appearance,
-      isLoading: false,
-    });
-  } finally {
-    suppressClientSettingsCrossWindowBroadcast = false;
-  }
+/** Remote changes cannot overwrite locally pending fields and are never echoed. */
+export function applyClientSettingsFromRemote(incoming: PartialAppSettings): void {
+  const patch = parseSettingsPatch(incoming);
+  if (!patch) return;
+  const current = useSettingsStore.getState();
+  const merged = mergeSettings(mergePatches(mergePatches(current, patch), pendingSettings));
+  if (clientSettingsFingerprint(current) === clientSettingsFingerprint(merged)) return;
+  saveLocalSettings(mergeSettings(mergePatches(loadLocalSettings(), patch)));
+  useSettingsStore.setState({ ...merged, isLoading: false });
 }
 
 interface SettingsStore {
@@ -153,12 +141,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    const state = get();
-    const settings: AppSettings = {
-      ai: state.ai,
-      appearance: state.appearance,
-    };
-    persistClientSettings(settings);
+    const patch = pendingSettings;
+    const settings = mergeSettings(mergePatches(loadLocalSettings(), patch));
+    saveLocalSettings(settings);
+    pendingSettings = {};
+    if (clientSettingsFingerprint(get()) !== clientSettingsFingerprint(settings)) set(settings);
+    if (Object.keys(patch.ai ?? {}).length || Object.keys(patch.appearance ?? {}).length)
+      publishClientSettings?.(patch);
   };
 
   const scheduleSave = () => {
@@ -174,6 +163,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     isLoading: true,
 
     load: async () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = null;
+      pendingSettings = {};
       set({ isLoading: true });
       set({
         ...loadLocalSettings(),
@@ -181,37 +173,50 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       });
     },
 
-    updateAi: (updates) =>
-      set((state) => {
-        const next = { ai: { ...state.ai, ...updates } };
-        queueMicrotask(scheduleSave);
-        return next;
-      }),
+    updateAi: (updates) => {
+      const patch = parseSettingsPatch({ ai: updates });
+      if (!patch) throw new Error("Invalid AI settings fields");
+      pendingSettings = mergePatches(pendingSettings, patch);
+      set((state) => ({ ai: { ...state.ai, ...patch.ai } }));
+      scheduleSave();
+    },
 
-    updateAppearance: (updates) =>
-      set((state) => {
-        const next = { appearance: mergeAppearanceSettings({ ...state.appearance, ...updates }) };
-        queueMicrotask(scheduleSave);
-        return next;
-      }),
+    updateAppearance: (updates) => {
+      const parsed = parseSettingsPatch({ appearance: updates });
+      if (!parsed) throw new Error("Invalid appearance settings fields");
+      const current = get().appearance;
+      const next = mergeAppearanceSettings({ ...current, ...parsed.appearance });
+      const patch = { ...parsed.appearance };
+      // A theme switch also changes its remembered preset in the same commit.
+      if (next.lastLightColorTheme !== current.lastLightColorTheme)
+        patch.lastLightColorTheme = next.lastLightColorTheme;
+      if (next.lastDarkColorTheme !== current.lastDarkColorTheme)
+        patch.lastDarkColorTheme = next.lastDarkColorTheme;
+      pendingSettings = mergePatches(pendingSettings, { appearance: patch });
+      set({ appearance: next });
+      scheduleSave();
+    },
 
     // 立即保存当前状态
     save: saveImmediately,
 
     resetAiToDefaults: async () => {
+      pendingSettings = mergePatches(pendingSettings, { ai: DEFAULT_AI });
       set({ ai: DEFAULT_AI });
       await saveImmediately();
     },
 
     resetAppearanceToDefaults: async () => {
+      pendingSettings = mergePatches(pendingSettings, { appearance: DEFAULT_APPEARANCE });
       set({ appearance: DEFAULT_APPEARANCE });
       await saveImmediately();
     },
 
     resetAllToDefaults: async () => {
       const defaults = mergeSettings({});
+      pendingSettings = defaults;
       set(defaults);
-      persistClientSettings(defaults);
+      await saveImmediately();
     },
   };
 });
