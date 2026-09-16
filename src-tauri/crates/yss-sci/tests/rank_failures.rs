@@ -25,8 +25,7 @@ fn models_reject_failed_rank_zero_rank_and_exhausted_degrees_of_freedom() {
                 weights: Col::from_fn(3, |_| 1.0),
                 config: WLSConfig {
                     constant: true,
-                    cov_type: String::new(),
-                    cov_params: None
+                    covariance: Default::default()
                 },
             }
             .fit()

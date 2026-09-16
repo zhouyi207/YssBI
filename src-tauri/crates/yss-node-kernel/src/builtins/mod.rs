@@ -117,6 +117,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
                     Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual => 3,
+                    Statistical(OlsFit | OlsSummary) => 2,
                     Numeric(_) | Convert | Relational(relational::RelationalKernel::Filter) => 2,
                     _ => 1,
                 })

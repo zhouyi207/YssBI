@@ -6,6 +6,65 @@ fn near(actual: f64, expected: f64) {
 }
 
 #[test]
+fn unified_gls_identity_estimates_scale_like_ols() {
+    use yss_sci::regression::fit::fit_regression;
+    use yss_sci_contract::regression::fit::{RegressionKind, RegressionStatistics};
+    use yss_sci_contract::{MissingValuePolicy, StatisticalObservationMetadata};
+
+    let fit = |kind| {
+        fit_regression(
+            kind,
+            vec![1., 2., 1., 4., 3.],
+            vec![vec![0., 1., 2., 3., 4.]],
+            None,
+            StatisticalObservationMetadata {
+                original_observation_count: 5,
+                used_observation_count: 5,
+                dropped_null_count: 0,
+                dropped_nan_count: 0,
+                missing_value_policy: MissingValuePolicy::Reject,
+            },
+        )
+        .unwrap()
+    };
+    let ols = fit(RegressionKind::Ols);
+    let gls = fit(RegressionKind::Gls);
+    assert_eq!(gls.family, "gls");
+    let (
+        RegressionStatistics::Linear {
+            coefficients: expected,
+            model: expected_model,
+        },
+        RegressionStatistics::Linear {
+            coefficients: actual,
+            model: actual_model,
+        },
+    ) = (ols.statistics, gls.statistics)
+    else {
+        panic!("Expected linear results")
+    };
+    assert_eq!(actual_model.covariance_type, "GLS (estimated scale)");
+    for i in 0..2 {
+        near(actual.standard_errors[i], expected.standard_errors[i]);
+        near(actual.statistic_values[i], expected.statistic_values[i]);
+        near(actual.p_values[i], expected.p_values[i]);
+        near(
+            actual.confidence_interval_lower[i],
+            expected.confidence_interval_lower[i],
+        );
+        near(
+            actual.confidence_interval_upper[i],
+            expected.confidence_interval_upper[i],
+        );
+        for j in 0..2 {
+            near(actual.covariance[i][j], expected.covariance[i][j]);
+        }
+    }
+    near(actual_model.f_statistic, expected_model.f_statistic);
+    near(actual_model.f_p_value, expected_model.f_p_value);
+}
+
+#[test]
 fn weighted_statistics_use_the_transformed_intercept() {
     let weights = Col::from_fn(5, |i| (1 << i) as f64);
     for constant in [true, false] {
@@ -20,8 +79,7 @@ fn weighted_statistics_use_the_transformed_intercept() {
                 weights: weights.clone(),
                 config: WLSConfig {
                     constant,
-                    cov_type: String::new(),
-                    cov_params: None,
+                    covariance: Default::default(),
                 },
             }
             .fit()
@@ -37,6 +95,14 @@ fn weighted_statistics_use_the_transformed_intercept() {
             near(wls.ss_total, gls.ss_total);
             near(wls.r2, gls.r2);
             near(wls.fvalue, gls.fvalue);
+            near(wls.f_p_value, gls.f_p_value);
+            for j in 0..exog.ncols() {
+                near(wls.stds[j], gls.stds[j]);
+                near(wls.tvalues[j], gls.tvalues[j]);
+                near(wls.pvalues[j], gls.pvalues[j]);
+                near(wls.conf_int_left[j], gls.conf_int_left[j]);
+                near(wls.conf_int_right[j], gls.conf_int_right[j]);
+            }
             if constant {
                 // Exact weighted least-squares values derived using rational arithmetic.
                 near(wls.ss_total, 914.0 / 31.0);
@@ -76,5 +142,22 @@ fn correlated_gls_centers_against_the_whitened_constant() {
         .fit()
         .unwrap();
         near(result.ss_total, expected);
+        let scaled = GLS {
+            endog: Col::from_fn(5, |i| [1., 2., 1., 4., 3.][i] + offset),
+            exog: Mat::from_fn(5, 2, |i, j| if j == 0 { 1.0 } else { i as f64 }),
+            sigma: yss_sci_linalg::Scale(7.0) * &sigma,
+            config: GLSConfig { constant: true },
+        }
+        .fit()
+        .unwrap();
+        for j in 0..2 {
+            near(result.betas[j], scaled.betas[j]);
+            near(result.stds[j], scaled.stds[j]);
+            near(result.pvalues[j], scaled.pvalues[j]);
+            near(result.conf_int_left[j], scaled.conf_int_left[j]);
+            near(result.conf_int_right[j], scaled.conf_int_right[j]);
+        }
+        near(result.fvalue, scaled.fvalue);
+        near(result.f_p_value, scaled.f_p_value);
     }
 }

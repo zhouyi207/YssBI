@@ -30,6 +30,8 @@ pub fn fit_regression(
     match kind {
         RegressionKind::Ols => fit_ols_design(&y, &x, &OlsOptions::default(), metadata),
         RegressionKind::Gls => {
+            // This entry point has no covariance input: identity structure with estimated
+            // error scale is ordinary least squares, retaining the requested GLS label.
             let result = GLS {
                 endog: y.clone(),
                 exog: x.clone(),
@@ -97,8 +99,7 @@ pub fn fit_regression(
                 weights: Col::from_iter(weights),
                 config: WLSConfig {
                     constant: true,
-                    cov_type: "nonrobust".into(),
-                    cov_params: None,
+                    covariance: Default::default(),
                 },
             }
             .fit()

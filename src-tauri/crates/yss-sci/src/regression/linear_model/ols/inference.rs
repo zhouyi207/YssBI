@@ -3,18 +3,10 @@ use super::{OLS, OlsFit, OlsFitError};
 use crate::regression::covariance::compute_cov_beta;
 use num_traits::{One, Pow, Zero};
 use statrs::{
-    distribution::{ContinuousCDF, FisherSnedecor, StudentsT},
+    distribution::{ContinuousCDF, StudentsT},
     statistics::Statistics,
 };
 use yss_sci_linalg::Col;
-use yss_sci_linalg::{MatrixExt, Solve};
-
-fn is_robust_cov_type(cov_type: &str) -> bool {
-    matches!(
-        cov_type,
-        "HC0" | "HC1" | "HC2" | "HC3" | "cluster" | "HAC" | "newey" | "fixed scale"
-    )
-}
 
 pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFitError> {
     let OlsSolution {
@@ -79,62 +71,14 @@ pub(super) fn infer(model: &OLS, solution: OlsSolution) -> Result<OlsFit, OlsFit
     let cov_beta_nonrobust = yss_sci_linalg::Scale(ms_residual) * &xtx_inv_nd;
 
     // F 统计量：robust VCE 时用 Wald，否则用经典 F
-    let (f, f_p_value) = if df_model > 0 {
-        if is_robust_cov_type(&covariance_type) {
-            let betas_nd = betas.as_ref().to_owned();
-            // Wald = β_s' V_s^{-1} β_s，F = Wald / df_model
-            let (beta_s, v_s) = if model.config.constant && rank > 1 {
-                (
-                    betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned(),
-                    cov_beta
-                        .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
-                        .to_owned(),
-                )
-            } else {
-                (betas_nd.clone(), cov_beta.clone())
-            };
-            let wald = if beta_s.nrows() > 0 {
-                let v_matrix = v_s.as_ref().to_owned();
-                let beta_vector = beta_s.as_ref().to_owned();
-                match v_matrix.as_ref().checked_cholesky() {
-                    Ok(llt) => {
-                        let x_sol = llt.solve(&beta_vector.as_ref());
-                        beta_s.transpose() * x_sol.as_ref()
-                    }
-                    Err(_) => 0.0, // cov 非正定（如 cluster 聚类少）时回退
-                }
-            } else {
-                0.0
-            };
-            let f_val = (wald / df_model as f64).max(0.0);
-            let df1 = (df_model as f64).max(1.0);
-            let df2 = (df_residual as f64).max(1.0);
-            let dist = FisherSnedecor::new(df1, df2)
-                .map_err(|e| {
-                    format!(
-                        "OLS F-distribution: df_model={} df_residual={} {}",
-                        df_model, df_residual, e
-                    )
-                })
-                .map_err(OlsFitError::Inference)?;
-            (f_val, 1.0 - dist.cdf(f_val))
-        } else {
-            let f_val = (ms_model / ms_residual).max(0.0);
-            let df1 = (df_model as f64).max(1.0);
-            let df2 = (df_residual as f64).max(1.0);
-            let dist = FisherSnedecor::new(df1, df2)
-                .map_err(|e| {
-                    format!(
-                        "OLS F-distribution: df_model={} df_residual={} {}",
-                        df_model, df_residual, e
-                    )
-                })
-                .map_err(OlsFitError::Inference)?;
-            (f_val, 1.0 - dist.cdf(f_val))
-        }
-    } else {
-        (0.0, 1.0)
-    };
+    let (f, f_p_value) = super::super::overall_f_test(
+        &betas,
+        &cov_beta,
+        model.config.constant,
+        df_residual,
+        (covariance_type == "nonrobust").then_some(ms_model / ms_residual),
+    )
+    .map_err(OlsFitError::Inference)?;
 
     // std err
     let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());

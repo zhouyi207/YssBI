@@ -3,7 +3,7 @@
 
 use yss_sci_linalg::{Col, Mat};
 
-use yss_sci_contract::regression::CovParams;
+use yss_sci_contract::regression::{CovParams, OlsCovariance, OlsOptions};
 
 /// 计算参数协方差矩阵 cov_beta
 /// - x: (n × k) 设计矩阵
@@ -18,21 +18,21 @@ pub fn compute_cov_beta(
     cov_type: &str,
     cov_params: Option<&CovParams>,
 ) -> Result<Mat<f64>, String> {
+    let selection = OlsOptions::from_covariance_parts(false, cov_type, cov_params)
+        .map_err(|error| error.to_string())?;
     let n = x.nrows();
     let k = x.ncols();
 
-    match cov_type {
-        "nonrobust" => cov_nonrobust(xtx_inv, u, df_residual),
-        "fixed scale" => cov_fixed_scale(xtx_inv, cov_params),
-        "HC0" => cov_hc0(x, xtx_inv, u, n, k),
-        "HC1" => cov_hc1(x, xtx_inv, u, n, k, df_residual),
-        "HC2" => cov_hc2(x, xtx_inv, u, n, k, df_residual),
-        "HC3" => cov_hc3(x, xtx_inv, u, n, k, df_residual),
-        "cluster" => cov_cluster(x, xtx_inv, u, cov_params),
-        "HAC" => cov_hac(x, xtx_inv, u, n, k, cov_params),
-        "newey" => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
-        "hac-panel" | "hac-groupsum" => Err(format!("cov_type '{}' not yet implemented", cov_type)),
-        _ => cov_nonrobust(xtx_inv, u, df_residual),
+    match selection.covariance {
+        OlsCovariance::NonRobust => cov_nonrobust(xtx_inv, u, df_residual),
+        OlsCovariance::FixedScale { .. } => cov_fixed_scale(xtx_inv, cov_params),
+        OlsCovariance::Hc0 => cov_hc0(x, xtx_inv, u, n, k),
+        OlsCovariance::Hc1 => cov_hc1(x, xtx_inv, u, n, k, df_residual),
+        OlsCovariance::Hc2 => cov_hc2(x, xtx_inv, u, n, k, df_residual),
+        OlsCovariance::Hc3 => cov_hc3(x, xtx_inv, u, n, k, df_residual),
+        OlsCovariance::Cluster { .. } => cov_cluster(x, xtx_inv, u, cov_params),
+        OlsCovariance::Hac { .. } => cov_hac(x, xtx_inv, u, n, k, cov_params),
+        OlsCovariance::Newey { .. } => cov_newey(x, xtx_inv, u, n, k, df_residual, cov_params),
     }
 }
 

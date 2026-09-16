@@ -1,4 +1,4 @@
-use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
@@ -10,6 +10,7 @@ pub struct GLSConfig {
 pub struct GLS {
     pub endog: Col<f64>,
     pub exog: Mat<f64>,
+    /// Relative covariance structure: Var(error) = scale * sigma, with scale estimated.
     pub sigma: Mat<f64>,
     pub config: GLSConfig,
 }
@@ -102,16 +103,14 @@ impl GLS {
         let ms_residual = ss_residual / df_residual as f64;
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = 1.0 - ms_residual / ms_total;
-        let f = ms_model / ms_residual;
-
-        let f_safe = f.max(0.0);
-        let df1 = (df_model as f64).max(1.0);
-        let df2 = (df_residual as f64).max(1.0);
-        let dist =
-            FisherSnedecor::new(df1, df2).map_err(|e| format!("GLS: FisherSnedecor: {}", e))?;
-        let f_p_value = 1.0 - dist.cdf(f_safe);
-
-        let cov_beta = xtx_inv.as_ref().to_owned();
+        let cov_beta = yss_sci_linalg::Scale(ms_residual) * &xtx_inv;
+        let (f, f_p_value) = super::overall_f_test(
+            &betas,
+            &cov_beta,
+            self.config.constant,
+            df_residual,
+            Some(ms_model / ms_residual),
+        )?;
         let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());
         let betas_nd = betas.as_ref().to_owned();
         let t_values: Vec<f64> = betas_nd
@@ -142,7 +141,7 @@ impl GLS {
             ms_model,
             ms_residual,
             ms_total,
-            covariance_type: "GLS (known Sigma)".to_string(),
+            covariance_type: "GLS (estimated scale)".to_string(),
             r2,
             r2_adjusted,
             fvalue: f,

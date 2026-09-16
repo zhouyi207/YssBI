@@ -38,6 +38,21 @@ errors and reject rank-deficient designs or insufficient residual degrees of
 freedom. Collinearity removal also propagates decomposition failure rather than
 using it to choose columns to drop.
 
+OLS and WLS share the overall coefficient test: nonrobust covariance uses the
+classical mean-square ratio, while other covariance selections use a Wald test
+excluding the intercept. A singular covariance or invalid Wald statistic returns
+an inference error instead of a fabricated zero statistic and unit p-value.
+WLS uses the shared typed `OlsCovariance` selection. Named covariance callers
+are validated by `OlsOptions::from_covariance_parts`; unsupported names or missing
+required parameters never fall back to nonrobust computation.
+
+GLS takes a relative error covariance structure `sigma`: `Var(error) = scale * sigma`.
+It estimates scale from whitened residual sums of squares divided by residual
+degrees of freedom. Parameter covariance includes that scale; coefficient tests
+use Student-t and the overall test uses F. The report labels this estimated-scale
+contract. `fit_regression(Gls)` supplies identity structure and therefore agrees
+with ordinary OLS inference. A fully known absolute covariance mode is not exposed.
+
 WLS, GLS and Prais compute total variation in the transformed space, centering
 along the transformed intercept when one is configured. Their shared
 `transformed_total_ss` preserves translation invariance with an intercept; without

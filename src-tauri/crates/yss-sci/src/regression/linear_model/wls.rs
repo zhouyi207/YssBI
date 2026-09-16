@@ -1,15 +1,14 @@
 use crate::regression::covariance::compute_cov_beta;
-use yss_sci_contract::regression::CovParams;
+use yss_sci_contract::regression::OlsCovariance;
 
-use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
+use statrs::distribution::{ContinuousCDF, StudentsT};
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 use yss_sci_linalg::{MatrixExt, Solve};
 
 pub struct WLSConfig {
     pub constant: bool,
-    pub cov_type: String,
-    pub cov_params: Option<CovParams>,
+    pub covariance: OlsCovariance,
 }
 
 pub struct WLS {
@@ -79,11 +78,8 @@ impl WLS {
         let df_model = if self.config.constant { rank - 1 } else { rank };
         let df_total = df_residual + df_model;
 
-        let covariance_type = if self.config.cov_type.is_empty() {
-            "nonrobust".to_string()
-        } else {
-            self.config.cov_type.clone()
-        };
+        let covariance_type = self.config.covariance.name().to_owned();
+        let covariance_parameters = self.config.covariance.parameters();
 
         let xtx = zz.transpose() * zz.as_ref();
         let xtz = zz.transpose() * z.as_ref();
@@ -107,15 +103,6 @@ impl WLS {
         let ms_residual = ss_residual / df_residual as f64;
         let ms_total = ss_total / df_total as f64;
         let r2_adjusted = 1.0 - ms_residual / ms_total;
-        let f = ms_model / ms_residual;
-
-        let f_safe = f.max(0.0);
-        let df1 = (df_model as f64).max(1.0);
-        let df2 = (df_residual as f64).max(1.0);
-        let dist =
-            FisherSnedecor::new(df1, df2).map_err(|e| format!("WLS: FisherSnedecor: {}", e))?;
-        let f_p_value = 1.0 - dist.cdf(f_safe);
-
         let u = &z - z_hat.as_ref();
         let x_nd = zz.as_ref().to_owned();
         let xtx_inv_nd = xtx_inv.as_ref().to_owned();
@@ -127,7 +114,15 @@ impl WLS {
             &u_nd,
             df_residual,
             &covariance_type,
-            self.config.cov_params.as_ref(),
+            covariance_parameters.as_ref(),
+        )?;
+
+        let (f, f_p_value) = super::overall_f_test(
+            &betas,
+            &cov_beta,
+            self.config.constant,
+            df_residual,
+            (covariance_type == "nonrobust").then_some(ms_model / ms_residual),
         )?;
 
         let std_err: Col<f64> = cov_beta.diagonal().column_vector().map(|v| v.sqrt());

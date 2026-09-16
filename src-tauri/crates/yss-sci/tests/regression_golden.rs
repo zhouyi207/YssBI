@@ -94,7 +94,7 @@ fn iv2sls_recovers_known_coefficients_with_single_and_multiple_endogenous_regres
                 + 0.5 * signal(row, 4)
                 + signal(row, 5)
         });
-        for covariance_type in ["nonrobust", "robust"] {
+        for covariance_type in ["nonrobust", "HC1"] {
             let result = IV2SLS {
                 endog: response.clone(),
                 exog: exog.clone(),
@@ -450,8 +450,7 @@ fn test_wls_golden() {
         weights: weights.clone(),
         config: WLSConfig {
             constant: true,
-            cov_type: "nonrobust".to_string(),
-            cov_params: None,
+            covariance: Default::default(),
         },
     };
     let w = wls.fit().unwrap();
