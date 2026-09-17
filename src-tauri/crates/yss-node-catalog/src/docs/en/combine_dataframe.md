@@ -1,7 +1,9 @@
-# Combine DataFrame
+# Assemble DataFrame
 
-Assemble multiple **DataSeries** columns into a single **DataFrame**. Shorter series are padded with nulls to match the longest column length.
+Assemble one or more series as columns, in input-port order. Columns may have different semantic types.
 
 ## Usage
 
-Connect at least one **Column** pin. Add more **Column** inputs as needed. Column names default to each series name; unnamed series become `col_i`. Use after **Decompose DataFrame** or manual series construction to rebuild a table for **Filter DataFrame** or econometric nodes.
+Lazy series sharing a proven row domain form a lazy projection, evaluated when consumed. Column selection and renaming preserve alignment; independently filtered or limited row domains cannot be aligned by matching lengths.
+
+Materialized series must have equal lengths and remain materialized. Shorter columns are not padded, and materialized lists cannot mix with lazy series. Names derive from source columns or output ports, with suffixes for duplicates. Use Rename DataFrame to adjust names afterward.

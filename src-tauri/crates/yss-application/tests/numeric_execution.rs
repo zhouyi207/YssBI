@@ -1705,6 +1705,102 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .unwrap()
         .parameters
         .insert("to".parse().unwrap(), serde_json::json!("预测.value"));
+    let [assemble, rows, columns, join, first_column, second_column] =
+        std::array::from_fn(|_| NodeId::new());
+    for (id, kind, parameters) in [
+        (assemble, "yssbi.dataframe.combine", vec![]),
+        (rows, "yssbi.dataframe.concat.rows", vec![]),
+        (columns, "yssbi.dataframe.concat.columns", vec![]),
+        (
+            join,
+            "yssbi.dataframe.join",
+            vec![
+                ("left_keys", serde_json::json!(["x"])),
+                ("right_keys", serde_json::json!(["x"])),
+            ],
+        ),
+        (
+            first_column,
+            "yssbi.dataframe.project",
+            vec![("columns", serde_json::json!(["预测.value"]))],
+        ),
+        (
+            second_column,
+            "yssbi.dataframe.project",
+            vec![("columns", serde_json::json!(["y"]))],
+        ),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: parameters
+                    .into_iter()
+                    .map(|(key, value)| (key.parse().unwrap(), value))
+                    .collect(),
+                user_label: None,
+            },
+        );
+    }
+    for (target, template, outputs) in [
+        (assemble, "series", vec![x_output.clone(), y_output.clone()]),
+        (
+            rows,
+            "frames",
+            vec![PortAddress::declared(filter, "result".parse().unwrap()); 2],
+        ),
+        (
+            columns,
+            "frames",
+            vec![
+                PortAddress::declared(first_column, "result".parse().unwrap()),
+                PortAddress::declared(second_column, "result".parse().unwrap()),
+            ],
+        ),
+    ] {
+        for (index, output) in outputs.into_iter().enumerate() {
+            let input = PortAddress::instance(
+                target,
+                template.parse().unwrap(),
+                yss_graph_document::PortInstanceId::new(),
+            );
+            document.port_bindings.insert(
+                input.clone(),
+                yss_graph_document::DynamicPortBinding::UserCreated {
+                    order: yss_graph_document::OrderKey::new(index.to_string()),
+                },
+            );
+            let id = ConnectionId::new();
+            document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output,
+                    input,
+                    order: None,
+                },
+            );
+        }
+    }
+    for (from, target, key) in [
+        (rename, first_column, "source"),
+        (rename, second_column, "source"),
+        (filter, join, "left"),
+        (filter, join, "right"),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(from, "result".parse().unwrap()),
+                input: PortAddress::declared(target, key.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
     let document: GraphDocument =
         serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
     let fixture_capture = project
@@ -1740,6 +1836,27 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         )
     };
     let result = app.query_pin_result(query(fit, "fitted")).unwrap().unwrap();
+    for (node, output, count, names) in [
+        (assemble, "dataframe", 4, vec!["预测.value", "y"]),
+        (rows, "result", 8, vec!["x", "y"]),
+        (columns, "result", 4, vec!["预测.value", "y"]),
+        (join, "result", 4, vec!["x", "y", "x_right", "y_right"]),
+    ] {
+        let result = app.query_pin_result(query(node, output)).unwrap().unwrap();
+        assert!(matches!(result.value().value(), RuntimeValue::Relation(_)));
+        let page = app
+            .query_result_page(result.provenance().reference(), 0, 20)
+            .unwrap()
+            .unwrap();
+        assert_eq!(page.values.len(), count);
+        assert_eq!(
+            page.columns
+                .iter()
+                .map(|column| column.name.as_ref())
+                .collect::<Vec<_>>(),
+            names
+        );
+    }
     assert_eq!(result.provenance().run_id(), run_id);
     let RuntimeValue::List(fitted) = result.value().value() else {
         panic!("fitted values");

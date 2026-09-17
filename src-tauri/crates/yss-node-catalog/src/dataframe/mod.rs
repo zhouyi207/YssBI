@@ -18,6 +18,7 @@ use families::{InterfaceKind, NODES, NodeSpec};
 pub const DATAFRAME_COLUMNS_RESOLVER: &str = "yssbi.dataframe.interface.columns";
 pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 pub const DATAFRAME_PANEL_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.panel";
+pub const DATAFRAME_COMPOSITION_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.composition";
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut messages = Vec::new();
@@ -37,6 +38,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         schema_resolvers: vec![
             sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_PANEL_SCHEMA_RESOLVER, SchemaResolverId::new)?,
+            sid(DATAFRAME_COMPOSITION_SCHEMA_RESOLVER, SchemaResolverId::new)?,
         ],
         nodes,
         messages,
@@ -52,8 +54,7 @@ fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyErr
 fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let (ports, parameters) = interface(spec.interface)?;
     let type_parameters = match spec.interface {
-        InterfaceKind::Combine
-        | InterfaceKind::SeriesSelect
+        InterfaceKind::SeriesSelect
         | InterfaceKind::SeriesLength
         | InterfaceKind::SeriesCount
         | InterfaceKind::DummyInfo
@@ -184,33 +185,83 @@ fn interface(
         )),
         Combine => Ok((
             vec![
-                user_input("series", "DataSeries", generic_series_type("element")?, 1)?,
-                data_output(
+                composition_input("series", "DataSeries", series_type()?, 1)?,
+                streaming_output(
                     "dataframe",
                     "DataFrame",
                     dataframe_type()?,
-                    Some(SchemaExpr::Append {
-                        inputs: vec![SchemaExpr::Input(port_key("series")?)],
-                    }),
+                    Some(derived_schema(
+                        DATAFRAME_COMPOSITION_SCHEMA_RESOLVER,
+                        vec![SchemaDependency::Port(port_key("series")?)],
+                    )?),
                 )?,
             ],
             vec![],
         )),
-        Filter => Ok((
+        ConcatRows | ConcatColumns => Ok((
             vec![
-                data_input("source", "Source", dataframe_type()?, None)?,
-                data_input("condition", "Condition", bool_series_type()?, None)?,
-                data_output(
+                composition_input("frames", "DataFrame", dataframe_type()?, 2)?,
+                streaming_output(
                     "result",
                     "Result",
                     dataframe_type()?,
-                    Some(SchemaExpr::Filter {
-                        input: Box::new(SchemaExpr::Input(port_key("source")?)),
-                        predicate: None,
-                    }),
+                    Some(derived_schema(
+                        DATAFRAME_COMPOSITION_SCHEMA_RESOLVER,
+                        vec![SchemaDependency::Port(port_key("frames")?)],
+                    )?),
                 )?,
             ],
-            vec![],
+            if kind == ConcatRows {
+                vec![choice_parameter(
+                    "column_match",
+                    "by_name",
+                    &["by_name", "by_position"],
+                )?]
+            } else {
+                vec![]
+            },
+        )),
+        Join => Ok((
+            vec![
+                streaming_input("left", "Left", dataframe_type()?, None)?,
+                streaming_input("right", "Right", dataframe_type()?, None)?,
+                streaming_output(
+                    "result",
+                    "Result",
+                    dataframe_type()?,
+                    Some(derived_schema(
+                        DATAFRAME_COMPOSITION_SCHEMA_RESOLVER,
+                        vec![
+                            SchemaDependency::Port(port_key("left")?),
+                            SchemaDependency::Port(port_key("right")?),
+                        ],
+                    )?),
+                )?,
+            ],
+            vec![
+                nominal_parameter(
+                    "left_keys",
+                    yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                )?,
+                nominal_parameter(
+                    "right_keys",
+                    yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+                )?,
+                choice_parameter("join_type", "inner", &["inner", "left", "right", "full"])?,
+                parameter(
+                    "right_suffix",
+                    concrete("core.text")?,
+                    ParameterEditorSpec::Text { multiline: false },
+                    Some(ParameterValue {
+                        value_type: concrete("core.text")?,
+                        value: Value::String("_right".into()),
+                    }),
+                    vec![ParameterConstraint::Length {
+                        min: Some(1),
+                        max: Some(128),
+                    }],
+                )?,
+            ],
         )),
         SeriesSelect => Ok((
             vec![
@@ -376,6 +427,36 @@ fn interface(
             vec![positive_integer_parameter("order", 1)?],
         )),
     }
+}
+
+fn composition_input(
+    key: &'static str,
+    title: &'static str,
+    value_type: TypeExpr,
+    min: u16,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    let mut port = user_input(key, title, value_type, min)?;
+    port.consumption = Some(InputConsumption::Streaming);
+    Ok(port)
+}
+
+fn choice_parameter(
+    key: &'static str,
+    default: &'static str,
+    values: &[&str],
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    parameter(
+        key,
+        concrete("core.text")?,
+        ParameterEditorSpec::Select,
+        Some(ParameterValue {
+            value_type: concrete("core.text")?,
+            value: Value::String(default.into()),
+        }),
+        vec![ParameterConstraint::OneOf(
+            values.iter().map(|v| Value::String((*v).into())).collect(),
+        )],
+    )
 }
 
 fn relational_ports(result_schema: SchemaExpr) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
@@ -681,7 +762,9 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::FilterRows
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
-        | InterfaceKind::Filter
+        | InterfaceKind::ConcatRows
+        | InterfaceKind::ConcatColumns
+        | InterfaceKind::Join
         | InterfaceKind::TimeAlign
         | InterfaceKind::PanelAlign => "dataframe",
         InterfaceKind::SeriesSelect
@@ -729,9 +812,6 @@ fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))
-}
-fn bool_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.binary")?))
 }
 fn normalized_union(
     context: &'static str,
@@ -850,6 +930,41 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", description, Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "column_match",
+            "Column Matching",
+            "列对齐方式",
+            "Match columns by name (fill missing columns with null) or by position.",
+            "按列名对齐并补齐缺失列，或按列位置对齐。",
+        ),
+        (
+            "left_keys",
+            "Left Keys",
+            "左表连接键",
+            "Select the left key columns in matching order.",
+            "按匹配顺序选择左表连接列。",
+        ),
+        (
+            "right_keys",
+            "Right Keys",
+            "右表连接键",
+            "Select the corresponding right key columns.",
+            "按相同顺序选择右表连接列。",
+        ),
+        (
+            "join_type",
+            "Join Type",
+            "连接类型",
+            "Inner, left, right, or full outer join. Null keys do not match.",
+            "选择内连接、左连接、右连接或全外连接；空键不匹配。",
+        ),
+        (
+            "right_suffix",
+            "Right Column Suffix",
+            "右表重名列后缀",
+            "Suffix used for duplicate right column names.",
+            "右表重名列自动添加的后缀。",
+        ),
         (
             "start",
             "Start",

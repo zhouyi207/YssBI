@@ -1,4 +1,12 @@
 export const zhCN = {
+  tableComposition: {
+    by_name: "按列名对齐（缺失列补空值）",
+    by_position: "按列位置对齐",
+    inner: "内连接",
+    left: "左连接",
+    right: "右连接",
+    full: "全外连接",
+  },
   conversion: {
     categorical: "分类",
     ordinal: "顺序",

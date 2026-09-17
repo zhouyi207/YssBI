@@ -29,6 +29,10 @@ function projectedDraft(parameter: ParameterEditorDto): string {
 }
 
 function optionLabel(key: string, option: string, t: TFunction): string {
+  if (key === "column_match" && ["by_name", "by_position"].includes(option))
+    return t(`tableComposition.${option}`);
+  if (key === "join_type" && ["inner", "left", "right", "full"].includes(option))
+    return t(`tableComposition.${option}`);
   if (key === "target_type") {
     const labels: Record<string, string> = {
       auto: "conversion.auto",

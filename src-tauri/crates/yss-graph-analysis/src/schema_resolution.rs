@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+mod composition;
 
 use crate::{GraphSchemaIssue, GraphSchemaState};
 use yss_data_contract::ValueType;
@@ -283,6 +284,11 @@ impl EditorSchemaResolver<'_> {
                 self.registry.fingerprint().as_bytes(),
                 &node.node_type,
                 &node.parameters,
+                self.document
+                    .port_bindings
+                    .iter()
+                    .filter(|(port, _)| port.node_id == node.id)
+                    .collect::<Vec<_>>(),
                 &expression,
                 // Include target addresses as well: moving a source between
                 // two inputs can change Project/Append/Rename semantics.
@@ -431,6 +437,11 @@ impl EditorSchemaResolver<'_> {
                 Ok(fields)
             }
             SchemaExpr::Filter { input, .. } => self.resolve_expression(node_id, input),
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.dataframe.schema.composition" =>
+            {
+                self.resolve_composition(node_id)
+            }
             SchemaExpr::Derived { resolver, .. }
                 if resolver.as_str() == DATAFRAME_RESOURCE_SCHEMA_RESOLVER =>
             {

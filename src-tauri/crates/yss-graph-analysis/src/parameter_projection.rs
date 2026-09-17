@@ -1,21 +1,31 @@
 use super::*;
 
+pub(super) fn parameter_schema<'a>(
+    ports: &'a [GraphPortSemanticFact],
+    key: &str,
+) -> Option<&'a ResolvedSchemaFact> {
+    let source = match key {
+        "left_keys" => Some("left"),
+        "right_keys" => Some("right"),
+        _ => None,
+    };
+    ports.iter().filter(|port| port.direction == PortDirection::Input)
+        .filter(|port| source.is_none_or(|source| matches!(&port.address.port, PortRef::Declared { key } if key.as_str() == source)))
+        .find_map(|port| port.schema_state.exact())
+}
+
 pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact) {
     use yss_node_protocol::dataframe::{
         FILTER_PREDICATE_TYPE_ID, FilterLiteral, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
         filter_comparison_is_compatible, prepare_filter_predicate_json,
         prepare_project_columns_json,
     };
-    let schema = node
-        .ports
-        .iter()
-        .filter(|port| port.direction == PortDirection::Input)
-        .find_map(|port| port.schema_state.exact());
-    let fields = schema.map_or(&[][..], |schema| schema.fields.as_slice());
-    let unavailable_reason = schema
-        .is_none()
-        .then(|| "editors.dataframe.connect_source".into());
     for parameter in &mut node.parameters {
+        let schema = parameter_schema(&node.ports, parameter.key.as_str());
+        let fields = schema.map_or(&[][..], |schema| schema.fields.as_slice());
+        let unavailable_reason = schema
+            .is_none()
+            .then(|| "editors.dataframe.connect_source".into());
         let TypeExpr::Concrete(type_id) = &parameter.value_type else {
             continue;
         };

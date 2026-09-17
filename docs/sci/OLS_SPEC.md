@@ -64,9 +64,9 @@ Fit 的 model 名义类型保留 `statistics.model.ols`，运行值使用现有 
 
 | 现有节点                        | 建议显示名称     | 明确区分的用途                  |
 | ------------------------------- | ---------------- | ------------------------------- |
-| `yssbi.dataframe.source.get`    | 获取数据框       | 绑定数据资源                    |
+| `yssbi.dataframe.source.get`    | 获取数据帧       | 绑定数据资源                    |
 | `yssbi.dataframe.filter.rows`   | 筛选行           | 根据谓词保留共同样本            |
-| `yssbi.dataframe.project`       | 选择列（数据框） | 输出多列数据框                  |
+| `yssbi.dataframe.project`       | 选择列（数据帧） | 输出多列数据帧                  |
 | `yssbi.dataframe.series.select` | 选择单列（数列） | 输出指定列，类型来自上游 Schema |
 | `yssbi.dataframe.decompose`     | 拆分为数列       | 通过已有动态端口选择需要的列    |
 | `yssbi.dataframe.rename`        | 重命名列         | 明确原列和目标列名              |

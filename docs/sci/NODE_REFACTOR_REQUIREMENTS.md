@@ -273,7 +273,7 @@ Physical 与 Semantic 属于数据或字段的元数据，不在 PortType 中建
 | 复合类型      | 含义                                               | 示例                                                             |
 | ------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
 | DataSeries<T> | 同类元素组成的数据列，关联其行域、顺序及来源事实   | DataSeries<Numeric>、DataSeries<Categorical>、DataSeries<Binary> |
-| DataFrame     | 同一行域内的多列数据；字段 Schema 属于数据框元数据 | income: Numeric、region: Categorical、rating: Ordinal            |
+| DataFrame     | 同一行域内的多列数据；字段 Schema 属于数据帧元数据 | income: Numeric、region: Categorical、rating: Ordinal            |
 
 DataFrame 不带 Schema 泛型参数。字段名称、字段类型及相关语义属于资源/运行值的元数据，由 Resolve 捕获并形成图语义快照。以下为类型与元数据的关系示意，不是序列化 wire：
 
@@ -342,7 +342,7 @@ Identifier 表示记录或实体的标识，例如 `sample_id`、`customer_id`�
 
 Identifier 语义参与 Schema/语义身份及计划有效性校验。将字段从 Numeric 改为 Identifier 后必须重新校验受影响的下游，不能继续复用此前允许统计计算的旧计划或把旧计算结果当作当前有效结果。
 
-筛选、重命名、投影、提取 DataSeries、连接以及数列/数据框转换等保留标识含义的操作必须传播 Identifier；语义不能在 DataSeries/DataFrame、序列化或结果读取之间丢失。普通物理类型转换也不解除标识语义。原始标识表示须保真，例如字符串 ID 的前导零不能因自动数值化而丢失。
+筛选、重命名、投影、提取 DataSeries、连接以及数列/数据帧转换等保留标识含义的操作必须传播 Identifier；语义不能在 DataSeries/DataFrame、序列化或结果读取之间丢失。普通物理类型转换也不解除标识语义。原始标识表示须保真，例如字符串 ID 的前导零不能因自动数值化而丢失。
 
 只有用户在数据 Detail 中显式选择新的 Semantic，或使用等价的显式转换操作，并通过目标语义和值域校验后，才能解除 Identifier 语义。该变更须保留操作记录，不能由自动选列、Physical 修改、隐式类型提升或统计节点内部补做。
 

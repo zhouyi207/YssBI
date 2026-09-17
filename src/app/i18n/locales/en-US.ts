@@ -1,4 +1,12 @@
 export const enUS = {
+  tableComposition: {
+    by_name: "By name (fill missing columns with null)",
+    by_position: "By position",
+    inner: "Inner join",
+    left: "Left join",
+    right: "Right join",
+    full: "Full outer join",
+  },
   conversion: {
     categorical: "Categorical",
     ordinal: "Ordinal",

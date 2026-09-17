@@ -115,15 +115,12 @@ pub(crate) fn validate(
         let Some(protocol) = registry.protocol(&document_node.node_type) else {
             continue;
         };
-        let schema = node
-            .ports
-            .iter()
-            .filter(|port| port.direction == PortDirection::Input)
-            .find_map(|port| port.schema_state.exact());
-        let Some(schema) = schema else {
-            continue;
-        };
         for parameter in &protocol.parameters.parameters {
+            let Some(schema) =
+                super::parameter_projection::parameter_schema(&node.ports, parameter.key.as_str())
+            else {
+                continue;
+            };
             let Some(value) = document_node.parameters.get(&parameter.key) else {
                 continue;
             };

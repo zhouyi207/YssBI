@@ -4,6 +4,167 @@ use yss_graph_document::{ConnectionId, DocumentConnection, DocumentNode, NodePos
 use yss_graph_resource_contract::{ColumnSchema, DataSchema, ResourceCatalogFingerprint};
 
 #[test]
+fn composed_schemas_track_input_order_join_keys_and_mixed_series() {
+    use yss_data_contract::SemanticType as S;
+    use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::from([
+            (
+                GraphResourceId::new("databases/left"),
+                DataSchema {
+                    columns: [("left_id", S::Numeric), ("label", S::Text)]
+                        .map(|(name, kind)| ColumnSchema {
+                            name: name.into(),
+                            data_type: ValueType::Scalar(kind),
+                            physical_type: None,
+                            semantic: None,
+                        })
+                        .into(),
+                },
+            ),
+            (
+                GraphResourceId::new("databases/right"),
+                DataSchema {
+                    columns: [("right_id", S::Numeric), ("label", S::Text)]
+                        .map(|(name, kind)| ColumnSchema {
+                            name: name.into(),
+                            data_type: ValueType::Scalar(kind),
+                            physical_type: None,
+                            semantic: None,
+                        })
+                        .into(),
+                },
+            ),
+        ]),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let mut document = GraphDocument::default();
+    let left = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("databases/left"))],
+    );
+    let right = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("databases/right"))],
+    );
+    let join = node(
+        &mut document,
+        "yssbi.dataframe.join",
+        &[
+            ("left_keys", serde_json::json!(["left_id"])),
+            ("right_keys", serde_json::json!(["right_id"])),
+        ],
+    );
+    connect(&mut document, port(left, "dataframe"), port(join, "left"));
+    connect(&mut document, port(right, "dataframe"), port(join, "right"));
+    let concat = node(&mut document, "yssbi.dataframe.concat.rows", &[]);
+    let mut dynamic = Vec::new();
+    for (index, source) in [left, right].into_iter().enumerate() {
+        let input = PortAddress::instance(concat, "frames".parse().unwrap(), PortInstanceId::new());
+        document.port_bindings.insert(
+            input.clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey::new(index.to_string()),
+            },
+        );
+        connect(&mut document, port(source, "dataframe"), input.clone());
+        dynamic.push(input);
+    }
+    let mut cache = GraphSemanticCache::default();
+    let first = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    let fields = |snapshot: &crate::GraphSemanticSnapshot, id| {
+        snapshot
+            .node(id)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.direction == yss_node_protocol::PortDirection::Output)
+            .unwrap()
+            .schema_state
+            .exact()
+            .unwrap()
+            .fields
+            .iter()
+            .map(|f| f.name.0.to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        fields(&first, join),
+        ["left_id", "label", "right_id", "label_right"]
+    );
+    assert_eq!(fields(&first, concat), ["left_id", "label", "right_id"]);
+    let right_keys = first
+        .node(join)
+        .unwrap()
+        .parameters
+        .iter()
+        .find(|p| p.key.as_str() == "right_keys")
+        .unwrap();
+    assert!(
+        matches!(&right_keys.configuration, Some(crate::GraphParameterConfigurationFact::ProjectColumns { options, .. }) if options[0].name.as_ref() == "right_id")
+    );
+    document.port_bindings.insert(
+        dynamic[0].clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey::new("z"),
+        },
+    );
+    let second = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert_eq!(fields(&second, concat), ["right_id", "label", "left_id"]);
+    let number = node(
+        &mut document,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("left_id"))],
+    );
+    let text = node(
+        &mut document,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("label"))],
+    );
+    for target in [number, text] {
+        connect(
+            &mut document,
+            port(left, "dataframe"),
+            port(target, "dataframe"),
+        );
+    }
+    let assemble = node(&mut document, "yssbi.dataframe.combine", &[]);
+    for (index, source) in [number, text].into_iter().enumerate() {
+        let input =
+            PortAddress::instance(assemble, "series".parse().unwrap(), PortInstanceId::new());
+        document.port_bindings.insert(
+            input.clone(),
+            DynamicPortBinding::UserCreated {
+                order: OrderKey::new(index.to_string()),
+            },
+        );
+        connect(&mut document, port(source, "series"), input);
+    }
+    let third = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert_eq!(fields(&third, assemble), ["left_id", "label"]);
+    document
+        .nodes
+        .get_mut(&join)
+        .unwrap()
+        .parameters
+        .insert("right_keys".parse().unwrap(), serde_json::json!(["absent"]));
+    let invalid = assert_matches_full(&document, &builtin.registry, &resources, &mut cache);
+    assert!(
+        invalid
+            .node(join)
+            .unwrap()
+            .ports
+            .iter()
+            .any(|p| p.direction == yss_node_protocol::PortDirection::Output
+                && p.schema_state.exact().is_none())
+    );
+}
+
+#[test]
 fn dataframe_decomposition_uses_all_seven_semantics_and_tracks_metadata_changes() {
     use yss_data_contract::{ColumnSemantic, SemanticType};
     let builtin = yss_node_catalog::build_builtin_node_system().unwrap();

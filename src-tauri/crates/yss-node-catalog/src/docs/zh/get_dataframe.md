@@ -4,4 +4,4 @@
 
 ## 用法
 
-将 **Get DataFrame** 放在数据流起点。在检查器中选择目标表，再将 **DataFrame** 接到 **Decompose DataFrame**、**Filter DataFrame**、回归节点等下游节点。所选表的 schema 会向下传播，以便动态 pin 正确解析。
+将 **Get DataFrame** 放在数据流起点。在检查器中选择目标表，再将 **DataFrame** 接到 **Decompose DataFrame**、“筛选行”“筛选列”、回归节点等下游节点。所选表的 schema 会向下传播，以便动态 pin 正确解析。

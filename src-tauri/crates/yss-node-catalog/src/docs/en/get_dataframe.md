@@ -4,4 +4,4 @@ Load a project **DataFrame** from the database by node instance parameter. The n
 
 ## Usage
 
-Place **Get DataFrame** at the start of a data pipeline. Choose the target table in the node inspector, then wire **DataFrame** to **Decompose DataFrame**, **Filter DataFrame**, regression nodes, or other consumers. Schema propagation uses the selected table so dynamic pins resolve correctly downstream.
+Place **Get DataFrame** at the start of a data pipeline. Choose the target table in the node inspector, then wire **DataFrame** to **Decompose DataFrame**, **Filter Rows**, **Select Columns**, regression nodes, or other consumers. Schema propagation uses the selected table so dynamic pins resolve correctly downstream.
