@@ -374,6 +374,338 @@ fn set_constant(
     )]);
 }
 
+#[test]
+fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures() {
+    use yss_data_contract::{DataValue, SemanticType, ValueType};
+    let mut document = GraphDocument::default();
+    let source = NodeId::new();
+    let convert = NodeId::new();
+    for (id, kind) in [
+        (source, "yssbi.constant.get"),
+        (convert, "yssbi.value.convert"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    set_constant(
+        &mut document,
+        source,
+        ValueType::Scalar(SemanticType::Text),
+        DataValue::String("001".into()),
+    );
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: PortAddress::declared(convert, "input".parse().unwrap()),
+            order: None,
+        },
+    );
+    document.nodes.get_mut(&convert).unwrap().parameters.insert(
+        "target_type".parse().unwrap(),
+        serde_json::json!("core.numeric"),
+    );
+    assert_eq!(
+        execute(&document, "yssbi.value.convert").unwrap(),
+        RuntimeValue::Decimal(1.)
+    );
+    document.nodes.get_mut(&convert).unwrap().parameters.insert(
+        "numeric_mode".parse().unwrap(),
+        serde_json::json!("integer"),
+    );
+    assert_eq!(
+        execute(&document, "yssbi.value.convert").unwrap(),
+        RuntimeValue::Integer(1)
+    );
+    set_constant(
+        &mut document,
+        source,
+        ValueType::Scalar(SemanticType::Text),
+        DataValue::String("9007199254740993".into()),
+    );
+    assert_eq!(
+        execute(&document, "yssbi.value.convert").unwrap(),
+        RuntimeValue::Integer(9_007_199_254_740_993)
+    );
+    document
+        .nodes
+        .get_mut(&convert)
+        .unwrap()
+        .parameters
+        .insert("numeric_mode".parse().unwrap(), serde_json::json!("real"));
+    assert!(execute(&document, "yssbi.value.convert").is_err());
+    let element = ValueType::Scalar(SemanticType::Text);
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataSeries(Box::new(element.clone())),
+        DataValue::DataSeries(yss_data_contract::DataSeriesValue::with_element_type(
+            r#"{"value":["001",null,"002"]}"#,
+            element,
+        )),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    assert_eq!(
+        execute(&document, "yssbi.value.convert").unwrap(),
+        RuntimeValue::List(Box::new([
+            RuntimeValue::Decimal(1.),
+            RuntimeValue::Null,
+            RuntimeValue::Decimal(2.)
+        ]))
+    );
+}
+
+#[test]
+fn automatic_conversion_executes_the_downstream_target_without_rewriting_parameters() {
+    use yss_data_contract::{DataValue, SemanticType, ValueType};
+    let (mut document, divide) = division_graph(2);
+    let source = document
+        .connections
+        .values()
+        .find(|edge| edge.input == PortAddress::declared(divide, "left".parse().unwrap()))
+        .unwrap()
+        .output
+        .node_id;
+    set_constant(
+        &mut document,
+        source,
+        ValueType::Scalar(SemanticType::Text),
+        DataValue::String("12".into()),
+    );
+    let convert = NodeId::new();
+    document.nodes.insert(
+        convert,
+        DocumentNode {
+            id: convert,
+            node_type: "yssbi.value.convert".parse().unwrap(),
+            position: NodePosition { x: 0., y: 0. },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        },
+    );
+    for edge in document.connections.values_mut() {
+        if edge.output.node_id == source {
+            edge.output = PortAddress::declared(convert, "output".parse().unwrap());
+        }
+    }
+    let id = ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(source, "value".parse().unwrap()),
+            input: PortAddress::declared(convert, "input".parse().unwrap()),
+            order: None,
+        },
+    );
+    assert_eq!(
+        execute(&document, "yssbi.numeric.divide").unwrap(),
+        RuntimeValue::Decimal(6.)
+    );
+    assert!(document.nodes[&convert].parameters.is_empty());
+    let element = ValueType::Scalar(SemanticType::Text);
+    set_constant(
+        &mut document,
+        source,
+        ValueType::DataSeries(Box::new(element.clone())),
+        DataValue::DataSeries(yss_data_contract::DataSeriesValue::with_element_type(
+            r#"{"value":["12","4"]}"#,
+            element,
+        )),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    assert_eq!(
+        execute(&document, "yssbi.numeric.divide").unwrap(),
+        RuntimeValue::List(Box::new([
+            RuntimeValue::Decimal(6.),
+            RuntimeValue::Decimal(2.)
+        ]))
+    );
+    assert!(document.nodes[&convert].parameters.is_empty());
+}
+
+#[test]
+fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_chains() {
+    use yss_data_contract::{DataValue, SemanticType as S, ValueType};
+    let evaluate =
+        |input: &str, steps: Vec<serde_json::Value>, expected_semantic: S, expected: &str| {
+            let mut document = GraphDocument::default();
+            let mut add = |kind: &str| {
+                let id = NodeId::new();
+                document.nodes.insert(
+                    id,
+                    DocumentNode {
+                        id,
+                        node_type: kind.parse().unwrap(),
+                        position: NodePosition { x: 0., y: 0. },
+                        parameters: ParameterValues::new(),
+                        user_label: None,
+                    },
+                );
+                id
+            };
+            let source = add("yssbi.constant.get");
+            let expected_node = add("yssbi.constant.get");
+            let equal = add("yssbi.logic.equal");
+            let expected_ordinal =
+                (expected_semantic == S::Ordinal).then(|| add("yssbi.value.convert"));
+            let conversions = steps
+                .iter()
+                .map(|_| add("yssbi.value.convert"))
+                .collect::<Vec<_>>();
+            set_constant(
+                &mut document,
+                source,
+                ValueType::Scalar(S::Text),
+                DataValue::String(input.into()),
+            );
+            set_constant(
+                &mut document,
+                expected_node,
+                ValueType::Scalar(if expected_ordinal.is_some() {
+                    S::Text
+                } else {
+                    expected_semantic
+                }),
+                DataValue::String(expected.into()),
+            );
+            if let Some(id) = expected_ordinal {
+                document.nodes.get_mut(&id).unwrap().parameters = ParameterValues::from([
+                    (
+                        "target_type".parse().unwrap(),
+                        serde_json::json!("core.ordinal"),
+                    ),
+                    (
+                        "semantic_domain".parse().unwrap(),
+                        steps[0]["semantic_domain"].clone(),
+                    ),
+                ]);
+                let edge = ConnectionId::new();
+                document.connections.insert(
+                    edge,
+                    DocumentConnection {
+                        id: edge,
+                        output: PortAddress::declared(expected_node, "value".parse().unwrap()),
+                        input: PortAddress::declared(id, "input".parse().unwrap()),
+                        order: None,
+                    },
+                );
+            }
+            let mut previous = (source, "value");
+            for (id, parameters) in conversions.into_iter().zip(steps) {
+                document.nodes.get_mut(&id).unwrap().parameters = parameters
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(key, value)| (key.parse().unwrap(), value.clone()))
+                    .collect();
+                let edge = ConnectionId::new();
+                document.connections.insert(
+                    edge,
+                    DocumentConnection {
+                        id: edge,
+                        output: PortAddress::declared(previous.0, previous.1.parse().unwrap()),
+                        input: PortAddress::declared(id, "input".parse().unwrap()),
+                        order: None,
+                    },
+                );
+                previous = (id, "output");
+            }
+            for (output, port, input) in [
+                (previous.0, previous.1, "left"),
+                (
+                    expected_ordinal.unwrap_or(expected_node),
+                    if expected_ordinal.is_some() {
+                        "output"
+                    } else {
+                        "value"
+                    },
+                    "right",
+                ),
+            ] {
+                let edge = ConnectionId::new();
+                document.connections.insert(
+                    edge,
+                    DocumentConnection {
+                        id: edge,
+                        output: PortAddress::declared(output, port.parse().unwrap()),
+                        input: PortAddress::declared(equal, input.parse().unwrap()),
+                        order: None,
+                    },
+                );
+            }
+            assert_eq!(
+                execute(&document, "yssbi.logic.equal").unwrap(),
+                RuntimeValue::Bool(true)
+            );
+            for constant in document.constants.values_mut() {
+                let DataValue::String(value) = &constant.data_value else {
+                    panic!("string fixture");
+                };
+                let encoded = serde_json::json!({"value":[value, null]}).to_string();
+                let element = constant.data_type.clone();
+                constant.data_type = ValueType::DataSeries(Box::new(element.clone()));
+                constant.data_value = DataValue::DataSeries(
+                    yss_data_contract::DataSeriesValue::with_element_type(encoded, element),
+                );
+                yss_graph_document::normalize_constant_value(constant).unwrap();
+            }
+            assert_eq!(
+                execute(&document, "yssbi.logic.equal").unwrap(),
+                RuntimeValue::Bool(true)
+            );
+        };
+    let domain = serde_json::json!({"values":[{"value":"002","label":"low"},{"value":"001","label":"high"}]});
+    for semantic in [S::Categorical, S::Ordinal, S::Identifier] {
+        evaluate(
+            "001",
+            vec![serde_json::json!({"semantic_domain":domain})],
+            semantic,
+            "001",
+        );
+    }
+    evaluate(
+        "001",
+        vec![
+            serde_json::json!({"target_type":"core.ordinal","semantic_domain":domain}),
+            serde_json::json!({"target_type":"core.categorical"}),
+            serde_json::json!({"target_type":"core.identifier"}),
+            serde_json::json!({"target_type":"core.text"}),
+        ],
+        S::Text,
+        "001",
+    );
+    evaluate(
+        "17/09/2026 08:30:00 +0800",
+        vec![serde_json::json!({"datetime_format":"%d/%m/%Y %H:%M:%S %z"})],
+        S::Datetime,
+        "2026-09-17T08:30:00",
+    );
+    evaluate(
+        "17/09/2026 08:30:00 +0800",
+        vec![
+            serde_json::json!({"target_type":"core.datetime","datetime_format":"%d/%m/%Y %H:%M:%S %z"}),
+            serde_json::json!({"target_type":"core.text"}),
+        ],
+        S::Text,
+        "2026-09-17T08:30:00",
+    );
+}
+
 fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
     use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
     let mut document = GraphDocument::default();
@@ -680,6 +1012,67 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
             column.clone()
         })
         .collect::<Vec<_>>();
+    let input = RuntimeValue::Series(
+        columns
+            .iter()
+            .find(|column| column.column() == "count")
+            .unwrap()
+            .clone(),
+    );
+    let converted = runtime
+        .kernels()
+        .execute(
+            &yss_node_kernel::KernelId::new("yssbi.value.convert".into()).unwrap(),
+            &yss_node_kernel::KernelInvocation {
+                inputs: &[input],
+                input_groups: &[None],
+                parameters: BTreeMap::from([
+                    (
+                        yss_node_kernel::KernelParameterKey::new("target_type".into()).unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::String("auto".into())),
+                    ),
+                    (
+                        yss_node_kernel::KernelParameterKey::new("numeric_mode".into()).unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::String("real".into())),
+                    ),
+                    (
+                        yss_node_kernel::KernelParameterKey::new("semantic_domain".into()).unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::Record(BTreeMap::new())),
+                    ),
+                    (
+                        yss_node_kernel::KernelParameterKey::new("datetime_kind".into()).unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::String("auto".into())),
+                    ),
+                    (
+                        yss_node_kernel::KernelParameterKey::new("datetime_precision".into())
+                            .unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::String("microseconds".into())),
+                    ),
+                    (
+                        yss_node_kernel::KernelParameterKey::new("datetime_format".into()).unwrap(),
+                        std::borrow::Cow::Owned(RuntimeValue::String("".into())),
+                    ),
+                ]),
+                outputs: &[yss_node_kernel::KernelOutputSpec {
+                    data_type: yss_data_contract::ValueType::DataSeries(Box::new(
+                        yss_data_contract::ValueType::Scalar(
+                            yss_data_contract::SemanticType::Numeric,
+                        ),
+                    )),
+                    fields: None,
+                }],
+                control: &yss_node_kernel::KernelControl::new(
+                    Arc::new(AtomicBool::new(false)),
+                    Instant::now() + Duration::from_secs(30),
+                ),
+            },
+        )
+        .unwrap();
+    let RuntimeValue::Series(converted) = &converted[0] else {
+        panic!("conversion must remain lazy");
+    };
+    assert_eq!(converted.relation(), &relation);
+    assert!(!path.exists(), "conversion kernel must not scan the source");
     let batch = RecordBatch::try_new(
         schema.clone(),
         vec![
@@ -697,6 +1090,16 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         deadline: Instant::now() + Duration::from_secs(30),
         max_input_bytes: 1024 * 1024,
     };
+    let converted_page = converted
+        .as_relation()
+        .unwrap()
+        .page(0, 4, &control)
+        .unwrap();
+    assert_eq!(converted.plan().field().data_type(), &DataType::Float64);
+    assert_eq!(
+        serde_json::to_value(converted_page.data.columns()[0].values()).unwrap(),
+        serde_json::json!([1.0, 2.0, null])
+    );
     for column in columns {
         let projected = column.as_relation().unwrap();
         let page = projected.page(0, 4, &control).unwrap();

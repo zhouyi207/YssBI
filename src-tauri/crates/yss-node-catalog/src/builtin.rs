@@ -493,18 +493,22 @@ fn assemble_builtin_parts()
     });
     fragment.categories.extend(
         [
-            ("constants", 10),
-            ("numeric", 20),
-            ("logic", 30),
-            ("dataflow", 40),
-            ("project", 50),
+            ("data", None, 10),
+            ("constants", Some("data"), 10),
+            ("operations", None, 20),
+            ("numeric", Some("operations"), 20),
+            ("logic", Some("operations"), 30),
+            ("dataflow", None, 40),
+            ("project", None, 50),
         ]
         .into_iter()
-        .map(|(name, order)| {
+        .map(|(name, parent, order)| {
             Ok(CategoryRegistration {
                 id: sid(name, NodeCategoryId::new)?,
                 title_key: iid(leak(format!("categories.{name}.title")))?,
-                parent: None,
+                parent: parent
+                    .map(|value| sid(value, NodeCategoryId::new))
+                    .transpose()?,
                 order,
             })
         })
@@ -745,8 +749,10 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("types.datetime.title", "Datetime", "日期时间"),
         ("types.ordinal.title", "Ordinal", "有序分类"),
         ("types.identifier.title", "Identifier", "标识"),
+        ("categories.data.title", "Data", "数据"),
         ("categories.constants.title", "Constants", "常量"),
-        ("categories.numeric.title", "Numeric", "数值"),
+        ("categories.operations.title", "Operations", "运算"),
+        ("categories.numeric.title", "Arithmetic", "算术"),
         ("categories.logic.title", "Logic", "逻辑"),
         ("categories.dataflow.title", "Data Flow", "数据流"),
         ("categories.project.title", "Project", "项目"),

@@ -38,6 +38,7 @@ pub enum ActivityItem {
         resource_path: String,
     },
     Node {
+        available: bool,
         key: String,
         title: String,
         creation: NodeCreation,
@@ -333,6 +334,7 @@ fn catalog_rows(catalog: LocalizedCatalog) -> Vec<ActivityRow> {
                     id: format!("node:{key}"),
                     depth: depth + 1,
                     content: ActivityRowContent::Item(ActivityItem::Node {
+                        available: item.available,
                         key,
                         title: item.title.to_string(),
                         creation: item.creation.clone(),

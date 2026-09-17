@@ -568,10 +568,12 @@ fn validate_typing(
             }
             output(output_key)
         }
-        NodeTypingSpec::ParameterOutput {
+        NodeTypingSpec::ShapePreservingConversion {
+            input: input_key,
             parameter,
             output: output_key,
         } => {
+            input(&PortSelector::Declared(input_key.clone()))?;
             if !parameters.contains_key(parameter) {
                 return Err(format!(
                     "typing rule references unknown parameter '{parameter}'"

@@ -218,7 +218,7 @@ fn project_result_page(
     if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
         return Err(ResultQueryApplicationError::InvalidPageRequest);
     }
-    let result = result.value();
+    let result = result.value().unannotated();
     let relation = match result {
         RuntimeValue::Relation(relation) => Some(relation.clone()),
         RuntimeValue::Series(series) => Some(series.as_relation()?),
@@ -339,7 +339,7 @@ fn charge_value(
     *remaining = remaining
         .checked_sub(3)
         .ok_or(ResultQueryApplicationError::PageTooLarge)?;
-    let bytes = match value {
+    let bytes = match value.unannotated() {
         RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.len().checked_mul(6),
         RuntimeValue::List(values) => {
             for value in values {
@@ -371,6 +371,33 @@ mod tests {
     mod paging;
     use super::*;
     use yss_graph_execution::plan::{PlanGraphId, PlanPortAddress};
+
+    #[test]
+    fn annotated_series_paging_preserves_sequence_shape_and_offsets() {
+        let result = StoredResult::new(
+            RuntimeValue::List(Box::new([
+                RuntimeValue::String("001".into()),
+                RuntimeValue::Null,
+            ]))
+            .with_metadata(yss_data_contract::ConversionMetadata {
+                semantic: yss_data_contract::ColumnSemantic::new(
+                    yss_data_contract::SemanticType::Identifier,
+                ),
+                temporal: None,
+            })
+            .unwrap(),
+        );
+        let control = RelationControl {
+            cancellation: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + Duration::from_secs(5),
+            max_input_bytes: 1024,
+        };
+        let page = project_result_page(&result, 1, 1, &control).unwrap();
+        assert!(matches!(page.kind, ResultPageKind::Sequence));
+        assert_eq!(page.total_count, Some(2));
+        assert_eq!(page.values.as_ref(), &[RuntimeValue::Null]);
+        assert!(!page.has_more);
+    }
 
     #[test]
     fn result_query_maps_opaque_graph_and_port_identities() {

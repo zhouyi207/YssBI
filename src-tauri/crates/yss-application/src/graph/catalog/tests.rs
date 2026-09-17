@@ -345,7 +345,9 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
                 .catalog
                 .items
                 .iter()
-                .any(|item| item.node_type_id.as_ref() == format!("yssbi.dataframe.series.{id}"))
+                .find(|item| item.node_type_id.as_ref() == format!("yssbi.dataframe.series.{id}"))
+                .expect("unavailable definitions remain visible")
+                .available
         );
     }
     assert!(
@@ -353,7 +355,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
             .catalog
             .items
             .iter()
-            .any(|item| item.node_type_id.as_ref() == "yssbi.numeric.add")
+            .any(|item| item.node_type_id.as_ref() == "yssbi.numeric.add" && item.available)
     );
     let resource = catalog
         .catalog
@@ -378,6 +380,30 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         .query_project_index(project_instance_id.clone(), "zh-CN", true)
         .unwrap();
     assert_eq!(snapshot.activity_panels.len(), 2);
+    for id in [
+        "statistics",
+        "statistics.regression",
+        "statistics.panel",
+        "statistics.timeseries",
+    ] {
+        assert!(
+            snapshot.activity_panels[1]
+                .rows
+                .iter()
+                .any(|row| row.id == id)
+        );
+    }
+    for (id, expected) in [
+        ("yssbi.statistics.ols.fit", true),
+        ("yssbi.statistics.logit.fit", false),
+    ] {
+        assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
+            &row.content,
+            crate::activity_panel::ActivityRowContent::Item(crate::activity_panel::ActivityItem::Node {
+                creation: yss_node_catalog::NodeCreation::Static { node_type_id }, available, ..
+            }) if node_type_id.as_str() == id && *available == expected
+        )));
+    }
     for panel in &snapshot.activity_panels {
         assert_eq!(
             panel.project_instance_id.as_deref(),

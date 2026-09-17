@@ -505,7 +505,7 @@ pub(crate) fn localized_node_catalog_from_facts(
         .localized_catalog_with_resources(context.project.resources().entries(), locale);
     captured
         .graph()
-        .retain_available_catalog_items(&mut localized, |id| {
+        .annotate_catalog_availability(&mut localized, |id| {
             captured.execution().kernels().supports(id)
         });
 
@@ -543,7 +543,7 @@ pub(crate) fn compatible_node_catalog_in_session(
         .map_err(map_graph_catalog_error)?;
     captured
         .graph()
-        .retain_available_catalog_items(&mut localized, |id| {
+        .annotate_catalog_availability(&mut localized, |id| {
             captured.execution().kernels().supports(id)
         });
 

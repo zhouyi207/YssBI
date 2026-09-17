@@ -93,7 +93,7 @@ pub fn get_result_value(
         return Ok(None);
     };
     if matches!(
-        result.value().value(),
+        result.value().value().unannotated(),
         RuntimeValue::List(_) | RuntimeValue::Relation(_) | RuntimeValue::Series(_)
     ) {
         return Err(result_requires_paging(result_id, "sequence"));

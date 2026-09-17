@@ -102,7 +102,8 @@ pub enum NodeTypingSpec {
         input: PortKey,
         output: PortKey,
     },
-    ParameterOutput {
+    ShapePreservingConversion {
+        input: PortKey,
         parameter: ParameterKey,
         output: PortKey,
     },

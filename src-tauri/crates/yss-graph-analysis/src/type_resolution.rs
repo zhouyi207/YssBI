@@ -15,6 +15,8 @@ use super::{
 
 const MAX_DOMAIN_SIZE: usize = 128;
 
+mod constraints;
+
 #[derive(Clone, Default)]
 pub struct GraphSemanticCache {
     pub(crate) schemas: super::schema_resolution::SchemaCache,
@@ -48,6 +50,8 @@ pub(crate) fn resolve_node_types(
         initialize_unresolved_ports(nodes);
         return Vec::new();
     };
+    let automatic_outputs =
+        constraints::automatic_output_constraints(document, index, registry, nodes);
     let indices = nodes
         .iter()
         .enumerate()
@@ -97,7 +101,12 @@ pub(crate) fn resolve_node_types(
         {
             states.insert(
                 port.address.clone(),
-                state_from_pattern(&port.accepted_type, registry.types(), &generic_bindings),
+                automatic_outputs
+                    .get(&port.address)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        state_from_pattern(&port.accepted_type, registry.types(), &generic_bindings)
+                    }),
             );
         }
 
@@ -482,6 +491,26 @@ fn bind_pattern_generics(
     }
 }
 
+fn conversion_target<'a>(
+    node: &'a yss_graph_document::DocumentNode,
+    parameter: &yss_node_protocol::ParameterKey,
+    registry: &'a NodeRegistry,
+) -> Option<&'a str> {
+    if let Some(value) = node.parameters.get(parameter) {
+        return value.as_str();
+    }
+    let parameter = registry
+        .protocol(&node.node_type)?
+        .parameters
+        .parameters
+        .iter()
+        .find(|candidate| &candidate.key == parameter)?;
+    match &parameter.default_value.as_ref()?.value {
+        yss_node_protocol::Value::String(value) => Some(value.as_ref()),
+        _ => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn apply_node_rule(
     rule: &NodeTypingSpec,
@@ -564,15 +593,48 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
-        NodeTypingSpec::ParameterOutput { parameter, output } => {
-            let state = match node.parameters.get(parameter) {
-                None => TypeState::Conflict(TypeConflict::MissingParameter),
-                Some(value) => value
-                    .as_str()
-                    .and_then(|value| yss_node_protocol::TypeId::new(value).ok())
-                    .filter(|value| registry.types().get(value).is_some())
-                    .map(|value| TypeState::Exact(ResolvedType::Nominal(value)))
-                    .unwrap_or(TypeState::Conflict(TypeConflict::UnsupportedParameter)),
+        NodeTypingSpec::ShapePreservingConversion {
+            input,
+            parameter,
+            output,
+        } => {
+            let target = conversion_target(node, parameter, registry);
+            if target == Some("auto") {
+                // The demand pass has already constrained this output before cache lookup.
+                // Input meaning must never select the automatic target.
+                return;
+            }
+            let target = target
+                .filter(|value| {
+                    yss_node_protocol::SemanticType::ALL
+                        .iter()
+                        .any(|semantic| semantic.type_id() == *value)
+                })
+                .and_then(|value| yss_node_protocol::TypeId::new(value).ok());
+            let input = declared_port(ports, input).and_then(|port| states.get(&port.address));
+            let state = match (target, input) {
+                (None, _) => TypeState::Conflict(TypeConflict::UnsupportedParameter),
+                (Some(target), Some(state)) => match state.domain() {
+                    Some(domain) => {
+                        state_from_candidates(domain.iter().filter_map(|source| match source {
+                            ResolvedType::Nominal(_) => Some(ResolvedType::Nominal(target.clone())),
+                            ResolvedType::Applied {
+                                constructor,
+                                arguments,
+                            } if constructor.as_str() == "core.data_series"
+                                && arguments.len() == 1 =>
+                            {
+                                Some(ResolvedType::Applied {
+                                    constructor: constructor.clone(),
+                                    arguments: Box::new([ResolvedType::Nominal(target.clone())]),
+                                })
+                            }
+                            _ => None,
+                        }))
+                    }
+                    None => state.clone(),
+                },
+                (_, None) => TypeState::Unknown(TypeUnknownReason::UnconnectedInput),
             };
             if let Some(output) = declared_port(ports, output) {
                 states.insert(output.address.clone(), state);

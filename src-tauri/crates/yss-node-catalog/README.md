@@ -17,7 +17,9 @@ Node 由三个 crate 组成：
 `BuiltinCatalog`。`localize_with_resources` 合并调用方提供的资源创建描述；`text` 查询节点元数据文本。
 扩展定义使用 `register_builtin_nodes(&mut NodeRegistryBuilder)` 将内置节点加入同一个 builder，
 再注册应用 provider 并冻结；不另建内置定义副本。执行函数及其冻结注册表由 [yss-node-kernel](../yss-node-kernel/README.md) 拥有，目录不依赖该执行实现 crate。应用的 `NodeComponents` 校验已安装 kernel 的
-参数字段与输出数量。缺少实现的定义保留在完整声明目录中，由编辑解析返回阻断诊断；Application 的 GUI 创建目录、兼容节点目录与 AI 搜索按当前会话内核能力过滤这些叶节点。
+参数字段与输出数量。Application 按当前会话的冻结内核注册表标注目录项的 `available`；结构节点无需叶节点内核。
+GUI 创建目录保留完整分类与节点，兼容节点目录在端口匹配后同样保留不可用节点；缺少实现的节点置灰并标注“暂不可用”，禁止点击、键盘选择和拖拽创建。AI 搜索只返回可用项。
+已有图中的缺少实现节点仍由编辑解析返回阻断诊断。
 目录不读取项目文件，不维护图中实例，也不推导连接后的类型、Schema 或血缘。
 
 三个 crate 均不依赖 Graph。Node Protocol 依赖序列化基础库和 Data Contract 的唯一基础语义定义；Registry 另用规范化哈希；

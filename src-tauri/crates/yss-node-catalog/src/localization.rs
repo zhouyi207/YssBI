@@ -38,6 +38,7 @@ pub struct LocalizedCategory {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedCatalogItem {
+    pub available: bool,
     pub node_type_id: Box<str>,
     pub title: Box<str>,
     pub documentation: Option<Box<str>>,
@@ -347,6 +348,7 @@ impl BuiltinCatalog {
             .collect();
         LocalizedCatalogItem {
             node_type_id: protocol.type_id.as_str().into(),
+            available: true,
             title,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
@@ -385,6 +387,7 @@ impl BuiltinCatalog {
         let resource_names = vec![entry.name.clone()];
         LocalizedCatalogItem {
             node_type_id: entry.node_type_id.as_str().into(),
+            available: true,
             title,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),

@@ -40,33 +40,6 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.logic.not" => markdown!("not"),
 
         "yssbi.value.convert" => markdown!("convert"),
-        "yssbi.data_series.convert.string_to_categorical" => {
-            markdown!("string_to_categorical")
-        }
-        "yssbi.data_series.convert.string_to_float64" => markdown!("string_to_float64"),
-        "yssbi.data_series.convert.string_to_int64" => markdown!("string_to_int64"),
-        "yssbi.data_series.convert.int64_to_string" => markdown!("int64_to_string"),
-        "yssbi.data_series.convert.float64_to_string" => markdown!("float64_to_string"),
-        "yssbi.data_series.convert.int64_to_float64" => markdown!("int64_to_float64"),
-        "yssbi.data_series.convert.float64_to_int64" => markdown!("float64_to_int64"),
-        "yssbi.data_series.convert.int64_to_bool" => markdown!("int64_to_boolean"),
-        "yssbi.data_series.convert.float64_to_bool" => markdown!("float64_to_boolean"),
-        "yssbi.data_series.convert.categorical_to_string" => {
-            markdown!("categorical_to_string")
-        }
-        "yssbi.data_series.convert.int64_to_categorical" => {
-            markdown!("int64_to_categorical")
-        }
-        "yssbi.data_series.convert.categorical_to_int64" => {
-            markdown!("categorical_to_int64")
-        }
-        "yssbi.data_series.convert.float64_to_categorical" => {
-            markdown!("float64_to_categorical")
-        }
-        "yssbi.data_series.convert.categorical_to_float64" => {
-            markdown!("categorical_to_float64")
-        }
-
         "yssbi.project.function.call" => markdown!("call_function"),
         "yssbi.constant.get" => markdown!("get_constant"),
         "yssbi.debug.view" => markdown!("view"),

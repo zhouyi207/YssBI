@@ -59,6 +59,18 @@ Assistant `apply_graph_edit` atomically persists its complete current graph thro
 
 ## DTO ownership
 
+The `semanticDomain` parameter editor carries an object with `values: [{ value, label }]`
+and optional `positiveValue`. Codes are exact strings and ordered rows define ordinal levels.
+Rust validates the domain; the frontend only owns the editing draft. Annotated runtime values
+retain conversion metadata internally, while result JSON and pagination project their underlying
+scalar/list payloads through the existing result contract.
+
+Node catalog items and Activity node rows carry a required boolean `available`, computed
+from the current session's frozen kernel registry. Desktop catalogs preserve unavailable
+items and their category hierarchy; clients display them disabled and prevent creation
+through drag, click or keyboard selection. AI catalog search continues to return only
+available items. Creation descriptors retain their existing shape.
+
 Harness tool start/completion/failure events carry the same invocation ID. Failure events expose only the stable `failureCode`, including cancellation and timeout. Harness channel subscriptions buffer live events until historical replay has been merged, then deliver each sequence once. The frontend consumes this stream as a projection.
 
 Wire DTOs are explicit transport types. Internal structs are not exposed merely because they implement serialization. Mapping is owned at this seam; domain/application crates do not depend on Tauri or frontend wire schema.

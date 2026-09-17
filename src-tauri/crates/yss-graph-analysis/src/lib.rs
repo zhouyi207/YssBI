@@ -1115,7 +1115,7 @@ mod tests {
         assert_eq!(
             add_result_type(
                 &[
-                    ("yssbi.data_series.convert.string_to_int64", "output"),
+                    ("yssbi.dataframe.series.int_range", "series"),
                     ("core.numeric", "value"),
                 ],
                 false,
@@ -1125,8 +1125,8 @@ mod tests {
         assert_eq!(
             add_result_type(
                 &[
-                    ("yssbi.data_series.convert.string_to_int64", "output"),
-                    ("yssbi.data_series.convert.int64_to_float64", "output"),
+                    ("yssbi.dataframe.series.int_range", "series"),
+                    ("yssbi.dataframe.series.int_range", "series"),
                 ],
                 false,
             ),
@@ -1326,7 +1326,7 @@ mod tests {
             (left, "yssbi.dataframe.series.int_range", 0.0),
             (right, "yssbi.constant.get", 0.0),
             (add, "yssbi.numeric.add", 200.0),
-            (consumer, "yssbi.data_series.convert.int64_to_string", 400.0),
+            (consumer, "yssbi.value.convert", 400.0),
         ] {
             document.nodes.insert(
                 node_id,
@@ -1412,6 +1412,89 @@ mod tests {
                     == PortAddress::declared(add, PortKey::new("result").unwrap()))
                 .map(|port| &port.type_state),
             Some(&TypeState::Exact(resolved_series("core.numeric")))
+        );
+    }
+
+    #[test]
+    fn semantic_conversion_tracks_input_shape_and_target_changes() {
+        let builtin = build_builtin_node_system().unwrap();
+        let mut document = GraphDocument::default();
+        let source = NodeId::new();
+        let convert = NodeId::new();
+        for (id, kind) in [
+            (source, "yssbi.dataframe.series.int_range"),
+            (convert, "yssbi.value.convert"),
+        ] {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: kind.parse().unwrap(),
+                    position: NodePosition { x: 0., y: 0. },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        let connection = ConnectionId::new();
+        document.connections.insert(
+            connection,
+            DocumentConnection {
+                id: connection,
+                output: PortAddress::declared(source, "series".parse().unwrap()),
+                input: PortAddress::declared(convert, "input".parse().unwrap()),
+                order: None,
+            },
+        );
+        let output_type = |document: &GraphDocument| {
+            let facts = resolve_graph_semantics(document, &builtin.registry, &empty_resources());
+            facts
+                .node(convert)
+                .unwrap()
+                .ports
+                .iter()
+                .find(|port| {
+                    port.address == PortAddress::declared(convert, "output".parse().unwrap())
+                })
+                .unwrap()
+                .type_state
+                .clone()
+        };
+        document.nodes.get_mut(&convert).unwrap().parameters.insert(
+            "target_type".parse().unwrap(),
+            serde_json::json!("core.numeric"),
+        );
+        assert_eq!(
+            output_type(&document),
+            TypeState::Exact(resolved_series("core.numeric"))
+        );
+        document.nodes.get_mut(&convert).unwrap().parameters.insert(
+            "target_type".parse().unwrap(),
+            serde_json::json!("core.text"),
+        );
+        assert_eq!(
+            output_type(&document),
+            TypeState::Exact(resolved_series("core.text"))
+        );
+        set_constant(
+            &mut document,
+            source,
+            ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            yss_data_contract::DataValue::Int64(1),
+        );
+        document.connections.get_mut(&connection).unwrap().output =
+            PortAddress::declared(source, "value".parse().unwrap());
+        assert_eq!(
+            output_type(&document),
+            TypeState::Exact(resolved_scalar("core.text"))
+        );
+        document.nodes.get_mut(&convert).unwrap().parameters.insert(
+            "target_type".parse().unwrap(),
+            serde_json::json!("core.binary"),
+        );
+        assert_eq!(
+            output_type(&document),
+            TypeState::Exact(resolved_scalar("core.binary"))
         );
     }
 

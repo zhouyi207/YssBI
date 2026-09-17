@@ -69,6 +69,13 @@ impl RelationPlan for DelayedPage {
     ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         Err(RelationError::InvalidPlan)
     }
+    fn convert_series(
+        &self,
+        _: &SeriesHandle,
+        _: yss_data_contract::SemanticConversion,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidPlan)
+    }
 }
 
 impl RelationExecutor for DelayedPage {

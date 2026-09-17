@@ -1,256 +1,155 @@
 use super::support::*;
 use yss_node_protocol::*;
 
-#[derive(Clone, Copy)]
-struct SeriesConversionSpec {
-    source: &'static str,
-    target: &'static str,
-    title: &'static str,
-    zh_title: &'static str,
-}
-
-const SERIES_CONVERSIONS: &[SeriesConversionSpec] = &[
-    SeriesConversionSpec {
-        source: "string",
-        target: "categorical",
-        title: "String to Categorical",
-        zh_title: "字符串转分类",
-    },
-    SeriesConversionSpec {
-        source: "string",
-        target: "float64",
-        title: "String to Float64",
-        zh_title: "字符串转 Float64",
-    },
-    SeriesConversionSpec {
-        source: "string",
-        target: "int64",
-        title: "String to Int64",
-        zh_title: "字符串转 Int64",
-    },
-    SeriesConversionSpec {
-        source: "int64",
-        target: "string",
-        title: "Int64 to String",
-        zh_title: "Int64 转字符串",
-    },
-    SeriesConversionSpec {
-        source: "float64",
-        target: "string",
-        title: "Float64 to String",
-        zh_title: "Float64 转字符串",
-    },
-    SeriesConversionSpec {
-        source: "int64",
-        target: "float64",
-        title: "Int64 to Float64",
-        zh_title: "Int64 转 Float64",
-    },
-    SeriesConversionSpec {
-        source: "float64",
-        target: "int64",
-        title: "Float64 to Int64",
-        zh_title: "Float64 转 Int64",
-    },
-    SeriesConversionSpec {
-        source: "int64",
-        target: "bool",
-        title: "Int64 to Boolean",
-        zh_title: "Int64 转布尔值",
-    },
-    SeriesConversionSpec {
-        source: "float64",
-        target: "bool",
-        title: "Float64 to Boolean",
-        zh_title: "Float64 转布尔值",
-    },
-    SeriesConversionSpec {
-        source: "categorical",
-        target: "string",
-        title: "Categorical to String",
-        zh_title: "分类转字符串",
-    },
-    SeriesConversionSpec {
-        source: "int64",
-        target: "categorical",
-        title: "Int64 to Categorical",
-        zh_title: "Int64 转分类",
-    },
-    SeriesConversionSpec {
-        source: "categorical",
-        target: "int64",
-        title: "Categorical to Int64",
-        zh_title: "分类转 Int64",
-    },
-    SeriesConversionSpec {
-        source: "float64",
-        target: "categorical",
-        title: "Float64 to Categorical",
-        zh_title: "Float64 转分类",
-    },
-    SeriesConversionSpec {
-        source: "categorical",
-        target: "float64",
-        title: "Categorical to Float64",
-        zh_title: "分类转 Float64",
-    },
-];
-
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
-    register_scalar_convert(fragment)?;
-    for spec in SERIES_CONVERSIONS {
-        register_series_convert(fragment, *spec)?;
-    }
-    Ok(())
-}
-
-fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
     const ID: &str = "yssbi.value.convert";
     fragment.add_node_messages(&NodeTextSpec {
         id: ID,
-        title: "Convert Value",
-        zh_title: "转换值",
-        documentation: "Supported targets are Boolean, Int64, Float64, and String. Invalid or lossy conversions fail explicitly.",
-        zh_documentation: "支持布尔值、Int64、Float64 和字符串；无效或有损转换会显式失败。",
-        aliases: &["convert", "cast", "coerce", "type conversion"],
-        zh_aliases: &["转换", "类型转换", "强制转换"],
+        title: "Convert Type",
+        zh_title: "类型转换",
+        documentation: "Convert all seven scalar meanings while preserving scalar/series shape. Category domains and ordinal levels are explicit; calendar values retain wall time. Series stay lazy and nulls are preserved.",
+        zh_documentation: "支持七种基础语义的转换，保持标量或数列结构。分类值域与等级顺序需明确配置，日期时间保留钟面时间；数列惰性执行并保留空值。",
+        aliases: &["convert", "cast", "semantic conversion"],
+        zh_aliases: &["转换", "类型转换", "语义转换"],
     })?;
     add_parameter_messages(
         fragment,
         ID,
-        &[(
-            "target_type",
-            "Target Type",
-            "目标类型",
-            "Stable core type identifier used by the conversion kernel.",
-            "转换 kernel 使用的稳定核心类型标识。",
-        )],
-    )?;
-    let target = parameter(
-        ID,
-        "target_type",
-        concrete("core.text")?,
-        None,
-        vec![
-            ParameterConstraint::Required,
-            ParameterConstraint::OneOf(vec![
-                Value::String("core.binary".into()),
-                Value::String("core.numeric".into()),
-                Value::String("core.text".into()),
-            ]),
+        &[
+            (
+                "target_type",
+                "Target Meaning",
+                "目标语义",
+                "Auto requires a unique target from connected downstream input ports. Connect a typed input or select a target explicitly if unresolved; conflicting requirements block execution.",
+                "自动取下游输入端口约束的交集。未连线或目标不唯一时，请连接明确类型的下游或手动选择；约束冲突时无法执行。",
+            ),
+            (
+                "numeric_mode",
+                "Numeric Representation",
+                "数值表示",
+                "For Numeric targets: auto preserves existing numbers and parses text as real numbers; integer rejects fractions; real requires exact conversion.",
+                "用于数值目标：自动保留现有数值表示，文本解析为实数；整数不允许小数；实数转换不得丢失精度。",
+            ),
+            (
+                "semantic_domain",
+                "Values and Levels",
+                "值域与等级",
+                "Declare original codes and labels. Ordinal levels run from low to high. Empty configuration inherits a compatible source domain.",
+                "配置原始编码与标签；顺序目标按从低到高排列。留空时继承兼容的源值域。",
+            ),
+            (
+                "datetime_kind",
+                "Calendar Kind",
+                "日期时间形式",
+                "Auto preserves temporal inputs; text defaults to a date and time.",
+                "自动保留已有时间表示，文本默认解析为日期时间；也可明确选择日期或时间。",
+            ),
+            (
+                "datetime_precision",
+                "Calendar Precision",
+                "时间精度",
+                "Precision for newly parsed values. Precision loss fails.",
+                "新解析时间值使用的精度；不能静默截断更高精度。",
+            ),
+            (
+                "datetime_format",
+                "Calendar Format",
+                "时间格式",
+                "Empty uses ISO. Custom formats use strftime, e.g. %d/%m/%Y. Offsets are removed without shifting wall time.",
+                "留空按 ISO 格式解析。自定义格式如 %d/%m/%Y；移除时区时保留原钟面时间。",
+            ),
         ],
-        ParameterEditorSpec::Select,
     )?;
-    let scalar_types = scalar_conversion_types()?;
+    let mut parameters = Vec::new();
+    for (key, default, options) in [
+        (
+            "target_type",
+            "auto",
+            std::iter::once("auto")
+                .chain(SemanticType::ALL.into_iter().map(SemanticType::type_id))
+                .collect(),
+        ),
+        ("numeric_mode", "auto", vec!["auto", "integer", "real"]),
+        (
+            "datetime_kind",
+            "auto",
+            vec!["auto", "date", "time", "datetime"],
+        ),
+        (
+            "datetime_precision",
+            "microseconds",
+            vec!["seconds", "milliseconds", "microseconds", "nanoseconds"],
+        ),
+    ] {
+        parameters.push(parameter(
+            ID,
+            key,
+            concrete("core.text")?,
+            Some(ParameterValue {
+                value_type: concrete("core.text")?,
+                value: Value::String(default.into()),
+            }),
+            vec![ParameterConstraint::OneOf(
+                options
+                    .into_iter()
+                    .map(|value| Value::String(value.into()))
+                    .collect(),
+            )],
+            ParameterEditorSpec::Select,
+        )?);
+    }
+    parameters.push(parameter(
+        ID,
+        "datetime_format",
+        concrete("core.text")?,
+        Some(ParameterValue {
+            value_type: concrete("core.text")?,
+            value: Value::String("".into()),
+        }),
+        vec![ParameterConstraint::Length {
+            min: None,
+            max: Some(256),
+        }],
+        ParameterEditorSpec::Text { multiline: false },
+    )?);
+    parameters.push(parameter(
+        ID,
+        "semantic_domain",
+        concrete("core.object")?,
+        Some(ParameterValue {
+            value_type: concrete("core.object")?,
+            value: Value::Object(Default::default()),
+        }),
+        vec![],
+        ParameterEditorSpec::SemanticDomain,
+    )?);
+    let types = TypeExpr::Union(
+        SemanticType::ALL
+            .into_iter()
+            .map(SemanticType::type_id)
+            .map(|kind| Ok([concrete(kind)?, data_series(kind)?]))
+            .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?
+            .into_iter()
+            .flatten()
+            .collect(),
+    );
+    let mut input = data_port("input", "Input", PortDirection::Input, types.clone())?;
+    input.consumption = Some(InputConsumption::Streaming);
+    let mut output = data_port("output", "Output", PortDirection::Output, types)?;
+    output.production = Some(OutputProduction::Streaming);
     let mut protocol = protocol(
         ID,
         "conversion",
-        vec![
-            data_port("input", "Input", PortDirection::Input, scalar_types.clone())?,
-            data_port("output", "Output", PortDirection::Output, scalar_types)?,
-        ],
+        vec![input, output],
         vec![],
-        vec![target],
+        parameters,
         pure(),
     )?;
-    protocol.typing = NodeTypingSpec::ParameterOutput {
+    protocol.typing = NodeTypingSpec::ShapePreservingConversion {
+        input: semantic("input", PortKey::new)?,
         parameter: semantic("target_type", ParameterKey::new)?,
         output: semantic("output", PortKey::new)?,
     };
     fragment.nodes.push(leaf(protocol, ID));
     Ok(())
-}
-
-fn register_series_convert(
-    fragment: &mut ProviderFragment,
-    spec: SeriesConversionSpec,
-) -> Result<(), BuiltinAssemblyError> {
-    let id = leak(format!(
-        "yssbi.data_series.convert.{}_to_{}",
-        spec.source, spec.target
-    ));
-    let source_term = leak(format!("DataSeries<{}>", technical_type(spec.source)?));
-    let target_term = leak(format!("DataSeries<{}>", technical_type(spec.target)?));
-    let aliases = Box::leak(
-        vec![
-            "data series conversion",
-            "series cast",
-            source_term,
-            target_term,
-        ]
-        .into_boxed_slice(),
-    );
-    fragment.add_node_messages(&NodeTextSpec {
-        id,
-        title: spec.title,
-        zh_title: spec.zh_title,
-        documentation: "The kernel preserves element order and nulls. Parse and range failures are reported instead of silently replacing values.",
-        zh_documentation: "kernel 保持元素顺序与空值；解析或范围错误会显式报告，不会静默替换。",
-        aliases,
-        zh_aliases: &["数据序列转换", "序列类型转换"],
-    })?;
-    fragment.nodes.push(leaf(
-        protocol(
-            id,
-            "conversion",
-            vec![
-                data_port(
-                    "input",
-                    "DataSeries",
-                    PortDirection::Input,
-                    data_series(core_type(spec.source)?)?,
-                )?,
-                data_port(
-                    "output",
-                    "DataSeries",
-                    PortDirection::Output,
-                    data_series(core_type(spec.target)?)?,
-                )?,
-            ],
-            vec![],
-            vec![],
-            pure(),
-        )?,
-        id,
-    ));
-    Ok(())
-}
-
-fn scalar_conversion_types() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Union(vec![
-        concrete("core.binary")?,
-        concrete("core.numeric")?,
-        concrete("core.text")?,
-    ]))
-}
-
-fn core_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {
-    match kind {
-        "bool" => Ok("core.binary"),
-        "int64" => Ok("core.numeric"),
-        "float64" => Ok("core.numeric"),
-        "string" => Ok("core.text"),
-        "categorical" => Ok("core.categorical"),
-        _ => Err(invalid_conversion_type(kind)),
-    }
-}
-
-fn technical_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {
-    match kind {
-        "bool" => Ok("Binary"),
-        "int64" => Ok("Numeric"),
-        "float64" => Ok("Numeric"),
-        "string" => Ok("Text"),
-        "categorical" => Ok("Categorical"),
-        _ => Err(invalid_conversion_type(kind)),
-    }
-}
-
-fn invalid_conversion_type(value: &'static str) -> BuiltinAssemblyError {
-    BuiltinAssemblyError::InvalidProtocol {
-        node_type: "yssbi.data_series.convert".into(),
-        source: ProtocolError::InvalidIdentity(format!(
-            "unsupported series conversion type '{value}'"
-        )),
-    }
 }

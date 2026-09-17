@@ -671,9 +671,17 @@ fn graph_edit_batches_preserve_parameters_reject_stale_versions_and_roll_back_fa
             )
             .unwrap();
         assert!(
-            matches!(result, AutomationCapabilityResult::NodeCatalogSearch(result) if !result.matches.is_empty()),
+            matches!(result, AutomationCapabilityResult::NodeCatalogSearch(ref result) if !result.matches.is_empty()),
             "{query}"
         );
+        if let AutomationCapabilityResult::NodeCatalogSearch(result) = result {
+            assert!(
+                result
+                    .matches
+                    .iter()
+                    .all(|item| item.node_type_id != "yssbi.statistics.logit.fit")
+            );
+        }
     }
 }
 

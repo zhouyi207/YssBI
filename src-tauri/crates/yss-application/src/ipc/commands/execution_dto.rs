@@ -120,7 +120,7 @@ impl ResultDescriptorDto {
         result_id: ResultId,
         result: &StoredResultSnapshot,
     ) -> Result<Self, RunEventDtoError> {
-        let stored = result.value().value();
+        let stored = result.value().value().unannotated();
         let (value_kind, total_count) = match stored {
             RuntimeValue::List(values) => (ResultValueKindDto::Sequence, Some(values.len())),
             RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
@@ -311,6 +311,7 @@ pub(crate) fn runtime_value_to_json(
     value: &RuntimeValue,
 ) -> Result<serde_json::Value, RunEventDtoError> {
     Ok(match value {
+        RuntimeValue::Annotated(value) => runtime_value_to_json(value.value())?,
         RuntimeValue::Null => serde_json::Value::Null,
         RuntimeValue::Bool(value) => (*value).into(),
         RuntimeValue::Integer(value) => serde_json::to_value(
@@ -373,5 +374,20 @@ mod tests {
         assert_eq!(encoded["hasMore"], true);
         assert_eq!(encoded["values"][0][0], u64::MAX.to_string());
         assert_eq!(encoded["metadata"]["columns"][0]["type"], "UInt64");
+        let annotated = RuntimeValue::List(Box::new([
+            RuntimeValue::String("001".into()),
+            RuntimeValue::Null,
+        ]))
+        .with_metadata(yss_data_contract::ConversionMetadata {
+            semantic: yss_data_contract::ColumnSemantic::new(
+                yss_data_contract::SemanticType::Identifier,
+            ),
+            temporal: None,
+        })
+        .unwrap();
+        assert_eq!(
+            runtime_value_to_json(&annotated).unwrap(),
+            serde_json::json!(["001", null])
+        );
     }
 }

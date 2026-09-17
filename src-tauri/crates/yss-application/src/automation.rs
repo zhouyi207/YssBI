@@ -216,6 +216,7 @@ fn search_node_catalog(
     let mut matches = catalog
         .items
         .iter()
+        .filter(|item| item.available)
         .filter_map(|item| {
             let score = catalog_item_score(item, &normalized_query);
             (score > 0).then_some((score, item))
@@ -480,6 +481,7 @@ fn inspect_runtime_value(
     budget: &mut ResultProjectionBudget,
 ) -> Result<ResultValueInspection, CapabilityFailure> {
     match value {
+        RuntimeValue::Annotated(value) => inspect_runtime_value(value.value(), depth, budget),
         RuntimeValue::Null => Ok(ResultValueInspection::Null),
         RuntimeValue::Bool(value) => Ok(ResultValueInspection::Boolean(*value)),
         RuntimeValue::Integer(value) => Ok(ResultValueInspection::Integer(*value)),

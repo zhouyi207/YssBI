@@ -371,6 +371,7 @@ pub struct ParameterDisplayDto {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ParameterEditorKindDto {
+    SemanticDomain,
     GraphConstant,
     Auto,
     Text,

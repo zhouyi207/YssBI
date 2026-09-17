@@ -61,6 +61,7 @@ pub enum ParameterEditorSpec {
     Toggle,
     Select,
     GraphConstant,
+    SemanticDomain,
     Configuration(super::ConfigurationSchema),
     Resource { kind: ResourceDisplayKind },
 }

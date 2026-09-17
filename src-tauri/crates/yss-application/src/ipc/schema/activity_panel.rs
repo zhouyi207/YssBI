@@ -93,6 +93,7 @@ pub enum ActivityItemDto {
         resource_path: String,
     },
     Node {
+        available: bool,
         key: String,
         title: String,
         creation: NodeCreationDescriptorDto,
@@ -137,10 +138,12 @@ impl From<app::ActivityItem> for ActivityItemDto {
                 resource_path,
             },
             app::ActivityItem::Node {
+                available,
                 key,
                 title,
                 creation,
             } => Self::Node {
+                available,
                 key,
                 title,
                 creation: creation.into(),

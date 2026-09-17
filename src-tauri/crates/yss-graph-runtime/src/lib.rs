@@ -471,9 +471,9 @@ impl GraphRuntimeState {
         localized
     }
 
-    /// Creation discovery excludes leaves without an installed implementation.
+    /// Annotate creation discovery without removing unavailable definitions.
     /// Structural and transparent nodes do not require a leaf kernel.
-    pub fn retain_available_catalog_items(
+    pub fn annotate_catalog_availability(
         &self,
         catalog: &mut LocalizedCatalog,
         supports: impl Fn(&str) -> bool,
@@ -487,9 +487,9 @@ impl GraphRuntimeState {
             })
             .map(|(id, _)| id.as_str())
             .collect();
-        catalog
-            .items
-            .retain(|item| available.contains(item.node_type_id.as_ref()));
+        for item in &mut catalog.items {
+            item.available = available.contains(item.node_type_id.as_ref());
+        }
     }
 
     pub fn compatible_catalog_with_resources(

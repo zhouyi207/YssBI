@@ -416,6 +416,13 @@ pub fn validate_and_prepare_parameter_values<T>(
             issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
             continue;
         }
+        if matches!(spec.editor, ParameterEditorSpec::SemanticDomain)
+            && !serde_json::from_value::<yss_data_contract::ConversionDomain>(value.clone())
+                .is_ok_and(|domain| domain.is_valid())
+        {
+            issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
+            continue;
+        }
         if let TypeExpr::Concrete(type_id) = &spec.value_type {
             match prepare_nominal(type_id, value) {
                 Some(Ok(prepared)) => {

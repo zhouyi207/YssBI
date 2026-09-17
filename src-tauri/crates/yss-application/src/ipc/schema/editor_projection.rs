@@ -195,6 +195,7 @@ fn map_parameter(parameter: &EditorParameterModel) -> ParameterEditorDto {
         editor: match parameter.editor {
             ParameterEditorKind::Auto => ParameterEditorKindDto::Auto,
             ParameterEditorKind::GraphConstant => ParameterEditorKindDto::GraphConstant,
+            ParameterEditorKind::SemanticDomain => ParameterEditorKindDto::SemanticDomain,
             ParameterEditorKind::Text => ParameterEditorKindDto::Text,
             ParameterEditorKind::Number => ParameterEditorKindDto::Number,
             ParameterEditorKind::Toggle => ParameterEditorKindDto::Toggle,

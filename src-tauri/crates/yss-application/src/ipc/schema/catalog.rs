@@ -34,6 +34,7 @@ pub struct LocalizedCategoryDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedCatalogItemDto {
+    pub available: bool,
     pub node_type_id: Box<str>,
     pub title: Box<str>,
     pub documentation: Option<Box<str>>,
@@ -152,6 +153,7 @@ impl From<yss_node_catalog::LocalizedCategory> for LocalizedCategoryDto {
 impl From<yss_node_catalog::LocalizedCatalogItem> for LocalizedCatalogItemDto {
     fn from(item: DomainCatalogItem) -> Self {
         Self {
+            available: item.available,
             node_type_id: item.node_type_id,
             title: item.title,
             documentation: item.documentation,
@@ -417,6 +419,14 @@ mod tests {
             .find(|item| item["resourcePath"] == "functions/Opaque.yssbi-function")
             .expect("function resource item is present");
         assert_eq!(item["resourceRevision"], 0);
+        assert_eq!(item["available"], true);
+        let unavailable = wire["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["nodeTypeId"] == "yssbi.statistics.logit.fit")
+            .unwrap();
+        assert_eq!(unavailable["available"], false);
         assert_eq!(item["creation"]["kind"], "resourceBound");
         assert_eq!(item["creation"]["createArgs"]["kind"], "function");
         assert!(
@@ -452,6 +462,10 @@ mod tests {
             })
             .unwrap();
         assert_eq!(function["item"]["creation"], item["creation"]);
+        assert_eq!(function["item"]["available"], true);
+        assert!(rows.iter().any(|row| row["item"]["creation"]["nodeTypeId"]
+            == "yssbi.statistics.logit.fit"
+            && row["item"]["available"] == false));
         assert!(rows.iter().any(|row| row["kind"] == "category"));
     }
 }

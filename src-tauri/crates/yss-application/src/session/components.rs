@@ -41,7 +41,7 @@ impl NodeComponents {
                 continue;
             };
             let kernel = implementation.implementation_identity();
-            // Keep definitions for existing graphs; creation discovery filters missing kernels.
+            // Keep definitions for existing graphs; the catalog marks missing kernels unavailable.
             let Some(contract) = kernels.contract(kernel) else {
                 continue;
             };

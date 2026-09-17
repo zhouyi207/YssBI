@@ -316,6 +316,7 @@ fn project_parameter(fact: &GraphParameterFact) -> Option<EditorParameterModel> 
         ParameterEditorSpec::Configuration(_) => (ParameterEditorKind::Configuration, false),
         ParameterEditorSpec::Select => (ParameterEditorKind::Select, false),
         ParameterEditorSpec::GraphConstant => (ParameterEditorKind::GraphConstant, false),
+        ParameterEditorSpec::SemanticDomain => (ParameterEditorKind::SemanticDomain, false),
         ParameterEditorSpec::Resource { .. } => (ParameterEditorKind::Resource, false),
     };
     Some(EditorParameterModel {

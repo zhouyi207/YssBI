@@ -669,8 +669,9 @@ fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
 
 fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyError> {
     [
-        ("database", None, 55),
-        ("dataframe", None, 60),
+        ("database", Some("data"), 55),
+        ("data_processing", None, 60),
+        ("dataframe", Some("data_processing"), 60),
         ("dataframe.series", Some("dataframe"), 61),
         ("dataframe.timeseries", Some("dataframe"), 62),
         ("dataframe.panel", Some("dataframe"), 63),
@@ -835,7 +836,12 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "数据框筛选谓词",
         ),
         ("categories.database.title", "Database", "数据库"),
-        ("categories.dataframe.title", "DataFrame", "数据框"),
+        (
+            "categories.data_processing.title",
+            "Data Processing",
+            "数据处理",
+        ),
+        ("categories.dataframe.title", "DataFrame", "数据帧"),
         (
             "categories.dataframe.series.title",
             "DataSeries",
