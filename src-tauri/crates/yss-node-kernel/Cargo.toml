@@ -12,3 +12,5 @@ yss-relational-contract = { path = "../yss-relational-contract" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 thiserror.workspace = true
+yss-tabular-arrow = { path = "../yss-tabular-arrow" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }

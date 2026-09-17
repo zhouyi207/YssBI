@@ -71,6 +71,8 @@ pub enum RelationError {
     InvalidPlan,
     #[error("relation input is invalid")]
     InvalidInput,
+    #[error("semantic conversion is invalid or loses information")]
+    InvalidConversion,
     #[error("series do not share the same relation and row alignment")]
     UnalignedSeries,
     #[error("relation source is unavailable")]
@@ -131,6 +133,11 @@ pub trait RelationPlan: Send + Sync {
         operation: NumericOperation,
         operands: &[SeriesOperand],
         output_type: NumericType,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
+    fn convert_series(
+        &self,
+        series: &SeriesHandle,
+        conversion: yss_data_contract::SemanticConversion,
     ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream>;
 }
@@ -216,6 +223,20 @@ impl RelationHandle {
         Ok(SeriesHandle::new(
             self.clone(),
             self.plan.numeric_series(operation, operands, output_type)?,
+        ))
+    }
+
+    pub fn convert_series(
+        &self,
+        series: &SeriesHandle,
+        conversion: yss_data_contract::SemanticConversion,
+    ) -> Result<SeriesHandle, RelationError> {
+        if series.relation() != self {
+            return Err(RelationError::UnalignedSeries);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan.convert_series(series, conversion)?,
         ))
     }
 

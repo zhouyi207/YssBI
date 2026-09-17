@@ -8,6 +8,42 @@ use crate::{
     RuntimeValue,
 };
 
+#[test]
+fn semantic_annotations_only_contain_materialized_scalar_values() {
+    use yss_data_contract::{ColumnSemantic, ConversionMetadata, SemanticType};
+    let metadata = ConversionMetadata {
+        semantic: ColumnSemantic::new(SemanticType::Identifier),
+        temporal: None,
+    };
+    let value = RuntimeValue::String("001".into());
+    for value in [
+        value.clone(),
+        RuntimeValue::List(Box::new([value, RuntimeValue::Null])),
+    ] {
+        let annotated = value.clone().with_metadata(metadata.clone()).unwrap();
+        assert_eq!(annotated.metadata(), Some(&metadata));
+        assert_eq!(annotated.unannotated(), &value);
+        assert_eq!(
+            annotated.with_metadata(metadata.clone()),
+            Err(crate::RuntimeValueError::Unrepresentable),
+        );
+    }
+    for value in [
+        RuntimeValue::Resource("dataset".into()),
+        RuntimeValue::List(Box::new([RuntimeValue::List(Box::new([]))])),
+        RuntimeValue::Record(BTreeMap::new()),
+    ] {
+        assert_eq!(
+            value.with_metadata(metadata.clone()),
+            Err(crate::RuntimeValueError::Unrepresentable)
+        );
+    }
+    assert_eq!(
+        RuntimeValue::Decimal(f64::NAN).with_metadata(metadata),
+        Err(crate::RuntimeValueError::NonFinite),
+    );
+}
+
 fn compare(
     operation: &str,
     inputs: &[RuntimeValue],

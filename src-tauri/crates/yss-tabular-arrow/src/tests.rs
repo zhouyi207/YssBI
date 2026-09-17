@@ -9,6 +9,100 @@ use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, Tabu
 use super::*;
 
 #[test]
+#[ignore = "manual conversion timing probe"]
+fn conversion_hot_path_timing() {
+    use std::{hint::black_box, time::Instant};
+    use yss_data_contract::{
+        NumericRepresentation, SemanticConversion, SemanticType, SemanticValue,
+    };
+    use yss_tabular_contract::TabularScalar;
+    let field = Field::new("code", DataType::Utf8, true);
+    let mut spec = SemanticConversion::new(SemanticType::Ordinal, NumericRepresentation::Auto);
+    spec.domain.values = (0..1024)
+        .map(|i| SemanticValue {
+            value: i.to_string(),
+            label: i.to_string(),
+        })
+        .collect();
+    let array = StringArray::from_iter_values((0..512).map(|i| i.to_string()));
+    let start = Instant::now();
+    let conversion = PreparedConversion::new(&field, &spec).unwrap();
+    for _ in 0..100 {
+        black_box(conversion.convert(&array).unwrap());
+    }
+    println!(
+        "domain_batches_ms={:.3}",
+        start.elapsed().as_secs_f64() * 1000.
+    );
+    let values = (0..10_000)
+        .map(|_| TabularScalar::String("12345.67".into()))
+        .collect::<Vec<_>>();
+    let spec = SemanticConversion::new(SemanticType::Numeric, NumericRepresentation::Auto);
+    let start = Instant::now();
+    for _ in 0..20 {
+        black_box(convert_semantic_values(&values, None, &spec).unwrap());
+    }
+    println!(
+        "materialized_values_ms={:.3}",
+        start.elapsed().as_secs_f64() * 1000.
+    );
+}
+
+#[test]
+fn prepared_conversion_validates_every_batch_without_mutating_declared_domains() {
+    use arrow::array::Int64Array;
+    use yss_data_contract::{NumericRepresentation, SemanticConversion};
+    let mut spec = SemanticConversion::new(SemanticType::Ordinal, NumericRepresentation::Auto);
+    spec.domain.values = ["high", "low"]
+        .map(|code| SemanticValue {
+            value: code.into(),
+            label: code.into(),
+        })
+        .into();
+    let conversion =
+        PreparedConversion::new(&Field::new("value", DataType::Utf8, true), &spec).unwrap();
+    for values in [vec![Some("low"), None], vec![Some("high")]] {
+        assert!(conversion.convert(&StringArray::from(values)).is_ok());
+        assert!(
+            conversion
+                .convert(&StringArray::from(vec!["unknown"]))
+                .is_err()
+        );
+        assert_eq!(
+            column_semantic(conversion.field()).unwrap().values,
+            spec.domain.values
+        );
+    }
+    let mut semantic = ColumnSemantic::new(SemanticType::Numeric);
+    semantic.numeric = Some(NumericConstraints {
+        integer: true,
+        minimum: Some("1".into()),
+        maximum: Some("9007199254740993".into()),
+    });
+    let source =
+        with_column_semantic(Field::new("value", DataType::Int64, true), &semantic).unwrap();
+    let conversion = PreparedConversion::new(
+        &source,
+        &SemanticConversion::new(SemanticType::Text, NumericRepresentation::Auto),
+    )
+    .unwrap();
+    assert!(
+        conversion
+            .convert(&Int64Array::from(vec![Some(9_007_199_254_740_993), None]))
+            .is_ok()
+    );
+    for invalid in [0, 9_007_199_254_740_994] {
+        assert!(
+            conversion
+                .convert(&Int64Array::from(vec![invalid]))
+                .is_err()
+        );
+    }
+    assert!(conversion.convert(&Int64Array::from(vec![1])).is_ok());
+    assert!(conversion.convert(&StringArray::from(vec!["1"])).is_err());
+}
+
+#[test]
 fn column_semantics_enforce_explicit_domains_and_numeric_constraints() {
     let field = Field::new("code", DataType::Int64, true);
     let values = vec![
@@ -139,6 +233,115 @@ fn physical_casts_reject_precision_loss_and_preserve_semantics() {
 }
 
 #[test]
+fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_identity() {
+    use yss_data_contract::{NumericRepresentation as N, SemanticConversion, SemanticType as S};
+    use yss_tabular_contract::TabularScalar as V;
+    let spec = |target, numeric| SemanticConversion::new(target, numeric);
+    let values = |values: Vec<V>, target, numeric| {
+        convert_semantic_values(&values, None, &spec(target, numeric)).map(|result| result.values)
+    };
+    let real = |value: f64| V::Decimal(value.try_into().unwrap());
+    assert_eq!(
+        values(
+            vec![
+                V::String(" 001.0 ".into()),
+                V::Null,
+                V::String("1e3".into()),
+                V::String("0.1".into())
+            ],
+            S::Numeric,
+            N::Auto
+        )
+        .unwrap(),
+        vec![real(1.), V::Null, real(1000.), real(0.1)]
+    );
+    assert_eq!(
+        values(
+            vec![V::Integer(9_007_199_254_740_993), V::Null],
+            S::Numeric,
+            N::Auto
+        )
+        .unwrap(),
+        vec![V::Integer(9_007_199_254_740_993), V::Null]
+    );
+    assert_eq!(
+        values(vec![V::String("001".into())], S::Numeric, N::Integer).unwrap(),
+        vec![V::Integer(1)]
+    );
+    for text in [
+        "9007199254740993",
+        "9007199254740993.0",
+        "9007199254740993e0",
+        "18446744073709551617",
+        "1.234567890123456789",
+        "NaN",
+        "inf",
+        "",
+        "oops",
+    ] {
+        assert!(
+            values(vec![V::String(text.into())], S::Numeric, N::Real).is_err(),
+            "{text}"
+        );
+    }
+    assert!(values(vec![real(1.5)], S::Numeric, N::Integer).is_err());
+    assert!(values(vec![V::Integer(9_007_199_254_740_993)], S::Numeric, N::Real).is_err());
+    assert_eq!(
+        values(
+            vec![V::String("true".into()), V::Null, V::String("0".into())],
+            S::Binary,
+            N::Auto
+        )
+        .unwrap(),
+        vec![V::Bool(true), V::Null, V::Bool(false)]
+    );
+    assert!(values(vec![V::Integer(2)], S::Binary, N::Auto).is_err());
+    assert_eq!(
+        values(vec![V::Bool(true), V::Null], S::Numeric, N::Auto).unwrap(),
+        vec![V::Integer(1), V::Null]
+    );
+    for target in [S::Numeric, S::Text, S::Binary] {
+        assert_eq!(
+            values(vec![V::Null], target, N::Auto).unwrap(),
+            vec![V::Null]
+        );
+    }
+    let field = Field::new("source", DataType::Utf8, true);
+    let conversion = PreparedConversion::new(&field, &spec(S::Numeric, N::Integer)).unwrap();
+    let output = conversion.field();
+    assert_eq!(output.data_type(), &DataType::Int64);
+    assert!(output.is_nullable());
+    assert!(column_semantic(&output).unwrap().numeric.unwrap().integer);
+    let invalid = with_column_semantic(
+        Field::new("id", DataType::Int64, true),
+        &ColumnSemantic::new(S::Identifier),
+    )
+    .unwrap();
+    assert_eq!(
+        column_semantic(
+            PreparedConversion::new(&invalid, &spec(S::Numeric, N::Auto))
+                .unwrap()
+                .field()
+        )
+        .unwrap()
+        .kind,
+        S::Numeric
+    );
+    let mut binary = column_semantic(&Field::new("flag", DataType::Boolean, true)).unwrap();
+    binary.positive_value = Some("false".into());
+    let field = with_column_semantic(Field::new("flag", DataType::Boolean, true), &binary).unwrap();
+    let array = arrow::array::BooleanArray::from(vec![Some(false), Some(true), None]);
+    let result = PreparedConversion::new(&field, &spec(S::Numeric, N::Auto))
+        .unwrap()
+        .convert(&array)
+        .unwrap();
+    assert_eq!(
+        array_to_json(result.as_ref()).unwrap(),
+        vec![json!(1), json!(0), json!(null)]
+    );
+}
+
+#[test]
 fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
     use arrow::array::{StructArray, TimestampNanosecondArray, TimestampSecondArray};
     let timestamps =
@@ -178,6 +381,115 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
         vec![json!("2024-03-10T01:30:00"), json!("2024-03-10T03:30:00")]
     );
     assert_eq!(data_type_name(dst.data_type()), "Datetime(s)");
+}
+
+#[test]
+fn semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels() {
+    use yss_data_contract::{
+        ConversionDomain, NumericRepresentation as N, SemanticConversion, SemanticType as S,
+        SemanticValue,
+    };
+    use yss_tabular_contract::TabularScalar as V;
+    let input = vec![V::String("001".into()), V::Null, V::String("002".into())];
+    let id = convert_semantic_values(
+        &input,
+        None,
+        &SemanticConversion::new(S::Identifier, N::Auto),
+    )
+    .unwrap();
+    assert_eq!(id.values, input);
+    assert_eq!(id.metadata.semantic.kind, S::Identifier);
+    let mut ordinal = SemanticConversion::new(S::Ordinal, N::Auto);
+    assert!(convert_semantic_values(&input, None, &ordinal).is_err());
+    ordinal.domain = ConversionDomain {
+        values: vec![
+            SemanticValue {
+                value: "002".into(),
+                label: "low".into(),
+            },
+            SemanticValue {
+                value: "001".into(),
+                label: "high".into(),
+            },
+        ],
+        positive_value: None,
+    };
+    let ranked = convert_semantic_values(&id.values, Some(&id.metadata), &ordinal).unwrap();
+    assert_eq!(ranked.values, input);
+    assert_eq!(ranked.metadata.semantic.values, ordinal.domain.values);
+    let categorical = convert_semantic_values(
+        &ranked.values,
+        Some(&ranked.metadata),
+        &SemanticConversion::new(S::Categorical, N::Auto),
+    )
+    .unwrap();
+    assert_eq!(categorical.metadata.semantic.kind, S::Categorical);
+    assert_eq!(categorical.metadata.semantic.values, ordinal.domain.values);
+    assert!(
+        convert_semantic_values(
+            &categorical.values,
+            Some(&categorical.metadata),
+            &SemanticConversion::new(S::Ordinal, N::Auto)
+        )
+        .is_err(),
+        "an unordered category domain must not silently become an ordinal order"
+    );
+    let text = convert_semantic_values(
+        &categorical.values,
+        Some(&categorical.metadata),
+        &SemanticConversion::new(S::Text, N::Auto),
+    )
+    .unwrap();
+    assert_eq!(text.values, input);
+    assert!(convert_semantic_values(&[V::String("003".into())], None, &ordinal).is_err());
+    ordinal.domain.values.push(ordinal.domain.values[0].clone());
+    assert!(convert_semantic_values(&input, None, &ordinal).is_err());
+}
+
+#[test]
+fn semantic_calendar_conversion_parses_formats_preserves_clock_and_rejects_precision_loss() {
+    use yss_data_contract::{
+        DatetimeRepresentation as D, NumericRepresentation as N, SemanticConversion,
+        SemanticType as S, TemporalPrecision as P,
+    };
+    use yss_tabular_contract::TabularScalar as V;
+    let mut spec = SemanticConversion::new(S::Datetime, N::Auto);
+    spec.format = "%d/%m/%Y %H:%M:%S %z".into();
+    let result = convert_semantic_values(
+        &[V::String("17/09/2026 08:30:00 +0800".into()), V::Null],
+        None,
+        &spec,
+    )
+    .unwrap();
+    assert_eq!(
+        result.values,
+        vec![V::String("2026-09-17T08:30:00".into()), V::Null]
+    );
+    let text = convert_semantic_values(
+        &result.values,
+        Some(&result.metadata),
+        &SemanticConversion::new(S::Text, N::Auto),
+    )
+    .unwrap();
+    assert_eq!(text.values, result.values);
+    spec.format.clear();
+    let value = vec![V::String("2026-09-17T08:30:00.000000001+08:00".into())];
+    assert!(convert_semantic_values(&value, None, &spec).is_err());
+    spec.precision = P::Nanoseconds;
+    let nanos = convert_semantic_values(&value, None, &spec).unwrap();
+    assert_eq!(
+        nanos.values,
+        vec![V::String("2026-09-17T08:30:00.000000001".into())]
+    );
+    spec.datetime = D::Date;
+    assert!(convert_semantic_values(&nanos.values, Some(&nanos.metadata), &spec).is_err());
+    let date = convert_semantic_values(&[V::String("2026-09-17".into())], None, &spec).unwrap();
+    assert_eq!(date.values, vec![V::String("2026-09-17".into())]);
+    spec.datetime = D::Time;
+    let time =
+        convert_semantic_values(&[V::String("08:30:00.000000001".into())], None, &spec).unwrap();
+    assert_eq!(time.values, vec![V::String("08:30:00.000000001".into())]);
+    assert!(convert_semantic_values(&[V::String("bad".into())], None, &spec).is_err());
 }
 
 #[test]
@@ -233,7 +545,7 @@ fn storage_schema_preserves_identity_exact_types_and_category_domain() {
     assert!(facts.columns()[2].nullable());
     assert_eq!(
         facts.columns()[2].data_type(),
-        &yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Datetime)time
+        &yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Datetime)
     );
     assert!(
         validate_storage_schema(&Schema::new(vec![field.clone(), field.with_name("other")]))

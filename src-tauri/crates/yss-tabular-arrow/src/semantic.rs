@@ -171,30 +171,68 @@ fn validate_semantic(field: &Field, semantic: &ColumnSemantic) -> Result<(), Tab
 /// Validate actual values at import/edit/semantic-change/cast boundaries. Nulls are missing
 /// observations, so they never add a category or participate in a binary value mapping.
 pub fn validate_semantic_array(field: &Field, array: &dyn Array) -> Result<(), TabularArrowError> {
-    // Imported dictionaries without metadata acquire their explicit domain after streaming.
     if !field.metadata().contains_key(SEMANTIC) {
         return Ok(());
     }
     let semantic = column_semantic(field)?;
-    if matches!(
-        semantic.kind,
-        SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
-    ) {
-        let allowed: BTreeSet<_> = semantic
-            .values
-            .iter()
-            .map(|value| value.value.as_str())
-            .collect();
-        if strings(array)?
-            .iter()
-            .flatten()
-            .any(|value| !allowed.contains(value))
+    PreparedSemanticValidator::new(field, &semantic)?.validate(array)
+}
+
+/// Definitions and bounds are checked once; only actual values are checked per batch.
+#[derive(Debug, Default)]
+pub(crate) struct PreparedSemanticValidator {
+    allowed: Option<std::collections::HashSet<String>>,
+    integer: bool,
+    bounds: Vec<(ArrayRef, bool)>,
+}
+
+impl PreparedSemanticValidator {
+    pub(crate) fn new(field: &Field, semantic: &ColumnSemantic) -> Result<Self, TabularArrowError> {
+        // Keep unannotated dictionary import behavior: its domain is installed after streaming.
+        if !field.metadata().contains_key(SEMANTIC) {
+            return Ok(Self::default());
+        }
+        let allowed = matches!(
+            semantic.kind,
+            SemanticType::Categorical | SemanticType::Ordinal | SemanticType::Binary
+        )
+        .then(|| {
+            semantic
+                .values
+                .iter()
+                .map(|value| value.value.clone())
+                .collect()
+        });
+        let mut bounds = Vec::new();
+        let mut integer = false;
+        if let Some(constraints) = &semantic.numeric {
+            integer = constraints.integer;
+            for (bound, minimum) in [
+                (constraints.minimum.as_ref(), true),
+                (constraints.maximum.as_ref(), false),
+            ] {
+                if let Some(bound) = bound {
+                    bounds.push((value_array(field, bound)?, minimum));
+                }
+            }
+        }
+        Ok(Self {
+            allowed,
+            integer,
+            bounds,
+        })
+    }
+
+    pub(crate) fn validate(&self, array: &dyn Array) -> Result<(), TabularArrowError> {
+        if let Some(allowed) = &self.allowed
+            && strings(array)?
+                .iter()
+                .flatten()
+                .any(|value| !allowed.contains(value))
         {
             return Err(TabularArrowError::InvalidValue);
         }
-    }
-    if let Some(constraints) = semantic.numeric {
-        if constraints.integer && array.data_type().is_floating() {
+        if self.integer && array.data_type().is_floating() {
             let numbers = cast_with_options(
                 array,
                 &DataType::Float64,
@@ -215,7 +253,7 @@ pub fn validate_semantic_array(field: &Field, array: &dyn Array) -> Result<(), T
             {
                 return Err(TabularArrowError::InvalidValue);
             }
-        } else if constraints.integer && !array.data_type().is_integer() {
+        } else if self.integer && !array.data_type().is_integer() {
             // A decimal representation retains exact text; no f64 rounding is used to decide
             // whether a wide decimal has a fractional component.
             for value in strings(array)?.iter().flatten() {
@@ -228,11 +266,11 @@ pub fn validate_semantic_array(field: &Field, array: &dyn Array) -> Result<(), T
                 }
             }
         }
-        let data = arrow::array::make_array(array.to_data());
-        for (bound, minimum) in [(constraints.minimum, true), (constraints.maximum, false)] {
-            if let Some(bound) = bound {
-                let bound = arrow::array::Scalar::new(value_array(field, &bound)?);
-                let invalid = if minimum {
+        if !self.bounds.is_empty() {
+            let data = arrow::array::make_array(array.to_data());
+            for (bound, minimum) in &self.bounds {
+                let bound = arrow::array::Scalar::new(bound.clone());
+                let invalid = if *minimum {
                     arrow::compute::kernels::cmp::lt(&data, &bound)
                 } else {
                     arrow::compute::kernels::cmp::gt(&data, &bound)
@@ -243,8 +281,8 @@ pub fn validate_semantic_array(field: &Field, array: &dyn Array) -> Result<(), T
                 }
             }
         }
+        Ok(())
     }
-    Ok(())
 }
 
 /// A physical cast keeps both category identities and explicit ordinal order. A cast that

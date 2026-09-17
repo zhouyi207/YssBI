@@ -263,6 +263,229 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
 }
 
 #[test]
+fn semantic_conversion_is_lazy_aligned_and_preserves_configuration_identity() {
+    use yss_data_contract::{NumericRepresentation as N, SemanticConversion, SemanticType as S};
+    use yss_tabular_contract::TabularScalar as V;
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "yss-conversion-{}-{}.parquet",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let schema = Arc::new(
+        yss_tabular_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("text", DataType::Utf8, true),
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("display_order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "display_order",
+        )
+        .unwrap(),
+    );
+    let relation = runtime
+        .parquet_relation(
+            binding(),
+            schema.clone(),
+            std::slice::from_ref(&path),
+            Arc::new(RemoveFile(path.clone())),
+        )
+        .unwrap();
+    let input = relation.select_series("text").unwrap();
+    let convert = |target, numeric| {
+        relation
+            .convert_series(&input, SemanticConversion::new(target, numeric))
+            .unwrap()
+    };
+    let integer = convert(S::Numeric, N::Integer);
+    let real = convert(S::Numeric, N::Real);
+    let binary = convert(S::Binary, N::Auto);
+    assert_ne!(integer, real);
+    assert_eq!(integer.relation(), &relation);
+    let combined = relation.project_series(&[integer.clone(), real]).unwrap();
+    assert!(
+        !path.exists(),
+        "conversion and projection must not read rows"
+    );
+    let batches = [vec![Some("001"), None], vec![Some("2"), Some("3")]]
+        .into_iter()
+        .enumerate()
+        .map(|(index, values)| {
+            RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(StringArray::from(values)),
+                    Arc::new(Int64Array::from(vec![
+                        (index * 2) as i64,
+                        (index * 2 + 1) as i64,
+                    ])),
+                    Arc::new(StringArray::from(vec![
+                        format!("{:04}", index * 2),
+                        format!("{:04}", index * 2 + 1),
+                    ])),
+                ],
+            )
+            .unwrap()
+        });
+    yss_tabular_io::write_parquet_batches(&path, schema.clone(), batches.map(Ok)).unwrap();
+    let page = combined.page(0, 4, &control()).unwrap();
+    assert_eq!(combined.schema().field(0).data_type(), &DataType::Int64);
+    assert_eq!(combined.schema().field(1).data_type(), &DataType::Float64);
+    assert_eq!(
+        page.data.columns()[0].values(),
+        &[V::Unsigned(1), V::Null, V::Unsigned(2), V::Unsigned(3)]
+    );
+    assert_eq!(
+        page.data.columns()[1].values(),
+        &[
+            V::Decimal(1.0.try_into().unwrap()),
+            V::Null,
+            V::Decimal(2.0.try_into().unwrap()),
+            V::Decimal(3.0.try_into().unwrap())
+        ]
+    );
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(combined.schema().field(0))
+            .unwrap()
+            .kind,
+        S::Numeric
+    );
+    assert_eq!(
+        binary.as_relation().unwrap().page(0, 4, &control()),
+        Err(RelationError::InvalidConversion)
+    );
+    let other = relation.limit(0, 2).unwrap();
+    assert_eq!(
+        other.convert_series(&input, SemanticConversion::new(S::Text, N::Auto)),
+        Err(RelationError::UnalignedSeries)
+    );
+    let mut cancelled = control();
+    cancelled
+        .cancellation
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert_eq!(
+        combined.page(0, 1, &cancelled),
+        Err(RelationError::Cancelled)
+    );
+    cancelled
+        .cancellation
+        .store(false, std::sync::atomic::Ordering::Release);
+    cancelled.deadline = Instant::now();
+    assert_eq!(
+        combined.page(0, 1, &cancelled),
+        Err(RelationError::DeadlineExceeded)
+    );
+}
+
+#[test]
+fn semantic_domains_and_calendar_fields_survive_lazy_projection_and_chained_conversion() {
+    use yss_data_contract::{
+        NumericRepresentation as N, SemanticConversion, SemanticType as S, SemanticValue,
+    };
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 1).unwrap();
+    let source = runtime
+        .batch_relation(
+            binding(),
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![
+                    Field::new("code", DataType::Utf8, true),
+                    Field::new("date", DataType::Utf8, true),
+                ])),
+                vec![
+                    Arc::new(StringArray::from(vec![Some("001"), Some("002"), None])),
+                    Arc::new(StringArray::from(vec![
+                        Some("2026-09-17T08:30:00+08:00"),
+                        Some("2026-09-18T09:30:00+08:00"),
+                        None,
+                    ])),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let code = source.select_series("code").unwrap();
+    let mut spec = SemanticConversion::new(S::Ordinal, N::Auto);
+    spec.domain.values = vec![
+        SemanticValue {
+            value: "002".into(),
+            label: "low".into(),
+        },
+        SemanticValue {
+            value: "001".into(),
+            label: "high".into(),
+        },
+    ];
+    let ordinal = source.convert_series(&code, spec.clone()).unwrap();
+    spec.domain.values.reverse();
+    let reversed = source.convert_series(&code, spec).unwrap();
+    assert_ne!(ordinal, reversed);
+    let categorical = source
+        .convert_series(&ordinal, SemanticConversion::new(S::Categorical, N::Auto))
+        .unwrap();
+    let identifier = source
+        .convert_series(
+            &categorical,
+            SemanticConversion::new(S::Identifier, N::Auto),
+        )
+        .unwrap();
+    let datetime = source
+        .convert_series(
+            &source.select_series("date").unwrap(),
+            SemanticConversion::new(S::Datetime, N::Auto),
+        )
+        .unwrap();
+    let projected = source
+        .project_series(&[ordinal, reversed, categorical, identifier, datetime])
+        .unwrap();
+    let schema = projected.schema();
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(schema.field(0))
+            .unwrap()
+            .values[0]
+            .value,
+        "002"
+    );
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(schema.field(1))
+            .unwrap()
+            .values[0]
+            .value,
+        "001"
+    );
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(schema.field(2))
+            .unwrap()
+            .kind,
+        S::Categorical
+    );
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(schema.field(3))
+            .unwrap()
+            .kind,
+        S::Identifier
+    );
+    assert_eq!(
+        schema.field(4).data_type(),
+        &DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None)
+    );
+    let page = projected.page(0, 3, &control()).unwrap();
+    for index in 0..4 {
+        assert_eq!(
+            serde_json::to_value(page.data.columns()[index].values()).unwrap(),
+            serde_json::json!(["001", "002", null])
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[4].values()).unwrap(),
+        serde_json::json!(["2026-09-17T08:30:00", "2026-09-18T09:30:00", null])
+    );
+}
+
+#[test]
 fn parquet_plans_are_lazy_and_joint_statistics_projection_preserves_alignment() {
     let runtime = DataFusionRuntime::new(32 * 1024 * 1024, 2).unwrap();
     let schema = Arc::new(

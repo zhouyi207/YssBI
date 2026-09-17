@@ -69,7 +69,7 @@ Pure Leaf
 
 `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog` 的全部生产模块归 Node。Graph 可以消费节点定义、注册表和目录；其他层按原有纯契约权限消费 Node Protocol。`rust.internal.node-boundary` 禁止 Node 引用任何 Graph crate，包括按 Pure Leaf 分类的图文档，精确 capability 也不能绕过此约束。Cargo 声明检查同时覆盖 Node 的开发依赖。
 
-`yss-node-kernel` 的生产模块归 Node Kernel。Application 负责装配，Execution 消费中立内核契约；Node Kernel 只使用中性契约和精确授权的 SCI Runtime 入口。`rust.internal.kernel-boundary` 禁止其依赖 Graph、Project 或 Application，包括按 Pure Leaf 分类的图/项目身份类型；Tauri 仍没有该层的依赖权限。
+`yss-node-kernel` 的生产模块归 Node Kernel。Application 负责装配，Execution 消费中立内核契约；Node Kernel 使用中立契约、精确授权的 SCI Runtime 入口，以及 `builtins::conversion` 对 Arrow 语义值转换函数的单一授权。该转换入口仅接收和返回中立 TabularScalar，不授予 Kernel 直接使用 Arrow/DataFusion 或数据集读写的权限。`rust.internal.kernel-boundary` 禁止其依赖 Graph、Project 或 Application，包括按 Pure Leaf 分类的图/项目身份类型；Tauri 仍没有该层的依赖权限。
 
 Frontend 当前 taxonomy：
 

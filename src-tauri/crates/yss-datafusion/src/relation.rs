@@ -355,6 +355,14 @@ impl RelationPlan for DataFusionRelation {
     ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         crate::series::arithmetic(operation, operands, output_type)
     }
+
+    fn convert_series(
+        &self,
+        series: &SeriesHandle,
+        conversion: yss_data_contract::SemanticConversion,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::series::convert(series, conversion)
+    }
 }
 
 pub(crate) fn query_error(error: datafusion::common::DataFusionError) -> RelationError {

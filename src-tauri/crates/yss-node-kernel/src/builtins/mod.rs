@@ -1,3 +1,4 @@
+mod conversion;
 mod numeric;
 mod relational;
 mod statistics;
@@ -98,7 +99,19 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         ("yssbi.compare.less_equal", LessEqual, &[], 1..=1),
         ("yssbi.compare.greater", Greater, &[], 1..=1),
         ("yssbi.compare.greater_equal", GreaterEqual, &[], 1..=1),
-        ("yssbi.value.convert", Convert, &["target_type"], 1..=1),
+        (
+            "yssbi.value.convert",
+            Convert,
+            &[
+                "target_type",
+                "numeric_mode",
+                "semantic_domain",
+                "datetime_kind",
+                "datetime_precision",
+                "datetime_format",
+            ],
+            1..=1,
+        ),
         ("yssbi.debug.view", Identity, &[], 0..=0),
         ("yssbi.core.reroute", Identity, &[], 1..=1),
     ];
@@ -118,7 +131,8 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 std::num::NonZeroU32::new(match kind {
                     Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual => 3,
                     Statistical(OlsFit | OlsSummary) => 2,
-                    Numeric(_) | Convert | Relational(relational::RelationalKernel::Filter) => 2,
+                    Convert => 5,
+                    Numeric(_) | Relational(relational::RelationalKernel::Filter) => 2,
                     _ => 1,
                 })
                 .expect("built-in implementation revision"),
@@ -166,18 +180,7 @@ fn execute_kernel(
         | BuiltinKernel::LessEqual
         | BuiltinKernel::Greater
         | BuiltinKernel::GreaterEqual => compare_numeric(kind, inputs),
-        BuiltinKernel::Convert => {
-            let target = outputs
-                .first()
-                .map(|output| &output.data_type)
-                .ok_or(KernelError::Failed)?;
-            inputs
-                .first()
-                .cloned()
-                .ok_or(KernelError::Failed)?
-                .coerce_to(target)
-                .map_err(|_| KernelError::Failed)
-        }
+        BuiltinKernel::Convert => conversion::execute(invocation),
         BuiltinKernel::Identity if outputs.is_empty() => return Ok(Vec::new()),
         BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelError::Failed),
     }?;

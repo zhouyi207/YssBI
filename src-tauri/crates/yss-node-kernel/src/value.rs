@@ -4,10 +4,11 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use yss_data_contract::{DataValue, ValueType};
+use yss_data_contract::DataValue;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
+    Annotated(std::sync::Arc<AnnotatedRuntimeValue>),
     Null,
     Bool(bool),
     Integer(i64),
@@ -22,14 +23,24 @@ pub enum RuntimeValue {
     Ols(std::sync::Arc<yss_sci_contract::scientific::OlsResult>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct AnnotatedRuntimeValue {
+    value: RuntimeValue,
+    metadata: yss_data_contract::ConversionMetadata,
+}
+
+impl AnnotatedRuntimeValue {
+    pub fn value(&self) -> &RuntimeValue {
+        &self.value
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
 pub enum RuntimeValueError {
     #[error("runtime value is not representable")]
     Unrepresentable,
     #[error("runtime numeric value is not finite")]
     NonFinite,
-    #[error("runtime value cannot be coerced to the requested type")]
-    InvalidCoercion,
 }
 
 impl TryFrom<&DataValue> for RuntimeValue {
@@ -63,6 +74,58 @@ impl TryFrom<&DataValue> for RuntimeValue {
 }
 
 impl RuntimeValue {
+    /// Retain conversion metadata when primitive carriers cannot express the meaning.
+    /// An annotation contains only a scalar or flat scalar list, never another annotation or a handle.
+    pub fn with_metadata(
+        self,
+        metadata: yss_data_contract::ConversionMetadata,
+    ) -> Result<Self, RuntimeValueError> {
+        let scalars = match &self {
+            Self::List(values) => values.as_ref(),
+            value => std::slice::from_ref(value),
+        };
+        for value in scalars {
+            match value {
+                Self::Null
+                | Self::Bool(_)
+                | Self::Integer(_)
+                | Self::Unsigned(_)
+                | Self::String(_) => {}
+                Self::Decimal(value) if value.is_finite() => {}
+                Self::Decimal(_) => return Err(RuntimeValueError::NonFinite),
+                _ => return Err(RuntimeValueError::Unrepresentable),
+            }
+        }
+        if matches!(
+            metadata.semantic.kind,
+            yss_data_contract::SemanticType::Numeric
+                | yss_data_contract::SemanticType::Text
+                | yss_data_contract::SemanticType::Binary
+        ) {
+            return Ok(self);
+        }
+        Ok(Self::Annotated(std::sync::Arc::new(
+            AnnotatedRuntimeValue {
+                value: self,
+                metadata,
+            },
+        )))
+    }
+
+    pub fn metadata(&self) -> Option<&yss_data_contract::ConversionMetadata> {
+        match self {
+            Self::Annotated(value) => Some(&value.metadata),
+            _ => None,
+        }
+    }
+
+    pub fn unannotated(&self) -> &Self {
+        match self {
+            Self::Annotated(value) => value.value(),
+            value => value,
+        }
+    }
+
     pub(crate) fn numeric_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use RuntimeValue::{Decimal, Integer, Unsigned};
         // i128 represents every supported integer. A finite float is truncated
@@ -77,7 +140,7 @@ impl RuntimeValue {
                 })
             })
         }
-        match (self, other) {
+        match (self.unannotated(), other.unannotated()) {
             (Integer(a), Integer(b)) => Some(a.cmp(b)),
             (Unsigned(a), Unsigned(b)) => Some(a.cmp(b)),
             (Integer(a), Unsigned(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
@@ -93,7 +156,7 @@ impl RuntimeValue {
 
     pub(crate) fn semantic_eq(&self, other: &Self) -> bool {
         use RuntimeValue::{Decimal, Integer, Unsigned};
-        match (self, other) {
+        match (self.unannotated(), other.unannotated()) {
             (Integer(_) | Unsigned(_) | Decimal(_), Integer(_) | Unsigned(_) | Decimal(_)) => {
                 self.numeric_cmp(other) == Some(std::cmp::Ordering::Equal)
             }
@@ -105,55 +168,7 @@ impl RuntimeValue {
                     && a.iter()
                         .all(|(key, a)| b.get(key).is_some_and(|b| a.semantic_eq(b)))
             }
-            _ => self == other,
-        }
-    }
-
-    pub fn coerce_to(self, target: &ValueType) -> Result<Self, RuntimeValueError> {
-        use yss_data_contract::SemanticType;
-        match target {
-            ValueType::Any => Ok(self),
-            ValueType::Scalar(SemanticType::Numeric) => match self {
-                Self::Integer(_) | Self::Unsigned(_) => Ok(self),
-                Self::Decimal(value) if value.is_finite() => Ok(Self::Decimal(value)),
-                Self::Bool(value) => Ok(Self::Integer(i64::from(value))),
-                Self::String(value) => {
-                    if let Ok(integer) = value.parse::<i64>() {
-                        return Ok(Self::Integer(integer));
-                    }
-                    if let Ok(integer) = value.parse::<u64>() {
-                        return Ok(Self::Unsigned(integer));
-                    }
-                    value
-                        .parse::<f64>()
-                        .ok()
-                        .filter(|value| value.is_finite())
-                        .map(Self::Decimal)
-                        .ok_or(RuntimeValueError::InvalidCoercion)
-                }
-                _ => Err(RuntimeValueError::InvalidCoercion),
-            },
-            ValueType::Scalar(SemanticType::Binary) => match self {
-                Self::Bool(_) | Self::Null => Ok(self),
-                Self::Integer(0) | Self::Unsigned(0) => Ok(Self::Bool(false)),
-                Self::Integer(1) | Self::Unsigned(1) => Ok(Self::Bool(true)),
-                Self::Decimal(0.0) => Ok(Self::Bool(false)),
-                Self::Decimal(1.0) => Ok(Self::Bool(true)),
-                Self::String(value) if value.as_ref() == "true" => Ok(Self::Bool(true)),
-                Self::String(value) if value.as_ref() == "false" => Ok(Self::Bool(false)),
-                _ => Err(RuntimeValueError::InvalidCoercion),
-            },
-            ValueType::Scalar(SemanticType::Text) => match self {
-                Self::String(_) | Self::Null => Ok(self),
-                Self::Bool(value) => Ok(Self::String(value.to_string().into())),
-                Self::Integer(value) => Ok(Self::String(value.to_string().into())),
-                Self::Unsigned(value) => Ok(Self::String(value.to_string().into())),
-                Self::Decimal(value) if value.is_finite() => {
-                    Ok(Self::String(value.to_string().into()))
-                }
-                _ => Err(RuntimeValueError::InvalidCoercion),
-            },
-            _ => Err(RuntimeValueError::InvalidCoercion),
+            (left, right) => left == right,
         }
     }
 }

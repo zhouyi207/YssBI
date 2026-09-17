@@ -9449,6 +9449,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "url",
+ "yss-data-contract",
  "yss-database-contract",
  "yss-dataset-profile",
  "yss-relational-contract",
@@ -9824,6 +9825,8 @@ dependencies = [
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",
+ "yss-tabular-arrow",
+ "yss-tabular-contract",
 ]
 
 [[package]]
@@ -10017,6 +10020,7 @@ dependencies = [
  "arrow-schema",
  "futures-core",
  "thiserror 2.0.20",
+ "yss-data-contract",
  "yss-database-contract",
  "yss-tabular-contract",
 ]

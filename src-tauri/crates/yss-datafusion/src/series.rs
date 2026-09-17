@@ -12,7 +12,76 @@ use yss_relational_contract::{
 
 pub(crate) struct DataFusionSeries {
     pub expression: Expr,
-    pub field: Field,
+    pub field: Arc<Field>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct SemanticConversionFunction {
+    signature: datafusion::logical_expr::Signature,
+    conversion: Arc<yss_tabular_arrow::PreparedConversion>,
+}
+
+impl datafusion::logical_expr::ScalarUDFImpl for SemanticConversionFunction {
+    fn name(&self) -> &str {
+        "yss_semantic_conversion"
+    }
+    fn signature(&self) -> &datafusion::logical_expr::Signature {
+        &self.signature
+    }
+    fn return_type(&self, _: &[DataType]) -> datafusion::common::Result<DataType> {
+        Ok(self.conversion.field().data_type().clone())
+    }
+    fn return_field_from_args(
+        &self,
+        _: datafusion::logical_expr::ReturnFieldArgs,
+    ) -> datafusion::common::Result<Arc<Field>> {
+        Ok(self.conversion.field().clone())
+    }
+    fn invoke_with_args(
+        &self,
+        arguments: datafusion::logical_expr::ScalarFunctionArgs,
+    ) -> datafusion::common::Result<ColumnarValue> {
+        let [input] = arguments.args.as_slice() else {
+            return Err(failure(RelationError::InvalidInput));
+        };
+        let arrays = ColumnarValue::values_to_arrays(&arguments.args)?;
+        let output = self
+            .conversion
+            .convert(arrays[0].as_ref())
+            .map_err(|_| failure(RelationError::InvalidConversion))?;
+        if matches!(input, ColumnarValue::Scalar(_)) {
+            Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                output.as_ref(),
+                0,
+            )?))
+        } else {
+            Ok(ColumnarValue::Array(output))
+        }
+    }
+}
+
+pub(crate) fn convert(
+    series: &SeriesHandle,
+    conversion: yss_data_contract::SemanticConversion,
+) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+    let source = series.plan().field();
+    let conversion = Arc::new(
+        yss_tabular_arrow::PreparedConversion::new(source, &conversion)
+            .map_err(|_| RelationError::InvalidConversion)?,
+    );
+    let field = conversion.field().clone();
+    // Field metadata and policy participate in Eq/Hash, without exposing codes in a UDF name.
+    let function = datafusion::logical_expr::ScalarUDF::from(SemanticConversionFunction {
+        signature: datafusion::logical_expr::Signature::exact(
+            vec![source.data_type().clone()],
+            Volatility::Immutable,
+        ),
+        conversion,
+    });
+    Ok(Arc::new(DataFusionSeries {
+        expression: function.call(vec![expression(series)?]),
+        field,
+    }))
 }
 
 impl SeriesPlan for DataFusionSeries {
@@ -33,7 +102,7 @@ impl SeriesPlan for DataFusionSeries {
 pub(crate) fn column(field: &Field) -> Arc<dyn SeriesPlan> {
     Arc::new(DataFusionSeries {
         expression: Expr::Column(Column::from_name(field.name().clone())),
-        field: field.clone(),
+        field: Arc::new(field.clone()),
     })
 }
 
@@ -174,6 +243,6 @@ pub(crate) fn arithmetic(
     );
     Ok(Arc::new(DataFusionSeries {
         expression: function.call(expressions),
-        field: Field::new("result", data_type, false),
+        field: Arc::new(Field::new("result", data_type, false)),
     }))
 }

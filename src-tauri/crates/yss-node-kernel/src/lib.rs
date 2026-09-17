@@ -16,7 +16,7 @@ pub use registry::{
     KernelBindingError, KernelContract, KernelRegistrationError, KernelRegistry,
     KernelRegistryBuilder,
 };
-pub use value::{RuntimeValue, RuntimeValueError};
+pub use value::{AnnotatedRuntimeValue, RuntimeValue, RuntimeValueError};
 
 #[cfg(test)]
 mod tests;

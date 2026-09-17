@@ -17,6 +17,13 @@ Arrow 字段的 Physical 选择整数/浮点表示，除法使用浮点表示，
 Equal/NotEqual 对列表和记录递归应用该规则，其他运行值维持原有值或资源身份相等语义。
 Graph 的广播说明不提前改写标量值。数值、转换、比较和关系筛选适配的行为变化会推进实现 revision。
 
+类型转换支持七种 Semantic，保留标量/数列结构。`builtins::conversion` 仅通过
+`yss-tabular-arrow::convert_semantic_values` 的精确能力调用处理已物化值，输入输出使用中立
+`TabularScalar` 和 `ConversionMetadata`，不在 Kernel 内直接使用 Arrow 或 DataFusion。Arrow 适配器直接从借用的中立值构建数组，复用 `PreparedConversion` 的转换与校验。
+已物化的分类、顺序、日期时间及标识输出通过 `RuntimeValue::with_metadata` 保留含义、值域和已确定的时间表示。标注载荷只允许标量或平坦标量列表，字段私有，不能嵌套标注或包装资源句柄；后续转换继承元数据，展示端剥离标注投影原值。惰性数列通过 `RelationHandle::convert_series`
+生成表达式，持有共享的预编译转换对象；每个批次继续执行值域、精度和范围检查。数值表示策略、Null 和失败规则见内置节点帮助。
+目标语义为 Auto 时，内核使用调用方提供的已解析输出语义，不读取图连接或从输入值猜测目标；未确定或冲突的自动目标由 Graph 阻止进入执行计划。
+
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
 `KernelError` 只表达计算错误、取消和超时。Execution 的 `OperationExecutionError` 负责图来源与阶段，并继续投影已有 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。

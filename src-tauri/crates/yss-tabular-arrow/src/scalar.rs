@@ -410,64 +410,122 @@ pub fn array_to_json(array: &dyn Array) -> Result<Vec<Value>, TabularArrowError>
 
 /// Materialize a document literal, whose contract has no exact storage dtype. Mixed numeric
 /// columns may widen only if all their values can be represented without integer precision loss.
-pub fn to_record_batch(snapshot: &TabularSnapshot) -> Result<RecordBatch, TabularArrowError> {
-    let mut fields = Vec::new();
-    let mut arrays = Vec::new();
-    for column in snapshot.columns() {
-        let mut dtype = DataType::Null;
-        for value in column.values() {
-            let next = match value {
-                TabularScalar::Null => continue,
-                TabularScalar::Bool(_) => DataType::Boolean,
-                TabularScalar::Integer(_) => DataType::Int64,
-                TabularScalar::Unsigned(_) => DataType::UInt64,
-                TabularScalar::Decimal(_) => DataType::Float64,
-                TabularScalar::String(_) => DataType::Utf8,
-            };
-            dtype = match (&dtype, &next) {
-                (DataType::Null, _) => next,
-                (a, b) if a == b => next,
-                (DataType::Int64, DataType::UInt64) | (DataType::UInt64, DataType::Int64) => {
-                    DataType::UInt64
-                }
-                (a, b) if a.is_numeric() && b.is_numeric() => DataType::Float64,
-                _ => return Err(TabularArrowError::InvalidValue),
-            };
-        }
-        if dtype == DataType::UInt64
-            && column
-                .values()
-                .iter()
-                .any(|v| matches!(v, TabularScalar::Integer(v) if *v < 0))
-        {
-            if column
-                .values()
-                .iter()
-                .any(|v| matches!(v, TabularScalar::Unsigned(v) if *v > i64::MAX as u64))
-            {
-                return Err(TabularArrowError::InvalidValue);
+pub(crate) fn scalars_to_array(values: &[TabularScalar]) -> Result<ArrayRef, TabularArrowError> {
+    let mut dtype = DataType::Null;
+    for value in values {
+        let next = match value {
+            TabularScalar::Null => continue,
+            TabularScalar::Bool(_) => DataType::Boolean,
+            TabularScalar::Integer(_) => DataType::Int64,
+            TabularScalar::Unsigned(_) => DataType::UInt64,
+            TabularScalar::Decimal(_) => DataType::Float64,
+            TabularScalar::String(_) => DataType::Utf8,
+        };
+        dtype = match (&dtype, &next) {
+            (DataType::Null, _) => next,
+            (a, b) if a == b => next,
+            (DataType::Int64, DataType::UInt64) | (DataType::UInt64, DataType::Int64) => {
+                DataType::UInt64
             }
-            dtype = DataType::Int64;
-        }
-        if dtype == DataType::Float64
-            && column.values().iter().any(|value| match value {
-                TabularScalar::Integer(value) => (*value as f64) as i128 != i128::from(*value),
-                TabularScalar::Unsigned(value) => (*value as f64) as u128 != u128::from(*value),
-                _ => false,
-            })
+            (a, b) if a.is_numeric() && b.is_numeric() => DataType::Float64,
+            _ => return Err(TabularArrowError::InvalidValue),
+        };
+    }
+    if dtype == DataType::UInt64
+        && values
+            .iter()
+            .any(|v| matches!(v, TabularScalar::Integer(v) if *v < 0))
+    {
+        if values
+            .iter()
+            .any(|v| matches!(v, TabularScalar::Unsigned(v) if *v > i64::MAX as u64))
         {
             return Err(TabularArrowError::InvalidValue);
         }
-        let field = Field::new(column.name().as_str(), dtype, true);
-        let values = column
-            .values()
-            .iter()
-            .map(serde_json::to_value)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| TabularArrowError::InvalidValue)?;
-        arrays.push(json_to_array(&field, &values)?);
-        fields.push(field);
+        dtype = DataType::Int64;
     }
+    if dtype == DataType::Float64
+        && values.iter().any(|value| match value {
+            TabularScalar::Integer(value) => (*value as f64) as i128 != i128::from(*value),
+            TabularScalar::Unsigned(value) => (*value as f64) as u128 != u128::from(*value),
+            _ => false,
+        })
+    {
+        return Err(TabularArrowError::InvalidValue);
+    }
+    let invalid = || TabularArrowError::InvalidValue;
+    Ok(match dtype {
+        DataType::Null => new_null_array(&dtype, values.len()),
+        DataType::Boolean => Arc::new(BooleanArray::from(
+            values
+                .iter()
+                .map(|value| match value {
+                    TabularScalar::Null => Ok(None),
+                    TabularScalar::Bool(value) => Ok(Some(*value)),
+                    _ => Err(invalid()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        DataType::Int64 => Arc::new(Int64Array::from(
+            values
+                .iter()
+                .map(|value| match value {
+                    TabularScalar::Null => Ok(None),
+                    TabularScalar::Integer(value) => Ok(Some(*value)),
+                    TabularScalar::Unsigned(value) => {
+                        i64::try_from(*value).map(Some).map_err(|_| invalid())
+                    }
+                    _ => Err(invalid()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        DataType::UInt64 => Arc::new(UInt64Array::from(
+            values
+                .iter()
+                .map(|value| match value {
+                    TabularScalar::Null => Ok(None),
+                    TabularScalar::Unsigned(value) => Ok(Some(*value)),
+                    TabularScalar::Integer(value) => {
+                        u64::try_from(*value).map(Some).map_err(|_| invalid())
+                    }
+                    _ => Err(invalid()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        DataType::Float64 => Arc::new(Float64Array::from(
+            values
+                .iter()
+                .map(|value| match value {
+                    TabularScalar::Null => Ok(None),
+                    TabularScalar::Decimal(value) => Ok(Some(value.as_f64())),
+                    TabularScalar::Integer(value) => Ok(Some(*value as f64)),
+                    TabularScalar::Unsigned(value) => Ok(Some(*value as f64)),
+                    _ => Err(invalid()),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
+        DataType::Utf8 => Arc::new(StringArray::from_iter(values.iter().map(
+            |value| match value {
+                TabularScalar::String(value) => Some(value.as_ref()),
+                _ => None,
+            },
+        ))),
+        _ => return Err(TabularArrowError::UnsupportedType),
+    })
+}
+
+pub fn to_record_batch(snapshot: &TabularSnapshot) -> Result<RecordBatch, TabularArrowError> {
+    let arrays = snapshot
+        .columns()
+        .iter()
+        .map(|column| scalars_to_array(column.values()))
+        .collect::<Result<Vec<_>, _>>()?;
+    let fields = snapshot
+        .columns()
+        .iter()
+        .zip(&arrays)
+        .map(|(column, array)| Field::new(column.name().as_str(), array.data_type().clone(), true))
+        .collect::<Vec<_>>();
     RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays)
         .map_err(|_| TabularArrowError::BuildFailed)
 }

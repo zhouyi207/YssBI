@@ -3,7 +3,9 @@
 //! RecordBatch and its exact Schema remain the storage/execution representation. JSON and
 //! TabularSnapshot are bounded display/literal projections, never storage schema authorities.
 
+mod conversion;
 mod edit_type;
+pub use conversion::{PreparedConversion, convert_semantic_values};
 mod scalar;
 mod temporal;
 pub use edit_type::editable_data_type;

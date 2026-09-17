@@ -12,3 +12,4 @@ futures-core.workspace = true
 thiserror.workspace = true
 yss-database-contract = { path = "../yss-database-contract" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-data-contract = { path = "../yss-data-contract" }

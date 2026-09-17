@@ -16,6 +16,7 @@ yss-relational-contract = { path = "../yss-relational-contract" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-tabular-arrow = { path = "../yss-tabular-arrow" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-data-contract = { path = "../yss-data-contract" }
 
 [dev-dependencies]
 yss-database-contract = { path = "../yss-database-contract" }

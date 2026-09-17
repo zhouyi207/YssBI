@@ -208,6 +208,12 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::NodeKernel,
+        repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/conversion.rs",
+        fully_qualified_owner: "yss_node_kernel::builtins::conversion",
+        canonical_origin_targets: &["yss_tabular_arrow::conversion::convert_semantic_values"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::NodeKernel,
         repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/statistics.rs",
         fully_qualified_owner: "yss_node_kernel::builtins::statistics",
         canonical_origin_targets: &["yss_sci_runtime::computation::ols"],
@@ -500,6 +506,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yss_application::database::samples::SampleImportError::Sample",
             "yss_application::database::samples::SampleImportError::Database",
             "yss_application::ipc::schema::database::SampleDatasetDto",
+            "yss_application::ipc::schema::database::ColumnSemanticDto",
             "yss_application::database::DatabaseMutation",
             "yss_application::database::LoadDatabaseResult",
             "yss_application::database::error::DatabaseOperationError",

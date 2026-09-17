@@ -64,7 +64,7 @@ impl std::str::FromStr for SemanticType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SemanticValue {
     /// Exact text representation of the stored value; never a JavaScript number.
@@ -73,7 +73,7 @@ pub struct SemanticValue {
     pub label: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NumericConstraints {
     #[serde(default)]
@@ -84,7 +84,7 @@ pub struct NumericConstraints {
     pub maximum: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ColumnSemantic {
     pub kind: SemanticType,
