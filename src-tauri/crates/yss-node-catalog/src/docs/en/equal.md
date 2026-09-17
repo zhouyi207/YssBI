@@ -6,8 +6,10 @@ $$
 \text{Result} = (A = B)
 $$
 
-Compares two values with a shared input type. Numeric values compare exactly across signed integer, unsigned integer and floating representations, without epsilon or lossy integer conversion. Lists and records compare their contents using the same rules; other values compare by value or resource identity. Output is a single `Boolean` (not a `DataSeries`).
+Compares scalars or series with matching meanings, supporting all seven basic meanings. Numeric values compare exactly across signed integer, unsigned integer and floating representations without epsilon or lossy promotion. Text compares original case-sensitive values without numeric parsing. Categorical and Ordinal compare codes rather than display labels.
+
+Two scalars return a Binary scalar. Any series input returns element-wise Binary results with scalar broadcasting on either side. Materialized series must have equal lengths; lazy series must share one relation row domain and cannot mix with unaligned materialized lists. A missing operand produces a missing result. Non-finite numbers and unsupported representations fail.
 
 ## Usage
 
-Produce a Boolean condition for filters or combine it with **And** / **Or**. For series-wise comparison, use dedicated **DataSeries** compare nodes.
+Produce comparison results for downstream computation. Use Whole Value Equal to compare complete lists or records and return one result.

@@ -15,9 +15,16 @@
       "title": "Data Flow"
     },
     {
-      "categoryId": "conversion",
-      "order": 25,
+      "categoryId": "operations",
+      "order": 20,
       "parentCategoryId": null,
+      "searchText": "operations",
+      "title": "Operations"
+    },
+    {
+      "categoryId": "conversion",
+      "order": 40,
+      "parentCategoryId": "operations",
       "searchText": "conversion",
       "title": "Conversion"
     },
@@ -29,32 +36,25 @@
       "title": "Database"
     },
     {
-      "categoryId": "dataframe",
+      "categoryId": "data_processing",
       "order": 60,
       "parentCategoryId": null,
+      "searchText": "data processing",
+      "title": "Data Processing"
+    },
+    {
+      "categoryId": "dataframe",
+      "order": 60,
+      "parentCategoryId": "data_processing",
       "searchText": "dataframe",
       "title": "DataFrame"
     },
     {
-      "categoryId": "dataframe.panel",
-      "order": 63,
-      "parentCategoryId": "dataframe",
-      "searchText": "panel data",
-      "title": "Panel Data"
-    },
-    {
       "categoryId": "dataframe.series",
       "order": 61,
-      "parentCategoryId": "dataframe",
+      "parentCategoryId": "data_processing",
       "searchText": "dataseries",
       "title": "DataSeries"
-    },
-    {
-      "categoryId": "dataframe.timeseries",
-      "order": 62,
-      "parentCategoryId": "dataframe",
-      "searchText": "time series",
-      "title": "Time Series"
     },
     {
       "categoryId": "debug",

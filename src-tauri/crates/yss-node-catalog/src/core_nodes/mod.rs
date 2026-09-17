@@ -19,14 +19,12 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             title_key: i18n("types.data_series.title")?,
             arity: 1,
         });
-    fragment.categories.extend([
-        category("conversion", "categories.conversion.title", 25)?,
-        category("debug", "categories.debug.title", 60)?,
-    ]);
+    fragment
+        .categories
+        .push(category("debug", "categories.debug.title", 60)?);
     for (key, en, zh) in [
         ("types.categorical.title", "Categorical", "分类"),
         ("types.data_series.title", "DataSeries", "数据序列"),
-        ("categories.conversion.title", "Conversion", "转换"),
         ("categories.debug.title", "Debug", "调试"),
     ] {
         let key = i18n(key)?;

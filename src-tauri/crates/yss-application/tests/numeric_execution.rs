@@ -347,6 +347,97 @@ fn zero_divisor_reports_the_reason_and_divide_node() {
     );
 }
 
+#[test]
+fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
+    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType as S, ValueType as T};
+    let mut document = GraphDocument::default();
+    let [left, right, comparison] = [NodeId::new(), NodeId::new(), NodeId::new()];
+    for (id, kind) in [
+        (left, "yssbi.constant.get"),
+        (right, "yssbi.constant.get"),
+        (comparison, "yssbi.logic.equal"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    set_constant(
+        &mut document,
+        left,
+        T::DataSeries(Box::new(T::Scalar(S::Text))),
+        DataValue::DataSeries(DataSeriesValue::with_element_type(
+            r#"{"value":["001","1",null]}"#,
+            T::Scalar(S::Text),
+        )),
+    );
+    set_constant(
+        &mut document,
+        right,
+        T::Scalar(S::Text),
+        DataValue::String("1".into()),
+    );
+    for value in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(value).unwrap();
+    }
+    for (source, pin) in [(left, "left"), (right, "right")] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(source, "value".parse().unwrap()),
+                input: PortAddress::declared(comparison, pin.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    assert_eq!(
+        execute(&document, "yssbi.logic.equal").unwrap(),
+        RuntimeValue::List(Box::new([
+            RuntimeValue::Bool(false),
+            RuntimeValue::Bool(true),
+            RuntimeValue::Null
+        ]))
+    );
+    for edge in document.connections.values_mut() {
+        let pin = if edge.output.node_id == left {
+            "right"
+        } else {
+            "left"
+        };
+        edge.input = PortAddress::declared(comparison, pin.parse().unwrap());
+    }
+    assert_eq!(
+        execute(&document, "yssbi.logic.equal").unwrap(),
+        RuntimeValue::List(Box::new([
+            RuntimeValue::Bool(false),
+            RuntimeValue::Bool(true),
+            RuntimeValue::Null
+        ]))
+    );
+    set_constant(
+        &mut document,
+        right,
+        T::Scalar(S::Numeric),
+        DataValue::Int64(1),
+    );
+    let graph = GraphResourcePath::new("events/comparison.yssbi-event").unwrap();
+    let resources = ResourceCatalogSnapshot::new(
+        BTreeMap::new(),
+        BTreeMap::new(),
+        ResourceCatalogFingerprint::from_bytes([0; 32]),
+    );
+    let analysis = analyze_document(&document, &graph, &resources);
+    assert!(analysis.semantic_snapshot().has_blocking_diagnostics());
+}
+
 fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
@@ -666,7 +757,7 @@ fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_cha
             }
             assert_eq!(
                 execute(&document, "yssbi.logic.equal").unwrap(),
-                RuntimeValue::Bool(true)
+                RuntimeValue::List(Box::new([RuntimeValue::Bool(true), RuntimeValue::Null]))
             );
         };
     let domain = serde_json::json!({"values":[{"value":"002","label":"low"},{"value":"001","label":"high"}]});

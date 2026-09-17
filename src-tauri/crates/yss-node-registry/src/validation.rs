@@ -531,6 +531,15 @@ fn validate_typing(
 
     match typing {
         NodeTypingSpec::Fixed => Ok(()),
+        NodeTypingSpec::Comparison {
+            left,
+            right,
+            output: result,
+        } => {
+            input(&PortSelector::Declared(left.clone()))?;
+            input(&PortSelector::Declared(right.clone()))?;
+            output(result)
+        }
         NodeTypingSpec::ColumnOutput {
             input: input_key,
             column,

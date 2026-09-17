@@ -88,6 +88,11 @@ pub enum ShapeRule {
 pub enum NodeTypingSpec {
     #[default]
     Fixed,
+    Comparison {
+        left: PortKey,
+        right: PortKey,
+        output: PortKey,
+    },
     Identity {
         input: PortKey,
         output: PortKey,

@@ -434,13 +434,21 @@ fn assemble_builtin_parts()
             spec.aliases,
             spec.zh_aliases,
         );
-        let protocol = if matches!(spec.id, "equal" | "not_equal") {
-            equality_protocol(id)?
-        } else {
-            binary_protocol(id, "logic", "core.numeric", "core.binary")?
-        };
+        let protocol = comparison_protocol(id, matches!(spec.id, "equal" | "not_equal"))?;
         nodes.push(leaf(protocol, spec.kernel));
     }
+    add_node_messages(
+        messages,
+        "yssbi.logic.whole_equal",
+        "Whole Value Equal",
+        "整体相等",
+        &["deep equal", "whole list equal"],
+        &["整体相等", "列表相等"],
+    );
+    nodes.push(leaf(
+        equality_protocol("yssbi.logic.whole_equal")?,
+        "compare.whole_equal",
+    ));
     for spec in LOGIC {
         let id = leak(format!("yssbi.logic.{}", spec.id));
         add_node_messages(
@@ -498,6 +506,7 @@ fn assemble_builtin_parts()
             ("operations", None, 20),
             ("numeric", Some("operations"), 20),
             ("logic", Some("operations"), 30),
+            ("conversion", Some("operations"), 40),
             ("dataflow", None, 40),
             ("project", None, 50),
         ]
@@ -574,6 +583,51 @@ fn binary_protocol(
         vec![],
         pure(),
     )
+}
+
+fn comparison_protocol(
+    id: &'static str,
+    equality: bool,
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let input = TypeExpr::Union(
+        SemanticType::ALL
+            .into_iter()
+            .filter(|kind| equality || matches!(kind, SemanticType::Numeric | SemanticType::Text))
+            .map(|kind| {
+                let scalar = TypeExpr::Concrete(sid(kind.type_id(), TypeId::new)?);
+                Ok([scalar.clone(), data_series_type(scalar)])
+            })
+            .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?
+            .into_iter()
+            .flatten()
+            .collect(),
+    );
+    let binary = TypeExpr::Concrete(sid("core.binary", TypeId::new)?);
+    let output = TypeExpr::Union(vec![binary.clone(), data_series_type(binary)]);
+    let mut protocol = protocol(
+        id,
+        "logic",
+        vec![
+            data_port_expr("left", "Left", PortDirection::Input, input.clone())?,
+            data_port_expr("right", "Right", PortDirection::Input, input)?,
+            data_port_expr("result", "Result", PortDirection::Output, output)?,
+        ],
+        vec![],
+        pure(),
+    )?;
+    protocol.typing = NodeTypingSpec::Comparison {
+        left: sid("left", PortKey::new)?,
+        right: sid("right", PortKey::new)?,
+        output: sid("result", PortKey::new)?,
+    };
+    for port in &mut protocol.interface.ports {
+        if port.direction == PortDirection::Input {
+            port.consumption = Some(InputConsumption::Streaming);
+        } else {
+            port.production = Some(OutputProduction::Streaming);
+        }
+    }
+    Ok(protocol)
 }
 
 fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyError> {
@@ -754,6 +808,7 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("categories.operations.title", "Operations", "运算"),
         ("categories.numeric.title", "Arithmetic", "算术"),
         ("categories.logic.title", "Logic", "逻辑"),
+        ("categories.conversion.title", "Conversion", "转换"),
         ("categories.dataflow.title", "Data Flow", "数据流"),
         ("categories.project.title", "Project", "项目"),
         ("parameters.value.title", "Value", "值"),

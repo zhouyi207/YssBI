@@ -584,6 +584,52 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
+        NodeTypingSpec::Comparison {
+            left,
+            right,
+            output,
+        } => {
+            let selected = [left, right].map(|key| declared_port(ports, key));
+            let result = match selected {
+                [Some(left), Some(right)] => {
+                    let left_state = &states[&left.address];
+                    let right_state = &states[&right.address];
+                    match (left_state.domain(), right_state.domain()) {
+                        (Some(a), Some(b)) => {
+                            let candidates = a
+                                .iter()
+                                .flat_map(|a| b.iter().filter_map(move |b| comparison_result(a, b)))
+                                .collect::<Vec<_>>();
+                            let result = if candidates.is_empty() {
+                                TypeState::Conflict(TypeConflict::IncompatibleInputs)
+                            } else {
+                                state_from_candidates(candidates)
+                            };
+                            if let Some(ResolvedType::Applied { .. }) = result.exact() {
+                                for port in [left, right] {
+                                    if matches!(
+                                        states[&port.address].exact(),
+                                        Some(ResolvedType::Nominal(_))
+                                    ) {
+                                        coercions.push(GraphInputCoercion {
+                                            address: port.address.clone(),
+                                            kind: InputCoercionKind::BroadcastScalarToSeries,
+                                        });
+                                    }
+                                }
+                            }
+                            result
+                        }
+                        (None, _) => left_state.clone(),
+                        (_, None) => right_state.clone(),
+                    }
+                }
+                _ => TypeState::Unknown(TypeUnknownReason::UnconnectedInput),
+            };
+            if let Some(output) = declared_port(ports, output) {
+                states.insert(output.address.clone(), result);
+            }
+        }
         NodeTypingSpec::ShapePreservingNumeric { input, output } => {
             let state = declared_port(ports, input)
                 .and_then(|port| states.get(&port.address))
@@ -700,6 +746,36 @@ enum NumericShape {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 struct NumericType {
     shape: NumericShape,
+}
+
+fn comparison_result(left: &ResolvedType, right: &ResolvedType) -> Option<ResolvedType> {
+    fn element(value: &ResolvedType) -> Option<(&yss_node_protocol::TypeId, bool)> {
+        match value {
+            ResolvedType::Nominal(id) => Some((id, false)),
+            ResolvedType::Applied {
+                constructor,
+                arguments,
+            } if constructor.as_str() == "core.data_series" => match arguments.as_ref() {
+                [ResolvedType::Nominal(id)] => Some((id, true)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    let (left, left_series) = element(left)?;
+    let (right, right_series) = element(right)?;
+    if left != right {
+        return None;
+    }
+    let binary = ResolvedType::Nominal("core.binary".parse().expect("binary type"));
+    Some(if left_series || right_series {
+        ResolvedType::Applied {
+            constructor: "core.data_series".parse().expect("series type"),
+            arguments: Box::new([binary]),
+        }
+    } else {
+        binary
+    })
 }
 
 fn numeric_fold_state(

@@ -231,6 +231,49 @@ pub(super) fn automatic_output_constraints(
             }
         }
         match &protocol.typing {
+            NodeTypingSpec::Comparison {
+                left,
+                right,
+                output,
+            } => {
+                if let (Some(left), Some(right), Some(output)) = (
+                    declared_port(&node.ports, left),
+                    declared_port(&node.ports, right),
+                    declared_port(&node.ports, output),
+                ) && !left.orphan
+                    && !right.orphan
+                    && !output.orphan
+                    && let (Some(a), Some(b), Some(results)) = (
+                        &domains[&left.address],
+                        &domains[&right.address],
+                        &domains[&output.address],
+                    )
+                {
+                    let mut allowed_left = BTreeSet::new();
+                    let mut allowed_right = BTreeSet::new();
+                    let mut allowed_output = BTreeSet::new();
+                    for a in a {
+                        for b in b {
+                            if let Some(result) = comparison_result(a, b)
+                                && results.contains(&result)
+                            {
+                                allowed_left.insert(a.clone());
+                                allowed_right.insert(b.clone());
+                                allowed_output.insert(result);
+                            }
+                        }
+                    }
+                    for (port, values) in [
+                        (left, allowed_left),
+                        (right, allowed_right),
+                        (output, allowed_output),
+                    ] {
+                        if narrow(&mut domains, &port.address, &Some(values)) {
+                            dirty.insert(id);
+                        }
+                    }
+                }
+            }
             NodeTypingSpec::Identity { input, output }
             | NodeTypingSpec::ShapePreservingConversion { input, output, .. } => {
                 if let (Some(input), Some(output)) = (
@@ -433,6 +476,14 @@ mod tests {
             TypeState::Constrained(_)
         ));
         let numeric = node(&mut document, "yssbi.logic.less");
+        let threshold = node(&mut document, "yssbi.constant.get");
+        constant(
+            &mut document,
+            threshold,
+            SemanticType::Numeric,
+            DataValue::Int64(1),
+        );
+        connect(&mut document, threshold, "value", numeric, "right");
         let numeric_edge = connect(&mut document, convert, "output", numeric, "left");
         assert_eq!(
             resolve(&document, convert, &mut cache),
@@ -533,12 +584,13 @@ mod tests {
         constant.data_value = DataValue::DataSeries(
             yss_data_contract::DataSeriesValue::with_element_type(r#"{"value":["1"]}"#, element),
         );
-        assert!(
-            matches!(
-                resolve(&document, convert, &mut cache),
-                TypeState::Conflict(_)
-            ),
-            "a series must not silently become a scalar"
+        assert_eq!(
+            resolve(&document, convert, &mut cache),
+            TypeState::Exact(ResolvedType::Applied {
+                constructor: "core.data_series".parse().unwrap(),
+                arguments: Box::new([ResolvedType::Nominal("core.identifier".parse().unwrap())]),
+            }),
+            "comparison broadcasts the scalar without changing the converted series shape"
         );
     }
 }

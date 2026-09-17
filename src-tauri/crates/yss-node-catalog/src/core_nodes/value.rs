@@ -5,12 +5,12 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
     const ID: &str = "yssbi.value.convert";
     fragment.add_node_messages(&NodeTextSpec {
         id: ID,
-        title: "Convert Type",
-        zh_title: "类型转换",
+        title: "Type Conversion",
+        zh_title: "类别转换",
         documentation: "Convert all seven scalar meanings while preserving scalar/series shape. Category domains and ordinal levels are explicit; calendar values retain wall time. Series stay lazy and nulls are preserved.",
         zh_documentation: "支持七种基础语义的转换，保持标量或数列结构。分类值域与等级顺序需明确配置，日期时间保留钟面时间；数列惰性执行并保留空值。",
         aliases: &["convert", "cast", "semantic conversion"],
-        zh_aliases: &["转换", "类型转换", "语义转换"],
+        zh_aliases: &["转换", "类别转换", "类型转换", "语义转换"],
     })?;
     add_parameter_messages(
         fragment,

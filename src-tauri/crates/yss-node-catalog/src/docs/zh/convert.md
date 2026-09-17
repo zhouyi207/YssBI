@@ -1,4 +1,4 @@
-# 类型转换
+# 类别转换
 
 支持数值（Numeric）、分类（Categorical）、顺序（Ordinal）、二元（Binary）、日期时间（Datetime）、文本（Text）和标识（Identifier）七种语义。输入为标量时输出标量，输入为数据序列时输出数据序列；输出语义由“目标语义”参数决定。
 

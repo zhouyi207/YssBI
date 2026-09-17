@@ -1,4 +1,4 @@
-# Convert Type
+# Type Conversion
 
 Supports Numeric, Categorical, Ordinal, Binary, Datetime, Text and Identifier. Scalars remain scalar; DataSeries remain DataSeries. The Target Meaning parameter determines the output meaning.
 

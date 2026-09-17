@@ -281,22 +281,6 @@ fn interface(
             ],
             vec![],
         )),
-        NumericCompare => Ok((
-            vec![
-                data_input("left", "Left", numeric_series_type(), None)?,
-                data_input("right", "Right", numeric_series_or_scalar_type()?, None)?,
-                data_output("result", "Result", bool_series_type()?, None)?,
-            ],
-            vec![],
-        )),
-        StringCompare => Ok((
-            vec![
-                data_input("left", "Left", string_series_type()?, None)?,
-                data_input("right", "Right", string_series_or_scalar_type()?, None)?,
-                data_output("result", "Result", bool_series_type()?, None)?,
-            ],
-            vec![],
-        )),
         Standardize => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_series_type(), None)?,
@@ -672,9 +656,7 @@ fn dataframe_categories() -> Result<Vec<CategoryRegistration>, BuiltinAssemblyEr
         ("database", Some("data"), 55),
         ("data_processing", None, 60),
         ("dataframe", Some("data_processing"), 60),
-        ("dataframe.series", Some("dataframe"), 61),
-        ("dataframe.timeseries", Some("dataframe"), 62),
-        ("dataframe.panel", Some("dataframe"), 63),
+        ("dataframe.series", Some("data_processing"), 61),
     ]
     .into_iter()
     .map(|(id, parent, order)| {
@@ -699,12 +681,22 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::FilterRows
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
-        | InterfaceKind::Filter => "dataframe",
-        InterfaceKind::TimeAlign | InterfaceKind::TimeUnary | InterfaceKind::TimeWindow => {
-            "dataframe.timeseries"
-        }
-        InterfaceKind::PanelAlign | InterfaceKind::PanelDifference => "dataframe.panel",
-        _ => "dataframe.series",
+        | InterfaceKind::Filter
+        | InterfaceKind::TimeAlign
+        | InterfaceKind::PanelAlign => "dataframe",
+        InterfaceKind::SeriesSelect
+        | InterfaceKind::IntRange
+        | InterfaceKind::SeriesLength
+        | InterfaceKind::SeriesCount
+        | InterfaceKind::SeriesSum
+        | InterfaceKind::SeriesMean
+        | InterfaceKind::Standardize
+        | InterfaceKind::InverseStandardize
+        | InterfaceKind::DummyInfo
+        | InterfaceKind::TimeUnary
+        | InterfaceKind::TimeWindow
+        | InterfaceKind::TimeLag
+        | InterfaceKind::PanelDifference => "dataframe.series",
     }
 }
 
@@ -738,23 +730,8 @@ fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.numeric")?))
 }
-fn string_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(data_series_type(concrete("core.text")?))
-}
 fn bool_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(data_series_type(concrete("core.binary")?))
-}
-fn numeric_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalized_union(
-        "dataframe numeric series/scalar union",
-        vec![numeric_series_type(), numeric_scalar_type()?],
-    )
-}
-fn string_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    normalized_union(
-        "dataframe string series/scalar union",
-        vec![string_series_type()?, concrete("core.text")?],
-    )
 }
 fn normalized_union(
     context: &'static str,
@@ -847,12 +824,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "DataSeries",
             "数据序列",
         ),
-        (
-            "categories.dataframe.timeseries.title",
-            "Time Series",
-            "时间序列",
-        ),
-        ("categories.dataframe.panel.title", "Panel Data", "面板数据"),
         (
             "editors.dataframe.connect_source",
             "Connect DataFrame input",

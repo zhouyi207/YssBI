@@ -34,6 +34,11 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.numeric.square" => markdown!("square"),
 
         "yssbi.logic.equal" => markdown!("equal"),
+        "yssbi.logic.whole_equal" => markdown!("whole_equal"),
+        "yssbi.logic.less"
+        | "yssbi.logic.less_equal"
+        | "yssbi.logic.greater"
+        | "yssbi.logic.greater_equal" => markdown!("comparison"),
         "yssbi.logic.not_equal" => markdown!("not_equal"),
         "yssbi.logic.and" => markdown!("and"),
         "yssbi.logic.or" => markdown!("or"),
@@ -52,15 +57,6 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.dataframe.series.length" => markdown!("dataseries_length"),
         "yssbi.dataframe.series.sum" => markdown!("dataseries_sum"),
         "yssbi.dataframe.series.mean" => markdown!("dataseries_mean"),
-        "yssbi.dataframe.series.compare.greater" => markdown!("dataseries_gt"),
-        "yssbi.dataframe.series.compare.less" => markdown!("dataseries_lt"),
-        "yssbi.dataframe.series.compare.greater_equal" => markdown!("dataseries_gte"),
-        "yssbi.dataframe.series.compare.less_equal" => markdown!("dataseries_lte"),
-        "yssbi.dataframe.series.compare.equal" | "yssbi.dataframe.series.compare.string.equal" => {
-            markdown!("dataseries_eq")
-        }
-        "yssbi.dataframe.series.compare.not_equal"
-        | "yssbi.dataframe.series.compare.string.not_equal" => markdown!("dataseries_neq"),
         "yssbi.dataframe.series.standardize" => markdown!("standardize_dataseries"),
         "yssbi.dataframe.series.inverse_standardize" => {
             markdown!("inverse_standardize_dataseries")
