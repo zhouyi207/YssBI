@@ -34,6 +34,27 @@ struct DelayedPage {
 }
 
 impl RelationPlan for DelayedPage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn concat_rows(
+        &self,
+        _: &[RelationHandle],
+        _: yss_data_contract::table::RowConcatMode,
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+    fn concat_columns(&self, _: &[RelationHandle]) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+    fn join(
+        &self,
+        _: &RelationHandle,
+        _: &yss_data_contract::table::TableJoin,
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+
     fn boolean_series(
         &self,
         _: yss_relational_contract::BooleanOperation,
@@ -49,8 +70,8 @@ impl RelationPlan for DelayedPage {
         Err(RelationError::InvalidInput)
     }
 
-    fn binding(&self) -> &RelationBinding {
-        &self.binding
+    fn bindings(&self) -> &[RelationBinding] {
+        std::slice::from_ref(&self.binding)
     }
     fn schema(&self) -> SchemaRef {
         Arc::new(Schema::new(vec![Field::new("x", DataType::Float64, true)]))
@@ -73,7 +94,11 @@ impl RelationPlan for DelayedPage {
     fn select_series(&self, _: &str) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         Err(RelationError::InvalidPlan)
     }
-    fn project_series(&self, _: &[SeriesHandle]) -> Result<RelationHandle, RelationError> {
+    fn project_series(
+        &self,
+        _: &[SeriesHandle],
+        _: Option<&[Box<str>]>,
+    ) -> Result<RelationHandle, RelationError> {
         Err(RelationError::InvalidPlan)
     }
     fn numeric_series(

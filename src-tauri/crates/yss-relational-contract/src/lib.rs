@@ -124,6 +124,18 @@ pub struct RelationPredicate {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn as_any(&self) -> &dyn std::any::Any;
+    fn concat_rows(
+        &self,
+        others: &[RelationHandle],
+        mode: yss_data_contract::table::RowConcatMode,
+    ) -> Result<RelationHandle, RelationError>;
+    fn concat_columns(&self, others: &[RelationHandle]) -> Result<RelationHandle, RelationError>;
+    fn join(
+        &self,
+        right: &RelationHandle,
+        spec: &yss_data_contract::table::TableJoin,
+    ) -> Result<RelationHandle, RelationError>;
     fn boolean_series(
         &self,
         operation: BooleanOperation,
@@ -134,14 +146,18 @@ pub trait RelationPlan: Send + Sync {
         operation: ComparisonOperation,
         operands: &[ComparisonOperand],
     ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
-    fn binding(&self) -> &RelationBinding;
+    fn bindings(&self) -> &[RelationBinding];
     fn schema(&self) -> SchemaRef;
     fn project(&self, columns: &[Box<str>]) -> Result<RelationHandle, RelationError>;
     fn filter(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError>;
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError>;
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError>;
     fn select_series(&self, column: &str) -> Result<Arc<dyn SeriesPlan>, RelationError>;
-    fn project_series(&self, series: &[SeriesHandle]) -> Result<RelationHandle, RelationError>;
+    fn project_series(
+        &self,
+        series: &[SeriesHandle],
+        names: Option<&[Box<str>]>,
+    ) -> Result<RelationHandle, RelationError>;
     fn numeric_series(
         &self,
         operation: NumericOperation,
@@ -212,8 +228,37 @@ impl RelationHandle {
     pub fn new(plan: Arc<dyn RelationPlan>, executor: Arc<dyn RelationExecutor>) -> Self {
         Self { plan, executor }
     }
-    pub fn binding(&self) -> &RelationBinding {
-        self.plan.binding()
+    pub fn bindings(&self) -> &[RelationBinding] {
+        self.plan.bindings()
+    }
+    pub fn plan(&self) -> &dyn RelationPlan {
+        self.plan.as_ref()
+    }
+    pub fn concat_rows(
+        &self,
+        others: &[Self],
+        mode: yss_data_contract::table::RowConcatMode,
+    ) -> Result<Self, RelationError> {
+        if others.is_empty() {
+            return Err(RelationError::InvalidInput);
+        }
+        self.plan.concat_rows(others, mode)
+    }
+    pub fn concat_columns(&self, others: &[Self]) -> Result<Self, RelationError> {
+        if others.is_empty() {
+            return Err(RelationError::InvalidInput);
+        }
+        self.plan.concat_columns(others)
+    }
+    pub fn join(
+        &self,
+        right: &Self,
+        spec: &yss_data_contract::table::TableJoin,
+    ) -> Result<Self, RelationError> {
+        if !spec.is_valid() {
+            return Err(RelationError::InvalidInput);
+        }
+        self.plan.join(right, spec)
     }
     pub fn schema(&self) -> SchemaRef {
         self.plan.schema()
@@ -257,10 +302,25 @@ impl RelationHandle {
         if series.is_empty() {
             return Err(RelationError::InvalidInput);
         }
-        if series.iter().any(|series| series.relation() != self) {
-            return Err(RelationError::UnalignedSeries);
+        self.plan.project_series(series, None)
+    }
+    pub fn assemble_series(
+        &self,
+        series: &[SeriesHandle],
+        names: &[Box<str>],
+    ) -> Result<Self, RelationError> {
+        if series.is_empty()
+            || series.len() != names.len()
+            || names.iter().any(|n| n.is_empty())
+            || names
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != names.len()
+        {
+            return Err(RelationError::InvalidInput);
         }
-        self.plan.project_series(series)
+        self.plan.project_series(series, Some(names))
     }
 
     pub fn numeric_series(
@@ -319,7 +379,7 @@ impl PartialEq for RelationHandle {
 impl fmt::Debug for RelationHandle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RelationHandle")
-            .field("binding", self.binding())
+            .field("bindings", &self.bindings())
             .finish_non_exhaustive()
     }
 }

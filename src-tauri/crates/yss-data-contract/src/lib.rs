@@ -12,3 +12,4 @@ pub use conversion::{
 };
 pub use data_value::{CategoricalRole, DataSeriesValue, DataValue, DummyInfo, TimeSeriesState};
 pub use value_type::{ValueType, ValueTypeParseError};
+pub mod table;

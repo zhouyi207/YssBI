@@ -475,6 +475,36 @@ struct ResultProjectionBudget {
     remaining: usize,
 }
 
+fn inspect_relation_sources(
+    bindings: &[yss_relational_contract::RelationBinding],
+    budget: &mut ResultProjectionBudget,
+) -> ResultValueInspection {
+    if let [source] = bindings {
+        return ResultValueInspection::Resource {
+            resource_id: source.snapshot.to_string(),
+        };
+    }
+    let take = bindings.len().min(budget.remaining);
+    budget.remaining -= take;
+    ResultValueInspection::Record {
+        total_count: bindings.len(),
+        truncated: bindings.len() > take,
+        entries: bindings
+            .iter()
+            .take(take)
+            .enumerate()
+            .map(|(index, source)| {
+                (
+                    format!("source_{}", index + 1),
+                    ResultValueInspection::Resource {
+                        resource_id: source.snapshot.to_string(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
 fn inspect_runtime_value(
     value: &RuntimeValue,
     depth: usize,
@@ -499,12 +529,13 @@ fn inspect_runtime_value(
         RuntimeValue::Resource(resource_id) => Ok(ResultValueInspection::Resource {
             resource_id: resource_id.to_string(),
         }),
-        RuntimeValue::Relation(relation) => Ok(ResultValueInspection::Resource {
-            resource_id: relation.binding().snapshot.to_string(),
-        }),
-        RuntimeValue::Series(series) => Ok(ResultValueInspection::Resource {
-            resource_id: series.relation().binding().snapshot.to_string(),
-        }),
+        RuntimeValue::Relation(relation) => {
+            Ok(inspect_relation_sources(relation.bindings(), budget))
+        }
+        RuntimeValue::Series(series) => Ok(inspect_relation_sources(
+            series.relation().bindings(),
+            budget,
+        )),
         RuntimeValue::Ols(result) => Ok(ResultValueInspection::Record {
             entries: std::collections::BTreeMap::from([
                 (

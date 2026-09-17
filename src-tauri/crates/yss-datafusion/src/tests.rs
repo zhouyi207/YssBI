@@ -42,6 +42,275 @@ fn predicate(comparison: RelationComparison, value: i64) -> RelationPredicate {
 }
 
 #[test]
+fn table_composition_preserves_order_alignment_and_combined_sources() {
+    use yss_data_contract::table::{RowConcatMode as Mode, TableJoin, TableJoinKind as Join};
+    use yss_tabular_contract::TabularScalar as V;
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let make = |id: &str, keys: Vec<Option<i64>>, texts: Vec<&str>| {
+        let mut source = binding();
+        source.dataset = DatabaseId::from_existing(id.into());
+        source.snapshot = format!("snapshot-{id}").into();
+        runtime
+            .batch_relation(
+                source,
+                RecordBatch::try_new(
+                    Arc::new(Schema::new(vec![
+                        Field::new("id.key", DataType::Int64, true),
+                        Field::new("label", DataType::Utf8, false),
+                    ])),
+                    vec![
+                        Arc::new(Int64Array::from(keys)),
+                        Arc::new(StringArray::from(texts)),
+                    ],
+                )
+                .unwrap(),
+            )
+            .unwrap()
+    };
+    let left = make(
+        "left",
+        vec![Some(2), Some(1), None],
+        vec!["b", "a", "missing-left"],
+    );
+    let right = make(
+        "right",
+        vec![Some(1), Some(1), Some(3), None],
+        vec!["r1", "r2", "r3", "missing-right"],
+    );
+    let mask = left
+        .compare_series(
+            yss_relational_contract::ComparisonOperation::Equal,
+            &[
+                yss_relational_contract::ComparisonOperand::Series(
+                    left.select_series("id.key").unwrap(),
+                ),
+                yss_relational_contract::ComparisonOperand::Scalar(V::Integer(1)),
+            ],
+        )
+        .unwrap();
+    let normalized = left
+        .convert_series(
+            &mask,
+            yss_data_contract::SemanticConversion::new(
+                yss_data_contract::SemanticType::Binary,
+                yss_data_contract::NumericRepresentation::Auto,
+            ),
+        )
+        .unwrap();
+    let plain = mask.as_relation().unwrap();
+    let normalized = normalized.as_relation().unwrap();
+    assert_eq!(
+        plain
+            .concat_rows(std::slice::from_ref(&normalized), Mode::ByName)
+            .unwrap()
+            .page(0, 10, &control())
+            .unwrap()
+            .row_count,
+        6
+    );
+    assert_eq!(
+        plain
+            .join(
+                &normalized,
+                &TableJoin {
+                    kind: Join::Inner,
+                    left_keys: vec!["result".into()],
+                    right_keys: vec!["result".into()],
+                    right_suffix: "_right".into()
+                }
+            )
+            .unwrap()
+            .page(0, 10, &control())
+            .unwrap()
+            .row_count,
+        2
+    );
+    let concatenated = left
+        .concat_rows(std::slice::from_ref(&right), Mode::ByName)
+        .unwrap();
+    assert_eq!(concatenated.bindings().len(), 2);
+    let page = concatenated.page(0, 10, &control()).unwrap();
+    assert_eq!(
+        page.data.columns()[1].values(),
+        ["b", "a", "missing-left", "r1", "r2", "r3", "missing-right"].map(|v| V::String(v.into()))
+    );
+    assert_eq!(
+        concatenated.page(3, 2, &control()).unwrap().data.columns()[1].values(),
+        &[V::String("r1".into()), V::String("r2".into())]
+    );
+    let a = left.project(&["label".into()]).unwrap();
+    let b = left
+        .project(&["id.key".into()])
+        .unwrap()
+        .rename("id.key", "key")
+        .unwrap();
+    let columns = a.concat_columns(std::slice::from_ref(&b)).unwrap();
+    assert_eq!(
+        columns.page(0, 10, &control()).unwrap().data.columns()[0].values(),
+        &page.data.columns()[1].values()[..3]
+    );
+    assert_eq!(columns.schema().field(1).name(), "key");
+    assert_eq!(
+        a.concat_columns(&[left.limit(0, 3).unwrap()]),
+        Err(RelationError::UnalignedSeries)
+    );
+    assert_eq!(
+        a.concat_columns(std::slice::from_ref(&right)),
+        Err(RelationError::UnalignedSeries)
+    );
+    let assembled = a
+        .assemble_series(
+            &[
+                a.select_series("label").unwrap(),
+                b.select_series("key").unwrap(),
+            ],
+            &["name".into(), "id".into()],
+        )
+        .unwrap();
+    assert_eq!(assembled.schema().field(0).name(), "name");
+    assert_eq!(assembled.page(0, 10, &control()).unwrap().row_count, 3);
+    for (kind, count) in [
+        (Join::Inner, 2),
+        (Join::Left, 4),
+        (Join::Right, 4),
+        (Join::Full, 6),
+    ] {
+        let spec = TableJoin {
+            kind,
+            left_keys: vec!["id.key".into()],
+            right_keys: vec!["id.key".into()],
+            right_suffix: "_right".into(),
+        };
+        let joined = left.join(&right, &spec).unwrap();
+        assert_eq!(joined.bindings().len(), 2);
+        assert_eq!(joined.schema().field(2).name(), "id.key_right");
+        let page = joined.page(0, 20, &control()).unwrap();
+        assert_eq!(page.row_count, count, "{kind:?}");
+        for offset in 0..count {
+            let one = joined.page(offset, 1, &control()).unwrap();
+            for (column, entire) in one.data.columns().iter().zip(page.data.columns()) {
+                assert_eq!(column.values()[0], entire.values()[offset]);
+            }
+        }
+        if kind == Join::Full {
+            assert!(joined.schema().fields().iter().all(|f| f.is_nullable()));
+        }
+    }
+    let missing = right
+        .project(&["label".into()])
+        .unwrap()
+        .rename("label", "other")
+        .unwrap();
+    let padded = left.concat_rows(&[missing.clone()], Mode::ByName).unwrap();
+    let page = padded.page(0, 10, &control()).unwrap();
+    assert_eq!(page.data.columns()[2].values()[0], V::Null);
+    assert_eq!(page.data.columns()[0].values()[3], V::Null);
+    assert!(left.concat_rows(&[missing], Mode::ByPosition).is_err());
+    let positioned = right.rename("id.key", "other-key").unwrap();
+    assert_eq!(
+        left.concat_rows(&[positioned], Mode::ByPosition)
+            .unwrap()
+            .schema()
+            .field(0)
+            .name(),
+        "id.key"
+    );
+}
+
+#[test]
+fn composed_plans_are_lazy_and_retain_every_source_lease() {
+    use yss_data_contract::table::{RowConcatMode, TableJoin, TableJoinKind};
+    struct Lease(Arc<std::sync::atomic::AtomicUsize>, PathBuf);
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let _ = std::fs::remove_file(&self.1);
+        }
+    }
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let schema = Arc::new(
+        yss_tabular_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("id", DataType::Int64, false),
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "order",
+        )
+        .unwrap(),
+    );
+    let dropped = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let make = |id: &str| {
+        let mut source = binding();
+        source.dataset = DatabaseId::from_existing(id.into());
+        source.snapshot = id.into();
+        let path = std::env::temp_dir().join(format!(
+            "yss-compose-{}-{id}-{}.parquet",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let relation = runtime
+            .parquet_relation(
+                source,
+                schema.clone(),
+                std::slice::from_ref(&path),
+                Arc::new(Lease(dropped.clone(), path.clone())),
+            )
+            .unwrap();
+        (relation, path)
+    };
+    let (a, a_path) = make("a");
+    let (b, b_path) = make("b");
+    let result = a
+        .concat_rows(std::slice::from_ref(&b), RowConcatMode::ByName)
+        .unwrap();
+    let joined = result
+        .join(
+            &a,
+            &TableJoin {
+                kind: TableJoinKind::Left,
+                left_keys: vec!["id".into()],
+                right_keys: vec!["id".into()],
+                right_suffix: "_right".into(),
+            },
+        )
+        .unwrap();
+    assert_eq!(joined.bindings().len(), 2);
+    assert!(!a_path.exists() && !b_path.exists());
+    for path in [&a_path, &b_path] {
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(vec![1])),
+                Arc::new(Int64Array::from(vec![0])),
+                Arc::new(StringArray::from(vec!["0"])),
+            ],
+        )
+        .unwrap();
+        yss_tabular_io::write_parquet_batches(path, schema.clone(), [Ok(batch)]).unwrap();
+    }
+    drop(a);
+    drop(b);
+    drop(result);
+    assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert_eq!(joined.page(0, 3, &control()).unwrap().row_count, 2);
+    let stream = runtime
+        .runtime
+        .as_ref()
+        .unwrap()
+        .block_on(joined.stream(control()))
+        .unwrap();
+    drop(joined);
+    assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 0);
+    drop(stream);
+    assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+#[test]
 fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
     use arrow::array::BooleanArray;
     use datafusion::logical_expr::{Expr, Operator};
@@ -931,7 +1200,7 @@ fn parquet_plans_are_lazy_and_joint_statistics_projection_preserves_alignment() 
         runtime.numeric_columns(&series, &control()).unwrap(),
         vec![vec![7., 9., 11., 13.], vec![3., 4., 5., 6.]]
     );
-    assert_eq!(series[0].relation().binding(), &binding());
+    assert_eq!(series[0].relation().bindings(), &[binding()]);
     let other = filtered
         .filter(&predicate(RelationComparison::Greater, 4))
         .unwrap();

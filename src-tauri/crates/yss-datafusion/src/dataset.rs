@@ -401,7 +401,7 @@ impl DatasetQuery {
     }
 
     pub fn relation(&self) -> Result<RelationHandle, RelationError> {
-        let (frame, schema) = ordered_user_frame(self.frame.clone(), &self.schema)?;
+        let (frame, schema, order) = ordered_user_frame(self.frame.clone(), &self.schema)?;
         crate::relation::DataFusionRelation::handle(
             frame,
             schema,
@@ -409,6 +409,7 @@ impl DatasetQuery {
             self.lease.clone(),
             self.engine.clone(),
             self.ordered_single_file,
+            order,
         )
     }
 

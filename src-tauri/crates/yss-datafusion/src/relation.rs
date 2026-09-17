@@ -14,14 +14,17 @@ use yss_relational_contract::{
 };
 
 pub(crate) struct DataFusionRelation {
-    frame: DataFrame,
+    pub(crate) frame: DataFrame,
     // Native CASE/projection rewrites do not reliably retain field metadata. Keep the exact
     // Arrow schema derived from the source, validate native types, and attach it at the stream.
-    schema: SchemaRef,
-    binding: RelationBinding,
-    lease: Arc<dyn Send + Sync>,
-    executor: Arc<dyn RelationExecutor>,
-    ordered_single_file: bool,
+    pub(crate) schema: SchemaRef,
+    pub(crate) bindings: Arc<[RelationBinding]>,
+    pub(crate) lease: Arc<dyn Send + Sync>,
+    pub(crate) executor: Arc<dyn RelationExecutor>,
+    pub(crate) ordered_single_file: bool,
+    pub(crate) domain: Arc<DataFrame>,
+    pub(crate) columns: Vec<Expr>,
+    pub(crate) domain_order: Vec<datafusion::logical_expr::expr::Sort>,
 }
 
 impl DataFusionRelation {
@@ -32,30 +35,48 @@ impl DataFusionRelation {
         lease: Arc<dyn Send + Sync>,
         executor: Arc<dyn RelationExecutor>,
         ordered_single_file: bool,
+        domain_order: Vec<datafusion::logical_expr::expr::Sort>,
     ) -> Result<RelationHandle, RelationError> {
-        let native = frame.schema().as_arrow();
-        if native.fields().len() != schema.fields().len()
+        let columns = schema
+            .fields()
+            .iter()
+            .map(|field| Expr::Column(Column::from_name(field.name().clone())))
+            .collect::<Vec<_>>();
+        let domain = Arc::new(frame);
+        let frame = domain
+            .as_ref()
+            .clone()
+            .select(columns.clone())
+            .map_err(|_| RelationError::InvalidPlan)?;
+        Self {
+            domain,
+            domain_order,
+            columns,
+            frame,
+            schema,
+            bindings: Arc::from([binding]),
+            lease,
+            executor,
+            ordered_single_file,
+        }
+        .into_handle()
+    }
+
+    pub(crate) fn into_handle(self) -> Result<RelationHandle, RelationError> {
+        let native = self.frame.schema().as_arrow();
+        if native.fields().len() != self.schema.fields().len()
             || native
                 .fields()
                 .iter()
-                .zip(schema.fields())
+                .zip(self.schema.fields())
                 .any(|(native, exact)| {
                     native.name() != exact.name() || native.data_type() != exact.data_type()
                 })
         {
             return Err(RelationError::InvalidPlan);
         }
-        Ok(RelationHandle::new(
-            Arc::new(Self {
-                frame,
-                schema,
-                binding,
-                lease,
-                executor: executor.clone(),
-                ordered_single_file,
-            }),
-            executor,
-        ))
+        let executor = self.executor.clone();
+        Ok(RelationHandle::new(Arc::new(self), executor))
     }
     fn derived(
         &self,
@@ -63,14 +84,29 @@ impl DataFusionRelation {
         schema: SchemaRef,
         ordered_single_file: bool,
     ) -> Result<RelationHandle, RelationError> {
-        Self::handle(
+        let domain = Arc::new(frame);
+        let frame = domain
+            .as_ref()
+            .clone()
+            .select(
+                self.columns
+                    .iter()
+                    .zip(schema.fields())
+                    .map(|(expr, field)| expr.clone().alias(field.name())),
+            )
+            .map_err(|_| RelationError::InvalidPlan)?;
+        Self {
+            domain,
+            domain_order: self.domain_order.clone(),
+            columns: self.columns.clone(),
             frame,
             schema,
-            self.binding.clone(),
-            self.lease.clone(),
-            self.executor.clone(),
+            bindings: self.bindings.clone(),
+            lease: self.lease.clone(),
+            executor: self.executor.clone(),
             ordered_single_file,
-        )
+        }
+        .into_handle()
     }
 }
 
@@ -82,14 +118,17 @@ impl RelationPlan for DataFusionRelation {
     ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         crate::series::boolean(operation, operands)
     }
-    fn binding(&self) -> &RelationBinding {
-        &self.binding
+    fn bindings(&self) -> &[RelationBinding] {
+        &self.bindings
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
     }
     fn project(&self, columns: &[Box<str>]) -> Result<RelationHandle, RelationError> {
-        let projection = columns
+        let indexes = columns
             .iter()
             .map(|name| {
                 self.schema
@@ -97,19 +136,13 @@ impl RelationPlan for DataFusionRelation {
                     .map_err(|_| RelationError::InvalidInput)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let schema = Arc::new(
-            self.schema
-                .project(&projection)
-                .map_err(|_| RelationError::InvalidInput)?,
-        );
-        let expressions = columns
-            .iter()
-            .map(|name| Expr::Column(Column::from_name(name.to_string())));
-        self.frame
-            .clone()
-            .select(expressions)
-            .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, schema, self.ordered_single_file))
+        self.project_expressions(
+            indexes
+                .iter()
+                .map(|i| self.schema.field(*i).clone())
+                .collect(),
+            indexes.iter().map(|i| self.columns[*i].clone()).collect(),
+        )
     }
     fn filter(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError> {
         let schema = self.schema();
@@ -248,17 +281,23 @@ impl RelationPlan for DataFusionRelation {
                 }
             }
         };
-        self.frame
+        self.domain
+            .as_ref()
             .clone()
-            .filter(expression)
+            .filter(self.expand_expression(expression)?)
             .map_err(|_| RelationError::InvalidPlan)
             .and_then(|frame| self.derived(frame, self.schema.clone(), false))
     }
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError> {
         // This limit fixes the scan strategy. A later limit must not turn an existing
         // large-offset query into a single-partition prefix scan.
-        crate::limit_frame(self.frame.clone(), offset, limit, self.ordered_single_file)
-            .and_then(|frame| self.derived(frame, self.schema.clone(), false))
+        crate::limit_frame(
+            self.domain.as_ref().clone(),
+            offset,
+            limit,
+            self.ordered_single_file,
+        )
+        .and_then(|frame| self.derived(frame, self.schema.clone(), false))
     }
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError> {
         if new.trim().is_empty()
@@ -283,11 +322,10 @@ impl RelationPlan for DataFusionRelation {
             fields,
             self.schema.metadata().clone(),
         ));
-        self.frame
-            .clone()
-            .with_column_renamed(old, new)
-            .map_err(|_| RelationError::InvalidPlan)
-            .and_then(|frame| self.derived(frame, schema, self.ordered_single_file))
+        self.project_expressions(
+            schema.fields().iter().map(|f| f.as_ref().clone()).collect(),
+            self.columns.clone(),
+        )
     }
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream> {
         Box::pin(async move {
@@ -330,28 +368,57 @@ impl RelationPlan for DataFusionRelation {
         Ok(crate::series::column(field))
     }
 
-    fn project_series(&self, series: &[SeriesHandle]) -> Result<RelationHandle, RelationError> {
-        let mut names = std::collections::BTreeSet::new();
-        let mut fields = Vec::with_capacity(series.len());
-        let mut expressions = Vec::with_capacity(series.len());
-        for series in series {
-            let mut name = series.column().to_owned();
-            while !names.insert(name.clone()) {
+    fn project_series(
+        &self,
+        series: &[SeriesHandle],
+        output_names: Option<&[Box<str>]>,
+    ) -> Result<RelationHandle, RelationError> {
+        let mut names = Vec::new();
+        let mut fields = Vec::new();
+        let mut expressions = Vec::new();
+        for (index, series) in series.iter().enumerate() {
+            let owner = series
+                .relation()
+                .plan()
+                .as_any()
+                .downcast_ref::<Self>()
+                .ok_or(RelationError::InvalidInput)?;
+            if !Arc::ptr_eq(&self.domain, &owner.domain) {
+                return Err(RelationError::UnalignedSeries);
+            }
+            let mut name = output_names.map_or_else(
+                || series.column().to_owned(),
+                |names| names[index].to_string(),
+            );
+            while names.contains(&name) {
                 name.push('_');
             }
-            fields.push(series.plan().field().clone().with_name(&name));
-            expressions.push(crate::series::expression(series)?.alias(name));
+            names.push(name.clone());
+            fields.push(if output_names.is_some() {
+                crate::composition::derived_field(series.plan().field(), &name)
+            } else {
+                series.plan().field().clone().with_name(&name)
+            });
+            expressions.push(owner.expand_expression(crate::series::expression(series)?)?);
         }
-        let schema = Arc::new(Schema::new_with_metadata(
-            fields,
-            self.schema.metadata().clone(),
-        ));
-        let frame = self
-            .frame
-            .clone()
-            .select(expressions)
-            .map_err(|_| RelationError::InvalidPlan)?;
-        self.derived(frame, schema, self.ordered_single_file)
+        self.project_expressions(fields, expressions)
+    }
+    fn concat_rows(
+        &self,
+        others: &[RelationHandle],
+        mode: yss_data_contract::table::RowConcatMode,
+    ) -> Result<RelationHandle, RelationError> {
+        self.compose_rows(others, mode)
+    }
+    fn concat_columns(&self, others: &[RelationHandle]) -> Result<RelationHandle, RelationError> {
+        self.compose_columns(others)
+    }
+    fn join(
+        &self,
+        right: &RelationHandle,
+        spec: &yss_data_contract::table::TableJoin,
+    ) -> Result<RelationHandle, RelationError> {
+        self.compose_join(right, spec)
     }
 
     fn numeric_series(

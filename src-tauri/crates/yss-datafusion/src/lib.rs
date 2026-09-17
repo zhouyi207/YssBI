@@ -5,6 +5,7 @@ mod page;
 mod profile;
 pub use dataset::{DatasetQuery, DatasetQueryPage};
 mod comparison;
+mod composition;
 mod relation;
 mod series;
 
@@ -125,8 +126,16 @@ impl DataFusionRuntime {
             .context()
             .read_table(Arc::new(table))
             .map_err(|_| RelationError::InvalidPlan)?;
-        let (frame, schema) = ordered_user_frame(frame, &schema)?;
-        relation::DataFusionRelation::handle(frame, schema, binding, lease, self.clone(), false)
+        let (frame, schema, order) = ordered_user_frame(frame, &schema)?;
+        relation::DataFusionRelation::handle(
+            frame,
+            schema,
+            binding,
+            lease,
+            self.clone(),
+            false,
+            order,
+        )
     }
 
     /// Useful at the already-materialized literal boundary; external imports use batch readers.
@@ -170,7 +179,7 @@ impl DataFusionRuntime {
             .context()
             .read_batch(batch)
             .map_err(|_| RelationError::InvalidPlan)?;
-        let (frame, schema) = ordered_user_frame(frame, &schema)?;
+        let (frame, schema, order) = ordered_user_frame(frame, &schema)?;
         relation::DataFusionRelation::handle(
             frame,
             schema,
@@ -178,6 +187,7 @@ impl DataFusionRuntime {
             Arc::new(()),
             self.clone(),
             false,
+            order,
         )
     }
 
@@ -272,16 +282,24 @@ fn limit_frame(
 fn ordered_user_frame(
     frame: DataFrame,
     schema: &Schema,
-) -> Result<(DataFrame, arrow::datatypes::SchemaRef), RelationError> {
+) -> Result<
+    (
+        DataFrame,
+        arrow::datatypes::SchemaRef,
+        Vec<datafusion::logical_expr::expr::Sort>,
+    ),
+    RelationError,
+> {
     let rows = yss_tabular_arrow::dataset_row_columns(schema)
         .map_err(|_| RelationError::InvalidInput)?
         .ok_or(RelationError::InvalidInput)?;
     let column = |name: &str| Expr::Column(Column::from_name(name.to_owned()));
+    let order = vec![
+        column(&rows.display_order).sort(true, false),
+        column(&rows.row_id).sort(true, false),
+    ];
     let frame = frame
-        .sort(vec![
-            column(&rows.display_order).sort(true, false),
-            column(&rows.row_id).sort(true, false),
-        ])
+        .sort(order.clone())
         .map_err(|_| RelationError::InvalidPlan)?;
     let projection = schema
         .fields()
@@ -294,12 +312,10 @@ fn ordered_user_frame(
     let schema = schema
         .project(&projection)
         .map_err(|_| RelationError::InvalidInput)?;
-    let frame = frame
-        .select(schema.fields().iter().map(|field| column(field.name())))
-        .map_err(|_| RelationError::InvalidPlan)?;
     Ok((
         frame,
         Arc::new(yss_tabular_arrow::without_row_metadata(&schema)),
+        order,
     ))
 }
 
