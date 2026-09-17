@@ -27,7 +27,9 @@ pub(crate) fn decompose(
                     RuntimeValue::Series(relation.select_series(&field.name).map_err(kernel_error)?)
                 }
                 RuntimeValue::Record(columns) => match columns.get(&field.name) {
-                    Some(column @ RuntimeValue::List(_)) => column.clone(),
+                    Some(column) if matches!(column.unannotated(), RuntimeValue::List(_)) => {
+                        column.clone()
+                    }
                     _ => return Err(KernelError::Failed),
                 },
                 _ => return Err(KernelError::Failed),
@@ -45,6 +47,10 @@ pub(crate) enum RelationalKernel {
     Series,
     Limit,
     Rename,
+    ConcatRows,
+    ConcatColumns,
+    Join,
+    Assemble,
 }
 
 pub(crate) fn execute(
@@ -52,6 +58,95 @@ pub(crate) fn execute(
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
     let parameter = |key| invocation.parameter(key).ok_or(KernelError::Failed);
+    invocation.check_control()?;
+    if matches!(kind, RelationalKernel::Assemble) {
+        let fields = invocation
+            .outputs
+            .first()
+            .and_then(|output| output.fields.as_deref())
+            .ok_or(KernelError::Failed)?;
+        if fields.len() != invocation.inputs.len()
+            || fields.is_empty()
+            || fields.iter().any(|field| field.name.trim().is_empty())
+            || fields
+                .iter()
+                .map(|field| &field.name)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != fields.len()
+        {
+            return Err(KernelError::Failed);
+        }
+        if invocation
+            .inputs
+            .iter()
+            .all(|v| matches!(v, RuntimeValue::Series(_)))
+        {
+            let series = invocation
+                .inputs
+                .iter()
+                .map(|v| match v {
+                    RuntimeValue::Series(s) => Ok(s.clone()),
+                    _ => Err(KernelError::Failed),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return series[0]
+                .relation()
+                .assemble_series(
+                    &series,
+                    &fields
+                        .iter()
+                        .map(|field| field.name.clone())
+                        .collect::<Vec<_>>(),
+                )
+                .map(RuntimeValue::Relation)
+                .map_err(kernel_error);
+        }
+        let mut rows = None;
+        let mut bytes = 0usize;
+        for input in invocation.inputs {
+            let RuntimeValue::List(values) = input.unannotated() else {
+                return Err(KernelError::Failed);
+            };
+            if rows.is_some_and(|rows| rows != values.len()) {
+                return Err(KernelError::Failed);
+            }
+            rows = Some(values.len());
+            for (index, value) in values.iter().enumerate() {
+                if index % 1024 == 0 {
+                    invocation.check_control()?;
+                }
+                match value {
+                    RuntimeValue::Null
+                    | RuntimeValue::Bool(_)
+                    | RuntimeValue::Integer(_)
+                    | RuntimeValue::Unsigned(_)
+                    | RuntimeValue::String(_) => {}
+                    RuntimeValue::Decimal(value) if value.is_finite() => {}
+                    _ => return Err(KernelError::Failed),
+                }
+                bytes = bytes
+                    .checked_add(
+                        std::mem::size_of::<RuntimeValue>()
+                            + match value {
+                                RuntimeValue::String(value) => value.len(),
+                                _ => 0,
+                            },
+                    )
+                    .ok_or(KernelError::Failed)?;
+                if bytes > invocation.control.max_input_bytes {
+                    return Err(KernelError::Failed);
+                }
+            }
+        }
+        return Ok(RuntimeValue::Record(
+            fields
+                .iter()
+                .zip(invocation.inputs)
+                .map(|(field, value)| (field.name.clone(), value.clone()))
+                .collect(),
+        ));
+    }
     if matches!(kind, RelationalKernel::Source) {
         let value = parameter("dataframe")?;
         return match value {
@@ -63,6 +158,58 @@ pub(crate) fn execute(
         return Err(KernelError::Failed);
     };
     let relation = match kind {
+        RelationalKernel::ConcatRows | RelationalKernel::ConcatColumns => {
+            if invocation.inputs.len() < 2 {
+                return Err(KernelError::Failed);
+            }
+            let others = invocation.inputs[1..]
+                .iter()
+                .map(|v| match v {
+                    RuntimeValue::Relation(v) => Ok(v.clone()),
+                    _ => Err(KernelError::Failed),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if matches!(kind, RelationalKernel::ConcatRows) {
+                let mode = match text(parameter("column_match")?)?.as_ref() {
+                    "by_name" => yss_data_contract::table::RowConcatMode::ByName,
+                    "by_position" => yss_data_contract::table::RowConcatMode::ByPosition,
+                    _ => return Err(KernelError::Failed),
+                };
+                relation.concat_rows(&others, mode)
+            } else {
+                relation.concat_columns(&others)
+            }
+        }
+        RelationalKernel::Join => {
+            let [_, RuntimeValue::Relation(right)] = invocation.inputs else {
+                return Err(KernelError::Failed);
+            };
+            let keys = |name| {
+                let RuntimeValue::List(values) = parameter(name)? else {
+                    return Err(KernelError::Failed);
+                };
+                values
+                    .iter()
+                    .map(|v| text(v).map(String::from))
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            let kind = match text(parameter("join_type")?)?.as_ref() {
+                "inner" => yss_data_contract::table::TableJoinKind::Inner,
+                "left" => yss_data_contract::table::TableJoinKind::Left,
+                "right" => yss_data_contract::table::TableJoinKind::Right,
+                "full" => yss_data_contract::table::TableJoinKind::Full,
+                _ => return Err(KernelError::Failed),
+            };
+            relation.join(
+                right,
+                &yss_data_contract::table::TableJoin {
+                    kind,
+                    left_keys: keys("left_keys")?,
+                    right_keys: keys("right_keys")?,
+                    right_suffix: text(parameter("right_suffix")?)?.into(),
+                },
+            )
+        }
         RelationalKernel::Project => {
             let RuntimeValue::List(columns) = parameter("columns")? else {
                 return Err(KernelError::Failed);
@@ -91,7 +238,7 @@ pub(crate) fn execute(
         RelationalKernel::Rename => {
             relation.rename(&text(parameter("from")?)?, &text(parameter("to")?)?)
         }
-        RelationalKernel::Source => return Err(KernelError::Failed),
+        RelationalKernel::Source | RelationalKernel::Assemble => return Err(KernelError::Failed),
     };
     relation.map(RuntimeValue::Relation).map_err(kernel_error)
 }

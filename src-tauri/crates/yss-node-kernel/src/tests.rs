@@ -430,4 +430,46 @@ fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
         )
         .unwrap();
     assert_eq!(result, vec![second, first]);
+    let assemble_outputs = [KernelOutputSpec {
+        data_type: ValueType::DataFrame,
+        fields: Some(
+            outputs
+                .iter()
+                .flat_map(|output| output.fields.as_ref().unwrap().iter().cloned())
+                .collect(),
+        ),
+    }];
+    let assembled = KernelRegistry::default()
+        .execute(
+            &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
+            &KernelInvocation {
+                inputs: &result,
+                input_groups: &[Some("series"), Some("series")],
+                parameters: BTreeMap::new(),
+                outputs: &assemble_outputs,
+                control: &control,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        assembled,
+        vec![RuntimeValue::Record(BTreeMap::from([
+            ("b".into(), result[0].clone()),
+            ("a".into(), result[1].clone())
+        ]))]
+    );
+    assert!(
+        KernelRegistry::default()
+            .execute(
+                &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
+                &KernelInvocation {
+                    inputs: &[result[0].clone(), RuntimeValue::List(Box::new([]))],
+                    input_groups: &[Some("series"), Some("series")],
+                    parameters: BTreeMap::new(),
+                    outputs: &assemble_outputs,
+                    control: &control,
+                }
+            )
+            .is_err()
+    );
 }

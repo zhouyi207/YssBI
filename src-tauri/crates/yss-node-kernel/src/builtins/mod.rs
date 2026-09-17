@@ -73,6 +73,30 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         ),
         ("yssbi.dataframe.decompose", Decompose, &[], 0..=usize::MAX),
         (
+            "yssbi.dataframe.combine",
+            Relational(relational::RelationalKernel::Assemble),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.concat.rows",
+            Relational(relational::RelationalKernel::ConcatRows),
+            &["column_match"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.concat.columns",
+            Relational(relational::RelationalKernel::ConcatColumns),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.join",
+            Relational(relational::RelationalKernel::Join),
+            &["left_keys", "right_keys", "join_type", "right_suffix"],
+            1..=1,
+        ),
+        (
             "yssbi.dataframe.limit",
             Relational(relational::RelationalKernel::Limit),
             &["rows"],
