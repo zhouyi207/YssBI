@@ -42,6 +42,134 @@ fn predicate(comparison: RelationComparison, value: i64) -> RelationPredicate {
 }
 
 #[test]
+fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
+    use arrow::array::BooleanArray;
+    use datafusion::logical_expr::{Expr, Operator};
+    use yss_relational_contract::{BooleanOperand as O, BooleanOperation as Op};
+    use yss_tabular_contract::TabularScalar as V;
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "yss-boolean-{}-{}.parquet",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut semantic =
+        yss_data_contract::ColumnSemantic::new(yss_data_contract::SemanticType::Binary);
+    semantic.values = ["0", "1"]
+        .map(|v| yss_data_contract::SemanticValue {
+            value: v.into(),
+            label: v.into(),
+        })
+        .into();
+    semantic.positive_value = Some("0".into());
+    let coded = yss_tabular_arrow::with_column_semantic(
+        Field::new("coded", DataType::Int64, true),
+        &semantic,
+    )
+    .unwrap();
+    let schema = Arc::new(
+        yss_tabular_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("left", DataType::Boolean, true),
+                Field::new("right", DataType::Boolean, true),
+                coded,
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("display_order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "display_order",
+        )
+        .unwrap(),
+    );
+    let source = runtime
+        .parquet_relation(
+            binding(),
+            schema.clone(),
+            std::slice::from_ref(&path),
+            Arc::new(RemoveFile(path.clone())),
+        )
+        .unwrap();
+    let left = source.select_series("left").unwrap();
+    let right = source.select_series("right").unwrap();
+    let operands = [O::Series(left.clone()), O::Series(right.clone())];
+    let and = source.boolean_series(Op::And, &operands).unwrap();
+    let or = source.boolean_series(Op::Or, &operands).unwrap();
+    let not = source
+        .boolean_series(Op::Not, &[O::Series(and.clone())])
+        .unwrap();
+    let expression = |value: &SeriesHandle| {
+        value
+            .plan()
+            .as_any()
+            .downcast_ref::<crate::series::DataFusionSeries>()
+            .unwrap()
+            .expression
+            .clone()
+    };
+    assert!(matches!(expression(&and), Expr::BinaryExpr(v) if v.op == Operator::And));
+    assert!(matches!(expression(&or), Expr::BinaryExpr(v) if v.op == Operator::Or));
+    assert!(matches!(expression(&not), Expr::Not(_)));
+    let broadcast = source
+        .boolean_series(Op::And, &[O::Scalar(Some(false)), O::Series(left.clone())])
+        .unwrap();
+    let normalized = source
+        .boolean_series(
+            Op::Or,
+            &[
+                O::Series(source.select_series("coded").unwrap()),
+                O::Scalar(Some(false)),
+            ],
+        )
+        .unwrap();
+    let projected = source
+        .project_series(&[and, or, not, broadcast, normalized])
+        .unwrap();
+    assert!(!path.exists(), "building boolean plans must not read rows");
+    let other = source.limit(0, 1).unwrap().select_series("left").unwrap();
+    assert_eq!(
+        source.boolean_series(Op::And, &[O::Series(left), O::Series(other)]),
+        Err(RelationError::UnalignedSeries)
+    );
+    let f = Some(false);
+    let t = Some(true);
+    let n = None;
+    let left = [f, f, f, t, t, t, n, n, n];
+    let right = [f, t, n, f, t, n, f, t, n];
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(BooleanArray::from(left.to_vec())),
+            Arc::new(BooleanArray::from(right.to_vec())),
+            Arc::new(Int64Array::from(
+                left.map(|v| v.map(|v| if v { 0 } else { 1 })).to_vec(),
+            )),
+            Arc::new(Int64Array::from_iter_values(0..9)),
+            Arc::new(StringArray::from_iter_values(
+                (0..9).map(|v| format!("{v:02}")),
+            )),
+        ],
+    )
+    .unwrap();
+    yss_tabular_io::write_parquet_batches(&path, schema, [Ok(batch)]).unwrap();
+    let page = projected.page(0, 9, &control()).unwrap();
+    for (column, expected) in page.data.columns().iter().zip([
+        [f, f, f, f, t, n, f, n, n],
+        [f, t, n, t, t, t, n, t, n],
+        [t, t, t, t, f, n, t, n, n],
+        [f; 9],
+        left,
+    ]) {
+        assert_eq!(
+            column.values(),
+            expected.map(|v| v.map_or(V::Null, V::Bool))
+        );
+    }
+}
+
+#[test]
 fn comparison_series_are_lazy_exact_nullable_and_aligned() {
     use yss_relational_contract::{ComparisonOperand as O, ComparisonOperation as C};
     use yss_tabular_contract::TabularScalar as V;
@@ -238,6 +366,25 @@ fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithm
     let x = source.select_series("x.value").unwrap();
     let count = source.select_series("count").unwrap();
     let scalar = |value| Operand::Scalar(RelationLiteral::Integer(value));
+    let unary = [Op::Ln, Op::Log2, Op::Log10, Op::Square, Op::Sqrt].map(|operation| {
+        source
+            .numeric_series(operation, &[Operand::Series(x.clone())], Type::Float64)
+            .unwrap()
+    });
+    let powered = source
+        .numeric_series(
+            Op::Power,
+            &[scalar(2), Operand::Series(x.clone())],
+            Type::Float64,
+        )
+        .unwrap();
+    let logarithm = source
+        .numeric_series(
+            Op::Logarithm,
+            &[Operand::Series(powered.clone()), scalar(2)],
+            Type::Float64,
+        )
+        .unwrap();
     let scaled = source
         .numeric_series(
             Op::Multiply,
@@ -303,8 +450,23 @@ fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithm
         .unwrap()
     });
     yss_tabular_io::write_parquet_batches(&path, schema, batches.into_iter().map(Ok)).unwrap();
+    let unary_values = source.numeric_columns(&unary, &control()).unwrap();
+    for (actual, (first, second)) in unary_values.iter().zip([
+        (0., std::f64::consts::LN_2),
+        (0., 1.),
+        (0., std::f64::consts::LOG10_2),
+        (1., 4.),
+        (1., std::f64::consts::SQRT_2),
+    ]) {
+        assert_eq!(actual.len(), 6);
+        assert_eq!(actual[0], first);
+        assert!((actual[1] - second).abs() < 1e-14);
+    }
     let columns = source
-        .numeric_columns(&[scaled, x, subtracted, divided, added], &control())
+        .numeric_columns(
+            &[scaled, x, subtracted, divided, added, powered, logarithm],
+            &control(),
+        )
         .unwrap();
     let expected = [
         vec![123., 246., 369., 492., 615., 738.],
@@ -312,6 +474,8 @@ fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithm
         vec![9., 8., 7., 6., 5., 4.],
         vec![10., 5., 10. / 3., 2.5, 2., 10. / 6.],
         vec![125., 249., 373., 497., 621., 745.],
+        vec![2., 4., 8., 16., 32., 64.],
+        vec![1., 2., 3., 4., 5., 6.],
     ];
     for (actual, expected) in columns.iter().zip(expected) {
         assert_eq!(actual, &expected);
@@ -370,6 +534,38 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
     );
     for (operation, operands, expected) in [
         (
+            Op::Power,
+            [series("huge"), scalar(2)],
+            RelationError::NonFiniteResult,
+        ),
+        (
+            Op::Power,
+            [
+                scalar(-2),
+                Operand::Series(
+                    source
+                        .numeric_series(Op::Divide, &[series("x.value"), scalar(2)], Type::Float64)
+                        .unwrap(),
+                ),
+            ],
+            RelationError::InvalidInput,
+        ),
+        (
+            Op::Logarithm,
+            [series("x.value"), scalar(1)],
+            RelationError::InvalidInput,
+        ),
+        (
+            Op::Logarithm,
+            [series("zero"), scalar(2)],
+            RelationError::InvalidInput,
+        ),
+        (
+            Op::Power,
+            [series("missing"), scalar(2)],
+            RelationError::InvalidInput,
+        ),
+        (
             Op::Divide,
             [scalar(1), series("zero")],
             RelationError::DivisionByZero,
@@ -392,6 +588,25 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
             source.numeric_columns(&[computed], &control()),
             Err(expected)
         );
+    }
+    let negative = source
+        .numeric_series(Op::Subtract, &[scalar(0), series("x.value")], Type::Float64)
+        .unwrap();
+    for (operation, operand, expected) in [
+        (Op::Ln, series("zero"), RelationError::InvalidInput),
+        (Op::Log2, series("missing"), RelationError::InvalidInput),
+        (Op::Log10, series("zero"), RelationError::InvalidInput),
+        (Op::Square, series("huge"), RelationError::NonFiniteResult),
+        (
+            Op::Sqrt,
+            Operand::Series(negative),
+            RelationError::InvalidInput,
+        ),
+    ] {
+        let result = source
+            .numeric_series(operation, &[operand], Type::Float64)
+            .unwrap();
+        assert_eq!(source.numeric_columns(&[result], &control()), Err(expected));
     }
     let valid = source
         .numeric_series(Op::Multiply, &[series("x.value"), scalar(2)], Type::Float64)

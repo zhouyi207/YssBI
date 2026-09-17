@@ -34,6 +34,13 @@ struct DelayedPage {
 }
 
 impl RelationPlan for DelayedPage {
+    fn boolean_series(
+        &self,
+        _: yss_relational_contract::BooleanOperation,
+        _: &[yss_relational_contract::BooleanOperand],
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn compare_series(
         &self,
         _: yss_relational_contract::ComparisonOperation,

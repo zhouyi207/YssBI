@@ -75,6 +75,13 @@ impl DataFusionRelation {
 }
 
 impl RelationPlan for DataFusionRelation {
+    fn boolean_series(
+        &self,
+        operation: yss_relational_contract::BooleanOperation,
+        operands: &[yss_relational_contract::BooleanOperand],
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::series::boolean(operation, operands)
+    }
     fn binding(&self) -> &RelationBinding {
         &self.binding
     }

@@ -6,8 +6,8 @@ use arrow::datatypes::{DataType, Field};
 use datafusion::common::{Column, DataFusionError, ScalarValue};
 use datafusion::logical_expr::{ColumnarValue, Expr, Volatility, create_udf};
 use yss_relational_contract::{
-    NumericOperation, NumericType, RelationError, RelationLiteral, SeriesHandle, SeriesOperand,
-    SeriesPlan,
+    BooleanOperand, BooleanOperation, NumericOperation, NumericType, RelationError,
+    RelationLiteral, SeriesHandle, SeriesOperand, SeriesPlan,
 };
 
 pub(crate) struct DataFusionSeries {
@@ -119,6 +119,62 @@ fn failure(error: RelationError) -> DataFusionError {
     DataFusionError::External(Box::new(error))
 }
 
+pub(crate) fn boolean(
+    operation: BooleanOperation,
+    operands: &[BooleanOperand],
+) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+    if operands.len() != operation.arity() {
+        return Err(RelationError::InvalidInput);
+    }
+    let expressions = operands
+        .iter()
+        .map(|operand| match operand {
+            BooleanOperand::Scalar(value) => Ok(Expr::Literal(ScalarValue::Boolean(*value), None)),
+            BooleanOperand::Series(series) => {
+                let field = series.plan().field();
+                let semantic = yss_tabular_arrow::column_semantic(field)
+                    .map_err(|_| RelationError::InvalidInput)?;
+                if semantic.kind != yss_data_contract::SemanticType::Binary {
+                    return Err(RelationError::InvalidInput);
+                }
+                if field.data_type() == &DataType::Boolean
+                    && semantic
+                        .positive_value
+                        .as_deref()
+                        .is_none_or(|value| value == "true")
+                {
+                    expression(series)
+                } else {
+                    let normalized = series.relation().convert_series(
+                        series,
+                        yss_data_contract::SemanticConversion::new(
+                            yss_data_contract::SemanticType::Binary,
+                            yss_data_contract::NumericRepresentation::Auto,
+                        ),
+                    )?;
+                    expression(&normalized)
+                }
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut expressions = expressions.into_iter();
+    let first = expressions.next().ok_or(RelationError::InvalidInput)?;
+    let expression = match operation {
+        BooleanOperation::Not => Expr::Not(Box::new(first)),
+        BooleanOperation::And => first.and(expressions.next().ok_or(RelationError::InvalidInput)?),
+        BooleanOperation::Or => first.or(expressions.next().ok_or(RelationError::InvalidInput)?),
+    };
+    let field = Field::new("result", DataType::Boolean, true);
+    let semantic =
+        yss_tabular_arrow::column_semantic(&field).map_err(|_| RelationError::InvalidInput)?;
+    let field = yss_tabular_arrow::with_column_semantic(field, &semantic)
+        .map_err(|_| RelationError::InvalidInput)?;
+    Ok(Arc::new(DataFusionSeries {
+        expression,
+        field: Arc::new(field),
+    }))
+}
+
 fn finite(array: &ArrayRef) -> bool {
     array
         .as_any()
@@ -131,9 +187,8 @@ pub(crate) fn arithmetic(
     operands: &[SeriesOperand],
     output_type: NumericType,
 ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
-    if operands.len() < 2
-        || (operation != NumericOperation::Add && operands.len() != 2)
-        || (operation == NumericOperation::Divide && output_type != NumericType::Float64)
+    if !operation.accepts_arity(operands.len())
+        || (operation.requires_float() && output_type != NumericType::Float64)
     {
         return Err(RelationError::InvalidInput);
     }
@@ -174,6 +229,13 @@ pub(crate) fn arithmetic(
         NumericOperation::Subtract => "yssbi_numeric_subtract",
         NumericOperation::Multiply => "yssbi_numeric_multiply",
         NumericOperation::Divide => "yssbi_numeric_divide",
+        NumericOperation::Power => "yssbi_numeric_power",
+        NumericOperation::Logarithm => "yssbi_numeric_log",
+        NumericOperation::Ln => "yssbi_numeric_ln",
+        NumericOperation::Log2 => "yssbi_numeric_log2",
+        NumericOperation::Log10 => "yssbi_numeric_log10",
+        NumericOperation::Square => "yssbi_numeric_square",
+        NumericOperation::Sqrt => "yssbi_numeric_sqrt",
     };
     // One native UDF retains strict numeric errors while Arrow supplies batch arithmetic
     // and DataFusion supplies scalar broadcasting, projection and controlled execution.
@@ -200,7 +262,7 @@ pub(crate) fn arithmetic(
                         .map_err(|_| failure(RelationError::InvalidInput))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            if arrays.len() < 2
+            if !operation.accepts_arity(arrays.len())
                 || arrays
                     .iter()
                     .any(|array| array.null_count() != 0 || !finite(array))
@@ -208,6 +270,18 @@ pub(crate) fn arithmetic(
                 return Err(failure(RelationError::InvalidInput));
             }
             let mut result = arrays[0].clone();
+            if operation.is_unary() {
+                let values = result
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .ok_or_else(|| failure(RelationError::InvalidInput))?;
+                let values = values
+                    .values()
+                    .iter()
+                    .map(|value| operation.evaluate_unary_float(*value).map_err(failure))
+                    .collect::<Result<Vec<_>, _>>()?;
+                result = Arc::new(Float64Array::from(values));
+            }
             for right in &arrays[1..] {
                 if operation == NumericOperation::Divide
                     && right
@@ -217,13 +291,39 @@ pub(crate) fn arithmetic(
                 {
                     return Err(failure(RelationError::DivisionByZero));
                 }
-                result = match operation {
-                    NumericOperation::Add => numeric::add(&result, right),
-                    NumericOperation::Subtract => numeric::sub(&result, right),
-                    NumericOperation::Multiply => numeric::mul(&result, right),
-                    NumericOperation::Divide => numeric::div(&result, right),
-                }
-                .map_err(|_| failure(RelationError::NonFiniteResult))?;
+                let native = match operation {
+                    NumericOperation::Add => Some(numeric::add(&result, right)),
+                    NumericOperation::Subtract => Some(numeric::sub(&result, right)),
+                    NumericOperation::Multiply => Some(numeric::mul(&result, right)),
+                    NumericOperation::Divide => Some(numeric::div(&result, right)),
+                    NumericOperation::Power | NumericOperation::Logarithm => None,
+                    NumericOperation::Ln
+                    | NumericOperation::Log2
+                    | NumericOperation::Log10
+                    | NumericOperation::Square
+                    | NumericOperation::Sqrt => None,
+                };
+                result = if let Some(native) = native {
+                    native.map_err(|_| failure(RelationError::NonFiniteResult))?
+                } else {
+                    let left = result
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .ok_or_else(|| failure(RelationError::InvalidInput))?;
+                    let right = right
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .ok_or_else(|| failure(RelationError::InvalidInput))?;
+                    let values = left
+                        .values()
+                        .iter()
+                        .zip(right.values().iter())
+                        .map(|(left, right)| {
+                            operation.evaluate_float(*left, *right).map_err(failure)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Arc::new(Float64Array::from(values))
+                };
                 if !finite(&result) {
                     return Err(failure(RelationError::NonFiniteResult));
                 }

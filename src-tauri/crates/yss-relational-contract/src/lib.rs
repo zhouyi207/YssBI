@@ -4,7 +4,8 @@ mod dataset;
 pub use dataset::{DatasetColumnPatch, DatasetOverlay, DatasetRelationInput};
 mod series;
 pub use series::{
-    ComparisonOperand, NumericOperation, NumericType, SeriesHandle, SeriesOperand, SeriesPlan,
+    BooleanOperand, BooleanOperation, ComparisonOperand, NumericOperation, NumericType,
+    SeriesHandle, SeriesOperand, SeriesPlan,
 };
 pub use yss_tabular_contract::ComparisonOperation;
 
@@ -123,6 +124,11 @@ pub struct RelationPredicate {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn boolean_series(
+        &self,
+        operation: BooleanOperation,
+        operands: &[BooleanOperand],
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
     fn compare_series(
         &self,
         operation: ComparisonOperation,
@@ -157,6 +163,29 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn boolean_series(
+        &self,
+        operation: BooleanOperation,
+        operands: &[BooleanOperand],
+    ) -> Result<SeriesHandle, RelationError> {
+        if operands.len() != operation.arity()
+            || !operands
+                .iter()
+                .any(|v| matches!(v, BooleanOperand::Series(_)))
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if operands
+            .iter()
+            .any(|v| matches!(v, BooleanOperand::Series(s) if s.relation() != self))
+        {
+            return Err(RelationError::UnalignedSeries);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan.boolean_series(operation, operands)?,
+        ))
+    }
     pub fn compare_series(
         &self,
         operation: ComparisonOperation,
