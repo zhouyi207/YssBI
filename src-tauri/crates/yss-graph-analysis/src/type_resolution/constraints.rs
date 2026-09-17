@@ -231,7 +231,7 @@ pub(super) fn automatic_output_constraints(
             }
         }
         match &protocol.typing {
-            NodeTypingSpec::Comparison {
+            NodeTypingSpec::BinaryPredicate {
                 left,
                 right,
                 output,
@@ -254,7 +254,7 @@ pub(super) fn automatic_output_constraints(
                     let mut allowed_output = BTreeSet::new();
                     for a in a {
                         for b in b {
-                            if let Some(result) = comparison_result(a, b)
+                            if let Some(result) = binary_predicate_result(a, b)
                                 && results.contains(&result)
                             {
                                 allowed_left.insert(a.clone());

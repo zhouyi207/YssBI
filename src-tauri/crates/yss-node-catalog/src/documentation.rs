@@ -29,7 +29,8 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.numeric.ln" => markdown!("ln"),
         "yssbi.numeric.log2" => markdown!("log2"),
         "yssbi.numeric.log10" => markdown!("log10"),
-        "yssbi.numeric.exp" => markdown!("exp"),
+        "yssbi.numeric.power" => markdown!("power"),
+        "yssbi.numeric.log" => markdown!("log"),
         "yssbi.numeric.sqrt" => markdown!("sqrt"),
         "yssbi.numeric.square" => markdown!("square"),
 
@@ -47,9 +48,12 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.value.convert" => markdown!("convert"),
         "yssbi.project.function.call" => markdown!("call_function"),
         "yssbi.constant.get" => markdown!("get_constant"),
+        "yssbi.constant.pi" => markdown!("pi"),
+        "yssbi.constant.e" => markdown!("e"),
         "yssbi.debug.view" => markdown!("view"),
 
         "yssbi.dataframe.source.get" => markdown!("get_dataframe"),
+        "yssbi.dataframe.project" => markdown!("select_columns"),
         "yssbi.dataframe.decompose" => markdown!("decompose_dataframe"),
         "yssbi.dataframe.combine" => markdown!("combine_dataframe"),
         "yssbi.dataframe.filter" => markdown!("filter_dataframe"),

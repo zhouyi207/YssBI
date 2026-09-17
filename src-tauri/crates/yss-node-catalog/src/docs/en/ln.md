@@ -6,7 +6,9 @@ $$
 \text{Result} = \ln x
 $$
 
-**Domain:** $x > 0$. Non-positive inputs yield null (series) or an error (scalar). Accepts `Int64`, `Float64`, or numeric `DataSeries`; output is `Float64` or `DataSeries<Float64>`.
+**Domain:** $x > 0$. Non-positive inputs fail for both scalars and series. Accepts Numeric scalars or series and preserves input shape, with Float64 results.
+
+Scalars execute directly; materialized series execute element-wise and lazy series execute in batches when consumed. Nulls, invalid domains, non-finite inputs/results, and integers that cannot widen exactly to Float64 fail instead of silently producing null. The source dataset is unchanged.
 
 ## Usage
 

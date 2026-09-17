@@ -65,10 +65,15 @@ pub(super) const NODES: &[NodeSpec] = &[
     ),
     spec(
         "yssbi.dataframe.project",
-        "Project DataFrame",
-        "投影数据框",
-        &["select columns", "projection", "dataframe"],
-        &["选择列", "投影", "数据框"],
+        "Select Columns",
+        "筛选列",
+        &[
+            "select columns",
+            "filter columns",
+            "projection",
+            "dataframe",
+        ],
+        &["筛选列", "选择列", "保留列", "列顺序", "投影", "数据帧"],
         InterfaceKind::Project,
     ),
     spec(

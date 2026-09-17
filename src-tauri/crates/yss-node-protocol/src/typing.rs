@@ -88,7 +88,7 @@ pub enum ShapeRule {
 pub enum NodeTypingSpec {
     #[default]
     Fixed,
-    Comparison {
+    BinaryPredicate {
         left: PortKey,
         right: PortKey,
         output: PortKey,

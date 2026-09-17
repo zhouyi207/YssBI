@@ -584,7 +584,7 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
-        NodeTypingSpec::Comparison {
+        NodeTypingSpec::BinaryPredicate {
             left,
             right,
             output,
@@ -598,7 +598,9 @@ fn apply_node_rule(
                         (Some(a), Some(b)) => {
                             let candidates = a
                                 .iter()
-                                .flat_map(|a| b.iter().filter_map(move |b| comparison_result(a, b)))
+                                .flat_map(|a| {
+                                    b.iter().filter_map(move |b| binary_predicate_result(a, b))
+                                })
                                 .collect::<Vec<_>>();
                             let result = if candidates.is_empty() {
                                 TypeState::Conflict(TypeConflict::IncompatibleInputs)
@@ -748,7 +750,7 @@ struct NumericType {
     shape: NumericShape,
 }
 
-fn comparison_result(left: &ResolvedType, right: &ResolvedType) -> Option<ResolvedType> {
+fn binary_predicate_result(left: &ResolvedType, right: &ResolvedType) -> Option<ResolvedType> {
     fn element(value: &ResolvedType) -> Option<(&yss_node_protocol::TypeId, bool)> {
         match value {
             ResolvedType::Nominal(id) => Some((id, false)),

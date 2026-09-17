@@ -12,6 +12,20 @@ struct MathSpec {
 
 const ARITHMETIC_OPERATORS: &[MathSpec] = &[
     MathSpec {
+        operation: "power",
+        title: "Power",
+        zh_title: "幂",
+        aliases: &["power", "pow", "exponent", "^"],
+        zh_aliases: &["幂", "乘方", "指数", "次方"],
+    },
+    MathSpec {
+        operation: "log",
+        title: "Logarithm",
+        zh_title: "对数",
+        aliases: &["log", "logarithm", "base"],
+        zh_aliases: &["对数", "底数", "换底"],
+    },
+    MathSpec {
         operation: "add",
         title: "Add",
         zh_title: "加法",
@@ -64,13 +78,6 @@ const UNARY_FUNCTIONS: &[MathSpec] = &[
         zh_aliases: &["常用对数", "log10"],
     },
     MathSpec {
-        operation: "exp",
-        title: "Exponential",
-        zh_title: "指数函数",
-        aliases: &["exp", "exponential", "e power"],
-        zh_aliases: &["指数", "指数函数", "exp"],
-    },
-    MathSpec {
         operation: "sqrt",
         title: "Square Root",
         zh_title: "平方根",
@@ -87,11 +94,52 @@ const UNARY_FUNCTIONS: &[MathSpec] = &[
 ];
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    register_constants(fragment)?;
     for spec in ARITHMETIC_OPERATORS {
         register_arithmetic_operator(fragment, *spec)?;
     }
     for spec in UNARY_FUNCTIONS {
         register_unary(fragment, *spec)?;
+    }
+    Ok(())
+}
+
+fn register_constants(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
+    for spec in [
+        NodeTextSpec {
+            id: "yssbi.constant.pi",
+            title: "Pi (π)",
+            zh_title: "π（圆周率）",
+            documentation: "The fixed mathematical constant pi, represented as Float64.",
+            zh_documentation: "输出圆周率 π 的 Float64 近似值，无需输入或配置。",
+            aliases: &["pi", "π", "circle constant"],
+            zh_aliases: &["pi", "π", "圆周率"],
+        },
+        NodeTextSpec {
+            id: "yssbi.constant.e",
+            title: "Euler's Number (e)",
+            zh_title: "e（自然常数）",
+            documentation: "The fixed base of the natural logarithm, represented as Float64.",
+            zh_documentation: "输出自然常数 e 的 Float64 近似值，可用作幂和对数的底数。",
+            aliases: &["e", "Euler's number", "natural logarithm base"],
+            zh_aliases: &["e", "自然常数", "自然对数底数"],
+        },
+    ] {
+        fragment.add_node_messages(&spec)?;
+        let protocol = protocol(
+            spec.id,
+            "constants",
+            vec![data_port(
+                "value",
+                "Value",
+                PortDirection::Output,
+                concrete("core.numeric")?,
+            )?],
+            vec![],
+            vec![],
+            pure(),
+        )?;
+        fragment.nodes.push(leaf(protocol, spec.id));
     }
     Ok(())
 }
@@ -111,6 +159,11 @@ fn register_arithmetic_operator(
         zh_aliases: spec.zh_aliases,
     })?;
     let numeric = numeric_value_type()?;
+    let (left_title, right_title) = match spec.operation {
+        "power" => ("Base", "Exponent"),
+        "log" => ("Value", "Base"),
+        _ => ("Left", "Right"),
+    };
     let operands = if spec.operation == "add" {
         data_port_with_cardinality(
             "operands",
@@ -120,13 +173,18 @@ fn register_arithmetic_operator(
             PortCardinality::UserCreated { min: 2, max: None },
         )?
     } else {
-        data_port("left", "Left", PortDirection::Input, numeric.clone())?
+        data_port("left", left_title, PortDirection::Input, numeric.clone())?
     };
     let mut ports = vec![operands];
     if spec.operation != "add" {
-        ports.push(data_port("right", "Right", PortDirection::Input, numeric)?);
+        ports.push(data_port(
+            "right",
+            right_title,
+            PortDirection::Input,
+            numeric,
+        )?);
     }
-    let result_type = if spec.operation == "divide" {
+    let result_type = if matches!(spec.operation, "divide" | "power" | "log") {
         float_value_type()?
     } else {
         numeric_value_type()?
@@ -137,6 +195,15 @@ fn register_arithmetic_operator(
         PortDirection::Output,
         result_type,
     )?);
+    if matches!(spec.operation, "power" | "log") {
+        for port in &mut ports {
+            if port.direction == PortDirection::Input {
+                port.consumption = Some(InputConsumption::Streaming);
+            } else {
+                port.production = Some(OutputProduction::Streaming);
+            }
+        }
+    }
     let mut protocol = protocol(id, "numeric", ports, vec![], vec![], pure())?;
     protocol.typing = NodeTypingSpec::NumericFold {
         inputs: if spec.operation == "add" {
@@ -191,6 +258,13 @@ fn register_unary(
         input: semantic("input", PortKey::new)?,
         output: semantic("result", PortKey::new)?,
     };
+    for port in &mut protocol.interface.ports {
+        if port.direction == PortDirection::Input {
+            port.consumption = Some(InputConsumption::Streaming);
+        } else {
+            port.production = Some(OutputProduction::Streaming);
+        }
+    }
     fragment.nodes.push(leaf(protocol, id));
     Ok(())
 }

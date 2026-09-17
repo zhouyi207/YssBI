@@ -531,7 +531,7 @@ fn validate_typing(
 
     match typing {
         NodeTypingSpec::Fixed => Ok(()),
-        NodeTypingSpec::Comparison {
+        NodeTypingSpec::BinaryPredicate {
             left,
             right,
             output: result,

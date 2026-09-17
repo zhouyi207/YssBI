@@ -263,6 +263,26 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         }
         execute(&document, &node_type)
     };
+    for (operator, values, scalar, scalar_left, expected) in [
+        ("power", r#"{"value":[1,2,3]}"#, 2, true, [2., 4., 8.]),
+        ("power", r#"{"value":[1,2,3]}"#, 2, false, [1., 4., 9.]),
+        ("log", r#"{"value":[2,4,8]}"#, 2, false, [1., 2., 3.]),
+        ("log", r#"{"value":[2,4,16]}"#, 16, true, [4., 2., 1.]),
+    ] {
+        let numeric = ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
+        assert_eq!(
+            evaluate(
+                operator,
+                numeric.clone(),
+                values,
+                numeric,
+                DataValue::Int64(scalar),
+                scalar_left
+            )
+            .unwrap(),
+            RuntimeValue::List(expected.map(RuntimeValue::Decimal).into())
+        );
+    }
     assert_eq!(
         evaluate(
             "multiply",
@@ -345,6 +365,233 @@ fn zero_divisor_reports_the_reason_and_divide_node() {
         failure.source.unwrap().node().unwrap().as_str(),
         divide.to_string()
     );
+}
+
+#[test]
+fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
+    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType as S, ValueType as T};
+    let mut document = GraphDocument::default();
+    let [source, low, high, less, greater, gate, not, flag] =
+        std::array::from_fn(|_| NodeId::new());
+    for (id, kind) in [
+        (source, "yssbi.constant.get"),
+        (low, "yssbi.constant.get"),
+        (high, "yssbi.constant.get"),
+        (flag, "yssbi.constant.get"),
+        (less, "yssbi.logic.less"),
+        (greater, "yssbi.logic.greater"),
+        (gate, "yssbi.logic.and"),
+        (not, "yssbi.logic.not"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    set_constant(
+        &mut document,
+        source,
+        T::DataSeries(Box::new(T::Scalar(S::Numeric))),
+        DataValue::DataSeries(DataSeriesValue::with_element_type(
+            r#"{"value":[1,2,3,null]}"#,
+            T::Scalar(S::Numeric),
+        )),
+    );
+    set_constant(
+        &mut document,
+        low,
+        T::Scalar(S::Numeric),
+        DataValue::Int64(1),
+    );
+    set_constant(
+        &mut document,
+        high,
+        T::Scalar(S::Numeric),
+        DataValue::Int64(3),
+    );
+    set_constant(
+        &mut document,
+        flag,
+        T::Scalar(S::Binary),
+        DataValue::Boolean(false),
+    );
+    for value in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(value).unwrap();
+    }
+    for (from, output, to, input) in [
+        (source, "value", less, "left"),
+        (source, "value", greater, "left"),
+        (low, "value", greater, "right"),
+        (high, "value", less, "right"),
+        (less, "result", gate, "left"),
+        (greater, "result", gate, "right"),
+        (gate, "result", not, "input"),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(from, output.parse().unwrap()),
+                input: PortAddress::declared(to, input.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    use RuntimeValue::{Bool as B, List as L, Null as N};
+    assert_eq!(
+        execute(&document, "yssbi.logic.not").unwrap(),
+        L(Box::new([B(true), B(false), B(true), N]))
+    );
+    document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.or".parse().unwrap();
+    assert_eq!(
+        execute(&document, "yssbi.logic.not").unwrap(),
+        L(Box::new([B(false), B(false), B(false), N]))
+    );
+    document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.and".parse().unwrap();
+    let edge = document
+        .connections
+        .values_mut()
+        .find(|edge| edge.output.node_id == greater && edge.input.node_id == gate)
+        .unwrap();
+    edge.output = PortAddress::declared(flag, "value".parse().unwrap());
+    assert_eq!(
+        execute(&document, "yssbi.logic.not").unwrap(),
+        L(Box::new([B(true), B(true), B(true), B(true)]))
+    );
+}
+
+#[test]
+fn mathematical_constants_execute_without_project_constants_and_feed_arithmetic() {
+    for (kind, expected, downstream, result) in [
+        (
+            "yssbi.constant.pi",
+            std::f64::consts::PI,
+            "yssbi.numeric.square",
+            std::f64::consts::PI * std::f64::consts::PI,
+        ),
+        (
+            "yssbi.constant.e",
+            std::f64::consts::E,
+            "yssbi.numeric.ln",
+            1.,
+        ),
+    ] {
+        let mut document = GraphDocument::default();
+        let source = NodeId::new();
+        document.nodes.insert(
+            source,
+            DocumentNode {
+                id: source,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        assert_eq!(
+            execute(&document, kind).unwrap(),
+            RuntimeValue::Decimal(expected)
+        );
+        let target = NodeId::new();
+        document.nodes.insert(
+            target,
+            DocumentNode {
+                id: target,
+                node_type: downstream.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+        let edge = ConnectionId::new();
+        document.connections.insert(
+            edge,
+            DocumentConnection {
+                id: edge,
+                output: PortAddress::declared(source, "value".parse().unwrap()),
+                input: PortAddress::declared(target, "input".parse().unwrap()),
+                order: None,
+            },
+        );
+        assert_eq!(
+            execute(&document, downstream).unwrap(),
+            RuntimeValue::Decimal(result)
+        );
+        assert!(document.constants.is_empty());
+    }
+}
+
+#[test]
+fn unary_arithmetic_nodes_execute_scalar_and_series_graphs() {
+    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType, ValueType};
+    for (operation, values, expected) in [
+        ("ln", [1., std::f64::consts::E], [0., 1.]),
+        ("log2", [1., 8.], [0., 3.]),
+        ("log10", [1., 100.], [0., 2.]),
+        ("square", [-3., 0.], [9., 0.]),
+        ("sqrt", [0., 9.], [0., 3.]),
+    ] {
+        let mut document = GraphDocument::default();
+        let source = NodeId::new();
+        let target = NodeId::new();
+        let node_type = format!("yssbi.numeric.{operation}");
+        for (id, kind) in [(source, "yssbi.constant.get"), (target, node_type.as_str())] {
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: kind.parse().unwrap(),
+                    position: NodePosition { x: 0., y: 0. },
+                    parameters: ParameterValues::new(),
+                    user_label: None,
+                },
+            );
+        }
+        let element = ValueType::Scalar(SemanticType::Numeric);
+        set_constant(
+            &mut document,
+            source,
+            element.clone(),
+            DataValue::Float64(values[1]),
+        );
+        let edge = ConnectionId::new();
+        document.connections.insert(
+            edge,
+            DocumentConnection {
+                id: edge,
+                output: PortAddress::declared(source, "value".parse().unwrap()),
+                input: PortAddress::declared(target, "input".parse().unwrap()),
+                order: None,
+            },
+        );
+        assert_eq!(
+            execute(&document, &node_type).unwrap(),
+            RuntimeValue::Decimal(expected[1])
+        );
+        set_constant(
+            &mut document,
+            source,
+            ValueType::DataSeries(Box::new(element.clone())),
+            DataValue::DataSeries(DataSeriesValue::with_element_type(
+                serde_json::json!({"value": values}).to_string(),
+                element,
+            )),
+        );
+        for value in document.constants.values_mut() {
+            yss_graph_document::normalize_constant_value(value).unwrap();
+        }
+        assert_eq!(
+            execute(&document, &node_type).unwrap(),
+            RuntimeValue::List(expected.map(RuntimeValue::Decimal).into())
+        );
+    }
 }
 
 #[test]

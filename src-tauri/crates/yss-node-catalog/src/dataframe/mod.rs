@@ -776,8 +776,8 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
             "将“源列”指定的列重命名为“目标列”。",
         ),
         InterfaceKind::Project => (
-            "Selects direct source columns without renaming or derived expressions.",
-            "选择源数据框中的直接列，不执行重命名或派生表达式。",
+            "Keeps the selected source columns in the specified output order.",
+            "保留数据帧中指定的列，并按指定顺序排列输出列。",
         ),
         InterfaceKind::FilterRows => (
             "Filters rows by one source column and a Rust-issued compatible operator.",
@@ -804,8 +804,8 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("types.series.title", "DataSeries", "数据序列"),
         (
             "types.dataframe_project_columns.title",
-            "DataFrame Project Columns",
-            "数据框投影列",
+            "Selected Columns",
+            "筛选列清单",
         ),
         (
             "types.dataframe_filter_predicate.title",

@@ -459,10 +459,7 @@ fn assemble_builtin_parts()
             spec.aliases,
             spec.zh_aliases,
         );
-        nodes.push(leaf(
-            binary_protocol(id, "logic", "core.binary", "core.binary")?,
-            spec.kernel,
-        ));
+        nodes.push(leaf(boolean_protocol(id, false)?, spec.kernel));
     }
     add_node_messages(
         messages,
@@ -473,7 +470,7 @@ fn assemble_builtin_parts()
         &["取反", "!"],
     );
     nodes.push(leaf(
-        unary_protocol("yssbi.logic.not", "logic", "core.binary", "core.binary")?,
+        boolean_protocol("yssbi.logic.not", true)?,
         "logic.not",
     ));
 
@@ -566,25 +563,6 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     )
 }
 
-fn binary_protocol(
-    id: &'static str,
-    category: &'static str,
-    input: &'static str,
-    output: &'static str,
-) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    protocol(
-        id,
-        category,
-        vec![
-            data_port("left", "Left", PortDirection::Input, input)?,
-            data_port("right", "Right", PortDirection::Input, input)?,
-            data_port("result", "Result", PortDirection::Output, output)?,
-        ],
-        vec![],
-        pure(),
-    )
-}
-
 fn comparison_protocol(
     id: &'static str,
     equality: bool,
@@ -602,6 +580,13 @@ fn comparison_protocol(
             .flatten()
             .collect(),
     );
+    binary_predicate_protocol(id, input)
+}
+
+fn binary_predicate_protocol(
+    id: &'static str,
+    input: TypeExpr,
+) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let binary = TypeExpr::Concrete(sid("core.binary", TypeId::new)?);
     let output = TypeExpr::Union(vec![binary.clone(), data_series_type(binary)]);
     let mut protocol = protocol(
@@ -615,9 +600,40 @@ fn comparison_protocol(
         vec![],
         pure(),
     )?;
-    protocol.typing = NodeTypingSpec::Comparison {
+    protocol.typing = NodeTypingSpec::BinaryPredicate {
         left: sid("left", PortKey::new)?,
         right: sid("right", PortKey::new)?,
+        output: sid("result", PortKey::new)?,
+    };
+    for port in &mut protocol.interface.ports {
+        if port.direction == PortDirection::Input {
+            port.consumption = Some(InputConsumption::Streaming);
+        } else {
+            port.production = Some(OutputProduction::Streaming);
+        }
+    }
+    Ok(protocol)
+}
+
+fn boolean_protocol(id: &'static str, unary: bool) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let scalar = concrete("core.binary")?;
+    let binary = TypeExpr::Union(vec![scalar.clone(), data_series_type(scalar)]);
+    if !unary {
+        return binary_predicate_protocol(id, binary);
+    }
+    let mut protocol = protocol(
+        id,
+        "logic",
+        vec![
+            data_port_expr("input", "Input", PortDirection::Input, binary.clone())?,
+            data_port_expr("result", "Result", PortDirection::Output, binary)?,
+        ],
+        vec![],
+        pure(),
+    )?;
+    // Identity of types only; NOT remains an executable leaf, not a transparent node.
+    protocol.typing = NodeTypingSpec::Identity {
+        input: sid("input", PortKey::new)?,
         output: sid("result", PortKey::new)?,
     };
     for port in &mut protocol.interface.ports {
@@ -654,24 +670,6 @@ fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyEr
         vec![],
     )?;
     Ok(protocol)
-}
-
-fn unary_protocol(
-    id: &'static str,
-    category: &'static str,
-    input: &'static str,
-    output: &'static str,
-) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    protocol(
-        id,
-        category,
-        vec![
-            data_port("input", "Input", PortDirection::Input, input)?,
-            data_port("result", "Result", PortDirection::Output, output)?,
-        ],
-        vec![],
-        pure(),
-    )
 }
 
 fn protocol(

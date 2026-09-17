@@ -97,6 +97,36 @@ mod tests {
     }
 
     #[test]
+    fn mathematical_constants_are_static_localized_numeric_sources() {
+        let system = build_builtin_node_system().unwrap();
+        for locale in ["zh-CN", "en-US"] {
+            let catalog = system.catalog.localize(&system.registry, locale);
+            for id in ["yssbi.constant.pi", "yssbi.constant.e"] {
+                let item = catalog
+                    .items
+                    .iter()
+                    .find(|item| item.node_type_id.as_ref() == id)
+                    .unwrap();
+                assert_eq!(item.category_id.as_ref(), "constants");
+                assert!(!item.title.is_empty());
+                assert!(item.documentation.is_some());
+                assert!(item.parameters.is_empty());
+                let protocol = system
+                    .registry
+                    .protocol(&NodeTypeId::new(id).unwrap())
+                    .unwrap();
+                assert_eq!(protocol.interface.ports.len(), 1);
+                let port = &protocol.interface.ports[0];
+                assert_eq!(port.direction, yss_node_protocol::PortDirection::Output);
+                assert_eq!(
+                    port.value_type,
+                    yss_node_protocol::TypeExpr::Concrete("core.numeric".parse().unwrap())
+                );
+            }
+        }
+    }
+
+    #[test]
     fn numeric_type_class_contains_the_numeric_semantic() {
         let registry = build_builtin_node_system()
             .expect("production built-in registry must assemble")
