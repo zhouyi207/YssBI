@@ -356,6 +356,14 @@ impl RelationPlan for DataFusionRelation {
         crate::series::arithmetic(operation, operands, output_type)
     }
 
+    fn compare_series(
+        &self,
+        operation: yss_relational_contract::ComparisonOperation,
+        operands: &[yss_relational_contract::ComparisonOperand],
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::comparison::compare(operation, operands)
+    }
+
     fn convert_series(
         &self,
         series: &SeriesHandle,

@@ -6,6 +6,29 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fmt;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ComparisonOperation {
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+}
+
+impl ComparisonOperation {
+    pub fn evaluate(self, ordering: std::cmp::Ordering) -> bool {
+        match self {
+            Self::Equal => ordering.is_eq(),
+            Self::NotEqual => !ordering.is_eq(),
+            Self::Less => ordering.is_lt(),
+            Self::LessEqual => ordering.is_le(),
+            Self::Greater => ordering.is_gt(),
+            Self::GreaterEqual => ordering.is_ge(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FiniteTabularDecimal(f64);
 
@@ -37,6 +60,33 @@ pub enum TabularScalar {
 }
 
 impl TabularScalar {
+    /// Exact comparison of primitive carriers. Missing or incompatible values have no ordering.
+    pub fn compare(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use TabularScalar::*;
+        fn integer_decimal(integer: i128, decimal: f64) -> std::cmp::Ordering {
+            integer.cmp(&(decimal as i128)).then_with(|| {
+                0.0_f64
+                    .partial_cmp(&decimal.fract())
+                    .expect("finite decimal")
+            })
+        }
+        match (self, other) {
+            (Integer(a), Integer(b)) => Some(a.cmp(b)),
+            (Unsigned(a), Unsigned(b)) => Some(a.cmp(b)),
+            (Integer(a), Unsigned(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
+            (Unsigned(a), Integer(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
+            (Integer(a), Decimal(b)) => Some(integer_decimal(i128::from(*a), b.as_f64())),
+            (Unsigned(a), Decimal(b)) => Some(integer_decimal(i128::from(*a), b.as_f64())),
+            (Decimal(a), Integer(b)) => Some(integer_decimal(i128::from(*b), a.as_f64()).reverse()),
+            (Decimal(a), Unsigned(b)) => {
+                Some(integer_decimal(i128::from(*b), a.as_f64()).reverse())
+            }
+            (Decimal(a), Decimal(b)) => a.as_f64().partial_cmp(&b.as_f64()),
+            (String(a), String(b)) => Some(a.cmp(b)),
+            (Bool(a), Bool(b)) => Some(a.cmp(b)),
+            _ => None,
+        }
+    }
     /// The JSON number representation cannot carry wider integers into JavaScript exactly.
     /// Storage/literals keep the original scalar; paged display uses decimal text when needed.
     pub fn display_value(&self) -> Self {

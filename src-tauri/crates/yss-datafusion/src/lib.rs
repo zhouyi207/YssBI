@@ -4,6 +4,7 @@ mod dataset;
 mod page;
 mod profile;
 pub use dataset::{DatasetQuery, DatasetQueryPage};
+mod comparison;
 mod relation;
 mod series;
 

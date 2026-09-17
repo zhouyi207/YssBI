@@ -25,6 +25,12 @@ pub enum SeriesOperand {
     Scalar(RelationLiteral),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ComparisonOperand {
+    Series(SeriesHandle),
+    Scalar(yss_tabular_contract::TabularScalar),
+}
+
 /// An adapter-owned expression over a relation's unchanged row domain. Native expressions
 /// stay in the adapter; this boundary does not serialize or optimize an expression tree.
 pub trait SeriesPlan: Send + Sync {

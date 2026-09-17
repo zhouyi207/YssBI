@@ -42,6 +42,164 @@ fn predicate(comparison: RelationComparison, value: i64) -> RelationPredicate {
 }
 
 #[test]
+fn comparison_series_are_lazy_exact_nullable_and_aligned() {
+    use yss_relational_contract::{ComparisonOperand as O, ComparisonOperation as C};
+    use yss_tabular_contract::TabularScalar as V;
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "yss-comparison-{}-{}.parquet",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let schema = Arc::new(
+        yss_tabular_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("text", DataType::Utf8, true),
+                Field::new("integer", DataType::Int64, true),
+                Field::new("real", DataType::Float64, true),
+                Field::new("fixed", DataType::Decimal128(20, 2), true),
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("display_order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "display_order",
+        )
+        .unwrap(),
+    );
+    let source = runtime
+        .parquet_relation(
+            binding(),
+            schema.clone(),
+            std::slice::from_ref(&path),
+            Arc::new(RemoveFile(path.clone())),
+        )
+        .unwrap();
+    let integer = source.select_series("integer").unwrap();
+    let real = source.select_series("real").unwrap();
+    let text = source.select_series("text").unwrap();
+    let operations = [
+        C::Equal,
+        C::NotEqual,
+        C::Less,
+        C::LessEqual,
+        C::Greater,
+        C::GreaterEqual,
+    ];
+    let mut columns = operations
+        .map(|op| {
+            source
+                .compare_series(op, &[O::Series(integer.clone()), O::Series(real.clone())])
+                .unwrap()
+        })
+        .to_vec();
+    for operands in [
+        [O::Series(text.clone()), O::Scalar(V::String("1".into()))],
+        [O::Scalar(V::String("1".into())), O::Series(text.clone())],
+    ] {
+        columns.push(source.compare_series(C::Equal, &operands).unwrap());
+    }
+    columns.push(
+        source
+            .compare_series(
+                C::Less,
+                &[O::Series(integer.clone()), O::Scalar(V::Unsigned(u64::MAX))],
+            )
+            .unwrap(),
+    );
+    columns.push(
+        source
+            .compare_series(
+                C::Equal,
+                &[
+                    O::Series(source.select_series("fixed").unwrap()),
+                    O::Scalar(V::Integer(1)),
+                ],
+            )
+            .unwrap(),
+    );
+    let combined = source.project_series(&columns).unwrap();
+    assert!(
+        !path.exists(),
+        "constructing comparisons must not read rows"
+    );
+    let other = source
+        .limit(0, 2)
+        .unwrap()
+        .select_series("integer")
+        .unwrap();
+    assert_eq!(
+        source.compare_series(C::Equal, &[O::Series(integer), O::Series(other)]),
+        Err(RelationError::UnalignedSeries)
+    );
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(StringArray::from(vec![Some("001"), None, Some("1")])),
+            Arc::new(Int64Array::from(vec![
+                Some(9_007_199_254_740_993),
+                None,
+                Some(-1),
+            ])),
+            Arc::new(Float64Array::from(vec![
+                Some(9_007_199_254_740_992.0),
+                Some(1.0),
+                Some(0.0),
+            ])),
+            Arc::new(
+                arrow::array::Decimal128Array::from(vec![Some(100), None, Some(101)])
+                    .with_precision_and_scale(20, 2)
+                    .unwrap(),
+            ),
+            Arc::new(Int64Array::from(vec![0, 1, 2])),
+            Arc::new(StringArray::from(vec!["000", "001", "002"])),
+        ],
+    )
+    .unwrap();
+    yss_tabular_io::write_parquet_batches(&path, schema, [Ok(batch)]).unwrap();
+    let page = combined.page(0, 3, &control()).unwrap();
+    for (index, (first, last)) in [
+        (false, false),
+        (true, true),
+        (false, true),
+        (false, true),
+        (true, false),
+        (true, false),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            page.data.columns()[index].values(),
+            &[V::Bool(first), V::Null, V::Bool(last)]
+        );
+    }
+    for index in [6, 7] {
+        assert_eq!(
+            page.data.columns()[index].values(),
+            &[V::Bool(false), V::Null, V::Bool(true)]
+        );
+    }
+    assert_eq!(
+        page.data.columns()[8].values(),
+        &[V::Bool(true), V::Null, V::Bool(true)]
+    );
+    assert!(combined.schema().field(0).is_nullable());
+    assert_eq!(
+        page.data.columns()[9].values(),
+        &[V::Bool(true), V::Null, V::Bool(false)]
+    );
+    assert_eq!(
+        yss_tabular_arrow::column_semantic(combined.schema().field(0))
+            .unwrap()
+            .kind,
+        yss_data_contract::SemanticType::Binary
+    );
+}
+
+#[test]
 fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithmetic() {
     use yss_relational_contract::{
         NumericOperation as Op, NumericType as Type, SeriesOperand as Operand,

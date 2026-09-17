@@ -3,7 +3,10 @@
 mod dataset;
 pub use dataset::{DatasetColumnPatch, DatasetOverlay, DatasetRelationInput};
 mod series;
-pub use series::{NumericOperation, NumericType, SeriesHandle, SeriesOperand, SeriesPlan};
+pub use series::{
+    ComparisonOperand, NumericOperation, NumericType, SeriesHandle, SeriesOperand, SeriesPlan,
+};
+pub use yss_tabular_contract::ComparisonOperation;
 
 use std::fmt;
 use std::future::Future;
@@ -120,6 +123,11 @@ pub struct RelationPredicate {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn compare_series(
+        &self,
+        operation: ComparisonOperation,
+        operands: &[ComparisonOperand],
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
     fn binding(&self) -> &RelationBinding;
     fn schema(&self) -> SchemaRef;
     fn project(&self, columns: &[Box<str>]) -> Result<RelationHandle, RelationError>;
@@ -149,6 +157,29 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn compare_series(
+        &self,
+        operation: ComparisonOperation,
+        operands: &[ComparisonOperand],
+    ) -> Result<SeriesHandle, RelationError> {
+        if operands.len() != 2
+            || !operands
+                .iter()
+                .any(|v| matches!(v, ComparisonOperand::Series(_)))
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if operands
+            .iter()
+            .any(|v| matches!(v, ComparisonOperand::Series(s) if s.relation() != self))
+        {
+            return Err(RelationError::UnalignedSeries);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan.compare_series(operation, operands)?,
+        ))
+    }
     pub fn new(plan: Arc<dyn RelationPlan>, executor: Arc<dyn RelationExecutor>) -> Self {
         Self { plan, executor }
     }
