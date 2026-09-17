@@ -133,6 +133,11 @@ export function ActivityPanelDocumentView({
                 key={row.id}
                 role="treeitem"
                 aria-level={row.depth + 1}
+                aria-disabled={
+                  row.kind === "item" && row.item.kind === "node" && !row.item.available
+                    ? true
+                    : undefined
+                }
                 aria-expanded={
                   row.kind === "category" ? (expanded[row.id] ?? row.defaultExpanded) : undefined
                 }

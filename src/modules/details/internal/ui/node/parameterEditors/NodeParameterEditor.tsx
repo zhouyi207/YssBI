@@ -13,6 +13,7 @@ import { DetailReadonlyField } from "../../shared/DetailForm";
 import { DetailFieldRow } from "../../shared/DetailFieldRow";
 import { detailInlineInputClass } from "../../shared/detailStyles";
 import { FilterPredicateEditor, ProjectColumnsEditor } from "./RelationalParameterEditors";
+import { SemanticDomainEditor } from "./SemanticDomainEditor";
 
 interface NodeParameterEditorProps {
   graphPath: string;
@@ -25,6 +26,33 @@ interface NodeParameterEditorProps {
 
 function projectedDraft(parameter: ParameterEditorDto): string {
   return parameter.value === null || parameter.value === undefined ? "" : String(parameter.value);
+}
+
+function optionLabel(key: string, option: string, t: TFunction): string {
+  if (key === "target_type") {
+    const labels: Record<string, string> = {
+      auto: "conversion.auto",
+      "core.numeric": "conversion.numeric",
+      "core.text": "conversion.text",
+      "core.binary": "conversion.binary",
+      "core.categorical": "conversion.categorical",
+      "core.ordinal": "conversion.ordinal",
+      "core.datetime": "conversion.datetime",
+      "core.identifier": "conversion.identifier",
+    };
+    if (labels[option]) return t(labels[option]);
+  }
+  if (key === "numeric_mode" && ["auto", "integer", "real"].includes(option)) {
+    return t(`conversion.${option}`);
+  }
+  if (key === "datetime_kind" && ["auto", "date", "time", "datetime"].includes(option))
+    return t(`conversion.${option}`);
+  if (
+    key === "datetime_precision" &&
+    ["seconds", "milliseconds", "microseconds", "nanoseconds"].includes(option)
+  )
+    return t(`conversion.${option}`);
+  return option;
 }
 
 type NumberDraftError = "required" | "notFinite" | "notInteger" | "outOfRange" | "unsupportedType";
@@ -181,8 +209,17 @@ export function ParameterValueEditor({
   onCommit: commit,
   formatFallback,
 }: OrdinaryValueEditorProps & { formatFallback(value: unknown): string }) {
+  const { t } = useTranslation();
   const fieldErrorId = useId();
   const configuration = parameter.configuration;
+  if (parameter.editor === "semanticDomain") {
+    return (
+      <DetailFieldRow label={parameter.display.title}>
+        <SemanticDomainEditor value={parameter.value} pending={pending} onCommit={commit} />
+        <ParameterErrorList id={fieldErrorId} errors={errors} />
+      </DetailFieldRow>
+    );
+  }
   if (configuration?.kind === "projectColumns") {
     return (
       <div className="space-y-2">
@@ -229,7 +266,7 @@ export function ParameterValueEditor({
             )}
             {configuration.options.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {optionLabel(parameter.key, option, t)}
               </option>
             ))}
           </select>

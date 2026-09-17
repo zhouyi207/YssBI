@@ -89,6 +89,7 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: "statistics.logit.fit",
       title: "逻辑回归",
+      available: true,
       documentation: null,
       categoryId: "statistics.regression",
       iconId: "statistics",
@@ -104,6 +105,7 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: "math.add",
       title: "加法",
+      available: true,
       documentation: null,
       categoryId: "math",
       iconId: "math",
@@ -119,6 +121,7 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: "output.print",
       title: "打印",
+      available: true,
       documentation: null,
       categoryId: "output",
       iconId: "output",
@@ -134,6 +137,7 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: "function.call",
       title: "调用 Helper",
+      available: true,
       documentation: null,
       categoryId: "functions",
       iconId: "function",

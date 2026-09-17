@@ -57,6 +57,7 @@ describe("useNodeCatalogStore", () => {
       {
         nodeTypeId: "second",
         title: "Second",
+        available: true,
         documentation: null,
         categoryId: "tests",
         iconId: "tests",

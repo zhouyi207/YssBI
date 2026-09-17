@@ -70,6 +70,7 @@ function item(title: string, descriptor: NodeCreationDescriptor) {
   return {
     nodeTypeId: descriptor.nodeTypeId,
     title,
+    available: true,
     documentation: null,
     categoryId: "resources",
     iconId: "resource",

@@ -65,7 +65,8 @@ function item(value: unknown): boolean {
       );
     case "node":
       return (
-        exact(value, ["kind", "key", "title", "creation"]) &&
+        exact(value, ["kind", "key", "title", "creation", "available"]) &&
+        typeof value.available === "boolean" &&
         strings(["key", "title"]) &&
         isNodeCreationDescriptorDto(value.creation)
       );

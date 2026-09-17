@@ -15,6 +15,7 @@ export function findResourceNodeSpawnTemplate(
 ): NodeSpawnTemplate | null {
   const item = items.find(
     (candidate) =>
+      candidate.available &&
       candidate.resourcePath === resourcePath &&
       candidate.creation.kind === "resourceBound" &&
       candidate.creation.resourcePath === resourcePath &&

@@ -32,6 +32,7 @@ export type ActivityItem =
     }
   | {
       readonly kind: "node";
+      readonly available: boolean;
       readonly key: string;
       readonly title: string;
       readonly creation: NodeCreationDescriptorDto;

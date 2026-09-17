@@ -78,6 +78,7 @@ function catalog(
       {
         nodeTypeId: "function.call",
         title: localized.title,
+        available: true,
         documentation: localized.documentation,
         categoryId: "functions",
         iconId: "function",

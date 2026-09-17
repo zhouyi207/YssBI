@@ -38,6 +38,7 @@ function catalog(projectInstanceId: string, locale: string): LocalizedCatalogDto
       {
         nodeTypeId,
         title: nodeTypeId,
+        available: true,
         documentation: null,
         categoryId: "tests",
         iconId: "tests",

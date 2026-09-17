@@ -16,6 +16,7 @@ const scalarTypes = new Set<unknown>([...SEMANTIC_TYPES, null]);
 const schemaKinds = new Set(["input", "project", "append", "rename", "filter", "derived"]);
 const portStatuses = new Set(["resolved", "orphan"]);
 const parameterEditorKinds = new Set([
+  "semanticDomain",
   "graphConstant",
   "auto",
   "text",

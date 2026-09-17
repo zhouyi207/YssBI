@@ -63,7 +63,13 @@ const nodesDocument = activityPanelFixture("nodes", [
     kind: "item",
     id: "node:add",
     depth: 1,
-    item: { kind: "node", key: "static:yssbi.numeric.add", title: "Add", creation: nodeCreation },
+    item: {
+      kind: "node",
+      available: true,
+      key: "static:yssbi.numeric.add",
+      title: "Add",
+      creation: nodeCreation,
+    },
   },
 ]);
 const commandsDocument = activityPanelFixture("commands", [

@@ -47,6 +47,7 @@ const backendDocument = activityPanelFixture("nodes", [
     depth: 2,
     item: {
       kind: "node",
+      available: true,
       key: "static:statistics.logit.fit",
       title: "Logit fit",
       creation: { kind: "static", nodeTypeId: "statistics.logit.fit" },
@@ -59,6 +60,7 @@ const backendDocument = activityPanelFixture("nodes", [
     depth: 1,
     item: {
       kind: "node",
+      available: true,
       key: "resourceBound:function.call:Helper",
       title: "Call Helper",
       creation: helperCreation,
@@ -70,6 +72,7 @@ const backendDocument = activityPanelFixture("nodes", [
     depth: 1,
     item: {
       kind: "node",
+      available: true,
       key: "resourceBound:function.call:Other",
       title: "Call Other",
       creation: otherCreation,

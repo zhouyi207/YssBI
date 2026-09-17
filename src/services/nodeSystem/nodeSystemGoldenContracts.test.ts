@@ -30,6 +30,20 @@ function deleteKey(value: object, key: string): void {
 const fingerprintPattern = /^[0-9a-f]{64}$/;
 
 describe("Rust-generated node-system golden contracts", () => {
+  it("accepts the semantic domain editor projection", () => {
+    const parameter = {
+      key: "semantic_domain",
+      display: { title: "Values and levels", description: null },
+      editor: "semanticDomain",
+      presentation: "detailPanel",
+      valueType: { kind: "Object" },
+      multiline: false,
+      value: { values: [{ value: "001", label: "First" }], positiveValue: null },
+      configuration: null,
+    };
+    expect(isParameterEditor(parameter)).toBe(true);
+    expect(isParameterEditor({ ...parameter, editor: "unknownEditor" })).toBe(false);
+  });
   it("parses every Rust-generated deadline phase", () => {
     const deadlineEvents = executionWire.runEvents.filter(
       (event) => event.kind.type === "runErrored" && event.kind.code === "deadlineExceeded",
@@ -113,6 +127,17 @@ describe("Rust-generated node-system golden contracts", () => {
     items.forEach((item) => deleteKey(item, "description"));
 
     expect(isLocalizedCatalogDto(catalog)).toBe(true);
+  });
+
+  it("preserves unavailable items and requires an explicit boolean availability", () => {
+    const catalog = clone(localizedCatalog);
+    catalog.items[0].available = false;
+    expect(isLocalizedCatalogDto(catalog)).toBe(true);
+    const item = catalog.items[0] as unknown as Record<string, unknown>;
+    item.available = "false";
+    expect(isLocalizedCatalogDto(catalog)).toBe(false);
+    deleteKey(item, "available");
+    expect(isLocalizedCatalogDto(catalog)).toBe(false);
   });
 
   it.each([

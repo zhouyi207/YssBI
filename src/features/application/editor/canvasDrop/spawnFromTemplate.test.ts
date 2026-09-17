@@ -64,6 +64,7 @@ describe("spawnNodeFromTemplate", () => {
       {
         nodeTypeId: "yssbi.project.function.call",
         title: "Opaque",
+        available: true,
         documentation: null,
         categoryId: "functions",
         iconId: "function",
@@ -98,5 +99,7 @@ describe("spawnNodeFromTemplate", () => {
     ).toBeNull();
     expect(findResourceNodeSpawnTemplate(items, "functions/opaque", "function")).toBeNull();
     expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "database")).toBeNull();
+    items[0].available = false;
+    expect(findResourceNodeSpawnTemplate(items, descriptor.resourcePath, "function")).toBeNull();
   });
 });

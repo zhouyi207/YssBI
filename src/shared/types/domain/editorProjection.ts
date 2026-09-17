@@ -244,6 +244,7 @@ export interface ParameterDisplayDto {
   description: string | null;
 }
 export type ParameterEditorKindDto =
+  | "semanticDomain"
   | "graphConstant"
   | "auto"
   | "text"

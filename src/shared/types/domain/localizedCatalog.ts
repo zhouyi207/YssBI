@@ -26,6 +26,7 @@ export interface LocalizedParameterDto {
 }
 
 export interface LocalizedCatalogItemDto {
+  available: boolean;
   nodeTypeId: string;
   title: string;
   documentation: string | null;
@@ -114,6 +115,7 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
     !hasExactKeys(
       candidate,
       [
+        "available",
         "nodeTypeId",
         "title",
         "documentation",
@@ -144,6 +146,7 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
         creation.nodeTypeId === candidate.nodeTypeId;
   return (
     coherent &&
+    typeof candidate.available === "boolean" &&
     typeof candidate.nodeTypeId === "string" &&
     typeof candidate.title === "string" &&
     isNullableString(candidate.documentation) &&

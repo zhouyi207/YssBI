@@ -42,6 +42,7 @@ function item(
   return {
     nodeTypeId,
     title: nodeTypeId,
+    available: true,
     documentation: null,
     categoryId,
     iconId: "test",

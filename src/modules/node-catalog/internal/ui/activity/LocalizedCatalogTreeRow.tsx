@@ -1,4 +1,5 @@
 import { VscSymbolMethod, VscSymbolProperty } from "react-icons/vsc";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import type { LocalizedCatalogBrowserRow } from "@/features/domain/nodeCatalog/localizedCatalogTree";
@@ -29,6 +30,7 @@ function CatalogItemContent({
 }: {
   row: Extract<LocalizedCatalogBrowserRow, { kind: "item" }>;
 }) {
+  const { t } = useTranslation();
   const NodeIcon = row.item.creation.kind === "resourceBound" ? VscSymbolMethod : VscSymbolProperty;
 
   return (
@@ -45,6 +47,11 @@ function CatalogItemContent({
       >
         {row.item.title}
       </span>
+      {!row.item.available && (
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {t("canvas.nodePalette.unavailable")}
+        </span>
+      )}
     </>
   );
 }
@@ -82,6 +89,7 @@ export function LocalizedCatalogTreeRow({
       type="button"
       variant="ghost"
       size="sm"
+      disabled={!row.item.available}
       data-catalog-item-key={row.rowKey}
       data-catalog-item-active={active || undefined}
       className={cn(catalogItemRowClass, active && "bg-sidebar-accent text-sidebar-foreground")}

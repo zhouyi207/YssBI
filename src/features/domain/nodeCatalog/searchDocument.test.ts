@@ -8,6 +8,7 @@ function item(overrides: Partial<LocalizedCatalogItem> = {}): LocalizedCatalogIt
     {
       nodeTypeId: "yssbi.example.node",
       title: "Localized title",
+      available: true,
       documentation: null,
       categoryId: "examples",
       iconId: "example",

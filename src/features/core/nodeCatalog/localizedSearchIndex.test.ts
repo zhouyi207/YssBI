@@ -26,6 +26,7 @@ function catalog(
       {
         nodeTypeId,
         title: nodeTypeId,
+        available: true,
         documentation: null,
         categoryId: "tests",
         iconId: "tests",

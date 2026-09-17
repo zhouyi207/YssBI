@@ -84,7 +84,7 @@ export function NodePalette({
     [catalog, expandedCategoryIds, query, searchIndex],
   );
   const itemRows = useMemo(
-    () => projection.rows.filter((row) => row.kind === "item"),
+    () => projection.rows.filter((row) => row.kind === "item").filter((row) => row.item.available),
     [projection.rows],
   );
   const activeItem = itemRows.find((row) => row.rowKey === activeItemKey) ?? itemRows[0] ?? null;
