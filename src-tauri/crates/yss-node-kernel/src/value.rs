@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use thiserror::Error;
 
 use yss_data_contract::DataValue;
+use yss_tabular_contract::TabularScalar;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
@@ -126,32 +127,26 @@ impl RuntimeValue {
         }
     }
 
+    pub(crate) fn tabular_scalar(
+        &self,
+    ) -> Result<yss_tabular_contract::TabularScalar, RuntimeValueError> {
+        Ok(match self.unannotated() {
+            Self::Null => TabularScalar::Null,
+            Self::Bool(v) => TabularScalar::Bool(*v),
+            Self::Integer(v) => TabularScalar::Integer(*v),
+            Self::Unsigned(v) => TabularScalar::Unsigned(*v),
+            Self::Decimal(v) => {
+                TabularScalar::Decimal((*v).try_into().map_err(|_| RuntimeValueError::NonFinite)?)
+            }
+            Self::String(v) => TabularScalar::String(v.clone()),
+            _ => return Err(RuntimeValueError::Unrepresentable),
+        })
+    }
+
     pub(crate) fn numeric_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use RuntimeValue::{Decimal, Integer, Unsigned};
-        // i128 represents every supported integer. A finite float is truncated
-        // before comparison, so integers never round through f64. Saturation
-        // beyond i128 is safe here: both integer variants are strictly inside it.
-        fn integer_decimal(integer: i128, decimal: f64) -> Option<std::cmp::Ordering> {
-            decimal.is_finite().then(|| {
-                integer.cmp(&(decimal as i128)).then_with(|| {
-                    0.0_f64
-                        .partial_cmp(&decimal.fract())
-                        .expect("finite fraction")
-                })
-            })
-        }
-        match (self.unannotated(), other.unannotated()) {
-            (Integer(a), Integer(b)) => Some(a.cmp(b)),
-            (Unsigned(a), Unsigned(b)) => Some(a.cmp(b)),
-            (Integer(a), Unsigned(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
-            (Unsigned(a), Integer(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
-            (Integer(a), Decimal(b)) => integer_decimal(i128::from(*a), *b),
-            (Unsigned(a), Decimal(b)) => integer_decimal(i128::from(*a), *b),
-            (Decimal(a), Integer(b)) => integer_decimal(i128::from(*b), *a).map(|o| o.reverse()),
-            (Decimal(a), Unsigned(b)) => integer_decimal(i128::from(*b), *a).map(|o| o.reverse()),
-            (Decimal(a), Decimal(b)) if a.is_finite() && b.is_finite() => a.partial_cmp(b),
-            _ => None,
-        }
+        self.tabular_scalar()
+            .ok()?
+            .compare(&other.tabular_scalar().ok()?)
     }
 
     pub(crate) fn semantic_eq(&self, other: &Self) -> bool {

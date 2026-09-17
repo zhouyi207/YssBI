@@ -1,3 +1,4 @@
+mod comparison;
 mod conversion;
 mod numeric;
 mod relational;
@@ -16,12 +17,8 @@ enum BuiltinKernel {
     And,
     Or,
     Not,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
+    Comparison(yss_relational_contract::ComparisonOperation),
+    WholeEqual,
     Convert,
     Identity,
 }
@@ -90,15 +87,46 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         ("yssbi.numeric.subtract", Numeric(Subtract), &[], 1..=1),
         ("yssbi.numeric.multiply", Numeric(Multiply), &[], 1..=1),
         ("yssbi.numeric.divide", Numeric(Divide), &[], 1..=1),
+        ("yssbi.compare.whole_equal", WholeEqual, &[], 1..=1),
         ("yssbi.logic.and", And, &[], 1..=1),
         ("yssbi.logic.or", Or, &[], 1..=1),
         ("yssbi.logic.not", Not, &[], 1..=1),
-        ("yssbi.compare.equal", Equal, &[], 1..=1),
-        ("yssbi.compare.not_equal", NotEqual, &[], 1..=1),
-        ("yssbi.compare.less", Less, &[], 1..=1),
-        ("yssbi.compare.less_equal", LessEqual, &[], 1..=1),
-        ("yssbi.compare.greater", Greater, &[], 1..=1),
-        ("yssbi.compare.greater_equal", GreaterEqual, &[], 1..=1),
+        (
+            "yssbi.compare.equal",
+            Comparison(yss_relational_contract::ComparisonOperation::Equal),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.compare.not_equal",
+            Comparison(yss_relational_contract::ComparisonOperation::NotEqual),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.compare.less",
+            Comparison(yss_relational_contract::ComparisonOperation::Less),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.compare.less_equal",
+            Comparison(yss_relational_contract::ComparisonOperation::LessEqual),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.compare.greater",
+            Comparison(yss_relational_contract::ComparisonOperation::Greater),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.compare.greater_equal",
+            Comparison(yss_relational_contract::ComparisonOperation::GreaterEqual),
+            &[],
+            1..=1,
+        ),
         (
             "yssbi.value.convert",
             Convert,
@@ -129,7 +157,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
-                    Equal | NotEqual | Less | LessEqual | Greater | GreaterEqual => 3,
+                    Comparison(_) => 4,
                     Statistical(OlsFit | OlsSummary) => 2,
                     Convert => 5,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 2,
@@ -163,23 +191,23 @@ fn execute_kernel(
         BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
         BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
         BuiltinKernel::Not => unary_bool(inputs, |value| !value),
-        BuiltinKernel::Equal | BuiltinKernel::NotEqual => {
+        BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
+        BuiltinKernel::WholeEqual => {
             let [left, right] = inputs else {
                 return Err(KernelError::Failed);
             };
-            let equal = left.semantic_eq(right);
-            Ok(RuntimeValue::Bool(
-                if matches!(kind, BuiltinKernel::Equal) {
-                    equal
-                } else {
-                    !equal
-                },
-            ))
+            fn materialized(value: &RuntimeValue) -> bool {
+                match value.unannotated() {
+                    RuntimeValue::List(values) => values.iter().all(materialized),
+                    RuntimeValue::Record(values) => values.values().all(materialized),
+                    value => value.tabular_scalar().is_ok(),
+                }
+            }
+            if !materialized(left) || !materialized(right) {
+                return Err(KernelError::Failed);
+            }
+            Ok(RuntimeValue::Bool(left.semantic_eq(right)))
         }
-        BuiltinKernel::Less
-        | BuiltinKernel::LessEqual
-        | BuiltinKernel::Greater
-        | BuiltinKernel::GreaterEqual => compare_numeric(kind, inputs),
         BuiltinKernel::Convert => conversion::execute(invocation),
         BuiltinKernel::Identity if outputs.is_empty() => return Ok(Vec::new()),
         BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelError::Failed),
@@ -224,24 +252,4 @@ fn unary_bool(
         return Err(KernelError::Failed);
     };
     Ok(RuntimeValue::Bool(operation(*value)))
-}
-
-fn compare_numeric(
-    kind: BuiltinKernel,
-    inputs: &[RuntimeValue],
-) -> Result<RuntimeValue, KernelError> {
-    let [left, right] = inputs else {
-        return Err(KernelError::InvalidNumericInput);
-    };
-    let ordering = left
-        .numeric_cmp(right)
-        .ok_or(KernelError::InvalidNumericInput)?;
-    let value = match kind {
-        BuiltinKernel::Less => ordering.is_lt(),
-        BuiltinKernel::LessEqual => ordering.is_le(),
-        BuiltinKernel::Greater => ordering.is_gt(),
-        BuiltinKernel::GreaterEqual => ordering.is_ge(),
-        _ => return Err(KernelError::Failed),
-    };
-    Ok(RuntimeValue::Bool(value))
 }

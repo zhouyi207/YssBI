@@ -59,7 +59,19 @@ fn compare(
             input_groups: &[None, None],
             parameters: BTreeMap::new(),
             outputs: &[KernelOutputSpec {
-                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Binary),
+                data_type: if operation != "whole_equal"
+                    && inputs.iter().any(|v| {
+                        matches!(
+                            v.unannotated(),
+                            RuntimeValue::List(_) | RuntimeValue::Series(_)
+                        )
+                    }) {
+                    ValueType::DataSeries(Box::new(ValueType::Scalar(
+                        yss_data_contract::SemanticType::Binary,
+                    )))
+                } else {
+                    ValueType::Scalar(yss_data_contract::SemanticType::Binary)
+                },
                 fields: None,
             }],
             control: &control,
@@ -113,6 +125,32 @@ fn comparison_kernels_preserve_exact_mixed_numeric_order() {
 }
 
 #[test]
+fn comparisons_broadcast_both_sides_preserve_nulls_and_reject_misalignment() {
+    use RuntimeValue::{Bool as B, List as L, Null as N, String as S};
+    let list = L(Box::new([S("001".into()), S("1".into()), N]));
+    for inputs in [[list.clone(), S("1".into())], [S("1".into()), list.clone()]] {
+        assert_eq!(
+            compare("equal", &inputs).unwrap(),
+            vec![L(Box::new([B(false), B(true), N]))]
+        );
+        assert_eq!(
+            compare("not_equal", &inputs).unwrap(),
+            vec![L(Box::new([B(true), B(false), N]))]
+        );
+    }
+    assert_eq!(
+        compare("less", &[S("1".into()), list.clone()]).unwrap(),
+        vec![L(Box::new([B(false), B(false), N]))]
+    );
+    assert_eq!(
+        compare("equal", &[list.clone(), list.clone()]).unwrap(),
+        vec![L(Box::new([B(true), B(true), N]))]
+    );
+    assert!(compare("equal", &[list, L(Box::new([]))]).is_err());
+    assert_eq!(compare("equal", &[N, N]).unwrap(), vec![N]);
+}
+
+#[test]
 fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
     let record = |value| {
         RuntimeValue::Record(BTreeMap::from([(
@@ -122,7 +160,7 @@ fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
     };
     assert_eq!(
         compare(
-            "equal",
+            "whole_equal",
             &[
                 record(RuntimeValue::Integer(1)),
                 record(RuntimeValue::Decimal(1.0))
@@ -133,14 +171,14 @@ fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
     );
     assert_eq!(
         compare(
-            "equal",
+            "whole_equal",
             &[RuntimeValue::Bool(true), RuntimeValue::Integer(1)]
         )
         .unwrap(),
         vec![RuntimeValue::Bool(false)]
     );
     assert_eq!(
-        compare("equal", &[RuntimeValue::Null, RuntimeValue::Null]).unwrap(),
+        compare("whole_equal", &[RuntimeValue::Null, RuntimeValue::Null]).unwrap(),
         vec![RuntimeValue::Bool(true)]
     );
 }
