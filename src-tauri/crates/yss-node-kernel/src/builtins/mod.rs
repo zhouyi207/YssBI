@@ -1,3 +1,4 @@
+mod boolean;
 mod comparison;
 mod conversion;
 mod numeric;
@@ -13,10 +14,9 @@ enum BuiltinKernel {
     Relational(relational::RelationalKernel),
     Decompose,
     Constant,
+    FixedNumber(f64),
     Numeric(NumericOperation),
-    And,
-    Or,
-    Not,
+    Boolean(yss_relational_contract::BooleanOperation),
     Comparison(yss_relational_contract::ComparisonOperation),
     WholeEqual,
     Convert,
@@ -25,7 +25,9 @@ enum BuiltinKernel {
 
 pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilder) {
     use BuiltinKernel::*;
-    use NumericOperation::{Add, Divide, Multiply, Subtract};
+    use NumericOperation::{
+        Add, Divide, Ln, Log2, Log10, Logarithm, Multiply, Power, Sqrt, Square, Subtract,
+    };
     use statistics::StatisticalKernel::{OlsFit, OlsSummary};
     let entries: &[(
         &str,
@@ -83,14 +85,48 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             1..=1,
         ),
         ("yssbi.constant.get", Constant, &["value"], 1..=1),
+        (
+            "yssbi.constant.pi",
+            FixedNumber(std::f64::consts::PI),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.constant.e",
+            FixedNumber(std::f64::consts::E),
+            &[],
+            1..=1,
+        ),
         ("yssbi.numeric.add", Numeric(Add), &[], 1..=1),
         ("yssbi.numeric.subtract", Numeric(Subtract), &[], 1..=1),
         ("yssbi.numeric.multiply", Numeric(Multiply), &[], 1..=1),
         ("yssbi.numeric.divide", Numeric(Divide), &[], 1..=1),
+        ("yssbi.numeric.power", Numeric(Power), &[], 1..=1),
+        ("yssbi.numeric.log", Numeric(Logarithm), &[], 1..=1),
+        ("yssbi.numeric.ln", Numeric(Ln), &[], 1..=1),
+        ("yssbi.numeric.log2", Numeric(Log2), &[], 1..=1),
+        ("yssbi.numeric.log10", Numeric(Log10), &[], 1..=1),
+        ("yssbi.numeric.square", Numeric(Square), &[], 1..=1),
+        ("yssbi.numeric.sqrt", Numeric(Sqrt), &[], 1..=1),
         ("yssbi.compare.whole_equal", WholeEqual, &[], 1..=1),
-        ("yssbi.logic.and", And, &[], 1..=1),
-        ("yssbi.logic.or", Or, &[], 1..=1),
-        ("yssbi.logic.not", Not, &[], 1..=1),
+        (
+            "yssbi.logic.and",
+            Boolean(yss_relational_contract::BooleanOperation::And),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.logic.or",
+            Boolean(yss_relational_contract::BooleanOperation::Or),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.logic.not",
+            Boolean(yss_relational_contract::BooleanOperation::Not),
+            &[],
+            1..=1,
+        ),
         (
             "yssbi.compare.equal",
             Comparison(yss_relational_contract::ComparisonOperation::Equal),
@@ -158,6 +194,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
                     Comparison(_) => 4,
+                    Boolean(_) => 2,
                     Statistical(OlsFit | OlsSummary) => 2,
                     Convert => 5,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 2,
@@ -187,10 +224,14 @@ fn execute_kernel(
             .parameter("value")
             .cloned()
             .ok_or(KernelError::Failed),
+        BuiltinKernel::FixedNumber(value) => {
+            if !inputs.is_empty() {
+                return Err(KernelError::Failed);
+            }
+            Ok(RuntimeValue::Decimal(value))
+        }
         BuiltinKernel::Numeric(operation) => numeric::execute(operation, invocation),
-        BuiltinKernel::And => binary_bool(inputs, |left, right| left && right),
-        BuiltinKernel::Or => binary_bool(inputs, |left, right| left || right),
-        BuiltinKernel::Not => unary_bool(inputs, |value| !value),
+        BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
         BuiltinKernel::WholeEqual => {
             let [left, right] = inputs else {
@@ -229,27 +270,4 @@ pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelE
         Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
         _ => Err(KernelError::InvalidNumericInput),
     }
-}
-
-fn binary_bool(
-    inputs: &[RuntimeValue],
-    operation: impl FnOnce(bool, bool) -> bool,
-) -> Result<RuntimeValue, KernelError> {
-    let Some(RuntimeValue::Bool(left)) = inputs.first() else {
-        return Err(KernelError::Failed);
-    };
-    let Some(RuntimeValue::Bool(right)) = inputs.get(1) else {
-        return Err(KernelError::Failed);
-    };
-    Ok(RuntimeValue::Bool(operation(*left, *right)))
-}
-
-fn unary_bool(
-    inputs: &[RuntimeValue],
-    operation: impl FnOnce(bool) -> bool,
-) -> Result<RuntimeValue, KernelError> {
-    let Some(RuntimeValue::Bool(value)) = inputs.first() else {
-        return Err(KernelError::Failed);
-    };
-    Ok(RuntimeValue::Bool(operation(*value)))
 }

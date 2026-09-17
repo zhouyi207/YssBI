@@ -11,7 +11,7 @@ pub(crate) fn execute(
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
     let inputs = invocation.inputs;
-    if inputs.len() < 2 || (operation != NumericOperation::Add && inputs.len() != 2) {
+    if !operation.accepts_arity(inputs.len()) {
         return Err(KernelError::InvalidNumericInput);
     }
     let output_type = invocation
@@ -19,8 +19,7 @@ pub(crate) fn execute(
         .first()
         .map(|output| &output.data_type)
         .ok_or(KernelError::Failed)?;
-    let representation = if operation == NumericOperation::Divide || inputs.iter().any(needs_float)
-    {
+    let representation = if operation.requires_float() || inputs.iter().any(needs_float) {
         NumericType::Float64
     } else {
         NumericType::Int64
@@ -135,9 +134,16 @@ fn scalar<'a>(
                     NumericOperation::Add => result.checked_add(right),
                     NumericOperation::Subtract => result.checked_sub(right),
                     NumericOperation::Multiply => result.checked_mul(right),
-                    NumericOperation::Divide => {
+                    NumericOperation::Divide
+                    | NumericOperation::Power
+                    | NumericOperation::Logarithm => {
                         return Err(KernelError::InvalidNumericInput);
                     }
+                    NumericOperation::Ln
+                    | NumericOperation::Log2
+                    | NumericOperation::Log10
+                    | NumericOperation::Square
+                    | NumericOperation::Sqrt => return Err(KernelError::InvalidNumericInput),
                 }
                 .ok_or(KernelError::NonFiniteResult)?;
             }
@@ -145,20 +151,16 @@ fn scalar<'a>(
         }
         NumericType::Float64 => {
             let mut result = numeric_input(values.next())?;
+            if operation.is_unary() {
+                result = operation
+                    .evaluate_unary_float(result)
+                    .map_err(super::relational::kernel_error)?;
+            }
             for right in values {
                 let right = numeric_input(Some(right))?;
-                result = match operation {
-                    NumericOperation::Add => result + right,
-                    NumericOperation::Subtract => result - right,
-                    NumericOperation::Multiply => result * right,
-                    NumericOperation::Divide if right == 0.0 => {
-                        return Err(KernelError::DivisionByZero);
-                    }
-                    NumericOperation::Divide => result / right,
-                };
-                if !result.is_finite() {
-                    return Err(KernelError::NonFiniteResult);
-                }
+                result = operation
+                    .evaluate_float(result, right)
+                    .map_err(super::relational::kernel_error)?;
             }
             Ok(RuntimeValue::Decimal(result))
         }

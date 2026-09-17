@@ -125,6 +125,216 @@ fn comparison_kernels_preserve_exact_mixed_numeric_order() {
 }
 
 #[test]
+fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
+    use RuntimeValue::{Bool as B, List as L, Null as N};
+    let evaluate = |operation: &str, inputs: &[RuntimeValue]| {
+        let control = KernelControl::new(
+            Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(30),
+        );
+        let scalar = ValueType::Scalar(yss_data_contract::SemanticType::Binary);
+        let data_type = if inputs.iter().any(|v| matches!(v, L(_))) {
+            ValueType::DataSeries(Box::new(scalar))
+        } else {
+            scalar
+        };
+        KernelRegistry::default().execute(
+            &KernelId::new(format!("yssbi.logic.{operation}").into()).unwrap(),
+            &KernelInvocation {
+                inputs,
+                input_groups: &vec![None; inputs.len()],
+                parameters: BTreeMap::new(),
+                outputs: &[KernelOutputSpec {
+                    data_type,
+                    fields: None,
+                }],
+                control: &control,
+            },
+        )
+    };
+    for (left, right, and, or) in [
+        (B(false), B(false), B(false), B(false)),
+        (B(false), B(true), B(false), B(true)),
+        (B(false), N, B(false), N),
+        (B(true), B(false), B(false), B(true)),
+        (B(true), B(true), B(true), B(true)),
+        (B(true), N, N, B(true)),
+        (N, B(false), B(false), N),
+        (N, B(true), N, B(true)),
+        (N, N, N, N),
+    ] {
+        assert_eq!(
+            evaluate("and", &[left.clone(), right.clone()]).unwrap(),
+            vec![and]
+        );
+        assert_eq!(evaluate("or", &[left, right]).unwrap(), vec![or]);
+    }
+    let values = L(Box::new([B(false), B(true), N]));
+    assert_eq!(
+        evaluate("not", std::slice::from_ref(&values)).unwrap(),
+        vec![L(Box::new([B(true), B(false), N]))]
+    );
+    assert_eq!(evaluate("not", &[N]).unwrap(), vec![N]);
+    for inputs in [[values.clone(), B(false)], [B(false), values.clone()]] {
+        assert_eq!(
+            evaluate("and", &inputs).unwrap(),
+            vec![L(Box::new([B(false), B(false), B(false)]))]
+        );
+    }
+    assert_eq!(
+        evaluate("or", &[values.clone(), B(true)]).unwrap(),
+        vec![L(Box::new([B(true), B(true), B(true)]))]
+    );
+    assert!(evaluate("and", &[values, L(Box::new([]))]).is_err());
+    assert!(evaluate("not", &[RuntimeValue::Integer(1)]).is_err());
+    assert!(evaluate("and", &[B(false), RuntimeValue::Integer(1)]).is_err());
+    assert!(evaluate("not", &[B(true), B(false)]).is_err());
+    assert!(evaluate("and", &[B(true)]).is_err());
+}
+
+#[test]
+fn power_and_logarithm_execute_scalars_broadcasts_and_domain_checks() {
+    use RuntimeValue::{Decimal as D, Integer as I, List as L};
+    let evaluate = |operation: &str, inputs: &[RuntimeValue]| {
+        let control = KernelControl::new(
+            Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(30),
+        );
+        let scalar = ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
+        let data_type = if inputs.iter().any(|v| matches!(v, L(_))) {
+            ValueType::DataSeries(Box::new(scalar))
+        } else {
+            scalar
+        };
+        KernelRegistry::default().execute(
+            &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
+            &KernelInvocation {
+                inputs,
+                input_groups: &[None, None],
+                parameters: BTreeMap::new(),
+                outputs: &[KernelOutputSpec {
+                    data_type,
+                    fields: None,
+                }],
+                control: &control,
+            },
+        )
+    };
+    for (op, left, right, expected) in [
+        ("power", I(2), I(3), 8.),
+        ("power", I(9), D(0.5), 3.),
+        ("power", I(-2), I(3), -8.),
+        ("power", I(2), I(-1), 0.5),
+        ("log", I(8), I(2), 3.),
+        ("log", I(100), I(10), 2.),
+        ("log", I(4), D(0.5), -2.),
+    ] {
+        assert_eq!(evaluate(op, &[left, right]).unwrap(), vec![D(expected)]);
+    }
+    let list = |values: &[i64]| L(values.iter().map(|v| I(*v)).collect());
+    assert_eq!(
+        evaluate("power", &[I(2), list(&[1, 2, 3])]).unwrap(),
+        vec![L(Box::new([D(2.), D(4.), D(8.)]))]
+    );
+    assert_eq!(
+        evaluate("power", &[list(&[2, 3]), list(&[3, 2])]).unwrap(),
+        vec![L(Box::new([D(8.), D(9.)]))]
+    );
+    assert_eq!(
+        evaluate("log", &[list(&[2, 4, 8]), I(2)]).unwrap(),
+        vec![L(Box::new([D(1.), D(2.), D(3.)]))]
+    );
+    for (op, left, right) in [
+        ("power", I(0), I(0)),
+        ("power", I(0), I(-1)),
+        ("power", I(-2), D(0.5)),
+        ("log", I(0), I(2)),
+        ("log", I(-1), I(2)),
+        ("log", I(2), I(1)),
+        ("log", I(2), I(0)),
+        ("log", I(2), I(-2)),
+        ("power", I(9_007_199_254_740_993), I(1)),
+        ("power", D(f64::NAN), I(1)),
+        ("log", RuntimeValue::Null, I(2)),
+        ("power", list(&[1, 2]), list(&[1])),
+    ] {
+        assert!(evaluate(op, &[left, right]).is_err(), "{op}");
+    }
+    assert!(matches!(
+        evaluate("power", &[D(f64::MAX), I(2)]),
+        Err(crate::KernelError::NonFiniteResult)
+    ));
+}
+
+#[test]
+fn unary_arithmetic_preserves_shape_and_rejects_invalid_values() {
+    use RuntimeValue::{Decimal as D, Integer as I, List as L};
+    let evaluate = |operation: &str, inputs: &[RuntimeValue]| {
+        let control = KernelControl::new(
+            Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(30),
+        );
+        let scalar = ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
+        let data_type = if inputs.iter().any(|v| matches!(v, L(_))) {
+            ValueType::DataSeries(Box::new(scalar))
+        } else {
+            scalar
+        };
+        KernelRegistry::default().execute(
+            &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
+            &KernelInvocation {
+                inputs,
+                input_groups: &[None],
+                parameters: BTreeMap::new(),
+                outputs: &[KernelOutputSpec {
+                    data_type,
+                    fields: None,
+                }],
+                control: &control,
+            },
+        )
+    };
+    for (op, values, expected) in [
+        ("ln", [1., std::f64::consts::E], [0., 1.]),
+        ("log2", [1., 8.], [0., 3.]),
+        ("log10", [1., 100.], [0., 2.]),
+        ("square", [-3., 0.], [9., 0.]),
+        ("sqrt", [0., 9.], [0., 3.]),
+    ] {
+        for (value, result) in values.into_iter().zip(expected) {
+            assert_eq!(evaluate(op, &[D(value)]).unwrap(), vec![D(result)]);
+        }
+        assert_eq!(
+            evaluate(op, &[L(values.map(D).into())]).unwrap(),
+            vec![L(expected.map(D).into())]
+        );
+        assert_eq!(
+            evaluate(op, &[L(Box::new([]))]).unwrap(),
+            vec![L(Box::new([]))]
+        );
+        for value in [
+            RuntimeValue::Null,
+            D(f64::NAN),
+            D(f64::INFINITY),
+            I(9_007_199_254_740_993),
+        ] {
+            assert!(evaluate(op, &[value]).is_err());
+        }
+        assert!(evaluate(op, &[]).is_err());
+        assert!(evaluate(op, &[I(1), I(2)]).is_err());
+    }
+    for op in ["ln", "log2", "log10"] {
+        assert!(evaluate(op, &[I(0)]).is_err());
+        assert!(evaluate(op, &[I(-1)]).is_err());
+    }
+    assert!(evaluate("sqrt", &[I(-1)]).is_err());
+    assert!(matches!(
+        evaluate("square", &[D(f64::MAX)]),
+        Err(crate::KernelError::NonFiniteResult)
+    ));
+}
+
+#[test]
 fn comparisons_broadcast_both_sides_preserve_nulls_and_reject_misalignment() {
     use RuntimeValue::{Bool as B, List as L, Null as N, String as S};
     let list = L(Box::new([S("001".into()), S("1".into()), N]));
