@@ -1,7 +1,5 @@
 use crate::graph::results::{ResultPinQuery, ResultQueryApplicationError};
-use crate::ipc::commands::execution_dto::{
-    ResultDescriptorDto, ResultPageDto, ResultValueDto, runtime_value_to_json,
-};
+use crate::ipc::commands::execution_dto::{ResultDescriptorDto, ResultPageDto, ResultValueDto};
 use crate::ipc::error::CommandError;
 use crate::ipc::schema::result::ResultReferenceDto;
 use crate::session::{ApplicationState, SessionCaptureError};
@@ -31,6 +29,9 @@ pub(super) fn result_query_command_error(error: ResultQueryApplicationError) -> 
             ResultRetentionError::WrongOwner => "result_lease_owner_mismatch",
             ResultRetentionError::OwnerClosed => "result_lease_owner_closed",
         }),
+        ResultQueryApplicationError::UnrepresentableValue => {
+            CommandError::expected("result_value_not_json")
+        }
         ResultQueryApplicationError::InvalidPageRequest => {
             CommandError::expected("invalid_result_page_request")
         }
@@ -98,18 +99,11 @@ pub fn get_result_value(
     ) {
         return Err(result_requires_paging(result_id, "sequence"));
     }
-    let value = match result.value().value() {
-        RuntimeValue::LinearRegression(_) => {
-            let report = state
-                .query_linear_regression_report(reference)
-                .map_err(super::reports::report_query_error)?;
-            serde_json::to_value(crate::ipc::schema::result::LinearRegressionReportDto::from(
-                report,
-            ))
-            .map_err(|_| CommandError::expected("result_value_not_json"))?
-        }
-        value => runtime_value_to_json(value)
-            .map_err(|_| CommandError::expected("result_value_not_json"))?,
+    let Some(value) = state
+        .query_result_json(reference)
+        .map_err(result_query_command_error)?
+    else {
+        return Ok(None);
     };
     let encoded_size = serde_json::to_vec(&value)
         .map_err(|_| CommandError::expected("result_value_not_json"))?

@@ -37,6 +37,8 @@ pub enum ResultQueryApplicationError {
     Retention(#[from] ResultRetentionError),
     #[error("result page request is invalid")]
     InvalidPageRequest,
+    #[error("result cannot be represented as JSON")]
+    UnrepresentableValue,
     #[error("result page exceeds its payload budget")]
     PageTooLarge,
     #[error("result page query failed")]
@@ -110,6 +112,39 @@ pub struct ResultPageProjection {
 }
 
 impl ApplicationState {
+    /// Full result metadata and JSON values, with native report data kept behind table references.
+    pub fn query_result_json(
+        &self,
+        reference: ResultReference,
+    ) -> Result<Option<serde_json::Value>, ResultQueryApplicationError> {
+        let captured = self.capture_session()?;
+        if captured.execution_session_id() != reference.execution_session_id {
+            return Err(ResultQueryApplicationError::SessionChanged);
+        }
+        let Some(snapshot) = captured.execution().query_result(reference.result_id) else {
+            return Ok(None);
+        };
+        let value = match snapshot.value().value().unannotated() {
+            RuntimeValue::LinearRegression(result) => {
+                Ok(report::report_projection(reference, result).into_json())
+            }
+            RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_) => {
+                Err(ResultQueryApplicationError::InvalidPageRequest)
+            }
+            value => runtime_value_to_json(value),
+        };
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| ResultQueryApplicationError::SessionChanged)?;
+        if captured
+            .execution()
+            .query_result(reference.result_id)
+            .is_none()
+        {
+            return Ok(None);
+        }
+        value.map(Some)
+    }
+
     pub fn query_result_page(
         &self,
         reference: ResultReference,
@@ -366,6 +401,43 @@ fn charge_value(
         .checked_sub(bytes)
         .ok_or(ResultQueryApplicationError::PageTooLarge)?;
     Ok(())
+}
+
+pub(crate) fn runtime_value_to_json(
+    value: &RuntimeValue,
+) -> Result<serde_json::Value, ResultQueryApplicationError> {
+    Ok(match value {
+        RuntimeValue::Annotated(value) => runtime_value_to_json(value.value())?,
+        RuntimeValue::Null => serde_json::Value::Null,
+        RuntimeValue::Bool(value) => (*value).into(),
+        RuntimeValue::Integer(value) => serde_json::to_value(
+            yss_tabular_contract::TabularScalar::Integer(*value).display_value(),
+        )
+        .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
+        RuntimeValue::Unsigned(value) => serde_json::to_value(
+            yss_tabular_contract::TabularScalar::Unsigned(*value).display_value(),
+        )
+        .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
+        RuntimeValue::Decimal(value) => serde_json::Number::from_f64(*value)
+            .map(serde_json::Value::Number)
+            .ok_or(ResultQueryApplicationError::UnrepresentableValue)?,
+        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::LinearRegression(_) => {
+            return Err(ResultQueryApplicationError::UnrepresentableValue);
+        }
+        RuntimeValue::List(values) => values
+            .iter()
+            .map(runtime_value_to_json)
+            .collect::<Result<Vec<_>, _>>()?
+            .into(),
+        RuntimeValue::Record(values) => values
+            .iter()
+            .map(|(key, value)| Ok((key.to_string(), runtime_value_to_json(value)?)))
+            .collect::<Result<std::collections::BTreeMap<_, _>, ResultQueryApplicationError>>()?
+            .into_iter()
+            .collect::<serde_json::Map<_, _>>()
+            .into(),
+    })
 }
 
 #[cfg(test)]

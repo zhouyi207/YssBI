@@ -411,41 +411,52 @@ fn inspect_result(
             CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable)
                 .with_detail("resultId", request.result_id.to_string())
         })?;
-    let mut budget = ResultProjectionBudget {
-        remaining: usize::from(CapabilityId::InspectResult.descriptor().maximum_results),
-    };
-    let value = if matches!(
-        result.value().value(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_)
+    let reference = result.provenance().reference();
+    let page = if let Some(part) = request.part.as_deref() {
+        let part = match part {
+            "coefficients" => crate::graph::results::report::ResultTablePart::Coefficients,
+            "observations" => crate::graph::results::report::ResultTablePart::Observations,
+            _ => {
+                return Err(invalid_request(
+                    CapabilityId::InspectResult,
+                    CapabilityContractError::InvalidField("part"),
+                ));
+            }
+        };
+        Some(
+            application
+                .query_result_table(reference, part, request.offset, usize::from(request.limit))
+                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
+        )
+    } else if matches!(
+        result.value().value().unannotated(),
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::List(_)
     ) {
-        let page = application
-            .query_result_page_with_control(
-                result.provenance().reference(),
-                request.offset,
-                usize::from(request.limit),
-                &yss_relational_contract::RelationControl {
-                    cancellation: control.cancellation_flag(),
-                    deadline: control.deadline(),
-                    max_input_bytes: 1024 * 1024,
-                },
-            )
-            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
-            .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?;
-        let count = page
-            .values
-            .len()
-            .min(budget.remaining / (page.columns.len().max(1) + 1));
-        if count == 0 && !page.values.is_empty() {
-            return Err(CapabilityFailure::new(
-                CapabilityFailureCode::ResultTooLarge,
-            ));
-        }
+        Some(
+            application
+                .query_result_page_with_control(
+                    reference,
+                    request.offset,
+                    usize::from(request.limit),
+                    &yss_relational_contract::RelationControl {
+                        cancellation: control.cancellation_flag(),
+                        deadline: control.deadline(),
+                        max_input_bytes: 1024 * 1024,
+                    },
+                )
+                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
+                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
+        )
+    } else {
+        None
+    };
+    let value = if let Some(page) = page {
         let rows = page
             .values
             .iter()
-            .take(count)
-            .map(|row| inspect_runtime_value(row, 0, &mut budget))
-            .collect::<Result<_, _>>()?;
+            .map(crate::graph::results::runtime_value_to_json)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
         ResultValueInspection::Table {
             columns: page
                 .columns
@@ -457,159 +468,23 @@ fn inspect_result(
                 .iter()
                 .map(|column| column.data_type.to_string())
                 .collect(),
+            next_offset: page.offset + rows.len(),
+            has_more: page.has_more,
             rows,
-            next_offset: request.offset + count,
-            has_more: page.has_more || count < page.values.len(),
         }
     } else {
-        inspect_runtime_value(result.value().value(), 0, &mut budget)?
+        ResultValueInspection::Json(
+            application
+                .query_result_json(reference)
+                .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?
+                .ok_or_else(|| CapabilityFailure::new(CapabilityFailureCode::ResultUnavailable))?,
+        )
     };
     Ok(ResultInspection {
         result_id: request.result_id,
         category: inspect_result_category(result.value().category()),
         value,
     })
-}
-
-struct ResultProjectionBudget {
-    remaining: usize,
-}
-
-fn inspect_relation_sources(
-    bindings: &[yss_relational_contract::RelationBinding],
-    budget: &mut ResultProjectionBudget,
-) -> ResultValueInspection {
-    if let [source] = bindings {
-        return ResultValueInspection::Resource {
-            resource_id: source.snapshot.to_string(),
-        };
-    }
-    let take = bindings.len().min(budget.remaining);
-    budget.remaining -= take;
-    ResultValueInspection::Record {
-        total_count: bindings.len(),
-        truncated: bindings.len() > take,
-        entries: bindings
-            .iter()
-            .take(take)
-            .enumerate()
-            .map(|(index, source)| {
-                (
-                    format!("source_{}", index + 1),
-                    ResultValueInspection::Resource {
-                        resource_id: source.snapshot.to_string(),
-                    },
-                )
-            })
-            .collect(),
-    }
-}
-
-fn inspect_runtime_value(
-    value: &RuntimeValue,
-    depth: usize,
-    budget: &mut ResultProjectionBudget,
-) -> Result<ResultValueInspection, CapabilityFailure> {
-    match value {
-        RuntimeValue::Annotated(value) => inspect_runtime_value(value.value(), depth, budget),
-        RuntimeValue::Null => Ok(ResultValueInspection::Null),
-        RuntimeValue::Bool(value) => Ok(ResultValueInspection::Boolean(*value)),
-        RuntimeValue::Integer(value) => Ok(ResultValueInspection::Integer(*value)),
-        RuntimeValue::Unsigned(value) => Ok(ResultValueInspection::Unsigned(*value)),
-        RuntimeValue::Decimal(value) if value.is_finite() => {
-            Ok(ResultValueInspection::Decimal(*value))
-        }
-        RuntimeValue::Decimal(_) => Err(CapabilityFailure::new(
-            CapabilityFailureCode::InternalFailure,
-        )),
-        RuntimeValue::String(value) => {
-            let (value, truncated) = bounded_text(value, 4_096);
-            Ok(ResultValueInspection::String { value, truncated })
-        }
-        RuntimeValue::Resource(resource_id) => Ok(ResultValueInspection::Resource {
-            resource_id: resource_id.to_string(),
-        }),
-        RuntimeValue::Relation(relation) => {
-            Ok(inspect_relation_sources(relation.bindings(), budget))
-        }
-        RuntimeValue::Series(series) => Ok(inspect_relation_sources(
-            series.relation().bindings(),
-            budget,
-        )),
-        RuntimeValue::LinearRegression(result) => Ok(ResultValueInspection::Record {
-            entries: std::collections::BTreeMap::from([
-                (
-                    "title".into(),
-                    ResultValueInspection::String {
-                        value: result.report.title.clone(),
-                        truncated: false,
-                    },
-                ),
-                (
-                    "observations".into(),
-                    ResultValueInspection::Unsigned(result.residuals.len() as u64),
-                ),
-                (
-                    "rSquared".into(),
-                    ResultValueInspection::Decimal(result.report.model_basic_info.r_squared),
-                ),
-            ]),
-            total_count: 3,
-            truncated: false,
-        }),
-        RuntimeValue::List(values) => {
-            let total_count = values.len();
-            if depth >= 4 {
-                return Ok(ResultValueInspection::List {
-                    items: Vec::new(),
-                    total_count,
-                    truncated: !values.is_empty(),
-                });
-            }
-            let take = values.len().min(budget.remaining);
-            budget.remaining -= take;
-            let items = values[..take]
-                .iter()
-                .map(|value| inspect_runtime_value(value, depth + 1, budget))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(ResultValueInspection::List {
-                items,
-                total_count,
-                truncated: take < total_count,
-            })
-        }
-        RuntimeValue::Record(values) => {
-            let total_count = values.len();
-            if depth >= 4 {
-                return Ok(ResultValueInspection::Record {
-                    entries: Default::default(),
-                    total_count,
-                    truncated: !values.is_empty(),
-                });
-            }
-            let take = values.len().min(budget.remaining);
-            budget.remaining -= take;
-            let entries = values
-                .iter()
-                .take(take)
-                .map(|(key, value)| {
-                    inspect_runtime_value(value, depth + 1, budget)
-                        .map(|value| (key.to_string(), value))
-                })
-                .collect::<Result<_, _>>()?;
-            Ok(ResultValueInspection::Record {
-                entries,
-                total_count,
-                truncated: take < total_count,
-            })
-        }
-    }
-}
-
-fn bounded_text(value: &str, maximum_chars: usize) -> (String, bool) {
-    let bounded = value.chars().take(maximum_chars).collect::<String>();
-    let truncated = value.chars().count() > maximum_chars;
-    (bounded, truncated)
 }
 
 fn inspect_result_category(category: ResultCategory) -> ResultCategoryInspection {
@@ -763,27 +638,136 @@ mod tests {
     }
 
     #[test]
-    fn result_projection_truncates_nested_values_at_the_shared_budget() {
-        let value = RuntimeValue::List(
-            (0..5)
-                .map(RuntimeValue::Integer)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
+    fn result_json_preserves_long_text_deep_objects_and_complete_arrays() {
+        let text = "x".repeat(2_000_000);
+        let mut value = RuntimeValue::Record(
+            [
+                ("text".into(), RuntimeValue::String(text.clone().into())),
+                (
+                    "coefficients".into(),
+                    RuntimeValue::List((0..150).map(RuntimeValue::Integer).collect()),
+                ),
+            ]
+            .into(),
         );
-        let mut budget = ResultProjectionBudget { remaining: 3 };
+        for _ in 0..8 {
+            value = RuntimeValue::Record([("nested".into(), value)].into());
+        }
+        let json = crate::graph::results::runtime_value_to_json(&value).unwrap();
+        let mut nested = &json;
+        for _ in 0..8 {
+            nested = &nested["nested"];
+        }
+        assert_eq!(nested["text"], text);
+        assert_eq!(nested["coefficients"].as_array().unwrap().len(), 150);
+        let result = AutomationCapabilityResult::ResultInspection(ResultInspection {
+            result_id: 1,
+            category: ResultCategoryInspection::Value,
+            value: ResultValueInspection::Json(json),
+        });
+        assert!(result.validate_budget(1_048_576).is_ok());
+    }
 
-        let ResultValueInspection::List {
-            items,
-            total_count,
-            truncated,
-        } = inspect_runtime_value(&value, 0, &mut budget).unwrap()
-        else {
-            panic!("list projection changed shape");
+    #[test]
+    fn ai_reads_the_shared_result_json_and_follows_table_references() {
+        let (application, reference, model) = crate::graph::results::report::tests::fixture(1_000);
+        let captured = application.capture_session().unwrap();
+        let control = CapabilityControl::new(
+            yss_harness_contract::CancellationToken::default(),
+            std::time::Duration::from_secs(10),
+        );
+        let inspect = |part: Option<&str>, offset, limit| {
+            inspect_result(
+                &application,
+                &captured,
+                InspectResultRequest {
+                    result_id: reference.result_id.get(),
+                    part: part.map(str::to_owned),
+                    offset,
+                    limit,
+                },
+                &control,
+            )
+            .unwrap()
+            .value
         };
-        assert_eq!(items.len(), 3);
-        assert_eq!(total_count, 5);
-        assert!(truncated);
-        assert_eq!(budget.remaining, 0);
+        let ResultValueInspection::Json(json) = inspect(None, 0, 20) else {
+            panic!("full result JSON");
+        };
+        assert_eq!(
+            json,
+            application.query_result_json(reference).unwrap().unwrap()
+        );
+        assert_eq!(json["model_basic_info"]["num_observation"], 1_000);
+        assert!(json["model_basic_info"]["f_statistic"].is_number());
+        assert_eq!(json["coefficients"]["kind"], "tableRef");
+        assert_eq!(json["observations"]["rowCount"], 1_000);
+        assert!(json.get("design").is_none());
+        assert!(json.get("residuals").is_none());
+        let ResultValueInspection::Table {
+            rows,
+            columns,
+            next_offset,
+            has_more,
+            ..
+        } = inspect(Some("coefficients"), 0, 1)
+        else {
+            panic!("coefficient page");
+        };
+        assert_eq!(rows.len(), 1);
+        assert_eq!(columns[1], "coef");
+        assert_eq!(rows[0][1], model.coefficients[0]);
+        assert!(has_more);
+        assert_eq!(next_offset, 1);
+        let ResultValueInspection::Table {
+            rows,
+            next_offset,
+            has_more,
+            ..
+        } = inspect(Some("observations"), 7, 3)
+        else {
+            panic!("observation page");
+        };
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0][0], 8);
+        assert_eq!(rows[0][2], model.residuals[7]);
+        assert_eq!(next_offset, 10);
+        assert!(has_more);
+        let series = captured
+            .execution()
+            .query_graph_results("events/report.yssbi-event", 100)
+            .into_iter()
+            .find(|result| matches!(result.value().value(), RuntimeValue::List(_)))
+            .unwrap();
+        let page = inspect_result(
+            &application,
+            &captured,
+            InspectResultRequest {
+                result_id: series.provenance().result_id().get(),
+                part: None,
+                offset: 5,
+                limit: 7,
+            },
+            &control,
+        )
+        .unwrap();
+        let ResultValueInspection::Table {
+            rows,
+            has_more,
+            next_offset,
+            ..
+        } = &page.value
+        else {
+            panic!("in-memory series must remain paged");
+        };
+        assert_eq!(rows.len(), 7);
+        assert_eq!(*next_offset, 12);
+        assert!(*has_more);
+        assert!(
+            AutomationCapabilityResult::ResultInspection(page)
+                .validate_budget(1)
+                .is_err()
+        );
     }
 
     #[test]

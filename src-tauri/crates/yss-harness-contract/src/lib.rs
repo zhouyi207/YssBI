@@ -345,6 +345,9 @@ pub struct InspectDatasetProfileRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectResultRequest {
     pub result_id: u64,
+    /// Table-reference part returned in result JSON. Omit to read the full JSON result.
+    #[serde(default)]
+    pub part: Option<String>,
     #[serde(default)]
     pub offset: usize,
     #[serde(default = "default_result_page_limit")]
@@ -897,39 +900,17 @@ pub enum ResultCategoryInspection {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ResultValueInspection {
+    Json(serde_json::Value),
     Table {
         columns: Vec<String>,
         #[serde(rename = "columnTypes")]
         column_types: Vec<String>,
-        rows: Vec<ResultValueInspection>,
+        rows: Vec<serde_json::Value>,
         #[serde(rename = "nextOffset")]
         next_offset: usize,
         #[serde(rename = "hasMore")]
         has_more: bool,
     },
-    Null,
-    Boolean(bool),
-    Integer(i64),
-    Unsigned(u64),
-    Decimal(f64),
-    String {
-        value: String,
-        truncated: bool,
-    },
-    List {
-        items: Vec<ResultValueInspection>,
-        total_count: usize,
-        truncated: bool,
-    },
-    Record {
-        entries: BTreeMap<String, ResultValueInspection>,
-        total_count: usize,
-        truncated: bool,
-    },
-    Resource {
-        resource_id: String,
-    },
-    Empty,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
@@ -999,6 +980,16 @@ pub enum AutomationCapabilityResult {
 
 impl AutomationCapabilityResult {
     pub fn validate_budget(&self, maximum_bytes: usize) -> Result<(), CapabilityFailure> {
+        // Result JSON is the complete shared projection. Tabular data is separately paged.
+        if matches!(
+            self,
+            Self::ResultInspection(ResultInspection {
+                value: ResultValueInspection::Json(_),
+                ..
+            })
+        ) {
+            return Ok(());
+        }
         let bytes = serde_json::to_vec(self)
             .map_err(|_| CapabilityFailure::new(CapabilityFailureCode::InternalFailure))?;
         if bytes.len() > maximum_bytes {

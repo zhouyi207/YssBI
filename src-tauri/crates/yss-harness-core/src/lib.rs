@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod approval;
+mod conversation;
 mod host;
 mod knowledge;
 mod memory;

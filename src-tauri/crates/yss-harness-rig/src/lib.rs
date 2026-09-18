@@ -19,12 +19,12 @@ use rig_core::providers::openai;
 use yss_harness_contract::{
     AgentDriverConfigurationFailure, AgentDriverConfigurationPort, AgentDriverFailure,
     AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput, AgentMessage,
-    AgentMessageRole, AgentTurnRequest, AgentTurnResult, ApplyGraphEditRequest,
-    AutomationCapabilityRequest, CancellationReason, CancellationToken, CapabilityFailure,
-    CapabilityFailureCode, CapabilityId, InspectDatasetProfileRequest, InspectDatasetSchemaRequest,
-    InspectGraphRequest, InspectProjectRequest, InspectResultRequest, ModelCapabilityExecutor,
-    ModelCapabilityRequest, SearchNodeCatalogRequest, SecretCredential, StatisticalPlan,
-    ToolDescriptor, statistical_plan_schema,
+    AgentTurnRequest, AgentTurnResult, ApplyGraphEditRequest, AutomationCapabilityRequest,
+    CancellationReason, CancellationToken, CapabilityFailure, CapabilityFailureCode, CapabilityId,
+    InspectDatasetProfileRequest, InspectDatasetSchemaRequest, InspectGraphRequest,
+    InspectProjectRequest, InspectResultRequest, ModelCapabilityExecutor, ModelCapabilityRequest,
+    SearchNodeCatalogRequest, SecretCredential, StatisticalPlan, ToolDescriptor,
+    statistical_plan_schema,
 };
 
 pub fn openai_agent_driver(
@@ -396,13 +396,53 @@ fn prepare_messages(messages: Vec<AgentMessage>) -> Result<PreparedMessages, Age
     let mut preamble = Vec::new();
     let mut conversation = Vec::new();
     for message in messages {
-        if message.content.trim().is_empty() || message.content.len() > 1024 * 1024 {
-            return Err(invalid_response());
-        }
-        match message.role {
-            AgentMessageRole::System => preamble.push(message.content),
-            AgentMessageRole::User => conversation.push(Message::user(message.content)),
-            AgentMessageRole::Assistant => conversation.push(Message::assistant(message.content)),
+        match message {
+            AgentMessage::System { content } => preamble.push(content),
+            AgentMessage::User { content } => conversation.push(Message::user(content)),
+            AgentMessage::Assistant { content } => conversation.push(Message::assistant(content)),
+            AgentMessage::ToolCall {
+                invocation_id,
+                request,
+            } => {
+                let name = request.capability_id().as_str().to_owned();
+                let mut encoded = serde_json::to_value(request).map_err(|_| invalid_response())?;
+                let arguments = encoded
+                    .get_mut("payload")
+                    .ok_or_else(invalid_response)?
+                    .take();
+                use rig_core::completion::message::{
+                    AssistantContent, ToolCall, ToolCallId, ToolFunction,
+                };
+                let call = ToolCall::new(
+                    ToolCallId::new(invocation_id.to_string()).ok_or_else(invalid_response)?,
+                    ToolFunction::new(name, arguments),
+                );
+                conversation.push(Message::Assistant {
+                    id: None,
+                    content: vec![AssistantContent::ToolCall(call)],
+                });
+            }
+            AgentMessage::ToolResult {
+                invocation_id,
+                capability_id,
+                outcome,
+            } => {
+                let result = match outcome {
+                    Ok(result) => serde_json::to_value(result).map_err(|_| invalid_response())?,
+                    Err(failure) => serde_json::json!({"state": "failed", "failure": failure}),
+                };
+                conversation.push(Message::tool_result(
+                    invocation_id.to_string(),
+                    capability_id.as_str(),
+                    result.to_string(),
+                ));
+            }
+            AgentMessage::Plan { plan } => {
+                conversation.push(Message::assistant(format!(
+                    "[Statistical plan]\n{}",
+                    serde_json::to_string(&plan).map_err(|_| invalid_response())?
+                )));
+            }
         }
     }
     let prompt = conversation.pop().ok_or_else(invalid_response)?;
@@ -588,7 +628,7 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Inspect bounded data-quality and shape statistics. null metrics (including duplicatedRows) mean unknown or not computed, never zero."
         }
         CapabilityId::InspectResult => {
-            "Inspect a bounded structured execution result produced by YssBI. For table/series previews, offset and limit paginate rows; use nextOffset only when hasMore is true. Lists/records indicate truncation explicitly."
+            "Read the complete result JSON produced by YssBI, including all nested fields and data references. DataFrame/DataSeries values are paged, never expanded in full. To read a tableRef from the JSON, call inspect_result with its resultRef.resultId and part. offset and limit paginate rows; use nextOffset only when hasMore is true."
         }
         CapabilityId::InspectProject => {
             "List bounded project metadata and resource identities, including graph files with no open editor panel. Use a graph resourceId as graphPath for inspect_graph and graph edits. Does not read raw dataset rows."
@@ -613,6 +653,18 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
 
 fn map_prompt_failure(error: PromptError) -> AgentDriverFailure {
     use AgentDriverFailureCode::*;
+    if error
+        .provider_response_json()
+        .ok()
+        .flatten()
+        .is_some_and(|body| {
+            body.pointer("/error/code")
+                .and_then(serde_json::Value::as_str)
+                == Some("context_length_exceeded")
+        })
+    {
+        return AgentDriverFailure::new(ContextWindowExceeded);
+    }
     let code = match error
         .provider_response_status()
         .map(|status| status.as_u16())
@@ -687,12 +739,14 @@ mod tests {
     #[derive(Clone)]
     struct ScriptedCompletionModel {
         turns: Arc<Mutex<VecDeque<Vec<AssistantContent>>>>,
+        requests: Arc<Mutex<Vec<CompletionRequest>>>,
     }
 
     impl ScriptedCompletionModel {
         fn new(turns: impl IntoIterator<Item = Vec<AssistantContent>>) -> Self {
             Self {
                 turns: Arc::new(Mutex::new(turns.into_iter().collect())),
+                requests: Arc::new(Mutex::new(Vec::new())),
             }
         }
     }
@@ -707,8 +761,9 @@ mod tests {
 
         async fn stream(
             &self,
-            _request: CompletionRequest,
+            request: CompletionRequest,
         ) -> Result<StreamingCompletionResponse, CompletionError> {
+            self.requests.lock().unwrap().push(request);
             use rig_core::streaming::{RawStreamingChoice, RawStreamingToolCall, StreamFinal};
             let choice = self
                 .turns
@@ -802,17 +857,121 @@ mod tests {
                 ProjectSessionId::new("project-session-1"),
             ),
             messages: vec![
-                AgentMessage {
-                    role: AgentMessageRole::System,
+                AgentMessage::System {
                     content: "Use evidence.".to_owned(),
                 },
-                AgentMessage {
-                    role: AgentMessageRole::User,
+                AgentMessage::User {
                     content: "Inspect the schema.".to_owned(),
                 },
             ],
             tools,
         }
+    }
+
+    #[test]
+    fn context_capacity_failure_is_explicit_without_treating_other_rejections_as_capacity() {
+        for (code, expected) in [
+            (
+                "context_length_exceeded",
+                AgentDriverFailureCode::ContextWindowExceeded,
+            ),
+            (
+                "invalid_request",
+                AgentDriverFailureCode::ProviderRequestRejected,
+            ),
+        ] {
+            let error = CompletionError::from_http_response(
+                400u16.try_into().unwrap(),
+                serde_json::json!({"error": {"code": code}}).to_string(),
+            );
+            assert_eq!(
+                map_prompt_failure(PromptError::CompletionError(error)).code,
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn provider_receives_complete_history_and_correlated_tool_messages() {
+        let model = ScriptedCompletionModel::new([vec![AssistantContent::text("continued")]]);
+        let recorded = model.requests.clone();
+        let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
+        let text = "long-history:".to_owned() + &"h".repeat(2_000_000) + ":text-tail";
+        let payload = serde_json::json!({"complete": "r".repeat(2_000_000), "tail": "result-tail"});
+        let invocation_id = ToolInvocationId::try_new("saved-call-1").unwrap();
+        let mut input = request(Vec::new());
+        input.messages = vec![
+            AgentMessage::System {
+                content: "Use recorded evidence.".into(),
+            },
+            AgentMessage::User {
+                content: text.clone(),
+            },
+            AgentMessage::Assistant {
+                content: "Checking.".into(),
+            },
+            AgentMessage::ToolCall {
+                invocation_id: invocation_id.clone(),
+                request: AutomationCapabilityRequest::InspectResult(InspectResultRequest {
+                    result_id: 17,
+                    part: None,
+                    offset: 0,
+                    limit: 20,
+                }),
+            },
+            AgentMessage::ToolResult {
+                invocation_id,
+                capability_id: CapabilityId::InspectResult,
+                outcome: Ok(AutomationCapabilityResult::ResultInspection(
+                    yss_harness_contract::ResultInspection {
+                        result_id: 17,
+                        category: yss_harness_contract::ResultCategoryInspection::Value,
+                        value: yss_harness_contract::ResultValueInspection::Json(payload.clone()),
+                    },
+                )),
+            },
+            AgentMessage::Assistant {
+                content: "Previous conclusion.".into(),
+            },
+            AgentMessage::User {
+                content: "Continue.".into(),
+            },
+        ];
+        driver
+            .run_turn(
+                input,
+                Arc::new(StaticExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap();
+        let requests = recorded.lock().unwrap();
+        let wire = requests[0]
+            .chat_history
+            .clone()
+            .into_iter()
+            .flat_map(|message| {
+                Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
+            })
+            .map(|message| serde_json::to_value(message).unwrap())
+            .collect::<Vec<_>>();
+        let encoded = serde_json::to_string(&wire).unwrap();
+        assert!(encoded.contains(&text));
+        assert!(encoded.contains("result-tail"));
+        let call = wire
+            .iter()
+            .find(|message| message.get("tool_calls").is_some())
+            .unwrap();
+        let result = wire
+            .iter()
+            .find(|message| message["role"] == "tool")
+            .unwrap();
+        assert_eq!(call["tool_calls"][0]["id"], result["tool_call_id"]);
+        assert_eq!(call["tool_calls"][0]["function"]["name"], "inspect_result");
+        let value: serde_json::Value =
+            serde_json::from_str(result["content"].as_str().unwrap()).unwrap();
+        assert!(value["payload"]["value"]["value"] == payload);
     }
 
     #[tokio::test]

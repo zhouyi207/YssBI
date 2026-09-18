@@ -68,6 +68,7 @@ const TERMINAL_TURN_ERRORS = new Set([
   "assistant_authentication_failed",
   "assistant_rate_limited",
   "assistant_provider_request_rejected",
+  "assistant_context_window_exceeded",
   "assistant_provider_connection_failed",
   "assistant_invalid_provider_response",
   "assistant_turn_failed",

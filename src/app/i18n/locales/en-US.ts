@@ -217,6 +217,8 @@ export const enUS = {
         "Authentication failed. Check your API key and model access.",
       assistant_rate_limited:
         "The service is rate limited or out of quota. Check your quota and try again later.",
+      assistant_context_window_exceeded:
+        "The complete conversation exceeds the model context window. History was not truncated. Choose a model with a larger context window or start a new conversation.",
       assistant_provider_request_rejected:
         "The service rejected the request. Check the model, API URL, and API compatibility.",
       assistant_provider_connection_failed:

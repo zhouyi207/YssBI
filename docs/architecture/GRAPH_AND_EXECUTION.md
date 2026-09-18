@@ -411,6 +411,8 @@ Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `Li
 结果回收或会话结束后的迟到成功和失败均被丢弃；仅当前输出失效不撤销有租约的快照读取。
 数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
 
+Application 的 `query_result_json` 拥有界面和 AI 共用的完整结果 JSON 投影。普通 JSON 对象递归保留字段、数组和文本；原生线性回归结果通过同一报告投影转成概览与表引用，不序列化完整设计矩阵、拟合值或残差。通用数值编码也由 Application 共用，保持宽整数的精确文本表示。DataFrame、DataSeries 和顶层内存数列走现有分页入口；AI 不另维护统计字段白名单。AI 的 JSON 与表引用读取语义见 [Harness capability 契约](STATISTICAL_HARNESS.md#4-registered-capabilities)。
+
 线性回归报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
 前端复用 Result query coordinator，以执行会话、结果和 part/analysis kind 隔离请求；每张表和每类分析仅保留当前投影，
 分析参数参与读取匹配。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。

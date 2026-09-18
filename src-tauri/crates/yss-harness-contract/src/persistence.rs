@@ -266,11 +266,6 @@ impl PersistenceFailure {
 pub type PersistenceFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait HarnessSessionStorePort: Send + Sync {
-    fn recent_completed_turns<'a>(
-        &'a self,
-        session_id: &'a HarnessSessionId,
-        limit: usize,
-    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>>;
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>>;
@@ -363,6 +358,12 @@ pub trait WorkflowStorePort: Send + Sync {
 }
 
 pub trait ToolInvocationLedgerPort: Send + Sync {
+    fn load_invocation<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+        invocation_id: &'a ToolInvocationId,
+    ) -> PersistenceFuture<'a, Result<Option<ToolInvocationRecord>, PersistenceFailure>>;
+
     fn load_running_invocations<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>>;

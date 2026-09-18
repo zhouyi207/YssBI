@@ -29,6 +29,23 @@ pub struct LinearRegressionReportProjection {
     pub observation_count: usize,
 }
 
+impl LinearRegressionReportProjection {
+    pub fn into_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "title": self.title,
+            "endog_name": self.endog_name,
+            "resultRef": {
+                "executionSessionId": self.reference.execution_session_id.as_uuid().to_string(),
+                "resultId": self.reference.result_id.get().to_string(),
+            },
+            "model_basic_info": self.model,
+            "diagnostic_info": { "cond_no": self.condition_number },
+            "coefficients": { "kind": "tableRef", "part": "coefficients", "rowCount": self.coefficient_count },
+            "observations": { "kind": "tableRef", "part": "observations", "rowCount": self.observation_count },
+        })
+    }
+}
+
 pub enum ResultAnalysisRequest {
     ResidualPlot {
         max_points: usize,
@@ -177,7 +194,7 @@ impl ApplicationState {
     }
 }
 
-fn report_projection(
+pub(super) fn report_projection(
     reference: ResultReference,
     result: &LinearRegressionResult,
 ) -> LinearRegressionReportProjection {
