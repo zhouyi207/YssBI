@@ -32,15 +32,15 @@ const descriptor: ResultDescriptor = {
     },
     createdAtMs: "100",
   },
-  presentation: { kind: "report", report: "olsSummary" },
+  presentation: { kind: "report", report: "linearRegressionSummary" },
   valueKind: "scalar",
   metadata: null,
   totalCount: 1,
-  title: "OLS Summary",
+  title: "Linear Regression Summary",
 };
 
-const malformedOlsReport = {
-  title: "OLS Summary",
+const malformedLinearRegressionReport = {
+  title: "Linear Regression Summary",
   endog_name: "response",
   resultRef: { executionSessionId: "00000000-0000-0000-0000-000000000001", resultId: "42" },
   observations: { kind: "tableRef", part: "observations", rowCount: 3 },
@@ -109,7 +109,11 @@ describe("ReportView", () => {
   it("logs an actionable diagnostic for a malformed canonical OLS report", () => {
     act(() => {
       root.render(
-        <ReportView descriptor={descriptor} report="olsSummary" data={malformedOlsReport} />,
+        <ReportView
+          descriptor={descriptor}
+          report="linearRegressionSummary"
+          data={malformedLinearRegressionReport}
+        />,
       );
     });
 
@@ -123,7 +127,7 @@ describe("ReportView", () => {
       runId: "7",
       nodeId: "ols-node",
       outputPinId: "report",
-      presentation: { kind: "report", report: "olsSummary" },
+      presentation: { kind: "report", report: "linearRegressionSummary" },
       valueKind: "scalar",
       fieldPath: "coefficients.rowCount",
       reason: "missing required field",
@@ -136,14 +140,14 @@ describe("ReportView", () => {
       root.render(
         <ReportView
           descriptor={descriptor}
-          report="olsSummary"
+          report="linearRegressionSummary"
           data={{
-            ...malformedOlsReport,
+            ...malformedLinearRegressionReport,
             model_basic_info: {
-              ...malformedOlsReport.model_basic_info,
+              ...malformedLinearRegressionReport.model_basic_info,
               covariance_type: undefined,
             },
-            coefficients: { ...malformedOlsReport.coefficients, rowCount: 1 },
+            coefficients: { ...malformedLinearRegressionReport.coefficients, rowCount: 1 },
           }}
         />,
       );

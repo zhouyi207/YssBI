@@ -356,7 +356,9 @@ fn charge_value(
             }
             Some(2)
         }
-        RuntimeValue::Ols(_) => return Err(ResultQueryApplicationError::InvalidPageRequest),
+        RuntimeValue::LinearRegression(_) => {
+            return Err(ResultQueryApplicationError::InvalidPageRequest);
+        }
         _ => Some(24),
     }
     .ok_or(ResultQueryApplicationError::PageTooLarge)?;

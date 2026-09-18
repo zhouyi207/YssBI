@@ -4,25 +4,25 @@ import { VscArrowDown, VscArrowUp } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  defaultOlsReportSpec,
-  OLS_REPORT_SPEC_TEXT_LIMIT,
-  parseOlsReportSpecJson,
-  type OlsReportSpec,
-  type OlsReportSpecIssue,
-} from "@/shared/types/domain/olsReportSpec";
+  defaultLinearRegressionReportSpec,
+  LINEAR_REGRESSION_REPORT_SPEC_TEXT_LIMIT,
+  parseLinearRegressionReportSpecJson,
+  type LinearRegressionReportSpec,
+  type LinearRegressionReportSpecIssue,
+} from "@/shared/types/domain/linearRegressionReportSpec";
 
-export function OlsReportLayoutControls({
+export function LinearRegressionReportLayoutControls({
   spec,
   onChange,
 }: {
-  spec: OlsReportSpec;
-  onChange: (spec: OlsReportSpec) => void;
+  spec: LinearRegressionReportSpec;
+  onChange: (spec: LinearRegressionReportSpec) => void;
 }) {
   const { t } = useTranslation();
   const id = useId();
   const [text, setText] = useState("");
-  const [issue, setIssue] = useState<OlsReportSpecIssue | null>(null);
-  const install = (next: OlsReportSpec) => {
+  const [issue, setIssue] = useState<LinearRegressionReportSpecIssue | null>(null);
+  const install = (next: LinearRegressionReportSpec) => {
     onChange(next);
     setIssue(null);
   };
@@ -85,7 +85,7 @@ export function OlsReportLayoutControls({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => install(defaultOlsReportSpec(spec.source))}
+          onClick={() => install(defaultLinearRegressionReportSpec(spec.source))}
         >
           {t("common.restoreDefaults")}
         </Button>
@@ -99,7 +99,7 @@ export function OlsReportLayoutControls({
               id={`${id}-json`}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              maxLength={OLS_REPORT_SPEC_TEXT_LIMIT + 1}
+              maxLength={LINEAR_REGRESSION_REPORT_SPEC_TEXT_LIMIT + 1}
               spellCheck={false}
               rows={10}
               className="w-full rounded-md border border-input bg-background p-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -123,7 +123,7 @@ export function OlsReportLayoutControls({
                 size="sm"
                 disabled={!text.trim()}
                 onClick={() => {
-                  const parsed = parseOlsReportSpecJson(text, spec.source);
+                  const parsed = parseLinearRegressionReportSpecJson(text, spec.source);
                   if (parsed.ok) install(parsed.value);
                   else setIssue(parsed.issue);
                 }}

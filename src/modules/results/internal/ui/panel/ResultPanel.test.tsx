@@ -44,11 +44,11 @@ it("keeps the opened snapshot when its pin is invalidated and rerun", async () =
       output,
       createdAtMs: "1",
     },
-    presentation: { kind: "report", report: "olsSummary" },
+    presentation: { kind: "report", report: "linearRegressionSummary" },
     valueKind: "scalar",
     metadata: null,
     totalCount: 1,
-    title: "OLS Summary",
+    title: "Linear Regression Summary",
   };
   const host = document.createElement("div");
   const root = createRoot(host);

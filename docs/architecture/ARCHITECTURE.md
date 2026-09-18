@@ -71,7 +71,7 @@ Rust 与 React 之间只允许单向投影加显式 draft：React 不维护第�
 
 客户端设置跨窗口只广播已提交的字段补丁。每个窗口保留防抖期间的本地待提交字段，远端补丁按字段合并，本地待提交值优先；同一字段在没有本地待提交值时采用收到的更新。保存时重新读取持久化设置并合并本地补丁，避免整份旧快照覆盖其他窗口的独立修改。接收更新不回声广播。本地读取与事件接收共用字段解析器，缺失字段可补默认值，已知字段类型错误则拒绝输入；原生窗口状态不进入此协议。
 
-缺失值策略、判秩、收敛和数值保护阈值由各算法的契约与实现管理。Graph OLS 当前仅接收有限数值并采用 Reject 策略，客户端偏好不参与统计计算。相关数值策略见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
+缺失值策略、判秩、收敛和数值保护阈值由各算法的契约与实现管理。Graph 线性回归当前仅接收有限数值并采用 Reject 策略，客户端偏好不参与统计计算。相关数值策略见 [Tolerance 分析](../reviews/2026-09-07-tolerance-analysis.md)。
 
 命名常量属于 GraphDocument，在 Event/Function 的 Details 中通过后端当前图编辑，并随图保存。没有独立全局变量资源或变量 revision。资源命令 receipt 与事件回声按提交身份去重。项目关闭使用 `clearProjectProjection` 清空客户端投影，项目加载只从 Rust 当前 session 获取完整数据。
 
@@ -219,7 +219,7 @@ Rust algorithms 拥有统计数值和 typed result；React 只把 authoritative 
 
 [`yss-sci-linalg`](../../src-tauri/crates/yss-sci-linalg/README.md) 拥有不透明的 `Mat`、`Col`、行与借用视图，以及矩阵运算、分解检查、稳定错误类型和秩阈值。faer 仅是该 crate 的实现依赖，对外不重导出原生类型。SCI 只通过 Linalg 使用矩阵；runtime 只调用 SCI，不依赖 Linalg 或 faer。中性契约使用业务结构和普通向量，Arrow 负责表格交换；输入与报告按逻辑行列转换，不依赖矩阵物理存储顺序。
 
-[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。OLS 报告由 runtime 映射拟合结果，预测值和残差使用模型已计算的事实。`ols`、`acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
+[`yss-sci`](../../src-tauri/crates/yss-sci/README.md) 的 OLS 模块分别组织模型/结果、拟合和推断，使用中性契约中的唯一 `OlsOptions`。Runtime 按 regression、hypothesis、time_series、panel 等能力组织入口；`runtime::data` 使用 Arrow 数组与批次完成有界时间序列/面板输入准备，runtime 与核心算法均不依赖 Polars。线性回归报告由 runtime 映射 OLS/WLS/GLS 拟合结果，预测值和残差使用模型已计算的事实。`linear_regression`、`ols`、`acf_pacf` 是普通函数，接收中性请求和取消/deadline 控制；桌面入口和 Application 不构造、保存或注入科学计算后端。
 
 SCI 拥有数值设计矩阵、回归拟合、ADF/VAR/VEC 模型准备、DID 随机化推断和核密度计算。假设检验也归 SCI：复用 `yss-math-expr` 解析，完成约束线性化、参数列序、矩阵构造与 t/Wald 分派；Application 保留结果身份和项目状态检查。Julia 插件不依赖任何 SCI crate，输入值、分类角色和取消/期限契约由插件内的 `yss-bayes-worker` 拥有。
 

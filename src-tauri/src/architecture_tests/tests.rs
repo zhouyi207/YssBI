@@ -2421,8 +2421,8 @@ fn result_projection_capability_does_not_grant_application_state_access() {
         rust_dependency_findings(
             &[dependency(
                 projection,
-                "yss_application::graph::results::report::OlsReportProjection",
-                "OlsReportProjection"
+                "yss_application::graph::results::report::LinearRegressionReportProjection",
+                "LinearRegressionReportProjection"
             )],
             &classification
         )

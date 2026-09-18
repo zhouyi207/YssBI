@@ -70,7 +70,7 @@ IPC 只将模型转换为 wire DTO。投影不依赖 Application，也不构成�
 `yss-graph-runtime` 负责编辑解析；`yss-graph-execution::graph_preparation` 消费只读的 `GraphAnalysis`，
 直接构建已有 `ExecutionPlan`、`PlanParameterBundle` 和输出契约。计划缓存归执行会话，资源授权依据
 在每次准备时重新绑定。Application 组织资源和会话校验，不再持有一套图包到执行包的转换。
-调度器消费执行计划；`kernel_invocation` 将已求值输入、已解析参数及输出类型/字段投影为中立内核调用，kernel 不消费 Graph 计划。运行准备不读取 UI 投影或 Project 可变状态。
+调度器消费执行计划；`kernel_invocation` 将已求值输入、输入模板名、已解析参数及输出类型/字段投影为中立内核调用，kernel 不消费 Graph 计划。运行准备不读取 UI 投影或 Project 可变状态。
 
 Application 的图用例集中在 `graph/`，包括编辑、解析、资源、运行与结果查询；`session/` 独立拥有整个
 Project/Database/Graph/Execution 会话的组装和替换。`chart/` 按资源操作、数据库查询及纯图表投影组织，
@@ -308,7 +308,7 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 自然对数、以 2/10 为底的对数、平方及平方根采用单输入 Numeric 操作，复用相同执行管线并保持输入形状；统一输出 Float64。`accepts_arity` 约束操作数数量，`evaluate_unary_float` 使用对应的实数函数并统一定义域/非有限值检查。数列按批惰性计算，空值和非法定义域均报错，不隐式填充 null。
 分页、统计输入消费沿用各自的取消、deadline 和内存边界，不将非法计算值写成正常结果。
 
-OLS Fit/Summary 从节点参数构造 `yss-sci-contract` 的共享 `OlsOptions`，由 Node Kernel 的统计适配调用 `yss_sci_runtime::ols`，传入本次执行的取消标记和 deadline。节点默认值与模型使用同一个配置定义；函数返回类型化 OLS 摘要，由内核转换为 runtime values。支持常数项、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale。
+线性回归 Fit 从节点参数构造 `OlsOptions` 和 `LinearRegressionMethod`，由 Node Kernel 调用 `yss_sci_runtime::linear_regression`，传入本次执行的取消标记和 deadline。OLS/WLS 支持截距、Nonrobust、HC0–HC3、HAC、Newey-West 和 Fixed Scale；GLS 接收相对误差协方差矩阵并估计尺度，标准误仅支持 Nonrobust。Summary 读取上游原生模型，不调用拟合；Predict 复用训练系数和截距。
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
@@ -397,7 +397,11 @@ Pin 查询与当前结果搜索重新验证数据库内容及函数依赖；报�
 
 统计摘要区分 `LinearModelInfo` 与 `BinaryModelInfo`。Logit/Probit 使用 `pseudo_r2`、`adjusted_pseudo_r2`、`lr_chi2` 与 `prob_lr_chi2`，不生成 F/Wald 别名或线性 ANOVA 的平方和字段。通用回归 envelope 只复用系数、诊断与检验输入。
 
-OLS 的 `result` 与 `report` outputs 共享不可变的原生 `OlsResult`，仍由当前 `ResultStore` 拥有。
+线性回归统一使用 `yssbi.statistics.linear.fit`、`linear.summary` 与 `linear.predict`。Fit 在配置中选择 OLS/WLS/GLS，输出 `model`、`fitted`、`residuals`；Summary 只接收 `model`，无拟合参数，也不重新估计；Predict 使用同一模型的系数与截距。
+WLS 通过一个按需添加的 `weights` 数列接收正精度权重；GLS 通过按顺序添加的 `sigma` 数列接收完整相对误差协方差矩阵的各列，验证有限、方阵、对称与正定。只允许所选方法需要的辅助输入。WLS 权重与训练列联合读取以验证共同样本；协方差矩阵的行列顺序由调用者对应训练样本。GLS 当前仅支持常规标准误；其他标准误配置被拒绝。
+执行计划保留端口实例分组身份和模板名，内核只接收中立模板名来区分 predictors/weights/sigma，不解析图地址。
+
+Fit 的 `model` 与 Summary 的 `result`、`report` 共享不可变的原生 `LinearRegressionResult`，仍由当前 `ResultStore` 拥有。报告类别统一为 `linearRegressionSummary`，标题为 Linear Regression Summary，模型概览保留实际 OLS/WLS/GLS 方法。WLS/GLS 的平方和与 R² 使用变换尺度，拟合值与残差保留原始尺度。
 拟合值、残差、设计矩阵与参数协方差留在 Rust；报告 value 只包含模型概览、条件数、
 `{ executionSessionId, resultId }` 引用，以及 coefficients/observations 表引用与行数。
 引用的 part 是固定枚举，不是任意 JSON 路径；观测表把拟合值和残差按拟合时的行序配对。
@@ -407,18 +411,18 @@ OLS 的 `result` 与 `report` outputs 共享不可变的原生 `OlsResult`，仍
 结果回收或会话结束后的迟到成功和失败均被丢弃；仅当前输出失效不撤销有租约的快照读取。
 数据仍由原 ResultStore 拥有，不另建报告存储或复制完整数据。
 
-OLS 报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
+线性回归报告按区域读取：概览与系数首页先加载，展开图形/观测表后才读取对应投影，检验由用户提交参数触发。
 前端复用 Result query coordinator，以执行会话、结果和 part/analysis kind 隔离请求；每张表和每类分析仅保留当前投影，
 分析参数参与读取匹配。最后一个 payload consumer 释放、结果回收或会话结束会清理这些投影。
 报告字段的结构不再随观测数增长，也不通过大 scalar 的分页回退搬运完整数值数组。
 
 报告的字段结构由各 `parseCommon`、`parseRegression`、`parseVar`、`parseVec` 和 `parsePanel` owner 校验，复用 typed field reader，递归检查数组、矩阵和可选诊断块。`parseReportPayloadResult` 单次读取返回已校验的值或字段路径错误；OLS 的必需统计字段和标题要求在同一解析路径内表达。非法嵌套内容不能通过强制类型转换进入 renderer。
 
-### OLS 语义报告布局
+### 线性回归语义报告布局
 
-OLS 报告的章节顺序与显示状态由 `OlsReportSpec` 控制，用户可在「报告布局」中调整并导入／导出 JSON。
+线性回归报告的章节顺序与显示状态由 `LinearRegressionReportSpec` 控制，用户可在「报告布局」中调整并导入／导出 JSON。
 Spec 只含版本、固定报告类型、当前结果引用及带稳定 ID 的平面章节列表；章节词汇、数量和文本长度上限由
-`src/shared/types/domain/olsReportSpec.ts` 定义。它不接受统计值、查询参数、任意 props、嵌套树、脚本、网络请求或 IPC action。
+`src/shared/types/domain/linearRegressionReportSpec.ts` 定义。它不接受统计值、查询参数、任意 props、嵌套树、脚本、网络请求或 IPC action。
 未知字段、重复 ID／章节类型、越界数量、不支持的版本及不匹配的结果引用都拒绝安装；错误保留上一份有效布局。
 完整报告 payload 的引用还必须与后端 descriptor 匹配，不能通过布局切换到其他结果。
 

@@ -2,8 +2,10 @@ use thiserror::Error;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::RelationColumn;
-use yss_sci_contract::regression::report::OlsModelSummary;
-use yss_sci_contract::scientific::{AcfPacfResult, OlsResult, ScientificComputationError};
+use yss_sci_contract::regression::report::LinearModelSummary;
+use yss_sci_contract::scientific::{
+    AcfPacfResult, LinearRegressionResult, ScientificComputationError,
+};
 
 use super::{MAX_RESULT_PAGE_ROWS, ResultPageKind, ResultPageProjection};
 use crate::session::{ApplicationState, SessionCaptureError};
@@ -17,11 +19,11 @@ pub enum ResultTablePart {
     Observations,
 }
 
-pub struct OlsReportProjection {
+pub struct LinearRegressionReportProjection {
     pub reference: ResultReference,
     pub title: String,
     pub endog_name: String,
-    pub model: OlsModelSummary,
+    pub model: LinearModelSummary,
     pub condition_number: f64,
     pub coefficient_count: usize,
     pub observation_count: usize,
@@ -85,11 +87,13 @@ pub enum ReportQueryError {
 }
 
 impl ApplicationState {
-    pub fn query_ols_report(
+    pub fn query_linear_regression_report(
         &self,
         reference: ResultReference,
-    ) -> Result<OlsReportProjection, ReportQueryError> {
-        self.with_ols_result(reference, |result| Ok(report_projection(reference, result)))
+    ) -> Result<LinearRegressionReportProjection, ReportQueryError> {
+        self.with_linear_regression_result(reference, |result| {
+            Ok(report_projection(reference, result))
+        })
     }
 
     pub fn query_result_table(
@@ -99,7 +103,9 @@ impl ApplicationState {
         offset: usize,
         limit: usize,
     ) -> Result<ResultPageProjection, ReportQueryError> {
-        self.with_ols_result(reference, |result| table_page(result, part, offset, limit))
+        self.with_linear_regression_result(reference, |result| {
+            table_page(result, part, offset, limit)
+        })
     }
 
     pub fn analyze_result(
@@ -107,7 +113,7 @@ impl ApplicationState {
         reference: ResultReference,
         request: ResultAnalysisRequest,
     ) -> Result<ResultAnalysisProjection, ReportQueryError> {
-        self.with_ols_result(reference, |result| {
+        self.with_linear_regression_result(reference, |result| {
             Ok(match request {
                 ResultAnalysisRequest::ResidualPlot {
                     max_points,
@@ -140,10 +146,10 @@ impl ApplicationState {
         })
     }
 
-    fn with_ols_result<T>(
+    fn with_linear_regression_result<T>(
         &self,
         reference: ResultReference,
-        read: impl FnOnce(&OlsResult) -> Result<T, ReportQueryError>,
+        read: impl FnOnce(&LinearRegressionResult) -> Result<T, ReportQueryError>,
     ) -> Result<T, ReportQueryError> {
         let captured = self.capture_session()?;
         if captured.execution_session_id() != reference.execution_session_id {
@@ -153,7 +159,7 @@ impl ApplicationState {
             .execution()
             .query_result(reference.result_id)
             .ok_or(ReportQueryError::Unavailable)?;
-        let RuntimeValue::Ols(result) = snapshot.value().value() else {
+        let RuntimeValue::LinearRegression(result) = snapshot.value().value() else {
             return Err(ReportQueryError::WrongKind);
         };
         // The snapshot retains shared native buffers. No store lock is held during analysis.
@@ -171,8 +177,11 @@ impl ApplicationState {
     }
 }
 
-fn report_projection(reference: ResultReference, result: &OlsResult) -> OlsReportProjection {
-    OlsReportProjection {
+fn report_projection(
+    reference: ResultReference,
+    result: &LinearRegressionResult,
+) -> LinearRegressionReportProjection {
+    LinearRegressionReportProjection {
         reference,
         title: result.report.title.clone(),
         endog_name: result.report.endog_name.clone(),
@@ -191,7 +200,7 @@ fn validate_lags(lags: usize) -> Result<(), ReportQueryError> {
 }
 
 fn table_page(
-    result: &OlsResult,
+    result: &LinearRegressionResult,
     part: ResultTablePart,
     offset: usize,
     limit: usize,
@@ -266,7 +275,7 @@ fn table_page(
 }
 
 fn residual_plot(
-    result: &OlsResult,
+    result: &LinearRegressionResult,
     max_points: usize,
     x_range: Option<[f64; 2]>,
 ) -> Result<ResidualPlotProjection, ReportQueryError> {

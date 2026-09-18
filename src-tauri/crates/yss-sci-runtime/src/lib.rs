@@ -7,7 +7,7 @@
 //! export, Tauri transport, or UI state.
 
 mod computation;
-pub use computation::{acf_pacf, ols};
+pub use computation::{acf_pacf, linear_regression, ols};
 
 pub mod density;
 pub mod hypothesis;

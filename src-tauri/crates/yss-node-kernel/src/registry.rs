@@ -187,7 +187,7 @@ impl KernelRegistry {
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         let kernel = self.kernels.get(id).ok_or(KernelError::KernelNotFound)?;
         invocation.check_control()?;
-        if invocation.inputs.len() != invocation.input_groups.len() {
+        if invocation.inputs.len() != invocation.input_templates.len() {
             return Err(KernelError::Failed);
         }
         if !kernel

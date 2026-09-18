@@ -1,12 +1,12 @@
 import { useMemo } from "react";
-import type { OlsReportData } from "@/shared/types/domain/resultReport";
+import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 import type { Coefficient } from "@/shared/types/report/regression";
-import { olsCoefficientField } from "@/shared/types/report/parseOls";
+import { linearCoefficientField } from "@/shared/types/report/parseLinearRegression";
 import { usePagedResultRows } from "@/features/application/results/usePagedResultRows";
 import { useResultAnalysis } from "@/features/application/results/useResultAnalysis";
 import type { HypothesisTestSource } from "./useHypothesisTestBlock";
 
-export function useOlsReport(data: OlsReportData) {
+export function useLinearRegressionReport(data: LinearRegressionReportData) {
   const page = usePagedResultRows(
     data.resultRef,
     data.coefficients.rowCount,
@@ -21,7 +21,7 @@ export function useOlsReport(data: OlsReportData) {
       const value = Object.fromEntries(
         page.columns.map((column, index) => [column.name, row[index]]),
       );
-      const parsed = olsCoefficientField.read(value, "coefficients");
+      const parsed = linearCoefficientField.read(value, "coefficients");
       if (!parsed.ok)
         return {
           coefficients: [],

@@ -1490,6 +1490,7 @@ mod tests {
                 PlanPortAddress::from_existing("consumer:value".into()),
                 PlanInputSource::Value(ValueRef::new(1)),
                 crate::plan::PlanInputContract {
+                    template: None,
                     group: None,
                     expected_type: yss_data_contract::ValueType::Scalar(
                         yss_data_contract::SemanticType::Numeric,

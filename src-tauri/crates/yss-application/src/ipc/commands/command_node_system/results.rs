@@ -99,12 +99,14 @@ pub fn get_result_value(
         return Err(result_requires_paging(result_id, "sequence"));
     }
     let value = match result.value().value() {
-        RuntimeValue::Ols(_) => {
+        RuntimeValue::LinearRegression(_) => {
             let report = state
-                .query_ols_report(reference)
+                .query_linear_regression_report(reference)
                 .map_err(super::reports::report_query_error)?;
-            serde_json::to_value(crate::ipc::schema::result::OlsReportDto::from(report))
-                .map_err(|_| CommandError::expected("result_value_not_json"))?
+            serde_json::to_value(crate::ipc::schema::result::LinearRegressionReportDto::from(
+                report,
+            ))
+            .map_err(|_| CommandError::expected("result_value_not_json"))?
         }
         value => runtime_value_to_json(value)
             .map_err(|_| CommandError::expected("result_value_not_json"))?,

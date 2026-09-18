@@ -84,7 +84,7 @@ vi.mock("@/features/core/dataStore", () => ({
         [graphPath]: {
           nodes: {
             "view-node": { nodeType: "yssbi.debug.view" },
-            "other-node": { nodeType: "yssbi.statistics.ols.summary" },
+            "other-node": { nodeType: "yssbi.statistics.linear.summary" },
           },
         },
       },

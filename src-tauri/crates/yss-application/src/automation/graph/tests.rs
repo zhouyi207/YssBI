@@ -514,7 +514,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
     let fit = f.edit(vec![
-        node("yssbi.statistics.ols.summary", "fit"),
+        node("yssbi.statistics.linear.fit", "fit"),
         GraphEditOperation::AddPortInstance {
             node_id: "$fit".into(),
             template_key: "predictors".into(),

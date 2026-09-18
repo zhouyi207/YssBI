@@ -28,7 +28,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
     use NumericOperation::{
         Add, Divide, Ln, Log2, Log10, Logarithm, Multiply, Power, Sqrt, Square, Subtract,
     };
-    use statistics::StatisticalKernel::{OlsFit, OlsSummary};
+    use statistics::StatisticalKernel::{LinearFit, LinearPredict, LinearRegressionSummary};
     let entries: &[(
         &str,
         BuiltinKernel,
@@ -36,16 +36,22 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         std::ops::RangeInclusive<usize>,
     )] = &[
         (
-            "yssbi.statistics.ols.fit",
-            Statistical(OlsFit),
+            "yssbi.statistics.linear.fit",
+            Statistical(LinearFit),
             &["configuration"],
             3..=3,
         ),
         (
-            "yssbi.statistics.ols.summary",
-            Statistical(OlsSummary),
-            &["configuration"],
+            "yssbi.statistics.linear.summary",
+            Statistical(LinearRegressionSummary),
+            &[],
             2..=2,
+        ),
+        (
+            "yssbi.statistics.linear.predict",
+            Statistical(LinearPredict),
+            &[],
+            1..=1,
         ),
         (
             "yssbi.dataframe.source.get",
@@ -219,7 +225,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                 std::num::NonZeroU32::new(match kind {
                     Comparison(_) => 4,
                     Boolean(_) => 2,
-                    Statistical(OlsFit | OlsSummary) => 2,
+                    Statistical(LinearFit | LinearRegressionSummary | LinearPredict) => 3,
                     Convert => 5,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 2,
                     _ => 1,

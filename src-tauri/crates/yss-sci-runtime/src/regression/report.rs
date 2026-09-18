@@ -6,7 +6,7 @@ use yss_sci_contract::regression::fit::{
     RegressionStatistics,
 };
 use yss_sci_contract::regression::report::{
-    OlsDiagnostics, OlsModelSummary, OlsSummary, RegressionCoefficient,
+    LinearDiagnostics, LinearModelSummary, LinearRegressionSummary, RegressionCoefficient,
 };
 use yss_sci_contract::{SciError, SciOperationCode};
 
@@ -116,8 +116,8 @@ fn binary_model_basic_info(
 }
 
 pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciError> {
-    if fit.family == "ols" {
-        return serde_json::to_value(ols_report(fit)?)
+    if matches!(fit.family, "ols" | "wls" | "gls") {
+        return serde_json::to_value(linear_regression_report(fit)?)
             .map_err(|_| computation_failed(SciOperationCode::Regression));
     }
     #[derive(Serialize)]
@@ -188,16 +188,22 @@ pub fn regression_report(fit: &RegressionFit) -> Result<serde_json::Value, SciEr
     .map_err(|_| computation_failed(SciOperationCode::Regression))
 }
 
-pub fn ols_report(fit: &RegressionFit) -> Result<OlsSummary, SciError> {
+pub fn linear_regression_report(fit: &RegressionFit) -> Result<LinearRegressionSummary, SciError> {
     let RegressionStatistics::Linear { model, .. } = &fit.statistics else {
         return Err(computation_failed(SciOperationCode::Regression));
     };
-    Ok(OlsSummary {
-        title: "OLS Summary".into(),
+    Ok(LinearRegressionSummary {
+        title: "Linear Regression Summary".into(),
         endog_name: "response".into(),
-        model_basic_info: OlsModelSummary {
-            model_type: "OLS".into(),
-            method: "Least Squares".into(),
+        model_basic_info: LinearModelSummary {
+            model_type: fit.family.to_uppercase(),
+            method: match fit.family {
+                "ols" => "Ordinary Least Squares",
+                "wls" => "Weighted Least Squares",
+                "gls" => "Generalized Least Squares",
+                _ => return Err(computation_failed(SciOperationCode::Regression)),
+            }
+            .into(),
             num_observation: fit.metadata.used_observation_count,
             r_squared: model.r2,
             adj_r_squared: model.adjusted_r2,
@@ -215,7 +221,7 @@ pub fn ols_report(fit: &RegressionFit) -> Result<OlsSummary, SciError> {
             covariance_type: model.covariance_type.clone(),
         },
         coefficients: report_coefficients(fit),
-        diagnostic_info: OlsDiagnostics {
+        diagnostic_info: LinearDiagnostics {
             cond_no: model.condition_number,
         },
         cov_beta: fit.statistics.coefficient_statistics().covariance.clone(),

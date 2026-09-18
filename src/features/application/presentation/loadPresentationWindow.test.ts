@@ -45,17 +45,17 @@ describe("loadPresentationWindow", () => {
   });
 
   it("loads a ready scalar report as the canonical object only", async () => {
-    const report = { title: "OLS Summary", model_basic_info: {} };
+    const report = { title: "Linear Regression Summary", model_basic_info: {} };
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(
       descriptor("20", {
-        presentation: { kind: "report", report: "olsSummary" },
+        presentation: { kind: "report", report: "linearRegressionSummary" },
       }),
     );
     vi.mocked(ResultService.getValue).mockResolvedValue({ kind: "value", value: report });
 
     await expect(loadPresentationWindow(resultReferenceFixture("20"))).resolves.toMatchObject({
       status: "ready",
-      payload: { mode: "report", report: "olsSummary", data: report },
+      payload: { mode: "report", report: "linearRegressionSummary", data: report },
     });
     expect(ResultService.getValue).toHaveBeenCalledWith(resultReferenceFixture("20"));
     expect(ResultService.getPage).not.toHaveBeenCalled();
@@ -64,7 +64,7 @@ describe("loadPresentationWindow", () => {
   it("requires report descriptors to use the scalar value kind", async () => {
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(
       descriptor("21", {
-        presentation: { kind: "report", report: "olsSummary" },
+        presentation: { kind: "report", report: "linearRegressionSummary" },
         valueKind: "sequence",
       }),
     );
@@ -78,7 +78,7 @@ describe("loadPresentationWindow", () => {
       nextOffset: null,
       valueKind: "sequence",
       metadata: null,
-      values: [{ title: "OLS Summary" }],
+      values: [{ title: "Linear Regression Summary" }],
     });
 
     await expect(loadPresentationWindow(resultReferenceFixture("21"))).resolves.toEqual({

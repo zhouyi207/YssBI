@@ -1,17 +1,17 @@
-//! Scientific analyses derived from an Execution-owned OLS result.
+//! Scientific analyses derived from an Execution-owned linear regression result.
 
 use std::time::{Duration, Instant};
 
 use yss_sci_contract::SciError;
 use yss_sci_contract::hypothesis::{HypothesisError, HypothesisTestInput, HypothesisTestOutput};
 use yss_sci_contract::scientific::{
-    AcfPacfRequest, AcfPacfResult, OlsResult, ScientificCancellationToken,
+    AcfPacfRequest, AcfPacfResult, LinearRegressionResult, ScientificCancellationToken,
     ScientificComputationError, ScientificExecutionControl,
 };
 use yss_sci_contract::serial_tests::{SerialTestsInput, SerialTestsOutput};
 
 pub fn acf_pacf(
-    result: &OlsResult,
+    result: &LinearRegressionResult,
     max_lag: usize,
 ) -> Result<AcfPacfResult, ScientificComputationError> {
     let control = ScientificExecutionControl {
@@ -28,7 +28,7 @@ pub fn acf_pacf(
 }
 
 pub fn serial_tests(
-    result: &OlsResult,
+    result: &LinearRegressionResult,
     lags: usize,
     bg_nomiss0: bool,
 ) -> Result<SerialTestsOutput, SciError> {
@@ -45,7 +45,7 @@ pub fn serial_tests(
 }
 
 pub fn hypothesis(
-    result: &OlsResult,
+    result: &LinearRegressionResult,
     hypothesis: String,
 ) -> Result<HypothesisTestOutput, HypothesisError> {
     yss_sci_runtime::hypothesis::run_hypothesis_test(HypothesisTestInput {

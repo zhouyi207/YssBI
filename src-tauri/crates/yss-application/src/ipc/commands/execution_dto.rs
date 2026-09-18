@@ -80,7 +80,7 @@ pub enum ResultPlotKindDto {
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResultReportKindDto {
-    OlsSummary,
+    LinearRegressionSummary,
     BinarySummary,
     Iv2slsSummary,
     IvLimlSummary,
@@ -185,8 +185,8 @@ fn result_presentation(
         yss_graph_execution::plan::ResultCategory::StatisticalReport(kind) => {
             ResultPresentationDto::Report {
                 report: match kind {
-                    yss_graph_execution::plan::StatisticalReportKind::OlsSummary => {
-                        ResultReportKindDto::OlsSummary
+                    yss_graph_execution::plan::StatisticalReportKind::LinearRegressionSummary => {
+                        ResultReportKindDto::LinearRegressionSummary
                     }
                     yss_graph_execution::plan::StatisticalReportKind::BinarySummary => {
                         ResultReportKindDto::BinarySummary
@@ -326,7 +326,7 @@ pub(crate) fn runtime_value_to_json(
             .map(serde_json::Value::Number)
             .ok_or(RunEventDtoError::InvalidOutput)?,
         RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::Ols(_) => {
+        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::LinearRegression(_) => {
             return Err(RunEventDtoError::InvalidOutput);
         }
         RuntimeValue::List(values) => values

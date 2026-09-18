@@ -536,7 +536,7 @@ fn inspect_runtime_value(
             series.relation().bindings(),
             budget,
         )),
-        RuntimeValue::Ols(result) => Ok(ResultValueInspection::Record {
+        RuntimeValue::LinearRegression(result) => Ok(ResultValueInspection::Record {
             entries: std::collections::BTreeMap::from([
                 (
                     "title".into(),
@@ -639,7 +639,7 @@ fn plot_kind(kind: PlotDataKind) -> &'static str {
 
 fn report_kind(kind: StatisticalReportKind) -> &'static str {
     match kind {
-        StatisticalReportKind::OlsSummary => "ols_summary",
+        StatisticalReportKind::LinearRegressionSummary => "linear_regression_summary",
         StatisticalReportKind::BinarySummary => "binary_summary",
         StatisticalReportKind::Iv2slsSummary => "iv_2sls_summary",
         StatisticalReportKind::IvLimlSummary => "iv_liml_summary",

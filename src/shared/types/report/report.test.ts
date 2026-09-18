@@ -275,7 +275,7 @@ describe("parseReportPayloadResult", () => {
     ).toMatchObject({ ok: false, issue: { fieldPath: "rows[0]" } });
   });
 
-  it("accepts the Rust OLS Summary report output", () => {
+  it("accepts the Rust Linear Regression Summary report output", () => {
     const payload: unknown = JSON.parse(
       readFileSync(
         resolve("src/tests/fixtures/node-system-contracts/ols-summary-report.json"),
@@ -283,6 +283,9 @@ describe("parseReportPayloadResult", () => {
       ),
     );
 
-    expect(parseReportPayloadResult("olsSummary", payload)).toEqual({ ok: true, value: payload });
+    expect(parseReportPayloadResult("linearRegressionSummary", payload)).toEqual({
+      ok: true,
+      value: payload,
+    });
   });
 });

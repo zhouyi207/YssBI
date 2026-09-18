@@ -39,7 +39,7 @@ export function ReportView({ descriptor, report, data }: ReportViewProps) {
 
   let content: ReactNode;
   if (!validation.ok) {
-    const label = report === "olsSummary" ? "OLS report" : "report";
+    const label = report === "linearRegressionSummary" ? "linear regression report" : "report";
     content = (
       <Alert variant="destructive" className="m-4 w-auto">
         <AlertDescription className="text-destructive">

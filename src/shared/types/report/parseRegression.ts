@@ -287,4 +287,4 @@ function regressionReportField<ModelInfo>(
 }
 export const linearRegressionReportField = regressionReportField(linearModelInfoField);
 export const binaryRegressionReportField = regressionReportField(binaryModelInfoField);
-export { olsReportField as canonicalOlsReportField } from "./parseOls";
+export { linearRegressionReportField as canonicalLinearRegressionReportField } from "./parseLinearRegression";

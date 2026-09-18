@@ -31,7 +31,7 @@ export function validateReportPayload(
 ): ReportValidationResult {
   const parsed = parseReportPayloadResult(report, raw);
   const identityMatches =
-    report !== "olsSummary" ||
+    report !== "linearRegressionSummary" ||
     (parsed.ok &&
       isRecord(parsed.value) &&
       isResultReference(parsed.value.resultRef) &&

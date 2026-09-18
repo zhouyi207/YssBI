@@ -37,12 +37,12 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 | ---------------------------------------- | ------------------------------------------------------ |
 | [identity](src/identity.rs)              | KernelId、参数键及能力指纹                             |
 | [invocation](src/invocation.rs)          | 中立调用、输出元数据、取消/deadline 和计算预算         |
-| [value](src/value.rs)                    | 标量、列表、记录、关系/数列句柄与原生 OLS 运行值       |
+| [value](src/value.rs)                    | 标量、列表、记录、关系/数列句柄与原生线性回归 运行值   |
 | [registry](src/registry.rs)              | 注册一致性、冻结指纹、能力查询、执行契约与输出数量检查 |
 | [builtins](src/builtins/mod.rs)          | 内置注册装配及逻辑、常量、转换等适配                   |
 | [numeric](src/builtins/numeric.rs)       | 已有标量/数列四则运算                                  |
 | [relational](src/builtins/relational.rs) | 已有 DataFrame/数列关系操作和按输出 Schema 拆列        |
-| [statistics](src/builtins/statistics.rs) | 已有 OLS Fit/Summary 到 SCI Runtime 的适配             |
+| [statistics](src/builtins/statistics.rs) | 线性回归 Fit/Summary/Predict 到 SCI Runtime 的适配     |
 
 科学计算继续调用 `yss-sci-runtime`，数值算法属于 SCI，关系执行使用 `yss-relational-contract` 的句柄。这里不直接依赖 Graph、Project、Application、Tauri、DataFusion 或 Linalg。
 

@@ -22,7 +22,7 @@ type UnknownRecord = Record<string, unknown>;
 
 const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
 const REPORT_KINDS = new Set([
-  "olsSummary",
+  "linearRegressionSummary",
   "binarySummary",
   "iv2slsSummary",
   "ivLimlSummary",

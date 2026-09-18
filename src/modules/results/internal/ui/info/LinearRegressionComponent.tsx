@@ -1,7 +1,7 @@
 import { Fragment, useState, type FC, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useOlsReport } from "@/features/application/stats/useOlsReport";
+import { useLinearRegressionReport } from "@/features/application/stats/useLinearRegressionReport";
 import { useResultAnalysisQuery } from "@/features/application/results/useResultAnalysis";
 import {
   usePagedResultRows,
@@ -11,13 +11,13 @@ import { ReadOnlyDataGrid } from "@/features/application/results/components/Read
 import { ResultPageToolbar } from "@/features/application/results/components/ResultPageToolbar";
 import { ResultReadError } from "@/features/application/results/components/ResultReadError";
 import { ScatterChart } from "@/shared/charts/cartesian/ScatterChart";
-import type { OlsReportData } from "@/shared/types/domain/resultReport";
+import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
 import {
-  defaultOlsReportSpec,
-  type OlsReportSectionKind,
-} from "@/shared/types/domain/olsReportSpec";
-import { OlsReportLayoutControls } from "./OlsReportLayoutControls";
+  defaultLinearRegressionReportSpec,
+  type LinearRegressionReportSectionKind,
+} from "@/shared/types/domain/linearRegressionReportSpec";
+import { LinearRegressionReportLayoutControls } from "./LinearRegressionReportLayoutControls";
 import {
   ReportLayout,
   ReportLazyBoundary,
@@ -51,7 +51,7 @@ function ExpandableReportSection({ title, children }: { title: string; children:
   );
 }
 
-function OlsObservations({ data }: { data: OlsReportData }) {
+function LinearObservations({ data }: { data: LinearRegressionReportData }) {
   const page = usePagedResultRows(
     data.resultRef,
     data.observations.rowCount,
@@ -76,7 +76,7 @@ function OlsObservations({ data }: { data: OlsReportData }) {
   );
 }
 
-function OlsResidualPlot({ reference }: { reference: ResultReference }) {
+function LinearResidualPlot({ reference }: { reference: ResultReference }) {
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
   const [xRange, setXRange] = useState<[number, number] | undefined>();
@@ -160,16 +160,19 @@ function OlsResidualPlot({ reference }: { reference: ResultReference }) {
   );
 }
 
-export const OLSComponent: FC<{ data: OlsReportData }> = ({ data }) => (
-  <OlsReport key={`${data.resultRef.executionSessionId}:${data.resultRef.resultId}`} data={data} />
+export const LinearRegressionComponent: FC<{ data: LinearRegressionReportData }> = ({ data }) => (
+  <LinearRegressionReport
+    key={`${data.resultRef.executionSessionId}:${data.resultRef.resultId}`}
+    data={data}
+  />
 );
 
-function OlsReport({ data }: { data: OlsReportData }) {
-  const [spec, setSpec] = useState(() => defaultOlsReportSpec(data.resultRef));
+function LinearRegressionReport({ data }: { data: LinearRegressionReportData }) {
+  const [spec, setSpec] = useState(() => defaultLinearRegressionReportSpec(data.resultRef));
   const { page, coefficients, coefficientError, hypothesisSource, computeAcf, computeSerialTests } =
-    useOlsReport(data);
+    useLinearRegressionReport(data);
   const info = data.model_basic_info;
-  const renderSection = (kind: OlsReportSectionKind): ReactNode => {
+  const renderSection = (kind: LinearRegressionReportSectionKind): ReactNode => {
     switch (kind) {
       case "equation":
         return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
@@ -221,13 +224,13 @@ function OlsReport({ data }: { data: OlsReportData }) {
       case "residualPlot":
         return (
           <ExpandableReportSection title="Residuals vs Fitted">
-            <OlsResidualPlot reference={data.resultRef} />
+            <LinearResidualPlot reference={data.resultRef} />
           </ExpandableReportSection>
         );
       case "observations":
         return (
           <ExpandableReportSection title="Fitted values and residuals">
-            <OlsObservations data={data} />
+            <LinearObservations data={data} />
           </ExpandableReportSection>
         );
       case "acfPacf":
@@ -253,7 +256,7 @@ function OlsReport({ data }: { data: OlsReportData }) {
         </>
       }
     >
-      <OlsReportLayoutControls spec={spec} onChange={setSpec} />
+      <LinearRegressionReportLayoutControls spec={spec} onChange={setSpec} />
       {spec.sections
         .filter((section) => section.visible)
         .map((section) => (

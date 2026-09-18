@@ -9,8 +9,8 @@ export interface ResultTableReference<Part extends ResultTablePart = ResultTable
   readonly rowCount: number;
 }
 
-export interface OlsReportData {
-  title: "OLS Summary";
+export interface LinearRegressionReportData {
+  title: "Linear Regression Summary";
   endog_name: string;
   resultRef: ResultReference;
   model_basic_info: LinearModelInfo;
