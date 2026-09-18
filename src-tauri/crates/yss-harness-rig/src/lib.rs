@@ -218,6 +218,7 @@ where
         }
         let prepared = prepare_messages(request.messages)?;
         let tool_tasks = Arc::new(Mutex::new(Vec::new()));
+        let (tool_failure, failure_receiver) = tokio::sync::watch::channel(None);
         let mut tools = request
             .tools
             .into_iter()
@@ -226,10 +227,14 @@ where
                     descriptor,
                     Arc::clone(&capabilities),
                     Arc::clone(&tool_tasks),
+                    tool_failure.clone(),
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        tools.push(statistical_plan_tool(Arc::clone(&output))?);
+        tools.push(statistical_plan_tool(
+            Arc::clone(&output),
+            tool_failure.clone(),
+        )?);
         let builder = AgentBuilder::new(self.model.clone())
             .name("yssbi-statistical-assistant")
             .preamble(&prepared.preamble)
@@ -260,7 +265,14 @@ where
                     return Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
                 }
             };
-            consume_text_stream(stream, stream_output, stream_cancellation, deadline).await
+            consume_text_stream(
+                stream,
+                stream_output,
+                stream_cancellation,
+                deadline,
+                Some(failure_receiver),
+            )
+            .await
         });
         let mut result = prompt
             .await
@@ -276,6 +288,9 @@ where
                     AgentDriverFailureCode::InternalFailure,
                 ));
             }
+        }
+        if let Some(failure) = tool_failure.borrow().clone() {
+            result = Err(failure);
         }
         let final_text = result?;
         if cancellation.is_cancelled() {
@@ -305,6 +320,7 @@ async fn consume_text_stream(
     output: Arc<dyn AgentEventOutput>,
     cancellation: CancellationToken,
     deadline: tokio::time::Instant,
+    mut tool_failures: Option<tokio::sync::watch::Receiver<Option<AgentDriverFailure>>>,
 ) -> Result<String, AgentDriverFailure> {
     let mut pending = String::new();
     let mut transcript = String::new();
@@ -320,6 +336,7 @@ async fn consume_text_stream(
                 cancellation.cancel(CancellationReason::DeadlineElapsed);
                 break Err(AgentDriverFailure::new(AgentDriverFailureCode::DeadlineElapsed));
             }
+            failure = wait_tool_failure(&mut tool_failures) => break Err(failure),
             _ = timer.tick() => flush_text(output.as_ref(), &mut pending).await?,
             item = stream.next() => {
                 let Some(item) = item else {
@@ -386,6 +403,74 @@ where
     }
 }
 
+async fn wait_tool_failure(
+    receiver: &mut Option<tokio::sync::watch::Receiver<Option<AgentDriverFailure>>>,
+) -> AgentDriverFailure {
+    let Some(receiver) = receiver else {
+        return std::future::pending().await;
+    };
+    loop {
+        let failure = receiver.borrow_and_update().clone();
+        if let Some(failure) = failure {
+            return failure;
+        }
+        if receiver.changed().await.is_err() {
+            return AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure);
+        }
+    }
+}
+
+fn runtime_tool_failure(
+    sender: &tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
+    code: AgentDriverFailureCode,
+) -> ToolExecutionError {
+    // Rig turns ordinary tool errors into feedback. Stop fatal errors explicitly before another model step.
+    sender.send_if_modified(|failure| {
+        if failure.is_some() {
+            return false;
+        }
+        *failure = Some(AgentDriverFailure::new(code));
+        true
+    });
+    ToolExecutionError::other(code.to_string())
+}
+
+fn tool_result_json(
+    outcome: Result<yss_harness_contract::AutomationCapabilityResult, CapabilityFailure>,
+) -> Result<serde_json::Value, serde_json::Error> {
+    match outcome {
+        Ok(result) => serde_json::to_value(result),
+        Err(failure) => serde_json::to_value(failure)
+            .map(|failure| serde_json::json!({"state": "failed", "failure": failure})),
+    }
+}
+
+fn fatal_capability_failure(code: CapabilityFailureCode) -> Option<AgentDriverFailureCode> {
+    use CapabilityFailureCode::*;
+    match code {
+        Cancelled | ProjectSessionUnavailable | ProjectSessionMismatch | ProjectSessionChanged => {
+            Some(AgentDriverFailureCode::Cancelled)
+        }
+        DeadlineElapsed => Some(AgentDriverFailureCode::DeadlineElapsed),
+        PersistenceUnavailable | InternalFailure => Some(AgentDriverFailureCode::InternalFailure),
+        GraphClientUnavailable => Some(AgentDriverFailureCode::OutputUnavailable),
+        InvalidRequest
+        | GraphUnavailable
+        | DatabaseUnavailable
+        | CatalogUnavailable
+        | ResultUnavailable
+        | ApprovalRequired
+        | RevisionConflict
+        | MutationRejected
+        | ResultTooLarge
+        | InvocationConflict
+        | GraphDraftChanged
+        | GraphValidationFailed
+        | GraphExecutionFailed
+        | OutcomeUnknown => None,
+    }
+}
+
 struct PreparedMessages {
     preamble: String,
     history: Vec<Message>,
@@ -427,10 +512,9 @@ fn prepare_messages(messages: Vec<AgentMessage>) -> Result<PreparedMessages, Age
                 capability_id,
                 outcome,
             } => {
-                let result = match outcome {
-                    Ok(result) => serde_json::to_value(result).map_err(|_| invalid_response())?,
-                    Err(failure) => serde_json::json!({"state": "failed", "failure": failure}),
-                };
+                let result = tool_result_json(outcome).map_err(|_| {
+                    AgentDriverFailure::new(AgentDriverFailureCode::InternalFailure)
+                })?;
                 conversation.push(Message::tool_result(
                     invocation_id.to_string(),
                     capability_id.as_str(),
@@ -460,6 +544,7 @@ fn dynamic_tool(
     descriptor: ToolDescriptor,
     capabilities: Arc<dyn ModelCapabilityExecutor>,
     tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
+    tool_failure: tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
 ) -> Result<DynamicTool, AgentDriverFailure> {
     let parameters =
         serde_json::to_value(&descriptor.input_schema).map_err(|_| invalid_response())?;
@@ -471,8 +556,24 @@ fn dynamic_tool(
         move |_context, arguments| {
             let capabilities = Arc::clone(&capabilities);
             let tasks = Arc::clone(&tasks);
+            let tool_failure = tool_failure.clone();
             Box::pin(async move {
-                let request = decode_request(capability_id, arguments)?;
+                let request = match decode_request(capability_id, arguments) {
+                    Ok(request) => request,
+                    Err(_) => {
+                        return tool_result_json(Err(CapabilityFailure::new(
+                            CapabilityFailureCode::InvalidRequest,
+                        )
+                        .with_detail("reason", "tool_arguments_do_not_match_schema")))
+                        .map(ToolOutput::json)
+                        .map_err(|_| {
+                            runtime_tool_failure(
+                                &tool_failure,
+                                AgentDriverFailureCode::InternalFailure,
+                            )
+                        });
+                    }
+                };
                 let (sender, receiver) = tokio::sync::oneshot::channel();
                 let task = tokio::spawn(async move {
                     let outcome = capabilities
@@ -484,12 +585,18 @@ fn dynamic_tool(
                     .lock()
                     .unwrap_or_else(|error| error.into_inner())
                     .push(task);
-                let outcome = receiver
-                    .await
-                    .map_err(|_| ToolExecutionError::other("tool execution interrupted"))?
-                    .map_err(map_capability_failure)?;
-                let result = serde_json::to_value(outcome.result)
-                    .map_err(|_| ToolExecutionError::other("tool result encoding failed"))?;
+                let outcome = receiver.await.map_err(|_| {
+                    runtime_tool_failure(&tool_failure, AgentDriverFailureCode::InternalFailure)
+                })?;
+                if let Err(failure) = &outcome
+                    && let Some(code) = fatal_capability_failure(failure.code)
+                {
+                    return Err(runtime_tool_failure(&tool_failure, code));
+                }
+                let result =
+                    tool_result_json(outcome.map(|outcome| outcome.result)).map_err(|_| {
+                        runtime_tool_failure(&tool_failure, AgentDriverFailureCode::InternalFailure)
+                    })?;
                 Ok(ToolOutput::json(result))
             })
         },
@@ -498,6 +605,7 @@ fn dynamic_tool(
 
 fn statistical_plan_tool(
     output: Arc<dyn AgentEventOutput>,
+    tool_failure: tokio::sync::watch::Sender<Option<AgentDriverFailure>>,
 ) -> Result<DynamicTool, AgentDriverFailure> {
     let parameters =
         serde_json::to_value(statistical_plan_schema()).map_err(|_| invalid_response())?;
@@ -507,6 +615,7 @@ fn statistical_plan_tool(
         parameters,
         move |_context, arguments| {
             let output = Arc::clone(&output);
+            let tool_failure = tool_failure.clone();
             Box::pin(async move {
                 let plan = serde_json::from_value::<StatisticalPlan>(arguments).map_err(|_| {
                     ToolExecutionError::invalid_args("statistical plan did not match the schema")
@@ -514,23 +623,24 @@ fn statistical_plan_tool(
                 output
                     .emit(AgentEvent::PlanProposed { plan })
                     .await
-                    .map_err(map_output_failure)?;
+                    .map_err(|failure| match failure {
+                        yss_harness_contract::AgentOutputFailure::PolicyRejected => {
+                            ToolExecutionError::invalid_args(
+                                "statistical plan failed Harness policy validation",
+                            )
+                        }
+                        yss_harness_contract::AgentOutputFailure::Closed
+                        | yss_harness_contract::AgentOutputFailure::PersistenceFailed => {
+                            runtime_tool_failure(
+                                &tool_failure,
+                                AgentDriverFailureCode::OutputUnavailable,
+                            )
+                        }
+                    })?;
                 Ok(ToolOutput::json(serde_json::json!({ "accepted": true })))
             })
         },
     ))
-}
-
-fn map_output_failure(failure: yss_harness_contract::AgentOutputFailure) -> ToolExecutionError {
-    match failure {
-        yss_harness_contract::AgentOutputFailure::PolicyRejected => {
-            ToolExecutionError::invalid_args("statistical plan failed Harness policy validation")
-        }
-        yss_harness_contract::AgentOutputFailure::Closed
-        | yss_harness_contract::AgentOutputFailure::PersistenceFailed => {
-            ToolExecutionError::other("tool event output unavailable")
-        }
-    }
 }
 
 fn decode_request(
@@ -578,41 +688,6 @@ fn decode_request(
     .map_err(|_| ToolExecutionError::invalid_args("tool arguments did not match the schema"))
 }
 
-fn map_capability_failure(failure: CapabilityFailure) -> ToolExecutionError {
-    let code = failure.details.get("reason").map_or_else(
-        || failure.code.to_string(),
-        |reason| format!("{}: {reason}", failure.code),
-    );
-    match failure.code {
-        CapabilityFailureCode::InvalidRequest | CapabilityFailureCode::ResultTooLarge => {
-            ToolExecutionError::invalid_args(code)
-        }
-        CapabilityFailureCode::Cancelled => ToolExecutionError::cancelled(code),
-        CapabilityFailureCode::DeadlineElapsed => ToolExecutionError::timeout(code),
-        CapabilityFailureCode::GraphUnavailable
-        | CapabilityFailureCode::DatabaseUnavailable
-        | CapabilityFailureCode::CatalogUnavailable
-        | CapabilityFailureCode::ResultUnavailable => ToolExecutionError::not_found(code),
-        CapabilityFailureCode::ProjectSessionMismatch
-        | CapabilityFailureCode::ProjectSessionChanged
-        | CapabilityFailureCode::ProjectSessionUnavailable
-        | CapabilityFailureCode::ApprovalRequired => ToolExecutionError::permission_denied(code),
-        CapabilityFailureCode::RevisionConflict
-        | CapabilityFailureCode::MutationRejected
-        | CapabilityFailureCode::OutcomeUnknown => {
-            ToolExecutionError::other(code).with_retryable(false)
-        }
-        CapabilityFailureCode::InvocationConflict
-        | CapabilityFailureCode::PersistenceUnavailable
-        | CapabilityFailureCode::InternalFailure
-        | CapabilityFailureCode::GraphClientUnavailable
-        | CapabilityFailureCode::GraphDraftChanged
-        | CapabilityFailureCode::GraphValidationFailed
-        | CapabilityFailureCode::GraphExecutionFailed => ToolExecutionError::other(code),
-    }
-    .with_code(failure.code.to_string())
-}
-
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
         CapabilityId::InspectGraph => {
@@ -628,7 +703,7 @@ fn tool_description(capability_id: CapabilityId) -> &'static str {
             "Inspect bounded data-quality and shape statistics. null metrics (including duplicatedRows) mean unknown or not computed, never zero."
         }
         CapabilityId::InspectResult => {
-            "Read the complete result JSON produced by YssBI, including all nested fields and data references. DataFrame/DataSeries values are paged, never expanded in full. To read a tableRef from the JSON, call inspect_result with its resultRef.resultId and part. offset and limit paginate rows; use nextOffset only when hasMore is true."
+            "Read the complete result JSON produced by YssBI, including all nested fields and data references. DataFrame/DataSeries values are paged, never expanded in full. To read a tableRef from the JSON, call inspect_result with its resultRef.executionSessionId, resultRef.resultId and part. Execution sessions change on project restart; rediscover current result references instead of reusing stale IDs. offset and limit paginate rows; use nextOffset only when hasMore is true."
         }
         CapabilityId::InspectProject => {
             "List bounded project metadata and resource identities, including graph files with no open editor panel. Use a graph resourceId as graphPath for inspect_graph and graph edits. Does not read raw dataset rows."
@@ -781,7 +856,7 @@ mod tests {
                     }
                     AssistantContent::ToolCall(call) => {
                         items.push(Ok(RawStreamingChoice::ToolCall(RawStreamingToolCall::new(
-                            "call-1",
+                            call.id.as_str(),
                             call.function.name,
                             call.function.arguments,
                         ))))
@@ -913,6 +988,7 @@ mod tests {
             AgentMessage::ToolCall {
                 invocation_id: invocation_id.clone(),
                 request: AutomationCapabilityRequest::InspectResult(InspectResultRequest {
+                    execution_session_id: "00000000-0000-0000-0000-000000000001".into(),
                     result_id: 17,
                     part: None,
                     offset: 0,
@@ -1052,6 +1128,180 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn domain_failure_is_structured_feedback_and_the_model_can_correct_its_request() {
+        struct CorrectingExecutor;
+        impl ModelCapabilityExecutor for CorrectingExecutor {
+            fn execute<'a>(
+                &'a self,
+                request: ModelCapabilityRequest,
+            ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+                Box::pin(async move {
+                    if matches!(&request.request, AutomationCapabilityRequest::InspectDatasetSchema(request) if request.database_id == "missing")
+                    {
+                        return Err(CapabilityFailure::new(
+                            CapabilityFailureCode::DatabaseUnavailable,
+                        )
+                        .with_detail("databaseId", "missing"));
+                    }
+                    StaticExecutor.execute(request).await
+                })
+            }
+        }
+        let call = |id: &str, database: &str| {
+            vec![AssistantContent::ToolCall(ToolCall::from_wire(
+                id,
+                ToolFunction::new(
+                    "inspect_dataset_schema".into(),
+                    serde_json::json!({"databaseId": database}),
+                ),
+            ))]
+        };
+        let model = ScriptedCompletionModel::new([
+            call("first", "missing"),
+            call("second", "database-1"),
+            vec![AssistantContent::text("Corrected and completed.")],
+        ]);
+        let requests = model.requests.clone();
+        let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
+        let result = driver
+            .run_turn(
+                request(vec![
+                    ToolDescriptor::for_capability(CapabilityId::InspectDatasetSchema).unwrap(),
+                ]),
+                Arc::new(CorrectingExecutor),
+                Arc::new(CollectingOutput::default()),
+                CancellationToken::default(),
+            )
+            .await;
+        assert!(
+            result.is_ok(),
+            "ordinary tool failure must allow another model step"
+        );
+        assert_eq!(result.unwrap().final_text, "Corrected and completed.");
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 3);
+        let wire = requests[1]
+            .chat_history
+            .clone()
+            .into_iter()
+            .flat_map(|message| {
+                Vec::<rig_core::providers::openai::completion::Message>::try_from(message).unwrap()
+            })
+            .map(|message| serde_json::to_value(message).unwrap())
+            .collect::<Vec<_>>();
+        let tool = wire
+            .iter()
+            .find(|message| message["role"] == "tool")
+            .unwrap();
+        let call = wire
+            .iter()
+            .find(|message| message.get("tool_calls").is_some())
+            .unwrap();
+        assert_eq!(call["tool_calls"][0]["id"], tool["tool_call_id"]);
+        let feedback = serde_json::from_str::<serde_json::Value>(tool["content"].as_str().unwrap());
+        assert!(
+            feedback.is_ok(),
+            "domain failure must use the same structured JSON as replayed history"
+        );
+        let feedback = feedback.unwrap();
+        assert_eq!(feedback["state"], "failed");
+        assert_eq!(feedback["failure"]["code"], "database_unavailable");
+        assert_eq!(feedback["failure"]["details"]["databaseId"], "missing");
+    }
+
+    #[tokio::test]
+    async fn fatal_tool_failures_stop_before_another_model_request_and_settle_admitted_work() {
+        struct FatalExecutor(Option<CapabilityFailureCode>, Arc<AtomicBool>);
+        impl ModelCapabilityExecutor for FatalExecutor {
+            fn execute<'a>(
+                &'a self,
+                _request: ModelCapabilityRequest,
+            ) -> AgentFuture<'a, Result<ModelCapabilityOutcome, CapabilityFailure>> {
+                Box::pin(async move {
+                    self.1.store(true, Ordering::SeqCst);
+                    match self.0 {
+                        Some(code) => Err(CapabilityFailure::new(code)),
+                        None => panic!("simulated executor failure"),
+                    }
+                })
+            }
+        }
+        for (failure, expected) in [
+            (
+                Some(CapabilityFailureCode::InternalFailure),
+                AgentDriverFailureCode::InternalFailure,
+            ),
+            (
+                Some(CapabilityFailureCode::PersistenceUnavailable),
+                AgentDriverFailureCode::InternalFailure,
+            ),
+            (
+                Some(CapabilityFailureCode::GraphClientUnavailable),
+                AgentDriverFailureCode::OutputUnavailable,
+            ),
+            (
+                Some(CapabilityFailureCode::Cancelled),
+                AgentDriverFailureCode::Cancelled,
+            ),
+            (
+                Some(CapabilityFailureCode::ProjectSessionChanged),
+                AgentDriverFailureCode::Cancelled,
+            ),
+            (
+                Some(CapabilityFailureCode::DeadlineElapsed),
+                AgentDriverFailureCode::DeadlineElapsed,
+            ),
+            (None, AgentDriverFailureCode::InternalFailure),
+        ] {
+            let model = ScriptedCompletionModel::new([
+                vec![
+                    AssistantContent::text("Before tool."),
+                    AssistantContent::ToolCall(ToolCall::from_wire(
+                        "fatal-call",
+                        ToolFunction::new(
+                            "inspect_dataset_schema".into(),
+                            serde_json::json!({"databaseId": "database-1"}),
+                        ),
+                    )),
+                ],
+                vec![AssistantContent::text("Must not execute this model step.")],
+            ]);
+            let requests = model.requests.clone();
+            let settled = Arc::new(AtomicBool::new(false));
+            let output = Arc::new(CollectingOutput::default());
+            let driver = RigAgentDriver::new(model, RigAgentDriverConfig::default()).unwrap();
+            let result = driver
+                .run_turn(
+                    request(vec![
+                        ToolDescriptor::for_capability(CapabilityId::InspectDatasetSchema).unwrap(),
+                    ]),
+                    Arc::new(FatalExecutor(failure, settled.clone())),
+                    output.clone(),
+                    CancellationToken::default(),
+                )
+                .await;
+            assert_eq!(result.unwrap_err().code, expected);
+            assert!(settled.load(Ordering::SeqCst));
+            assert_eq!(
+                requests.lock().unwrap().len(),
+                1,
+                "fatal failure must not reach a subsequent completion request"
+            );
+            let text = output
+                .events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter_map(|event| match event {
+                    AgentEvent::TextDelta { delta } => Some(delta.clone()),
+                    _ => None,
+                })
+                .collect::<String>();
+            assert_eq!(text, "Before tool.");
+        }
+    }
+
+    #[tokio::test]
     async fn text_is_published_while_provider_waits_and_pending_text_survives_cancellation() {
         use rig_core::message::Text;
         for cancel in [false, true] {
@@ -1078,6 +1328,7 @@ mod tests {
                 output.clone(),
                 token.clone(),
                 tokio::time::Instant::now() + Duration::from_secs(2),
+                None,
             ));
             tokio::time::timeout(Duration::from_secs(1), async {
                 loop {
@@ -1131,6 +1382,7 @@ mod tests {
             output.clone(),
             cancellation,
             tokio::time::Instant::now() + Duration::from_secs(1),
+            None,
         )
         .await;
         assert_eq!(result.unwrap_err().code, AgentDriverFailureCode::Cancelled);

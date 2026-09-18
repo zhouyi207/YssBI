@@ -112,6 +112,8 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
         get_harness_runtime_status,
         configure_harness_provider,
         create_harness_session,
+        list_harness_sessions,
+        open_harness_session,
         subscribe_harness_events,
         unsubscribe_harness_events,
         submit_harness_turn,

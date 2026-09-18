@@ -204,6 +204,9 @@ export const zhCN = {
     assistantStatusReady: "Ctrl+Enter 发送",
     assistantStatusRunning: "正在分析…",
     assistantStatusError: "Assistant 暂时不可用",
+    assistantConversations: "对话列表",
+    assistantNewConversation: "新对话",
+    assistantReloadConversations: "重试",
     assistantErrors: {
       assistant_authentication_failed: "认证失败，请检查 API Key 及模型访问权限。",
       assistant_rate_limited: "服务已限流或额度不足，请检查额度后稍后重试。",

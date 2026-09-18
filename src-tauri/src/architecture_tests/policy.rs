@@ -396,6 +396,8 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         canonical_origin_targets: &[
             "yss_application::harness::HarnessSessionError",
             "yss_application::harness::HarnessSessionError::SessionCapture",
+            "yss_application::harness::HarnessSessionError::Changed",
+            "yss_application::harness::HarnessSessionError::ProjectUnavailable",
             "yss_application::harness::HarnessSessionError::Host",
             "yss_application::ipc::error::CommandError",
             "yss_ipc_contract::harness::HarnessEventDto",

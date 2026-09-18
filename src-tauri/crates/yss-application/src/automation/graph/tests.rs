@@ -466,6 +466,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         .invoke_automation_capability(
             f.context.clone(),
             AutomationCapabilityRequest::InspectResult(InspectResultRequest {
+                execution_session_id: product.execution_session_id.clone(),
                 part: None,
                 result_id: product.result_id,
                 offset: 0,

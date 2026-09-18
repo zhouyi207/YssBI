@@ -35,9 +35,19 @@ pub struct HarnessSessionRecord {
     pub id: HarnessSessionId,
     pub principal_id: PrincipalId,
     pub project: ProjectSessionBinding,
+    pub conversation: Option<HarnessConversationMetadata>,
     pub state: HarnessSessionState,
     pub created_at: UnixMillis,
     pub updated_at: UnixMillis,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HarnessConversationMetadata {
+    /// Stable project root identity, independent of runtime activation IDs.
+    pub project_key: String,
+    pub title: String,
+    pub last_opened_at: UnixMillis,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -266,6 +276,12 @@ impl PersistenceFailure {
 pub type PersistenceFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub trait HarnessSessionStorePort: Send + Sync {
+    fn list_conversations<'a>(
+        &'a self,
+        principal: &'a PrincipalId,
+        project_key: &'a str,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>>;
+
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>>;

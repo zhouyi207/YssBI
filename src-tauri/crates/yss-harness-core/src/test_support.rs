@@ -203,6 +203,30 @@ impl InMemoryHarnessStore {
 }
 
 impl HarnessSessionStorePort for InMemoryHarnessStore {
+    fn list_conversations<'a>(
+        &'a self,
+        principal: &'a yss_harness_contract::PrincipalId,
+        project_key: &'a str,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .sessions
+                .values()
+                .filter(|session| {
+                    &session.principal_id == principal
+                        && session
+                            .conversation
+                            .as_ref()
+                            .is_some_and(|value| value.project_key == project_key)
+                })
+                .cloned()
+                .collect())
+        })
+    }
+
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {

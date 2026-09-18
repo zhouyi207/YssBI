@@ -228,7 +228,7 @@ impl ToolDescriptor {
         Ok(Self {
             id: ToolId::try_new(capability_id.as_str())?,
             version: ToolVersion::try_new(if capability_id == CapabilityId::InspectResult {
-                "2.0.0"
+                "3.0.0"
             } else {
                 "1.0.0"
             })?,

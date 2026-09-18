@@ -941,6 +941,12 @@ pub(crate) fn list_graph_results(
         .map_err(|_| graph_failure(CapabilityFailureCode::GraphUnavailable))?
         .into_iter()
         .map(|result| GraphResultReference {
+            execution_session_id: result
+                .provenance()
+                .reference()
+                .execution_session_id
+                .as_uuid()
+                .to_string(),
             result_id: result.provenance().result_id().get(),
             run_id: result.provenance().run_id().get(),
             output: result.output().port().as_str().into(),

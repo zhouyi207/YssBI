@@ -404,6 +404,18 @@ fn inspect_result(
     request: InspectResultRequest,
     control: &CapabilityControl,
 ) -> Result<ResultInspection, CapabilityFailure> {
+    let execution_session_id =
+        uuid::Uuid::parse_str(&request.execution_session_id).map_err(|_| {
+            invalid_request(
+                CapabilityId::InspectResult,
+                CapabilityContractError::InvalidField("executionSessionId"),
+            )
+        })?;
+    if execution_session_id != captured.execution_session_id().as_uuid() {
+        return Err(CapabilityFailure::new(
+            CapabilityFailureCode::ResultUnavailable,
+        ));
+    }
     let result = captured
         .execution()
         .query_result(ResultId::from_existing(request.result_id))
@@ -681,6 +693,7 @@ mod tests {
                 &application,
                 &captured,
                 InspectResultRequest {
+                    execution_session_id: reference.execution_session_id.as_uuid().to_string(),
                     result_id: reference.result_id.get(),
                     part: part.map(str::to_owned),
                     offset,
@@ -691,6 +704,21 @@ mod tests {
             .unwrap()
             .value
         };
+        let stale = inspect_result(
+            &application,
+            &captured,
+            InspectResultRequest {
+                execution_session_id: uuid::Uuid::new_v4().to_string(),
+                result_id: reference.result_id.get(),
+                part: None,
+                offset: 0,
+                limit: 20,
+            },
+            &control,
+        );
+        assert!(
+            matches!(stale, Err(failure) if failure.code == CapabilityFailureCode::ResultUnavailable)
+        );
         let ResultValueInspection::Json(json) = inspect(None, 0, 20) else {
             panic!("full result JSON");
         };
@@ -743,6 +771,7 @@ mod tests {
             &application,
             &captured,
             InspectResultRequest {
+                execution_session_id: reference.execution_session_id.as_uuid().to_string(),
                 result_id: series.provenance().result_id().get(),
                 part: None,
                 offset: 5,

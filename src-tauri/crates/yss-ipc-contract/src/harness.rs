@@ -25,11 +25,24 @@ pub struct HarnessSessionDto {
     pub session_id: String,
     pub project_instance_id: String,
     pub project_session_id: String,
+    pub title: String,
+    pub last_opened_at: u64,
 }
 
 impl From<HarnessSessionRecord> for HarnessSessionDto {
     fn from(record: HarnessSessionRecord) -> Self {
         Self {
+            title: record
+                .conversation
+                .as_ref()
+                .map(|value| value.title.clone())
+                .unwrap_or_default(),
+            last_opened_at: record
+                .conversation
+                .as_ref()
+                .map(|value| value.last_opened_at)
+                .unwrap_or(record.created_at)
+                .get(),
             session_id: record.id.to_string(),
             project_instance_id: record.project.project_instance_id().as_str().to_owned(),
             project_session_id: record.project.project_session_id().as_str().to_owned(),

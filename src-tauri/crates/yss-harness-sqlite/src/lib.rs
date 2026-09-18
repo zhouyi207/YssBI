@@ -166,6 +166,18 @@ const SCHEMA: &[&str] = &[
 ];
 
 impl HarnessSessionStorePort for SqliteHarnessStore {
+    fn list_conversations<'a>(
+        &'a self,
+        principal: &'a yss_harness_contract::PrincipalId,
+        project_key: &'a str,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            sqlx::query_scalar::<_, String>("SELECT payload_json FROM assistant_session WHERE json_extract(payload_json, '$.principalId') = ? AND json_extract(payload_json, '$.conversation.projectKey') = ? ORDER BY rowid")
+                .bind(principal.as_str()).bind(project_key).fetch_all(&self.pool).await.map_err(|_| unavailable())?
+                .into_iter().map(|payload| decode(&payload)).collect()
+        })
+    }
+
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
@@ -1128,6 +1140,7 @@ mod tests {
             ProjectSessionId::new("project-session-1"),
         );
         let session = HarnessSessionRecord {
+            conversation: None,
             id: HarnessSessionId::try_new("session-1").unwrap(),
             principal_id: PrincipalId::try_new("user-1").unwrap(),
             project: project.clone(),

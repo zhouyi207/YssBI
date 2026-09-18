@@ -344,6 +344,7 @@ pub struct InspectDatasetProfileRequest {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InspectResultRequest {
+    pub execution_session_id: String,
     pub result_id: u64,
     /// Table-reference part returned in result JSON. Omit to read the full JSON result.
     #[serde(default)]
@@ -528,6 +529,7 @@ impl AutomationCapabilityRequest {
                 validate_resource_id("databaseId", &request.database_id)
             }
             Self::InspectResult(request) => {
+                validate_resource_id("executionSessionId", &request.execution_session_id)?;
                 if request.limit == 0 || request.limit > 50 {
                     Err(CapabilityContractError::InvalidLimit { maximum: 50 })
                 } else {

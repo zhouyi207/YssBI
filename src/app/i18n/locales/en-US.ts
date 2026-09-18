@@ -212,6 +212,9 @@ export const enUS = {
     assistantStatusReady: "Press Ctrl+Enter to send",
     assistantStatusRunning: "Analyzing…",
     assistantStatusError: "Assistant is temporarily unavailable",
+    assistantConversations: "Conversations",
+    assistantNewConversation: "New chat",
+    assistantReloadConversations: "Retry",
     assistantErrors: {
       assistant_authentication_failed:
         "Authentication failed. Check your API key and model access.",

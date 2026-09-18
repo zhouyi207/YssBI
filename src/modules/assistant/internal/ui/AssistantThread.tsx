@@ -142,7 +142,8 @@ function AssistantMessage() {
 export function AssistantThread() {
   const { t } = useTranslation();
   const snapshot = useAssistantHarnessSnapshot();
-  const { deleteMemory } = useAssistantHarnessActions();
+  const { deleteMemory, newConversation, selectConversation, reloadConversations } =
+    useAssistantHarnessActions();
   const statusText = snapshot.error
     ? t(`panel.assistantErrors.${snapshot.error.code}`, {
         defaultValue: t("panel.assistantStatusError"),
@@ -159,6 +160,47 @@ export function AssistantThread() {
 
   return (
     <ThreadPrimitive.Root className="flex h-full min-h-0 min-w-0 flex-col bg-(--workbench-bg)">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+        <select
+          aria-label={t("panel.assistantConversations")}
+          className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          value={snapshot.sessionId ?? ""}
+          disabled={snapshot.status === "initializing" || snapshot.isRunning}
+          onChange={(event) => void selectConversation(event.target.value)}
+        >
+          {!snapshot.sessionId ? (
+            <option value="">{t("panel.assistantConversations")}</option>
+          ) : null}
+          {snapshot.conversations.map((session) => (
+            <option key={session.sessionId} value={session.sessionId}>
+              {session.title || t("panel.assistantNewConversation")}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          disabled={
+            snapshot.status === "initializing" ||
+            snapshot.isRunning ||
+            (snapshot.sessionId !== null && snapshot.messages.length === 0)
+          }
+          onClick={() => void newConversation()}
+        >
+          {t("panel.assistantNewConversation")}
+        </Button>
+        {snapshot.status === "error" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => void reloadConversations()}
+          >
+            {t("panel.assistantReloadConversations")}
+          </Button>
+        ) : null}
+      </div>
       <ThreadPrimitive.ViewportProvider>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <ThreadPrimitive.Viewport

@@ -65,6 +65,126 @@ impl HarnessHost {
         principal_id: PrincipalId,
         project: ProjectSessionBinding,
     ) -> Result<HarnessSessionRecord, HarnessError> {
+        self.new_session(principal_id, project, None).await
+    }
+
+    pub async fn create_conversation(
+        &self,
+        principal_id: PrincipalId,
+        project_key: String,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let metadata = yss_harness_contract::HarnessConversationMetadata {
+            project_key,
+            title: String::new(),
+            last_opened_at: self.ports.clock.now(),
+        };
+        self.new_session(principal_id, project, Some(metadata))
+            .await
+    }
+
+    pub async fn list_conversations(
+        &self,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<Vec<HarnessSessionRecord>, HarnessError> {
+        let mut sessions = self
+            .ports
+            .sessions
+            .list_conversations(principal, project_key)
+            .await?;
+        sessions.sort_by(|left, right| {
+            right
+                .conversation
+                .as_ref()
+                .map(|value| value.last_opened_at)
+                .cmp(&left.conversation.as_ref().map(|value| value.last_opened_at))
+                .then_with(|| right.created_at.cmp(&left.created_at))
+                .then_with(|| right.id.as_str().cmp(left.id.as_str()))
+        });
+        Ok(sessions)
+    }
+
+    pub async fn conversation(
+        &self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        if &session.principal_id != principal
+            || session
+                .conversation
+                .as_ref()
+                .is_none_or(|value| value.project_key != project_key)
+        {
+            return Err(HarnessError::SessionNotFound);
+        }
+        Ok(session)
+    }
+
+    pub async fn open_conversation(
+        &self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let mut session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        if &session.principal_id != principal
+            || session
+                .conversation
+                .as_ref()
+                .is_none_or(|value| value.project_key != project_key)
+        {
+            return Err(HarnessError::SessionNotFound);
+        }
+        if self
+            .active_turns
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .contains_key(session_id)
+        {
+            if session.project == project && session.state == HarnessSessionState::Active {
+                return Ok(session);
+            }
+            return Err(HarnessError::ConcurrentTurn);
+        }
+        let (_cancellation, _admission) = self.admit_turn(session_id)?;
+        session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        session.project = project;
+        session.state = HarnessSessionState::Active;
+        session.updated_at = self.ports.clock.now();
+        session
+            .conversation
+            .as_mut()
+            .ok_or(HarnessError::SessionNotFound)?
+            .last_opened_at = session.updated_at;
+        self.ports.sessions.update_session(&session).await?;
+        Ok(session)
+    }
+
+    async fn new_session(
+        &self,
+        principal_id: PrincipalId,
+        project: ProjectSessionBinding,
+        conversation: Option<yss_harness_contract::HarnessConversationMetadata>,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
         let id =
             HarnessSessionId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessSession)?)?;
         let now = self.ports.clock.now();
@@ -72,6 +192,7 @@ impl HarnessHost {
             id: id.clone(),
             principal_id,
             project,
+            conversation,
             state: HarnessSessionState::Active,
             created_at: now,
             updated_at: now,
@@ -90,7 +211,7 @@ impl HarnessHost {
         active_graph_path: Option<String>,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
-        let session = self
+        let mut session = self
             .ports
             .sessions
             .load_session(session_id)
@@ -100,6 +221,19 @@ impl HarnessHost {
             return Err(HarnessError::SessionNotActive);
         }
         let (cancellation, _admission) = self.admit_turn(session_id)?;
+        if let Some(conversation) = &mut session.conversation
+            && conversation.title.is_empty()
+        {
+            conversation.title = user_message
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(60)
+                .collect();
+            session.updated_at = self.ports.clock.now();
+            self.ports.sessions.update_session(&session).await?;
+        }
         let turn_id =
             HarnessTurnId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessTurn)?)?;
         let started_at = self.ports.clock.now();
@@ -1356,6 +1490,8 @@ mod tests {
                         .execute(ModelCapabilityRequest {
                             request: AutomationCapabilityRequest::InspectResult(
                                 InspectResultRequest {
+                                    execution_session_id: "00000000-0000-0000-0000-000000000001"
+                                        .into(),
                                     result_id: 7,
                                     part: None,
                                     offset: 0,

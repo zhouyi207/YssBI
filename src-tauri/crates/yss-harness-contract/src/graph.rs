@@ -118,6 +118,7 @@ pub struct GraphSaved {
 #[derive(Clone, Debug, Eq, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GraphResultReference {
+    pub execution_session_id: String,
     pub result_id: u64,
     pub run_id: u64,
     pub output: String,

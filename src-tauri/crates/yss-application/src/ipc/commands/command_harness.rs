@@ -87,22 +87,63 @@ pub async fn create_harness_session(
         )
         .await
         .map(HarnessSessionDto::from)
-        .map_err(|error| match error {
-            HarnessSessionError::SessionCapture(_) => {
-                CommandError::expected("project_session_unavailable")
-            }
-            HarnessSessionError::Host(error) => map_harness_error(error),
-        })
+        .map_err(map_session_error)
+}
+
+fn map_session_error(error: HarnessSessionError) -> CommandError {
+    match error {
+        HarnessSessionError::SessionCapture(_) | HarnessSessionError::ProjectUnavailable => {
+            CommandError::expected("project_session_unavailable")
+        }
+        HarnessSessionError::Changed => CommandError::expected("project_session_changed"),
+        HarnessSessionError::Host(error) => map_harness_error(error),
+    }
+}
+
+#[tauri::command]
+pub async fn list_harness_sessions(
+    application: State<'_, ApplicationState>,
+    runtime: State<'_, HarnessRuntimeState>,
+) -> Result<Vec<HarnessSessionDto>, CommandError> {
+    let principal =
+        PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
+    application
+        .list_harness_sessions(&runtime.host, &principal)
+        .await
+        .map(|sessions| sessions.into_iter().map(HarnessSessionDto::from).collect())
+        .map_err(map_session_error)
+}
+
+#[tauri::command]
+pub async fn open_harness_session(
+    application: State<'_, ApplicationState>,
+    runtime: State<'_, HarnessRuntimeState>,
+    session_id: String,
+) -> Result<HarnessSessionDto, CommandError> {
+    let principal =
+        PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
+    application
+        .open_harness_session(&runtime.host, &principal, &parse_session_id(session_id)?)
+        .await
+        .map(HarnessSessionDto::from)
+        .map_err(map_session_error)
 }
 
 #[tauri::command]
 pub async fn subscribe_harness_events(
+    application: State<'_, ApplicationState>,
     runtime: State<'_, HarnessRuntimeState>,
     session_id: String,
     after_sequence: u64,
     on_event: Channel<HarnessEventDto>,
 ) -> Result<HarnessSubscriptionDto, CommandError> {
     let session_id = parse_session_id(session_id)?;
+    let principal =
+        PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
+    application
+        .validate_harness_session(&runtime.host, &principal, &session_id)
+        .await
+        .map_err(map_session_error)?;
     let subscription_id = runtime
         .channels
         .subscribe(session_id.clone(), on_event, after_sequence);
@@ -133,6 +174,7 @@ pub fn unsubscribe_harness_events(
 
 #[tauri::command]
 pub async fn submit_harness_turn(
+    application: State<'_, ApplicationState>,
     runtime: State<'_, HarnessRuntimeState>,
     session_id: String,
     message: String,
@@ -141,9 +183,16 @@ pub async fn submit_harness_turn(
     if !runtime.provider.is_configured() {
         return Err(CommandError::expected("assistant_provider_unavailable"));
     }
+    let session_id = parse_session_id(session_id)?;
+    let principal =
+        PrincipalId::try_new("local-user").map_err(|_| CommandError::internal("principal"))?;
+    application
+        .open_harness_session(&runtime.host, &principal, &session_id)
+        .await
+        .map_err(map_session_error)?;
     runtime
         .host
-        .submit_turn(&parse_session_id(session_id)?, message, active_graph_path)
+        .submit_turn(&session_id, message, active_graph_path)
         .await
         .map(|result| HarnessTurnResultDto {
             final_text: result.final_text,
