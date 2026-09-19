@@ -282,6 +282,7 @@ pub enum ColumnSelectionExpr {
     All,
     Explicit(Vec<SchemaColumnRef>),
     FromParameter(ParameterKey),
+    ExcludingParameter(ParameterKey),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

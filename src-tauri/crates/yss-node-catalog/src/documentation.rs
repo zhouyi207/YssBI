@@ -54,6 +54,8 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
 
         "yssbi.dataframe.source.get" => markdown!("get_dataframe"),
         "yssbi.dataframe.project" => markdown!("select_columns"),
+        "yssbi.dataframe.drop.columns" => markdown!("drop_columns"),
+        "yssbi.dataframe.drop.rows" => markdown!("drop_rows"),
         "yssbi.dataframe.decompose" => markdown!("decompose_dataframe"),
         "yssbi.dataframe.combine" => markdown!("combine_dataframe"),
         "yssbi.dataframe.concat.rows" => markdown!("concatenate_rows"),

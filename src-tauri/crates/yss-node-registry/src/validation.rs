@@ -718,7 +718,9 @@ fn validate_schema(
                 schema_resolvers,
                 nominal_type_ids,
             )?;
-            if let ColumnSelectionExpr::FromParameter(key) = columns {
+            if let ColumnSelectionExpr::FromParameter(key)
+            | ColumnSelectionExpr::ExcludingParameter(key) = columns
+            {
                 validate_schema_parameter_type(key, parameters, &nominal_type_ids.project_columns)?;
             }
             Ok(())
@@ -907,6 +909,14 @@ mod nominal_schema_tests {
         let nominal_type_ids = builtin_nominal_type_ids().unwrap();
 
         for (expression, key, expected_type) in [
+            (
+                SchemaExpr::Project {
+                    input: source(),
+                    columns: ColumnSelectionExpr::ExcludingParameter(project_key.clone()),
+                },
+                project_key.clone(),
+                yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
+            ),
             (
                 project,
                 project_key,

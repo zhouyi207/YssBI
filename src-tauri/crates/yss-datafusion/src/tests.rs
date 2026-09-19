@@ -42,6 +42,82 @@ fn predicate(comparison: RelationComparison, value: i64) -> RelationPredicate {
 }
 
 #[test]
+fn drop_rows_and_columns_preserve_nulls_order_and_source() {
+    use yss_tabular_contract::TabularScalar as V;
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("x.value", DataType::Int64, true),
+        Field::new("unused", DataType::Utf8, false),
+        Field::new("id", DataType::Int64, false),
+    ]));
+    let source = runtime
+        .batch_relation(
+            binding(),
+            RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(vec![Some(-1), None, Some(0), Some(2)])),
+                    Arc::new(StringArray::from(vec!["a", "b", "c", "d"])),
+                    Arc::new(Int64Array::from(vec![1, 2, 3, 4])),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let projected = source.drop_columns(&["unused".into()]).unwrap();
+    assert_eq!(projected.schema().fields().len(), 2);
+    assert_eq!(projected.schema().field(0), schema.field(0));
+    assert_eq!(projected.schema().field(1), schema.field(2));
+    let renamed = projected.rename("x.value", "amount.value").unwrap();
+    let mut condition = predicate(RelationComparison::Less, 0);
+    condition.column = "amount.value".into();
+    let kept = renamed.drop_rows(&condition).unwrap();
+    let page = kept.page(0, 10, &control()).unwrap();
+    assert_eq!(
+        page.data.columns()[0].values(),
+        &[V::Null, V::Unsigned(0), V::Unsigned(2)]
+    );
+    assert_eq!(
+        page.data.columns()[1].values(),
+        &[V::Unsigned(2), V::Unsigned(3), V::Unsigned(4)]
+    );
+    condition.comparison = RelationComparison::IsNull;
+    condition.value = None;
+    assert_eq!(
+        kept.drop_rows(&condition)
+            .unwrap()
+            .page(0, 10, &control())
+            .unwrap()
+            .row_count,
+        2
+    );
+    condition.comparison = RelationComparison::IsNotNull;
+    assert_eq!(
+        kept.drop_rows(&condition)
+            .unwrap()
+            .page(0, 10, &control())
+            .unwrap()
+            .data
+            .columns()[0]
+            .values(),
+        &[V::Null]
+    );
+    assert_eq!(source.page(0, 10, &control()).unwrap().row_count, 4);
+    assert_eq!(source.schema(), schema);
+    for names in [
+        vec![],
+        vec!["missing"],
+        vec!["unused", "unused"],
+        vec!["x.value", "unused", "id"],
+    ] {
+        assert_eq!(
+            source.drop_columns(&names.into_iter().map(Into::into).collect::<Vec<_>>()),
+            Err(RelationError::InvalidInput)
+        );
+    }
+}
+
+#[test]
 fn table_composition_preserves_order_alignment_and_combined_sources() {
     use yss_data_contract::table::{RowConcatMode as Mode, TableJoin, TableJoinKind as Join};
     use yss_tabular_contract::TabularScalar as V;

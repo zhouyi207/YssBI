@@ -151,17 +151,21 @@ fn interface(
                 required_text_parameter("to")?,
             ],
         )),
-        Project => Ok((
+        Project | DropColumns => Ok((
             relational_ports(SchemaExpr::Project {
                 input: Box::new(SchemaExpr::Input(port_key("source")?)),
-                columns: ColumnSelectionExpr::FromParameter(sid("columns", ParameterKey::new)?),
+                columns: if kind == DropColumns {
+                    ColumnSelectionExpr::ExcludingParameter(sid("columns", ParameterKey::new)?)
+                } else {
+                    ColumnSelectionExpr::FromParameter(sid("columns", ParameterKey::new)?)
+                },
             })?,
             vec![nominal_parameter(
                 "columns",
                 yss_node_protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             )?],
         )),
-        FilterRows => Ok((
+        FilterRows | DropRows => Ok((
             relational_ports(SchemaExpr::Filter {
                 input: Box::new(SchemaExpr::Input(port_key("source")?)),
                 predicate: Some(sid("predicate", ParameterKey::new)?),
@@ -760,6 +764,8 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::Rename
         | InterfaceKind::Project
         | InterfaceKind::FilterRows
+        | InterfaceKind::DropColumns
+        | InterfaceKind::DropRows
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
         | InterfaceKind::ConcatRows
@@ -862,6 +868,14 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
         InterfaceKind::FilterRows => (
             "Filters rows by one source column and a Rust-issued compatible operator.",
             "按一个源列和 Rust 提供的兼容运算符筛选行。",
+        ),
+        InterfaceKind::DropColumns => (
+            "Removes selected columns, preserving the order of the remaining columns.",
+            "移除指定列，并保留其余列的原始顺序。",
+        ),
+        InterfaceKind::DropRows => (
+            "Removes rows where the condition is true; false and null results are retained.",
+            "移除条件为真的行；条件为假或空值的行保留。",
         ),
         _ => (
             "Uses stable ports and the tabular runtime API.",

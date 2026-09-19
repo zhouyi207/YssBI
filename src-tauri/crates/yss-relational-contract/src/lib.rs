@@ -150,6 +150,7 @@ pub trait RelationPlan: Send + Sync {
     fn schema(&self) -> SchemaRef;
     fn project(&self, columns: &[Box<str>]) -> Result<RelationHandle, RelationError>;
     fn filter(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError>;
+    fn drop_rows(&self, predicate: &RelationPredicate) -> Result<RelationHandle, RelationError>;
     fn limit(&self, offset: usize, limit: usize) -> Result<RelationHandle, RelationError>;
     fn rename(&self, old: &str, new: &str) -> Result<RelationHandle, RelationError>;
     fn select_series(&self, column: &str) -> Result<Arc<dyn SeriesPlan>, RelationError>;
@@ -268,6 +269,30 @@ impl RelationHandle {
     }
     pub fn filter(&self, predicate: &RelationPredicate) -> Result<Self, RelationError> {
         self.plan.filter(predicate)
+    }
+    /// Remove only matching rows, retaining false and unknown predicate results.
+    pub fn drop_rows(&self, predicate: &RelationPredicate) -> Result<Self, RelationError> {
+        self.plan.drop_rows(predicate)
+    }
+    pub fn drop_columns(&self, columns: &[Box<str>]) -> Result<Self, RelationError> {
+        let schema = self.schema();
+        let selected: std::collections::BTreeSet<_> = columns.iter().map(AsRef::as_ref).collect();
+        if columns.is_empty()
+            || selected.len() != columns.len()
+            || columns.iter().any(|name| schema.index_of(name).is_err())
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        let retained: Vec<Box<str>> = schema
+            .fields()
+            .iter()
+            .filter(|field| !selected.contains(field.name().as_str()))
+            .map(|field| field.name().as_str().into())
+            .collect();
+        if retained.is_empty() {
+            return Err(RelationError::InvalidInput);
+        }
+        self.project(&retained)
     }
     pub fn limit(&self, offset: usize, limit: usize) -> Result<Self, RelationError> {
         self.plan.limit(offset, limit)

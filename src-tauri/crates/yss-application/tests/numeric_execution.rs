@@ -1519,7 +1519,54 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         .unwrap()
         .data;
     let resource = format!("databases/{}", dataset.id);
-    let (mut document, [_, _, filter, response, predictor, fit]) = relational_document(&resource);
+    let (mut document, [source, project_columns, filter, response, predictor, fit]) =
+        relational_document(&resource);
+    let drop_columns = NodeId::new();
+    let drop_rows = NodeId::new();
+    for (id, kind, key, value) in [
+        (
+            drop_columns,
+            "yssbi.dataframe.drop.columns",
+            "columns",
+            serde_json::json!(["unused"]),
+        ),
+        (
+            drop_rows,
+            "yssbi.dataframe.drop.rows",
+            "predicate",
+            serde_json::json!({"column":"x","operator":"lessThanOrEqual","value":{"type":"integer","value":"1"}}),
+        ),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::from([(key.parse().unwrap(), value)]),
+                user_label: None,
+            },
+        );
+    }
+    document
+        .connections
+        .retain(|_, connection| connection.input.node_id != project_columns);
+    for (output_node, output_key, input_node) in [
+        (source, "dataframe", drop_columns),
+        (drop_columns, "result", drop_rows),
+        (drop_rows, "result", project_columns),
+    ] {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(output_node, output_key.parse().unwrap()),
+                input: PortAddress::declared(input_node, "source".parse().unwrap()),
+                order: None,
+            },
+        );
+    }
     document.nodes.remove(&response);
     document.nodes.remove(&predictor);
     document.connections.retain(|_, connection| {
@@ -1837,6 +1884,9 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     };
     let result = app.query_pin_result(query(fit, "fitted")).unwrap().unwrap();
     for (node, output, count, names) in [
+        (source, "dataframe", 6, vec!["x", "y", "unused"]),
+        (drop_columns, "result", 6, vec!["x", "y"]),
+        (drop_rows, "result", 5, vec!["x", "y"]),
         (assemble, "dataframe", 4, vec!["预测.value", "y"]),
         (rows, "result", 8, vec!["x", "y"]),
         (columns, "result", 4, vec!["预测.value", "y"]),

@@ -82,6 +82,9 @@ impl RelationPlan for DelayedPage {
     fn filter(&self, _: &RelationPredicate) -> Result<RelationHandle, RelationError> {
         Err(RelationError::InvalidPlan)
     }
+    fn drop_rows(&self, _: &RelationPredicate) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidPlan)
+    }
     fn limit(&self, _: usize, _: usize) -> Result<RelationHandle, RelationError> {
         Err(RelationError::InvalidPlan)
     }

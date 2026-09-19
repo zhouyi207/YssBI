@@ -44,6 +44,8 @@ pub(crate) enum RelationalKernel {
     Source,
     Project,
     Filter,
+    DropColumns,
+    DropRows,
     Series,
     Limit,
     Rename,
@@ -210,18 +212,26 @@ pub(crate) fn execute(
                 },
             )
         }
-        RelationalKernel::Project => {
+        RelationalKernel::Project | RelationalKernel::DropColumns => {
             let RuntimeValue::List(columns) = parameter("columns")? else {
                 return Err(KernelError::Failed);
             };
             let columns = columns.iter().map(text).collect::<Result<Vec<_>, _>>()?;
-            relation.project(&columns)
+            if matches!(kind, RelationalKernel::DropColumns) {
+                relation.drop_columns(&columns)
+            } else {
+                relation.project(&columns)
+            }
         }
-        RelationalKernel::Filter => {
+        RelationalKernel::Filter | RelationalKernel::DropRows => {
             let RuntimeValue::Record(fields) = parameter("predicate")? else {
                 return Err(KernelError::Failed);
             };
-            relation.filter(&predicate(fields)?)
+            if matches!(kind, RelationalKernel::DropRows) {
+                relation.drop_rows(&predicate(fields)?)
+            } else {
+                relation.filter(&predicate(fields)?)
+            }
         }
         RelationalKernel::Series => {
             return relation

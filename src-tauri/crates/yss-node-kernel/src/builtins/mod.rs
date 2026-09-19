@@ -66,6 +66,18 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             1..=1,
         ),
         (
+            "yssbi.dataframe.drop.columns",
+            Relational(relational::RelationalKernel::DropColumns),
+            &["columns"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.drop.rows",
+            Relational(relational::RelationalKernel::DropRows),
+            &["predicate"],
+            1..=1,
+        ),
+        (
             "yssbi.dataframe.series.select",
             Relational(relational::RelationalKernel::Series),
             &["column"],

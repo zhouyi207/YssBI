@@ -386,6 +386,23 @@ impl EditorSchemaResolver<'_> {
                 let selected = self
                     .selected_columns(node_id, columns)
                     .ok_or(GraphSchemaIssue::InvalidParameter)?;
+                if matches!(columns, ColumnSelectionExpr::ExcludingParameter(_)) {
+                    if selected
+                        .iter()
+                        .any(|name| !fields.iter().any(|field| &field.name.0 == name))
+                    {
+                        return Err(GraphSchemaIssue::MissingColumn);
+                    }
+                    let retained: Vec<_> = fields
+                        .into_iter()
+                        .filter(|field| !selected.contains(&field.name.0))
+                        .collect();
+                    return if retained.is_empty() {
+                        Err(GraphSchemaIssue::InvalidParameter)
+                    } else {
+                        Ok(retained)
+                    };
+                }
                 selected
                     .into_iter()
                     .map(|name| {
@@ -604,7 +621,8 @@ impl EditorSchemaResolver<'_> {
             ColumnSelectionExpr::Explicit(columns) => {
                 Some(columns.iter().map(|column| column.0.clone()).collect())
             }
-            ColumnSelectionExpr::FromParameter(parameter) => self
+            ColumnSelectionExpr::FromParameter(parameter)
+            | ColumnSelectionExpr::ExcludingParameter(parameter) => self
                 .document
                 .nodes
                 .get(&node_id)?

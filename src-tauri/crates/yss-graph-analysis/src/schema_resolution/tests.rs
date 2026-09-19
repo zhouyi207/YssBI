@@ -4,6 +4,130 @@ use yss_graph_document::{ConnectionId, DocumentConnection, DocumentNode, NodePos
 use yss_graph_resource_contract::{ColumnSchema, DataSchema, ResourceCatalogFingerprint};
 
 #[test]
+fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
+    use yss_data_contract::SemanticType as S;
+    let builtin = yss_node_catalog::build_builtin_node_system().unwrap();
+    let resource = |extra: bool| {
+        ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::from([(
+                GraphResourceId::new("data"),
+                DataSchema {
+                    columns: [
+                        ("amount", S::Numeric),
+                        ("unused", S::Text),
+                        ("id", S::Identifier),
+                    ]
+                    .into_iter()
+                    .chain(extra.then_some(("new", S::Text)))
+                    .map(|(name, kind)| ColumnSchema {
+                        name: name.into(),
+                        data_type: ValueType::Scalar(kind),
+                        physical_type: None,
+                        semantic: None,
+                    })
+                    .collect(),
+                },
+            )]),
+            ResourceCatalogFingerprint::from_bytes([0; 32]),
+        )
+    };
+    let mut document = GraphDocument::default();
+    let source = node(
+        &mut document,
+        "yssbi.dataframe.source.get",
+        &[("dataframe", serde_json::json!("data"))],
+    );
+    let columns = node(
+        &mut document,
+        "yssbi.dataframe.drop.columns",
+        &[("columns", serde_json::json!(["unused"]))],
+    );
+    let rows = node(
+        &mut document,
+        "yssbi.dataframe.drop.rows",
+        &[(
+            "predicate",
+            serde_json::json!({"column":"amount","operator":"lessThan","value":{"type":"integer","value":"0"}}),
+        )],
+    );
+    connect(
+        &mut document,
+        port(source, "dataframe"),
+        port(columns, "source"),
+    );
+    connect(&mut document, port(columns, "result"), port(rows, "source"));
+    let mut cache = GraphSemanticCache::default();
+    for extra in [false, true] {
+        let snapshot =
+            assert_matches_full(&document, &builtin.registry, &resource(extra), &mut cache);
+        assert!(matches!(
+            &snapshot.node(columns).unwrap().parameters[0].configuration,
+            Some(crate::GraphParameterConfigurationFact::ProjectColumns { available: true, options, .. })
+                if options.len() == if extra { 4 } else { 3 }
+        ));
+        assert!(matches!(
+            &snapshot.node(rows).unwrap().parameters[0].configuration,
+            Some(crate::GraphParameterConfigurationFact::FilterPredicate { available: true, columns, .. })
+                if columns.len() == if extra { 3 } else { 2 }
+        ));
+        let source_fields = snapshot
+            .node(source)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(source, "dataframe"))
+            .unwrap()
+            .schema_state
+            .exact()
+            .unwrap()
+            .fields
+            .clone();
+        let expected: Vec<_> = source_fields
+            .into_iter()
+            .filter(|f| f.name.0.as_ref() != "unused")
+            .collect();
+        for id in [columns, rows] {
+            let result = snapshot
+                .node(id)
+                .unwrap()
+                .ports
+                .iter()
+                .find(|p| p.address == port(id, "result"))
+                .unwrap();
+            assert_eq!(result.schema_state.exact().unwrap().fields, expected);
+        }
+    }
+    for (selection, issue) in [
+        (
+            serde_json::json!(["absent"]),
+            GraphSchemaIssue::MissingColumn,
+        ),
+        (
+            serde_json::json!(["amount", "unused", "id"]),
+            GraphSchemaIssue::InvalidParameter,
+        ),
+    ] {
+        document
+            .nodes
+            .get_mut(&columns)
+            .unwrap()
+            .parameters
+            .insert("columns".parse().unwrap(), selection);
+        let snapshot =
+            assert_matches_full(&document, &builtin.registry, &resource(false), &mut cache);
+        let result = snapshot
+            .node(columns)
+            .unwrap()
+            .ports
+            .iter()
+            .find(|p| p.address == port(columns, "result"))
+            .unwrap();
+        assert_eq!(result.schema_state.issue(), Some(issue));
+    }
+}
+
+#[test]
 fn composed_schemas_track_input_order_join_keys_and_mixed_series() {
     use yss_data_contract::SemanticType as S;
     use yss_graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
