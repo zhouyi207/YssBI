@@ -223,6 +223,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
             yss_node_kernel::KernelRegistry::default().into(),
+            yss_database_runtime::dataset_query_engine().unwrap(),
         );
         let package = execution
             .prepare_graph_package(&graph, &analysis, execution_basis)

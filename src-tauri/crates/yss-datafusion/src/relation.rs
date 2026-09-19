@@ -185,7 +185,7 @@ impl DataFusionRelation {
     pub(crate) fn handle(
         frame: DataFrame,
         schema: SchemaRef,
-        binding: RelationBinding,
+        bindings: Arc<[RelationBinding]>,
         lease: Arc<dyn Send + Sync>,
         executor: Arc<dyn RelationExecutor>,
         ordered_single_file: bool,
@@ -208,7 +208,7 @@ impl DataFusionRelation {
             columns,
             frame,
             schema,
-            bindings: Arc::from([binding]),
+            bindings,
             lease,
             executor,
             ordered_single_file,

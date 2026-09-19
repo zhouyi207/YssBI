@@ -7,21 +7,50 @@ use std::num::NonZeroU32;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-/// The lowered parameter fields and output arity accepted by an implementation.
+/// One ordered input key, either a declared port or a repeatable input group.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KernelInputSpec {
+    key: Box<str>,
+    count: RangeInclusive<usize>,
+}
+
+impl KernelInputSpec {
+    pub fn fixed(key: &str) -> Self {
+        Self::repeated(key, 1..=1)
+    }
+
+    pub fn repeated(key: &str, count: RangeInclusive<usize>) -> Self {
+        Self {
+            key: key.into(),
+            count,
+        }
+    }
+}
+
+/// The input layout, lowered parameter fields and output arity accepted by an implementation.
 /// Graph remains the authority for port types and parameter value validation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KernelContract {
+    inputs: Box<[KernelInputSpec]>,
     parameters: BTreeSet<KernelParameterKey>,
     outputs: RangeInclusive<usize>,
 }
 
 impl KernelContract {
     pub fn new(
+        inputs: impl IntoIterator<Item = KernelInputSpec>,
         parameters: impl IntoIterator<Item = KernelParameterKey>,
         outputs: RangeInclusive<usize>,
     ) -> Result<Self, KernelRegistrationError> {
         if outputs.is_empty() {
             return Err(KernelRegistrationError::InvalidOutputArity);
+        }
+        let inputs: Box<[_]> = inputs.into_iter().collect();
+        let mut keys = BTreeSet::new();
+        for input in &inputs {
+            if input.key.trim().is_empty() || input.count.is_empty() || !keys.insert(&input.key) {
+                return Err(KernelRegistrationError::InvalidInputLayout);
+            }
         }
         let mut fields = BTreeSet::new();
         for field in parameters {
@@ -30,6 +59,7 @@ impl KernelContract {
             }
         }
         Ok(Self {
+            inputs,
             parameters: fields,
             outputs,
         })
@@ -37,9 +67,26 @@ impl KernelContract {
 
     pub fn validate_binding<'a>(
         &self,
+        inputs: impl IntoIterator<Item = (&'a str, RangeInclusive<usize>)>,
         parameters: impl IntoIterator<Item = &'a str>,
         outputs: RangeInclusive<usize>,
     ) -> Result<(), KernelBindingError> {
+        let mut inputs = inputs.into_iter();
+        for expected in &self.inputs {
+            let Some((key, count)) = inputs.next() else {
+                return Err(KernelBindingError::Inputs);
+            };
+            if key != expected.key.as_ref()
+                || count.is_empty()
+                || !expected.count.contains(count.start())
+                || !expected.count.contains(count.end())
+            {
+                return Err(KernelBindingError::Inputs);
+            }
+        }
+        if inputs.next().is_some() {
+            return Err(KernelBindingError::Inputs);
+        }
         if self
             .parameters
             .iter()
@@ -57,10 +104,27 @@ impl KernelContract {
         }
         Ok(())
     }
+
+    fn accepts_inputs(&self, keys: &[&str]) -> bool {
+        let mut remaining = keys;
+        for input in &self.inputs {
+            let count = remaining
+                .iter()
+                .take_while(|key| **key == input.key.as_ref())
+                .count();
+            if !input.count.contains(&count) {
+                return false;
+            }
+            remaining = &remaining[count..];
+        }
+        remaining.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum KernelRegistrationError {
+    #[error("kernel input layout contains empty or duplicate keys, or an empty arity")]
+    InvalidInputLayout,
     #[error("execution kernel is already registered: {0}")]
     DuplicateKernel(KernelId),
     #[error("kernel parameter field is duplicated: {0:?}")]
@@ -71,6 +135,8 @@ pub enum KernelRegistrationError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum KernelBindingError {
+    #[error("node inputs differ from the execution kernel contract")]
+    Inputs,
     #[error("node parameters differ from the execution kernel contract")]
     Parameters,
     #[error("node outputs exceed the execution kernel contract")]
@@ -141,6 +207,19 @@ impl KernelRegistryBuilder {
                     kernel.revision.get(),
                     kernel
                         .contract
+                        .inputs
+                        .iter()
+                        .map(|input| {
+                            (
+                                input.key.as_ref(),
+                                *input.count.start() as u64,
+                                (*input.count.end() != usize::MAX)
+                                    .then_some(*input.count.end() as u64),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                    kernel
+                        .contract
                         .parameters
                         .iter()
                         .map(|field| field.as_str())
@@ -187,22 +266,31 @@ impl KernelRegistry {
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         let kernel = self.kernels.get(id).ok_or(KernelError::KernelNotFound)?;
         invocation.check_control()?;
-        if invocation.inputs.len() != invocation.input_templates.len() {
-            return Err(KernelError::Failed);
+        if invocation.inputs.len() != invocation.input_keys.len()
+            || !kernel.contract.accepts_inputs(invocation.input_keys)
+        {
+            return Err(KernelError::InputLayoutMismatch);
         }
         if !kernel
             .contract
             .parameters
             .iter()
             .eq(invocation.parameters.keys())
-            || !kernel.contract.outputs.contains(&invocation.outputs.len())
         {
-            return Err(KernelError::Failed);
+            return Err(KernelError::InvalidParameter);
+        }
+        if !kernel.contract.outputs.contains(&invocation.outputs.len()) {
+            return Err(KernelError::OutputContractMismatch);
         }
         let result = (kernel.execute)(invocation)?;
         invocation.check_control()?;
-        if result.len() != invocation.outputs.len() {
-            return Err(KernelError::Failed);
+        if result.len() != invocation.outputs.len()
+            || result
+                .iter()
+                .zip(invocation.outputs)
+                .any(|(value, output)| !value.matches_carrier(&output.data_type))
+        {
+            return Err(KernelError::OutputContractMismatch);
         }
         Ok(result)
     }

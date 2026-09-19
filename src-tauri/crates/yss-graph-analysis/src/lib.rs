@@ -436,7 +436,7 @@ pub struct GraphAnalysis {
     kernel_fingerprint: [u8; 32],
     resource_versions: ResourceVersionSet,
     resource_observations: yss_graph_analysis_contract::ResourceObservationSet,
-    semantic_snapshot: GraphSemanticSnapshot,
+    semantic_snapshot: std::sync::Arc<GraphSemanticSnapshot>,
     semantic_input_hash: [u8; 32],
 }
 
@@ -468,7 +468,7 @@ impl GraphAnalysis {
     }
 
     pub fn with_semantic_snapshot(mut self, snapshot: GraphSemanticSnapshot) -> Self {
-        self.semantic_snapshot = snapshot;
+        self.semantic_snapshot = std::sync::Arc::new(snapshot);
         self
     }
 
@@ -476,7 +476,9 @@ impl GraphAnalysis {
         mut self,
         transform: impl FnOnce(GraphSemanticSnapshot) -> GraphSemanticSnapshot,
     ) -> Self {
-        self.semantic_snapshot = transform(self.semantic_snapshot);
+        self.semantic_snapshot = std::sync::Arc::new(transform(std::sync::Arc::unwrap_or_clone(
+            self.semantic_snapshot,
+        )));
         self
     }
 }
@@ -490,7 +492,7 @@ pub fn analyze(
         kernel_fingerprint: basis.kernel_fingerprint,
         resource_versions: basis.resource_versions.clone(),
         resource_observations: basis.resource_observations.clone(),
-        semantic_snapshot,
+        semantic_snapshot: std::sync::Arc::new(semantic_snapshot),
         semantic_input_hash: [0; 32],
     }
 }

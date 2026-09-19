@@ -125,6 +125,15 @@ impl OperationExecutionError {
                     ..error.failure()
                 };
             }
+            Self::Kernel(KernelError::ShapeMismatch) => RunFailureCode::ShapeMismatch,
+            Self::Kernel(KernelError::InvalidParameter) => RunFailureCode::InvalidParameter,
+            Self::Kernel(KernelError::UnalignedSeries) => RunFailureCode::UnalignedSeries,
+            Self::Kernel(KernelError::BudgetExceeded) => RunFailureCode::BudgetExceeded,
+            Self::Kernel(KernelError::InputLayoutMismatch) => RunFailureCode::InputLayoutMismatch,
+            Self::Kernel(KernelError::OutputContractMismatch) => {
+                RunFailureCode::OutputContractMismatch
+            }
+            Self::Kernel(KernelError::ScientificFailure) => RunFailureCode::ScientificFailure,
             Self::Kernel(KernelError::DivisionByZero) => RunFailureCode::DivisionByZero,
             Self::Kernel(KernelError::NonFiniteResult) => RunFailureCode::NonFiniteResult,
             Self::Kernel(KernelError::InvalidNumericInput) => RunFailureCode::InvalidNumericInput,
@@ -196,7 +205,8 @@ struct PreparedPlanExecution<'a> {
     resources: &'a PreparedRunResources,
     control: &'a RunExecutionControl,
     run_id: crate::run_registry::RunId,
-    demand: &'a crate::plan::PlanExecutionDemand,
+    producers: &'a [Option<usize>],
+    selection: ExecutionSelection,
 }
 
 struct PreparedExecutionDispatch<'a> {
@@ -215,6 +225,7 @@ trait PreparedPlanExecutor: Send + Sync {
 
 struct NeutralPlanExecutor {
     kernels: Arc<KernelRegistry>,
+    relations: Arc<dyn yss_relational_contract::RelationFactory>,
 }
 
 impl PreparedPlanExecutor for NeutralPlanExecutor {
@@ -228,18 +239,11 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
             resources,
             control,
             run_id: _run_id,
-            demand,
+            producers,
+            selection,
         } = execution;
         let operations = package.plan().operations();
-        let value_count = operations
-            .iter()
-            .flat_map(|operation| operation.outputs())
-            .map(|output| output.value().index() as usize)
-            .max()
-            .map_or(0, |maximum| maximum.saturating_add(1));
-        let mut values: Vec<Option<RuntimeValue>> = vec![None; value_count];
-        let producers = execution_producers(package)?;
-        let selection = select_execution(package, demand, &producers)?;
+        let mut values: Vec<Option<RuntimeValue>> = vec![None; producers.len()];
         let mut remaining_dependencies = vec![0usize; operations.len()];
         let mut dependents = vec![Vec::new(); operations.len()];
         for (operation_index, operation) in operations.iter().enumerate() {
@@ -303,6 +307,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
 
             let output_values = crate::kernel_invocation::invoke(
                 &self.kernels,
+                &self.relations,
                 operation,
                 &inputs,
                 package.parameters(),
@@ -321,7 +326,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     return Err(OperationExecutionError::Failed);
                 }
                 results.push(SchedulerResult {
-                    value: StoredResult::new(value.clone()),
+                    value: StoredResult::new(value),
                     category: output.contract().category,
                     output: output.output().clone(),
                 });
@@ -356,9 +361,13 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                 let crate::plan::PlanInputSource::Value(value) = selected.source else {
                     return Err(OperationExecutionError::Failed);
                 };
-                let output = operations
+                let producer = producers
+                    .get(value.index() as usize)
+                    .and_then(|producer| *producer)
+                    .ok_or(OperationExecutionError::Failed)?;
+                let output = operations[producer]
+                    .outputs()
                     .iter()
-                    .flat_map(|operation| operation.outputs())
                     .find(|output| output.value() == value)
                     .map(|output| output.output().clone())
                     .ok_or(OperationExecutionError::Failed)?;
@@ -722,6 +731,7 @@ impl ExecutionRuntimeState {
         session_id: ExecutionSessionId,
         generation: RuntimeGeneration,
         kernels: Arc<KernelRegistry>,
+        relations: Arc<dyn yss_relational_contract::RelationFactory>,
     ) -> Self {
         Self {
             graph_plans: crate::graph_preparation::GraphPlanCache::default(),
@@ -730,7 +740,7 @@ impl ExecutionRuntimeState {
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
             results: ResultStore::new(),
             runs: RunRegistry::new(),
-            executor: NeutralPlanExecutor { kernels },
+            executor: NeutralPlanExecutor { kernels, relations },
             active_controls: Mutex::new(BTreeMap::new()),
             next_result_id: AtomicU64::new(1),
         }
@@ -931,7 +941,8 @@ impl ExecutionRuntimeState {
             resources: &prepared_resources,
             control,
             run_id,
-            demand,
+            producers: &producers,
+            selection,
         }) {
             Ok(output) => output,
             Err(OperationExecutionError::Kernel(KernelError::Cancelled)) => {
@@ -1449,6 +1460,7 @@ mod tests {
             ExecutionSessionId::new(uuid::Uuid::nil()),
             crate::identity::RuntimeGeneration::INITIAL,
             yss_node_kernel::KernelRegistry::default().into(),
+            crate::test_relations(),
         )
     }
 
@@ -1484,13 +1496,13 @@ mod tests {
         let parameter_handle = PlanParameterHandle::from_existing("constant/value".into());
         let consumer = PlanOperation::new(
             operation_source("consumer"),
-            crate::plan::PlanNodeTypeId::from_existing("yssbi.core.reroute".into()),
+            crate::plan::PlanNodeTypeId::from_existing("yssbi.numeric.square".into()),
             BTreeMap::new(),
             Box::new([PlanInputBinding::new(
                 PlanPortAddress::from_existing("consumer:value".into()),
                 PlanInputSource::Value(ValueRef::new(1)),
                 crate::plan::PlanInputContract {
-                    template: None,
+                    key: "input".into(),
                     group: None,
                     expected_type: yss_data_contract::ValueType::Scalar(
                         yss_data_contract::SemanticType::Numeric,
@@ -1501,12 +1513,12 @@ mod tests {
             Box::new([]),
             Box::new([operation_output("consumer", ValueRef::new(0))]),
             crate::plan::PlanKernelSpecialization::new(
-                KernelId::from_existing("yssbi.core.reroute".into()),
+                KernelId::from_existing("yssbi.numeric.square".into()),
                 Box::new([crate::plan::PlanTypeBinding::new(
                     PlanPortAddress::from_existing("consumer:value".into()),
                     yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
                 )]),
-                operation_specialization("yssbi.core.reroute", "consumer")
+                operation_specialization("yssbi.numeric.square", "consumer")
                     .output_types()
                     .into(),
                 Box::new([]),
@@ -1547,7 +1559,12 @@ mod tests {
 
         assert_eq!(candidate.results().len(), 2);
         assert!(candidate.results().iter().all(|result| {
-            result.value().value() == &yss_node_kernel::RuntimeValue::Integer(7)
+            result.value().value()
+                == &if result.output().port().as_str().starts_with("consumer:") {
+                    RuntimeValue::Decimal(49.0)
+                } else {
+                    RuntimeValue::Integer(7)
+                }
         }));
         let outputs = candidate
             .results()

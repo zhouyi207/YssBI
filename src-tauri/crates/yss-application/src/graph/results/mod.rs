@@ -377,13 +377,13 @@ fn charge_value(
     let bytes = match value.unannotated() {
         RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.len().checked_mul(6),
         RuntimeValue::List(values) => {
-            for value in values {
+            for value in values.iter() {
                 charge_value(value, remaining, depth + 1)?;
             }
             Some(2)
         }
         RuntimeValue::Record(values) => {
-            for (key, value) in values {
+            for (key, value) in values.iter() {
                 *remaining = remaining
                     .checked_sub(key.len().saturating_mul(6))
                     .ok_or(ResultQueryApplicationError::PageTooLarge)?;
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn annotated_series_paging_preserves_sequence_shape_and_offsets() {
         let result = StoredResult::new(
-            RuntimeValue::List(Box::new([
+            RuntimeValue::List(std::sync::Arc::from([
                 RuntimeValue::String("001".into()),
                 RuntimeValue::Null,
             ]))

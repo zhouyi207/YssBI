@@ -56,23 +56,33 @@ impl NodeComponents {
                     .map(|parameter| parameter.key.as_str())
                     .collect()
             };
+            let arity = |cardinality: &PortCardinality| match cardinality {
+                PortCardinality::Declared => (1, 1),
+                PortCardinality::UserCreated { min, max } => {
+                    (usize::from(*min), max.map_or(usize::MAX, usize::from))
+                }
+                PortCardinality::Derived { .. } => (0, usize::MAX),
+            };
+            let inputs = protocol
+                .interface
+                .ports
+                .iter()
+                .filter(|port| port.direction == PortDirection::Input)
+                .map(|port| {
+                    let (min, max) = arity(&port.cardinality);
+                    (port.key.as_str(), min..=max)
+                });
             let (minimum, maximum) = protocol
                 .interface
                 .ports
                 .iter()
                 .filter(|port| port.direction == PortDirection::Output)
                 .fold((0usize, 0usize), |(minimum, maximum), port| {
-                    let (min, max) = match &port.cardinality {
-                        PortCardinality::Declared => (1, 1),
-                        PortCardinality::UserCreated { min, max } => {
-                            (usize::from(*min), max.map_or(usize::MAX, usize::from))
-                        }
-                        PortCardinality::Derived { .. } => (0, usize::MAX),
-                    };
+                    let (min, max) = arity(&port.cardinality);
                     (minimum.saturating_add(min), maximum.saturating_add(max))
                 });
             contract
-                .validate_binding(parameters, minimum..=maximum)
+                .validate_binding(inputs, parameters, minimum..=maximum)
                 .map_err(|source| NodeCompositionError::Binding {
                     node: id.clone(),
                     kernel: kernel.into(),

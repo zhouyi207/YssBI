@@ -1255,6 +1255,7 @@ mod tests {
             execution_session_id,
             RuntimeGeneration::from_existing(epoch),
             yss_node_kernel::KernelRegistry::default().into(),
+            yss_database_runtime::dataset_query_engine().unwrap(),
         ));
         let resource_provider_factory = Arc::new(ResourceProviderFactory::new(
             project_session_id.as_str().into(),

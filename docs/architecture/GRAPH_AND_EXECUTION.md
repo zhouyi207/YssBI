@@ -280,7 +280,9 @@ Chart Save 同样按提交的完整内容覆盖资源，不接受 frontend `expe
 
 Demand selection 和 DAG scheduler 保留。`yss-node-kernel::KernelRegistry` 按 KernelId 向已注册实现传递 `KernelInvocation`；source node type 与 kernel identity 分开保留。参数使用具名完整集合，包含已解析默认值，普通 String 不按路径前缀猜成 Resource。计划中的 input slots 继续携带地址、实例组、预期类型和 coercion；顺序来自 snapshot 的 concrete port/connection order，package admission 校验 slot 与 specialization 一致。
 
-Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 只传运行值、输入组、有序输出类型与字段、取消/deadline 和预算。Literal 与资源运行值可以借用，不为创建调用复制完整 payload。内核返回局部输出顺序的值列表，注册表检查输出数量；Execution 将其映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
+Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析资源参数，向 kernel 传运行值、固定端口/重复组的局部键、有序输出类型与字段、取消/deadline、预算及中立关系工厂。Application 装配时核对输入布局；调用时注册表复核布局和输出外层载体。Literal 与资源运行值可以借用，列表和记录使用不可变共享缓冲。Execution 将局部输出映射回 PlanOutputRef，并保留 lineage、category 与结果来源。
+
+同一运行的 demand selection 和 producer 索引从准入传给调度器，不重复构建。最终结果在持有 ResultStore 写锁前已成为 `Arc<StoredResult>`，发布只增加引用。GraphAnalysis 的语义快照也按引用共享，展示投影修改时才取得独立内容。协议指纹显式排除展示字段，保留配置对象校验、条件和资源解释；不会递归删除用户数据中的同名字段。
 
 内核的 `KernelError` 不携带图地址、运行阶段或项目状态；Execution 的 `OperationExecutionError` 负责节点定位，并保持已有 RunFailure 错误码和取消/超时终态。RuntimeValue、KernelId、KernelParameterKey 和 KernelFingerprint 由 Node Kernel 拥有，ResultStore 与结果租约仍属于 Execution。
 
@@ -299,6 +301,7 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 原始列和计算数列都由 `SeriesHandle` 持有 adapter-owned 表达式，表达式不进入持久化 Graph 文档。
 数据帧组合使用原生 Union、Join、Projection 及用于稳定顺序的 Window/Sort 计划。按行拼接保留重复行、输入顺序及各来源行序；列名模式补齐缺失列，位置模式使用首表列名。公共列要求相同物理类型和兼容语义，不进行隐式有损提升。连接支持多列键和 inner/left/right/full，空键不匹配，重复键保留全部匹配组合；输出保留两侧键，右侧重名列使用后缀消歧。
 `RelationHandle::bindings` 保留全部来源绑定，组合执行检查项目会话、执行环境及同一数据集的快照一致性。来源租约由组合结果和输出流共同持有；资源准备入口仍要求每个数据源授权值只有一个匹配绑定。多来源结果不伪装成单一数据集，自动化只读检查按预算列出其来源。
+DataFrame 字面量和内存列组合通过注入的 `RelationFactory` 一次性导入同一 DataFusion runtime，之后复用上述关系运算及分页。它们的来源绑定为空；空绑定不授权任何外部数据集。旧的 Record 表执行分支已移除，普通结构化值仍使用 Record。
 DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命名和数列投影保留行域证明；筛选行、截取、行拼接和连接建立新行域。按列拼接与组装只组合可证明对齐的惰性输入，不以长度或行号猜测独立数据帧的对应关系。组装也支持等长内存数列，保留其已物化形式，不混用惰性与内存数列。
 源行顺序的内部字段仅留在 adapter 的域计划中；组合时由显式排序的行号窗口生成内部位置，确保分页稳定，不复用源表的可编辑行标识。输出只暴露用户列，并保留语义元数据；组合输出的字段身份由图的派生 Schema 负责。动态输入顺序进入 Schema 缓存指纹，连接键编辑器和校验分别使用对应一侧的 Schema。
 同一关系的数列可以连续运算并联合投影，名称重复的计算列按投影位置区分；不同关系或无对齐证明的物化列表

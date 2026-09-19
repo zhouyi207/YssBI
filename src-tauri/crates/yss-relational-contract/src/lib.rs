@@ -57,6 +57,19 @@ pub struct RelationPage {
     pub has_more: bool,
 }
 
+/// Import immutable, already materialized columns into the caller's shared query engine.
+/// Literal relations have no dataset bindings and never authorize external resource access.
+/// Metadata retains explicit domains/temporal representations when present; a bare categorical
+/// or calendar declaration is completed from the literal at this materialization boundary.
+pub trait RelationFactory: Send + Sync {
+    fn materialize(
+        self: Arc<Self>,
+        data: &yss_tabular_contract::TabularSnapshot,
+        metadata: &[Option<yss_data_contract::ConversionMetadata>],
+        control: &RelationControl,
+    ) -> Result<RelationHandle, RelationError>;
+}
+
 impl RelationControl {
     pub fn check(&self) -> Result<(), RelationError> {
         if self.cancellation.load(Ordering::Acquire) {

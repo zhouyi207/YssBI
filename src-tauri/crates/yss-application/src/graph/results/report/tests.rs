@@ -307,7 +307,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     assert!(!page.has_more);
     assert_eq!(
         page.values[0],
-        RuntimeValue::List(Box::new([
+        RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Unsigned(53_931),
             RuntimeValue::Decimal(fit.fitted[53_930]),
             RuntimeValue::Decimal(fit.residuals[53_930]),

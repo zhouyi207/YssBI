@@ -326,9 +326,9 @@ mod tests {
                     name: "id".into(),
                     data_type: "UInt64".into(),
                 }]),
-                values: Box::new([RuntimeValue::List(Box::new([RuntimeValue::Unsigned(
-                    u64::MAX,
-                )]))]),
+                values: Box::new([RuntimeValue::List(std::sync::Arc::from([
+                    RuntimeValue::Unsigned(u64::MAX),
+                ]))]),
             },
         )
         .unwrap();
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(encoded["hasMore"], true);
         assert_eq!(encoded["values"][0][0], u64::MAX.to_string());
         assert_eq!(encoded["metadata"]["columns"][0]["type"], "UInt64");
-        let annotated = RuntimeValue::List(Box::new([
+        let annotated = RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::String("001".into()),
             RuntimeValue::Null,
         ]))

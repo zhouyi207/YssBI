@@ -332,10 +332,10 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
     );
     for (binding, semantic_binding) in operation.inputs().iter().zip(semantic_node.inputs.iter()) {
         assert_eq!(
-            binding.contract().template.as_deref(),
+            binding.contract().key.as_ref(),
             match &semantic_binding.address.port {
-                yss_graph_document::PortRef::Instance { template, .. } => Some(template.as_str()),
-                yss_graph_document::PortRef::Declared { .. } => None,
+                yss_graph_document::PortRef::Instance { template, .. } => template.as_str(),
+                yss_graph_document::PortRef::Declared { key } => key.as_str(),
             }
         );
         assert_eq!(

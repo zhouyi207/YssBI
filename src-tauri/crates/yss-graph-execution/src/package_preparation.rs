@@ -232,6 +232,7 @@ mod tests {
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::from_existing(3),
             yss_node_kernel::KernelRegistry::default().into(),
+            crate::test_relations(),
         );
         let prepared = state
             .prepare_package(package(), RuntimeGeneration::from_existing(3))

@@ -147,6 +147,8 @@ impl From<SessionCandidateBuildError> for InvalidSessionCandidateError {
 
 #[derive(Debug, Error)]
 pub enum ProjectSessionCandidateError {
+    #[error("shared query engine could not be initialized")]
+    QueryEngine(#[source] yss_dataset_store::DatasetStoreError),
     #[error("project snapshot could not be captured for the application session")]
     ProjectSnapshot(#[source] ProjectOperationError),
     #[error("project database declaration observations could not be captured")]
@@ -336,6 +338,8 @@ pub fn build_current_project_candidate(
         execution_session_id,
         runtime_generation,
         nodes.kernels(),
+        yss_database_runtime::dataset_query_engine()
+            .map_err(ProjectSessionCandidateError::QueryEngine)?,
     ));
     let bound_project_session =
         PlanProjectSessionId::from_existing(project_session_id.as_str().into());
@@ -414,6 +418,7 @@ mod tests {
                 execution_session_id,
                 runtime_generation,
                 yss_node_kernel::KernelRegistry::default().into(),
+                yss_database_runtime::dataset_query_engine().unwrap(),
             )),
             database,
         )

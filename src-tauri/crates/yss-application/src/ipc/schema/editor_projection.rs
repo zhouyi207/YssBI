@@ -545,7 +545,7 @@ mod tests {
             wire["nodes"][0]["ports"][0]["resolvedSchema"],
             json!({
                 "kind": "derived",
-                "fields": [{"name": "sales", "scalarType": "float64"}],
+                "fields": [{"name": "sales", "scalarType": "Numeric"}],
             })
         );
         assert_eq!(wire["nodes"][0]["portInstanceAdditions"], json!([]));
@@ -555,7 +555,7 @@ mod tests {
                 "kind": "projectColumns",
                 "available": true,
                 "unavailableReason": null,
-                "options": [{"name": "sales", "dataType": "float64"}],
+                "options": [{"name": "sales", "dataType": "Numeric"}],
                 "value": ["sales"],
             })
         );

@@ -15,7 +15,8 @@ result analyses and standalone IPC ACF/PACF use the existing 60-second deadline.
 Application declares this dependency for its IPC commands. Desktop composition
 and other application modules do not call it or construct/inject a backend object.
 The runtime has no Execution dependency.
-Cancellation and deadlines are checked before dispatch and after computation;
+Linear regression checks cancellation and deadlines during input validation, before
+SCI dispatch, before report projection and before returning the result;
 these checks do not promise cooperative interruption of a running matrix decomposition.
 
 ## Capability modules

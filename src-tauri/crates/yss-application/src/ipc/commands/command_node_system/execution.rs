@@ -144,6 +144,19 @@ fn prepared_execution_command_code(
         ExecutePreparedError::Cancelled { .. } => "run_cancelled",
         ExecutePreparedError::DeadlineExceeded { .. } => "run_deadline_exceeded",
         ExecutePreparedError::Kernel(_) => match error.failure().code {
+            yss_graph_execution::error::RunFailureCode::ShapeMismatch => "run_shape_mismatch",
+            yss_graph_execution::error::RunFailureCode::InvalidParameter => "run_invalid_parameter",
+            yss_graph_execution::error::RunFailureCode::UnalignedSeries => "run_unaligned_series",
+            yss_graph_execution::error::RunFailureCode::BudgetExceeded => "run_budget_exceeded",
+            yss_graph_execution::error::RunFailureCode::InputLayoutMismatch => {
+                "run_input_layout_mismatch"
+            }
+            yss_graph_execution::error::RunFailureCode::OutputContractMismatch => {
+                "run_output_contract_mismatch"
+            }
+            yss_graph_execution::error::RunFailureCode::ScientificFailure => {
+                "run_scientific_failure"
+            }
             yss_graph_execution::error::RunFailureCode::DivisionByZero => "run_division_by_zero",
             yss_graph_execution::error::RunFailureCode::NonFiniteResult => "run_non_finite_result",
             yss_graph_execution::error::RunFailureCode::InvalidNumericInput => {

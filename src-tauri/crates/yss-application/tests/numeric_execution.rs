@@ -66,6 +66,7 @@ fn execute(
         ExecutionSessionId::new(uuid::Uuid::new_v4()),
         RuntimeGeneration::INITIAL,
         yss_node_kernel::KernelRegistry::default().into(),
+        yss_database_runtime::dataset_query_engine().unwrap(),
     );
     let basis = PlanBasis::new(
         session.clone(),
@@ -336,7 +337,7 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         .unwrap_err()
         .failure()
         .code,
-        RunFailureCode::InvalidNumericInput
+        RunFailureCode::ShapeMismatch
     );
     assert_eq!(
         evaluate(
@@ -447,12 +448,12 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
     use RuntimeValue::{Bool as B, List as L, Null as N};
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(Box::new([B(true), B(false), B(true), N]))
+        L(std::sync::Arc::from([B(true), B(false), B(true), N]))
     );
     document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.or".parse().unwrap();
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(Box::new([B(false), B(false), B(false), N]))
+        L(std::sync::Arc::from([B(false), B(false), B(false), N]))
     );
     document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.and".parse().unwrap();
     let edge = document
@@ -463,7 +464,7 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
     edge.output = PortAddress::declared(flag, "value".parse().unwrap());
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(Box::new([B(true), B(true), B(true), B(true)]))
+        L(std::sync::Arc::from([B(true), B(true), B(true), B(true)]))
     );
 }
 
@@ -647,7 +648,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
     }
     assert_eq!(
         execute(&document, "yssbi.logic.equal").unwrap(),
-        RuntimeValue::List(Box::new([
+        RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Bool(false),
             RuntimeValue::Bool(true),
             RuntimeValue::Null
@@ -663,7 +664,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
     }
     assert_eq!(
         execute(&document, "yssbi.logic.equal").unwrap(),
-        RuntimeValue::List(Box::new([
+        RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Bool(false),
             RuntimeValue::Bool(true),
             RuntimeValue::Null
@@ -797,7 +798,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
     }
     assert_eq!(
         execute(&document, "yssbi.value.convert").unwrap(),
-        RuntimeValue::List(Box::new([
+        RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Decimal(1.),
             RuntimeValue::Null,
             RuntimeValue::Decimal(2.)
@@ -868,7 +869,7 @@ fn automatic_conversion_executes_the_downstream_target_without_rewriting_paramet
     }
     assert_eq!(
         execute(&document, "yssbi.numeric.divide").unwrap(),
-        RuntimeValue::List(Box::new([
+        RuntimeValue::List(std::sync::Arc::from([
             RuntimeValue::Decimal(6.),
             RuntimeValue::Decimal(2.)
         ]))
@@ -1004,7 +1005,10 @@ fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_cha
             }
             assert_eq!(
                 execute(&document, "yssbi.logic.equal").unwrap(),
-                RuntimeValue::List(Box::new([RuntimeValue::Bool(true), RuntimeValue::Null]))
+                RuntimeValue::List(std::sync::Arc::from([
+                    RuntimeValue::Bool(true),
+                    RuntimeValue::Null
+                ]))
             );
         };
     let domain = serde_json::json!({"values":[{"value":"002","label":"low"},{"value":"001","label":"high"}]});
@@ -1132,6 +1136,243 @@ fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
 }
 
 #[test]
+fn literal_tables_feed_relational_statistics_and_page_without_dataset_bindings() {
+    use yss_data_contract::{DataValue, ValueType};
+    let (mut document, [source, _, _, _, _, _]) = relational_document("unused");
+    set_constant(&mut document, source, ValueType::DataFrame, DataValue::DataFrame(
+        r#"{"x":[1,2,3,4,5,6,7,8],"y":[5,8,11,14,17,20,23,26],"flag":[true,false,true,false,true,false,true,false]}"#.into(),
+    ));
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    for connection in document.connections.values_mut() {
+        if connection.output.node_id == source {
+            connection.output = PortAddress::declared(source, "value".parse().unwrap());
+        }
+    }
+    let RuntimeValue::LinearRegression(model) =
+        execute(&document, "yssbi.statistics.linear.fit").unwrap()
+    else {
+        panic!("a literal table must reach the statistical kernel");
+    };
+    assert_eq!(model.fitted.len(), 6);
+    assert!((model.coefficients.last().unwrap() - 3.0).abs() < 1e-10);
+    let RuntimeValue::Relation(table) = execute(&document, "yssbi.dataframe.filter.rows").unwrap()
+    else {
+        panic!("table outputs must use the pageable relation carrier");
+    };
+    assert!(table.bindings().is_empty());
+    let control = yss_relational_contract::RelationControl {
+        cancellation: Arc::new(AtomicBool::new(false)),
+        deadline: Instant::now() + Duration::from_secs(10),
+        max_input_bytes: 1024 * 1024,
+    };
+    let page = table.page(1, 2, &control).unwrap();
+    assert_eq!(page.row_count, 2);
+    assert!(page.has_more);
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[0].values()).unwrap(),
+        serde_json::json!([4, 5])
+    );
+    let joined = table
+        .concat_rows(
+            &[table.clone()],
+            yss_data_contract::table::RowConcatMode::ByName,
+        )
+        .unwrap();
+    assert!(joined.bindings().is_empty());
+    assert_eq!(joined.page(10, 3, &control).unwrap().row_count, 2);
+}
+
+#[test]
+fn assembled_memory_columns_share_the_relational_path_and_preserve_column_order() {
+    use yss_data_contract::{SemanticType, ValueType};
+    use yss_node_kernel::{
+        KernelControl, KernelField, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry,
+    };
+    let relations: Arc<dyn yss_relational_contract::RelationFactory> =
+        yss_database_runtime::dataset_query_engine().unwrap();
+    let registry = KernelRegistry::default();
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(10),
+    );
+    let fields = [
+        KernelField {
+            name: "b".into(),
+            data_type: ValueType::Scalar(SemanticType::Binary),
+        },
+        KernelField {
+            name: "a".into(),
+            data_type: ValueType::number(),
+        },
+    ];
+    let output = [KernelOutputSpec {
+        data_type: ValueType::DataFrame,
+        fields: Some(fields.clone().into()),
+    }];
+    let assemble = |inputs: &[RuntimeValue], control: &KernelControl| {
+        registry.execute(
+            &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
+            &KernelInvocation {
+                relations: &relations,
+                inputs,
+                input_keys: &["series", "series"],
+                parameters: BTreeMap::new(),
+                outputs: &output,
+                control,
+            },
+        )
+    };
+    let inputs = [
+        RuntimeValue::List(
+            [
+                RuntimeValue::Bool(true),
+                RuntimeValue::Null,
+                RuntimeValue::Bool(false),
+            ]
+            .into(),
+        ),
+        RuntimeValue::List([11, 22, 33].map(RuntimeValue::Integer).into()),
+    ];
+    let assembled = assemble(&inputs, &control).unwrap();
+    let outputs = fields
+        .iter()
+        .map(|field| KernelOutputSpec {
+            data_type: ValueType::DataSeries(Box::new(field.data_type.clone())),
+            fields: Some(vec![field.clone()].into_boxed_slice()),
+        })
+        .collect::<Vec<_>>();
+    let columns = registry
+        .execute(
+            &KernelId::new("yssbi.dataframe.decompose".into()).unwrap(),
+            &KernelInvocation {
+                relations: &relations,
+                inputs: &assembled,
+                input_keys: &["dataframe"],
+                parameters: BTreeMap::new(),
+                outputs: &outputs,
+                control: &control,
+            },
+        )
+        .unwrap();
+    for (column, field) in columns.iter().zip(&fields) {
+        let RuntimeValue::Series(column) = column else {
+            panic!("decomposition must remain lazy");
+        };
+        assert_eq!(column.column(), field.name.as_ref());
+    }
+    let reassembled = assemble(&columns, &control).unwrap();
+    let RuntimeValue::Relation(table) = &reassembled[0] else {
+        panic!("relation");
+    };
+    let query_control = yss_relational_contract::RelationControl {
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+        max_input_bytes: control.max_input_bytes,
+    };
+    let page = table
+        .project(&["a".into(), "b".into()])
+        .unwrap()
+        .limit(0, 2)
+        .unwrap()
+        .page(0, 10, &query_control)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[0].values()).unwrap(),
+        serde_json::json!([11, 22])
+    );
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[1].values()).unwrap(),
+        serde_json::json!([true, null])
+    );
+    assert!(matches!(
+        assemble(
+            &[inputs[0].clone(), RuntimeValue::List(Arc::from([]))],
+            &control
+        ),
+        Err(yss_node_kernel::KernelError::ShapeMismatch)
+    ));
+    let semantic_output = [KernelOutputSpec {
+        data_type: ValueType::DataFrame,
+        fields: Some(
+            [
+                KernelField {
+                    name: "category".into(),
+                    data_type: ValueType::Scalar(SemanticType::Categorical),
+                },
+                KernelField {
+                    name: "calendar".into(),
+                    data_type: ValueType::Scalar(SemanticType::Datetime),
+                },
+            ]
+            .into(),
+        ),
+    }];
+    let semantic_inputs = [
+        RuntimeValue::List(
+            [
+                RuntimeValue::String("b".into()),
+                RuntimeValue::String("a".into()),
+            ]
+            .into(),
+        ),
+        RuntimeValue::List(
+            [
+                RuntimeValue::String("2026-09-19T12:34:56+08:00".into()),
+                RuntimeValue::Null,
+            ]
+            .into(),
+        ),
+    ];
+    let semantic_table = registry
+        .execute(
+            &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
+            &KernelInvocation {
+                relations: &relations,
+                inputs: &semantic_inputs,
+                input_keys: &["series", "series"],
+                parameters: BTreeMap::new(),
+                outputs: &semantic_output,
+                control: &control,
+            },
+        )
+        .unwrap();
+    let RuntimeValue::Relation(table) = &semantic_table[0] else {
+        panic!("semantic columns must remain queryable");
+    };
+    let category = yss_tabular_arrow::column_semantic(table.schema().field(0)).unwrap();
+    assert_eq!(category.kind, SemanticType::Categorical);
+    assert_eq!(category.values.len(), 2);
+    let page = table.page(0, 10, &query_control).unwrap();
+    assert_eq!(
+        serde_json::to_value(page.data.columns()[0].values()).unwrap(),
+        serde_json::json!(["b", "a"])
+    );
+    let calendar = serde_json::to_value(page.data.columns()[1].values()).unwrap();
+    assert!(calendar[0].as_str().unwrap().contains("12:34:56"));
+    assert!(calendar[1].is_null());
+    let limited = KernelControl {
+        max_input_bytes: 1,
+        ..control
+    };
+    assert!(matches!(
+        assemble(&inputs, &limited),
+        Err(yss_node_kernel::KernelError::BudgetExceeded)
+    ));
+    assert!(
+        assemble(
+            &[
+                RuntimeValue::List(Arc::from([])),
+                RuntimeValue::List(Arc::from([]))
+            ],
+            &limited
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     use arrow::array::{BooleanArray, Int64Array, StringArray};
     use arrow::datatypes::{DataType, Field, Schema};
@@ -1222,6 +1463,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         ExecutionSessionId::new(uuid::Uuid::new_v4()),
         RuntimeGeneration::INITIAL,
         yss_node_kernel::KernelRegistry::default().into(),
+        yss_database_runtime::dataset_query_engine().unwrap(),
     );
     let resource = PlanResourceId::from_existing("data".into());
     let version = PlanResourceVersion::from_existing("7".into());
@@ -1362,8 +1604,10 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         .execute(
             &yss_node_kernel::KernelId::new("yssbi.value.convert".into()).unwrap(),
             &yss_node_kernel::KernelInvocation {
+                relations: &(yss_database_runtime::dataset_query_engine().unwrap()
+                    as std::sync::Arc<dyn yss_relational_contract::RelationFactory>),
                 inputs: &[input],
-                input_templates: &[None],
+                input_keys: &["input"],
                 parameters: BTreeMap::from([
                     (
                         yss_node_kernel::KernelParameterKey::new("target_type".into()).unwrap(),
@@ -1375,7 +1619,9 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("semantic_domain".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::Record(BTreeMap::new())),
+                        std::borrow::Cow::Owned(RuntimeValue::Record(std::sync::Arc::new(
+                            BTreeMap::new(),
+                        ))),
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("datetime_kind".into()).unwrap(),
@@ -1967,7 +2213,9 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         assert_eq!(page.columns[0].name.as_ref(), name);
         assert_eq!(
             page.values.as_ref(),
-            expected.map(|value| RuntimeValue::List(Box::new([RuntimeValue::Unsigned(value)])))
+            expected.map(|value| RuntimeValue::List(std::sync::Arc::from([
+                RuntimeValue::Unsigned(value)
+            ])))
         );
         assert!(page.has_more);
     }

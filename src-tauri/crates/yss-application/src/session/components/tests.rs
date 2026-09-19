@@ -141,6 +141,7 @@ fn kernels(revision: Option<u32>) -> KernelRegistryBuilder {
                 KernelId::new(ID.into()).unwrap(),
                 NonZeroU32::new(revision).unwrap(),
                 KernelContract::new(
+                    [yss_node_kernel::KernelInputSpec::fixed("input")],
                     [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
                     1..=1,
                 )
@@ -277,6 +278,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         session.execution().session_id(),
         session.runtime_generation(),
         Arc::new(updated),
+        yss_database_runtime::dataset_query_engine().unwrap(),
     );
     let revised_package = updated_runtime
         .prepare_graph_package(
@@ -311,6 +313,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         session.execution().session_id(),
         session.runtime_generation(),
         Arc::new(missing),
+        yss_database_runtime::dataset_query_engine().unwrap(),
     );
     assert!(matches!(
         missing_runtime.prepare_graph_package(
@@ -333,6 +336,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
 fn conflicting_registrations_and_node_kernel_contracts_are_rejected() {
     let mut builder = kernels(Some(1));
     let contract = KernelContract::new(
+        [yss_node_kernel::KernelInputSpec::fixed("input")],
         [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
         1..=1,
     )
@@ -347,8 +351,14 @@ fn conflicting_registrations_and_node_kernel_contracts_are_rejected() {
         Err(KernelRegistrationError::DuplicateKernel(_))
     ));
     for contract in [
-        KernelContract::new([], 1..=1).unwrap(),
         KernelContract::new(
+            [yss_node_kernel::KernelInputSpec::fixed("input")],
+            [],
+            1..=1,
+        )
+        .unwrap(),
+        KernelContract::new(
+            [yss_node_kernel::KernelInputSpec::fixed("input")],
             [yss_node_kernel::KernelParameterKey::new("step".into()).unwrap()],
             2..=2,
         )

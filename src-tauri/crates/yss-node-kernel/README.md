@@ -9,7 +9,15 @@
 
 ## 调用边界
 
-`KernelInvocation` 接收已求值输入、输入组、有序输出类型/字段、已解析参数及 `KernelControl`。参数可以借用现有 literal 和已授权的资源运行值，避免仅为构造调用就复制完整数据。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`。
+`KernelInvocation` 接收已求值输入、固定端口或重复组的局部键、有序输出类型/字段、已解析参数、`KernelControl` 和中立 `RelationFactory`。参数可以借用现有 literal 和已授权的资源运行值。内核返回按调用局部输出顺序排列的 `Vec<RuntimeValue>`；注册表在调用前检查输入布局，在返回后检查输出数量和外层载体，不重新推导 Graph 的元素语义。
+
+列表和记录通过不可变 `Arc` 共享。调度槽、下游输入和结果发布不再逐元素复制；统计拟合值和残差只在转换成运行值时分配一次，不先复制原数值向量。紧凑数值缓冲仍属于[后续评估](../../../TODO.md)，当前模型向量与通用运行值列表保持不同表示。
+
+DataFrame 常量和内存列组合统一通过调用方注入的 `RelationFactory` 进入共享查询引擎，后续选列、筛选、拆列和分页均使用 `RelationHandle`。`Record` 只承载配置和普通结构化值。字面量关系不声明数据集绑定，不能据此获得外部资源授权；组合仍检查实际数据集的会话、快照及执行环境。
+
+导入裸分类字面量时建立无序值域，已有显式值域和顺序级别继续保持不变；日期时间文本复用 Arrow 适配器的日历转换，去除时区时保留墙钟字段。
+
+`KernelControl::check_bytes/reserve` 统一执行预算检查和可失败的预留。统计内存列在转换前检查完整形状和总输入大小；GLS 辅助矩阵、密集工作区及两份输出使用合计准入估算，预测和转换循环周期性检查取消。估算不等同于进程 RSS 上限，也不承诺中断正在执行的矩阵分解。
 
 输出契约通过 `ValueType` 引用七种 Semantic，数值端口统一为 Numeric。四则运算根据实际标量或
 Arrow 字段的 Physical 选择整数/浮点表示，除法使用浮点表示，有损提升会被拒绝。
@@ -29,7 +37,7 @@ Graph 的广播说明不提前改写标量值。数值、转换、比较和关�
 
 Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocation.rs) 负责从计划生成这些信息。它在准备好的资源绑定中解析资源参数，保留图端口地址、Schema 血缘和结果类别，并将返回值映射到对应输出。内核不接收 `GraphDocument`、`PlanOutputRef`、项目状态或资源授权服务。
 
-`KernelError` 只表达计算错误、取消和超时。Execution 的 `OperationExecutionError` 负责图来源与阶段，并继续投影已有 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
+`KernelError` 表达维度、参数、行对齐、预算、调用契约、科学计算、取消和超时等稳定原因，不携带图地址。Execution 的 `OperationExecutionError` 补充图来源与阶段，IPC 和前端保留对应 `RunFailure` 错误码。ResultStore、结果引用、租约、保存和运行生命周期仍属于其原所有者。
 
 ## 模块
 
@@ -48,14 +56,14 @@ Execution 的 [kernel_invocation.rs](../yss-graph-execution/src/kernel_invocatio
 
 ## 注册与扩展
 
-`KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明实际参数键集合及输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
+`KernelRegistryBuilder::register` 接收 KernelId、非零实现 revision、KernelContract 和执行函数。KernelContract 声明有序输入键及数量范围、实际参数键集合和输出数量范围；它不复制 Catalog 的分类、本地化文本或完整配置模型。
 
-`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、参数键和输出数量。尚未接入的分布采样等节点仍返回缺少执行能力的诊断。
+`with_builtins` 组合已有内置实现；Application 可以在冻结前加入扩展。冻结后所有调用使用同一能力指纹。指纹继续采用 `yssbi.kernel-registry.v1` 编码，覆盖排序后的 ID、revision、输入布局、参数键和输出数量。尚未接入的分布采样等节点仍返回缺少执行能力的诊断。
 
 新增节点时在对应方法族模块实现适配，再加入内置装配或由应用 provider 注册；实际算法放回 SCI 或相应数据所有者。执行函数只使用已经解析的类型和资源，不重新求解图类型，也不自行读取项目资源。
 
-实现行为变化需要递增 revision。参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作；内置表中保留的同名身份不改变其 Graph 语义。
+实现行为变化需要递增 revision。输入布局、参数或输出形状变化需要同步节点声明和消费者，并复核解析与计划缓存的能力身份。透明重路由不产生执行操作，也不注册无效的同名内核。
 
 ## 验证
 
-已有内置指纹作为缓存契约验证；独立调用测试检查拆列输出顺序。Application 的扩展注册、配置、数值执行和结果查询测试继续覆盖跨边界行为。运行命令与范围选择见[本地工作流](../../../docs/development/LOCAL_WORKFLOW.md)。
+独立调用测试检查输入顺序、输出载体和资源控制；Application 集成测试检查内存表的组合、拆列顺序、关系计算与分页。扩展注册、配置、数值执行和结果查询测试继续覆盖跨边界行为。运行命令与范围选择见[本地工作流](../../../docs/development/LOCAL_WORKFLOW.md)。

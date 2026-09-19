@@ -1483,6 +1483,23 @@ fn numeric_materialization_enforces_missing_values_cancellation_and_memory_budge
         runtime.numeric_columns(&series, &control()).unwrap(),
         vec![vec![1., 3.]]
     );
+    for (integer, exact) in [
+        (9_007_199_254_740_992i64, true),
+        (9_007_199_254_740_993, false),
+    ] {
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("x", DataType::Int64, false)])),
+            vec![Arc::new(Int64Array::from(vec![integer]))],
+        )
+        .unwrap();
+        let source = runtime.batch_relation(binding(), batch).unwrap();
+        let converted = runtime.numeric_columns(&[source.select_series("x").unwrap()], &control());
+        if exact {
+            assert_eq!(converted.unwrap(), vec![vec![integer as f64]]);
+        } else {
+            assert_eq!(converted, Err(RelationError::InvalidInput));
+        }
+    }
 }
 
 #[test]

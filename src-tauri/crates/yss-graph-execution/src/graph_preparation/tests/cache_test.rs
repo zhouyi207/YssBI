@@ -38,6 +38,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         ExecutionSessionId::new(uuid::Uuid::nil()),
         RuntimeGeneration::INITIAL,
         Arc::new(yss_node_kernel::KernelRegistry::default()),
+        crate::test_relations(),
     );
     let plan_basis = PlanBasis::new(
         PlanProjectSessionId::from_existing("cache-session".into()),
@@ -84,6 +85,10 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
                 &[],
                 "en-US",
             );
+            assert!(std::ptr::eq(
+                analysis.semantic_snapshot(),
+                analysis.clone().semantic_snapshot()
+            ));
             let semantics = analysis
                 .semantic_snapshot()
                 .clone()

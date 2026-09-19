@@ -80,22 +80,13 @@ pub(crate) fn execute(
     for input in inputs {
         match input {
             RuntimeValue::List(values) if values.len() == rows => {}
-            RuntimeValue::List(_) => return Err(KernelError::InvalidNumericInput),
+            RuntimeValue::List(_) => return Err(KernelError::ShapeMismatch),
             value => {
                 numeric_input(Some(value))?;
             }
         }
     }
-    let bytes = rows
-        .checked_mul(std::mem::size_of::<RuntimeValue>())
-        .ok_or(KernelError::Failed)?;
-    if bytes > invocation.control.max_input_bytes {
-        return Err(KernelError::Failed);
-    }
-    let mut result = Vec::new();
-    result
-        .try_reserve_exact(rows)
-        .map_err(|_| KernelError::Failed)?;
+    let mut result = invocation.control.reserve(rows)?;
     for row in 0..rows {
         if row % 1024 == 0 {
             invocation.check_control()?;
@@ -107,7 +98,7 @@ pub(crate) fn execute(
         result.push(scalar(operation, values, representation)?);
     }
     invocation.check_control()?;
-    Ok(RuntimeValue::List(result.into_boxed_slice()))
+    Ok(RuntimeValue::List(result.into()))
 }
 
 fn integer(value: Option<&RuntimeValue>) -> Result<i64, KernelError> {

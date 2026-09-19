@@ -1,6 +1,7 @@
 //! Runtime values shared by kernels and their callers, independent of graph identities.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -16,8 +17,8 @@ pub enum RuntimeValue {
     Unsigned(u64),
     Decimal(f64),
     String(Box<str>),
-    List(Box<[RuntimeValue]>),
-    Record(BTreeMap<Box<str>, RuntimeValue>),
+    List(Arc<[RuntimeValue]>),
+    Record(Arc<BTreeMap<Box<str>, RuntimeValue>>),
     Resource(Box<str>),
     Relation(yss_relational_contract::RelationHandle),
     Series(yss_relational_contract::SeriesHandle),
@@ -44,6 +45,19 @@ pub enum RuntimeValueError {
     NonFinite,
 }
 
+impl From<TabularScalar> for RuntimeValue {
+    fn from(value: TabularScalar) -> Self {
+        match value {
+            TabularScalar::Null => Self::Null,
+            TabularScalar::Bool(value) => Self::Bool(value),
+            TabularScalar::Integer(value) => Self::Integer(value),
+            TabularScalar::Unsigned(value) => Self::Unsigned(value),
+            TabularScalar::Decimal(value) => Self::Decimal(value.as_f64()),
+            TabularScalar::String(value) => Self::String(value),
+        }
+    }
+}
+
 impl TryFrom<&DataValue> for RuntimeValue {
     type Error = RuntimeValueError;
 
@@ -59,12 +73,12 @@ impl TryFrom<&DataValue> for RuntimeValue {
                 .iter()
                 .map(Self::try_from)
                 .collect::<Result<Vec<_>, _>>()
-                .map(|values| Self::List(values.into_boxed_slice())),
+                .map(|values| Self::List(values.into())),
             DataValue::Object(values) => values
                 .iter()
                 .map(|(key, value)| Ok((key.clone().into_boxed_str(), Self::try_from(value)?)))
                 .collect::<Result<BTreeMap<_, _>, RuntimeValueError>>()
-                .map(Self::Record),
+                .map(|values| Self::Record(Arc::new(values))),
             DataValue::DataFrame(id) => Ok(Self::Resource(id.clone().into_boxed_str())),
             DataValue::DataSeries(series) => Ok(Self::Resource(series.id.clone().into_boxed_str())),
             DataValue::Struct { handle_id, .. } => {
@@ -75,6 +89,58 @@ impl TryFrom<&DataValue> for RuntimeValue {
 }
 
 impl RuntimeValue {
+    /// Validate the outer carrier without rescanning immutable column buffers. Element semantics
+    /// remain the responsibility of Graph's resolved types and the producing kernel/adapter.
+    pub(crate) fn matches_carrier(&self, expected: &yss_data_contract::ValueType) -> bool {
+        use yss_data_contract::{SemanticType, ValueType};
+        match expected {
+            ValueType::Any => true,
+            ValueType::OneOf(types) => types.iter().any(|ty| self.matches_carrier(ty)),
+            ValueType::Scalar(semantic) => {
+                if let Some(metadata) = self.metadata() {
+                    return metadata.semantic.kind == *semantic
+                        && !matches!(self.unannotated(), Self::List(_));
+                }
+                match (semantic, self.unannotated()) {
+                    (_, Self::Null) => true,
+                    (
+                        SemanticType::Numeric,
+                        Self::Integer(_) | Self::Unsigned(_) | Self::Decimal(_),
+                    ) => true,
+                    (SemanticType::Binary, Self::Bool(_)) => true,
+                    (SemanticType::Text, Self::String(_)) => true,
+                    (
+                        SemanticType::Categorical
+                        | SemanticType::Ordinal
+                        | SemanticType::Datetime
+                        | SemanticType::Identifier,
+                        value,
+                    ) => {
+                        matches!(
+                            value,
+                            Self::Null
+                                | Self::Bool(_)
+                                | Self::Integer(_)
+                                | Self::Unsigned(_)
+                                | Self::String(_)
+                        ) || matches!(value, Self::Decimal(number) if number.is_finite())
+                    }
+                    _ => false,
+                }
+            }
+            ValueType::DataFrame => matches!(self, Self::Relation(_)),
+            ValueType::DataSeries(_) => {
+                matches!(self.unannotated(), Self::List(_) | Self::Series(_))
+            }
+            ValueType::Array(_) => matches!(self.unannotated(), Self::List(_)),
+            ValueType::Object => matches!(self, Self::Record(_)),
+            ValueType::Struct(_) => matches!(
+                self,
+                Self::LinearRegression(_) | Self::Record(_) | Self::Resource(_)
+            ),
+        }
+    }
+
     /// Retain conversion metadata when primitive carriers cannot express the meaning.
     /// An annotation contains only a scalar or flat scalar list, never another annotation or a handle.
     pub fn with_metadata(

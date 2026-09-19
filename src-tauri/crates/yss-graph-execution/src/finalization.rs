@@ -9,6 +9,7 @@ use crate::plan::{
     ResourceKind,
 };
 use crate::result::{ResultId, ResultProvenance, StoredResult};
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct ReadyPinResult {
@@ -34,7 +35,7 @@ impl ReadyPinResult {
 #[derive(Debug, PartialEq)]
 pub struct ReadyResult {
     result_id: ResultId,
-    value: StoredResult,
+    value: Arc<StoredResult>,
     pin: ReadyPinResult,
 }
 
@@ -47,7 +48,7 @@ impl ReadyResult {
     ) -> Self {
         Self {
             result_id,
-            value: value.with_category(category),
+            value: Arc::new(value.with_category(category)),
             pin,
         }
     }
@@ -56,7 +57,7 @@ impl ReadyResult {
         self.result_id
     }
 
-    pub fn value(&self) -> &StoredResult {
+    pub fn value(&self) -> &Arc<StoredResult> {
         &self.value
     }
 

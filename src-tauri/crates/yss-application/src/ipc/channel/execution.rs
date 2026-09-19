@@ -46,6 +46,13 @@ fn run_failure_to_transport(
     use yss_graph_execution::error::{RunFailureCode, RunPhase};
     RunErrorOutcomeDto {
         code: match failure.code {
+            RunFailureCode::ShapeMismatch => "shapeMismatch",
+            RunFailureCode::InvalidParameter => "invalidParameter",
+            RunFailureCode::UnalignedSeries => "unalignedSeries",
+            RunFailureCode::BudgetExceeded => "budgetExceeded",
+            RunFailureCode::InputLayoutMismatch => "inputLayoutMismatch",
+            RunFailureCode::OutputContractMismatch => "outputContractMismatch",
+            RunFailureCode::ScientificFailure => "scientificFailure",
             RunFailureCode::KernelFailed => "kernelFailed",
             RunFailureCode::KernelNotFound => "kernelNotFound",
             RunFailureCode::InvalidNumericInput => "invalidNumericInput",

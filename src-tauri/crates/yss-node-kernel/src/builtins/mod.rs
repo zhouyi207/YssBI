@@ -20,7 +20,7 @@ enum BuiltinKernel {
     Comparison(yss_relational_contract::ComparisonOperation),
     WholeEqual,
     Convert,
-    Identity,
+    Observe,
 }
 
 pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilder) {
@@ -218,12 +218,12 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             ],
             1..=1,
         ),
-        ("yssbi.debug.view", Identity, &[], 0..=0),
-        ("yssbi.core.reroute", Identity, &[], 1..=1),
+        ("yssbi.debug.view", Observe, &[], 0..=0),
     ];
     for (id, kind, parameters, outputs) in entries {
         let kind = *kind;
         let contract = crate::KernelContract::new(
+            input_contract(kind),
             parameters.iter().map(|field| {
                 crate::KernelParameterKey::new((*field).into())
                     .expect("built-in parameter identity")
@@ -235,12 +235,12 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
-                    Comparison(_) => 4,
-                    Boolean(_) => 2,
-                    Statistical(LinearFit | LinearRegressionSummary | LinearPredict) => 3,
-                    Convert => 5,
-                    Numeric(_) | Relational(relational::RelationalKernel::Filter) => 2,
-                    _ => 1,
+                    Comparison(_) => 5,
+                    Boolean(_) => 3,
+                    Statistical(LinearFit | LinearRegressionSummary | LinearPredict) => 4,
+                    Convert => 6,
+                    Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,
+                    _ => 2,
                 })
                 .expect("built-in implementation revision"),
                 contract,
@@ -250,28 +250,56 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
     }
 }
 
+fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
+    use crate::KernelInputSpec as Input;
+    use BuiltinKernel::*;
+    use relational::RelationalKernel as Table;
+    use statistics::StatisticalKernel as Stats;
+    match kind {
+        Statistical(Stats::LinearFit) => vec![
+            Input::fixed("response"),
+            Input::repeated("predictors", 1..=usize::MAX),
+            Input::repeated("weights", 0..=1),
+            Input::repeated("sigma", 0..=usize::MAX),
+        ],
+        Statistical(Stats::LinearPredict) => vec![
+            Input::fixed("model"),
+            Input::repeated("predictors", 1..=usize::MAX),
+        ],
+        Statistical(Stats::LinearRegressionSummary) => vec![Input::fixed("model")],
+        Relational(Table::Source) | Constant | FixedNumber(_) => vec![],
+        Relational(Table::Assemble) => vec![Input::repeated("series", 1..=usize::MAX)],
+        Relational(Table::ConcatRows | Table::ConcatColumns) => {
+            vec![Input::repeated("frames", 2..=usize::MAX)]
+        }
+        Relational(Table::Join) => vec![Input::fixed("left"), Input::fixed("right")],
+        Relational(Table::Series) | Decompose => vec![Input::fixed("dataframe")],
+        Relational(_) => vec![Input::fixed("source")],
+        Numeric(NumericOperation::Add) => vec![Input::repeated("operands", 2..=usize::MAX)],
+        Numeric(op) if op.is_unary() => vec![Input::fixed("input")],
+        Boolean(yss_relational_contract::BooleanOperation::Not) | Convert => {
+            vec![Input::fixed("input")]
+        }
+        Numeric(_) | Boolean(_) | Comparison(_) | WholeEqual => {
+            vec![Input::fixed("left"), Input::fixed("right")]
+        }
+        Observe => vec![Input::fixed("data")],
+    }
+}
+
 fn execute_kernel(
     kind: BuiltinKernel,
     invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let inputs = invocation.inputs;
-    let outputs = invocation.outputs;
     let value = match kind {
         BuiltinKernel::Statistical(kind) => {
             return statistics::execute(kind, invocation);
         }
         BuiltinKernel::Relational(kind) => relational::execute(kind, invocation),
         BuiltinKernel::Decompose => return relational::decompose(invocation),
-        BuiltinKernel::Constant => invocation
-            .parameter("value")
-            .cloned()
-            .ok_or(KernelError::Failed),
-        BuiltinKernel::FixedNumber(value) => {
-            if !inputs.is_empty() {
-                return Err(KernelError::Failed);
-            }
-            Ok(RuntimeValue::Decimal(value))
-        }
+        BuiltinKernel::Constant => relational::constant(invocation),
+        BuiltinKernel::FixedNumber(value) => Ok(RuntimeValue::Decimal(value)),
         BuiltinKernel::Numeric(operation) => numeric::execute(operation, invocation),
         BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
@@ -292,12 +320,8 @@ fn execute_kernel(
             Ok(RuntimeValue::Bool(left.semantic_eq(right)))
         }
         BuiltinKernel::Convert => conversion::execute(invocation),
-        BuiltinKernel::Identity if outputs.is_empty() => return Ok(Vec::new()),
-        BuiltinKernel::Identity => inputs.first().cloned().ok_or(KernelError::Failed),
+        BuiltinKernel::Observe => return Ok(Vec::new()),
     }?;
-    let [_output] = outputs else {
-        return Err(KernelError::Failed);
-    };
     Ok(vec![value])
 }
 

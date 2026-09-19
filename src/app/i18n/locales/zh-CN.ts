@@ -283,6 +283,13 @@ export const zhCN = {
     code: "错误代码：{{code}}",
     incident: "诊断编号：{{id}}",
     causes: {
+      shapeMismatch: "输入列的长度或矩阵维度不匹配。请检查该节点的输入。",
+      invalidParameter: "节点参数无效。请检查方法及其配置。",
+      unalignedSeries: "输入列的行对齐关系不同。请从同一数据帧选择参与运算的列。",
+      budgetExceeded: "本次计算所需内存超过预算。请减少输入行数或列数。",
+      inputLayoutMismatch: "节点输入布局与计算实现不一致。请使用诊断编号查看详情。",
+      outputContractMismatch: "节点计算返回了不符合声明的输出。请使用诊断编号查看详情。",
+      scientificFailure: "统计计算失败。请检查矩阵条件及模型是否可估计。",
       divisionByZero: "除数为 0。请检查除法节点的右侧输入及其上游值。",
       nonFiniteResult: "计算产生了非有限结果（NaN 或无穷大）。请检查输入范围和数值溢出。",
       invalidNumericInput: "数值运算收到不兼容的输入类型。请检查该节点的输入及上游常量。",

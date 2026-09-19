@@ -405,7 +405,7 @@ impl DatasetQuery {
         crate::relation::DataFusionRelation::handle(
             frame,
             schema,
-            self.binding.clone(),
+            Arc::from([self.binding.clone()]),
             self.lease.clone(),
             self.engine.clone(),
             self.ordered_single_file,

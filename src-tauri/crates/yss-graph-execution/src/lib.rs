@@ -15,3 +15,21 @@ pub mod result;
 pub mod result_store;
 pub mod run_registry;
 pub mod state;
+
+#[cfg(test)]
+
+fn test_relations() -> std::sync::Arc<dyn yss_relational_contract::RelationFactory> {
+    struct UnusedRelations;
+    impl yss_relational_contract::RelationFactory for UnusedRelations {
+        fn materialize(
+            self: std::sync::Arc<Self>,
+            _: &yss_tabular_contract::TabularSnapshot,
+            _: &[Option<yss_data_contract::ConversionMetadata>],
+            _: &yss_relational_contract::RelationControl,
+        ) -> Result<yss_relational_contract::RelationHandle, yss_relational_contract::RelationError>
+        {
+            panic!("this unit test must not materialize a relation")
+        }
+    }
+    std::sync::Arc::new(UnusedRelations)
+}

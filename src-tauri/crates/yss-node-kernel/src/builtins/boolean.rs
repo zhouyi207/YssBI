@@ -68,22 +68,13 @@ pub(super) fn execute(
     for input in inputs {
         match input {
             RuntimeValue::List(values) if values.len() == rows => {}
-            RuntimeValue::List(_) => return Err(KernelError::Failed),
+            RuntimeValue::List(_) => return Err(KernelError::ShapeMismatch),
             value => {
                 scalar(value)?;
             }
         }
     }
-    if rows
-        .checked_mul(std::mem::size_of::<RuntimeValue>())
-        .is_none_or(|bytes| bytes > invocation.control.max_input_bytes)
-    {
-        return Err(KernelError::Failed);
-    }
-    let mut output = Vec::new();
-    output
-        .try_reserve_exact(rows)
-        .map_err(|_| KernelError::Failed)?;
+    let mut output = invocation.control.reserve(rows)?;
     for row in 0..rows {
         if row % 1024 == 0 {
             invocation.check_control()?;
@@ -97,5 +88,5 @@ pub(super) fn execute(
         output.push(evaluate(values)?);
     }
     invocation.check_control()?;
-    Ok(RuntimeValue::List(output.into_boxed_slice()))
+    Ok(RuntimeValue::List(output.into()))
 }

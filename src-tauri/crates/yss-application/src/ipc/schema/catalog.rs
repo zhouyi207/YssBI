@@ -373,6 +373,7 @@ mod tests {
             execution_session_id,
             RuntimeGeneration::from_existing(1),
             yss_node_kernel::KernelRegistry::default().into(),
+            yss_database_runtime::dataset_query_engine().unwrap(),
         ));
         let session = Arc::new(ApplicationSession::new_for_test(
             ApplicationSessionEpoch::from_existing(1),

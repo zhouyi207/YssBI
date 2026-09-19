@@ -366,6 +366,7 @@ mod tests {
             ExecutionSessionId::new(uuid::Uuid::nil()),
             RuntimeGeneration::INITIAL,
             yss_node_kernel::KernelRegistry::default().into(),
+            crate::test_relations(),
         )
         .prepare_package(package, RuntimeGeneration::INITIAL)
         .expect("test package is valid")

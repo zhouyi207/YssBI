@@ -527,7 +527,7 @@ impl ResultStore {
                 .entry(id)
                 .or_insert_with(|| ResultEntry {
                     snapshot: StoredResultSnapshot::new(
-                        Arc::new(result.value().clone()),
+                        Arc::clone(result.value()),
                         result.output().clone(),
                         provenance.clone(),
                     ),
@@ -1197,6 +1197,41 @@ mod tests {
                 ),
             ),
         )
+    }
+
+    #[test]
+    fn publication_reuses_the_prepared_result_and_immutable_nested_buffers() {
+        use yss_node_kernel::RuntimeValue;
+        let numbers: Arc<[_]> = (0..4096).map(RuntimeValue::Integer).collect();
+        let fields = Arc::new(BTreeMap::from([(
+            "values".into(),
+            RuntimeValue::List(numbers.clone()),
+        )]));
+        let original = RuntimeValue::Record(fields.clone());
+        let RuntimeValue::Record(copy) = original.clone() else {
+            unreachable!()
+        };
+        assert!(Arc::ptr_eq(&fields, &copy));
+        let run = RunId::from_existing(1);
+        let ready = ReadyResult::from_scheduler(
+            ResultId::from_existing(1),
+            StoredResult::new(original),
+            ResultCategory::Value,
+            ReadyPinResult::new(output(), result(1, run).pin().provenance().clone()),
+        );
+        let store = ResultStore::new();
+        store.begin_run(run, &[output()], None);
+        assert!(store.publish(std::slice::from_ref(&ready), &[]));
+        let snapshot = store.get(ready.result_id()).unwrap();
+        assert!(Arc::ptr_eq(ready.value(), snapshot.value()));
+        let RuntimeValue::Record(stored) = snapshot.value().value() else {
+            unreachable!()
+        };
+        assert!(Arc::ptr_eq(&fields, stored));
+        let RuntimeValue::List(stored) = &stored["values"] else {
+            unreachable!()
+        };
+        assert!(Arc::ptr_eq(&numbers, stored));
     }
 
     #[test]

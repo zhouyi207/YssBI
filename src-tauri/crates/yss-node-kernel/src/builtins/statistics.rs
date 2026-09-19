@@ -5,7 +5,7 @@ use std::sync::Arc;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 use yss_sci_contract::scientific::{
     LinearRegressionMethod, LinearRegressionRequest, ScientificComputationError,
-    ScientificExecutionControl,
+    ScientificExecutionControl, ScientificInputViolation,
 };
 
 #[derive(Clone, Copy)]
@@ -34,43 +34,57 @@ pub(crate) fn execute(
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
                 return Err(KernelError::InvalidNumericInput);
             };
-            let predictors = columns(&group(invocation, "predictors"), invocation)?;
+            let predictors = columns(&group(invocation, "predictors"), invocation, 0)?;
             if predictors.is_empty()
                 || predictors.len() + usize::from(model.constant) != model.coefficients.len()
             {
                 return Err(KernelError::InvalidNumericInput);
             }
             let n = predictors[0].len();
-            let mut prediction = vec![
-                if model.constant {
+            invocation.control.check_bytes(
+                n.checked_mul(predictors.len())
+                    .and_then(|v| v.checked_mul(size_of::<f64>()))
+                    .and_then(|v| v.checked_add(n.checked_mul(size_of::<RuntimeValue>())?)),
+            )?;
+            let mut prediction = invocation.control.reserve(n)?;
+            for row in 0..n {
+                if row % 1024 == 0 {
+                    invocation.check_control()?;
+                }
+                let mut value = if model.constant {
                     model.coefficients[0]
                 } else {
                     0.0
                 };
-                n
-            ];
-            for (column, coefficient) in predictors
-                .iter()
-                .zip(&model.coefficients[usize::from(model.constant)..])
-            {
-                for (value, x) in prediction.iter_mut().zip(column) {
-                    *value += coefficient * x;
+                for (index, (column, coefficient)) in predictors
+                    .iter()
+                    .zip(&model.coefficients[usize::from(model.constant)..])
+                    .enumerate()
+                {
+                    if index % 1024 == 0 {
+                        invocation.check_control()?;
+                    }
+                    value += coefficient * column[row];
                 }
+                if !value.is_finite() {
+                    return Err(KernelError::NonFiniteResult);
+                }
+                prediction.push(RuntimeValue::Decimal(value));
             }
-            vec![numeric_list(prediction)?]
+            vec![RuntimeValue::List(prediction.into())]
         }
         StatisticalKernel::LinearFit => {
             let Some(RuntimeValue::Record(configuration)) = invocation.parameter("configuration")
             else {
-                return Err(KernelError::InvalidNumericInput);
+                return Err(KernelError::InvalidParameter);
             };
             let constant = match configuration.get("constant") {
                 Some(RuntimeValue::Bool(value)) => *value,
-                _ => return Err(KernelError::InvalidNumericInput),
+                _ => return Err(KernelError::InvalidParameter),
             };
             let method = match configuration.get("method") {
                 Some(RuntimeValue::String(value)) => value.as_ref(),
-                _ => return Err(KernelError::InvalidNumericInput),
+                _ => return Err(KernelError::InvalidParameter),
             };
             let weights = group(invocation, "weights");
             let sigma = group(invocation, "sigma");
@@ -79,7 +93,7 @@ pub(crate) fn execute(
                 || (method == "GLS" && sigma.is_empty())
                 || (method != "GLS" && !sigma.is_empty())
             {
-                return Err(KernelError::InvalidNumericInput);
+                return Err(KernelError::InvalidParameter);
             }
             let response = invocation
                 .inputs
@@ -88,32 +102,37 @@ pub(crate) fn execute(
             let mut inputs = vec![response];
             inputs.extend(group(invocation, "predictors"));
             inputs.extend(weights);
-            let mut prepared = columns(&inputs, invocation)?;
+            let mut prepared = columns(&inputs, invocation, 0)?;
+            let n = prepared[0].len();
+            check_fit_workspace(
+                n,
+                group(invocation, "predictors").len(),
+                constant,
+                method,
+                invocation,
+            )?;
             let method = match method {
                 "OLS" => LinearRegressionMethod::Ols,
                 "WLS" => LinearRegressionMethod::Wls {
                     weights: prepared.pop().ok_or(KernelError::InvalidNumericInput)?,
                 },
                 "GLS" => {
-                    let n = prepared[0].len();
-                    if sigma.len() != n
-                        || n.checked_mul(n)
-                            .and_then(|v| v.checked_mul(8))
-                            .is_none_or(|bytes| bytes > invocation.control.max_input_bytes)
-                    {
-                        return Err(KernelError::InvalidNumericInput);
+                    if sigma.len() != n {
+                        return Err(KernelError::ShapeMismatch);
                     }
-                    let matrix = columns(&sigma, invocation)?;
+                    let retained = n
+                        .checked_mul(prepared.len())
+                        .and_then(|v| v.checked_mul(size_of::<f64>()))
+                        .ok_or(KernelError::BudgetExceeded)?;
+                    let matrix = columns(&sigma, invocation, retained)?;
                     if matrix.iter().any(|column| column.len() != n) {
-                        return Err(KernelError::InvalidNumericInput);
+                        return Err(KernelError::ShapeMismatch);
                     }
-                    LinearRegressionMethod::Gls {
-                        sigma: (0..n)
-                            .map(|i| matrix.iter().map(|column| column[i]).collect())
-                            .collect(),
-                    }
+                    // A valid covariance matrix is symmetric. Its columns already equal its
+                    // rows; SCI validates symmetry, so no second n-by-n transpose is needed.
+                    LinearRegressionMethod::Gls { sigma: matrix }
                 }
-                _ => return Err(KernelError::InvalidNumericInput),
+                _ => return Err(KernelError::InvalidParameter),
             };
             let response = prepared.remove(0);
             let result = yss_sci_runtime::linear_regression(
@@ -134,11 +153,15 @@ pub(crate) fn execute(
             .map_err(|error| match error {
                 ScientificComputationError::Cancelled => KernelError::Cancelled,
                 ScientificComputationError::DeadlineExceeded => KernelError::DeadlineExceeded,
-                ScientificComputationError::InvalidInput { .. } => KernelError::InvalidNumericInput,
-                _ => KernelError::Failed,
+                ScientificComputationError::InvalidInput { violation } => match violation {
+                    ScientificInputViolation::ShapeMismatch => KernelError::ShapeMismatch,
+                    ScientificInputViolation::ParameterOutOfRange => KernelError::InvalidParameter,
+                    _ => KernelError::InvalidNumericInput,
+                },
+                ScientificComputationError::ComputationFailed => KernelError::ScientificFailure,
             })?;
-            let fitted = numeric_list(result.fitted.clone())?;
-            let residuals = numeric_list(result.residuals.clone())?;
+            let fitted = numeric_list(&result.fitted, invocation)?;
+            let residuals = numeric_list(&result.residuals, invocation)?;
             vec![
                 RuntimeValue::LinearRegression(Arc::new(result)),
                 fitted,
@@ -147,66 +170,114 @@ pub(crate) fn execute(
         }
     };
     invocation.check_control()?;
-    if values.len() != invocation.outputs.len() {
-        return Err(KernelError::Failed);
-    }
     Ok(values)
 }
 
 fn group<'a>(invocation: &'a KernelInvocation<'_>, name: &str) -> Vec<&'a RuntimeValue> {
     invocation
-        .input_templates
+        .input_keys
         .iter()
         .zip(invocation.inputs)
-        .filter_map(|(group, value)| (*group == Some(name)).then_some(value))
+        .filter_map(|(group, value)| (*group == name).then_some(value))
         .collect()
 }
 
 fn columns(
     values: &[&RuntimeValue],
     invocation: &KernelInvocation<'_>,
+    retained_bytes: usize,
 ) -> Result<Vec<Vec<f64>>, KernelError> {
-    let columns = if values
-        .first()
-        .is_some_and(|value| matches!(value, RuntimeValue::Series(_)))
-    {
+    invocation.control.check_bytes(Some(retained_bytes))?;
+    if values.is_empty() {
+        return Err(KernelError::InvalidNumericInput);
+    }
+    if matches!(values[0], RuntimeValue::Series(_)) {
         let series = values
             .iter()
             .map(|value| match value {
                 RuntimeValue::Series(series) => Ok(series.clone()),
-                _ => Err(KernelError::InvalidNumericInput),
+                _ => Err(KernelError::UnalignedSeries),
             })
             .collect::<Result<Vec<_>, _>>()?;
-        super::relational::numeric_columns(&series, invocation)?
-    } else {
-        values
-            .iter()
-            .map(|value| numeric_series(value))
-            .collect::<Result<Vec<_>, _>>()?
-    };
-    let n = columns.first().map_or(0, Vec::len);
-    if columns
-        .iter()
-        .any(|column| column.len() != n || column.iter().any(|value| !value.is_finite()))
-        || n.checked_mul(columns.len())
-            .and_then(|v| v.checked_mul(8))
-            .is_none_or(|bytes| bytes > invocation.control.max_input_bytes)
-    {
-        return Err(KernelError::InvalidNumericInput);
+        let mut control = invocation.relation_control();
+        control.max_input_bytes -= retained_bytes;
+        return series[0]
+            .relation()
+            .numeric_columns(&series, &control)
+            .map_err(super::relational::kernel_error);
+    }
+    let mut rows = None;
+    for value in values {
+        let RuntimeValue::List(column) = value else {
+            return Err(KernelError::InvalidNumericInput);
+        };
+        if rows.is_some_and(|rows| rows != column.len()) {
+            return Err(KernelError::ShapeMismatch);
+        }
+        rows = Some(column.len());
+    }
+    let rows = rows.unwrap_or(0);
+    invocation.control.check_bytes(
+        rows.checked_mul(values.len())
+            .and_then(|v| v.checked_mul(size_of::<f64>()))
+            .and_then(|v| v.checked_add(retained_bytes)),
+    )?;
+    let mut columns = Vec::with_capacity(values.len());
+    for value in values {
+        let RuntimeValue::List(values) = value else {
+            unreachable!()
+        };
+        let mut column = invocation.control.reserve(rows)?;
+        for (index, value) in values.iter().enumerate() {
+            if index % 1024 == 0 {
+                invocation.check_control()?;
+            }
+            column.push(numeric_input(Some(value))?);
+        }
+        columns.push(column);
     }
     Ok(columns)
+}
+
+/// Conservative admission estimate for the dense fit, retained model and both materialized
+/// outputs. The linear algebra library has its own opaque workspace, so this is not an RSS cap.
+fn check_fit_workspace(
+    rows: usize,
+    predictors: usize,
+    constant: bool,
+    method: &str,
+    invocation: &KernelInvocation<'_>,
+) -> Result<(), KernelError> {
+    let bytes = (|| {
+        let parameters = predictors.checked_add(usize::from(constant))?;
+        let design = rows.checked_mul(parameters)?.checked_mul(6)?;
+        let covariance = parameters.checked_mul(parameters)?.checked_mul(8)?;
+        let vectors = rows.checked_mul(8)?;
+        let gls = if method == "GLS" {
+            rows.checked_mul(rows)?.checked_mul(4)?
+        } else {
+            0
+        };
+        let numeric = design
+            .checked_add(covariance)?
+            .checked_add(vectors)?
+            .checked_add(gls)?
+            .checked_mul(size_of::<f64>())?;
+        numeric.checked_add(rows.checked_mul(2 * size_of::<RuntimeValue>())?)
+    })();
+    invocation.control.check_bytes(bytes).map(|_| ())
 }
 
 fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance, KernelError> {
     let integer = |key: &str| match values.get(key) {
         Some(RuntimeValue::Integer(value)) => {
-            usize::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)
+            usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)
         }
-        _ => Err(KernelError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidParameter),
     };
     let string = |key: &str| match values.get(key) {
         Some(RuntimeValue::String(value)) => Ok(value.clone()),
-        _ => Err(KernelError::InvalidNumericInput),
+        _ => Err(KernelError::InvalidParameter),
     };
     Ok(match string("covariance")?.as_ref() {
         "nonrobust" => OlsCovariance::NonRobust,
@@ -217,45 +288,40 @@ fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance
         "fixed scale" => OlsCovariance::FixedScale {
             scale: match values.get("scale") {
                 // Configuration fields also accept the protocol's decimal JSON spelling.
-                Some(RuntimeValue::String(value)) => value
-                    .parse()
-                    .map_err(|_| KernelError::InvalidNumericInput)?,
+                Some(RuntimeValue::String(value)) => {
+                    value.parse().map_err(|_| KernelError::InvalidParameter)?
+                }
                 value => numeric_input(value)?,
             },
         },
         "HAC" => OlsCovariance::Hac {
             kernel: string("kernel")?.into_string(),
             bandwidth: Some(
-                i64::try_from(integer("bandwidth")?)
-                    .map_err(|_| KernelError::InvalidNumericInput)?,
+                i64::try_from(integer("bandwidth")?).map_err(|_| KernelError::InvalidParameter)?,
             ),
         },
         "newey" => OlsCovariance::Newey {
-            lag: Some(
-                i64::try_from(integer("lag")?).map_err(|_| KernelError::InvalidNumericInput)?,
-            ),
+            lag: Some(i64::try_from(integer("lag")?).map_err(|_| KernelError::InvalidParameter)?),
         },
-        _ => return Err(KernelError::InvalidNumericInput),
+        _ => return Err(KernelError::InvalidParameter),
     })
 }
 
-fn numeric_series(value: &RuntimeValue) -> Result<Vec<f64>, KernelError> {
-    let RuntimeValue::List(values) = value else {
-        return Err(KernelError::InvalidNumericInput);
-    };
-    values
-        .iter()
-        .map(|value| numeric_input(Some(value)))
-        .collect()
-}
-
-fn numeric_list(values: Vec<f64>) -> Result<RuntimeValue, KernelError> {
-    if values.iter().any(|value| !value.is_finite()) {
-        return Err(KernelError::NonFiniteResult);
+fn numeric_list(
+    values: &[f64],
+    invocation: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    let mut output = invocation.control.reserve(values.len())?;
+    for (index, value) in values.iter().copied().enumerate() {
+        if index % 1024 == 0 {
+            invocation.check_control()?;
+        }
+        if !value.is_finite() {
+            return Err(KernelError::NonFiniteResult);
+        }
+        output.push(RuntimeValue::Decimal(value));
     }
-    Ok(RuntimeValue::List(
-        values.into_iter().map(RuntimeValue::Decimal).collect(),
-    ))
+    Ok(RuntimeValue::List(output.into()))
 }
 
 #[cfg(test)]
@@ -276,32 +342,41 @@ mod tests {
         count: usize,
         constant: bool,
     ) -> Result<Vec<RuntimeValue>, KernelError> {
-        let config = RuntimeValue::Record(BTreeMap::from([
+        let config = RuntimeValue::Record(std::sync::Arc::new(BTreeMap::from([
             ("constant".into(), RuntimeValue::Bool(constant)),
             ("method".into(), RuntimeValue::String(method.into())),
             (
                 "covariance".into(),
                 RuntimeValue::String("nonrobust".into()),
             ),
-        ]));
+        ])));
         let control = KernelControl::new(
             Arc::new(AtomicBool::new(false)),
             Instant::now() + Duration::from_secs(10),
         );
-        let outputs = vec![
-            KernelOutputSpec {
-                data_type: yss_data_contract::ValueType::Scalar(
-                    yss_data_contract::SemanticType::Numeric
-                ),
-                fields: None
-            };
-            count
-        ];
+        let numeric = yss_data_contract::ValueType::DataSeries(Box::new(
+            yss_data_contract::ValueType::number(),
+        ));
+        let model = yss_data_contract::ValueType::Struct("statistics.model.linear".into());
+        let outputs = (0..count)
+            .map(|index| KernelOutputSpec {
+                data_type: if kind == "summary" || (kind == "fit" && index == 0) {
+                    model.clone()
+                } else {
+                    numeric.clone()
+                },
+                fields: None,
+            })
+            .collect::<Vec<_>>();
         KernelRegistry::default().execute(
             &KernelId::new(format!("yssbi.statistics.linear.{kind}").into()).unwrap(),
             &KernelInvocation {
+                relations: &crate::tests::relations(),
                 inputs,
-                input_templates: groups,
+                input_keys: &groups
+                    .iter()
+                    .map(|key| key.unwrap_or(if kind == "fit" { "response" } else { "model" }))
+                    .collect::<Vec<_>>(),
                 parameters: if kind == "fit" {
                     BTreeMap::from([(
                         crate::KernelParameterKey::new("configuration".into()).unwrap(),
@@ -317,7 +392,75 @@ mod tests {
     }
 
     fn series(values: &[f64]) -> RuntimeValue {
-        numeric_list(values.to_vec()).unwrap()
+        RuntimeValue::List(values.iter().copied().map(RuntimeValue::Decimal).collect())
+    }
+
+    #[test]
+    fn statistical_materialization_checks_budget_shape_and_control_before_conversion() {
+        let invalid =
+            RuntimeValue::List(Arc::from([RuntimeValue::String("invalid number".into())]));
+        let valid = series(&[1.0, 2.0]);
+        let relations = crate::tests::relations();
+        let mut control = KernelControl::new(
+            Arc::new(AtomicBool::new(false)),
+            Instant::now() + Duration::from_secs(10),
+        );
+        control.max_input_bytes = 0;
+        let mut invocation = KernelInvocation {
+            relations: &relations,
+            inputs: &[],
+            input_keys: &[],
+            parameters: BTreeMap::new(),
+            outputs: &[],
+            control: &control,
+        };
+        // Invalid data would fail numeric conversion: the budget must be rejected first.
+        assert!(matches!(
+            columns(&[&invalid], &invocation, 0),
+            Err(KernelError::BudgetExceeded)
+        ));
+        assert!(matches!(
+            control.reserve::<RuntimeValue>(usize::MAX),
+            Err(KernelError::BudgetExceeded)
+        ));
+        let admitted = KernelControl {
+            max_input_bytes: 32,
+            cancellation: control.cancellation.clone(),
+            deadline: control.deadline,
+        };
+        invocation.control = &admitted;
+        assert!(matches!(
+            columns(&[&invalid, &valid], &invocation, 0),
+            Err(KernelError::ShapeMismatch)
+        ));
+        assert!(matches!(
+            columns(&[&valid], &invocation, 24),
+            Err(KernelError::BudgetExceeded)
+        ));
+        assert!(matches!(
+            check_fit_workspace(2, 1, true, "GLS", &invocation),
+            Err(KernelError::BudgetExceeded)
+        ));
+        admitted
+            .cancellation
+            .store(true, std::sync::atomic::Ordering::Release);
+        assert!(matches!(
+            columns(&[&valid], &invocation, 0),
+            Err(KernelError::Cancelled)
+        ));
+        admitted
+            .cancellation
+            .store(false, std::sync::atomic::Ordering::Release);
+        let expired = KernelControl {
+            deadline: Instant::now(),
+            cancellation: admitted.cancellation.clone(),
+            max_input_bytes: admitted.max_input_bytes,
+        };
+        invocation.control = &expired;
+        assert!(matches!(
+            columns(&[&valid], &invocation, 0),
+            Err(KernelError::DeadlineExceeded)
+        ));
     }
 
     #[test]

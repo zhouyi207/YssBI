@@ -290,11 +290,11 @@ fn input_bindings(
                 plan_port(&binding.address),
                 source,
                 PlanInputContract {
-                    template: match &binding.address.port {
+                    key: match &binding.address.port {
                         yss_graph_document::PortRef::Instance { template, .. } => {
-                            Some(template.as_str().into())
+                            template.as_str().into()
                         }
-                        yss_graph_document::PortRef::Declared { .. } => None,
+                        yss_graph_document::PortRef::Declared { key } => key.as_str().into(),
                     },
                     group: binding
                         .group
@@ -486,7 +486,6 @@ fn constant_runtime_value(
     constant: &yss_graph_document::GraphConstant,
 ) -> Result<yss_node_kernel::RuntimeValue, GraphPlanError> {
     use yss_node_kernel::RuntimeValue;
-    use yss_tabular_contract::TabularScalar;
     let Some(snapshot) = &constant.tabular else {
         return RuntimeValue::try_from(&constant.data_value).map_err(GraphPlanError::ConstantValue);
     };
@@ -495,14 +494,8 @@ fn constant_runtime_value(
             column
                 .values()
                 .iter()
-                .map(|value| match value {
-                    TabularScalar::Null => RuntimeValue::Null,
-                    TabularScalar::Bool(value) => RuntimeValue::Bool(*value),
-                    TabularScalar::Integer(value) => RuntimeValue::Integer(*value),
-                    TabularScalar::Unsigned(value) => RuntimeValue::Unsigned(*value),
-                    TabularScalar::Decimal(value) => RuntimeValue::Decimal(value.as_f64()),
-                    TabularScalar::String(value) => RuntimeValue::String(value.clone()),
-                })
+                .cloned()
+                .map(RuntimeValue::from)
                 .collect(),
         )
     };
@@ -516,13 +509,13 @@ fn constant_runtime_value(
             .map(column_value)
             .ok_or(GraphPlanError::UnsupportedResolvedType);
     }
-    Ok(RuntimeValue::Record(
+    Ok(RuntimeValue::Record(std::sync::Arc::new(
         snapshot
             .columns()
             .iter()
             .map(|column| (column.name().as_str().into(), column_value(column)))
             .collect(),
-    ))
+    )))
 }
 
 fn map_result_category(category: GraphResultCategory) -> crate::plan::ResultCategory {

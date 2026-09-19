@@ -255,7 +255,7 @@ fn table_page(
             RuntimeValue::List(match part {
                 ResultTablePart::Coefficients => {
                     let coefficient = &result.report.coefficients[row];
-                    Box::new([
+                    std::sync::Arc::from([
                         RuntimeValue::String(coefficient.variable.clone().into_boxed_str()),
                         RuntimeValue::Decimal(coefficient.coef),
                         RuntimeValue::Decimal(coefficient.std_err),
@@ -266,7 +266,7 @@ fn table_page(
                         RuntimeValue::Bool(coefficient.is_significant),
                     ])
                 }
-                ResultTablePart::Observations => Box::new([
+                ResultTablePart::Observations => std::sync::Arc::from([
                     RuntimeValue::Unsigned((row + 1) as u64),
                     RuntimeValue::Decimal(result.fitted[row]),
                     RuntimeValue::Decimal(result.residuals[row]),

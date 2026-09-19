@@ -43,13 +43,18 @@ pub fn linear_regression(
     {
         return Err(invalid(ScientificInputViolation::ShapeMismatch));
     }
-    if request
+    for (index, value) in request
         .response
         .iter()
         .chain(request.predictors.iter().flatten())
-        .any(|value| !value.is_finite())
+        .enumerate()
     {
-        return Err(invalid(ScientificInputViolation::NonFiniteInput));
+        if index % 1024 == 0 {
+            admit(control)?;
+        }
+        if !value.is_finite() {
+            return Err(invalid(ScientificInputViolation::NonFiniteInput));
+        }
     }
     validate_ols_covariance(&request.options.covariance, observations)?;
     let metadata = yss_sci_contract::StatisticalObservationMetadata {
@@ -60,6 +65,7 @@ pub fn linear_regression(
         missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
     };
     let constant = request.options.constant;
+    admit(control)?;
     let fit = yss_sci::regression::fit::fit_linear_regression(
         request.response,
         &request.predictors,
@@ -68,6 +74,7 @@ pub fn linear_regression(
         metadata,
     )
     .map_err(map_sci_error)?;
+    admit(control)?;
     let report = crate::regression::report::linear_regression_report(&fit)
         .map_err(|_| ScientificComputationError::ComputationFailed)?;
     let mut design = request.predictors;

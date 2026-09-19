@@ -4,8 +4,7 @@ use std::time::{Duration, Instant};
 use yss_data_contract::ValueType;
 
 use crate::{
-    KernelControl, KernelField, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry,
-    RuntimeValue,
+    KernelControl, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry, RuntimeValue,
 };
 
 #[test]
@@ -18,7 +17,7 @@ fn semantic_annotations_only_contain_materialized_scalar_values() {
     let value = RuntimeValue::String("001".into());
     for value in [
         value.clone(),
-        RuntimeValue::List(Box::new([value, RuntimeValue::Null])),
+        RuntimeValue::List(std::sync::Arc::from([value, RuntimeValue::Null])),
     ] {
         let annotated = value.clone().with_metadata(metadata.clone()).unwrap();
         assert_eq!(annotated.metadata(), Some(&metadata));
@@ -30,8 +29,10 @@ fn semantic_annotations_only_contain_materialized_scalar_values() {
     }
     for value in [
         RuntimeValue::Resource("dataset".into()),
-        RuntimeValue::List(Box::new([RuntimeValue::List(Box::new([]))])),
-        RuntimeValue::Record(BTreeMap::new()),
+        RuntimeValue::List(std::sync::Arc::from([RuntimeValue::List(
+            std::sync::Arc::from([]),
+        )])),
+        RuntimeValue::Record(std::sync::Arc::new(BTreeMap::new())),
     ] {
         assert_eq!(
             value.with_metadata(metadata.clone()),
@@ -55,8 +56,9 @@ fn compare(
     KernelRegistry::default().execute(
         &KernelId::new(format!("yssbi.compare.{operation}").into()).unwrap(),
         &KernelInvocation {
+            relations: &crate::tests::relations(),
             inputs,
-            input_templates: &[None, None],
+            input_keys: &["left", "right"],
             parameters: BTreeMap::new(),
             outputs: &[KernelOutputSpec {
                 data_type: if operation != "whole_equal"
@@ -141,8 +143,13 @@ fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
         KernelRegistry::default().execute(
             &KernelId::new(format!("yssbi.logic.{operation}").into()).unwrap(),
             &KernelInvocation {
+                relations: &crate::tests::relations(),
                 inputs,
-                input_templates: &vec![None; inputs.len()],
+                input_keys: if operation == "not" {
+                    &["input"]
+                } else {
+                    &["left", "right"]
+                },
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -169,23 +176,23 @@ fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
         );
         assert_eq!(evaluate("or", &[left, right]).unwrap(), vec![or]);
     }
-    let values = L(Box::new([B(false), B(true), N]));
+    let values = L(std::sync::Arc::from([B(false), B(true), N]));
     assert_eq!(
         evaluate("not", std::slice::from_ref(&values)).unwrap(),
-        vec![L(Box::new([B(true), B(false), N]))]
+        vec![L(std::sync::Arc::from([B(true), B(false), N]))]
     );
     assert_eq!(evaluate("not", &[N]).unwrap(), vec![N]);
     for inputs in [[values.clone(), B(false)], [B(false), values.clone()]] {
         assert_eq!(
             evaluate("and", &inputs).unwrap(),
-            vec![L(Box::new([B(false), B(false), B(false)]))]
+            vec![L(std::sync::Arc::from([B(false), B(false), B(false)]))]
         );
     }
     assert_eq!(
         evaluate("or", &[values.clone(), B(true)]).unwrap(),
-        vec![L(Box::new([B(true), B(true), B(true)]))]
+        vec![L(std::sync::Arc::from([B(true), B(true), B(true)]))]
     );
-    assert!(evaluate("and", &[values, L(Box::new([]))]).is_err());
+    assert!(evaluate("and", &[values, L(std::sync::Arc::from([]))]).is_err());
     assert!(evaluate("not", &[RuntimeValue::Integer(1)]).is_err());
     assert!(evaluate("and", &[B(false), RuntimeValue::Integer(1)]).is_err());
     assert!(evaluate("not", &[B(true), B(false)]).is_err());
@@ -209,8 +216,9 @@ fn power_and_logarithm_execute_scalars_broadcasts_and_domain_checks() {
         KernelRegistry::default().execute(
             &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
             &KernelInvocation {
+                relations: &crate::tests::relations(),
                 inputs,
-                input_templates: &[None, None],
+                input_keys: &["left", "right"],
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -234,15 +242,15 @@ fn power_and_logarithm_execute_scalars_broadcasts_and_domain_checks() {
     let list = |values: &[i64]| L(values.iter().map(|v| I(*v)).collect());
     assert_eq!(
         evaluate("power", &[I(2), list(&[1, 2, 3])]).unwrap(),
-        vec![L(Box::new([D(2.), D(4.), D(8.)]))]
+        vec![L(std::sync::Arc::from([D(2.), D(4.), D(8.)]))]
     );
     assert_eq!(
         evaluate("power", &[list(&[2, 3]), list(&[3, 2])]).unwrap(),
-        vec![L(Box::new([D(8.), D(9.)]))]
+        vec![L(std::sync::Arc::from([D(8.), D(9.)]))]
     );
     assert_eq!(
         evaluate("log", &[list(&[2, 4, 8]), I(2)]).unwrap(),
-        vec![L(Box::new([D(1.), D(2.), D(3.)]))]
+        vec![L(std::sync::Arc::from([D(1.), D(2.), D(3.)]))]
     );
     for (op, left, right) in [
         ("power", I(0), I(0)),
@@ -283,8 +291,9 @@ fn unary_arithmetic_preserves_shape_and_rejects_invalid_values() {
         KernelRegistry::default().execute(
             &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
             &KernelInvocation {
+                relations: &crate::tests::relations(),
                 inputs,
-                input_templates: &[None],
+                input_keys: &["input"],
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -309,8 +318,8 @@ fn unary_arithmetic_preserves_shape_and_rejects_invalid_values() {
             vec![L(expected.map(D).into())]
         );
         assert_eq!(
-            evaluate(op, &[L(Box::new([]))]).unwrap(),
-            vec![L(Box::new([]))]
+            evaluate(op, &[L(std::sync::Arc::from([]))]).unwrap(),
+            vec![L(std::sync::Arc::from([]))]
         );
         for value in [
             RuntimeValue::Null,
@@ -337,36 +346,36 @@ fn unary_arithmetic_preserves_shape_and_rejects_invalid_values() {
 #[test]
 fn comparisons_broadcast_both_sides_preserve_nulls_and_reject_misalignment() {
     use RuntimeValue::{Bool as B, List as L, Null as N, String as S};
-    let list = L(Box::new([S("001".into()), S("1".into()), N]));
+    let list = L(std::sync::Arc::from([S("001".into()), S("1".into()), N]));
     for inputs in [[list.clone(), S("1".into())], [S("1".into()), list.clone()]] {
         assert_eq!(
             compare("equal", &inputs).unwrap(),
-            vec![L(Box::new([B(false), B(true), N]))]
+            vec![L(std::sync::Arc::from([B(false), B(true), N]))]
         );
         assert_eq!(
             compare("not_equal", &inputs).unwrap(),
-            vec![L(Box::new([B(true), B(false), N]))]
+            vec![L(std::sync::Arc::from([B(true), B(false), N]))]
         );
     }
     assert_eq!(
         compare("less", &[S("1".into()), list.clone()]).unwrap(),
-        vec![L(Box::new([B(false), B(false), N]))]
+        vec![L(std::sync::Arc::from([B(false), B(false), N]))]
     );
     assert_eq!(
         compare("equal", &[list.clone(), list.clone()]).unwrap(),
-        vec![L(Box::new([B(true), B(true), N]))]
+        vec![L(std::sync::Arc::from([B(true), B(true), N]))]
     );
-    assert!(compare("equal", &[list, L(Box::new([]))]).is_err());
+    assert!(compare("equal", &[list, L(std::sync::Arc::from([]))]).is_err());
     assert_eq!(compare("equal", &[N, N]).unwrap(), vec![N]);
 }
 
 #[test]
 fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
     let record = |value| {
-        RuntimeValue::Record(BTreeMap::from([(
+        RuntimeValue::Record(std::sync::Arc::new(BTreeMap::from([(
             "values".into(),
-            RuntimeValue::List(vec![value].into_boxed_slice()),
-        )]))
+            RuntimeValue::List(vec![value].into()),
+        )])))
     };
     assert_eq!(
         compare(
@@ -393,83 +402,76 @@ fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
     );
 }
 
+pub(crate) fn relations() -> std::sync::Arc<dyn yss_relational_contract::RelationFactory> {
+    struct UnusedRelations;
+    impl yss_relational_contract::RelationFactory for UnusedRelations {
+        fn materialize(
+            self: std::sync::Arc<Self>,
+            _: &yss_tabular_contract::TabularSnapshot,
+            _: &[Option<yss_data_contract::ConversionMetadata>],
+            _: &yss_relational_contract::RelationControl,
+        ) -> Result<yss_relational_contract::RelationHandle, yss_relational_contract::RelationError>
+        {
+            panic!("this unit test must not materialize a relation")
+        }
+    }
+    std::sync::Arc::new(UnusedRelations)
+}
+
 #[test]
-fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
-    let first = RuntimeValue::List(vec![RuntimeValue::Integer(11)].into_boxed_slice());
-    let second = RuntimeValue::List(vec![RuntimeValue::Integer(22)].into_boxed_slice());
-    let input = RuntimeValue::Record(BTreeMap::from([
-        ("a".into(), first.clone()),
-        ("b".into(), second.clone()),
-    ]));
-    let outputs = ["b", "a"].map(|name| KernelOutputSpec {
-        data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
-            yss_data_contract::SemanticType::Numeric,
-        ))),
-        fields: Some(
-            vec![KernelField {
-                name: name.into(),
-                data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            }]
-            .into_boxed_slice(),
-        ),
-    });
+fn invocation_rejects_wrong_input_order_before_dispatch_and_wrong_output_carriers() {
+    use crate::{KernelContract, KernelError, KernelInputSpec, KernelRegistryBuilder};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let calls = Arc::new(AtomicUsize::new(0));
+    let called = calls.clone();
+    let id = KernelId::new("test.table".into()).unwrap();
+    let mut builder = KernelRegistryBuilder::new();
+    builder
+        .register(
+            id.clone(),
+            std::num::NonZeroU32::new(1).unwrap(),
+            KernelContract::new(
+                [
+                    KernelInputSpec::fixed("left"),
+                    KernelInputSpec::fixed("right"),
+                ],
+                [],
+                1..=1,
+            )
+            .unwrap(),
+            move |_| {
+                called.fetch_add(1, Ordering::Relaxed);
+                Ok(vec![RuntimeValue::Record(Arc::new(BTreeMap::new()))])
+            },
+        )
+        .unwrap();
+    let registry = builder.freeze();
     let control = KernelControl::new(
         Arc::new(AtomicBool::new(false)),
-        Instant::now() + Duration::from_secs(30),
+        Instant::now() + Duration::from_secs(10),
     );
-    let result = KernelRegistry::default()
-        .execute(
-            &KernelId::new("yssbi.dataframe.decompose".into()).unwrap(),
-            &KernelInvocation {
-                inputs: &[input],
-                input_templates: &[None],
-                parameters: BTreeMap::new(),
-                outputs: &outputs,
-                control: &control,
-            },
-        )
-        .unwrap();
-    assert_eq!(result, vec![second, first]);
-    let assemble_outputs = [KernelOutputSpec {
+    let output = [KernelOutputSpec {
         data_type: ValueType::DataFrame,
-        fields: Some(
-            outputs
-                .iter()
-                .flat_map(|output| output.fields.as_ref().unwrap().iter().cloned())
-                .collect(),
-        ),
+        fields: None,
     }];
-    let assembled = KernelRegistry::default()
-        .execute(
-            &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
-            &KernelInvocation {
-                inputs: &result,
-                input_templates: &[Some("series"), Some("series")],
-                parameters: BTreeMap::new(),
-                outputs: &assemble_outputs,
-                control: &control,
-            },
-        )
-        .unwrap();
-    assert_eq!(
-        assembled,
-        vec![RuntimeValue::Record(BTreeMap::from([
-            ("b".into(), result[0].clone()),
-            ("a".into(), result[1].clone())
-        ]))]
-    );
-    assert!(
-        KernelRegistry::default()
-            .execute(
-                &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
-                &KernelInvocation {
-                    inputs: &[result[0].clone(), RuntimeValue::List(Box::new([]))],
-                    input_templates: &[Some("series"), Some("series")],
-                    parameters: BTreeMap::new(),
-                    outputs: &assemble_outputs,
-                    control: &control,
-                }
-            )
-            .is_err()
-    );
+    let relations = relations();
+    let mut invocation = KernelInvocation {
+        relations: &relations,
+        inputs: &[RuntimeValue::Null, RuntimeValue::Null],
+        input_keys: &["right", "left"],
+        parameters: BTreeMap::new(),
+        outputs: &output,
+        control: &control,
+    };
+    assert!(matches!(
+        registry.execute(&id, &invocation),
+        Err(KernelError::InputLayoutMismatch)
+    ));
+    assert_eq!(calls.load(Ordering::Relaxed), 0);
+    invocation.input_keys = &["left", "right"];
+    assert!(matches!(
+        registry.execute(&id, &invocation),
+        Err(KernelError::OutputContractMismatch)
+    ));
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
 }

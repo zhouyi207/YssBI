@@ -2,8 +2,7 @@ use crate::KernelInvocation;
 use std::collections::BTreeMap;
 
 use yss_relational_contract::{
-    RelationComparison, RelationControl, RelationError, RelationLiteral, RelationPredicate,
-    SeriesHandle,
+    RelationComparison, RelationError, RelationLiteral, RelationPredicate,
 };
 
 use crate::KernelError;
@@ -12,31 +11,133 @@ use crate::RuntimeValue;
 pub(crate) fn decompose(
     invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let [input @ (RuntimeValue::Relation(_) | RuntimeValue::Record(_))] = invocation.inputs else {
-        return Err(KernelError::Failed);
+    let [RuntimeValue::Relation(relation)] = invocation.inputs else {
+        return Err(KernelError::InputLayoutMismatch);
     };
     invocation
         .outputs
         .iter()
         .map(|output| {
-            let [field] = output.fields.as_deref().ok_or(KernelError::Failed)? else {
-                return Err(KernelError::Failed);
+            let [field] = output
+                .fields
+                .as_deref()
+                .ok_or(KernelError::OutputContractMismatch)?
+            else {
+                return Err(KernelError::OutputContractMismatch);
             };
-            let value = match input {
-                RuntimeValue::Relation(relation) => {
-                    RuntimeValue::Series(relation.select_series(&field.name).map_err(kernel_error)?)
-                }
-                RuntimeValue::Record(columns) => match columns.get(&field.name) {
-                    Some(column) if matches!(column.unannotated(), RuntimeValue::List(_)) => {
-                        column.clone()
-                    }
-                    _ => return Err(KernelError::Failed),
-                },
-                _ => return Err(KernelError::Failed),
-            };
-            Ok(value)
+            relation
+                .select_series(&field.name)
+                .map(RuntimeValue::Series)
+                .map_err(kernel_error)
         })
         .collect()
+}
+
+pub(crate) fn constant(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue, KernelError> {
+    let value = invocation
+        .parameter("value")
+        .ok_or(KernelError::InvalidParameter)?;
+    if invocation
+        .outputs
+        .first()
+        .is_some_and(|output| output.data_type == yss_data_contract::ValueType::DataFrame)
+    {
+        let RuntimeValue::Record(columns) = value else {
+            return Err(KernelError::InvalidParameter);
+        };
+        let fields = invocation.outputs[0]
+            .fields
+            .as_deref()
+            .ok_or(KernelError::OutputContractMismatch)?;
+        if fields.len() != columns.len() {
+            return Err(KernelError::ShapeMismatch);
+        }
+        let values = fields
+            .iter()
+            .map(|field| columns.get(&field.name).ok_or(KernelError::ShapeMismatch))
+            .collect::<Result<Vec<_>, _>>()?;
+        materialize(fields, &values, invocation)
+    } else {
+        Ok(value.clone())
+    }
+}
+
+/// A single boundary for literal tables and assembled memory columns. Downstream table kernels
+/// always consume relation handles; records remain available for ordinary structured values.
+fn materialize(
+    fields: &[crate::KernelField],
+    inputs: &[&RuntimeValue],
+    invocation: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
+    let mut rows = None;
+    let mut bytes = 0usize;
+    // Validate all lengths and the complete conversion budget before copying any columns.
+    for input in inputs {
+        let RuntimeValue::List(values) = input.unannotated() else {
+            return Err(KernelError::InvalidParameter);
+        };
+        if rows.is_some_and(|rows| rows != values.len()) {
+            return Err(KernelError::ShapeMismatch);
+        }
+        rows = Some(values.len());
+        for (index, value) in values.iter().enumerate() {
+            if index % 1024 == 0 {
+                invocation.check_control()?;
+            }
+            let size = size_of::<TabularScalar>()
+                + match value.unannotated() {
+                    RuntimeValue::String(value) => value.len(),
+                    _ => 0,
+                };
+            bytes = invocation.control.check_bytes(bytes.checked_add(size))?;
+        }
+    }
+    let mut columns = Vec::with_capacity(fields.len());
+    let mut metadata = Vec::with_capacity(fields.len());
+    for (field, input) in fields.iter().zip(inputs) {
+        let RuntimeValue::List(values) = input.unannotated() else {
+            unreachable!()
+        };
+        let mut scalars = invocation.control.reserve(values.len())?;
+        for (index, value) in values.iter().enumerate() {
+            if index % 1024 == 0 {
+                invocation.check_control()?;
+            }
+            scalars.push(
+                value
+                    .tabular_scalar()
+                    .map_err(|_| KernelError::InvalidParameter)?,
+            );
+        }
+        columns.push(TabularColumn::new(
+            TabularColumnName::try_from(field.name.as_ref())
+                .map_err(|_| KernelError::InvalidParameter)?,
+            scalars.into_boxed_slice(),
+        ));
+        metadata.push(
+            input
+                .metadata()
+                .cloned()
+                .or_else(|| match &field.data_type {
+                    yss_data_contract::ValueType::Scalar(semantic) => {
+                        Some(yss_data_contract::ConversionMetadata {
+                            semantic: yss_data_contract::ColumnSemantic::new(*semantic),
+                            temporal: None,
+                        })
+                    }
+                    _ => None,
+                }),
+        );
+    }
+    let data = TabularSnapshot::try_from_columns(columns.into_boxed_slice())
+        .map_err(|_| KernelError::ShapeMismatch)?;
+    invocation
+        .relations
+        .clone()
+        .materialize(&data, &metadata, &invocation.relation_control())
+        .map(RuntimeValue::Relation)
+        .map_err(kernel_error)
 }
 
 #[derive(Clone, Copy)]
@@ -104,50 +205,11 @@ pub(crate) fn execute(
                 .map(RuntimeValue::Relation)
                 .map_err(kernel_error);
         }
-        let mut rows = None;
-        let mut bytes = 0usize;
-        for input in invocation.inputs {
-            let RuntimeValue::List(values) = input.unannotated() else {
-                return Err(KernelError::Failed);
-            };
-            if rows.is_some_and(|rows| rows != values.len()) {
-                return Err(KernelError::Failed);
-            }
-            rows = Some(values.len());
-            for (index, value) in values.iter().enumerate() {
-                if index % 1024 == 0 {
-                    invocation.check_control()?;
-                }
-                match value {
-                    RuntimeValue::Null
-                    | RuntimeValue::Bool(_)
-                    | RuntimeValue::Integer(_)
-                    | RuntimeValue::Unsigned(_)
-                    | RuntimeValue::String(_) => {}
-                    RuntimeValue::Decimal(value) if value.is_finite() => {}
-                    _ => return Err(KernelError::Failed),
-                }
-                bytes = bytes
-                    .checked_add(
-                        std::mem::size_of::<RuntimeValue>()
-                            + match value {
-                                RuntimeValue::String(value) => value.len(),
-                                _ => 0,
-                            },
-                    )
-                    .ok_or(KernelError::Failed)?;
-                if bytes > invocation.control.max_input_bytes {
-                    return Err(KernelError::Failed);
-                }
-            }
-        }
-        return Ok(RuntimeValue::Record(
-            fields
-                .iter()
-                .zip(invocation.inputs)
-                .map(|(field, value)| (field.name.clone(), value.clone()))
-                .collect(),
-        ));
+        return materialize(
+            fields,
+            &invocation.inputs.iter().collect::<Vec<_>>(),
+            invocation,
+        );
     }
     if matches!(kind, RelationalKernel::Source) {
         let value = parameter("dataframe")?;
@@ -301,35 +363,16 @@ fn predicate(fields: &BTreeMap<Box<str>, RuntimeValue>) -> Result<RelationPredic
     })
 }
 
-pub(crate) fn numeric_columns(
-    series: &[SeriesHandle],
-    invocation: &KernelInvocation<'_>,
-) -> Result<Vec<Vec<f64>>, KernelError> {
-    let relation = series
-        .first()
-        .ok_or(KernelError::InvalidNumericInput)?
-        .relation();
-    relation
-        .numeric_columns(
-            series,
-            &RelationControl {
-                cancellation: invocation.control.cancellation.clone(),
-                deadline: invocation.control.deadline,
-                max_input_bytes: invocation.control.max_input_bytes,
-            },
-        )
-        .map_err(kernel_error)
-}
-
 pub(crate) fn kernel_error(error: RelationError) -> KernelError {
     match error {
         RelationError::Cancelled => KernelError::Cancelled,
         RelationError::DeadlineExceeded => KernelError::DeadlineExceeded,
         RelationError::DivisionByZero => KernelError::DivisionByZero,
         RelationError::NonFiniteResult => KernelError::NonFiniteResult,
-        RelationError::InvalidInput | RelationError::UnalignedSeries => {
-            KernelError::InvalidNumericInput
-        }
+        RelationError::InvalidInput => KernelError::InvalidNumericInput,
+        RelationError::UnalignedSeries => KernelError::UnalignedSeries,
+        RelationError::MemoryLimitExceeded => KernelError::BudgetExceeded,
+        RelationError::InvalidConversion => KernelError::InvalidParameter,
         _ => KernelError::Failed,
     }
 }

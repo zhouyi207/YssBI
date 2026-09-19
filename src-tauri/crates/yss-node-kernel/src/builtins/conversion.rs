@@ -72,71 +72,58 @@ pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue,
         RuntimeValue::List(values) => values.as_ref(),
         value => std::slice::from_ref(value),
     };
-    let mut budget = inputs
-        .len()
-        .checked_mul(std::mem::size_of::<RuntimeValue>() * 4)
-        .ok_or(KernelError::Failed)?;
+    let mut budget = invocation
+        .control
+        .check_bytes(inputs.len().checked_mul(size_of::<RuntimeValue>() * 4))?;
     for (index, value) in inputs.iter().enumerate() {
         if index % 1024 == 0 {
             invocation.check_control()?;
         }
         if let RuntimeValue::String(value) = value {
-            budget = budget
-                .checked_add(value.len().checked_mul(4).ok_or(KernelError::Failed)?)
-                .ok_or(KernelError::Failed)?;
+            budget = invocation.control.check_bytes(
+                value
+                    .len()
+                    .checked_mul(4)
+                    .and_then(|size| budget.checked_add(size)),
+            )?;
         }
     }
-    if budget > invocation.control.max_input_bytes {
-        return Err(KernelError::Failed);
+    let mut values = invocation.control.reserve(inputs.len())?;
+    for (index, input) in inputs.iter().enumerate() {
+        if index % 1024 == 0 {
+            invocation.check_control()?;
+        }
+        values.push(
+            input
+                .tabular_scalar()
+                .map_err(|_| KernelError::InvalidParameter)?,
+        );
     }
-    let values = inputs
-        .iter()
-        .map(|input| {
-            Ok(match input {
-                RuntimeValue::Null => TabularScalar::Null,
-                RuntimeValue::Bool(value) => TabularScalar::Bool(*value),
-                RuntimeValue::Integer(value) => TabularScalar::Integer(*value),
-                RuntimeValue::Unsigned(value) => TabularScalar::Unsigned(*value),
-                RuntimeValue::Decimal(value) => {
-                    TabularScalar::Decimal((*value).try_into().map_err(|_| KernelError::Failed)?)
-                }
-                RuntimeValue::String(value) => TabularScalar::String(value.clone()),
-                _ => return Err(KernelError::Failed),
-            })
-        })
-        .collect::<Result<Vec<_>, KernelError>>()?;
     let result = yss_tabular_arrow::convert_semantic_values(&values, metadata, &conversion)
-        .map_err(|_| KernelError::Failed)?;
+        .map_err(|_| KernelError::InvalidParameter)?;
     let metadata = result.metadata;
-    let values = result.values;
-    invocation.check_control()?;
-    let mut output_bytes = values
-        .len()
-        .checked_mul(std::mem::size_of::<RuntimeValue>())
-        .ok_or(KernelError::Failed)?;
-    let values = values
-        .into_iter()
-        .map(|value| {
-            Ok(match value {
-                TabularScalar::Null => RuntimeValue::Null,
-                TabularScalar::Bool(value) => RuntimeValue::Bool(value),
-                TabularScalar::Integer(value) => RuntimeValue::Integer(value),
-                TabularScalar::Unsigned(value) => RuntimeValue::Unsigned(value),
-                TabularScalar::Decimal(value) => RuntimeValue::Decimal(value.as_f64()),
-                TabularScalar::String(value) => {
-                    output_bytes = output_bytes
-                        .checked_add(value.len())
-                        .ok_or(KernelError::Failed)?;
-                    RuntimeValue::String(value)
-                }
-            })
-        })
-        .collect::<Result<Vec<_>, KernelError>>()?;
-    if output_bytes > invocation.control.max_input_bytes {
-        return Err(KernelError::Failed);
+    let mut output_bytes = invocation
+        .control
+        .check_bytes(result.values.len().checked_mul(size_of::<RuntimeValue>()))?;
+    for (index, value) in result.values.iter().enumerate() {
+        if index % 1024 == 0 {
+            invocation.check_control()?;
+        }
+        if let TabularScalar::String(value) = value {
+            output_bytes = invocation
+                .control
+                .check_bytes(output_bytes.checked_add(value.len()))?;
+        }
+    }
+    let mut values = invocation.control.reserve(result.values.len())?;
+    for (index, value) in result.values.into_iter().enumerate() {
+        if index % 1024 == 0 {
+            invocation.check_control()?;
+        }
+        values.push(RuntimeValue::from(value));
     }
     let value = if list {
-        RuntimeValue::List(values.into_boxed_slice())
+        RuntimeValue::List(values.into())
     } else {
         values.into_iter().next().ok_or(KernelError::Failed)?
     };

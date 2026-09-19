@@ -24,21 +24,87 @@ pub struct ConvertedValues {
     pub metadata: ConversionMetadata,
 }
 
+/// Import primitive values with their declared meaning or retained conversion metadata.
+/// A bare categorical literal establishes its unordered domain; explicit domains stay fixed.
+pub fn materialized_column(
+    name: &str,
+    values: &[TabularScalar],
+    metadata: Option<&ConversionMetadata>,
+) -> Result<(Field, ArrayRef), TabularArrowError> {
+    let mut array = crate::scalar::scalars_to_array(values)?;
+    if array.data_type() == &DataType::Null
+        && let Some(metadata) = metadata
+    {
+        let dtype = match metadata.semantic.kind {
+            SemanticType::Numeric => DataType::Float64,
+            SemanticType::Binary => DataType::Boolean,
+            SemanticType::Datetime => metadata
+                .temporal
+                .map(temporal_type)
+                .unwrap_or(DataType::Timestamp(TimeUnit::Microsecond, None)),
+            _ => DataType::Utf8,
+        };
+        array = arrow::array::new_null_array(&dtype, values.len());
+    }
+    if let Some(temporal) = metadata.and_then(|metadata| metadata.temporal) {
+        array = lossless_cast(array.as_ref(), &temporal_type(temporal), false)?;
+    } else if metadata.is_some_and(|metadata| metadata.semantic.kind == SemanticType::Datetime)
+        && !array.data_type().is_temporal()
+    {
+        array = lossless_cast(
+            array.as_ref(),
+            &DataType::Timestamp(TimeUnit::Microsecond, None),
+            false,
+        )?;
+    }
+    let mut field = Field::new(name, array.data_type().clone(), array.null_count() != 0);
+    if let Some(metadata) = metadata {
+        let semantic = if metadata.semantic.kind == SemanticType::Categorical
+            && metadata.semantic.values.is_empty()
+        {
+            // Bare categorical literals declare their meaning without a codebook. Establish
+            // an unordered domain once; explicit domains and ordinal levels stay authoritative.
+            let codes = cast(array.as_ref(), &DataType::Utf8)?;
+            let codes = codes
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or(TabularArrowError::UnsupportedType)?;
+            let mut distinct = std::collections::BTreeSet::new();
+            for code in codes.iter().flatten() {
+                distinct.insert(code);
+                if distinct.len() > 65_536 {
+                    return Err(TabularArrowError::InvalidValue);
+                }
+            }
+            let mut semantic = metadata.semantic.clone();
+            semantic.values = distinct
+                .into_iter()
+                .map(|code| SemanticValue {
+                    value: code.into(),
+                    label: code.into(),
+                })
+                .collect();
+            semantic
+        } else if metadata.semantic.kind == SemanticType::Binary
+            && metadata.semantic.values.is_empty()
+            && array.data_type() == &DataType::Boolean
+        {
+            crate::column_semantic(&field)?
+        } else {
+            metadata.semantic.clone()
+        };
+        field = with_column_semantic(field, &semantic)?;
+        crate::validate_semantic_array(&field, array.as_ref())?;
+    }
+    Ok((field, array))
+}
+
 pub fn convert_semantic_values(
     values: &[TabularScalar],
     source_metadata: Option<&ConversionMetadata>,
     spec: &SemanticConversion,
 ) -> Result<ConvertedValues, TabularArrowError> {
-    let mut array = crate::scalar::scalars_to_array(values)?;
-    let mut field = Field::new("value", array.data_type().clone(), true);
-    if let Some(metadata) = source_metadata {
-        if let Some(temporal) = metadata.temporal {
-            let dtype = temporal_type(temporal);
-            array = lossless_cast(array.as_ref(), &dtype, false)?;
-            field = Field::new("value", dtype, true);
-        }
-        field = with_column_semantic(field, &metadata.semantic)?;
-    }
+    let (field, array) = materialized_column("value", values, source_metadata)?;
     let conversion = PreparedConversion::new(&field, spec)?;
     let result = conversion.convert(array.as_ref())?;
     let result = if conversion.metadata.temporal.is_some() {

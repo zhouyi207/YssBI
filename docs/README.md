@@ -76,6 +76,8 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## History
 
+- [2026-09-19 节点执行链路修复](reviews/2026-09-19-node-execution-fixes.md)：必要性判断、共享载体、关系入口、资源控制、调用契约和验证边界。
+
 - [2026-09-15 Graph 与 JSON 报告实施](reviews/2026-09-15-motion-json-driver-implementation.md)：语义报告试点、同一真实 OLS 样本的 renderer 对比，以及人工验收结果与明确跳过项。
 
 - [2026-09-15 Graph 实时解析优化](reviews/2026-09-15-graph-resolution-optimization.md)：语义快照复用、Schema 增量缓存、批次解析与投影索引的实现和测量边界。

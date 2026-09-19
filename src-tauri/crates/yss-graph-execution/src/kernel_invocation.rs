@@ -13,16 +13,17 @@ use crate::resource_preparation::PreparedRunResources;
 
 pub(crate) fn invoke(
     kernels: &KernelRegistry,
+    relations: &std::sync::Arc<dyn yss_relational_contract::RelationFactory>,
     operation: &PlanOperation,
     inputs: &[RuntimeValue],
     parameters: &PlanParameterBundle,
     resources: &PreparedRunResources,
     control: &KernelControl,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let input_templates = operation
+    let input_keys = operation
         .inputs()
         .iter()
-        .map(|input| input.contract().template.as_deref())
+        .map(|input| input.contract().key.as_ref())
         .collect::<Vec<_>>();
     let outputs = operation
         .outputs()
@@ -57,8 +58,9 @@ pub(crate) fn invoke(
     kernels.execute(
         operation.kernel_id(),
         &KernelInvocation {
+            relations,
             inputs,
-            input_templates: &input_templates,
+            input_keys: &input_keys,
             parameters,
             outputs: &outputs,
             control,
@@ -88,18 +90,20 @@ pub(crate) fn parameter_value<'a>(
             values
                 .iter()
                 .map(|value| parameter_value(value, resources).map(Cow::into_owned))
-                .collect::<Result<Box<[_]>, _>>()?,
+                .collect::<Result<std::sync::Arc<[_]>, _>>()?,
         )),
-        PlanParameterValue::Record(fields) => Cow::Owned(RuntimeValue::Record(
-            fields
-                .iter()
-                .map(|(key, value)| {
-                    Ok((
-                        key.as_str().into(),
-                        parameter_value(value, resources)?.into_owned(),
-                    ))
-                })
-                .collect::<Result<BTreeMap<_, _>, KernelError>>()?,
-        )),
+        PlanParameterValue::Record(fields) => {
+            Cow::Owned(RuntimeValue::Record(std::sync::Arc::new(
+                fields
+                    .iter()
+                    .map(|(key, value)| {
+                        Ok((
+                            key.as_str().into(),
+                            parameter_value(value, resources)?.into_owned(),
+                        ))
+                    })
+                    .collect::<Result<BTreeMap<_, _>, KernelError>>()?,
+            )))
+        }
     })
 }

@@ -301,6 +301,15 @@ export const enUS = {
     code: "Error code: {{code}}",
     incident: "Diagnostic reference: {{id}}",
     causes: {
+      shapeMismatch: "Input column lengths or matrix dimensions do not match.",
+      invalidParameter: "Node parameters are invalid. Check the method and its configuration.",
+      unalignedSeries:
+        "Input columns have different row alignment. Select columns from the same data frame.",
+      budgetExceeded: "The computation exceeds its memory budget. Reduce input rows or columns.",
+      inputLayoutMismatch: "The node input layout does not match its implementation.",
+      outputContractMismatch: "The node returned an output that does not match its declaration.",
+      scientificFailure:
+        "Statistical computation failed. Check matrix conditioning and model estimability.",
       divisionByZero:
         "The divisor is zero. Check the division node's right input and its upstream value.",
       nonFiniteResult:

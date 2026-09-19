@@ -134,18 +134,17 @@ impl DataFusionRelation {
     ) -> Result<RelationHandle, RelationError> {
         let mut bindings: Vec<RelationBinding> = Vec::new();
         let mut leases = Vec::new();
-        let session = self
-            .bindings
-            .first()
-            .ok_or(RelationError::InvalidInput)?
-            .project_session
-            .as_ref();
+        let session = std::iter::once(self)
+            .chain(inputs.iter().copied())
+            .flat_map(|input| input.bindings.iter())
+            .next()
+            .map(|binding| binding.project_session.as_ref());
         for input in std::iter::once(self).chain(inputs.iter().copied()) {
             if !Arc::ptr_eq(&self.executor, &input.executor) {
                 return Err(RelationError::InvalidInput);
             }
             for binding in input.bindings.iter() {
-                if binding.project_session.as_ref() != session {
+                if Some(binding.project_session.as_ref()) != session {
                     return Err(RelationError::InvalidInput);
                 }
                 if let Some(previous) = bindings

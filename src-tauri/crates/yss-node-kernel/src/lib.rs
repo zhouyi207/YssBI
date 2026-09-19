@@ -13,7 +13,7 @@ pub use error::KernelError;
 pub use identity::{InvalidKernelIdentity, KernelFingerprint, KernelId, KernelParameterKey};
 pub use invocation::{KernelControl, KernelField, KernelInvocation, KernelOutputSpec};
 pub use registry::{
-    KernelBindingError, KernelContract, KernelRegistrationError, KernelRegistry,
+    KernelBindingError, KernelContract, KernelInputSpec, KernelRegistrationError, KernelRegistry,
     KernelRegistryBuilder,
 };
 pub use value::{AnnotatedRuntimeValue, RuntimeValue, RuntimeValueError};

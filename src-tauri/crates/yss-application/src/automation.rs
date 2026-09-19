@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn result_json_preserves_long_text_deep_objects_and_complete_arrays() {
         let text = "x".repeat(2_000_000);
-        let mut value = RuntimeValue::Record(
+        let mut value = RuntimeValue::Record(std::sync::Arc::new(
             [
                 ("text".into(), RuntimeValue::String(text.clone().into())),
                 (
@@ -661,9 +661,9 @@ mod tests {
                 ),
             ]
             .into(),
-        );
+        ));
         for _ in 0..8 {
-            value = RuntimeValue::Record([("nested".into(), value)].into());
+            value = RuntimeValue::Record(std::sync::Arc::new([("nested".into(), value)].into()));
         }
         let json = crate::graph::results::runtime_value_to_json(&value).unwrap();
         let mut nested = &json;
