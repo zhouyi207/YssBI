@@ -4,14 +4,14 @@ import { parseDfAdfSummaryListResultData, parseDfAdfSummaryResultData } from "./
 import { panelDidResultDataField, panelSummaryField } from "./parsePanel";
 import {
   binaryRegressionReportField,
-  canonicalOlsReportField,
+  canonicalLinearRegressionReportField,
   linearRegressionReportField,
 } from "./parseRegression";
 import { varSocResultDataField, varSummaryResultDataField } from "./parseVar";
 import { vecRankResultDataField, vecSummaryResultDataField } from "./parseVec";
 
 const reportFields = {
-  olsSummary: canonicalOlsReportField,
+  linearRegressionSummary: canonicalLinearRegressionReportField,
   binarySummary: binaryRegressionReportField,
   iv2slsSummary: linearRegressionReportField,
   ivLimlSummary: linearRegressionReportField,

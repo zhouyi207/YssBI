@@ -105,6 +105,8 @@ export interface HarnessSession {
   readonly sessionId: string;
   readonly projectInstanceId: string;
   readonly projectSessionId: string;
+  readonly title: string;
+  readonly lastOpenedAt: number;
 }
 
 export interface HarnessTurnResult {
@@ -261,10 +263,32 @@ export function parseHarnessSession(value: unknown): HarnessSession {
   const sessionId = source && stringField(source, "sessionId");
   const projectInstanceValue = source && stringField(source, "projectInstanceId");
   const projectSessionId = source && stringField(source, "projectSessionId");
-  if (!sessionId || !projectInstanceValue || !projectSessionId) {
+  if (
+    !sessionId ||
+    !projectInstanceValue ||
+    !projectSessionId ||
+    typeof source?.title !== "string" ||
+    typeof source.lastOpenedAt !== "number" ||
+    !Number.isSafeInteger(source.lastOpenedAt) ||
+    source.lastOpenedAt < 0
+  ) {
     throw new InvalidHarnessPayloadError("HarnessSession");
   }
-  return { sessionId, projectInstanceId: projectInstanceValue, projectSessionId };
+  return {
+    sessionId,
+    projectInstanceId: projectInstanceValue,
+    projectSessionId,
+    title: source.title,
+    lastOpenedAt: source.lastOpenedAt,
+  };
+}
+
+export function parseHarnessSessions(value: unknown): readonly HarnessSession[] {
+  if (!Array.isArray(value)) throw new InvalidHarnessPayloadError("HarnessSessions");
+  const sessions = value.map(parseHarnessSession);
+  if (new Set(sessions.map((session) => session.sessionId)).size !== sessions.length)
+    throw new InvalidHarnessPayloadError("HarnessSessions");
+  return sessions;
 }
 
 export function parseHarnessTurnResult(value: unknown): HarnessTurnResult {

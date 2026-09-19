@@ -69,7 +69,7 @@ describe("workbench panel metadata", () => {
         leaseId: resultLeaseIdFixture(3),
         reference: resultReferenceFixture("43"),
         title: "Report result",
-        presentation: { kind: "report", report: "olsSummary" },
+        presentation: { kind: "report", report: "linearRegressionSummary" },
       },
     ];
     for (const result of results) {

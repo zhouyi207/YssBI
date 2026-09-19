@@ -19,10 +19,10 @@ pub(crate) fn invoke(
     resources: &PreparedRunResources,
     control: &KernelControl,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let input_groups = operation
+    let input_templates = operation
         .inputs()
         .iter()
-        .map(|input| input.contract().group.as_ref().map(|group| group.as_str()))
+        .map(|input| input.contract().template.as_deref())
         .collect::<Vec<_>>();
     let outputs = operation
         .outputs()
@@ -58,7 +58,7 @@ pub(crate) fn invoke(
         operation.kernel_id(),
         &KernelInvocation {
             inputs,
-            input_groups: &input_groups,
+            input_templates: &input_templates,
             parameters,
             outputs: &outputs,
             control,

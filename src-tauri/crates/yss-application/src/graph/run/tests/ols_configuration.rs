@@ -38,8 +38,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     for (id, node_type) in [
         (response, "yssbi.constant.get"),
         (predictor, "yssbi.constant.get"),
-        (fit, "yssbi.statistics.ols.fit"),
-        (summary, "yssbi.statistics.ols.summary"),
+        (fit, "yssbi.statistics.linear.fit"),
+        (summary, "yssbi.statistics.linear.summary"),
     ] {
         document.nodes.insert(
             id,
@@ -90,7 +90,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
             .unwrap();
         apply_graph_document_patch(document, &patch).unwrap();
     };
-    for target in [fit, summary] {
+    for target in [fit] {
         apply(
             &mut document,
             EditorGraphMutation::AddPortInstance {
@@ -129,6 +129,16 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
             );
         }
     }
+    let connection = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        connection,
+        DocumentConnection {
+            id: connection,
+            output: port(fit, "model"),
+            input: port(summary, "model"),
+            order: None,
+        },
+    );
     let catalog = ResourceCatalogSnapshot::new(
         BTreeMap::new(),
         BTreeMap::new(),
@@ -190,10 +200,10 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
             .and_then(serde_json::Value::as_str)
             .unwrap()
         {
-            "HAC" => vec!["constant", "covariance", "kernel", "bandwidth"],
-            "fixed scale" => vec!["constant", "covariance", "scale"],
-            "newey" => vec!["constant", "covariance", "lag"],
-            _ => vec!["constant", "covariance"],
+            "HAC" => vec!["method", "constant", "covariance", "kernel", "bandwidth"],
+            "fixed scale" => vec!["method", "constant", "covariance", "scale"],
+            "newey" => vec!["method", "constant", "covariance", "lag"],
+            _ => vec!["method", "constant", "covariance"],
         };
         assert_eq!(
             fields
@@ -253,7 +263,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         results
     };
     let default_results = execute(&document);
-    for target in [fit, summary] {
+    for target in [fit] {
         apply(
             &mut document,
             EditorGraphMutation::SetConfiguration {
@@ -270,25 +280,23 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     let local = execute(&document);
     let model_key = port(fit, "model").to_string();
     let report_key = port(summary, "report").to_string();
-    let RuntimeValue::Record(model) = &local[&model_key] else {
-        panic!("model must be a record");
+    let RuntimeValue::LinearRegression(model) = &local[&model_key] else {
+        panic!("model must be a native linear regression result");
     };
-    assert_eq!(model["constant"], RuntimeValue::Bool(false));
-    let RuntimeValue::List(coefficients) = &model["coefficients"] else {
-        panic!("coefficients must be a list");
+    assert!(!model.constant);
+    assert_eq!(model.coefficients.len(), 1);
+    assert!((model.coefficients[0] - 124.0 / 91.0).abs() < 1e-10);
+    let RuntimeValue::LinearRegression(report) = &local[&report_key] else {
+        panic!("report model");
     };
-    assert_eq!(coefficients.len(), 1);
-    let RuntimeValue::Decimal(coefficient) = coefficients[0] else {
-        panic!("coefficient must be numeric");
-    };
-    assert!((coefficient - 124.0 / 91.0).abs() < 1e-10);
+    assert!(Arc::ptr_eq(model, report));
     assert_ne!(default_results[&model_key], local[&model_key]);
     assert_ne!(default_results[&report_key], local[&report_key]);
     let saved = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
     assert_eq!(local, execute(&saved));
     // Isolate covariance from the intercept setting: coefficients stay fixed,
     // while the uncertainty reported by the real scientific backend changes.
-    for target in [fit, summary] {
+    for target in [fit] {
         apply(
             &mut document,
             EditorGraphMutation::SetConfiguration {
@@ -304,9 +312,16 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         );
     }
     let fixed_scale = execute(&document);
-    assert_eq!(fixed_scale[&model_key], local[&model_key]);
+    let coefficients = |value: &RuntimeValue| match value {
+        RuntimeValue::LinearRegression(model) => model.coefficients.clone(),
+        _ => panic!("model"),
+    };
+    assert_eq!(
+        coefficients(&fixed_scale[&model_key]),
+        coefficients(&local[&model_key])
+    );
     assert_ne!(fixed_scale[&report_key], local[&report_key]);
-    for target in [fit, summary] {
+    for target in [fit] {
         document
             .nodes
             .get_mut(&target)
@@ -321,7 +336,7 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     }
     assert_eq!(execute(&document)[&report_key], fixed_scale[&report_key]);
     for covariance in ["HAC", "newey"] {
-        for target in [fit, summary] {
+        for target in [fit] {
             apply(
                 &mut document,
                 EditorGraphMutation::SetConfiguration {
@@ -331,7 +346,10 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
                 },
             );
         }
-        assert_eq!(execute(&document)[&model_key], local[&model_key]);
+        assert_eq!(
+            coefficients(&execute(&document)[&model_key]),
+            coefficients(&local[&model_key])
+        );
     }
     document
         .nodes

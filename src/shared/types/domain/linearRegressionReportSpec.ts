@@ -1,7 +1,7 @@
 import { isRecord } from "@/shared/types/report/guards";
 import { isResultReference, resultReference, type ResultReference } from "./result";
 
-export const OLS_REPORT_SECTION_KINDS = [
+export const LINEAR_REGRESSION_REPORT_SECTION_KINDS = [
   "equation",
   "modelSummary",
   "anova",
@@ -14,23 +14,24 @@ export const OLS_REPORT_SECTION_KINDS = [
   "serialTests",
 ] as const;
 
-export type OlsReportSectionKind = (typeof OLS_REPORT_SECTION_KINDS)[number];
-export interface OlsReportSection {
+export type LinearRegressionReportSectionKind =
+  (typeof LINEAR_REGRESSION_REPORT_SECTION_KINDS)[number];
+export interface LinearRegressionReportSection {
   readonly id: string;
-  readonly kind: OlsReportSectionKind;
+  readonly kind: LinearRegressionReportSectionKind;
   readonly visible: boolean;
 }
 
 /** Presentation only. Numerical values and query parameters belong to Results and its controls. */
-export interface OlsReportSpec {
+export interface LinearRegressionReportSpec {
   readonly schemaVersion: 1;
   readonly type: "regressionReport";
   readonly source: ResultReference;
-  readonly sections: readonly OlsReportSection[];
+  readonly sections: readonly LinearRegressionReportSection[];
 }
 
-export const OLS_REPORT_SPEC_TEXT_LIMIT = 16 * 1024;
-export type OlsReportSpecErrorCode =
+export const LINEAR_REGRESSION_REPORT_SPEC_TEXT_LIMIT = 16 * 1024;
+export type LinearRegressionReportSpecErrorCode =
   | "invalidJson"
   | "tooLarge"
   | "invalidShape"
@@ -39,20 +40,26 @@ export type OlsReportSpecErrorCode =
   | "unknownSection"
   | "invalidId"
   | "duplicateSection";
-export interface OlsReportSpecIssue {
-  readonly code: OlsReportSpecErrorCode;
+export interface LinearRegressionReportSpecIssue {
+  readonly code: LinearRegressionReportSpecErrorCode;
   readonly path: string;
 }
-export type OlsReportSpecResult =
-  | { readonly ok: true; readonly value: OlsReportSpec }
-  | { readonly ok: false; readonly issue: OlsReportSpecIssue };
+export type LinearRegressionReportSpecResult =
+  | { readonly ok: true; readonly value: LinearRegressionReportSpec }
+  | { readonly ok: false; readonly issue: LinearRegressionReportSpecIssue };
 
-export function defaultOlsReportSpec(source: ResultReference): OlsReportSpec {
+export function defaultLinearRegressionReportSpec(
+  source: ResultReference,
+): LinearRegressionReportSpec {
   return {
     schemaVersion: 1,
     type: "regressionReport",
     source: resultReference(source),
-    sections: OLS_REPORT_SECTION_KINDS.map((kind) => ({ id: kind, kind, visible: true })),
+    sections: LINEAR_REGRESSION_REPORT_SECTION_KINDS.map((kind) => ({
+      id: kind,
+      kind,
+      visible: true,
+    })),
   };
 }
 
@@ -60,8 +67,14 @@ function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): b
   return Object.keys(value).every((key) => keys.includes(key));
 }
 
-export function parseOlsReportSpec(raw: unknown, source: ResultReference): OlsReportSpecResult {
-  const fail = (code: OlsReportSpecErrorCode, path: string): OlsReportSpecResult => ({
+export function parseLinearRegressionReportSpec(
+  raw: unknown,
+  source: ResultReference,
+): LinearRegressionReportSpecResult {
+  const fail = (
+    code: LinearRegressionReportSpecErrorCode,
+    path: string,
+  ): LinearRegressionReportSpecResult => ({
     ok: false,
     issue: { code, path },
   });
@@ -78,9 +91,10 @@ export function parseOlsReportSpec(raw: unknown, source: ResultReference): OlsRe
   )
     return fail("sourceMismatch", "source");
   if (!Array.isArray(raw.sections)) return fail("invalidShape", "sections");
-  if (raw.sections.length > OLS_REPORT_SECTION_KINDS.length) return fail("tooLarge", "sections");
+  if (raw.sections.length > LINEAR_REGRESSION_REPORT_SECTION_KINDS.length)
+    return fail("tooLarge", "sections");
 
-  const sections: OlsReportSection[] = [];
+  const sections: LinearRegressionReportSection[] = [];
   const ids = new Set<string>();
   const kinds = new Set<string>();
   for (const [index, section] of raw.sections.entries()) {
@@ -90,7 +104,7 @@ export function parseOlsReportSpec(raw: unknown, source: ResultReference): OlsRe
       return fail("invalidShape", path);
     if (typeof section.id !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(section.id))
       return fail("invalidId", `${path}.id`);
-    const kind = OLS_REPORT_SECTION_KINDS.find((kind) => kind === section.kind);
+    const kind = LINEAR_REGRESSION_REPORT_SECTION_KINDS.find((kind) => kind === section.kind);
     if (!kind) return fail("unknownSection", `${path}.kind`);
     if (section.visible !== undefined && typeof section.visible !== "boolean")
       return fail("invalidShape", `${path}.visible`);
@@ -110,8 +124,11 @@ export function parseOlsReportSpec(raw: unknown, source: ResultReference): OlsRe
   };
 }
 
-export function parseOlsReportSpecJson(text: string, source: ResultReference): OlsReportSpecResult {
-  if (text.length > OLS_REPORT_SPEC_TEXT_LIMIT)
+export function parseLinearRegressionReportSpecJson(
+  text: string,
+  source: ResultReference,
+): LinearRegressionReportSpecResult {
+  if (text.length > LINEAR_REGRESSION_REPORT_SPEC_TEXT_LIMIT)
     return { ok: false, issue: { code: "tooLarge", path: "$" } };
   let raw: unknown;
   try {
@@ -119,5 +136,5 @@ export function parseOlsReportSpecJson(text: string, source: ResultReference): O
   } catch {
     return { ok: false, issue: { code: "invalidJson", path: "$" } };
   }
-  return parseOlsReportSpec(raw, source);
+  return parseLinearRegressionReportSpec(raw, source);
 }

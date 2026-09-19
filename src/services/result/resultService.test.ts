@@ -32,11 +32,11 @@ const readyDescriptor = {
 
   executionSessionId: resultSessionFixture,
   provenance,
-  presentation: { kind: "report" as const, report: "olsSummary" as const },
+  presentation: { kind: "report" as const, report: "linearRegressionSummary" as const },
   valueKind: "scalar" as const,
   metadata: null,
   totalCount: 1,
-  title: "OLS Summary",
+  title: "Linear Regression Summary",
 };
 
 describe("result DTO parsers", () => {

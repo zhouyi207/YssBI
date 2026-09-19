@@ -203,33 +203,30 @@ impl InMemoryHarnessStore {
 }
 
 impl HarnessSessionStorePort for InMemoryHarnessStore {
-    fn recent_completed_turns<'a>(
+    fn list_conversations<'a>(
         &'a self,
-        session_id: &'a HarnessSessionId,
-        limit: usize,
-    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        principal: &'a yss_harness_contract::PrincipalId,
+        project_key: &'a str,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
         Box::pin(async move {
-            let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
-            let mut turns = state
-                .turns
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .sessions
                 .values()
-                .filter(|turn| {
-                    &turn.session_id == session_id
-                        && turn.state == yss_harness_contract::HarnessTurnState::Completed
+                .filter(|session| {
+                    &session.principal_id == principal
+                        && session
+                            .conversation
+                            .as_ref()
+                            .is_some_and(|value| value.project_key == project_key)
                 })
                 .cloned()
-                .collect::<Vec<_>>();
-            turns.sort_by_key(|turn| turn.started_at);
-            Ok(turns
-                .into_iter()
-                .rev()
-                .take(limit)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
                 .collect())
         })
     }
+
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
@@ -521,6 +518,23 @@ impl WorkflowStorePort for InMemoryHarnessStore {
 }
 
 impl ToolInvocationLedgerPort for InMemoryHarnessStore {
+    fn load_invocation<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+        invocation_id: &'a yss_harness_contract::ToolInvocationId,
+    ) -> PersistenceFuture<'a, Result<Option<ToolInvocationRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            Ok(self
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .invocations
+                .values()
+                .find(|record| &record.session_id == session_id && &record.id == invocation_id)
+                .cloned())
+        })
+    }
+
     fn load_running_invocations<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>> {

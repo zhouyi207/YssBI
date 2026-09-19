@@ -212,11 +212,16 @@ export const enUS = {
     assistantStatusReady: "Press Ctrl+Enter to send",
     assistantStatusRunning: "Analyzing…",
     assistantStatusError: "Assistant is temporarily unavailable",
+    assistantConversations: "Conversations",
+    assistantNewConversation: "New chat",
+    assistantReloadConversations: "Retry",
     assistantErrors: {
       assistant_authentication_failed:
         "Authentication failed. Check your API key and model access.",
       assistant_rate_limited:
         "The service is rate limited or out of quota. Check your quota and try again later.",
+      assistant_context_window_exceeded:
+        "The complete conversation exceeds the model context window. History was not truncated. Choose a model with a larger context window or start a new conversation.",
       assistant_provider_request_rejected:
         "The service rejected the request. Check the model, API URL, and API compatibility.",
       assistant_provider_connection_failed:

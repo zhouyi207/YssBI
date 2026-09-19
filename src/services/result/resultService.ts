@@ -10,7 +10,7 @@ import {
   type ResultLease,
   type GraphResultState,
 } from "@/shared/types/domain/result";
-import { parseResultAnalysis } from "@/shared/types/report/parseOls";
+import { parseResultAnalysis } from "@/shared/types/report/parseLinearRegression";
 import type { PortAddressDto } from "@/shared/types/dto/editorProjection";
 import type { ResultDescriptor, ResultPage, ResultValue } from "@/shared/types/dto/result";
 import {

@@ -7,6 +7,8 @@
 
 工作台使用一个原生 FlexLayout Model 保存已提交的物理布局。React 的 Layout 和组件注册表呈现该模型，Application 通过语义操作协调面板生命周期。工作台布局、Graph 文档和统计结果具有独立的 owner。
 
+Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](STATISTICAL_HARNESS.md#5-session-turn-and-events)。
+
 ## 1. 渲染层级与 authority
 
 ```text

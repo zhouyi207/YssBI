@@ -53,7 +53,8 @@ pub struct KernelOutputSpec {
 
 pub struct KernelInvocation<'a> {
     pub inputs: &'a [RuntimeValue],
-    pub input_groups: &'a [Option<&'a str>],
+    /// Template keys for repeatable inputs; declared inputs have no template.
+    pub input_templates: &'a [Option<&'a str>],
     /// Literals and authorized resource values can be borrowed without copying large payloads.
     pub parameters: BTreeMap<KernelParameterKey, Cow<'a, RuntimeValue>>,
     pub outputs: &'a [KernelOutputSpec],

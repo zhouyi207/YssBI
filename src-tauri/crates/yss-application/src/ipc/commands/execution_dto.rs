@@ -1,4 +1,4 @@
-use crate::graph::results::{ResultPageKind, ResultPageProjection};
+use crate::graph::results::{ResultPageKind, ResultPageProjection, runtime_value_to_json};
 use crate::graph::run::RunDemand;
 use crate::ipc::channel::execution::{RunEventDtoError, output_dto};
 use serde::Serialize;
@@ -80,7 +80,7 @@ pub enum ResultPlotKindDto {
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResultReportKindDto {
-    OlsSummary,
+    LinearRegressionSummary,
     BinarySummary,
     Iv2slsSummary,
     IvLimlSummary,
@@ -185,8 +185,8 @@ fn result_presentation(
         yss_graph_execution::plan::ResultCategory::StatisticalReport(kind) => {
             ResultPresentationDto::Report {
                 report: match kind {
-                    yss_graph_execution::plan::StatisticalReportKind::OlsSummary => {
-                        ResultReportKindDto::OlsSummary
+                    yss_graph_execution::plan::StatisticalReportKind::LinearRegressionSummary => {
+                        ResultReportKindDto::LinearRegressionSummary
                     }
                     yss_graph_execution::plan::StatisticalReportKind::BinarySummary => {
                         ResultReportKindDto::BinarySummary
@@ -272,7 +272,8 @@ impl ResultPageDto {
             .values
             .iter()
             .map(runtime_value_to_json)
-            .collect::<Result<Box<[_]>, _>>()?;
+            .collect::<Result<Box<[_]>, _>>()
+            .map_err(|_| RunEventDtoError::InvalidOutput)?;
         let actual_count = values.len();
         let next = page
             .offset
@@ -305,43 +306,6 @@ impl ResultPageDto {
             values,
         })
     }
-}
-
-pub(crate) fn runtime_value_to_json(
-    value: &RuntimeValue,
-) -> Result<serde_json::Value, RunEventDtoError> {
-    Ok(match value {
-        RuntimeValue::Annotated(value) => runtime_value_to_json(value.value())?,
-        RuntimeValue::Null => serde_json::Value::Null,
-        RuntimeValue::Bool(value) => (*value).into(),
-        RuntimeValue::Integer(value) => serde_json::to_value(
-            yss_tabular_contract::TabularScalar::Integer(*value).display_value(),
-        )
-        .map_err(|_| RunEventDtoError::InvalidOutput)?,
-        RuntimeValue::Unsigned(value) => serde_json::to_value(
-            yss_tabular_contract::TabularScalar::Unsigned(*value).display_value(),
-        )
-        .map_err(|_| RunEventDtoError::InvalidOutput)?,
-        RuntimeValue::Decimal(value) => serde_json::Number::from_f64(*value)
-            .map(serde_json::Value::Number)
-            .ok_or(RunEventDtoError::InvalidOutput)?,
-        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
-        RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::Ols(_) => {
-            return Err(RunEventDtoError::InvalidOutput);
-        }
-        RuntimeValue::List(values) => values
-            .iter()
-            .map(runtime_value_to_json)
-            .collect::<Result<Vec<_>, _>>()?
-            .into(),
-        RuntimeValue::Record(values) => values
-            .iter()
-            .map(|(key, value)| Ok((key.to_string(), runtime_value_to_json(value)?)))
-            .collect::<Result<std::collections::BTreeMap<_, _>, RunEventDtoError>>()?
-            .into_iter()
-            .collect::<serde_json::Map<_, _>>()
-            .into(),
-    })
 }
 
 #[cfg(test)]

@@ -166,19 +166,18 @@ const SCHEMA: &[&str] = &[
 ];
 
 impl HarnessSessionStorePort for SqliteHarnessStore {
-    fn recent_completed_turns<'a>(
+    fn list_conversations<'a>(
         &'a self,
-        session_id: &'a HarnessSessionId,
-        limit: usize,
-    ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
+        principal: &'a yss_harness_contract::PrincipalId,
+        project_key: &'a str,
+    ) -> PersistenceFuture<'a, Result<Vec<HarnessSessionRecord>, PersistenceFailure>> {
         Box::pin(async move {
-            let mut turns = sqlx::query_scalar::<_, String>("SELECT payload_json FROM assistant_turn WHERE session_id = ? AND state = 'completed' ORDER BY rowid DESC LIMIT ?")
-                .bind(session_id.as_str()).bind(i64::try_from(limit.min(20)).map_err(|_| invalid_record())?).fetch_all(&self.pool).await.map_err(|_| unavailable())?
-                .into_iter().map(|payload| decode(&payload)).collect::<Result<Vec<HarnessTurnRecord>, _>>()?;
-            turns.reverse();
-            Ok(turns)
+            sqlx::query_scalar::<_, String>("SELECT payload_json FROM assistant_session WHERE json_extract(payload_json, '$.principalId') = ? AND json_extract(payload_json, '$.conversation.projectKey') = ? ORDER BY rowid")
+                .bind(principal.as_str()).bind(project_key).fetch_all(&self.pool).await.map_err(|_| unavailable())?
+                .into_iter().map(|payload| decode(&payload)).collect()
         })
     }
+
     fn load_running_turns<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<HarnessTurnRecord>, PersistenceFailure>> {
@@ -508,6 +507,24 @@ impl WorkflowStorePort for SqliteHarnessStore {
 }
 
 impl ToolInvocationLedgerPort for SqliteHarnessStore {
+    fn load_invocation<'a>(
+        &'a self,
+        session_id: &'a HarnessSessionId,
+        invocation_id: &'a yss_harness_contract::ToolInvocationId,
+    ) -> PersistenceFuture<'a, Result<Option<ToolInvocationRecord>, PersistenceFailure>> {
+        Box::pin(async move {
+            let payload = sqlx::query_scalar::<_, String>(
+                "SELECT payload_json FROM tool_invocation WHERE session_id = ? AND id = ?",
+            )
+            .bind(session_id.as_str())
+            .bind(invocation_id.as_str())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| unavailable())?;
+            payload.map(|payload| decode(&payload)).transpose()
+        })
+    }
+
     fn load_running_invocations<'a>(
         &'a self,
     ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>> {
@@ -1123,6 +1140,7 @@ mod tests {
             ProjectSessionId::new("project-session-1"),
         );
         let session = HarnessSessionRecord {
+            conversation: None,
             id: HarnessSessionId::try_new("session-1").unwrap(),
             principal_id: PrincipalId::try_new("user-1").unwrap(),
             project: project.clone(),
@@ -1198,20 +1216,28 @@ mod tests {
         turn.finished_at = Some(UnixMillis::from_existing(43));
         store.update_turn(&turn).await.unwrap();
         assert!(store.load_running_turns().await.unwrap().is_empty());
+        assert_eq!(store.load_turn(&turn.id).await.unwrap(), Some(turn.clone()));
+        assert_eq!(
+            store
+                .load_invocation(&session.id, &invocation.id)
+                .await
+                .unwrap(),
+            Some(finished)
+        );
         assert!(
             store
-                .recent_completed_turns(&session.id, 8)
+                .load_invocation(
+                    &HarnessSessionId::try_new("another-session").unwrap(),
+                    &invocation.id
+                )
                 .await
                 .unwrap()
-                .is_empty()
+                .is_none()
         );
         turn.state = HarnessTurnState::Completed;
         turn.final_text = Some("Completed".into());
         store.update_turn(&turn).await.unwrap();
-        assert_eq!(
-            store.recent_completed_turns(&session.id, 1).await.unwrap(),
-            [turn]
-        );
+        assert_eq!(store.load_turn(&turn.id).await.unwrap(), Some(turn));
         assert_eq!(store.latest_sequence(&session.id).await.unwrap(), 1);
         assert_eq!(
             store.load_session(&session.id).await.unwrap(),

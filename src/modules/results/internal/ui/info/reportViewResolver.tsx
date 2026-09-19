@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import type { ReportKind } from "@/features/application/results/types";
-import { OLSComponent } from "./OLSComponent";
+import { LinearRegressionComponent } from "./LinearRegressionComponent";
 import { VARComponent } from "./VARComponent";
 import { VARSocComponent } from "./VARSocComponent";
 import { VECComponent } from "./VECComponent";
@@ -17,7 +17,7 @@ import { LIMLComponent } from "./LIMLComponent";
 export type ReportViewProps = { data: unknown };
 
 const REPORT_COMPONENTS: Record<ReportKind, ComponentType<ReportViewProps>> = {
-  olsSummary: OLSComponent as ComponentType<ReportViewProps>,
+  linearRegressionSummary: LinearRegressionComponent as ComponentType<ReportViewProps>,
   binarySummary: BinaryComponent as ComponentType<ReportViewProps>,
   iv2slsSummary: TwoSLSComponent as ComponentType<ReportViewProps>,
   ivLimlSummary: LIMLComponent as ComponentType<ReportViewProps>,
@@ -33,5 +33,5 @@ const REPORT_COMPONENTS: Record<ReportKind, ComponentType<ReportViewProps>> = {
 };
 
 export function resolveReportComponent(report: ReportKind): ComponentType<ReportViewProps> {
-  return REPORT_COMPONENTS[report] ?? OLSComponent;
+  return REPORT_COMPONENTS[report] ?? LinearRegressionComponent;
 }

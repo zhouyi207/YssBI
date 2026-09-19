@@ -93,7 +93,7 @@ fn connections_consume_the_exact_multi_output_port_value() {
         producer,
         DocumentNode {
             id: producer,
-            node_type: "yssbi.statistics.ols.fit"
+            node_type: "yssbi.statistics.linear.fit"
                 .parse()
                 .expect("built-in node type is valid"),
             position: NodePosition { x: 0.0, y: 0.0 },
@@ -331,6 +331,13 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
         operands.iter().map(ToString::to_string).collect::<Vec<_>>()
     );
     for (binding, semantic_binding) in operation.inputs().iter().zip(semantic_node.inputs.iter()) {
+        assert_eq!(
+            binding.contract().template.as_deref(),
+            match &semantic_binding.address.port {
+                yss_graph_document::PortRef::Instance { template, .. } => Some(template.as_str()),
+                yss_graph_document::PortRef::Declared { .. } => None,
+            }
+        );
         assert_eq!(
             binding
                 .contract()

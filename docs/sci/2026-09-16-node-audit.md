@@ -113,7 +113,7 @@
 | ------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------ |
 | [节点目录](../../src-tauri/crates/yss-node-catalog/README.md)                         | 已有节点定义、分类、本地化、别名和帮助文档装配 | 在现有目录中整理名称和职责                 |
 | [参数配置面板](../../src/modules/details/internal/ui/node/NodeConfigurationPanel.tsx) | 按投影中的配置字段渲染并提交图修改             | 统一变量角色、参数组织及实际传参           |
-| [OLS 报告布局](../../src/shared/types/domain/olsReportSpec.ts)                        | 已定义章节种类、显示配置、结果引用和解析校验   | 作为报告体验样板，后续按模型扩展           |
+| [OLS 报告布局](../../src/shared/types/domain/linearRegressionReportSpec.ts)           | 已定义章节种类、显示配置、结果引用和解析校验   | 作为报告体验样板，后续按模型扩展           |
 | [OLS 结果分析](../../src-tauri/crates/yss-graph-execution/src/result/analysis.rs)     | 已有基于 OLS 结果的相关分析入口                | 明确哪些下游能力在首批复用                 |
 | [回归 golden tests](../../src-tauri/crates/yss-sci/tests/regression_golden.rs)        | 已有数值回归测试代码和参考值                   | 修改相关算法时按范围运行，并核对参考值来源 |
 

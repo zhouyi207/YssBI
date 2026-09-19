@@ -388,7 +388,7 @@ Rust 用例、补丁原子性、版本校验和传输解析可以做聚焦自动
 
 [^8]: YssBI，[activity_panel_sync.rs](../../src-tauri/crates/yss-application/src/ipc/activity_panel_sync.rs)，有界基线和行补丁；[activityPanelService.ts](../../src/services/workbench/activityPanelService.ts)，快照恢复；[parameter.rs](../../src-tauri/crates/yss-node-protocol/src/parameter.rs)，`ParameterEditorSpec`；[NodeConfigurationPanel.tsx](../../src/modules/details/internal/ui/node/NodeConfigurationPanel.tsx)，schema 字段到控件的映射。
 
-[^9]: YssBI，[reportViewResolver.tsx](../../src/modules/results/internal/ui/info/reportViewResolver.tsx)，报告注册表；[OLSComponent.tsx](../../src/modules/results/internal/ui/info/OLSComponent.tsx)，报告小节、分页及残差分析。
+[^9]: YssBI，[reportViewResolver.tsx](../../src/modules/results/internal/ui/info/reportViewResolver.tsx)，报告注册表；[OLSComponent.tsx](../../src/modules/results/internal/ui/info/LinearRegressionComponent.tsx)，报告小节、分页及残差分析。
 
 [^10]: YssBI，[result.ts](../../src/shared/types/domain/result.ts)，`ResultReference`；[resultQueryCoordinator.ts](../../src/features/application/results/resultQueryCoordinator.ts)，引用及读取生命周期；[IPC contract](../../src-tauri/crates/yss-application/src/ipc/README.md)，结果租约与分页；[Plugin protocol](../../src-tauri/crates/yss-plugin-protocol/README.md)，类型/schema 生成入口。
 

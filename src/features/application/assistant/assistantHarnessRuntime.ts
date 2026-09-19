@@ -10,14 +10,16 @@ import {
   type AppendMessage,
   type ThreadMessageLike,
 } from "@assistant-ui/react";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 import { getSettingsSnapshot, useSettingsRead } from "@/features/core/settings/read";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
 import {
   HarnessService,
   type HarnessEvent,
+  type HarnessSession,
   type HarnessEventSubscription,
   type HarnessKnowledgeCitation,
   type HarnessMemoryRecord,
@@ -42,6 +44,7 @@ export interface AssistantHarnessSnapshot {
   readonly error: ErrorReference | null;
   readonly providerConfigured: boolean;
   readonly sessionId: string | null;
+  readonly conversations: readonly HarnessSession[];
   readonly lastSequence: number;
   readonly messages: readonly ProjectionMessage[];
   readonly isRunning: boolean;
@@ -55,6 +58,7 @@ const INITIAL_SNAPSHOT: AssistantHarnessSnapshot = Object.freeze({
   error: null,
   providerConfigured: false,
   sessionId: null,
+  conversations: Object.freeze([]),
   lastSequence: 0,
   messages: Object.freeze([]),
   isRunning: false,
@@ -68,6 +72,7 @@ const TERMINAL_TURN_ERRORS = new Set([
   "assistant_authentication_failed",
   "assistant_rate_limited",
   "assistant_provider_request_rejected",
+  "assistant_context_window_exceeded",
   "assistant_provider_connection_failed",
   "assistant_invalid_provider_response",
   "assistant_turn_failed",
@@ -117,6 +122,7 @@ class AssistantHarnessProjection {
   readonly getSnapshot = (): AssistantHarnessSnapshot => this.snapshot;
 
   readonly start = async (): Promise<void> => {
+    this.stop();
     const generation = ++this.generation;
     this.citationsByTurn.clear();
     this.plansByTurn.clear();
@@ -140,39 +146,19 @@ class AssistantHarnessProjection {
       if (generation !== this.generation) return;
       const runtime = await HarnessService.runtimeStatus();
       if (generation !== this.generation) return;
-      const session = await HarnessService.createSession();
-      if (generation !== this.generation) {
-        await HarnessService.closeSession(session.sessionId).catch(() => {});
-        return;
-      }
+      const conversations = await HarnessService.listSessions();
+      if (generation !== this.generation) return;
       this.update({
         ...this.snapshot,
+        conversations,
         providerConfigured: runtime.providerConfigured,
-        sessionId: session.sessionId,
-        status: "initializing",
       });
-      const streamGeneration = ++this.streamGeneration;
-      const subscription = await HarnessService.subscribeEvents(
-        session.sessionId,
-        0,
-        (event) => {
-          if (generation === this.generation && streamGeneration === this.streamGeneration)
-            this.onEvent(event);
-        },
-        () => {
-          if (generation === this.generation && streamGeneration === this.streamGeneration)
-            this.onStreamError();
-        },
-      );
-      if (generation !== this.generation || streamGeneration !== this.streamGeneration) {
-        await subscription.unsubscribe();
-        return;
-      }
-      this.subscription = subscription;
-      this.update({
-        ...this.snapshot,
-        status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
-      });
+      const session =
+        conversations.length > 0
+          ? await HarnessService.openSession(conversations[0].sessionId)
+          : await HarnessService.createSession();
+      if (generation !== this.generation) return;
+      await this.attachSession(session, generation);
     } catch (error) {
       if (generation === this.generation)
         this.update({
@@ -182,6 +168,99 @@ class AssistantHarnessProjection {
         });
     }
   };
+
+  readonly newConversation = async (): Promise<void> => {
+    if (this.snapshot.isRunning || this.submitting || this.snapshot.status === "initializing")
+      return;
+    if (this.snapshot.sessionId && this.snapshot.messages.length === 0) return;
+    await this.changeConversation(null);
+  };
+
+  readonly selectConversation = async (sessionId: string): Promise<void> => {
+    if (
+      sessionId === this.snapshot.sessionId ||
+      this.snapshot.isRunning ||
+      this.submitting ||
+      this.snapshot.status === "initializing"
+    )
+      return;
+    await this.changeConversation(sessionId);
+  };
+
+  private async changeConversation(sessionId: string | null): Promise<void> {
+    const conversations = this.snapshot.conversations;
+    const providerConfigured = this.snapshot.providerConfigured;
+    this.stop();
+    const generation = ++this.generation;
+    this.citationsByTurn.clear();
+    this.plansByTurn.clear();
+    this.toolsByTurn.clear();
+    this.update({ ...INITIAL_SNAPSHOT, conversations, providerConfigured });
+    try {
+      const session = sessionId
+        ? await HarnessService.openSession(sessionId)
+        : await HarnessService.createSession();
+      if (generation !== this.generation) return;
+      await this.attachSession(session, generation);
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          ...this.snapshot,
+          status: "error",
+          error: toErrorReference(error, "assistant_session_failed"),
+        });
+    }
+  }
+
+  private async attachSession(session: HarnessSession, generation: number): Promise<void> {
+    this.update({
+      ...this.snapshot,
+      sessionId: session.sessionId,
+      conversations: [
+        session,
+        ...this.snapshot.conversations.filter((entry) => entry.sessionId !== session.sessionId),
+      ],
+    });
+    const streamGeneration = ++this.streamGeneration;
+    const subscription = await HarnessService.subscribeEvents(
+      session.sessionId,
+      0,
+      (event) => {
+        if (generation === this.generation && streamGeneration === this.streamGeneration)
+          this.onEvent(event);
+      },
+      () => {
+        if (generation === this.generation && streamGeneration === this.streamGeneration)
+          this.onStreamError();
+      },
+    );
+    if (generation !== this.generation || streamGeneration !== this.streamGeneration) {
+      await subscription.unsubscribe();
+      return;
+    }
+    this.subscription = subscription;
+    const memoryRecords = await HarnessService.listMemory(session.sessionId);
+    if (generation !== this.generation) return;
+    this.update({
+      ...this.snapshot,
+      memoryRecords,
+      memoryCount: memoryRecords.length,
+      status: this.snapshot.providerConfigured ? "ready" : "provider-unavailable",
+    });
+  }
+
+  private async refreshConversations(generation: number): Promise<void> {
+    try {
+      const conversations = await HarnessService.listSessions();
+      if (generation === this.generation) this.update({ ...this.snapshot, conversations });
+    } catch (error) {
+      if (generation === this.generation)
+        this.update({
+          ...this.snapshot,
+          error: toErrorReference(error, "assistant_session_failed"),
+        });
+    }
+  }
 
   readonly syncProvider = async (model: string, baseUrl: string, apiKey: string): Promise<void> => {
     const generation = this.generation;
@@ -219,10 +298,8 @@ class AssistantHarnessProjection {
     this.submitting = false;
     this.recovering = false;
     const subscription = this.subscription;
-    const sessionId = this.snapshot.sessionId;
     this.subscription = null;
     if (subscription) void subscription.unsubscribe().catch(() => {});
-    if (sessionId) void HarnessService.closeSession(sessionId).catch(() => {});
   };
 
   readonly submit = async (message: AppendMessage): Promise<void> => {
@@ -251,6 +328,7 @@ class AssistantHarnessProjection {
       if (generation === this.generation && sessionId === this.snapshot.sessionId) {
         this.submitting = false;
         this.update({ ...this.snapshot, isRunning: false });
+        void this.refreshConversations(generation);
       }
     }
   };
@@ -673,6 +751,7 @@ export function useAssistantHarnessRuntime() {
   projectionRef.current ??= new AssistantHarnessProjection();
   const projection = projectionRef.current;
   const ai = useSettingsRead((state) => state.ai);
+  const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const isLoading = useSettingsRead((state) => state.isLoading);
   const snapshot = useSyncExternalStore(
     projection.subscribe,
@@ -682,7 +761,7 @@ export function useAssistantHarnessRuntime() {
   useEffect(() => {
     void projection.start();
     return projection.stop;
-  }, [projection]);
+  }, [projection, projectInstanceId]);
   useEffect(() => {
     if (isLoading) return;
     const timer = window.setTimeout(() => {
@@ -698,5 +777,23 @@ export function useAssistantHarnessRuntime() {
     onNew: projection.submit,
     onCancel: projection.cancel,
   });
-  return { runtime, snapshot, deleteMemory: projection.deleteMemory };
+  const drafts = useRef(new Map<string, string>());
+  const draftSessionId = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (draftSessionId.current === snapshot.sessionId) return;
+    if (draftSessionId.current)
+      drafts.current.set(draftSessionId.current, runtime.thread.composer.getState().text);
+    runtime.thread.composer.setText(
+      snapshot.sessionId ? (drafts.current.get(snapshot.sessionId) ?? "") : "",
+    );
+    draftSessionId.current = snapshot.sessionId;
+  }, [runtime, snapshot.sessionId]);
+  return {
+    runtime,
+    snapshot,
+    deleteMemory: projection.deleteMemory,
+    newConversation: projection.newConversation,
+    selectConversation: projection.selectConversation,
+    reloadConversations: projection.start,
+  };
 }

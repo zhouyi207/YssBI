@@ -3,7 +3,7 @@
  */
 
 export const REPORT_PAYLOAD_KINDS = [
-  "olsSummary",
+  "linearRegressionSummary",
   "binarySummary",
   "iv2slsSummary",
   "ivLimlSummary",

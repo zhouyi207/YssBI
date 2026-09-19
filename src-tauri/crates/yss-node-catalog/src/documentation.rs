@@ -112,10 +112,8 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
 
         "yssbi.statistics.adf.test" => markdown!("df_adf"),
         "yssbi.statistics.adf.summary" => markdown!("df_adf_summary"),
-        "yssbi.statistics.ols.fit" => markdown!("ols"),
-        "yssbi.statistics.ols.summary" => markdown!("ols_summary"),
-        "yssbi.statistics.gls.fit" => markdown!("gls"),
-        "yssbi.statistics.gls.summary" => markdown!("gls_summary"),
+        "yssbi.statistics.linear.fit" => markdown!("linear_regression"),
+        "yssbi.statistics.linear.summary" => markdown!("linear_regression_summary"),
         "yssbi.statistics.iv.2sls.summary" => markdown!("iv_2sls_summary"),
         "yssbi.statistics.iv.liml.summary" => markdown!("iv_liml_summary"),
         "yssbi.statistics.logit.fit" => markdown!("logit"),
@@ -133,8 +131,6 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.statistics.var.summary" => markdown!("var_summary"),
         "yssbi.statistics.vec.fit" => markdown!("vec"),
         "yssbi.statistics.vec.rank_test" => markdown!("vecrank"),
-        "yssbi.statistics.wls.fit" => markdown!("wls"),
-        "yssbi.statistics.wls.summary" => markdown!("wls_summary"),
         _ => return None,
     })
 }

@@ -1,4 +1,7 @@
-import type { OlsReportData, ResultAnalysis } from "@/shared/types/domain/resultReport";
+import type {
+  LinearRegressionReportData,
+  ResultAnalysis,
+} from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
 import type { Coefficient } from "@/shared/types/report/regression";
 import { linearModelInfoField } from "@/shared/types/report/parseCommon";
@@ -27,9 +30,9 @@ export const resultReferenceField = refineField(
       : { fieldPath: "resultRef", reason: "invalid result reference" },
 );
 
-export const olsReportField = refineField(
-  objectField<OlsReportData>({
-    title: literalField("OLS Summary"),
+export const linearRegressionReportField = refineField(
+  objectField<LinearRegressionReportData>({
+    title: literalField("Linear Regression Summary"),
     endog_name: stringField,
     resultRef: resultReferenceField,
     model_basic_info: linearModelInfoField,
@@ -51,7 +54,7 @@ export const olsReportField = refineField(
       : { fieldPath: "observations.rowCount", reason: "inconsistent observation count" },
 );
 
-export const olsCoefficientField = objectField<Coefficient>({
+export const linearCoefficientField = objectField<Coefficient>({
   category: optionalField(stringField),
   variable: stringField,
   coef: numberField,

@@ -394,7 +394,7 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
         );
     }
     for (id, expected) in [
-        ("yssbi.statistics.ols.fit", true),
+        ("yssbi.statistics.linear.fit", true),
         ("yssbi.statistics.logit.fit", false),
     ] {
         assert!(snapshot.activity_panels[1].rows.iter().any(|row| matches!(
@@ -808,7 +808,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
                 .catalog
                 .items
                 .iter()
-                .any(|item| item.node_type_id.as_ref() == "yssbi.statistics.ols.fit"),
+                .any(|item| item.node_type_id.as_ref() == "yssbi.statistics.linear.fit"),
             numeric
         );
         assert!(

@@ -47,7 +47,7 @@ yss-harness-core
 | ordered Assistant stream                             | persisted Harness events + Rust sequence            |
 | rendered conversation/workflow cards                 | React projection，可从 replay 重建                  |
 
-Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、bounded capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
+Harness 只保存业务资源的 opaque references、project/session binding、captured revisions、完整结果 JSON、分页数据及其他有界 capability results 和 receipts。Result payload 仍由 Execution `ResultStore` 拥有；Harness 不能复制完整 DataFrame 或成为 Project history。
 
 ## 3. Stable contracts and ports
 
@@ -73,12 +73,16 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 | `search_node_catalog`     | 查询 localized node catalog                                           |
 | `inspect_dataset_schema`  | 读取 schema 和 current revision facts                                 |
 | `inspect_dataset_profile` | 读取 bounded data-quality/profile facts                               |
-| `inspect_result`          | 读取 structured result，支持数列/表格的 bounded 分页预览              |
+| `inspect_result`          | 读取完整结果 JSON；数列、表格及 JSON 中的 tableRef 按需分页           |
 | `apply_graph_edit`        | 原子应用并自动保存可撤销的图编辑批次                                  |
 | `validate_graph`          | 只读校验匹配 hash 的当前图，返回可运行性与阻断诊断                    |
 | `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs |
 | `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                            |
 | `save_graph`              | 用户要求保存时调用正常的独立 Save                                     |
+
+`inspect_result` 与界面复用 Application 的 `query_result_json`，返回 `ResultValueInspection::Json` 中的完整 JSON。结果字段、嵌套对象、统计数组与文本不做 AI 专用裁剪；不保留 title/observations/rSquared 三字段白名单，也不使用原有 100 项、4 层或 4096 字符截断。工具的通用响应字节预算不限制此 JSON 分支。
+
+DataFrame、DataSeries 和内存数列仍通过 `offset`/`limit` 分页，不展开全部数据。JSON 中的数据引用保持原样；AI 可以把 `resultRef.executionSessionId`、`resultRef.resultId` 和 `tableRef.part` 传给同一个 `inspect_result` 继续分页读取。未指定 `part` 时读取完整 JSON；指定 `part` 时读取该结果公开的表。分页响应使用 JSON 行值和 `nextOffset`/`hasMore`，保留行数及字节边界。项目会话、结果可用性、取消和 deadline 检查继续生效。
 
 Model-facing schema 来自 typed capability contract；Harness 内部不以任意 JSON 代替 request/result 类型。每次调用先写 running ledger record，再通过 Gateway 执行，最后持久化成功 result 或 structured failure。idempotency 命中已有 terminal record 时返回既有 outcome，而不是重复执行。
 
@@ -112,7 +116,13 @@ SQLite adapter 只接受当前 schema，不执行旧记录迁移，也不维护�
 
 ## 5. Session, turn, and events
 
-一个 Harness session 绑定明确 principal 和 Project instance/session。每个 session 同时只准入一个 active turn；submit、cancel、close 和 project/session currentness 由 Rust 控制。
+一个 Harness session 绑定明确 principal 和当前 Project instance/session。用于 Assistant 对话的 session 还保存 `HarnessConversationMetadata`：项目根目录的稳定文件系统身份、首条消息生成的标题和最近打开时间；底层 workflow/session 调用可不带对话元数据。每个 session 同时只准入一个 active turn；submit、cancel、close 和 project/session currentness 由 Rust 控制。
+
+对话及其完整事件/工具账本继续保存在应用的 SQLite 中，不跟随 Assistant 面板卸载而关闭或删除。界面按当前用户和项目查询对话列表，优先恢复最近打开的一项；可新建和切换多个对话。切换后从 sequence 0 重放目标对话，旧订阅和迟到回调不能混入新对话；未发送草稿只在当前挂载界面内按对话分开保存。生成回答期间先停止或等待结束再切换。
+
+重新打开项目时，Application 通过既有 RootBinding 获取项目根目录身份，验证对话归属后重新绑定当前运行期 ProjectSessionBinding；历史 receipt 保持原始身份，不恢复旧授权或执行结果。订阅和发送均验证当前项目归属和运行绑定。无已保存项目时使用仅当前激活有效的临时归属。无持久项目归属的记录保持原状，不自动猜测或迁移到某个项目。
+
+`list_graph_results` / `execute_graph` 的每个结果引用携带 executionSessionId；`inspect_result` 必须同时提供它与 resultId。项目重启后的历史结果 ID 不能因为编号重用而读取到新结果，失效引用返回 ResultUnavailable，模型应重新查询当前结果。
 
 Turn 流程是：
 
@@ -168,16 +178,26 @@ Frontend AI settings 通过 explicit Harness configuration command 更新 config
 
 Rig adapter 显式启用 `rig-core` 的 Reqwest 和 Rustls 功能，以支持 HTTPS、证书校验及系统代理。
 模型调用使用 Rig 多轮 streaming 接口，只发布公开 text 内容；首段立即发布，后续短片段按 40ms 或 4KiB 合并，工具边界和终止前刷新。工具生命周期仍由 Gateway 发布，不能用 Rig 的批次完成事件代替实时工具状态。取消和超时停止读取模型流，保留已产生的文本并等待已接纳工具完成清理。`finalText` 保存整轮公开文本，不在流结束时再发送一份完整 TextDelta。
+实时 capability 返回与历史重放复用相同的工具结果 JSON 编码。资源不存在、参数或业务校验失败、revision/invocation conflict、执行图失败及 approval_required 等可处理结果，以 `{state: "failed", failure: {code, details}}` 交回模型，使它可以纠正参数、读取当前状态或向用户说明。成功结果继续使用原能力输出。`outcome_unknown` 也保留为失败反馈；模型必须先查询事实，不能盲目重试可能已经提交的修改。Core 的 ledger 与 ToolInvocationFailed 事件仍记录失败，不因协议层成功交付反馈而改写为成功。
+
+Rig 0.42 默认会把 ToolExecutionError 转成模型反馈，不能以返回该错误作为必然中止的保证。Adapter 因此对取消、超时、项目会话失效、内部错误、持久化故障和工具运行通道异常发出独立的致命信号：流消费者在下一次模型调用前结束，刷新已产生的公开文本，并等待已准入工具完成收尾。计划工具的事件持久化或交付故障也使用此路径。Provider/stream 错误继续由 AgentDriverFailure 终止；ModelTurnRetried 的拒绝策略保持原有语义。
+
 Provider 请求有连接/总时限，完整 model turn 也有独立时限；模型任务 panic 和超时均转换为 typed terminal failure，原始 panic/响应内容不进入错误 wire。具体预算由 adapter 配置和源码拥有。
 `providerConfigured` 表示本地客户端配置已建立，不表示远端认证已经通过。模型调用按结构化 HTTP 状态区分认证、限流、请求拒绝、服务不可用和连接失败；响应解析失败单独分类，原始响应和凭据不进入错误 wire。
 
 ## 9. Tauri transport and frontend projection
 
-`yss-application::ipc` 当前暴露 Harness runtime status/provider configuration、session create/close、event subscribe/unsubscribe、turn submit/cancel、memory list/delete，以及 dataset-quality workflow plan/advance/pause/resume/cancel。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
+`yss-application::ipc` 当前暴露 Harness runtime status/provider configuration、按项目列举、新建、重新打开及关闭 session、event subscribe/unsubscribe、turn submit/cancel、memory list/delete，以及 dataset-quality workflow plan/advance/pause/resume/cancel。Command 只做 DTO mapping 和 transport delivery；完整注册表以 `yss-application::ipc` 源码为准，不在本文复制。
 
 有序事件通过 Tauri Channel 进入 `src/services/assistant/harnessService.ts`，由 `harnessContract.ts` 严格解析。`src/features/application/assistant/assistantHarnessRuntime.ts` 维护可重建的 projection、last sequence 和 reconnect；assistant-ui ExternalStore 只渲染 messages、plan、tool cards、memory 和 composer actions。
 
-提交携带 active graph reference，并从已持久化的 completed turns 提供有限长度的会话上下文；历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者，不复制到聊天日志。
+提交携带 active graph reference。模型上下文由 Harness Core 的 `conversation` 从本会话的完整持久事件流和工具账本重建，以当前 TurnStarted 为边界；当前用户消息只加入一次。不限制最近轮数，不按条截断用户或 assistant 文本，也不将失败/取消轮次排除。相邻 TextDelta 合并，工具事件保留其间的顺序；已有流式正文时不重复追加 TurnCompleted.finalText。
+
+AgentMessage 使用 provider-neutral 的文本、工具调用、工具结果和统计计划变体。工具参数与成功/失败结果读取本会话中对应 invocation 的原始记录，Rig 映射为成对的原生 tool-call/tool-result 消息，不将工具证据降为 assistant 摘要。恢复后的成功 receipt 保留成功，失败保留结构化 failure，缺少确定终态的调用标记 outcome_unknown；取消或失败的 turn 附带明确状态，不暗示已经提交的操作被回滚。事件缺口或缺失的工具记录会明确失败，不静默发送不完整历史。
+
+完整结果 JSON 随工具历史传递，DataSeries/DataFrame 仍保持引用或已读取的数据页。Rig 不再为单条历史消息设 1 MiB 准入上限，也不自动裁剪历史；供应商返回结构化 context_length_exceeded 时映射为 assistant_context_window_exceeded，界面提示完整对话超过模型容量，保留会话供用户切换模型或开启新会话。新消息、模型生成和超时准入仍使用各自已有契约。
+
+历史不替代当前工具事实。图工具的运行事件进入原有 Execution/Results 消费者；对话只复用持久 Harness 事件与工具 receipt，不新增第二份持久聊天状态。
 
 转换为 assistant-ui 消息时，只有 assistant 角色携带 `status`；user 消息不携带该字段。运行时集成回归使用真实的 ExternalStore 消息转换器校验这一边界。
 消息投影按事件顺序维护 text/source/data/tool parts，相邻文本片段合并，工具终态更新原位置。完成事件只收尾已有流式内容；仅在没有文本片段时使用 `finalText` 恢复正文。取消、失败和按 sequence 重放不覆盖中间说明或重排工具。

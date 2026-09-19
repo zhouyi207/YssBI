@@ -1,5 +1,5 @@
 //! OLS / WLS 回归结果 golden 测试
-//! 覆盖 ols_summary / wls_summary 窗口展示的所有内容
+//! 覆盖 linear_regression_summary / wls_summary 窗口展示的所有内容
 //! 使用当前已验证正确的计算结果作为参考，重构后若计算不一致则测试失败
 
 use std::f64::consts::PI;

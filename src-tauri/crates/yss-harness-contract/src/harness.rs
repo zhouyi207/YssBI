@@ -201,6 +201,7 @@ pub enum IdempotencyPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResultBudget {
+    /// For inspect_result, budgets apply to data pages, not to complete result JSON.
     pub maximum_items: u16,
     pub maximum_bytes: u32,
 }
@@ -226,13 +227,19 @@ impl ToolDescriptor {
         let capability = capability_id.descriptor();
         Ok(Self {
             id: ToolId::try_new(capability_id.as_str())?,
-            version: ToolVersion::try_new("1.0.0")?,
+            version: ToolVersion::try_new(if capability_id == CapabilityId::InspectResult {
+                "3.0.0"
+            } else {
+                "1.0.0"
+            })?,
             capability_id,
             input_schema: capability_input_schema(capability_id),
             output_schema: capability_output_schema(capability_id),
             effect: capability.effect,
             approval: capability.approval,
-            data_access: if capability.effect == ToolEffect::Mutate {
+            data_access: if capability.effect == ToolEffect::Mutate
+                || capability_id == CapabilityId::InspectResult
+            {
                 DataAccessPolicy::BoundedRecords
             } else {
                 DataAccessPolicy::MetadataOnly
@@ -255,19 +262,30 @@ impl ToolDescriptor {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentMessageRole {
-    System,
-    User,
-    Assistant,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AgentMessage {
-    pub role: AgentMessageRole,
-    pub content: String,
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "role", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AgentMessage {
+    System {
+        content: String,
+    },
+    User {
+        content: String,
+    },
+    Assistant {
+        content: String,
+    },
+    ToolCall {
+        invocation_id: crate::ToolInvocationId,
+        request: AutomationCapabilityRequest,
+    },
+    ToolResult {
+        invocation_id: crate::ToolInvocationId,
+        capability_id: CapabilityId,
+        outcome: Result<AutomationCapabilityResult, CapabilityFailure>,
+    },
+    Plan {
+        plan: StatisticalPlan,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -340,6 +358,8 @@ pub enum AgentDriverFailureCode {
     ProviderRateLimited,
     #[error("provider_request_rejected")]
     ProviderRequestRejected,
+    #[error("context_window_exceeded")]
+    ContextWindowExceeded,
     #[error("provider_transport_failed")]
     ProviderTransportFailed,
     #[error("deadline_elapsed")]

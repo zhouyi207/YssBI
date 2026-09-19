@@ -1,10 +1,13 @@
+#[cfg(test)]
+use crate::graph::results::report::LinearRegressionReportProjection;
 use crate::graph::results::report::{
-    OlsReportProjection, ResultAnalysisProjection, ResultAnalysisRequest, ResultTablePart,
+    ResultAnalysisProjection, ResultAnalysisRequest, ResultTablePart,
 };
 use serde::{Deserialize, Serialize};
 use yss_graph_execution::identity::ExecutionSessionId;
 use yss_graph_execution::result::{ResultId, ResultReference};
-use yss_sci_contract::regression::report::OlsModelSummary;
+#[cfg(test)]
+use yss_sci_contract::regression::report::LinearModelSummary;
 
 use super::statistics::{
     AcfPacfResponseDto, DurbinWatsonResultDto, HypothesisTestResponseDto, SerialTestWithLagDto,
@@ -57,55 +60,6 @@ impl From<ResultTablePartDto> for ResultTablePart {
         match value {
             ResultTablePartDto::Coefficients => Self::Coefficients,
             ResultTablePartDto::Observations => Self::Observations,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResultTableReferenceDto {
-    kind: &'static str,
-    part: ResultTablePartDto,
-    row_count: usize,
-}
-
-#[derive(Serialize)]
-pub struct OlsReportDto {
-    title: String,
-    endog_name: String,
-    #[serde(rename = "resultRef")]
-    reference: ResultReferenceDto,
-    model_basic_info: OlsModelSummary,
-    diagnostic_info: OlsDiagnosticsDto,
-    coefficients: ResultTableReferenceDto,
-    observations: ResultTableReferenceDto,
-}
-
-#[derive(Serialize)]
-struct OlsDiagnosticsDto {
-    cond_no: f64,
-}
-
-impl From<OlsReportProjection> for OlsReportDto {
-    fn from(value: OlsReportProjection) -> Self {
-        Self {
-            title: value.title,
-            endog_name: value.endog_name,
-            reference: value.reference.into(),
-            model_basic_info: value.model,
-            diagnostic_info: OlsDiagnosticsDto {
-                cond_no: value.condition_number,
-            },
-            coefficients: ResultTableReferenceDto {
-                kind: "tableRef",
-                part: ResultTablePartDto::Coefficients,
-                row_count: value.coefficient_count,
-            },
-            observations: ResultTableReferenceDto {
-                kind: "tableRef",
-                part: ResultTablePartDto::Observations,
-                row_count: value.observation_count,
-            },
         }
     }
 }
@@ -355,17 +309,17 @@ mod tests {
 
     #[test]
     fn ols_overview_wire_matches_the_frontend_contract_and_stays_bounded() {
-        let projection = |n| OlsReportProjection {
+        let projection = |n| LinearRegressionReportProjection {
             reference: ResultReference {
                 execution_session_id: ExecutionSessionId::new(uuid::Uuid::from_u128(1)),
                 result_id: ResultId::from_existing(17),
             },
-            title: "OLS Summary".into(),
+            title: "Linear Regression Summary".into(),
             endog_name: "response".into(),
             condition_number: 2.0,
             coefficient_count: 2,
             observation_count: n,
-            model: OlsModelSummary {
+            model: LinearModelSummary {
                 model_type: "OLS".into(),
                 method: "Least Squares".into(),
                 num_observation: n,
@@ -385,13 +339,13 @@ mod tests {
                 covariance_type: "nonrobust".into(),
             },
         };
-        let small = serde_json::to_value(OlsReportDto::from(projection(3))).unwrap();
+        let small = projection(3).into_json();
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../../../src/tests/fixtures/node-system-contracts/ols-summary-report.json"
         ))
         .unwrap();
         assert_eq!(small, fixture);
-        let large = serde_json::to_vec(&OlsReportDto::from(projection(53_940))).unwrap();
+        let large = serde_json::to_vec(&projection(53_940).into_json()).unwrap();
         assert!(large.len() < 4096);
         assert!(large.len() <= serde_json::to_vec(&small).unwrap().len() + 16);
     }
@@ -402,7 +356,10 @@ mod tests {
         use crate::ipc::commands::execution_dto::ResultPageDto;
 
         let (app, reference, _) = crate::graph::results::report::tests::fixture(1_000);
-        let report = OlsReportDto::from(app.query_ols_report(reference).unwrap());
+        let report = app
+            .query_linear_regression_report(reference)
+            .unwrap()
+            .into_json();
         let coefficients = ResultPageDto::from_application(
             reference.result_id,
             app.query_result_table(reference, ResultTablePart::Coefficients, 0, 200)

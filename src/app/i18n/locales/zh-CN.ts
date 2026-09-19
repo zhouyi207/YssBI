@@ -204,9 +204,14 @@ export const zhCN = {
     assistantStatusReady: "Ctrl+Enter 发送",
     assistantStatusRunning: "正在分析…",
     assistantStatusError: "Assistant 暂时不可用",
+    assistantConversations: "对话列表",
+    assistantNewConversation: "新对话",
+    assistantReloadConversations: "重试",
     assistantErrors: {
       assistant_authentication_failed: "认证失败，请检查 API Key 及模型访问权限。",
       assistant_rate_limited: "服务已限流或额度不足，请检查额度后稍后重试。",
+      assistant_context_window_exceeded:
+        "完整对话已超出模型上下文容量，历史未被截断。请切换更大上下文的模型或开启新会话。",
       assistant_provider_request_rejected: "服务拒绝了请求，请检查模型、API 地址及接口兼容性。",
       assistant_provider_connection_failed: "无法连接模型服务，请检查网络、代理和 API 地址后重试。",
       assistant_provider_unavailable: "模型服务暂时不可用，请稍后重新发送。",

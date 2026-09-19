@@ -466,6 +466,8 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
         .invoke_automation_capability(
             f.context.clone(),
             AutomationCapabilityRequest::InspectResult(InspectResultRequest {
+                execution_session_id: product.execution_session_id.clone(),
+                part: None,
                 result_id: product.result_id,
                 offset: 0,
                 limit: 20,
@@ -483,16 +485,16 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let actual = rows
         .into_iter()
         .map(|row| match row {
-            ResultValueInspection::List { items, .. } => items.into_iter().next().unwrap(),
+            serde_json::Value::Array(items) => items.into_iter().next().unwrap(),
             _ => panic!("row"),
         })
         .collect::<Vec<_>>();
     assert_eq!(
         actual,
         [
-            ResultValueInspection::Unsigned(3),
-            ResultValueInspection::Unsigned(6),
-            ResultValueInspection::Unsigned(9)
+            serde_json::json!(3),
+            serde_json::json!(6),
+            serde_json::json!(9)
         ]
     );
     assert_eq!(
@@ -514,7 +516,7 @@ fn assistant_edits_current_graph_validates_runs_and_reads_actual_series_results(
     let serialized = std::fs::read_to_string(f.directory.join("project").join(&f.path)).unwrap();
     assert!(serialized.contains(&created.created_nodes["product"]));
     let fit = f.edit(vec![
-        node("yssbi.statistics.ols.summary", "fit"),
+        node("yssbi.statistics.linear.fit", "fit"),
         GraphEditOperation::AddPortInstance {
             node_id: "$fit".into(),
             template_key: "predictors".into(),

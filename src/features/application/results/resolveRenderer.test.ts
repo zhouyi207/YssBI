@@ -40,7 +40,7 @@ describe("resolveResultRenderer", () => {
     expect(
       resolveResultRenderer({
         ...descriptor("scalar"),
-        presentation: { kind: "report", report: "olsSummary" },
+        presentation: { kind: "report", report: "linearRegressionSummary" },
       }),
     ).toBe("info");
   });

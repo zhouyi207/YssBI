@@ -12,31 +12,70 @@ use yss_sci_contract::regression::fit::{
     InstrumentalVariableKind, LinearRegressionStatistics, PanelFit, PraisRegressionStatistics,
     RegressionCoefficientStatistics, RegressionFit, RegressionKind, RegressionStatistics,
 };
+use yss_sci_contract::scientific::LinearRegressionMethod;
 use yss_sci_contract::{
     SciError, SciInputViolation, SciOperationCode, StatisticalObservationMetadata,
 };
 use yss_sci_linalg::matrix_rank;
 use yss_sci_linalg::{Col, Mat};
 
-pub fn fit_regression(
-    kind: RegressionKind,
+pub fn fit_linear_regression(
     response: Vec<f64>,
-    predictors: Vec<Vec<f64>>,
-    weights: Option<Vec<f64>>,
+    predictors: &[Vec<f64>],
+    config: OlsOptions,
+    method: LinearRegressionMethod,
     metadata: StatisticalObservationMetadata,
 ) -> Result<RegressionFit, SciError> {
     let y = Col::from_iter(response);
-    let x = design_matrix(&predictors, y.nrows(), true, SciOperationCode::Regression)?;
-    match kind {
-        RegressionKind::Ols => fit_ols_design(&y, &x, &OlsOptions::default(), metadata),
-        RegressionKind::Gls => {
-            // This entry point has no covariance input: identity structure with estimated
-            // error scale is ordinary least squares, retaining the requested GLS label.
+    let x = design_matrix(
+        predictors,
+        y.nrows(),
+        config.constant,
+        SciOperationCode::Regression,
+    )?;
+    match &method {
+        LinearRegressionMethod::Wls { weights }
+            if weights.len() != y.nrows()
+                || weights.iter().any(|w| !w.is_finite() || *w <= 0.0) =>
+        {
+            return Err(invalid_input(
+                SciOperationCode::Regression,
+                SciInputViolation::ParameterOutOfRange,
+            ));
+        }
+        LinearRegressionMethod::Gls { sigma } => {
+            if sigma.len() != y.nrows() || sigma.iter().any(|row| row.len() != y.nrows()) {
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    SciInputViolation::ShapeMismatch,
+                ));
+            }
+            if !matches!(
+                config.covariance,
+                yss_sci_contract::regression::OlsCovariance::NonRobust
+            ) || sigma.iter().enumerate().any(|(i, row)| {
+                row.iter()
+                    .enumerate()
+                    .any(|(j, v)| !v.is_finite() || *v != sigma[j][i])
+            }) {
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    SciInputViolation::ParameterOutOfRange,
+                ));
+            }
+        }
+        _ => {}
+    }
+    let mut fit = match method {
+        LinearRegressionMethod::Ols => fit_ols_design(&y, &x, &config, metadata),
+        LinearRegressionMethod::Gls { sigma } => {
             let result = GLS {
                 endog: y.clone(),
                 exog: x.clone(),
-                sigma: Mat::identity(y.nrows(), y.nrows()),
-                config: GLSConfig { constant: true },
+                sigma: Mat::from_fn(y.nrows(), y.nrows(), |i, j| sigma[i][j]),
+                config: GLSConfig {
+                    constant: config.constant,
+                },
             }
             .fit()
             .map_err(|_| computation_failed(SciOperationCode::Regression))?;
@@ -83,10 +122,7 @@ pub fn fit_regression(
                 metadata,
             )
         }
-        RegressionKind::Wls => {
-            let weights = weights.ok_or_else(|| {
-                invalid_input(SciOperationCode::Regression, SciInputViolation::EmptyInput)
-            })?;
+        LinearRegressionMethod::Wls { weights } => {
             if weights.len() != y.nrows() {
                 return Err(invalid_input(
                     SciOperationCode::Regression,
@@ -98,8 +134,8 @@ pub fn fit_regression(
                 exog: x.clone(),
                 weights: Col::from_iter(weights),
                 config: WLSConfig {
-                    constant: true,
-                    covariance: Default::default(),
+                    constant: config.constant,
+                    covariance: config.covariance.clone(),
                 },
             }
             .fit()
@@ -144,6 +180,44 @@ pub fn fit_regression(
                         condition_number: result.cond_no,
                     },
                 },
+                metadata,
+            )
+        }
+    }?;
+    fit.constant = config.constant;
+    Ok(fit)
+}
+
+pub fn fit_regression(
+    kind: RegressionKind,
+    response: Vec<f64>,
+    predictors: Vec<Vec<f64>>,
+    weights: Option<Vec<f64>>,
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
+    let y = Col::from_iter(response);
+    let x = design_matrix(&predictors, y.nrows(), true, SciOperationCode::Regression)?;
+    match kind {
+        RegressionKind::Ols => fit_ols_design(&y, &x, &OlsOptions::default(), metadata),
+        RegressionKind::Gls | RegressionKind::Wls => {
+            let method = if matches!(kind, RegressionKind::Gls) {
+                LinearRegressionMethod::Gls {
+                    sigma: (0..y.nrows())
+                        .map(|i| (0..y.nrows()).map(|j| f64::from(i == j)).collect())
+                        .collect(),
+                }
+            } else {
+                LinearRegressionMethod::Wls {
+                    weights: weights.ok_or_else(|| {
+                        invalid_input(SciOperationCode::Regression, SciInputViolation::EmptyInput)
+                    })?,
+                }
+            };
+            fit_linear_regression(
+                y.iter().copied().collect(),
+                &predictors,
+                OlsOptions::default(),
+                method,
                 metadata,
             )
         }

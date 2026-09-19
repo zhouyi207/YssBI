@@ -290,6 +290,12 @@ fn input_bindings(
                 plan_port(&binding.address),
                 source,
                 PlanInputContract {
+                    template: match &binding.address.port {
+                        yss_graph_document::PortRef::Instance { template, .. } => {
+                            Some(template.as_str().into())
+                        }
+                        yss_graph_document::PortRef::Declared { .. } => None,
+                    },
                     group: binding
                         .group
                         .map(|id| PlanInputGroupId::from_existing(id.to_string().into())),
@@ -535,7 +541,9 @@ fn map_result_category(category: GraphResultCategory) -> crate::plan::ResultCate
         }),
         GraphResultCategory::StatisticalReport(kind) => {
             ResultCategory::StatisticalReport(match kind {
-                GraphStatisticalReportKind::OlsSummary => StatisticalReportKind::OlsSummary,
+                GraphStatisticalReportKind::LinearRegressionSummary => {
+                    StatisticalReportKind::LinearRegressionSummary
+                }
                 GraphStatisticalReportKind::BinarySummary => StatisticalReportKind::BinarySummary,
                 GraphStatisticalReportKind::Iv2slsSummary => StatisticalReportKind::Iv2slsSummary,
                 GraphStatisticalReportKind::IvLimlSummary => StatisticalReportKind::IvLimlSummary,

@@ -24,6 +24,7 @@ pub struct PlanInputBinding {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanInputContract {
+    pub template: Option<Box<str>>,
     pub group: Option<PlanInputGroupId>,
     pub expected_type: ValueType,
     pub coercions: Box<[PlanInputCoercionKind]>,

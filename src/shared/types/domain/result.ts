@@ -72,7 +72,7 @@ export function isResultPlotKind(value: unknown): value is ResultPlotKind {
 }
 
 export type ResultReportKind =
-  | "olsSummary"
+  | "linearRegressionSummary"
   | "binarySummary"
   | "iv2slsSummary"
   | "ivLimlSummary"

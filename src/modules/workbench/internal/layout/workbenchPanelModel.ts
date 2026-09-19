@@ -87,7 +87,7 @@ const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
 );
 const WORKBENCH_VIEW_ID_SET = new Set<WorkbenchViewId>(WORKBENCH_VIEW_IDS);
 const RESULT_REPORT_KINDS = new Set([
-  "olsSummary",
+  "linearRegressionSummary",
   "binarySummary",
   "iv2slsSummary",
   "ivLimlSummary",

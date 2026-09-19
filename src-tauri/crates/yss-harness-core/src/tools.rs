@@ -666,6 +666,15 @@ mod tests {
         }
         struct FailFirstFinish(Arc<InMemoryHarnessStore>, AtomicBool);
         impl ToolInvocationLedgerPort for FailFirstFinish {
+            fn load_invocation<'a>(
+                &'a self,
+                session: &'a HarnessSessionId,
+                id: &'a ToolInvocationId,
+            ) -> PersistenceFuture<'a, Result<Option<ToolInvocationRecord>, PersistenceFailure>>
+            {
+                self.0.load_invocation(session, id)
+            }
+
             fn load_running_invocations<'a>(
                 &'a self,
             ) -> PersistenceFuture<'a, Result<Vec<ToolInvocationRecord>, PersistenceFailure>>

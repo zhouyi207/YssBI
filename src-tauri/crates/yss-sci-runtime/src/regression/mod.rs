@@ -75,36 +75,44 @@ mod tests {
 
     #[test]
     fn regression_reports_expose_hypothesis_inputs() {
-        let response = vec![1.0, 2.1, 2.9, 4.2, 5.1, 5.9];
-        let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
-        let fit = fit_regression(
-            RegressionKind::Ols,
-            response.clone(),
-            vec![predictor],
-            None,
-            regression_metadata(response.len()),
-        )
-        .unwrap();
+        for (kind, method) in [
+            (RegressionKind::Ols, "OLS"),
+            (RegressionKind::Wls, "WLS"),
+            (RegressionKind::Gls, "GLS"),
+        ] {
+            let response = vec![1.0, 2.1, 2.9, 4.2, 5.1, 5.9];
+            let predictor = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+            let fit = fit_regression(
+                kind,
+                response.clone(),
+                vec![predictor],
+                Some(vec![1.0; response.len()]),
+                regression_metadata(response.len()),
+            )
+            .unwrap();
 
-        let report = regression_report(&fit).expect("regression report must serialize");
+            let report = regression_report(&fit).expect("regression report must serialize");
 
-        assert_eq!(
-            report["coefficients"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|coefficient| coefficient["coef"].as_f64().unwrap())
-                .collect::<Vec<_>>(),
-            fit.coefficients
-        );
-        assert_eq!(report["cov_beta"].as_array().map(Vec::len), Some(2));
-        assert!(
-            report["cov_beta"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|row| row.as_array().map(Vec::len) == Some(2))
-        );
+            assert_eq!(report["title"], "Linear Regression Summary");
+            assert_eq!(report["model_basic_info"]["model_type"], method);
+            assert_eq!(
+                report["coefficients"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|coefficient| coefficient["coef"].as_f64().unwrap())
+                    .collect::<Vec<_>>(),
+                fit.coefficients
+            );
+            assert_eq!(report["cov_beta"].as_array().map(Vec::len), Some(2));
+            assert!(
+                report["cov_beta"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|row| row.as_array().map(Vec::len) == Some(2))
+            );
+        }
     }
 
     #[test]

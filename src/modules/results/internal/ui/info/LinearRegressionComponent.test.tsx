@@ -40,11 +40,11 @@ it("loads an OLS overview and requests report data and tests by reference on dem
       output: null,
       createdAtMs: "1",
     },
-    presentation: { kind: "report", report: "olsSummary" },
+    presentation: { kind: "report", report: "linearRegressionSummary" },
     valueKind: "scalar",
     totalCount: 1,
     metadata: null,
-    title: "OLS Summary",
+    title: "Linear Regression Summary",
   });
   vi.spyOn(ResultService, "getValue").mockResolvedValue({ kind: "value", value: report });
   vi.spyOn(ResultService, "getPage").mockResolvedValue({
@@ -117,7 +117,11 @@ it("loads an OLS overview and requests report data and tests by reference on dem
       root.render(
         <ChartThemeProvider>
           <TooltipProvider>
-            <ReportView descriptor={ready.descriptor} report="olsSummary" data={data} />
+            <ReportView
+              descriptor={ready.descriptor}
+              report="linearRegressionSummary"
+              data={data}
+            />
           </TooltipProvider>
         </ChartThemeProvider>,
       ),

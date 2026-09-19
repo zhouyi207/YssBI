@@ -12,8 +12,23 @@ use yss_sci_contract::{SciError, SciInputViolation, SciOperationCode};
 pub fn ols(
     request: yss_sci_contract::scientific::OlsRequest,
     control: &ScientificExecutionControl,
-) -> Result<yss_sci_contract::scientific::OlsResult, ScientificComputationError> {
-    use yss_sci_contract::scientific::OlsResult;
+) -> Result<yss_sci_contract::scientific::LinearRegressionResult, ScientificComputationError> {
+    linear_regression(
+        yss_sci_contract::scientific::LinearRegressionRequest {
+            response: request.response,
+            predictors: request.predictors,
+            options: request.options,
+            method: yss_sci_contract::scientific::LinearRegressionMethod::Ols,
+        },
+        control,
+    )
+}
+
+pub fn linear_regression(
+    request: yss_sci_contract::scientific::LinearRegressionRequest,
+    control: &ScientificExecutionControl,
+) -> Result<yss_sci_contract::scientific::LinearRegressionResult, ScientificComputationError> {
+    use yss_sci_contract::scientific::LinearRegressionResult;
     admit(control)?;
     let observations = request.response.len();
     if request.predictors.is_empty()
@@ -45,21 +60,23 @@ pub fn ols(
         missing_value_policy: yss_sci_contract::MissingValuePolicy::Reject,
     };
     let constant = request.options.constant;
-    let fit = crate::regression::fit_ols(
+    let fit = yss_sci::regression::fit::fit_linear_regression(
         request.response,
         &request.predictors,
         request.options,
+        request.method,
         metadata,
     )
-    .map_err(|_| ScientificComputationError::ComputationFailed)?;
-    let report = crate::regression::report::ols_report(&fit)
+    .map_err(map_sci_error)?;
+    let report = crate::regression::report::linear_regression_report(&fit)
         .map_err(|_| ScientificComputationError::ComputationFailed)?;
     let mut design = request.predictors;
     if constant {
         design.insert(0, vec![1.0; observations]);
     }
     admit(control)?;
-    Ok(OlsResult {
+    Ok(LinearRegressionResult {
+        constant,
         coefficients: fit.coefficients,
         fitted: fit.fitted,
         residuals: fit.residuals,
@@ -118,7 +135,10 @@ fn map_sci_error(error: SciError) -> ScientificComputationError {
             operation,
             violation,
         } => {
-            if operation != SciOperationCode::AcfPacf {
+            if !matches!(
+                operation,
+                SciOperationCode::AcfPacf | SciOperationCode::Regression
+            ) {
                 return ScientificComputationError::ComputationFailed;
             }
             invalid(match violation {

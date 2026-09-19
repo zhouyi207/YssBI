@@ -21,7 +21,7 @@ pub enum GraphPlotDataKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GraphStatisticalReportKind {
-    OlsSummary,
+    LinearRegressionSummary,
     BinarySummary,
     Iv2slsSummary,
     IvLimlSummary,
@@ -41,12 +41,9 @@ pub(crate) fn result_category_for_output(
     port_key: &str,
 ) -> GraphResultCategory {
     let report = match (node_type_id, port_key) {
-        (
-            "yssbi.statistics.ols.summary"
-            | "yssbi.statistics.gls.summary"
-            | "yssbi.statistics.wls.summary",
-            "report",
-        ) => GraphStatisticalReportKind::OlsSummary,
+        ("yssbi.statistics.linear.summary", "report") => {
+            GraphStatisticalReportKind::LinearRegressionSummary
+        }
         ("yssbi.statistics.logit.summary" | "yssbi.statistics.probit.summary", "report") => {
             GraphStatisticalReportKind::BinarySummary
         }
@@ -67,9 +64,7 @@ pub(crate) fn result_category_for_output(
 
 pub fn result_category_for_node(node_type_id: &str) -> GraphResultCategory {
     let output_key = match node_type_id {
-        "yssbi.statistics.ols.summary"
-        | "yssbi.statistics.gls.summary"
-        | "yssbi.statistics.wls.summary"
+        "yssbi.statistics.linear.summary"
         | "yssbi.statistics.logit.summary"
         | "yssbi.statistics.probit.summary"
         | "yssbi.statistics.iv.2sls.summary"
@@ -119,19 +114,9 @@ mod tests {
     fn real_output_categories_are_output_specific() {
         let report_cases = [
             (
-                "yssbi.statistics.ols.summary",
+                "yssbi.statistics.linear.summary",
                 "report",
-                GraphStatisticalReportKind::OlsSummary,
-            ),
-            (
-                "yssbi.statistics.gls.summary",
-                "report",
-                GraphStatisticalReportKind::OlsSummary,
-            ),
-            (
-                "yssbi.statistics.wls.summary",
-                "report",
-                GraphStatisticalReportKind::OlsSummary,
+                GraphStatisticalReportKind::LinearRegressionSummary,
             ),
             (
                 "yssbi.statistics.logit.summary",

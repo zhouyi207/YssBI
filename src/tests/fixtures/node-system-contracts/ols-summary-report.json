@@ -27,7 +27,7 @@
     "ss_residual": 0.125,
     "ss_total": 1.25
   },
-  "title": "OLS Summary",
+  "title": "Linear Regression Summary",
   "resultRef": {
     "executionSessionId": "00000000-0000-0000-0000-000000000001",
     "resultId": "17"

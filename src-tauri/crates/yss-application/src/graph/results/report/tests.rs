@@ -18,7 +18,24 @@ use yss_graph_execution::resource_preparation::RunResourceBindings;
 use yss_graph_execution::state::RunExecutionControl;
 use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 
-pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsResult>) {
+pub(crate) fn fixture(
+    n: usize,
+) -> (
+    ApplicationState,
+    ResultReference,
+    Arc<LinearRegressionResult>,
+) {
+    fixture_with_method(n, "OLS")
+}
+
+fn fixture_with_method(
+    n: usize,
+    method: &str,
+) -> (
+    ApplicationState,
+    ResultReference,
+    Arc<LinearRegressionResult>,
+) {
     let candidate = crate::session::build_current_project_candidate(
         ApplicationSessionEpoch::INITIAL,
         Arc::new(yss_project::ProjectState::new()),
@@ -37,11 +54,12 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
     let graph = GraphResourcePath::new("events/report.yssbi-event").unwrap();
     let builtins = yss_node_catalog::build_builtin_node_system().unwrap();
     let mut document = GraphDocument::default();
-    let [response, predictor, summary] = std::array::from_fn(|_| NodeId::new());
+    let [response, predictor, fit, summary] = std::array::from_fn(|_| NodeId::new());
     for (id, node_type) in [
         (response, "yssbi.constant.get"),
         (predictor, "yssbi.constant.get"),
-        (summary, "yssbi.statistics.ols.summary"),
+        (fit, "yssbi.statistics.linear.fit"),
+        (summary, "yssbi.statistics.linear.summary"),
     ] {
         document.nodes.insert(
             id,
@@ -91,7 +109,7 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
             .insert("constant".parse().unwrap(), id.to_string().into());
     }
     let patch = EditorGraphMutation::AddPortInstance {
-        node_id: summary,
+        node_id: fit,
         template_key: "predictors".parse().unwrap(),
         placement: PortPlacement::Append,
     }
@@ -101,16 +119,93 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
     let input = document
         .port_bindings
         .keys()
-        .find(|port| port.node_id == summary)
+        .find(|port| port.node_id == fit)
         .unwrap()
         .clone();
     for (source, input) in [
         (
             response,
-            PortAddress::declared(summary, "response".parse().unwrap()),
+            PortAddress::declared(fit, "response".parse().unwrap()),
         ),
         (predictor, input),
     ] {
+        let id = yss_graph_document::ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(source, "value".parse().unwrap()),
+                input,
+                order: None,
+            },
+        );
+    }
+    let id = yss_graph_document::ConnectionId::new();
+    document.connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(fit, "model".parse().unwrap()),
+            input: PortAddress::declared(summary, "model".parse().unwrap()),
+            order: None,
+        },
+    );
+    document.nodes.get_mut(&fit).unwrap().parameters.insert(
+        "configuration".parse().unwrap(),
+        serde_json::json!({"method": method, "constant": true, "covariance": "nonrobust"}),
+    );
+    let auxiliary = match method {
+        "WLS" => vec![(0..n).map(|i| (i + 1) as f64).collect::<Vec<_>>()],
+        "GLS" => (0..n)
+            .map(|j| {
+                (0..n)
+                    .map(|i| if i == j { 1.0 / (i + 1) as f64 } else { 0.0 })
+                    .collect()
+            })
+            .collect(),
+        _ => vec![],
+    };
+    for (index, values) in auxiliary.into_iter().enumerate() {
+        let source = NodeId::new();
+        let id = yss_graph_document::ConstantId::new();
+        let mut constant = GraphConstant {
+            id,
+            name: format!("auxiliary{index}"),
+            data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
+                yss_data_contract::SemanticType::Numeric,
+            ))),
+            data_value: DataValue::DataSeries(DataSeriesValue::with_element_type(
+                serde_json::json!({"value": values}).to_string(),
+                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
+            )),
+            tabular: None,
+            description: String::new(),
+            tags: vec![],
+        };
+        yss_graph_document::normalize_constant_value(&mut constant).unwrap();
+        document.constants.insert(id, constant);
+        document.nodes.insert(
+            source,
+            DocumentNode {
+                id: source,
+                node_type: "yssbi.constant.get".parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: [("constant".parse().unwrap(), id.to_string().into())].into(),
+                user_label: None,
+            },
+        );
+        let template = if method == "WLS" { "weights" } else { "sigma" };
+        let input = PortAddress::instance(
+            fit,
+            template.parse().unwrap(),
+            yss_graph_document::PortInstanceId::new(),
+        );
+        document.port_bindings.insert(
+            input.clone(),
+            yss_graph_document::DynamicPortBinding::UserCreated {
+                order: yss_graph_document::OrderKey::new(index.to_string()),
+            },
+        );
         let id = yss_graph_document::ConnectionId::new();
         document.connections.insert(
             id,
@@ -176,14 +271,15 @@ pub(crate) fn fixture(n: usize) -> (ApplicationState, ResultReference, Arc<OlsRe
         .results()
         .iter()
         .filter_map(|entry| {
-            if let RuntimeValue::Ols(result) = entry.value().value() {
+            if let RuntimeValue::LinearRegression(result) = entry.value().value() {
                 Some((entry.result_id(), result.clone()))
             } else {
                 None
             }
         })
         .collect::<Vec<_>>();
-    assert_eq!(reports.len(), 2);
+    assert_eq!(reports.len(), 3);
+    assert!(Arc::ptr_eq(&reports[0].1, &reports[2].1));
     assert!(Arc::ptr_eq(&reports[0].1, &reports[1].1));
     let reference = ResultReference {
         execution_session_id: captured.execution_session_id(),
@@ -201,7 +297,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
         .unwrap()
         .execution()
         .invalidate_graph_results("events/report.yssbi-event");
-    let overview = app.query_ols_report(reference).unwrap();
+    let overview = app.query_linear_regression_report(reference).unwrap();
     assert_eq!(overview.observation_count, 53_940);
     assert_eq!(overview.coefficient_count, 2);
     let page = app
@@ -277,7 +373,7 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     assert_eq!(test.df2, 53_938);
     app.release_result_lease(lease, "report").unwrap();
     assert!(matches!(
-        app.query_ols_report(reference),
+        app.query_linear_regression_report(reference),
         Err(ReportQueryError::Unavailable)
     ));
 }
@@ -294,7 +390,7 @@ fn references_reject_other_sessions_and_in_flight_results_after_invalidation() {
             app.query_result_table(foreign, ResultTablePart::Coefficients, 0, 1),
             Err(ReportQueryError::Stale)
         ));
-        let outcome = app.with_ols_result(reference, |_| {
+        let outcome = app.with_linear_regression_result(reference, |_| {
             app.capture_session()
                 .unwrap()
                 .execution()
@@ -311,4 +407,26 @@ fn references_reject_other_sessions_and_in_flight_results_after_invalidation() {
             Err(ReportQueryError::Unavailable)
         ));
     }
+}
+
+#[test]
+fn weighted_graph_inputs_reach_the_shared_report_query() {
+    let (wls_app, wls_reference, wls) = fixture_with_method(8, "WLS");
+    let (gls_app, gls_reference, gls) = fixture_with_method(8, "GLS");
+    for (app, reference, model, method) in [
+        (&wls_app, wls_reference, &wls, "WLS"),
+        (&gls_app, gls_reference, &gls, "GLS"),
+    ] {
+        let overview = app.query_linear_regression_report(reference).unwrap();
+        assert_eq!(overview.model.model_type, method);
+        assert_eq!(overview.observation_count, 8);
+        assert!(model.constant);
+    }
+    for (a, b) in wls.coefficients.iter().zip(&gls.coefficients) {
+        assert!((a - b).abs() < 1e-10);
+    }
+    assert!(
+        (wls.report.model_basic_info.r_squared - gls.report.model_basic_info.r_squared).abs()
+            < 1e-10
+    );
 }

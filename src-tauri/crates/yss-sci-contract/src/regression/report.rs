@@ -1,4 +1,4 @@
-//! Typed OLS summary data. Rendering and label construction belong to the runtime.
+//! Typed linear regression summary data. Rendering and label construction belong to the runtime.
 
 use serde::Serialize;
 
@@ -17,7 +17,7 @@ pub struct RegressionCoefficient {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct OlsModelSummary {
+pub struct LinearModelSummary {
     pub model_type: String,
     pub method: String,
     pub num_observation: usize,
@@ -38,16 +38,16 @@ pub struct OlsModelSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct OlsDiagnostics {
+pub struct LinearDiagnostics {
     pub cond_no: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct OlsSummary {
+pub struct LinearRegressionSummary {
     pub title: String,
     pub endog_name: String,
-    pub model_basic_info: OlsModelSummary,
+    pub model_basic_info: LinearModelSummary,
     pub coefficients: Vec<RegressionCoefficient>,
-    pub diagnostic_info: OlsDiagnostics,
+    pub diagnostic_info: LinearDiagnostics,
     pub cov_beta: Vec<Vec<f64>>,
 }

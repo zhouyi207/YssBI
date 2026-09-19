@@ -9,6 +9,7 @@ import {
   parseHarnessMemoryRecords,
   parseHarnessRuntimeStatus,
   parseHarnessSession,
+  parseHarnessSessions,
   parseHarnessSubscription,
   parseHarnessTurnResult,
   parseHarnessWorkflowRun,
@@ -53,6 +54,14 @@ export class HarnessService {
 
   static async createSession(): Promise<HarnessSession> {
     return parseHarnessSession(await invokeCommand("create_harness_session"));
+  }
+
+  static async listSessions(): Promise<readonly HarnessSession[]> {
+    return parseHarnessSessions(await invokeCommand("list_harness_sessions"));
+  }
+
+  static async openSession(sessionId: string): Promise<HarnessSession> {
+    return parseHarnessSession(await invokeCommand("open_harness_session", { sessionId }));
   }
 
   static async subscribeEvents(

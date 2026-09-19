@@ -56,7 +56,7 @@ fn compare(
         &KernelId::new(format!("yssbi.compare.{operation}").into()).unwrap(),
         &KernelInvocation {
             inputs,
-            input_groups: &[None, None],
+            input_templates: &[None, None],
             parameters: BTreeMap::new(),
             outputs: &[KernelOutputSpec {
                 data_type: if operation != "whole_equal"
@@ -142,7 +142,7 @@ fn boolean_kernels_share_three_valued_logic_and_broadcast_shape() {
             &KernelId::new(format!("yssbi.logic.{operation}").into()).unwrap(),
             &KernelInvocation {
                 inputs,
-                input_groups: &vec![None; inputs.len()],
+                input_templates: &vec![None; inputs.len()],
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -210,7 +210,7 @@ fn power_and_logarithm_execute_scalars_broadcasts_and_domain_checks() {
             &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
             &KernelInvocation {
                 inputs,
-                input_groups: &[None, None],
+                input_templates: &[None, None],
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -284,7 +284,7 @@ fn unary_arithmetic_preserves_shape_and_rejects_invalid_values() {
             &KernelId::new(format!("yssbi.numeric.{operation}").into()).unwrap(),
             &KernelInvocation {
                 inputs,
-                input_groups: &[None],
+                input_templates: &[None],
                 parameters: BTreeMap::new(),
                 outputs: &[KernelOutputSpec {
                     data_type,
@@ -422,7 +422,7 @@ fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
             &KernelId::new("yssbi.dataframe.decompose".into()).unwrap(),
             &KernelInvocation {
                 inputs: &[input],
-                input_groups: &[None],
+                input_templates: &[None],
                 parameters: BTreeMap::new(),
                 outputs: &outputs,
                 control: &control,
@@ -444,7 +444,7 @@ fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
             &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
             &KernelInvocation {
                 inputs: &result,
-                input_groups: &[Some("series"), Some("series")],
+                input_templates: &[Some("series"), Some("series")],
                 parameters: BTreeMap::new(),
                 outputs: &assemble_outputs,
                 control: &control,
@@ -464,7 +464,7 @@ fn decomposition_follows_local_output_schema_order_without_graph_addresses() {
                 &KernelId::new("yssbi.dataframe.combine".into()).unwrap(),
                 &KernelInvocation {
                     inputs: &[result[0].clone(), RuntimeValue::List(Box::new([]))],
-                    input_groups: &[Some("series"), Some("series")],
+                    input_templates: &[Some("series"), Some("series")],
                     parameters: BTreeMap::new(),
                     outputs: &assemble_outputs,
                     control: &control,

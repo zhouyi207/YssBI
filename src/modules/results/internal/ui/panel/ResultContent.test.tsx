@@ -101,8 +101,8 @@ const descriptor: ResultDescriptor = {
 const reportDescriptor: ResultDescriptor = {
   ...descriptor,
   resultId: "report-1",
-  presentation: { kind: "report", report: "olsSummary" },
-  title: "OLS Summary",
+  presentation: { kind: "report", report: "linearRegressionSummary" },
+  title: "Linear Regression Summary",
 };
 
 const preloadedReportData = { title: "preloaded report" };

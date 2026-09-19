@@ -1078,7 +1078,7 @@ fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
             "yssbi.dataframe.series.select",
             vec![("column", serde_json::json!("x"))],
         ),
-        (fit, "yssbi.statistics.ols.fit", vec![]),
+        (fit, "yssbi.statistics.linear.fit", vec![]),
     ] {
         document.nodes.insert(
             id,
@@ -1363,7 +1363,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
             &yss_node_kernel::KernelId::new("yssbi.value.convert".into()).unwrap(),
             &yss_node_kernel::KernelInvocation {
                 inputs: &[input],
-                input_groups: &[None],
+                input_templates: &[None],
                 parameters: BTreeMap::from([
                     (
                         yss_node_kernel::KernelParameterKey::new("target_type".into()).unwrap(),

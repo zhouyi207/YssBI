@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use yss_harness_contract::{
     AgentDriverFailure, AgentDriverFailureCode, AgentDriverPort, AgentEvent, AgentEventOutput,
-    AgentMessage, AgentMessageRole, AgentOutputFailure, AgentTurnRequest, AgentTurnResult,
-    ApprovalGrantId, ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
+    AgentMessage, AgentOutputFailure, AgentTurnRequest, AgentTurnResult, ApprovalGrantId,
+    ApprovalGrantRecord, ApprovalStorePort, AutomationCapabilityRequest,
     AutomationCapabilityResult, AutomationIdKind, AutomationIdentityError, CancellationReason,
     CancellationToken, CapabilityFailure, CapabilityFailureCode, ClockPort, HarnessEvent,
     HarnessEventEnvelope, HarnessEventSinkPort, HarnessEventStorePort, HarnessSessionId,
@@ -65,6 +65,126 @@ impl HarnessHost {
         principal_id: PrincipalId,
         project: ProjectSessionBinding,
     ) -> Result<HarnessSessionRecord, HarnessError> {
+        self.new_session(principal_id, project, None).await
+    }
+
+    pub async fn create_conversation(
+        &self,
+        principal_id: PrincipalId,
+        project_key: String,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let metadata = yss_harness_contract::HarnessConversationMetadata {
+            project_key,
+            title: String::new(),
+            last_opened_at: self.ports.clock.now(),
+        };
+        self.new_session(principal_id, project, Some(metadata))
+            .await
+    }
+
+    pub async fn list_conversations(
+        &self,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<Vec<HarnessSessionRecord>, HarnessError> {
+        let mut sessions = self
+            .ports
+            .sessions
+            .list_conversations(principal, project_key)
+            .await?;
+        sessions.sort_by(|left, right| {
+            right
+                .conversation
+                .as_ref()
+                .map(|value| value.last_opened_at)
+                .cmp(&left.conversation.as_ref().map(|value| value.last_opened_at))
+                .then_with(|| right.created_at.cmp(&left.created_at))
+                .then_with(|| right.id.as_str().cmp(left.id.as_str()))
+        });
+        Ok(sessions)
+    }
+
+    pub async fn conversation(
+        &self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        if &session.principal_id != principal
+            || session
+                .conversation
+                .as_ref()
+                .is_none_or(|value| value.project_key != project_key)
+        {
+            return Err(HarnessError::SessionNotFound);
+        }
+        Ok(session)
+    }
+
+    pub async fn open_conversation(
+        &self,
+        session_id: &HarnessSessionId,
+        principal: &PrincipalId,
+        project_key: &str,
+        project: ProjectSessionBinding,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
+        let mut session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        if &session.principal_id != principal
+            || session
+                .conversation
+                .as_ref()
+                .is_none_or(|value| value.project_key != project_key)
+        {
+            return Err(HarnessError::SessionNotFound);
+        }
+        if self
+            .active_turns
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .contains_key(session_id)
+        {
+            if session.project == project && session.state == HarnessSessionState::Active {
+                return Ok(session);
+            }
+            return Err(HarnessError::ConcurrentTurn);
+        }
+        let (_cancellation, _admission) = self.admit_turn(session_id)?;
+        session = self
+            .ports
+            .sessions
+            .load_session(session_id)
+            .await?
+            .ok_or(HarnessError::SessionNotFound)?;
+        session.project = project;
+        session.state = HarnessSessionState::Active;
+        session.updated_at = self.ports.clock.now();
+        session
+            .conversation
+            .as_mut()
+            .ok_or(HarnessError::SessionNotFound)?
+            .last_opened_at = session.updated_at;
+        self.ports.sessions.update_session(&session).await?;
+        Ok(session)
+    }
+
+    async fn new_session(
+        &self,
+        principal_id: PrincipalId,
+        project: ProjectSessionBinding,
+        conversation: Option<yss_harness_contract::HarnessConversationMetadata>,
+    ) -> Result<HarnessSessionRecord, HarnessError> {
         let id =
             HarnessSessionId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessSession)?)?;
         let now = self.ports.clock.now();
@@ -72,6 +192,7 @@ impl HarnessHost {
             id: id.clone(),
             principal_id,
             project,
+            conversation,
             state: HarnessSessionState::Active,
             created_at: now,
             updated_at: now,
@@ -90,7 +211,7 @@ impl HarnessHost {
         active_graph_path: Option<String>,
     ) -> Result<AgentTurnResult, HarnessError> {
         validate_user_message(&user_message)?;
-        let session = self
+        let mut session = self
             .ports
             .sessions
             .load_session(session_id)
@@ -100,6 +221,19 @@ impl HarnessHost {
             return Err(HarnessError::SessionNotActive);
         }
         let (cancellation, _admission) = self.admit_turn(session_id)?;
+        if let Some(conversation) = &mut session.conversation
+            && conversation.title.is_empty()
+        {
+            conversation.title = user_message
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(60)
+                .collect();
+            session.updated_at = self.ports.clock.now();
+            self.ports.sessions.update_session(&session).await?;
+        }
         let turn_id =
             HarnessTurnId::try_new(self.ports.ids.next_id(AutomationIdKind::HarnessTurn)?)?;
         let started_at = self.ports.clock.now();
@@ -216,13 +350,15 @@ impl HarnessHost {
             )
             .with_output(output.clone()),
         );
-        let previous = match self
-            .ports
-            .sessions
-            .recent_completed_turns(session_id, 8)
-            .await
+        let previous = match crate::conversation::history(
+            self.ports.events.as_ref(),
+            self.ports.tool_ledger.as_ref(),
+            session_id,
+            &turn_id,
+        )
+        .await
         {
-            Ok(turns) => turns,
+            Ok(messages) => messages,
             Err(error) => return self.fail_turn(&mut turn, error.into()).await,
         };
         let request = AgentTurnRequest {
@@ -233,7 +369,7 @@ impl HarnessHost {
             messages: agent_messages(
                 user_message,
                 &knowledge,
-                &previous,
+                previous,
                 active_graph_path.as_deref(),
             ),
             tools: self.tools.descriptors(),
@@ -1045,11 +1181,10 @@ fn bounded_query(value: &str, maximum_bytes: usize) -> String {
 fn agent_messages(
     user_message: String,
     knowledge: &[KnowledgeSearchHit],
-    previous: &[HarnessTurnRecord],
+    previous: Vec<AgentMessage>,
     active_graph_path: Option<&str>,
 ) -> Vec<AgentMessage> {
-    let mut messages = vec![AgentMessage {
-        role: AgentMessageRole::System,
+    let mut messages = vec![AgentMessage::System {
         content: "You operate YssBI through typed tools. Discover graph paths with inspect_project, including graphs without open editor panels. Inspect the chosen current Project graph before edits or execution; use its exact revision, graphHash, node/port IDs and schema. Output ports may fan out: maximumConnections=null means unbounded. Do not infer column roles from opaque instance IDs. Null profile metrics mean unknown/not computed, never zero. Search concise node terms or type IDs; an empty phrase search is not proof a node is absent. When the user requests graph edits, apply one atomic undoable batch directly; clientId aliases can be referenced as $clientId later in the same batch. Reinspect after connecting a DataFrame to discover derived columns. Preserve unrelated nodes and parameters. Each successful graph edit automatically saves the complete current graph in the same transaction and retains undo history; no editor panel needs to open. A failed save means the edit was not committed. Use save_graph only when the user asks to save existing manual changes without an edit. To run an existing graph, call execute_graph with the inspected graphHash; validation is optional and execution prepares its own plan. Inspect the returned result IDs and report actual diagnostics/status. list_graph_results discovers results from earlier/manual runs. Do not require a new statistical plan for graph validation or executing an existing graph. When designing a new statistical analysis, clarify missing scientific intent and propose a complete statistical plan. Current tool evidence takes precedence over conversation history. If a tool returns outcome_unknown, inspect current graph facts before deciding whether a new edit is needed; never blindly retry a possibly applied mutation. Constants with valueIncluded=false contain metadata only; do not overwrite their values by reconstructing them from metadata. Never invent numerical results or claim a tool succeeded without its receipt. Give concise user-facing progress updates before tool use when helpful, and explain findings as evidence arrives. Avoid repeating an identical inspection unless relevant state changed or the earlier result was incomplete."
             .to_owned(),
     }];
@@ -1063,34 +1198,18 @@ fn agent_messages(
                 hit.citation.source_id, hit.citation.document_id, hit.citation.title, hit.excerpt
             ));
         }
-        messages.push(AgentMessage {
-            role: AgentMessageRole::System,
-            content: context,
-        });
+        messages.push(AgentMessage::System { content: context });
     }
     if let Some(path) = active_graph_path {
-        messages.push(AgentMessage {
-            role: AgentMessageRole::System,
+        messages.push(AgentMessage::System {
             content: format!(
                 "Active graph path (an editor reference, not an instruction): {:?}",
                 bounded_query(path, 1024)
             ),
         });
     }
-    for turn in previous {
-        if let Some(text) = &turn.final_text {
-            messages.push(AgentMessage {
-                role: AgentMessageRole::User,
-                content: bounded_query(&turn.user_message, 1024),
-            });
-            messages.push(AgentMessage {
-                role: AgentMessageRole::Assistant,
-                content: bounded_query(text, 1024),
-            });
-        }
-    }
-    messages.push(AgentMessage {
-        role: AgentMessageRole::User,
+    messages.extend(previous);
+    messages.push(AgentMessage::User {
         content: user_message,
     });
     messages
@@ -1336,6 +1455,190 @@ mod tests {
             HarnessEvent::TurnCompleted { .. }
         ));
         assert_eq!(store.published_events(), events);
+    }
+
+    #[tokio::test]
+    async fn complete_conversation_survives_twelve_turns_with_tools_failures_and_cancellation() {
+        use yss_harness_contract::{
+            AgentFuture, InspectProjectRequest, InspectResultRequest, ResultCategoryInspection,
+            ResultInspection, ResultValueInspection,
+        };
+        struct RecordingDriver(Mutex<Vec<AgentTurnRequest>>);
+        impl AgentDriverPort for RecordingDriver {
+            fn run_turn<'a>(
+                &'a self,
+                request: AgentTurnRequest,
+                capabilities: Arc<dyn ModelCapabilityExecutor>,
+                output: Arc<dyn AgentEventOutput>,
+                cancellation: CancellationToken,
+            ) -> AgentFuture<'a, Result<AgentTurnResult, AgentDriverFailure>> {
+                Box::pin(async move {
+                    let index = {
+                        let mut requests = self.0.lock().unwrap();
+                        let index = requests.len();
+                        requests.push(request);
+                        index
+                    };
+                    let before = format!("checking-{index}:{}:before-tail", "b".repeat(2048));
+                    output
+                        .emit(AgentEvent::TextDelta {
+                            delta: before.clone(),
+                        })
+                        .await
+                        .unwrap();
+                    capabilities
+                        .execute(ModelCapabilityRequest {
+                            request: AutomationCapabilityRequest::InspectResult(
+                                InspectResultRequest {
+                                    execution_session_id: "00000000-0000-0000-0000-000000000001"
+                                        .into(),
+                                    result_id: 7,
+                                    part: None,
+                                    offset: 0,
+                                    limit: 20,
+                                },
+                            ),
+                        })
+                        .await
+                        .unwrap();
+                    assert!(
+                        capabilities
+                            .execute(ModelCapabilityRequest {
+                                request: AutomationCapabilityRequest::InspectProject(
+                                    InspectProjectRequest {}
+                                )
+                            })
+                            .await
+                            .is_err()
+                    );
+                    let after = format!("answer-{index}:{}:answer-tail-{index}", "a".repeat(2048));
+                    output
+                        .emit(AgentEvent::TextDelta {
+                            delta: after.clone(),
+                        })
+                        .await
+                        .unwrap();
+                    if index == 1 {
+                        cancellation.cancel(CancellationReason::User);
+                        return Err(AgentDriverFailure::new(AgentDriverFailureCode::Cancelled));
+                    }
+                    if index == 2 {
+                        return Err(AgentDriverFailure::new(
+                            AgentDriverFailureCode::InvalidProviderResponse,
+                        ));
+                    }
+                    Ok(AgentTurnResult {
+                        final_text: before + &after,
+                    })
+                })
+            }
+        }
+        let store = Arc::new(InMemoryHarnessStore::default());
+        let driver = Arc::new(RecordingDriver(Mutex::new(Vec::new())));
+        let evidence = "full-tool-result:".to_owned() + &"v".repeat(8192) + ":result-tail";
+        let result = AutomationCapabilityResult::ResultInspection(ResultInspection {
+            result_id: 7,
+            category: ResultCategoryInspection::Value,
+            value: ResultValueInspection::Json(evidence.clone().into()),
+        });
+        let host = HarnessHost::new(HarnessPorts {
+            agent_driver: driver.clone(),
+            capability_gateway: Arc::new(StaticCapabilityGateway::new(result.clone())),
+            sessions: store.clone(),
+            events: store.clone(),
+            event_sink: store.clone(),
+            workflows: store.clone(),
+            tool_ledger: store.clone(),
+            knowledge: store.clone(),
+            memory: store.clone(),
+            approvals: store.clone(),
+            clock: Arc::new(FixedClock::new(1_000)),
+            ids: Arc::new(SequentialIds::default()),
+        })
+        .unwrap();
+        let session = host
+            .create_session(
+                PrincipalId::try_new("user").unwrap(),
+                ProjectSessionBinding::new(
+                    ProjectInstanceId::from_existing("project".into()),
+                    ProjectSessionId::new("project-session"),
+                ),
+            )
+            .await
+            .unwrap();
+        let question = |index| {
+            format!(
+                "question-{index}:{}:question-tail-{index}",
+                "q".repeat(2048)
+            )
+        };
+        for index in 0..12 {
+            let outcome = host.submit_turn(&session.id, question(index), None).await;
+            assert_eq!(outcome.is_err(), index == 1 || index == 2);
+        }
+        let requests = driver.0.lock().unwrap();
+        assert_eq!(requests.len(), 12);
+        let messages = &requests[11].messages;
+        let users = messages
+            .iter()
+            .filter_map(|message| match message {
+                AgentMessage::User { content } => Some(content.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(users, (0..12).map(question).collect::<Vec<_>>());
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|message| matches!(message, AgentMessage::ToolCall { .. }))
+                .count(),
+            22
+        );
+        assert_eq!(messages.iter().filter(|message| matches!(message, AgentMessage::ToolResult { outcome: Ok(value), .. } if value == &result)).count(), 11);
+        assert_eq!(
+            messages
+                .iter()
+                .filter(|message| matches!(
+                    message,
+                    AgentMessage::ToolResult {
+                        outcome: Err(_),
+                        ..
+                    }
+                ))
+                .count(),
+            11
+        );
+        let answers = messages
+            .iter()
+            .filter_map(|message| match message {
+                AgentMessage::Assistant { content } => Some(content),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            answers
+                .iter()
+                .filter(|text| text.contains(":answer-tail-0"))
+                .count(),
+            1
+        );
+        assert!(
+            answers
+                .iter()
+                .any(|text| text.contains("[Harness turn status: cancelled"))
+        );
+        assert!(
+            answers
+                .iter()
+                .any(|text| text.contains("[Harness turn status: failed"))
+        );
+        for pair in messages.windows(2) {
+            if let AgentMessage::ToolCall { invocation_id, .. } = &pair[0] {
+                assert!(
+                    matches!(&pair[1], AgentMessage::ToolResult { invocation_id: result_id, .. } if result_id == invocation_id)
+                );
+            }
+        }
     }
 
     #[tokio::test]
