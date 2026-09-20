@@ -2,6 +2,7 @@ use yss_data_contract::TabularScalar;
 mod boolean;
 mod comparison;
 mod conversion;
+mod distribution;
 mod numeric;
 mod relational;
 mod series;
@@ -12,6 +13,7 @@ use yss_relational_contract::NumericOperation;
 
 #[derive(Clone, Copy)]
 enum BuiltinKernel {
+    Distribution(distribution::DistributionKernel),
     Statistical(statistics::StatisticalKernel),
     Relational(relational::RelationalKernel),
     Series(series::SeriesKernel),
@@ -38,6 +40,144 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         &[&str],
         std::ops::RangeInclusive<usize>,
     )] = &[
+        (
+            "yssbi.distribution.normal.sample",
+            Distribution(distribution::DistributionKernel::Normal),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.uniform.sample",
+            Distribution(distribution::DistributionKernel::Uniform),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.exponential.sample",
+            Distribution(distribution::DistributionKernel::Exponential),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.gamma.sample",
+            Distribution(distribution::DistributionKernel::Gamma),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.beta.sample",
+            Distribution(distribution::DistributionKernel::Beta),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.students_t.sample",
+            Distribution(distribution::DistributionKernel::StudentsT),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.cauchy.sample",
+            Distribution(distribution::DistributionKernel::Cauchy),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.chi_squared.sample",
+            Distribution(distribution::DistributionKernel::ChiSquared),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.log_normal.sample",
+            Distribution(distribution::DistributionKernel::LogNormal),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.weibull.sample",
+            Distribution(distribution::DistributionKernel::Weibull),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.laplace.sample",
+            Distribution(distribution::DistributionKernel::Laplace),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.pareto.sample",
+            Distribution(distribution::DistributionKernel::Pareto),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.inverse_gamma.sample",
+            Distribution(distribution::DistributionKernel::InverseGamma),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.triangular.sample",
+            Distribution(distribution::DistributionKernel::Triangular),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.fisher_snedecor.sample",
+            Distribution(distribution::DistributionKernel::FisherSnedecor),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.erlang.sample",
+            Distribution(distribution::DistributionKernel::Erlang),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.bernoulli.sample",
+            Distribution(distribution::DistributionKernel::Bernoulli),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.binomial.sample",
+            Distribution(distribution::DistributionKernel::Binomial),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.poisson.sample",
+            Distribution(distribution::DistributionKernel::Poisson),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.geometric.sample",
+            Distribution(distribution::DistributionKernel::Geometric),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.negative_binomial.sample",
+            Distribution(distribution::DistributionKernel::NegativeBinomial),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.discrete_uniform.sample",
+            Distribution(distribution::DistributionKernel::DiscreteUniform),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.distribution.hypergeometric.sample",
+            Distribution(distribution::DistributionKernel::Hypergeometric),
+            &["configuration"],
+            1..=1,
+        ),
         (
             "yssbi.dataframe.series.int_range",
             Series(series::SeriesKernel::Range),
@@ -349,6 +489,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
     use relational::RelationalKernel as Table;
     use statistics::StatisticalKernel as Stats;
     match kind {
+        Distribution(_) => vec![],
         Series(series::SeriesKernel::Range) => vec![],
         Series(series::SeriesKernel::InverseStandardize) => vec![
             Input::fixed("standardized"),
@@ -397,6 +538,7 @@ fn execute_kernel(
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let inputs = invocation.inputs;
     let value = match kind {
+        BuiltinKernel::Distribution(kind) => distribution::execute(kind, invocation),
         BuiltinKernel::Series(kind) => return series::execute(kind, invocation),
         BuiltinKernel::Statistical(kind) => {
             return statistics::execute(kind, invocation);

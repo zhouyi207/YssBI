@@ -52,6 +52,96 @@ fn analyze_document(
 }
 
 #[test]
+fn probability_distribution_catalog_executes_all_defaults_and_rejects_invalid_or_unbounded_requests()
+ {
+    let graph = |name: &str, configuration: Option<serde_json::Value>| {
+        let mut document = GraphDocument::default();
+        let id = NodeId::new();
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: format!("yssbi.distribution.{name}.sample").parse().unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                user_label: None,
+                parameters: configuration
+                    .map(|value| ParameterValues::from([("configuration".parse().unwrap(), value)]))
+                    .unwrap_or_default(),
+            },
+        );
+        document
+    };
+    for (name, integer) in [
+        ("normal", false),
+        ("uniform", false),
+        ("exponential", false),
+        ("gamma", false),
+        ("beta", false),
+        ("students_t", false),
+        ("cauchy", false),
+        ("chi_squared", false),
+        ("log_normal", false),
+        ("weibull", false),
+        ("laplace", false),
+        ("pareto", false),
+        ("inverse_gamma", false),
+        ("triangular", false),
+        ("fisher_snedecor", false),
+        ("erlang", false),
+        ("bernoulli", true),
+        ("binomial", true),
+        ("poisson", true),
+        ("geometric", true),
+        ("negative_binomial", true),
+        ("discrete_uniform", true),
+        ("hypergeometric", true),
+    ] {
+        let document = graph(name, None);
+        let result = execute(&document, &format!("yssbi.distribution.{name}.sample")).unwrap();
+        let RuntimeValue::List(samples) = result else {
+            panic!("{name}: samples must be a series");
+        };
+        assert_eq!(samples.len(), 100, "{name}");
+        for sample in samples.iter() {
+            if integer {
+                let RuntimeValue::Scalar(TabularScalar::Integer(value)) = sample else {
+                    panic!("{name}: integer sample expected");
+                };
+                assert!(*value >= i64::from(name == "geometric"), "{name}");
+                if matches!(name, "bernoulli" | "discrete_uniform" | "hypergeometric") {
+                    assert!(*value <= 1, "{name}");
+                }
+                if name == "binomial" {
+                    assert!(*value <= 10);
+                }
+            } else {
+                let RuntimeValue::Scalar(TabularScalar::Float64(value)) = sample else {
+                    panic!("{name}: float sample expected");
+                };
+                assert!(value.as_f64().is_finite());
+                if matches!(name, "uniform" | "beta" | "triangular") {
+                    assert!((0.0..=1.0).contains(&value.as_f64()), "{name}");
+                }
+                if name == "pareto" {
+                    assert!(value.as_f64() >= 1.0);
+                }
+            }
+        }
+    }
+    // Configuration decimal strings are the same values emitted by the editor protocol.
+    let invalid = graph(
+        "normal",
+        Some(serde_json::json!({"mean":"0","standard_deviation":"-1","sample_count":5})),
+    );
+    assert!(execute(&invalid, "yssbi.distribution.normal.sample").is_err());
+    let bounded = graph(
+        "normal",
+        Some(serde_json::json!({"mean":"0","standard_deviation":"1","sample_count":i64::MAX})),
+    );
+    assert!(execute(&bounded, "yssbi.distribution.normal.sample").is_err());
+}
+
+#[test]
 fn series_catalog_nodes_execute_through_graph_planning_and_standardization_roundtrip() {
     let mut document = GraphDocument::default();
     let mut ids = BTreeMap::new();
