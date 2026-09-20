@@ -87,7 +87,7 @@ Application 的 GUI 创建目录和兼容节点目录保留完整定义，按会
 
 逻辑比较统一为六个节点，标量返回 Binary，任一输入为 DataSeries 时逐元素输出 Binary 数列，支持任一侧标量广播。`NodeTypingSpec::BinaryPredicate` 要求输入元素语义一致并推导二元输出形状，供比较及 AND/OR 复用；反向约束同时支持自动转换经这些端口传播语义和形状需求。等于/不等于支持七种基础语义的值比较，排序比较支持 Numeric 和 Text，不根据分类编码隐式推断等级。
 内存数列必须等长，惰性数列必须属于同一关系行域，不混用未对齐的内存列表。任一元素为空时输出空值。Tabular Contract 拥有精确标量比较，Kernel 处理内存值，DataFusion 对相同物理类型使用 Arrow 比较，对混合整数/浮点复用精确标量比较，避免优化器的隐式浮点提升；不支持的表示失败。比较实现 revision 参与已有能力指纹及执行缓存。
-原数据序列数值/字符串比较节点已移除。“整体相等”独立递归比较完整内存列表和记录，返回单个 Binary，空值与空值相等；不读取惰性数列或数据帧。
+原数据序列数值/字符串比较节点已移除。
 AND/OR/NOT 接受 Binary 标量或数列，采用 SQL 三值逻辑，内存数列要求等长并支持标量广播。NOT 保持输入类型和形状，使用类型恒等规则但仍是执行叶节点。惰性输入通过关系契约构造 DataFusion 原生 AND/OR/NOT 表达式，在结果消费时执行，不由布尔运算节点物化整列或封装自定义布尔 UDF；具备正值映射的非标准二元编码先复用语义转换规范化。关系行域必须一致。这些节点属于数据计算，不构成图的控制流或上游短路执行承诺。
 
 类型转换由 `yss-data-contract::SemanticConversion` 定义目标语义、数值表示、显式值域、时间形式/精度与解析格式，支持全部七种 Semantic。
@@ -353,11 +353,16 @@ Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompo
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-database-engine` 内；计划构造不 collect。
 
 数据序列目录的整数序列、长度、非空计数、求和、均值、标准化、逆标准化、虚拟变量信息、
-时间差分、变化率、滚动均值、滞后及面板差分均由 Node Kernel 执行。它们沿用目录声明的
-FullyMaterialized 输出契约；Graph Resolve 不执行计算。关系输入在节点执行时通过
+时间差分、变化率、滚动均值、滞后及面板差分均由 Node Kernel 执行。Graph Resolve 不执行计算。关系输入在节点执行时通过
 `RelationExecutor::visit_batches` 消费受控 Arrow 批流，长度和计数不保留整列，其他变换
 在输入与输出预算内物化。数值运算拒绝非有限值或有损提升；空值规则由各节点帮助明确。
 标准化使用样本标准差并分别输出均值和标准差，不存在额外 Transform 句柄。
+标准化先受控扫描计算统计量；关系数列的标准化和逆标准化输出保留原行域的惰性表达式，
+通过适配器的 Null 保留变换计算，仍可与原列比较或组合。内存数列继续输出内存数列，
+不通过长度相同推断其与无关关系的行对齐。两步往返不保证浮点逐位相同。
+六个逻辑比较节点默认精确比较，可在配置中切换到数值容差模式，并显示绝对/相对容差字段；默认 atol=1e-12、rtol=1e-9，
+标量、物化数列与关系表达式共享 `NumericTolerance` 判定。Null 传播，容差必须有限且非负，
+到 Float64 的有损转换被拒绝。容差模式采用对称公式 `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`，先将容差内的两值视为相等，再应用比较运算符，容差外保留数值顺序。运算符及容差参数参与表达式身份，不能被优化器误合并。布尔运算不需要数值容差。容差关系不具备传递性，不用于排序或分组。
 
 面板差分显式选择上下文数据帧的实体列和时间列，与待计算数列联合投影以证明行对齐；
 拒绝缺失及重复键，组内排序计算后恢复原始行位置，不推断日历间隔或删除缺失行。
@@ -386,7 +391,7 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 
 `ResultStore` 是 session-scoped result authority，分别维护当前 output address 索引和不可变结果记录。
 结果以 `{ executionSessionId, resultId }` 标识，保留 type/presentation、payload 与生成时的 provenance。
-`StoredResult` 直接保存 `RuntimeValue` 和输出类别，不再维护平行标量/文本/空值分支或递归类别包装。
+`StoredResult` 保存 `RuntimeValue`、输出类别和生成时的 `PlanOutputContract`，让已保留结果的类型与 Schema 不依赖当前图或重新推断数据。
 `StoredResultSnapshot` 表示共享结果的一致性读取视图；这一机制称为结果缓存与持有租约，不提供历次运行归档。
 当前输出和显式报告租约是结果的持有者；输出不再指向结果且最后一个租约释放后，移除结果索引。
 计算中的查询通过临时 `Arc` 保证内存安全，最后一个共享引用释放后回收实际数据；不依赖周期性 GC 或前端计数。
@@ -419,9 +424,16 @@ Frontend 通过 `get_pin_result(graphPath, output)` 查询当前 descriptor 或 
 在能确认末页总数时返回精确值；列名/精确类型与行值一起交付。页大小和字节预算由 Result query owner 限制。
 读取完成后再次检查 Application session 和 ResultId；失效结果的迟到成功/失败均不重新发布。
 Frontend 在总数未知时照常请求首页，按后端 `hasMore` 翻页，在表格中显示列名；超出 JavaScript 精确整数范围的值以十进制文本显示。
+Application Results 的 `ResultStructure` 统一决定 descriptor 和分页的结构、已知总数与列信息，IPC 只编码此投影。
+物化数列和惰性数列均使用 `sequence` 表格协议：每行是单元格数组，每页携带列定义，每行长度等于列数。
+物化列表的每个元素占一行一列，嵌套列表和记录保留为结构化单元格，不根据第一个元素猜测多列表格。
+列名和语义类型取自输出契约与语义标注；只有 Numeric 契约时展示 Numeric，不猜测 Float64。
+关系结果的精确物理类型取自适配器 Schema。延迟 Schema 的 descriptor 暂不列出列定义，由受控分页解析，
+已确定 Schema 的分页须与 descriptor 一致。空表及全 Null 数列仍返回列定义；前端也请求零行结果的首页。
+前端仅渲染分页提供的行和列，不补列、不包装行，不再保留独立的 DataSeries JSON renderer。
 分页只用于数据表格和数列（包括报告内的观测表）；报告概览、图形和分析结果本身不分页。
 
-Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence 和 DataSeries renderer 都提供分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
+Run event 使用实际 ExecutionSessionId 与 RunId 标识运行，执行会话重建后的计数重置不会混入旧运行。前端结果投影集中在 Application results 模块，Execution UI store 只保存运行状态、预览和 Output。分页只保留每个结果当前请求的一页，后续翻页使旧请求失效；Sequence renderer 统一提供表格与数列分页入口。读取组件持有 payload consumer lease，最后一个消费者释放时才清除本地 value/page；project reset 后的旧 lease 不能释放新项目的数据。主窗口和独立窗口的 Inspector 均由挂载的 renderer 读取数据，不预读后再重复读取。descriptor 仅表示可用结果，不携带 pending/failed/cancelled 状态；运行状态通过 Run event 与 pin status 表达。provenance 包含 RunId、输出地址与创建时间。
 
 显式打开的 Result panel 和独立展示窗口绑定打开时的结果引用；节点删除、图语义修改、重跑均不会更换已有报告的数据。
 Application 在创建面板前通过 `retain_result` 原子取得租约和 descriptor。租约 token 由调用方预先生成，
