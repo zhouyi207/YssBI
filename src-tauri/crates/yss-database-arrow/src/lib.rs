@@ -5,7 +5,10 @@
 
 mod conversion;
 mod edit_type;
-pub use conversion::{PreparedConversion, convert_semantic_values, materialized_column};
+pub use conversion::{
+    PreparedConversion, convert_semantic_values, materialized_column, materialized_values,
+    temporal_metadata,
+};
 mod scalar;
 mod temporal;
 pub use edit_type::editable_data_type;

@@ -76,9 +76,13 @@ impl DataFusionRuntime {
             .ok_or(RelationError::QueryFailed)?
             .block_on(async {
                 let mut stream = relation.stream(control.clone()).await?;
-                while let Some(batch) = stream.next().await {
+                while let Some(batch) = relation::controlled(stream.next(), control).await? {
                     control.check()?;
-                    visitor(batch?)?;
+                    let batch = batch?;
+                    if batch.get_array_memory_size() > control.max_input_bytes {
+                        return Err(RelationError::MemoryLimitExceeded);
+                    }
+                    visitor(batch)?;
                 }
                 control.check()
             })
@@ -359,6 +363,14 @@ fn ordered_user_frame(
 }
 
 impl RelationExecutor for DataFusionRuntime {
+    fn visit_batches(
+        &self,
+        relation: &RelationHandle,
+        control: &RelationControl,
+        visitor: &mut dyn FnMut(arrow::record_batch::RecordBatch) -> Result<(), RelationError>,
+    ) -> Result<(), RelationError> {
+        self.visit_relation(relation, control, visitor)
+    }
     fn page(
         &self,
         relation: &RelationHandle,

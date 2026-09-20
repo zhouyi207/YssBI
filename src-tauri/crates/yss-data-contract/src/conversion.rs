@@ -108,6 +108,8 @@ pub enum TemporalType {
 pub struct ConversionMetadata {
     pub semantic: ColumnSemantic,
     pub temporal: Option<TemporalType>,
+    /// Reference category for downstream dummy encoding; values remain unchanged.
+    pub dummy_base_level: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

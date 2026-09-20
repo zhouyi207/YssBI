@@ -150,12 +150,14 @@ impl RuntimeValue {
         {
             return Err(RuntimeValueError::Unrepresentable);
         }
-        if matches!(
-            metadata.semantic.kind,
-            yss_data_contract::SemanticType::Numeric
-                | yss_data_contract::SemanticType::Text
-                | yss_data_contract::SemanticType::Binary
-        ) {
+        if metadata.dummy_base_level.is_none()
+            && matches!(
+                metadata.semantic.kind,
+                yss_data_contract::SemanticType::Numeric
+                    | yss_data_contract::SemanticType::Text
+                    | yss_data_contract::SemanticType::Binary
+            )
+        {
             return Ok(self);
         }
         Ok(Self::Annotated(Arc::new(AnnotatedRuntimeValue {

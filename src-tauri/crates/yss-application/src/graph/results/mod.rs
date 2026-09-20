@@ -442,6 +442,7 @@ mod tests {
                     yss_data_contract::SemanticType::Identifier,
                 ),
                 temporal: None,
+                dummy_base_level: None,
             })
             .unwrap(),
         );

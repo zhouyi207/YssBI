@@ -94,6 +94,11 @@ pub fn materialized_column(
             metadata.semantic.clone()
         };
         field = with_column_semantic(field, &semantic)?;
+        if let Some(base) = &metadata.dummy_base_level {
+            let mut entries = field.metadata().clone();
+            entries.insert("yssbi.dummy_base_level".into(), base.clone());
+            field = field.with_metadata(entries);
+        }
         crate::validate_semantic_array(&field, array.as_ref())?;
     }
     Ok((field, array))
@@ -119,7 +124,25 @@ pub fn convert_semantic_values(
     })
 }
 
-fn materialized_values(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularArrowError> {
+pub fn materialized_values(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularArrowError> {
+    let target = match array.data_type() {
+        DataType::Null => return Ok(vec![TabularScalar::Null; array.len()]),
+        dtype if dtype.is_signed_integer() => DataType::Int64,
+        dtype if dtype.is_unsigned_integer() => DataType::UInt64,
+        DataType::Float16 | DataType::Float32 => DataType::Float64,
+        DataType::Decimal32(_, _)
+        | DataType::Decimal64(_, _)
+        | DataType::Decimal128(_, _)
+        | DataType::Decimal256(_, _) => {
+            return materialized_values(lossless_cast(array, &DataType::Float64, false)?.as_ref());
+        }
+        dtype if dtype.is_temporal() => DataType::Utf8,
+        DataType::LargeUtf8 | DataType::Utf8View | DataType::Dictionary(_, _) => DataType::Utf8,
+        _ => array.data_type().clone(),
+    };
+    if &target != array.data_type() {
+        return materialized_values(cast(array, &target)?.as_ref());
+    }
     macro_rules! values {
         ($array:ty, $variant:ident) => {
             if let Some(array) = array.as_any().downcast_ref::<$array>() {
@@ -262,6 +285,7 @@ impl PreparedConversion {
         let metadata = ConversionMetadata {
             semantic,
             temporal: temporal_metadata(output.data_type()),
+            dummy_base_level: None,
         };
         Ok(Self {
             source: source.clone(),
@@ -554,7 +578,7 @@ fn temporal_type(kind: TemporalType) -> DataType {
     }
 }
 
-fn temporal_metadata(dtype: &DataType) -> Option<TemporalType> {
+pub fn temporal_metadata(dtype: &DataType) -> Option<TemporalType> {
     let (time, unit) = match dtype {
         DataType::Date32 | DataType::Date64 => return Some(TemporalType::Date),
         DataType::Time32(unit) | DataType::Time64(unit) => (true, unit),

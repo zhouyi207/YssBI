@@ -14,6 +14,7 @@ fn semantic_annotations_only_contain_materialized_scalar_values() {
     let metadata = ConversionMetadata {
         semantic: ColumnSemantic::new(SemanticType::Identifier),
         temporal: None,
+        dummy_base_level: None,
     };
     let value = RuntimeValue::Scalar(TabularScalar::String("001".into()));
     for value in [

@@ -211,6 +211,14 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    /// Consume Arrow batches on an existing compute worker, with adapter-owned async execution.
+    pub fn visit_batches(
+        &self,
+        control: &RelationControl,
+        visitor: &mut dyn FnMut(RecordBatch) -> Result<(), RelationError>,
+    ) -> Result<(), RelationError> {
+        self.executor.visit_batches(self, control, visitor)
+    }
     pub fn schema_is_deferred(&self) -> bool {
         self.plan.schema_is_deferred()
     }
@@ -472,6 +480,14 @@ impl fmt::Debug for RelationHandle {
 /// Synchronous callers run on compute workers. The adapter consumes the asynchronous Arrow
 /// stream in one joint projection and enforces the separately supplied statistics memory budget.
 pub trait RelationExecutor: Send + Sync {
+    fn visit_batches(
+        &self,
+        _relation: &RelationHandle,
+        _control: &RelationControl,
+        _visitor: &mut dyn FnMut(RecordBatch) -> Result<(), RelationError>,
+    ) -> Result<(), RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn page(
         &self,
         relation: &RelationHandle,

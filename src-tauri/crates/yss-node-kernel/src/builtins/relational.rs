@@ -121,6 +121,7 @@ fn materialize(
                     Some(yss_data_contract::ConversionMetadata {
                         semantic: yss_data_contract::ColumnSemantic::new(*semantic),
                         temporal: None,
+                        dummy_base_level: None,
                     })
                 }
                 _ => None,
