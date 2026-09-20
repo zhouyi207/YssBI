@@ -7,6 +7,67 @@ pub(super) fn execute(
     operation: ComparisonOperation,
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
+    let tolerance = {
+        let Some(RuntimeValue::Record(configuration)) = invocation.parameter("configuration")
+        else {
+            return Err(KernelError::InvalidParameter);
+        };
+        match configuration.get("mode").map(RuntimeValue::unannotated) {
+            Some(RuntimeValue::Scalar(TabularScalar::String(mode))) if mode.as_ref() == "exact" => {
+                None
+            }
+            Some(RuntimeValue::Scalar(TabularScalar::String(mode)))
+                if mode.as_ref() == "tolerance" =>
+            {
+                let read = |key: &str| -> Result<f64, KernelError> {
+                    match configuration.get(key).map(RuntimeValue::unannotated) {
+                        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => {
+                            value.parse().map_err(|_| KernelError::InvalidParameter)
+                        }
+                        value => {
+                            super::numeric_input(value).map_err(|_| KernelError::InvalidParameter)
+                        }
+                    }
+                };
+                Some(
+                    yss_relational_contract::NumericTolerance::new(
+                        read("absolute_tolerance")?,
+                        read("relative_tolerance")?,
+                    )
+                    .map_err(|_| KernelError::InvalidParameter)?,
+                )
+            }
+            _ => return Err(KernelError::InvalidParameter),
+        }
+    };
+    execute_with_tolerance(operation, tolerance, invocation)
+}
+
+fn execute_with_tolerance(
+    operation: ComparisonOperation,
+    tolerance: Option<yss_relational_contract::NumericTolerance>,
+    invocation: &KernelInvocation<'_>,
+) -> Result<RuntimeValue, KernelError> {
+    let compare = |left: &RuntimeValue, right: &RuntimeValue| {
+        if let Some(tolerance) = tolerance {
+            if [left, right]
+                .iter()
+                .any(|v| matches!(v.unannotated(), RuntimeValue::Scalar(TabularScalar::Null)))
+            {
+                return Ok(RuntimeValue::Scalar(TabularScalar::Null));
+            }
+            let equal = tolerance
+                .evaluate(
+                    operation,
+                    super::numeric_input(Some(left))?,
+                    super::numeric_input(Some(right))?,
+                )
+                .map_err(super::relational::kernel_error)?;
+            Ok(RuntimeValue::Scalar(TabularScalar::Bool(equal)))
+        } else {
+            scalar(operation, left, right)
+        }
+    };
     let [left, right] = invocation.inputs else {
         return Err(KernelError::Failed);
     };
@@ -21,6 +82,15 @@ pub(super) fn execute(
             )
         })
     }) {
+        return Err(KernelError::Failed);
+    }
+    if tolerance.is_some()
+        && [left, right].iter().any(|value| {
+            value
+                .metadata()
+                .is_some_and(|metadata| metadata.semantic.kind != SemanticType::Numeric)
+        })
+    {
         return Err(KernelError::Failed);
     }
     let inputs = [left.unannotated(), right.unannotated()];
@@ -52,6 +122,13 @@ pub(super) fn execute(
                     .map_err(|_| KernelError::Failed),
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if let Some(tolerance) = tolerance {
+            return first
+                .relation()
+                .compare_series_with_tolerance(operation, &operands, tolerance)
+                .map(RuntimeValue::Series)
+                .map_err(super::relational::kernel_error);
+        }
         return first
             .relation()
             .compare_series(operation, &operands)
@@ -63,7 +140,7 @@ pub(super) fn execute(
         _ => None,
     });
     let Some(rows) = rows else {
-        return scalar(operation, inputs[0], inputs[1]);
+        return compare(inputs[0], inputs[1]);
     };
     for input in inputs {
         match input {
@@ -83,7 +160,7 @@ pub(super) fn execute(
             RuntimeValue::List(v) => &v[row],
             v => v,
         });
-        result.push(scalar(operation, left, right)?);
+        result.push(compare(left, right)?);
     }
     invocation.check_control()?;
     Ok(RuntimeValue::List(result.into()))

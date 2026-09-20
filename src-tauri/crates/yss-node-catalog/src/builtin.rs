@@ -426,6 +426,31 @@ fn assemble_builtin_parts()
     let nodes = &mut fragment.nodes;
     add_shared_messages(messages);
 
+    messages.push((
+        "en-US",
+        "parameters.comparison_mode.title",
+        Text("Comparison Mode"),
+    ));
+    messages.push((
+        "zh-CN",
+        "parameters.comparison_mode.title",
+        Text("比较模式"),
+    ));
+    for (key, en, zh) in [
+        (
+            "parameters.absolute_tolerance.title",
+            "Absolute Tolerance",
+            "绝对容差",
+        ),
+        (
+            "parameters.relative_tolerance.title",
+            "Relative Tolerance",
+            "相对容差",
+        ),
+    ] {
+        messages.push(("en-US", key, Text(en)));
+        messages.push(("zh-CN", key, Text(zh)));
+    }
     for spec in COMPARISONS {
         let id = leak(format!("yssbi.logic.{}", spec.id));
         add_node_messages(
@@ -436,21 +461,10 @@ fn assemble_builtin_parts()
             spec.aliases,
             spec.zh_aliases,
         );
-        let protocol = comparison_protocol(id, matches!(spec.id, "equal" | "not_equal"))?;
+        let mut protocol = comparison_protocol(id, matches!(spec.id, "equal" | "not_equal"))?;
+        protocol.parameters = comparison_parameters(id)?;
         nodes.push(leaf(protocol, spec.kernel));
     }
-    add_node_messages(
-        messages,
-        "yssbi.logic.whole_equal",
-        "Whole Value Equal",
-        "整体相等",
-        &["deep equal", "whole list equal"],
-        &["整体相等", "列表相等"],
-    );
-    nodes.push(leaf(
-        equality_protocol("yssbi.logic.whole_equal")?,
-        "compare.whole_equal",
-    ));
     for spec in LOGIC {
         let id = leak(format!("yssbi.logic.{}", spec.id));
         add_node_messages(
@@ -565,6 +579,68 @@ pub(super) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
     )
 }
 
+fn comparison_parameters(id: &'static str) -> Result<ParameterSchema, BuiltinAssemblyError> {
+    let numeric = concrete("core.numeric")?;
+    let text = concrete("core.text")?;
+    let mut fields = vec![ConfigurationFieldSpec {
+        parameter: ParameterSpec {
+            key: sid("mode", ParameterKey::new)?,
+            title_key: iid("parameters.comparison_mode.title")?,
+            description_key: None,
+            value_type: text.clone(),
+            default_value: Some(TypedValue {
+                value_type: text,
+                value: DataValue::String("exact".into()),
+            }),
+            constraints: vec![
+                ParameterConstraint::Required,
+                ParameterConstraint::OneOf(vec![
+                    DataValue::String("exact".into()),
+                    DataValue::String("tolerance".into()),
+                ]),
+            ],
+            editor: ParameterEditorSpec::Select,
+            presentation: ParameterPresentation::DetailPanel,
+        },
+        visible_when: None,
+    }];
+    for (key, default) in [
+        ("absolute_tolerance", "0.000000000001"),
+        ("relative_tolerance", "0.000000001"),
+    ] {
+        let title = leak(format!("parameters.{key}.title"));
+
+        fields.push(ConfigurationFieldSpec {
+            parameter: ParameterSpec {
+                key: sid(key, ParameterKey::new)?,
+                title_key: iid(title)?,
+                description_key: None,
+                value_type: numeric.clone(),
+                default_value: Some(TypedValue {
+                    value_type: numeric.clone(),
+                    value: DataValue::Decimal(assembled_decimal(id, default)?),
+                }),
+                constraints: vec![ParameterConstraint::Required],
+                editor: ParameterEditorSpec::Number,
+                presentation: ParameterPresentation::DetailPanel,
+            },
+            visible_when: Some(ConfigurationCondition {
+                key: sid("mode", ParameterKey::new)?,
+                values: vec![DataValue::String("tolerance".into())].into_boxed_slice(),
+            }),
+        });
+    }
+    assembled_parameters(
+        id,
+        vec![configuration_parameter(
+            "parameters.configuration.title",
+            ConfigurationSchema {
+                fields: fields.into_boxed_slice(),
+            },
+        )?],
+    )
+}
+
 fn comparison_protocol(
     id: &'static str,
     equality: bool,
@@ -648,32 +724,6 @@ fn boolean_protocol(id: &'static str, unary: bool) -> Result<NodeProtocol, Built
     Ok(protocol)
 }
 
-fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let value = sid("value", TypeParameterId::new)?;
-    let mut protocol = protocol(id, "logic", vec![], vec![], pure())?;
-    protocol.interface = assembled_interface(
-        id,
-        vec![
-            data_port_expr(
-                "left",
-                "Left",
-                PortDirection::Input,
-                TypeExpr::Generic(value.clone()),
-            )?,
-            data_port_expr(
-                "right",
-                "Right",
-                PortDirection::Input,
-                TypeExpr::Generic(value.clone()),
-            )?,
-            data_port("result", "Result", PortDirection::Output, "core.binary")?,
-        ],
-        vec![value],
-        vec![],
-    )?;
-    Ok(protocol)
-}
-
 fn protocol(
     id: &'static str,
     category: &'static str,
@@ -700,15 +750,6 @@ fn protocol(
         scope: NodeScope::Any,
         managed_role: None,
     })
-}
-
-fn data_port(
-    key: &'static str,
-    title: &'static str,
-    direction: PortDirection,
-    ty: &'static str,
-) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port_expr(key, title, direction, concrete(ty)?)
 }
 
 fn data_port_expr(

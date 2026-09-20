@@ -23,7 +23,6 @@ enum BuiltinKernel {
     Numeric(NumericOperation),
     Boolean(yss_relational_contract::BooleanOperation),
     Comparison(yss_relational_contract::ComparisonOperation),
-    WholeEqual,
     Convert,
     Observe,
 }
@@ -383,7 +382,6 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         ("yssbi.numeric.log10", Numeric(Log10), &[], 1..=1),
         ("yssbi.numeric.square", Numeric(Square), &[], 1..=1),
         ("yssbi.numeric.sqrt", Numeric(Sqrt), &[], 1..=1),
-        ("yssbi.compare.whole_equal", WholeEqual, &[], 1..=1),
         (
             "yssbi.logic.and",
             Boolean(yss_relational_contract::BooleanOperation::And),
@@ -405,37 +403,37 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         (
             "yssbi.compare.equal",
             Comparison(yss_relational_contract::ComparisonOperation::Equal),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
             "yssbi.compare.not_equal",
             Comparison(yss_relational_contract::ComparisonOperation::NotEqual),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
             "yssbi.compare.less",
             Comparison(yss_relational_contract::ComparisonOperation::Less),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
             "yssbi.compare.less_equal",
             Comparison(yss_relational_contract::ComparisonOperation::LessEqual),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
             "yssbi.compare.greater",
             Comparison(yss_relational_contract::ComparisonOperation::Greater),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
             "yssbi.compare.greater_equal",
             Comparison(yss_relational_contract::ComparisonOperation::GreaterEqual),
-            &[],
+            &["configuration"],
             1..=1,
         ),
         (
@@ -468,7 +466,11 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
             .register(
                 crate::KernelId::new((*id).into()).expect("built-in kernel identity"),
                 std::num::NonZeroU32::new(match kind {
-                    Comparison(_) => 5,
+                    Comparison(_) => 7,
+                    Series(
+                        series::SeriesKernel::Standardize
+                        | series::SeriesKernel::InverseStandardize,
+                    ) => 3,
                     Boolean(_) => 3,
                     Statistical(LinearFit | LinearRegressionSummary | LinearPredict) => 4,
                     Convert => 6,
@@ -525,7 +527,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
         Boolean(yss_relational_contract::BooleanOperation::Not) | Convert => {
             vec![Input::fixed("input")]
         }
-        Numeric(_) | Boolean(_) | Comparison(_) | WholeEqual => {
+        Numeric(_) | Boolean(_) | Comparison(_) => {
             vec![Input::fixed("left"), Input::fixed("right")]
         }
         Observe => vec![Input::fixed("data")],
@@ -536,7 +538,6 @@ fn execute_kernel(
     kind: BuiltinKernel,
     invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
-    let inputs = invocation.inputs;
     let value = match kind {
         BuiltinKernel::Distribution(kind) => distribution::execute(kind, invocation),
         BuiltinKernel::Series(kind) => return series::execute(kind, invocation),
@@ -552,24 +553,6 @@ fn execute_kernel(
         BuiltinKernel::Numeric(operation) => numeric::execute(operation, invocation),
         BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
-        BuiltinKernel::WholeEqual => {
-            let [left, right] = inputs else {
-                return Err(KernelError::Failed);
-            };
-            fn materialized(value: &RuntimeValue) -> bool {
-                match value.unannotated() {
-                    RuntimeValue::List(values) => values.iter().all(materialized),
-                    RuntimeValue::Record(values) => values.values().all(materialized),
-                    value => value.tabular_scalar().is_ok(),
-                }
-            }
-            if !materialized(left) || !materialized(right) {
-                return Err(KernelError::Failed);
-            }
-            Ok(RuntimeValue::Scalar(TabularScalar::Bool(
-                left.semantic_eq(right),
-            )))
-        }
         BuiltinKernel::Convert => conversion::execute(invocation),
         BuiltinKernel::Observe => return Ok(Vec::new()),
     }?;

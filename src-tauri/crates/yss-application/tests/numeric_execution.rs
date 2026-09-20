@@ -346,7 +346,18 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
                parameters: Vec<(&str, RuntimeValue)>,
                output_types: Vec<V>,
                control: &KernelControl| {
+        let mut parameters = parameters;
+        if suffix.starts_with("logic.") && parameters.is_empty() {
+            parameters.push((
+                "configuration",
+                RuntimeValue::Record(Arc::new(std::collections::BTreeMap::from([(
+                    "mode".into(),
+                    RuntimeValue::Scalar(TabularScalar::String("exact".into())),
+                )]))),
+            ));
+        }
         let keys = match suffix {
+            _ if suffix.starts_with("logic.") => vec!["left", "right"],
             "series.int_range" => vec![],
             "series.annotate_dummy" => vec!["source"],
             "series.inverse_standardize" => vec!["standardized", "mean", "standard_deviation"],
@@ -354,7 +365,12 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
             _ => vec!["series"],
         };
         KernelRegistry::default().execute(
-            &KernelId::new(format!("yssbi.dataframe.{suffix}").into()).unwrap(),
+            &KernelId::new(if suffix.starts_with("logic.") {
+                format!("yssbi.compare.{}", suffix.strip_prefix("logic.").unwrap()).into()
+            } else {
+                format!("yssbi.dataframe.{suffix}").into()
+            })
+            .unwrap(),
             &KernelInvocation {
                 relations: &factory,
                 inputs,
@@ -382,6 +398,14 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
     let number = |n| RuntimeValue::Scalar(TabularScalar::Integer(n));
     let numeric_series = || V::DataSeries(Box::new(V::Scalar(S::Numeric)));
     let as_json = |value: &RuntimeValue| {
+        if let RuntimeValue::Series(series) = value {
+            let page = series
+                .as_relation()
+                .unwrap()
+                .page(0, 100, &relation_control)
+                .unwrap();
+            return serde_json::to_value(page.data.columns()[0].values()).unwrap();
+        }
         let RuntimeValue::List(values) = value.unannotated() else {
             panic!("expected series");
         };
@@ -549,6 +573,115 @@ fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() 
         as_json(&restored[0]),
         serde_json::json!([4.0, 10.0, 1.0, null, 15.0])
     );
+    assert!(matches!(standardized[0], RuntimeValue::Series(_)));
+    assert!(matches!(restored[0], RuntimeValue::Series(_)));
+    let binary_series = || V::DataSeries(Box::new(V::Scalar(S::Binary)));
+    let tolerances = || {
+        vec![(
+            "configuration",
+            RuntimeValue::Record(Arc::new(std::collections::BTreeMap::from([
+                (
+                    "mode".into(),
+                    RuntimeValue::Scalar(TabularScalar::String("tolerance".into())),
+                ),
+                (
+                    "absolute_tolerance".into(),
+                    RuntimeValue::float64(1e-12).unwrap(),
+                ),
+                (
+                    "relative_tolerance".into(),
+                    RuntimeValue::float64(1e-9).unwrap(),
+                ),
+            ]))),
+        )]
+    };
+    let approximate = run(
+        "logic.equal",
+        &[restored[0].clone(), x.clone()],
+        tolerances(),
+        vec![binary_series()],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        as_json(&approximate[0]),
+        serde_json::json!([true, true, true, null, true])
+    );
+    let broadcast = run(
+        "logic.equal",
+        &[x.clone(), RuntimeValue::float64(4.0 + 1e-10).unwrap()],
+        tolerances(),
+        vec![binary_series()],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        as_json(&broadcast[0]),
+        serde_json::json!([true, false, false, null, false])
+    );
+    for (suffix, expected) in [
+        (
+            "equal",
+            serde_json::json!([true, false, false, null, false]),
+        ),
+        (
+            "not_equal",
+            serde_json::json!([false, true, true, null, true]),
+        ),
+        ("less", serde_json::json!([false, false, true, null, false])),
+        (
+            "less_equal",
+            serde_json::json!([true, false, true, null, false]),
+        ),
+        (
+            "greater",
+            serde_json::json!([false, true, false, null, true]),
+        ),
+        (
+            "greater_equal",
+            serde_json::json!([true, true, false, null, true]),
+        ),
+    ] {
+        let compared = run(
+            &format!("logic.{suffix}"),
+            &[x.clone(), RuntimeValue::float64(4.0 + 1e-10).unwrap()],
+            tolerances(),
+            vec![binary_series()],
+            &control,
+        )
+        .unwrap();
+        assert!(matches!(compared[0], RuntimeValue::Series(_)));
+        assert_eq!(as_json(&compared[0]), expected, "{suffix}");
+    }
+    for operands in [
+        [restored[0].clone(), x.clone()],
+        [x.clone(), restored[0].clone()],
+    ] {
+        let compared = run(
+            "logic.equal",
+            &operands,
+            vec![],
+            vec![binary_series()],
+            &control,
+        )
+        .unwrap();
+        assert_eq!(
+            as_json(&compared[0]),
+            serde_json::json!([true, true, true, null, true])
+        );
+    }
+    // Equal row counts do not authorize comparison across a different row domain.
+    let other = RuntimeValue::Series(frame.limit(0, 5).unwrap().select_series("x").unwrap());
+    assert!(
+        run(
+            "logic.equal",
+            &[restored[0].clone(), other],
+            vec![],
+            vec![binary_series()],
+            &control
+        )
+        .is_err()
+    );
     let empty = RuntimeValue::List(Arc::from([]));
     assert_eq!(
         run(
@@ -697,6 +830,123 @@ fn execute(
         .find(|result| result.output() == &requested_output)
         .unwrap();
     Ok(result.value().value().clone())
+}
+
+#[test]
+fn equality_modes_use_catalog_defaults_and_validate_tolerances() {
+    use yss_data_contract::{DataValue, DecimalLiteral, ValueType};
+    let mut document = GraphDocument::default();
+    let [left, right, equal] = std::array::from_fn(|_| NodeId::new());
+    for (id, kind) in [
+        (left, "yssbi.constant.get"),
+        (right, "yssbi.constant.get"),
+        (equal, "yssbi.logic.equal"),
+    ] {
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: kind.parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        );
+    }
+    for target in [equal] {
+        for (source, key) in [(left, "left"), (right, "right")] {
+            let id = ConnectionId::new();
+            document.connections.insert(
+                id,
+                DocumentConnection {
+                    id,
+                    output: PortAddress::declared(source, "value".parse().unwrap()),
+                    input: PortAddress::declared(target, key.parse().unwrap()),
+                    order: None,
+                },
+            );
+        }
+    }
+    for (id, value) in [(left, 0.1 + 0.2), (right, 0.3)] {
+        set_constant(
+            &mut document,
+            id,
+            ValueType::number(),
+            DataValue::Decimal(DecimalLiteral::try_from(value).unwrap()),
+        );
+    }
+    assert_eq!(
+        execute(&document, "yssbi.logic.equal").unwrap(),
+        RuntimeValue::Scalar(TabularScalar::Bool(false))
+    );
+    document.nodes.get_mut(&equal).unwrap().parameters = ParameterValues::from([(
+        "configuration".parse().unwrap(),
+        serde_json::json!({"mode":"tolerance","absolute_tolerance":1e-12,"relative_tolerance":1e-9}),
+    )]);
+    assert_eq!(
+        execute(&document, "yssbi.logic.equal").unwrap(),
+        RuntimeValue::Scalar(TabularScalar::Bool(true))
+    );
+    for (suffix, exact, tolerant) in [
+        ("equal", false, true),
+        ("not_equal", true, false),
+        ("less", false, false),
+        ("less_equal", false, true),
+        ("greater", true, false),
+        ("greater_equal", true, true),
+    ] {
+        let kind = format!("yssbi.logic.{suffix}");
+        document.nodes.get_mut(&equal).unwrap().node_type = kind.parse().unwrap();
+        for (mode, expected) in [("exact", exact), ("tolerance", tolerant)] {
+            let configuration = if mode == "exact" {
+                serde_json::json!({"mode":mode})
+            } else {
+                serde_json::json!({"mode":mode,"absolute_tolerance":1e-12,"relative_tolerance":1e-9})
+            };
+            document
+                .nodes
+                .get_mut(&equal)
+                .unwrap()
+                .parameters
+                .insert("configuration".parse().unwrap(), configuration);
+            assert_eq!(
+                execute(&document, &kind).unwrap(),
+                RuntimeValue::Scalar(TabularScalar::Bool(expected)),
+                "{suffix} {mode}"
+            );
+        }
+    }
+    document.nodes.get_mut(&equal).unwrap().node_type = "yssbi.logic.equal".parse().unwrap();
+    set_constant(
+        &mut document,
+        left,
+        ValueType::DataSeries(Box::new(ValueType::number())),
+        DataValue::String(r#"{"value":[0.30000000000000004,0.4,null]}"#.into()),
+    );
+    for value in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(value).unwrap();
+    }
+    assert_eq!(
+        execute(&document, "yssbi.logic.equal").unwrap(),
+        RuntimeValue::List(Arc::from([
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Null)
+        ]))
+    );
+    document.nodes.get_mut(&equal).unwrap().parameters = ParameterValues::from([(
+        "configuration".parse().unwrap(),
+        serde_json::json!({"mode":"tolerance","absolute_tolerance":"0","relative_tolerance":"0"}),
+    )]);
+    let RuntimeValue::List(values) = execute(&document, "yssbi.logic.equal").unwrap() else {
+        panic!()
+    };
+    assert_eq!(values[0], RuntimeValue::Scalar(TabularScalar::Bool(false)));
+    document.nodes.get_mut(&equal).unwrap().parameters.insert(
+        "configuration".parse().unwrap(),
+        serde_json::json!({"mode":"tolerance","absolute_tolerance":"-1","relative_tolerance":"0"}),
+    );
+    assert!(execute(&document, "yssbi.logic.equal").is_err());
 }
 
 fn division_graph(denominator: i64) -> (GraphDocument, NodeId) {

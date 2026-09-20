@@ -384,7 +384,7 @@ fn interface(
         Standardize => Ok((
             vec![
                 data_input("series", "DataSeries", numeric_series_type(), None)?,
-                data_output("standardized", "Standardized", float_series_type()?, None)?,
+                streaming_output("standardized", "Standardized", float_series_type()?, None)?,
                 data_output("mean", "Mean", float_type()?, None)?,
                 data_output(
                     "standard_deviation",
@@ -397,10 +397,10 @@ fn interface(
         )),
         InverseStandardize => Ok((
             vec![
-                data_input("standardized", "Standardized", float_series_type()?, None)?,
+                streaming_input("standardized", "Standardized", float_series_type()?, None)?,
                 scalar_input("mean", "Mean", "core.numeric")?,
                 scalar_input("standard_deviation", "Standard Deviation", "core.numeric")?,
-                data_output("series", "DataSeries", float_series_type()?, None)?,
+                streaming_output("series", "DataSeries", float_series_type()?, None)?,
             ],
             vec![],
         )),

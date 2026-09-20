@@ -186,29 +186,4 @@ impl RuntimeValue {
             _ => Err(RuntimeValueError::Unrepresentable),
         }
     }
-
-    pub(crate) fn numeric_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.tabular_scalar()
-            .ok()?
-            .compare(&other.tabular_scalar().ok()?)
-    }
-
-    pub(crate) fn semantic_eq(&self, other: &Self) -> bool {
-        use TabularScalar::{Float64, Integer, Unsigned};
-        match (self.unannotated(), other.unannotated()) {
-            (
-                Self::Scalar(Integer(_) | Unsigned(_) | Float64(_)),
-                Self::Scalar(Integer(_) | Unsigned(_) | Float64(_)),
-            ) => self.numeric_cmp(other) == Some(std::cmp::Ordering::Equal),
-            (Self::List(a), Self::List(b)) => {
-                a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a.semantic_eq(b))
-            }
-            (Self::Record(a), Self::Record(b)) => {
-                a.len() == b.len()
-                    && a.iter()
-                        .all(|(key, a)| b.get(key).is_some_and(|b| a.semantic_eq(b)))
-            }
-            (left, right) => left == right,
-        }
-    }
 }

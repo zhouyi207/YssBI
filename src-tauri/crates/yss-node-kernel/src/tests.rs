@@ -64,15 +64,20 @@ fn compare(
             relations: &crate::tests::relations(),
             inputs,
             input_keys: &["left", "right"],
-            parameters: BTreeMap::new(),
+            parameters: BTreeMap::from([(
+                crate::KernelParameterKey::new("configuration".into()).unwrap(),
+                std::borrow::Cow::Owned(RuntimeValue::Record(Arc::new(BTreeMap::from([(
+                    "mode".into(),
+                    RuntimeValue::Scalar(TabularScalar::String("exact".into())),
+                )])))),
+            )]),
             outputs: &[KernelOutputSpec {
-                data_type: if operation != "whole_equal"
-                    && inputs.iter().any(|v| {
-                        matches!(
-                            v.unannotated(),
-                            RuntimeValue::List(_) | RuntimeValue::Series(_)
-                        )
-                    }) {
+                data_type: if inputs.iter().any(|v| {
+                    matches!(
+                        v.unannotated(),
+                        RuntimeValue::List(_) | RuntimeValue::Series(_)
+                    )
+                }) {
                     ValueType::DataSeries(Box::new(ValueType::Scalar(
                         yss_data_contract::SemanticType::Binary,
                     )))
@@ -711,49 +716,6 @@ fn comparisons_broadcast_both_sides_preserve_nulls_and_reject_misalignment() {
         )
         .unwrap(),
         vec![RuntimeValue::Scalar(TabularScalar::Null)]
-    );
-}
-
-#[test]
-fn equality_compares_nested_numeric_values_without_coercing_other_semantics() {
-    let record = |value| {
-        RuntimeValue::Record(std::sync::Arc::new(BTreeMap::from([(
-            "values".into(),
-            RuntimeValue::List(vec![value].into()),
-        )])))
-    };
-    assert_eq!(
-        compare(
-            "whole_equal",
-            &[
-                record(RuntimeValue::Scalar(TabularScalar::Integer(1))),
-                record(RuntimeValue::float64(1.0).unwrap())
-            ]
-        )
-        .unwrap(),
-        vec![RuntimeValue::Scalar(TabularScalar::Bool(true))]
-    );
-    assert_eq!(
-        compare(
-            "whole_equal",
-            &[
-                RuntimeValue::Scalar(TabularScalar::Bool(true)),
-                RuntimeValue::Scalar(TabularScalar::Integer(1))
-            ]
-        )
-        .unwrap(),
-        vec![RuntimeValue::Scalar(TabularScalar::Bool(false))]
-    );
-    assert_eq!(
-        compare(
-            "whole_equal",
-            &[
-                RuntimeValue::Scalar(TabularScalar::Null),
-                RuntimeValue::Scalar(TabularScalar::Null)
-            ]
-        )
-        .unwrap(),
-        vec![RuntimeValue::Scalar(TabularScalar::Bool(true))]
     );
 }
 

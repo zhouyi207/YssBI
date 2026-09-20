@@ -1,5 +1,5 @@
-//! Materialized series operations. Relation inputs cross the controlled Arrow batch boundary
-//! only during invocation; authoring and graph analysis never evaluate these operations.
+//! Series operations consume controlled batches only during invocation. Standardization
+//! retains relation row domains; authoring and graph analysis never evaluate these operations.
 use super::{numeric_input, relational::kernel_error};
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::collections::BTreeMap;
@@ -321,6 +321,23 @@ pub(crate) fn execute(
             i64::try_from(count).map_err(|_| KernelError::NonFiniteResult)?,
         ))]);
     }
+    // Keep the relation's row domain when undoing standardization. Turning this into
+    // an unbound list would make comparison with the original column unsafe.
+    if matches!(kind, InverseStandardize)
+        && let RuntimeValue::Series(series) = input.unannotated()
+    {
+        let mean = numeric_input(invocation.inputs.get(1))?;
+        let sd = numeric_input(invocation.inputs.get(2))?;
+        if sd <= 0.0 {
+            return Err(KernelError::InvalidNumericInput);
+        }
+        return Ok(vec![RuntimeValue::Series(
+            series
+                .relation()
+                .standardize_series(series, mean, sd, true)
+                .map_err(kernel_error)?,
+        )]);
+    }
     let mut source = column(input, invocation)?;
     let n = source.values.len();
     if matches!(kind, Dummy) {
@@ -452,8 +469,18 @@ pub(crate) fn execute(
                 *value = float((x - mean) / sd)?;
             }
         }
+        let standardized = if let RuntimeValue::Series(series) = input.unannotated() {
+            RuntimeValue::Series(
+                series
+                    .relation()
+                    .standardize_series(series, mean, sd, false)
+                    .map_err(kernel_error)?,
+            )
+        } else {
+            output(source)?
+        };
         return Ok(vec![
-            output(source)?,
+            standardized,
             RuntimeValue::Scalar(float(mean)?),
             RuntimeValue::Scalar(float(sd)?),
         ]);

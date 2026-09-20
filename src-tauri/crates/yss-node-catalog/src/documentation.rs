@@ -35,7 +35,6 @@ fn mapped_documentation(node_type_id: &str) -> Option<Documentation> {
         "yssbi.numeric.square" => markdown!("square"),
 
         "yssbi.logic.equal" => markdown!("equal"),
-        "yssbi.logic.whole_equal" => markdown!("whole_equal"),
         "yssbi.logic.less"
         | "yssbi.logic.less_equal"
         | "yssbi.logic.greater"
