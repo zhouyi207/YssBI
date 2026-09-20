@@ -3,6 +3,7 @@ use super::builtin::{
     configuration_parameter, leaf, sid,
 };
 use crate::Message;
+use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
@@ -217,9 +218,9 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                                 title_key: i18n_key("parameters.plot.maximum_lag.title")?,
                                 description_key: None,
                                 value_type: concrete("core.numeric")?,
-                                default_value: Some(ParameterValue {
+                                default_value: Some(TypedValue {
                                     value_type: concrete("core.numeric")?,
-                                    value: Value::Integer(20),
+                                    value: DataValue::Integer(20),
                                 }),
                                 constraints: vec![ParameterConstraint::IntegerRange {
                                     min: Some(1),

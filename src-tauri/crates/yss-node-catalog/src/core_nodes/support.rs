@@ -152,7 +152,7 @@ pub(crate) fn parameter(
     node_id: &'static str,
     key: &'static str,
     value_type: TypeExpr,
-    default_value: Option<ParameterValue>,
+    default_value: Option<TypedValue>,
     constraints: Vec<ParameterConstraint>,
     editor: ParameterEditorSpec,
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {

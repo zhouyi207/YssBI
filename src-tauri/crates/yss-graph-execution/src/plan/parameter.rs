@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
-use yss_node_kernel::KernelParameterKey;
 
 use super::identity::PlanResourceId;
 
@@ -52,45 +51,11 @@ macro_rules! parameter_id {
 parameter_id!(PlanParameterSchemaId);
 parameter_id!(PlanParameterHandle);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CanonicalDecimal(f64);
-
-impl CanonicalDecimal {
-    pub fn try_new(value: f64) -> Result<Self, CanonicalDecimalError> {
-        if !value.is_finite() {
-            return Err(CanonicalDecimalError::NonFinite);
-        }
-        Ok(Self(if value == 0.0 { 0.0 } else { value }))
-    }
-
-    pub const fn value(self) -> f64 {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub enum CanonicalDecimalError {
-    #[error("canonical decimal is not finite")]
-    NonFinite,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum PlanParameterScalar {
-    Null,
-    Bool(bool),
-    Integer(i64),
-    Unsigned(u64),
-    Decimal(CanonicalDecimal),
-    String(Box<str>),
-}
-
+/// Immutable literal trees are prepared once; resources are authorized separately per run.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PlanParameterValue {
     Literal(std::sync::Arc<yss_node_kernel::RuntimeValue>),
-    Scalar(PlanParameterScalar),
     Resource(PlanResourceId),
-    List(Box<[PlanParameterValue]>),
-    Record(BTreeMap<KernelParameterKey, PlanParameterValue>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

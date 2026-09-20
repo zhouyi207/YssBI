@@ -71,7 +71,6 @@ yss-resource-naming = { path = "../yss-resource-naming" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
 yss-database-source = { path = "../yss-database-source" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }
 yss-database-io = { path = "../yss-database-io" }
 yss-chart-document = { path = "../yss-chart-document" }

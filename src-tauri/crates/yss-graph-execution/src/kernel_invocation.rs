@@ -8,7 +8,7 @@ use yss_node_kernel::{
     RuntimeValue,
 };
 
-use crate::plan::{PlanOperation, PlanParameterBundle, PlanParameterScalar, PlanParameterValue};
+use crate::plan::{PlanOperation, PlanParameterBundle, PlanParameterValue};
 use crate::resource_preparation::PreparedRunResources;
 
 pub(crate) fn invoke(
@@ -74,36 +74,9 @@ pub(crate) fn parameter_value<'a>(
     resources: &'a PreparedRunResources,
 ) -> Result<Cow<'a, RuntimeValue>, KernelError> {
     Ok(match value {
-        PlanParameterValue::Scalar(value) => Cow::Owned(match value {
-            PlanParameterScalar::Null => RuntimeValue::Null,
-            PlanParameterScalar::Bool(value) => RuntimeValue::Bool(*value),
-            PlanParameterScalar::Integer(value) => RuntimeValue::Integer(*value),
-            PlanParameterScalar::Unsigned(value) => RuntimeValue::Unsigned(*value),
-            PlanParameterScalar::Decimal(value) => RuntimeValue::Decimal(value.value()),
-            PlanParameterScalar::String(value) => RuntimeValue::String(value.clone()),
-        }),
         PlanParameterValue::Literal(value) => Cow::Borrowed(value.as_ref()),
         PlanParameterValue::Resource(resource) => {
             Cow::Borrowed(resources.value(resource).ok_or(KernelError::Failed)?)
-        }
-        PlanParameterValue::List(values) => Cow::Owned(RuntimeValue::List(
-            values
-                .iter()
-                .map(|value| parameter_value(value, resources).map(Cow::into_owned))
-                .collect::<Result<std::sync::Arc<[_]>, _>>()?,
-        )),
-        PlanParameterValue::Record(fields) => {
-            Cow::Owned(RuntimeValue::Record(std::sync::Arc::new(
-                fields
-                    .iter()
-                    .map(|(key, value)| {
-                        Ok((
-                            key.as_str().into(),
-                            parameter_value(value, resources)?.into_owned(),
-                        ))
-                    })
-                    .collect::<Result<BTreeMap<_, _>, KernelError>>()?,
-            )))
         }
     })
 }

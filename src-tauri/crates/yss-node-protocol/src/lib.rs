@@ -51,4 +51,4 @@ pub use validation::{
     validate_and_prepare_parameter_values, validate_parameter_values, validate_typed_literal,
     validate_typed_value,
 };
-pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};
+pub use value::TypedValue;

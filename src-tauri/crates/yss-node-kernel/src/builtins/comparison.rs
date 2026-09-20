@@ -1,4 +1,5 @@
 use crate::{KernelError, KernelInvocation, RuntimeValue};
+use yss_data_contract::TabularScalar;
 use yss_data_contract::{SemanticType, ValueType};
 use yss_relational_contract::{ComparisonOperand, ComparisonOperation};
 
@@ -93,25 +94,28 @@ fn scalar(
     left: &RuntimeValue,
     right: &RuntimeValue,
 ) -> Result<RuntimeValue, KernelError> {
-    if let (RuntimeValue::String(left), RuntimeValue::String(right)) = (left, right) {
-        return Ok(RuntimeValue::Bool(operation.evaluate(left.cmp(right))));
+    if let (
+        RuntimeValue::Scalar(TabularScalar::String(left)),
+        RuntimeValue::Scalar(TabularScalar::String(right)),
+    ) = (left, right)
+    {
+        return Ok(RuntimeValue::Scalar(TabularScalar::Bool(
+            operation.evaluate(left.cmp(right)),
+        )));
     }
     let left = left.tabular_scalar().map_err(|_| KernelError::Failed)?;
     let right = right.tabular_scalar().map_err(|_| KernelError::Failed)?;
     if !matches!(
         operation,
         ComparisonOperation::Equal | ComparisonOperation::NotEqual
-    ) && (matches!(left, yss_tabular_contract::TabularScalar::Bool(_))
-        || matches!(right, yss_tabular_contract::TabularScalar::Bool(_)))
+    ) && (matches!(left, TabularScalar::Bool(_)) || matches!(right, TabularScalar::Bool(_)))
     {
         return Err(KernelError::Failed);
     }
-    if matches!(left, yss_tabular_contract::TabularScalar::Null)
-        || matches!(right, yss_tabular_contract::TabularScalar::Null)
-    {
-        return Ok(RuntimeValue::Null);
+    if matches!(left, TabularScalar::Null) || matches!(right, TabularScalar::Null) {
+        return Ok(RuntimeValue::Scalar(TabularScalar::Null));
     }
     left.compare(&right)
-        .map(|order| RuntimeValue::Bool(operation.evaluate(order)))
+        .map(|order| RuntimeValue::Scalar(TabularScalar::Bool(operation.evaluate(order))))
         .ok_or(KernelError::Failed)
 }

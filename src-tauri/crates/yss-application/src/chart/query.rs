@@ -1,9 +1,9 @@
+use yss_data_contract::TabularColumnName;
 use yss_database_contract::DatabaseId;
 use yss_database_runtime::plot_query::{
     self, DatabasePlotQueryError, NumericColumnKind, NumericColumnPair,
 };
 use yss_project_identity::{ProjectInstanceId, ResourceRevision};
-use yss_tabular_contract::TabularColumnName;
 
 use crate::session::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,

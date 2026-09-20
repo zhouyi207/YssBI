@@ -2,10 +2,10 @@ use std::collections::{BTreeSet, HashMap};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use serde::{Deserialize, Serialize};
+use yss_data_contract::TabularColumnName;
 use yss_data_contract::ValueType as GraphValueType;
 use yss_database_contract::DatabaseId;
 use yss_database_schema::{DatabaseColumnFact, DatabaseSchemaFact};
-use yss_tabular_contract::TabularColumnName;
 
 use crate::TabularArrowError;
 

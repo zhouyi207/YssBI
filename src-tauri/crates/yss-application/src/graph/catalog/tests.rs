@@ -159,7 +159,7 @@ fn compatible_draft(source_node: NodeId) -> GraphDocument {
         &mut graph.document,
         source_node,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(0),
+        yss_data_contract::DataValue::Integer(0),
     );
     graph.document
 }
@@ -220,7 +220,7 @@ fn renamed_unloaded_function_caller_keeps_bound_ports_in_semantic_projection() {
         InputState {
             literal_override: Some(yss_node_protocol::TypedValue {
                 value_type: yss_node_protocol::TypeExpr::Concrete("core.numeric".parse().unwrap()),
-                value: yss_node_protocol::Value::Integer(3),
+                value: yss_data_contract::DataValue::Integer(3),
             }),
         },
     );
@@ -491,7 +491,7 @@ fn disconnecting_a_decompose_view_preserves_other_consumed_branches() {
         &mut document,
         source,
         ValueType::DataFrame,
-        DataValue::DataFrame(
+        DataValue::String(
             r#"{"species":["setosa","versicolor"],"sepal":[5.1,7.0],"petal":[1.4,4.7]}"#.into(),
         ),
     );
@@ -745,7 +745,7 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
         &mut document,
         source,
         ValueType::DataFrame,
-        DataValue::DataFrame(r#"{"amount":[1.5,2.5],"label":["a","b"]}"#.into()),
+        DataValue::String(r#"{"amount":[1.5,2.5],"label":["a","b"]}"#.into()),
     );
     yss_graph_document::normalize_constant_value(document.constants.values_mut().next().unwrap())
         .unwrap();
@@ -905,11 +905,11 @@ fn compatible_decompose_catalog_uses_column_types_and_claims_only_when_creating_
     assert!(!port.connections.can_replace);
     let mut stale = updated.document;
     let constant = stale.constants.values_mut().next().unwrap();
-    let yss_data_contract::DataValue::DataFrame(_) = constant.data_value else {
+    let yss_data_contract::DataValue::String(_) = constant.data_value else {
         panic!("dataframe literal");
     };
     constant.tabular = None;
-    constant.data_value = DataValue::DataFrame(r#"{"label":["a","b"]}"#.into());
+    constant.data_value = DataValue::String(r#"{"label":["a","b"]}"#.into());
     yss_graph_document::normalize_constant_value(constant).unwrap();
     let error = session
         .application

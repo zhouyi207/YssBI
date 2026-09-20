@@ -7,7 +7,7 @@ pub use series::{
     BooleanOperand, BooleanOperation, ComparisonOperand, NumericOperation, NumericType,
     SeriesHandle, SeriesOperand, SeriesPlan,
 };
-pub use yss_tabular_contract::ComparisonOperation;
+pub use yss_data_contract::ComparisonOperation;
 
 use std::fmt;
 use std::future::Future;
@@ -51,7 +51,7 @@ pub struct RelationColumn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RelationPage {
-    pub data: yss_tabular_contract::TabularSnapshot,
+    pub data: yss_data_contract::TabularSnapshot,
     pub row_count: usize,
     pub columns: Box<[RelationColumn]>,
     pub has_more: bool,
@@ -59,13 +59,11 @@ pub struct RelationPage {
 
 /// Import immutable, already materialized columns into the caller's shared query engine.
 /// Literal relations have no dataset bindings and never authorize external resource access.
-/// Metadata retains explicit domains/temporal representations when present; a bare categorical
-/// or calendar declaration is completed from the literal at this materialization boundary.
+/// Materialized Arrow fields carry resolved semantic metadata and physical representations.
 pub trait RelationFactory: Send + Sync {
     fn materialize(
         self: Arc<Self>,
-        data: &yss_tabular_contract::TabularSnapshot,
-        metadata: &[Option<yss_data_contract::ConversionMetadata>],
+        data: arrow_array::RecordBatch,
         control: &RelationControl,
     ) -> Result<RelationHandle, RelationError>;
 }
@@ -108,14 +106,6 @@ pub enum RelationError {
     NonFiniteResult,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum RelationLiteral {
-    Boolean(bool),
-    Integer(i64),
-    Decimal(Box<str>),
-    String(Box<str>),
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RelationComparison {
     Equal,
@@ -133,7 +123,7 @@ pub enum RelationComparison {
 pub struct RelationPredicate {
     pub column: Box<str>,
     pub comparison: RelationComparison,
-    pub value: Option<RelationLiteral>,
+    pub value: Option<yss_data_contract::FilterLiteral>,
 }
 
 pub trait RelationPlan: Send + Sync {

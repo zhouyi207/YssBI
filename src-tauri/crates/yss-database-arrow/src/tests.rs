@@ -3,8 +3,8 @@ use std::sync::Arc;
 use arrow::array::{Array, DictionaryArray, Int8Array, StringArray, UInt64Array};
 use arrow::datatypes::{DataType, Field, Int8Type, Schema, TimeUnit};
 use serde_json::json;
+use yss_data_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 use yss_database_contract::DatabaseId;
-use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
 use super::*;
 
@@ -12,10 +12,10 @@ use super::*;
 #[ignore = "manual conversion timing probe"]
 fn conversion_hot_path_timing() {
     use std::{hint::black_box, time::Instant};
+    use yss_data_contract::TabularScalar;
     use yss_data_contract::{
         NumericRepresentation, SemanticConversion, SemanticType, SemanticValue,
     };
-    use yss_tabular_contract::TabularScalar;
     let field = Field::new("code", DataType::Utf8, true);
     let mut spec = SemanticConversion::new(SemanticType::Ordinal, NumericRepresentation::Auto);
     spec.domain.values = (0..1024)
@@ -234,13 +234,13 @@ fn physical_casts_reject_precision_loss_and_preserve_semantics() {
 
 #[test]
 fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_identity() {
+    use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{NumericRepresentation as N, SemanticConversion, SemanticType as S};
-    use yss_tabular_contract::TabularScalar as V;
     let spec = |target, numeric| SemanticConversion::new(target, numeric);
     let values = |values: Vec<V>, target, numeric| {
         convert_semantic_values(&values, None, &spec(target, numeric)).map(|result| result.values)
     };
-    let real = |value: f64| V::Decimal(value.try_into().unwrap());
+    let real = |value: f64| V::Float64(value.try_into().unwrap());
     assert_eq!(
         values(
             vec![
@@ -311,7 +311,7 @@ fn semantic_conversion_preserves_nulls_and_rejects_loss_without_requiring_text_i
     let output = conversion.field();
     assert_eq!(output.data_type(), &DataType::Int64);
     assert!(output.is_nullable());
-    assert!(column_semantic(&output).unwrap().numeric.unwrap().integer);
+    assert!(column_semantic(output).unwrap().numeric.unwrap().integer);
     let invalid = with_column_semantic(
         Field::new("id", DataType::Int64, true),
         &ColumnSemantic::new(S::Identifier),
@@ -385,11 +385,11 @@ fn timezone_removal_retains_clock_precision_nulls_nested_fields_and_dst() {
 
 #[test]
 fn semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels() {
+    use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{
         ConversionDomain, NumericRepresentation as N, SemanticConversion, SemanticType as S,
         SemanticValue,
     };
-    use yss_tabular_contract::TabularScalar as V;
     let input = vec![V::String("001".into()), V::Null, V::String("002".into())];
     let id = convert_semantic_values(
         &input,
@@ -448,11 +448,11 @@ fn semantic_domains_and_identifiers_keep_codes_and_reject_undeclared_levels() {
 
 #[test]
 fn semantic_calendar_conversion_parses_formats_preserves_clock_and_rejects_precision_loss() {
+    use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{
         DatetimeRepresentation as D, NumericRepresentation as N, SemanticConversion,
         SemanticType as S, TemporalPrecision as P,
     };
-    use yss_tabular_contract::TabularScalar as V;
     let mut spec = SemanticConversion::new(S::Datetime, N::Auto);
     spec.format = "%d/%m/%Y %H:%M:%S %z".into();
     let result = convert_semantic_values(
@@ -688,7 +688,7 @@ fn document_literals_keep_unsigned_values_and_reject_lossy_numeric_mixing() {
     assert!(
         to_record_batch(&snapshot(vec![
             TabularScalar::Unsigned(u64::MAX),
-            TabularScalar::Decimal(1.0.try_into().unwrap())
+            TabularScalar::Float64(1.0.try_into().unwrap())
         ]))
         .is_err()
     );

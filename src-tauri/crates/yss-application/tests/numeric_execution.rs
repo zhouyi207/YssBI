@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
+use yss_data_contract::TabularScalar;
 use yss_graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
@@ -136,13 +137,15 @@ fn division_graph(denominator: i64) -> (GraphDocument, NodeId) {
         &mut document,
         left,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Float64(0.0),
+        yss_data_contract::DataValue::Decimal(
+            yss_data_contract::DecimalLiteral::try_from(0.0).expect("finite literal"),
+        ),
     );
     set_constant(
         &mut document,
         right,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(denominator),
+        yss_data_contract::DataValue::Integer(denominator),
     );
     for (source, input) in [(left, "left"), (right, "right")] {
         let id = ConnectionId::new();
@@ -164,7 +167,7 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
     let (mut document, divide) = division_graph(2);
     assert_eq!(
         execute(&document, "yssbi.numeric.divide").unwrap(),
-        RuntimeValue::Decimal(0.0)
+        RuntimeValue::float64(0.0).unwrap()
     );
     document
         .constants
@@ -172,11 +175,13 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
         .find(|constant| {
             matches!(
                 constant.data_value,
-                yss_data_contract::DataValue::Float64(_)
+                yss_data_contract::DataValue::Decimal(_)
             )
         })
         .unwrap()
-        .data_value = yss_data_contract::DataValue::Float64(8.0);
+        .data_value = yss_data_contract::DataValue::Decimal(
+        yss_data_contract::DecimalLiteral::try_from(8.0).expect("finite literal"),
+    );
     let multiply = NodeId::new();
     document.nodes.insert(
         multiply,
@@ -202,7 +207,7 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
     }
     assert_eq!(
         execute(&document, "yssbi.numeric.multiply").unwrap(),
-        RuntimeValue::Decimal(16.0)
+        RuntimeValue::float64(16.0).unwrap()
     );
 
     let (mut wide, operation) = division_graph(1);
@@ -213,22 +218,22 @@ fn graph_constants_retain_numeric_types_through_preparation_and_execution() {
         .find(|constant| {
             matches!(
                 constant.data_value,
-                yss_data_contract::DataValue::Float64(_)
+                yss_data_contract::DataValue::Decimal(_)
             )
         })
         .unwrap();
     value.data_type =
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric);
-    value.data_value = yss_data_contract::DataValue::Int64(9_007_199_254_740_993);
+    value.data_value = yss_data_contract::DataValue::Integer(9_007_199_254_740_993);
     assert_eq!(
         execute(&wide, "yssbi.numeric.multiply").unwrap(),
-        RuntimeValue::Integer(9_007_199_254_740_993)
+        RuntimeValue::Scalar(TabularScalar::Integer(9_007_199_254_740_993))
     );
 }
 
 #[test]
 fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
-    use yss_data_contract::{DataSeriesValue, DataValue, ValueType};
+    use yss_data_contract::{DataValue, ValueType};
     let evaluate = |operator: &str,
                     element: ValueType,
                     values: &str,
@@ -239,12 +244,9 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
         let node_type = format!("yssbi.numeric.{operator}");
         document.nodes.get_mut(&operation).unwrap().node_type = node_type.parse().unwrap();
         for constant in document.constants.values_mut() {
-            if matches!(constant.data_value, DataValue::Float64(_)) {
+            if matches!(constant.data_value, DataValue::Decimal(_)) {
                 constant.data_type = ValueType::DataSeries(Box::new(element.clone()));
-                constant.data_value = DataValue::DataSeries(DataSeriesValue::with_element_type(
-                    values,
-                    element.clone(),
-                ));
+                constant.data_value = DataValue::String((values).into());
             } else {
                 constant.data_type = scalar_type.clone();
                 constant.data_value = scalar_value.clone();
@@ -277,11 +279,15 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
                 numeric.clone(),
                 values,
                 numeric,
-                DataValue::Int64(scalar),
+                DataValue::Integer(scalar),
                 scalar_left
             )
             .unwrap(),
-            RuntimeValue::List(expected.map(RuntimeValue::Decimal).into())
+            RuntimeValue::List(
+                expected
+                    .map(|value| RuntimeValue::float64(value).unwrap())
+                    .into()
+            )
         );
     }
     assert_eq!(
@@ -290,11 +296,15 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[0.2,0.5,1.0]}"#,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Int64(123),
+            DataValue::Integer(123),
             false
         )
         .unwrap(),
-        RuntimeValue::List([24.6, 61.5, 123.].map(RuntimeValue::Decimal).into())
+        RuntimeValue::List(
+            [24.6, 61.5, 123.]
+                .map(|value| RuntimeValue::float64(value).unwrap())
+                .into()
+        )
     );
     assert_eq!(
         evaluate(
@@ -302,11 +312,17 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Float64(0.5),
+            DataValue::Decimal(
+                yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
+            ),
             false
         )
         .unwrap(),
-        RuntimeValue::List([0.5, 1., 1.5].map(RuntimeValue::Decimal).into())
+        RuntimeValue::List(
+            [0.5, 1., 1.5]
+                .map(|value| RuntimeValue::float64(value).unwrap())
+                .into()
+        )
     );
     assert_eq!(
         evaluate(
@@ -314,11 +330,17 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Float64(0.5),
+            DataValue::Decimal(
+                yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal")
+            ),
             true
         )
         .unwrap(),
-        RuntimeValue::List([-0.5, -1.5, -2.5].map(RuntimeValue::Decimal).into())
+        RuntimeValue::List(
+            [-0.5, -1.5, -2.5]
+                .map(|value| RuntimeValue::float64(value).unwrap())
+                .into()
+        )
     );
     assert_eq!(
         evaluate(
@@ -328,10 +350,7 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
             ValueType::DataSeries(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Numeric
             ))),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(
-                r#"{"value":[2]}"#,
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
-            )),
+            DataValue::String((r#"{"value":[2]}"#).into()),
             false
         )
         .unwrap_err()
@@ -345,7 +364,7 @@ fn constant_series_arithmetic_broadcasts_and_checks_lengths_and_divisors() {
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
             r#"{"value":[1,2,3]}"#,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            DataValue::Int64(0),
+            DataValue::Integer(0),
             false
         )
         .unwrap_err()
@@ -370,7 +389,7 @@ fn zero_divisor_reports_the_reason_and_divide_node() {
 
 #[test]
 fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
-    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType as S, ValueType as T};
+    use yss_data_contract::{DataValue, SemanticType as S, ValueType as T};
     let mut document = GraphDocument::default();
     let [source, low, high, less, greater, gate, not, flag] =
         std::array::from_fn(|_| NodeId::new());
@@ -399,28 +418,25 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
         &mut document,
         source,
         T::DataSeries(Box::new(T::Scalar(S::Numeric))),
-        DataValue::DataSeries(DataSeriesValue::with_element_type(
-            r#"{"value":[1,2,3,null]}"#,
-            T::Scalar(S::Numeric),
-        )),
+        DataValue::String((r#"{"value":[1,2,3,null]}"#).into()),
     );
     set_constant(
         &mut document,
         low,
         T::Scalar(S::Numeric),
-        DataValue::Int64(1),
+        DataValue::Integer(1),
     );
     set_constant(
         &mut document,
         high,
         T::Scalar(S::Numeric),
-        DataValue::Int64(3),
+        DataValue::Integer(3),
     );
     set_constant(
         &mut document,
         flag,
         T::Scalar(S::Binary),
-        DataValue::Boolean(false),
+        DataValue::Bool(false),
     );
     for value in document.constants.values_mut() {
         yss_graph_document::normalize_constant_value(value).unwrap();
@@ -445,15 +461,25 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
             },
         );
     }
-    use RuntimeValue::{Bool as B, List as L, Null as N};
+
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(std::sync::Arc::from([B(true), B(false), B(true), N]))
+        RuntimeValue::List(std::sync::Arc::from([
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Null)
+        ]))
     );
     document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.or".parse().unwrap();
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(std::sync::Arc::from([B(false), B(false), B(false), N]))
+        RuntimeValue::List(std::sync::Arc::from([
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Null)
+        ]))
     );
     document.nodes.get_mut(&gate).unwrap().node_type = "yssbi.logic.and".parse().unwrap();
     let edge = document
@@ -464,7 +490,12 @@ fn comparison_masks_feed_boolean_nodes_with_series_and_scalar_broadcasts() {
     edge.output = PortAddress::declared(flag, "value".parse().unwrap());
     assert_eq!(
         execute(&document, "yssbi.logic.not").unwrap(),
-        L(std::sync::Arc::from([B(true), B(true), B(true), B(true)]))
+        RuntimeValue::List(std::sync::Arc::from([
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true))
+        ]))
     );
 }
 
@@ -498,7 +529,7 @@ fn mathematical_constants_execute_without_project_constants_and_feed_arithmetic(
         );
         assert_eq!(
             execute(&document, kind).unwrap(),
-            RuntimeValue::Decimal(expected)
+            RuntimeValue::float64(expected).unwrap()
         );
         let target = NodeId::new();
         document.nodes.insert(
@@ -523,7 +554,7 @@ fn mathematical_constants_execute_without_project_constants_and_feed_arithmetic(
         );
         assert_eq!(
             execute(&document, downstream).unwrap(),
-            RuntimeValue::Decimal(result)
+            RuntimeValue::float64(result).unwrap()
         );
         assert!(document.constants.is_empty());
     }
@@ -531,7 +562,7 @@ fn mathematical_constants_execute_without_project_constants_and_feed_arithmetic(
 
 #[test]
 fn unary_arithmetic_nodes_execute_scalar_and_series_graphs() {
-    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType, ValueType};
+    use yss_data_contract::{DataValue, SemanticType, ValueType};
     for (operation, values, expected) in [
         ("ln", [1., std::f64::consts::E], [0., 1.]),
         ("log2", [1., 8.], [0., 3.]),
@@ -560,7 +591,9 @@ fn unary_arithmetic_nodes_execute_scalar_and_series_graphs() {
             &mut document,
             source,
             element.clone(),
-            DataValue::Float64(values[1]),
+            DataValue::Decimal(
+                yss_data_contract::DecimalLiteral::try_from(values[1]).expect("finite literal"),
+            ),
         );
         let edge = ConnectionId::new();
         document.connections.insert(
@@ -574,30 +607,31 @@ fn unary_arithmetic_nodes_execute_scalar_and_series_graphs() {
         );
         assert_eq!(
             execute(&document, &node_type).unwrap(),
-            RuntimeValue::Decimal(expected[1])
+            RuntimeValue::float64(expected[1]).unwrap()
         );
         set_constant(
             &mut document,
             source,
             ValueType::DataSeries(Box::new(element.clone())),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(
-                serde_json::json!({"value": values}).to_string(),
-                element,
-            )),
+            DataValue::String((serde_json::json!({"value": values}).to_string()).into()),
         );
         for value in document.constants.values_mut() {
             yss_graph_document::normalize_constant_value(value).unwrap();
         }
         assert_eq!(
             execute(&document, &node_type).unwrap(),
-            RuntimeValue::List(expected.map(RuntimeValue::Decimal).into())
+            RuntimeValue::List(
+                expected
+                    .map(|value| RuntimeValue::float64(value).unwrap())
+                    .into()
+            )
         );
     }
 }
 
 #[test]
 fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
-    use yss_data_contract::{DataSeriesValue, DataValue, SemanticType as S, ValueType as T};
+    use yss_data_contract::{DataValue, SemanticType as S, ValueType as T};
     let mut document = GraphDocument::default();
     let [left, right, comparison] = [NodeId::new(), NodeId::new(), NodeId::new()];
     for (id, kind) in [
@@ -620,10 +654,7 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
         &mut document,
         left,
         T::DataSeries(Box::new(T::Scalar(S::Text))),
-        DataValue::DataSeries(DataSeriesValue::with_element_type(
-            r#"{"value":["001","1",null]}"#,
-            T::Scalar(S::Text),
-        )),
+        DataValue::String((r#"{"value":["001","1",null]}"#).into()),
     );
     set_constant(
         &mut document,
@@ -649,9 +680,9 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
     assert_eq!(
         execute(&document, "yssbi.logic.equal").unwrap(),
         RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::Bool(false),
-            RuntimeValue::Bool(true),
-            RuntimeValue::Null
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Null)
         ]))
     );
     for edge in document.connections.values_mut() {
@@ -665,16 +696,16 @@ fn unified_comparisons_prepare_broadcasts_and_reject_mismatched_meanings() {
     assert_eq!(
         execute(&document, "yssbi.logic.equal").unwrap(),
         RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::Bool(false),
-            RuntimeValue::Bool(true),
-            RuntimeValue::Null
+            RuntimeValue::Scalar(TabularScalar::Bool(false)),
+            RuntimeValue::Scalar(TabularScalar::Bool(true)),
+            RuntimeValue::Scalar(TabularScalar::Null)
         ]))
     );
     set_constant(
         &mut document,
         right,
         T::Scalar(S::Numeric),
-        DataValue::Int64(1),
+        DataValue::Integer(1),
     );
     let graph = GraphResourcePath::new("events/comparison.yssbi-event").unwrap();
     let resources = ResourceCatalogSnapshot::new(
@@ -756,7 +787,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
     );
     assert_eq!(
         execute(&document, "yssbi.value.convert").unwrap(),
-        RuntimeValue::Decimal(1.)
+        RuntimeValue::float64(1.).unwrap()
     );
     document.nodes.get_mut(&convert).unwrap().parameters.insert(
         "numeric_mode".parse().unwrap(),
@@ -764,7 +795,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
     );
     assert_eq!(
         execute(&document, "yssbi.value.convert").unwrap(),
-        RuntimeValue::Integer(1)
+        RuntimeValue::Scalar(TabularScalar::Integer(1))
     );
     set_constant(
         &mut document,
@@ -774,7 +805,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
     );
     assert_eq!(
         execute(&document, "yssbi.value.convert").unwrap(),
-        RuntimeValue::Integer(9_007_199_254_740_993)
+        RuntimeValue::Scalar(TabularScalar::Integer(9_007_199_254_740_993))
     );
     document
         .nodes
@@ -788,10 +819,7 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
         &mut document,
         source,
         ValueType::DataSeries(Box::new(element.clone())),
-        DataValue::DataSeries(yss_data_contract::DataSeriesValue::with_element_type(
-            r#"{"value":["001",null,"002"]}"#,
-            element,
-        )),
+        DataValue::String((r#"{"value":["001",null,"002"]}"#).into()),
     );
     for constant in document.constants.values_mut() {
         yss_graph_document::normalize_constant_value(constant).unwrap();
@@ -799,9 +827,9 @@ fn semantic_conversion_executes_resolved_defaults_and_preserves_scalar_failures(
     assert_eq!(
         execute(&document, "yssbi.value.convert").unwrap(),
         RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::Decimal(1.),
-            RuntimeValue::Null,
-            RuntimeValue::Decimal(2.)
+            RuntimeValue::float64(1.).unwrap(),
+            RuntimeValue::Scalar(TabularScalar::Null),
+            RuntimeValue::float64(2.).unwrap()
         ]))
     );
 }
@@ -851,7 +879,7 @@ fn automatic_conversion_executes_the_downstream_target_without_rewriting_paramet
     );
     assert_eq!(
         execute(&document, "yssbi.numeric.divide").unwrap(),
-        RuntimeValue::Decimal(6.)
+        RuntimeValue::float64(6.).unwrap()
     );
     assert!(document.nodes[&convert].parameters.is_empty());
     let element = ValueType::Scalar(SemanticType::Text);
@@ -859,10 +887,7 @@ fn automatic_conversion_executes_the_downstream_target_without_rewriting_paramet
         &mut document,
         source,
         ValueType::DataSeries(Box::new(element.clone())),
-        DataValue::DataSeries(yss_data_contract::DataSeriesValue::with_element_type(
-            r#"{"value":["12","4"]}"#,
-            element,
-        )),
+        DataValue::String((r#"{"value":["12","4"]}"#).into()),
     );
     for constant in document.constants.values_mut() {
         yss_graph_document::normalize_constant_value(constant).unwrap();
@@ -870,8 +895,8 @@ fn automatic_conversion_executes_the_downstream_target_without_rewriting_paramet
     assert_eq!(
         execute(&document, "yssbi.numeric.divide").unwrap(),
         RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::Decimal(6.),
-            RuntimeValue::Decimal(2.)
+            RuntimeValue::float64(6.).unwrap(),
+            RuntimeValue::float64(2.).unwrap()
         ]))
     );
     assert!(document.nodes[&convert].parameters.is_empty());
@@ -989,7 +1014,7 @@ fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_cha
             }
             assert_eq!(
                 execute(&document, "yssbi.logic.equal").unwrap(),
-                RuntimeValue::Bool(true)
+                RuntimeValue::Scalar(TabularScalar::Bool(true))
             );
             for constant in document.constants.values_mut() {
                 let DataValue::String(value) = &constant.data_value else {
@@ -998,16 +1023,14 @@ fn remaining_semantic_conversions_execute_automatically_and_keep_metadata_in_cha
                 let encoded = serde_json::json!({"value":[value, null]}).to_string();
                 let element = constant.data_type.clone();
                 constant.data_type = ValueType::DataSeries(Box::new(element.clone()));
-                constant.data_value = DataValue::DataSeries(
-                    yss_data_contract::DataSeriesValue::with_element_type(encoded, element),
-                );
+                constant.data_value = DataValue::String((encoded).into());
                 yss_graph_document::normalize_constant_value(constant).unwrap();
             }
             assert_eq!(
                 execute(&document, "yssbi.logic.equal").unwrap(),
                 RuntimeValue::List(std::sync::Arc::from([
-                    RuntimeValue::Bool(true),
-                    RuntimeValue::Null
+                    RuntimeValue::Scalar(TabularScalar::Bool(true)),
+                    RuntimeValue::Scalar(TabularScalar::Null)
                 ]))
             );
         };
@@ -1139,7 +1162,7 @@ fn relational_document(resource: &str) -> (GraphDocument, [NodeId; 6]) {
 fn literal_tables_feed_relational_statistics_and_page_without_dataset_bindings() {
     use yss_data_contract::{DataValue, ValueType};
     let (mut document, [source, _, _, _, _, _]) = relational_document("unused");
-    set_constant(&mut document, source, ValueType::DataFrame, DataValue::DataFrame(
+    set_constant(&mut document, source, ValueType::DataFrame, DataValue::String(
         r#"{"x":[1,2,3,4,5,6,7,8],"y":[5,8,11,14,17,20,23,26],"flag":[true,false,true,false,true,false,true,false]}"#.into(),
     ));
     for constant in document.constants.values_mut() {
@@ -1227,13 +1250,17 @@ fn assembled_memory_columns_share_the_relational_path_and_preserve_column_order(
     let inputs = [
         RuntimeValue::List(
             [
-                RuntimeValue::Bool(true),
-                RuntimeValue::Null,
-                RuntimeValue::Bool(false),
+                RuntimeValue::Scalar(TabularScalar::Bool(true)),
+                RuntimeValue::Scalar(TabularScalar::Null),
+                RuntimeValue::Scalar(TabularScalar::Bool(false)),
             ]
             .into(),
         ),
-        RuntimeValue::List([11, 22, 33].map(RuntimeValue::Integer).into()),
+        RuntimeValue::List(
+            [11, 22, 33]
+                .map(|value| RuntimeValue::Scalar(TabularScalar::Integer(value)))
+                .into(),
+        ),
     ];
     let assembled = assemble(&inputs, &control).unwrap();
     let outputs = fields
@@ -1312,15 +1339,15 @@ fn assembled_memory_columns_share_the_relational_path_and_preserve_column_order(
     let semantic_inputs = [
         RuntimeValue::List(
             [
-                RuntimeValue::String("b".into()),
-                RuntimeValue::String("a".into()),
+                RuntimeValue::Scalar(TabularScalar::String("b".into())),
+                RuntimeValue::Scalar(TabularScalar::String("a".into())),
             ]
             .into(),
         ),
         RuntimeValue::List(
             [
-                RuntimeValue::String("2026-09-19T12:34:56+08:00".into()),
-                RuntimeValue::Null,
+                RuntimeValue::Scalar(TabularScalar::String("2026-09-19T12:34:56+08:00".into())),
+                RuntimeValue::Scalar(TabularScalar::Null),
             ]
             .into(),
         ),
@@ -1611,11 +1638,15 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                 parameters: BTreeMap::from([
                     (
                         yss_node_kernel::KernelParameterKey::new("target_type".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::String("auto".into())),
+                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                            "auto".into(),
+                        ))),
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("numeric_mode".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::String("real".into())),
+                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                            "real".into(),
+                        ))),
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("semantic_domain".into()).unwrap(),
@@ -1625,16 +1656,22 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("datetime_kind".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::String("auto".into())),
+                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                            "auto".into(),
+                        ))),
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("datetime_precision".into())
                             .unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::String("microseconds".into())),
+                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                            "microseconds".into(),
+                        ))),
                     ),
                     (
                         yss_node_kernel::KernelParameterKey::new("datetime_format".into()).unwrap(),
-                        std::borrow::Cow::Owned(RuntimeValue::String("".into())),
+                        std::borrow::Cow::Owned(RuntimeValue::Scalar(TabularScalar::String(
+                            "".into(),
+                        ))),
                     ),
                 ]),
                 outputs: &[yss_node_kernel::KernelOutputSpec {
@@ -1925,13 +1962,15 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         &mut document,
         half,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Float64(0.5),
+        yss_data_contract::DataValue::Decimal(
+            yss_data_contract::DecimalLiteral::try_from(0.5).expect("finite literal"),
+        ),
     );
     set_constant(
         &mut document,
         factor,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(123),
+        yss_data_contract::DataValue::Integer(123),
     );
     let fixture_capture = project
         .capture_graph_overwrite_operation(&instance, &path, OperationId::new())
@@ -2159,7 +2198,9 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     };
     assert_eq!(fitted.len(), 4);
     for (actual, expected) in fitted.iter().zip([7., 9., 11., 13.]) {
-        assert!(matches!(actual, RuntimeValue::Decimal(value) if (value - expected).abs() < 1e-10));
+        assert!(
+            matches!(actual, RuntimeValue::Scalar(TabularScalar::Float64(value)) if (value.as_f64() - expected).abs() < 1e-10)
+        );
     }
     let result = app
         .query_pin_result(query(fit, "residuals"))
@@ -2171,7 +2212,7 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
     assert!(
         residuals
             .iter()
-            .all(|value| matches!(value, RuntimeValue::Decimal(value) if value.abs() < 1e-10))
+            .all(|value| matches!(value, RuntimeValue::Scalar(TabularScalar::Float64(value)) if value.as_f64().abs() < 1e-10))
     );
     let relation = app
         .query_pin_result(query(filter, "result"))
@@ -2213,9 +2254,11 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         assert_eq!(page.columns[0].name.as_ref(), name);
         assert_eq!(
             page.values.as_ref(),
-            expected.map(|value| RuntimeValue::List(std::sync::Arc::from([
-                RuntimeValue::Unsigned(value)
-            ])))
+            expected.map(
+                |value| RuntimeValue::List(std::sync::Arc::from([RuntimeValue::Scalar(
+                    TabularScalar::Unsigned(value)
+                )]))
+            )
         );
         assert!(page.has_more);
     }
@@ -2240,8 +2283,8 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
             panic!("one-column row")
         };
         let actual = match values[0] {
-            RuntimeValue::Decimal(value) => value,
-            RuntimeValue::Unsigned(value) => value as f64,
+            RuntimeValue::Scalar(TabularScalar::Float64(value)) => value.as_f64(),
+            RuntimeValue::Scalar(TabularScalar::Unsigned(value)) => value as f64,
             _ => panic!("numeric result"),
         };
         assert!((actual - expected).abs() < 1e-10);

@@ -19,7 +19,6 @@ yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-database-engine = { path = "../yss-database-engine" }
 yss-database-store = { path = "../yss-database-store" }
 yss-relational-contract = { path = "../yss-relational-contract" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-database-arrow = { path = "../yss-database-arrow" }
 yss-database-io = { path = "../yss-database-io" }
 uuid.workspace = true

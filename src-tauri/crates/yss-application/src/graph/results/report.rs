@@ -1,4 +1,5 @@
 use thiserror::Error;
+use yss_data_contract::TabularScalar;
 use yss_graph_execution::result::ResultReference;
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::RelationColumn;
@@ -85,6 +86,8 @@ pub enum ResultAnalysisProjection {
 
 #[derive(Debug, Error)]
 pub enum ReportQueryError {
+    #[error("report value is not representable")]
+    UnrepresentableValue,
     #[error(transparent)]
     Session(#[from] SessionCaptureError),
     #[error("result reference is stale")]
@@ -252,28 +255,38 @@ fn table_page(
     let end = offset.saturating_add(limit).min(count);
     let values = (offset..end)
         .map(|row| {
-            RuntimeValue::List(match part {
+            Ok(RuntimeValue::List(match part {
                 ResultTablePart::Coefficients => {
                     let coefficient = &result.report.coefficients[row];
                     std::sync::Arc::from([
-                        RuntimeValue::String(coefficient.variable.clone().into_boxed_str()),
-                        RuntimeValue::Decimal(coefficient.coef),
-                        RuntimeValue::Decimal(coefficient.std_err),
-                        RuntimeValue::Decimal(coefficient.t_value),
-                        RuntimeValue::Decimal(coefficient.p_value),
-                        RuntimeValue::Decimal(coefficient.ci_lower),
-                        RuntimeValue::Decimal(coefficient.ci_upper),
-                        RuntimeValue::Bool(coefficient.is_significant),
+                        RuntimeValue::Scalar(TabularScalar::String(
+                            coefficient.variable.clone().into_boxed_str(),
+                        )),
+                        RuntimeValue::float64(coefficient.coef)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::float64(coefficient.std_err)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::float64(coefficient.t_value)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::float64(coefficient.p_value)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::float64(coefficient.ci_lower)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::float64(coefficient.ci_upper)
+                            .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                        RuntimeValue::Scalar(TabularScalar::Bool(coefficient.is_significant)),
                     ])
                 }
                 ResultTablePart::Observations => std::sync::Arc::from([
-                    RuntimeValue::Unsigned((row + 1) as u64),
-                    RuntimeValue::Decimal(result.fitted[row]),
-                    RuntimeValue::Decimal(result.residuals[row]),
+                    RuntimeValue::Scalar(TabularScalar::Unsigned((row + 1) as u64)),
+                    RuntimeValue::float64(result.fitted[row])
+                        .map_err(|_| ReportQueryError::UnrepresentableValue)?,
+                    RuntimeValue::float64(result.residuals[row])
+                        .map_err(|_| ReportQueryError::UnrepresentableValue)?,
                 ]),
-            })
+            }))
         })
-        .collect();
+        .collect::<Result<_, ReportQueryError>>()?;
     Ok(ResultPageProjection {
         offset,
         requested_limit: limit,

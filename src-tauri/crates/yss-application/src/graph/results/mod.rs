@@ -4,6 +4,7 @@ use thiserror::Error;
 
 use super::inputs::{GraphInputError, GraphResolutionContext};
 use crate::session::{ApplicationSession, ApplicationState, SessionCaptureError};
+use yss_data_contract::TabularScalar;
 use yss_graph_document::{GraphResourcePath, PortAddress};
 use yss_graph_execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
 use yss_graph_execution::result::{
@@ -11,7 +12,6 @@ use yss_graph_execution::result::{
 };
 use yss_node_kernel::RuntimeValue;
 use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
-use yss_tabular_contract::TabularScalar;
 
 pub mod report;
 mod retention;
@@ -353,14 +353,7 @@ fn project_result_page(
 }
 
 fn scalar_value(value: &TabularScalar) -> RuntimeValue {
-    match value.display_value() {
-        TabularScalar::Null => RuntimeValue::Null,
-        TabularScalar::Bool(value) => RuntimeValue::Bool(value),
-        TabularScalar::Integer(value) => RuntimeValue::Integer(value),
-        TabularScalar::Unsigned(value) => RuntimeValue::Unsigned(value),
-        TabularScalar::Decimal(value) => RuntimeValue::Decimal(value.as_f64()),
-        TabularScalar::String(value) => RuntimeValue::String(value),
-    }
+    RuntimeValue::Scalar(value.display_value())
 }
 
 fn charge_value(
@@ -375,7 +368,9 @@ fn charge_value(
         .checked_sub(3)
         .ok_or(ResultQueryApplicationError::PageTooLarge)?;
     let bytes = match value.unannotated() {
-        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.len().checked_mul(6),
+        RuntimeValue::Scalar(TabularScalar::String(value)) | RuntimeValue::Resource(value) => {
+            value.len().checked_mul(6)
+        }
         RuntimeValue::List(values) => {
             for value in values.iter() {
                 charge_value(value, remaining, depth + 1)?;
@@ -408,20 +403,9 @@ pub(crate) fn runtime_value_to_json(
 ) -> Result<serde_json::Value, ResultQueryApplicationError> {
     Ok(match value {
         RuntimeValue::Annotated(value) => runtime_value_to_json(value.value())?,
-        RuntimeValue::Null => serde_json::Value::Null,
-        RuntimeValue::Bool(value) => (*value).into(),
-        RuntimeValue::Integer(value) => serde_json::to_value(
-            yss_tabular_contract::TabularScalar::Integer(*value).display_value(),
-        )
-        .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
-        RuntimeValue::Unsigned(value) => serde_json::to_value(
-            yss_tabular_contract::TabularScalar::Unsigned(*value).display_value(),
-        )
-        .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
-        RuntimeValue::Decimal(value) => serde_json::Number::from_f64(*value)
-            .map(serde_json::Value::Number)
-            .ok_or(ResultQueryApplicationError::UnrepresentableValue)?,
-        RuntimeValue::String(value) | RuntimeValue::Resource(value) => value.as_ref().into(),
+        RuntimeValue::Scalar(value) => serde_json::to_value(value.display_value())
+            .map_err(|_| ResultQueryApplicationError::UnrepresentableValue)?,
+        RuntimeValue::Resource(value) => value.as_ref().into(),
         RuntimeValue::Relation(_) | RuntimeValue::Series(_) | RuntimeValue::LinearRegression(_) => {
             return Err(ResultQueryApplicationError::UnrepresentableValue);
         }
@@ -450,8 +434,8 @@ mod tests {
     fn annotated_series_paging_preserves_sequence_shape_and_offsets() {
         let result = StoredResult::new(
             RuntimeValue::List(std::sync::Arc::from([
-                RuntimeValue::String("001".into()),
-                RuntimeValue::Null,
+                RuntimeValue::Scalar(TabularScalar::String("001".into())),
+                RuntimeValue::Scalar(TabularScalar::Null),
             ]))
             .with_metadata(yss_data_contract::ConversionMetadata {
                 semantic: yss_data_contract::ColumnSemantic::new(
@@ -469,7 +453,10 @@ mod tests {
         let page = project_result_page(&result, 1, 1, &control).unwrap();
         assert!(matches!(page.kind, ResultPageKind::Sequence));
         assert_eq!(page.total_count, Some(2));
-        assert_eq!(page.values.as_ref(), &[RuntimeValue::Null]);
+        assert_eq!(
+            page.values.as_ref(),
+            &[RuntimeValue::Scalar(TabularScalar::Null)]
+        );
         assert!(!page.has_more);
     }
 

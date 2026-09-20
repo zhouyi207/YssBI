@@ -311,6 +311,7 @@ impl ResultPageDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yss_data_contract::TabularScalar;
 
     #[test]
     fn relation_page_wire_keeps_unknown_count_and_exact_wide_integer_text() {
@@ -327,7 +328,7 @@ mod tests {
                     data_type: "UInt64".into(),
                 }]),
                 values: Box::new([RuntimeValue::List(std::sync::Arc::from([
-                    RuntimeValue::Unsigned(u64::MAX),
+                    RuntimeValue::Scalar(TabularScalar::Unsigned(u64::MAX)),
                 ]))]),
             },
         )
@@ -339,8 +340,8 @@ mod tests {
         assert_eq!(encoded["values"][0][0], u64::MAX.to_string());
         assert_eq!(encoded["metadata"]["columns"][0]["type"], "UInt64");
         let annotated = RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::String("001".into()),
-            RuntimeValue::Null,
+            RuntimeValue::Scalar(TabularScalar::String("001".into())),
+            RuntimeValue::Scalar(TabularScalar::Null),
         ]))
         .with_metadata(yss_data_contract::ConversionMetadata {
             semantic: yss_data_contract::ColumnSemantic::new(

@@ -3,6 +3,7 @@
 //! This module depends exclusively on the node-system IR and keeps graph authoring,
 //! pin reconciliation, and execution concerns behind their current boundaries.
 
+use yss_data_contract::DataValue;
 mod families;
 
 use super::builtin::{
@@ -256,9 +257,9 @@ fn interface(
                     "right_suffix",
                     concrete("core.text")?,
                     ParameterEditorSpec::Text { multiline: false },
-                    Some(ParameterValue {
+                    Some(TypedValue {
                         value_type: concrete("core.text")?,
-                        value: Value::String("_right".into()),
+                        value: DataValue::String("_right".into()),
                     }),
                     vec![ParameterConstraint::Length {
                         min: Some(1),
@@ -297,9 +298,9 @@ fn interface(
                                     key,
                                     concrete("core.numeric")?,
                                     ParameterEditorSpec::Number,
-                                    Some(ParameterValue {
+                                    Some(TypedValue {
                                         value_type: concrete("core.numeric")?,
-                                        value: Value::Integer(default),
+                                        value: DataValue::Integer(default),
                                     }),
                                     vec![],
                                 )?,
@@ -453,12 +454,15 @@ fn choice_parameter(
         key,
         concrete("core.text")?,
         ParameterEditorSpec::Select,
-        Some(ParameterValue {
+        Some(TypedValue {
             value_type: concrete("core.text")?,
-            value: Value::String(default.into()),
+            value: DataValue::String(default.into()),
         }),
         vec![ParameterConstraint::OneOf(
-            values.iter().map(|v| Value::String((*v).into())).collect(),
+            values
+                .iter()
+                .map(|v| DataValue::String((*v).into()))
+                .collect(),
         )],
     )
 }
@@ -670,9 +674,9 @@ fn positive_integer_parameter(
         key,
         concrete("core.numeric")?,
         ParameterEditorSpec::Number,
-        Some(ParameterValue {
+        Some(TypedValue {
             value_type: concrete("core.numeric")?,
-            value: Value::Integer(default),
+            value: DataValue::Integer(default),
         }),
         vec![ParameterConstraint::IntegerRange {
             min: Some(1),
@@ -698,7 +702,7 @@ fn parameter(
     key: &'static str,
     value_type: TypeExpr,
     editor: ParameterEditorSpec,
-    default_value: Option<ParameterValue>,
+    default_value: Option<TypedValue>,
     constraints: Vec<ParameterConstraint>,
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     Ok(ParameterSpec {

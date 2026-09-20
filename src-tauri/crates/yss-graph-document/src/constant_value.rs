@@ -4,9 +4,7 @@ use serde::de::{MapAccess, Visitor};
 use serde_json::Value;
 use std::fmt;
 use yss_data_contract::{DataValue, ValueType};
-use yss_tabular_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
-
-const CONSTANT_HANDLE_PREFIX: &str = "constant:";
+use yss_data_contract::{TabularColumn, TabularContractError, TabularScalar, TabularSnapshot};
 
 /// Returns an inert value suitable for a constant whose type has just changed.
 ///
@@ -15,11 +13,11 @@ const CONSTANT_HANDLE_PREFIX: &str = "constant:";
 pub fn default_value_for(data_type: &ValueType) -> DataValue {
     use yss_data_contract::SemanticType;
     match data_type {
-        ValueType::Scalar(SemanticType::Binary) => DataValue::Boolean(false),
-        ValueType::Scalar(SemanticType::Numeric) => DataValue::Int64(0),
-        ValueType::Scalar(_) => DataValue::String(String::new()),
-        ValueType::Array(_) => DataValue::Array(Vec::new()),
-        ValueType::Object => DataValue::Object(std::collections::HashMap::new()),
+        ValueType::Scalar(SemanticType::Binary) => DataValue::Bool(false),
+        ValueType::Scalar(SemanticType::Numeric) => DataValue::Integer(0),
+        ValueType::Scalar(_) => DataValue::String("".into()),
+        ValueType::Array(_) => DataValue::List(Vec::new()),
+        ValueType::Object => DataValue::Object(std::collections::BTreeMap::new()),
         ValueType::OneOf(types) => types.first().map_or(DataValue::Null, default_value_for),
         _ => DataValue::Null,
     }
@@ -29,46 +27,27 @@ pub fn default_value_for(data_type: &ValueType) -> DataValue {
 pub enum ConstantValueError {
     #[error("constant value does not match its declared type")]
     ValueKindMismatch,
-    #[error("tabular constant handle belongs to another constant")]
-    ForeignConstantHandle,
-    #[error("tabular constant handle has no embedded snapshot")]
-    MissingSnapshot,
     #[error("tabular constant JSON is invalid")]
     InvalidJson,
     #[error("tabular constant JSON must be a column map")]
     ExpectedColumnMap,
     #[error("tabular constant column must be an array")]
     ColumnNotArray {
-        column: yss_tabular_contract::TabularColumnName,
+        column: yss_data_contract::TabularColumnName,
     },
     #[error("tabular constant cell must be a scalar")]
     UnsupportedCell {
-        column: yss_tabular_contract::TabularColumnName,
+        column: yss_data_contract::TabularColumnName,
         row: usize,
     },
     #[error("tabular constant contract is invalid")]
     Contract(TabularContractError),
 }
 
-pub fn constant_handle(id: &ConstantId) -> String {
-    format!("{CONSTANT_HANDLE_PREFIX}{id}")
-}
-
 impl GraphConstant {
     pub fn copy_with_id(&self, id: ConstantId) -> Self {
-        let mut copy = self.clone();
-        copy.id = id;
-        match &mut copy.data_value {
-            DataValue::DataFrame(handle) => *handle = constant_handle(&id),
-            DataValue::DataSeries(series) => series.id = constant_handle(&id),
-            _ => {}
-        }
-        copy
+        Self { id, ..self.clone() }
     }
-}
-
-fn is_constant_handle(value: &str) -> bool {
-    value.starts_with(CONSTANT_HANDLE_PREFIX)
 }
 
 fn parse_literal(payload: &str) -> Result<TabularSnapshot, ConstantValueError> {
@@ -78,7 +57,7 @@ fn parse_literal(payload: &str) -> Result<TabularSnapshot, ConstantValueError> {
         return Err(ConstantValueError::ExpectedColumnMap);
     };
     for (name, values) in columns {
-        let column = yss_tabular_contract::TabularColumnName::try_from(name.as_str())
+        let column = yss_data_contract::TabularColumnName::try_from(name.as_str())
             .map_err(ConstantValueError::Contract)?;
         let Some(values) = values.as_array() else {
             return Err(ConstantValueError::ColumnNotArray { column });
@@ -100,7 +79,7 @@ fn parse_literal(payload: &str) -> Result<TabularSnapshot, ConstantValueError> {
         columns
             .into_iter()
             .map(|(name, values)| {
-                yss_tabular_contract::TabularColumnName::try_from(name.as_str())
+                yss_data_contract::TabularColumnName::try_from(name.as_str())
                     .map(|name| TabularColumn::new(name, values.into_boxed_slice()))
                     .map_err(ConstantValueError::Contract)
             })
@@ -138,44 +117,6 @@ fn deserialize_literal_columns(
     deserializer.deserialize_map(LiteralColumnsVisitor)
 }
 
-enum TabularInput {
-    Clear,
-    Unchanged,
-    Snapshot(TabularSnapshot),
-}
-
-fn classify_payload(
-    payload: &str,
-    canonical_handle: &str,
-) -> Result<TabularInput, ConstantValueError> {
-    if payload == canonical_handle {
-        return Ok(TabularInput::Unchanged);
-    }
-    if is_constant_handle(payload) {
-        return Err(ConstantValueError::ForeignConstantHandle);
-    }
-    if !payload.trim_start().starts_with(['{', '[']) {
-        return Err(ConstantValueError::ValueKindMismatch);
-    }
-    Ok(TabularInput::Snapshot(parse_literal(payload)?))
-}
-
-fn ingest(constant: &GraphConstant) -> Result<TabularInput, ConstantValueError> {
-    let canonical_handle = constant_handle(&constant.id);
-    match (&constant.data_type, &constant.data_value) {
-        (ValueType::DataFrame, DataValue::Null) | (ValueType::DataSeries(_), DataValue::Null) => {
-            Ok(TabularInput::Clear)
-        }
-        (ValueType::DataFrame, DataValue::DataFrame(payload)) => {
-            classify_payload(payload, &canonical_handle)
-        }
-        (ValueType::DataSeries(_), DataValue::DataSeries(value)) => {
-            classify_payload(&value.id, &canonical_handle)
-        }
-        _ => Err(ConstantValueError::ValueKindMismatch),
-    }
-}
-
 fn validate_snapshot(
     data_type: &ValueType,
     snapshot: &TabularSnapshot,
@@ -201,7 +142,7 @@ fn validate_snapshot(
                     value,
                     TabularScalar::Integer(_)
                         | TabularScalar::Unsigned(_)
-                        | TabularScalar::Decimal(_)
+                        | TabularScalar::Float64(_)
                 ),
                 SemanticType::Binary => matches!(value, TabularScalar::Bool(_)),
                 SemanticType::Text | SemanticType::Datetime => {
@@ -235,22 +176,11 @@ pub fn validate_constant_definitions(
             constant.data_type,
             ValueType::DataFrame | ValueType::DataSeries(_)
         ) {
-            match (&constant.data_value, &constant.tabular) {
-                (DataValue::Null, None) => true,
-                (DataValue::DataFrame(handle), Some(snapshot))
-                    if constant.data_type == ValueType::DataFrame =>
-                {
-                    *handle == constant_handle(id)
-                        && validate_snapshot(&constant.data_type, snapshot).is_ok()
-                }
-                (DataValue::DataSeries(series), Some(snapshot))
-                    if matches!(constant.data_type, ValueType::DataSeries(_)) =>
-                {
-                    series.id == constant_handle(id)
-                        && validate_snapshot(&constant.data_type, snapshot).is_ok()
-                }
-                _ => false,
-            }
+            constant.data_value == DataValue::Null
+                && constant
+                    .tabular
+                    .as_ref()
+                    .is_none_or(|snapshot| validate_snapshot(&constant.data_type, snapshot).is_ok())
         } else {
             !matches!(
                 constant.data_type,
@@ -269,9 +199,8 @@ pub fn validate_constant_definitions(
     Ok(())
 }
 
-/// Normalizes a constant's tabular literal into an embedded snapshot and stable handle.
-///
-/// The update is atomic: on error, neither the value nor the snapshot is changed.
+/// Parse editor input once; persisted table constants contain only their snapshot.
+/// Validation finishes before any field is changed.
 pub fn normalize_constant_value(constant: &mut GraphConstant) -> Result<(), ConstantValueError> {
     if !matches!(
         constant.data_type,
@@ -287,40 +216,20 @@ pub fn normalize_constant_value(constant: &mut GraphConstant) -> Result<(), Cons
         constant.tabular = None;
         return Ok(());
     }
-
-    let next_tabular = match ingest(constant)? {
-        TabularInput::Clear => None,
-        TabularInput::Unchanged => {
-            let snapshot = constant
-                .tabular
-                .as_ref()
-                .ok_or(ConstantValueError::MissingSnapshot)?;
-            validate_snapshot(&constant.data_type, snapshot)?;
-            return Ok(());
+    match &constant.data_value {
+        DataValue::Null => {
+            if let Some(snapshot) = &constant.tabular {
+                validate_snapshot(&constant.data_type, snapshot)?;
+            }
         }
-        TabularInput::Snapshot(snapshot) => {
+        DataValue::String(payload) => {
+            let snapshot = parse_literal(payload)?;
             validate_snapshot(&constant.data_type, &snapshot)?;
-            Some(snapshot)
+            constant.tabular = Some(snapshot);
+            constant.data_value = DataValue::Null;
         }
-    };
-    let next_data_value = if next_tabular.is_none() {
-        constant.data_value.clone()
-    } else {
-        match (&constant.data_type, &constant.data_value) {
-            (ValueType::DataFrame, DataValue::DataFrame(_)) => {
-                DataValue::DataFrame(constant_handle(&constant.id))
-            }
-            (ValueType::DataSeries(_), DataValue::DataSeries(value)) => {
-                let mut value = value.clone();
-                value.id = constant_handle(&constant.id);
-                DataValue::DataSeries(value)
-            }
-            _ => return Err(ConstantValueError::ValueKindMismatch),
-        }
-    };
-
-    constant.tabular = next_tabular;
-    constant.data_value = next_data_value;
+        _ => return Err(ConstantValueError::ValueKindMismatch),
+    }
     Ok(())
 }
 
@@ -328,27 +237,28 @@ fn value_matches_type(value: &DataValue, data_type: &ValueType) -> bool {
     use yss_data_contract::SemanticType;
     match (value, data_type) {
         (DataValue::Null, _) => true,
-        (DataValue::Boolean(_), ValueType::Scalar(SemanticType::Binary) | ValueType::Any)
-        | (DataValue::Int64(_), ValueType::Scalar(SemanticType::Numeric) | ValueType::Any)
+        (DataValue::Bool(_), ValueType::Scalar(SemanticType::Binary) | ValueType::Any)
+        | (DataValue::Integer(_), ValueType::Scalar(SemanticType::Numeric) | ValueType::Any)
         | (
             DataValue::String(_),
             ValueType::Scalar(SemanticType::Text | SemanticType::Datetime) | ValueType::Any,
         ) => true,
-        (DataValue::Float64(value), ValueType::Scalar(SemanticType::Numeric) | ValueType::Any) => {
-            value.is_finite()
-        }
         (
-            DataValue::Boolean(_) | DataValue::Int64(_) | DataValue::String(_),
+            DataValue::Unsigned(_) | DataValue::Decimal(_),
+            ValueType::Scalar(SemanticType::Numeric) | ValueType::Any,
+        ) => true,
+        (
+            DataValue::Bool(_) | DataValue::Integer(_) | DataValue::String(_),
             ValueType::Scalar(SemanticType::Categorical | SemanticType::Identifier),
         ) => true,
         (
-            DataValue::Float64(value),
+            DataValue::Unsigned(_) | DataValue::Decimal(_),
             ValueType::Scalar(SemanticType::Categorical | SemanticType::Identifier),
-        ) => value.is_finite(),
-        (DataValue::Array(values), ValueType::Array(element)) => values
+        ) => true,
+        (DataValue::List(values), ValueType::Array(element)) => values
             .iter()
             .all(|value| value_matches_type(value, element)),
-        (DataValue::Array(values), ValueType::Any) => values
+        (DataValue::List(values), ValueType::Any) => values
             .iter()
             .all(|value| value_matches_type(value, &ValueType::Any)),
         (DataValue::Object(values), ValueType::Object | ValueType::Any) => values
@@ -364,8 +274,7 @@ fn value_matches_type(value: &DataValue, data_type: &ValueType) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yss_data_contract::DataSeriesValue;
-    use yss_tabular_contract::TabularColumnName;
+    use yss_data_contract::TabularColumnName;
 
     fn constant(data_type: ValueType, data_value: DataValue) -> GraphConstant {
         GraphConstant {
@@ -385,18 +294,18 @@ mod tests {
             default_value_for(&ValueType::Array(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Text
             )))),
-            DataValue::Array(Vec::new())
+            DataValue::List(Vec::new())
         );
         assert_eq!(
             default_value_for(&ValueType::Object),
-            DataValue::Object(std::collections::HashMap::new())
+            DataValue::Object(std::collections::BTreeMap::new())
         );
         assert_eq!(
             default_value_for(&ValueType::OneOf(vec![
                 ValueType::Scalar(yss_data_contract::SemanticType::Binary),
                 ValueType::Scalar(yss_data_contract::SemanticType::Numeric)
             ])),
-            DataValue::Boolean(false)
+            DataValue::Bool(false)
         );
         assert_eq!(
             default_value_for(&ValueType::OneOf(Vec::new())),
@@ -405,65 +314,47 @@ mod tests {
     }
 
     #[test]
-    fn normalize_enforces_current_constant_canonical_handle() {
+    fn normalization_and_copy_preserve_the_snapshot_without_a_handle() {
         let mut constant = constant(
             ValueType::DataFrame,
-            DataValue::DataFrame(r#"{"value":[1,2]}"#.into()),
+            DataValue::String(r#"{"value":[1,2]}"#.into()),
         );
-
-        normalize_constant_value(&mut constant).expect("valid tabular constant");
-        assert_eq!(
-            constant.data_value,
-            DataValue::DataFrame(constant_handle(&constant.id))
-        );
-        let snapshot = constant.tabular.clone();
-
-        normalize_constant_value(&mut constant).expect("canonical handle is unchanged");
-        assert_eq!(constant.tabular, snapshot);
-
-        let foreign_handle = constant_handle(&ConstantId::new());
-        constant.data_value = DataValue::DataFrame(foreign_handle.clone());
-
-        assert_eq!(
-            normalize_constant_value(&mut constant),
-            Err(ConstantValueError::ForeignConstantHandle)
-        );
-        assert_eq!(constant.data_value, DataValue::DataFrame(foreign_handle));
-        assert_eq!(constant.tabular, snapshot);
+        normalize_constant_value(&mut constant).unwrap();
+        assert_eq!(constant.data_value, DataValue::Null);
+        let normalized = constant.clone();
+        normalize_constant_value(&mut constant).unwrap();
+        assert_eq!(constant, normalized);
+        let copy = constant.copy_with_id(ConstantId::new());
+        assert_ne!(copy.id, constant.id);
+        assert_eq!(copy.data_value, DataValue::Null);
+        assert_eq!(copy.tabular, constant.tabular);
     }
 
     #[test]
-    fn data_series_normalization_preserves_non_handle_metadata() {
+    fn series_literals_are_checked_against_the_declared_element_semantic() {
         let mut constant = constant(
             ValueType::DataSeries(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Numeric,
             ))),
-            DataValue::DataSeries(DataSeriesValue::with_element_type(
-                r#"{"value":[1,2]}"#,
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            )),
+            DataValue::String(r#"{"value":["text"]}"#.into()),
         );
-
-        normalize_constant_value(&mut constant).expect("valid data series literal");
-        let DataValue::DataSeries(value) = &constant.data_value else {
-            panic!("normalization must retain the data-series value kind");
-        };
-        assert_eq!(value.id, constant_handle(&constant.id));
+        let before = constant.clone();
         assert_eq!(
-            value.element_type,
-            Some(ValueType::Scalar(yss_data_contract::SemanticType::Numeric))
+            normalize_constant_value(&mut constant),
+            Err(ConstantValueError::ValueKindMismatch)
         );
+        assert_eq!(constant, before);
     }
 
     #[test]
     fn invalid_tabular_payload_leaves_value_and_snapshot_unchanged() {
         let mut constant = constant(
             ValueType::DataFrame,
-            DataValue::DataFrame(r#"{"value":[1]}"#.into()),
+            DataValue::String(r#"{"value":[1]}"#.into()),
         );
         normalize_constant_value(&mut constant).expect("initial value");
         let before = constant.clone();
-        constant.data_value = DataValue::DataFrame(r#"{"value":[{"nested":true}]}"#.into());
+        constant.data_value = DataValue::String(r#"{"value":[{"nested":true}]}"#.into());
 
         assert!(matches!(
             normalize_constant_value(&mut constant),
@@ -472,7 +363,7 @@ mod tests {
         assert_eq!(constant.tabular, before.tabular);
         assert_eq!(
             constant.data_value,
-            DataValue::DataFrame(r#"{"value":[{"nested":true}]}"#.into())
+            DataValue::String(r#"{"value":[{"nested":true}]}"#.into())
         );
     }
 
@@ -480,7 +371,7 @@ mod tests {
     fn duplicate_column_contract_error_is_preserved() {
         let mut constant = constant(
             ValueType::DataFrame,
-            DataValue::DataFrame(r#"{"value":[1],"value":[2]}"#.into()),
+            DataValue::String(r#"{"value":[1],"value":[2]}"#.into()),
         );
 
         assert_eq!(

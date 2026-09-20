@@ -1,4 +1,5 @@
 use super::*;
+use yss_data_contract::FilterLiteral;
 
 pub(super) fn parameter_schema<'a>(
     ports: &'a [GraphPortSemanticFact],
@@ -16,7 +17,7 @@ pub(super) fn parameter_schema<'a>(
 
 pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact) {
     use yss_node_protocol::dataframe::{
-        FILTER_PREDICATE_TYPE_ID, FilterLiteral, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
+        FILTER_PREDICATE_TYPE_ID, FilterOperator, PROJECT_COLUMNS_TYPE_ID,
         filter_comparison_is_compatible, prepare_filter_predicate_json,
         prepare_project_columns_json,
     };
@@ -65,8 +66,7 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
                     (
                         GraphFilterLiteralType::Decimal,
                         FilterLiteral::Decimal(
-                            yss_node_protocol::CanonicalDecimal::new("0")
-                                .expect("zero is a decimal"),
+                            yss_data_contract::DecimalLiteral::new("0").expect("zero is a decimal"),
                         ),
                     ),
                     (
@@ -181,7 +181,7 @@ pub(super) fn parameter_fact(
                         options: options
                             .iter()
                             .filter_map(|value| match value {
-                                yss_node_protocol::Value::String(value) => Some(value.clone()),
+                                yss_data_contract::DataValue::String(value) => Some(value.clone()),
                                 _ => None,
                             })
                             .collect(),

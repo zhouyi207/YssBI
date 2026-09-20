@@ -506,7 +506,7 @@ fn conversion_target<'a>(
         .iter()
         .find(|candidate| &candidate.key == parameter)?;
     match &parameter.default_value.as_ref()?.value {
-        yss_node_protocol::Value::String(value) => Some(value.as_ref()),
+        yss_data_contract::DataValue::String(value) => Some(value.as_ref()),
         _ => None,
     }
 }

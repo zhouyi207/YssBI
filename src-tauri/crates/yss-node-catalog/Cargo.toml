@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+yss-data-contract = { path = "../yss-data-contract" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 serde.workspace = true
 yss-node-protocol = { path = "../yss-node-protocol" }

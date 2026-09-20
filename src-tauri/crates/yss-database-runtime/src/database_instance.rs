@@ -336,7 +336,8 @@ impl PreparedInstanceMutation {
     }
     pub fn recovery(
         &self,
-    ) -> Result<(Arc<yss_database_store::DatasetStore>, DatasetPublication), DatasetStoreError> {
+    ) -> Result<(Arc<yss_database_store::DatasetStore>, DatasetPublication), DatasetStoreError>
+    {
         Ok((
             self.before.snapshot()?.store().clone(),
             self.prepared.publication(),

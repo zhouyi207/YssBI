@@ -1,10 +1,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use yss_data_contract::TabularScalar;
 
 use super::*;
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot};
 use std::collections::BTreeMap;
-use yss_data_contract::{DataSeriesValue, DataValue, ValueType};
+use yss_data_contract::{DataValue, ValueType};
 use yss_graph_document::{
     DocumentConnection, DocumentNode, GraphConstant, GraphDocument, GraphResourcePath, NodeId,
     NodePosition, ParameterValues, PortAddress,
@@ -91,10 +92,9 @@ fn fixture_with_method(
             data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Numeric,
             ))),
-            data_value: DataValue::DataSeries(DataSeriesValue::with_element_type(
-                serde_json::json!({ "value": values }).to_string(),
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            )),
+            data_value: DataValue::String(
+                (serde_json::json!({ "value": values }).to_string()).into(),
+            ),
             tabular: None,
             description: String::new(),
             tags: vec![],
@@ -174,10 +174,9 @@ fn fixture_with_method(
             data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Numeric,
             ))),
-            data_value: DataValue::DataSeries(DataSeriesValue::with_element_type(
-                serde_json::json!({"value": values}).to_string(),
-                ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            )),
+            data_value: DataValue::String(
+                (serde_json::json!({"value": values}).to_string()).into(),
+            ),
             tabular: None,
             description: String::new(),
             tags: vec![],
@@ -308,9 +307,9 @@ fn large_report_reads_bounded_views_and_runs_tests_on_the_complete_fit() {
     assert_eq!(
         page.values[0],
         RuntimeValue::List(std::sync::Arc::from([
-            RuntimeValue::Unsigned(53_931),
-            RuntimeValue::Decimal(fit.fitted[53_930]),
-            RuntimeValue::Decimal(fit.residuals[53_930]),
+            RuntimeValue::Scalar(TabularScalar::Unsigned(53_931)),
+            RuntimeValue::float64(fit.fitted[53_930]).unwrap(),
+            RuntimeValue::float64(fit.residuals[53_930]).unwrap(),
         ]))
     );
     let ResultAnalysisProjection::ResidualPlot(plot) = app

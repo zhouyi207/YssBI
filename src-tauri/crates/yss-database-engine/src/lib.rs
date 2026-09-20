@@ -39,58 +39,25 @@ pub struct DataFusionRuntime {
 impl yss_relational_contract::RelationFactory for DataFusionRuntime {
     fn materialize(
         self: Arc<Self>,
-        data: &yss_tabular_contract::TabularSnapshot,
-        metadata: &[Option<yss_data_contract::ConversionMetadata>],
+        data: arrow::record_batch::RecordBatch,
         control: &RelationControl,
     ) -> Result<RelationHandle, RelationError> {
         control.check()?;
-        if data.columns().len() != metadata.len() {
-            return Err(RelationError::InvalidInput);
-        }
-        // Account for column conversion scratch space and the materialized row order.
-        // DataFusion's query workspace is separately bounded by the shared runtime pool.
-        let mut bytes = data
-            .row_count()
-            .checked_mul(64)
-            .ok_or(RelationError::MemoryLimitExceeded)?;
-        for column in data.columns() {
-            for (index, value) in column.values().iter().enumerate() {
-                if index % 1024 == 0 {
-                    control.check()?;
-                }
-                let size = 2 * size_of::<yss_tabular_contract::TabularScalar>()
-                    + match value {
-                        yss_tabular_contract::TabularScalar::String(value) => value.len(),
-                        _ => 0,
-                    };
-                bytes = bytes
-                    .checked_add(size)
-                    .filter(|bytes| *bytes <= control.max_input_bytes)
-                    .ok_or(RelationError::MemoryLimitExceeded)?;
-            }
-        }
-        let mut fields = Vec::with_capacity(metadata.len());
-        let mut arrays = Vec::with_capacity(metadata.len());
-        for (column, metadata) in data.columns().iter().zip(metadata) {
-            control.check()?;
-            let (field, array) = yss_database_arrow::materialized_column(
-                column.name().as_str(),
-                column.values(),
-                metadata.as_ref(),
-            )
-            .map_err(|_| RelationError::InvalidInput)?;
-            fields.push(field);
-            arrays.push(array);
-        }
-        control.check()?;
-        let schema = Arc::new(Schema::new(fields));
-        let batch = if arrays.is_empty() {
-            arrow::record_batch::RecordBatch::new_empty(schema)
+        // An empty batch has no input cells; allocator bookkeeping is not input data.
+        let array_bytes = if data.num_rows() == 0 {
+            0
         } else {
-            arrow::record_batch::RecordBatch::try_new(schema, arrays)
-                .map_err(|_| RelationError::InvalidInput)?
+            data.get_array_memory_size()
         };
-        let relation = self.materialized_batch(Arc::from([]), batch)?;
+        let bytes = data
+            .num_rows()
+            .checked_mul(64)
+            .and_then(|bytes| bytes.checked_add(array_bytes))
+            .ok_or(RelationError::MemoryLimitExceeded)?;
+        if bytes > control.max_input_bytes {
+            return Err(RelationError::MemoryLimitExceeded);
+        }
+        let relation = self.materialized_batch(Arc::from([]), data)?;
         control.check()?;
         Ok(relation)
     }

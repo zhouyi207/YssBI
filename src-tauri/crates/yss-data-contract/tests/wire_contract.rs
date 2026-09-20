@@ -1,49 +1,34 @@
-use yss_data_contract::{
-    CategoricalRole, DataSeriesValue, DataValue, DummyInfo, TimeSeriesState, ValueType,
-    ValueTypeParseError,
-};
+use yss_data_contract::{DataValue, ValueType, ValueTypeParseError};
 
 #[test]
-fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
-    let id_only = DataValue::DataSeries(DataSeriesValue::new("series-id"));
-    assert_eq!(
-        serde_json::to_value(&id_only).expect("id-only data series must serialize"),
-        serde_json::json!({"DataSeries": "series-id"})
-    );
-
-    let full = DataValue::DataSeries(DataSeriesValue {
-        id: "series-id".to_owned(),
-        element_type: Some(ValueType::Scalar(yss_data_contract::SemanticType::Text)),
-        dummy_info: Some(DummyInfo {
-            drop_category: Some("baseline".to_owned()),
-            role: CategoricalRole::Individual,
-        }),
-        time_series_state: Some(TimeSeriesState::Aligned),
-    });
-    let expected = serde_json::json!({
-        "DataSeries": {
-            "id": "series-id",
-            "elementType": {"kind": "Scalar", "inner": "Text"},
-            "dummyInfo": {
-                "dropCategory": "baseline",
-                "role": "individual"
-            },
-            "timeSeriesState": "aligned"
-        }
-    });
-    assert_eq!(
-        serde_json::to_value(&full).expect("full data series must serialize"),
-        expected
-    );
-    assert_eq!(
-        serde_json::from_value::<DataValue>(expected)
-            .expect("persisted full data series must deserialize"),
-        full
-    );
-
+fn literal_wire_preserves_wide_integers_and_rejects_noncanonical_spellings() {
+    for value in [
+        DataValue::Integer(i64::MIN),
+        DataValue::Integer(i64::MAX),
+        DataValue::Unsigned(u64::MAX),
+    ] {
+        let wire = serde_json::to_value(&value).unwrap();
+        assert!(
+            wire.as_object()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap()
+                .is_string()
+        );
+        assert_eq!(serde_json::from_value::<DataValue>(wire).unwrap(), value);
+    }
+    for wire in [
+        r#"{"Integer":1}"#,
+        r#"{"Integer":"01"}"#,
+        r#"{"Integer":"-0"}"#,
+        r#"{"Unsigned":"18446744073709551616"}"#,
+    ] {
+        assert!(serde_json::from_str::<DataValue>(wire).is_err());
+    }
     assert_eq!("".parse::<ValueType>(), Err(ValueTypeParseError::Empty));
     assert_eq!(
-        "Array<Int64".parse::<ValueType>(),
+        "Array<Numeric".parse::<ValueType>(),
         Err(ValueTypeParseError::MalformedComposite)
     );
     assert_eq!(

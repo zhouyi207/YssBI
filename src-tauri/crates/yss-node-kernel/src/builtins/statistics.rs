@@ -2,6 +2,7 @@ use super::numeric_input;
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use yss_data_contract::TabularScalar;
 use yss_sci_contract::regression::{OlsCovariance, OlsOptions};
 use yss_sci_contract::scientific::{
     LinearRegressionMethod, LinearRegressionRequest, ScientificComputationError,
@@ -69,7 +70,8 @@ pub(crate) fn execute(
                 if !value.is_finite() {
                     return Err(KernelError::NonFiniteResult);
                 }
-                prediction.push(RuntimeValue::Decimal(value));
+                prediction
+                    .push(RuntimeValue::float64(value).map_err(|_| KernelError::NonFiniteResult)?);
             }
             vec![RuntimeValue::List(prediction.into())]
         }
@@ -79,11 +81,11 @@ pub(crate) fn execute(
                 return Err(KernelError::InvalidParameter);
             };
             let constant = match configuration.get("constant") {
-                Some(RuntimeValue::Bool(value)) => *value,
+                Some(RuntimeValue::Scalar(TabularScalar::Bool(value))) => *value,
                 _ => return Err(KernelError::InvalidParameter),
             };
             let method = match configuration.get("method") {
-                Some(RuntimeValue::String(value)) => value.as_ref(),
+                Some(RuntimeValue::Scalar(TabularScalar::String(value))) => value.as_ref(),
                 _ => return Err(KernelError::InvalidParameter),
             };
             let weights = group(invocation, "weights");
@@ -270,13 +272,13 @@ fn check_fit_workspace(
 
 fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance, KernelError> {
     let integer = |key: &str| match values.get(key) {
-        Some(RuntimeValue::Integer(value)) => {
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => {
             usize::try_from(*value).map_err(|_| KernelError::InvalidParameter)
         }
         _ => Err(KernelError::InvalidParameter),
     };
     let string = |key: &str| match values.get(key) {
-        Some(RuntimeValue::String(value)) => Ok(value.clone()),
+        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.clone()),
         _ => Err(KernelError::InvalidParameter),
     };
     Ok(match string("covariance")?.as_ref() {
@@ -288,7 +290,7 @@ fn covariance(values: &BTreeMap<Box<str>, RuntimeValue>) -> Result<OlsCovariance
         "fixed scale" => OlsCovariance::FixedScale {
             scale: match values.get("scale") {
                 // Configuration fields also accept the protocol's decimal JSON spelling.
-                Some(RuntimeValue::String(value)) => {
+                Some(RuntimeValue::Scalar(TabularScalar::String(value))) => {
                     value.parse().map_err(|_| KernelError::InvalidParameter)?
                 }
                 value => numeric_input(value)?,
@@ -319,7 +321,7 @@ fn numeric_list(
         if !value.is_finite() {
             return Err(KernelError::NonFiniteResult);
         }
-        output.push(RuntimeValue::Decimal(value));
+        output.push(RuntimeValue::float64(value).map_err(|_| KernelError::NonFiniteResult)?);
     }
     Ok(RuntimeValue::List(output.into()))
 }
@@ -343,11 +345,17 @@ mod tests {
         constant: bool,
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         let config = RuntimeValue::Record(std::sync::Arc::new(BTreeMap::from([
-            ("constant".into(), RuntimeValue::Bool(constant)),
-            ("method".into(), RuntimeValue::String(method.into())),
+            (
+                "constant".into(),
+                RuntimeValue::Scalar(TabularScalar::Bool(constant)),
+            ),
+            (
+                "method".into(),
+                RuntimeValue::Scalar(TabularScalar::String(method.into())),
+            ),
             (
                 "covariance".into(),
-                RuntimeValue::String("nonrobust".into()),
+                RuntimeValue::Scalar(TabularScalar::String("nonrobust".into())),
             ),
         ])));
         let control = KernelControl::new(
@@ -392,13 +400,20 @@ mod tests {
     }
 
     fn series(values: &[f64]) -> RuntimeValue {
-        RuntimeValue::List(values.iter().copied().map(RuntimeValue::Decimal).collect())
+        RuntimeValue::List(
+            values
+                .iter()
+                .copied()
+                .map(|value| RuntimeValue::float64(value).unwrap())
+                .collect(),
+        )
     }
 
     #[test]
     fn statistical_materialization_checks_budget_shape_and_control_before_conversion() {
-        let invalid =
-            RuntimeValue::List(Arc::from([RuntimeValue::String("invalid number".into())]));
+        let invalid = RuntimeValue::List(Arc::from([RuntimeValue::Scalar(TabularScalar::String(
+            "invalid number".into(),
+        ))]));
         let valid = series(&[1.0, 2.0]);
         let relations = crate::tests::relations();
         let mut control = KernelControl::new(
@@ -525,10 +540,10 @@ mod tests {
                 let RuntimeValue::List(prediction) = &prediction[0] else {
                     panic!("prediction");
                 };
-                let RuntimeValue::Decimal(value) = prediction[0] else {
+                let RuntimeValue::Scalar(TabularScalar::Float64(value)) = prediction[0] else {
                     panic!("number");
                 };
-                assert!((value - intercept - 4.0 * expected).abs() < 1e-10);
+                assert!((value.as_f64() - intercept - 4.0 * expected).abs() < 1e-10);
             }
         }
     }

@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::BTreeMap;
+use yss_data_contract::DataValue;
 use yss_graph_analysis::{
     GraphDiagnosticFact, GraphDiagnosticLocation, GraphNodeSemanticFact, GraphPortBacking,
     GraphPortConnectionFacts, GraphPortEditorFact, GraphPortSemanticFact, GraphResolutionOutcome,
@@ -14,7 +15,7 @@ use yss_graph_document::{
 };
 use yss_node_protocol::{
     NodeTypeId, ParameterEditorSpec, ParameterKey, ParameterPresentation, PortDirection, PortKey,
-    ResolvedType, TypeDomain, TypeExpr, TypeId, TypeState, TypedValue, Value,
+    ResolvedType, TypeDomain, TypeExpr, TypeId, TypeState, TypedValue,
 };
 use yss_node_registry::RegistryFingerprint;
 
@@ -96,7 +97,9 @@ fn node_facts(
             value_type: bool_type(),
             configuration: None,
             effective_value: Some(
-                yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(Value::Bool(false)),
+                yss_graph_analysis::GraphResolvedParameterValue::DefaultLiteral(DataValue::Bool(
+                    false,
+                )),
             ),
         }]),
         ports,
@@ -176,7 +179,7 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
         InputState {
             literal_override: Some(TypedValue {
                 value_type: bool_type(),
-                value: Value::Bool(true),
+                value: DataValue::Bool(true),
             }),
         },
     );

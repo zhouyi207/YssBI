@@ -1,3 +1,4 @@
+use yss_data_contract::TabularScalar;
 pub(super) fn set_constant(
     document: &mut GraphDocument,
     node: NodeId,
@@ -251,13 +252,15 @@ fn execution_uses_the_same_add_type_and_coercion_plan_as_analysis() {
         &mut document,
         integer,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(0),
+        yss_data_contract::DataValue::Integer(0),
     );
     set_constant(
         &mut document,
         float,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Float64(0.0),
+        yss_data_contract::DataValue::Decimal(
+            yss_data_contract::DecimalLiteral::try_from(0.0).expect("finite literal"),
+        ),
     );
     let mut operands = Vec::new();
     for (index, source) in [integer, float].into_iter().enumerate() {
@@ -442,11 +445,11 @@ fn normalized_add_literals_resolve_and_prepare_as_typed_scalars() {
     ));
     assert!(prepared_values.iter().any(|value| matches!(
         value,
-        PlanParameterValue::Scalar(PlanParameterScalar::Integer(1))
+        PlanParameterValue::Literal(value) if matches!(value.as_ref(), RuntimeValue::Scalar(TabularScalar::Integer(1)))
     )));
     assert!(prepared_values.iter().any(|value| matches!(
         value,
-        PlanParameterValue::Scalar(PlanParameterScalar::Decimal(value)) if value.value() == 2.5
+        PlanParameterValue::Literal(value) if matches!(value.as_ref(), RuntimeValue::Scalar(TabularScalar::Float64(number)) if number.as_f64() == 2.5)
     )));
 }
 

@@ -78,7 +78,6 @@ members = [
   "crates/yss-sci-contract",
   "crates/yss-sci-runtime",
   "crates/yss-database-source",
-  "crates/yss-tabular-contract",
   "crates/yss-database-arrow",
   "crates/yss-database-io",
   "crates/tauri-plugin-tracing",

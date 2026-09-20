@@ -112,7 +112,7 @@ impl HostServices for PluginHostServices {
                 let columns = columns
                     .iter()
                     .map(|value| {
-                        yss_tabular_contract::TabularColumnName::try_from(
+                        yss_data_contract::TabularColumnName::try_from(
                             value.as_str().unwrap_or_default(),
                         )
                         .map_err(|_| fail("plugin_dataset_invalid"))

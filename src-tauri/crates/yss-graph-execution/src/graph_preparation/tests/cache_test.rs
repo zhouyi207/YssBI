@@ -70,7 +70,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         &mut document,
         node_id,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(7),
+        yss_data_contract::DataValue::Integer(7),
     );
     let resources = empty_resource_catalog();
     let analysis_basis = basis(&runtime);
@@ -136,7 +136,7 @@ fn execution_package_cache_tracks_semantics_and_requires_current_readiness() {
         &mut document,
         node_id,
         yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(8),
+        yss_data_contract::DataValue::Integer(8),
     );
     let semantic_change = resolve(&document, &resources, true);
     let changed_package = execution

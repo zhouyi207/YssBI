@@ -24,9 +24,9 @@ yss-graph-analysis = { path = "../yss-graph-analysis" }
 yss-graph-document = { path = "../yss-graph-document" }
 yss-graph-type-mapping = { path = "../yss-graph-type-mapping" }
 yss-node-protocol = { path = "../yss-node-protocol" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }
 
 [dev-dependencies]
+arrow-array.workspace = true
 yss-graph-analysis-contract = { path = "../yss-graph-analysis-contract" }
 yss-node-registry = { path = "../yss-node-registry" }
 yss-node-catalog = { path = "../yss-node-catalog" }

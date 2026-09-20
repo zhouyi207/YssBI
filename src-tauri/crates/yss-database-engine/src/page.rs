@@ -1,8 +1,8 @@
 use futures_util::StreamExt;
+use yss_data_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 use yss_relational_contract::{
     RelationColumn, RelationControl, RelationError, RelationHandle, RelationPage,
 };
-use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
 pub(crate) async fn read_page(
     relation: &RelationHandle,

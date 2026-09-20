@@ -176,7 +176,7 @@ pub struct GraphConstant {
     pub data_type: yss_data_contract::ValueType,
     pub data_value: yss_data_contract::DataValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tabular: Option<yss_tabular_contract::TabularSnapshot>,
+    pub tabular: Option<yss_data_contract::TabularSnapshot>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

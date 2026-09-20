@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 use yss_database_engine::DataFusionRuntime;
 use yss_database_store::{DatasetCellEdit, DatasetColumnCast, DatasetSnapshot, DatasetStore};
 use yss_relational_contract::{
-    RelationComparison, RelationControl, RelationHandle, RelationLiteral, RelationPredicate,
+    RelationComparison, RelationControl, RelationHandle, RelationPredicate,
 };
 
+use yss_data_contract::FilterLiteral;
 const ROWS: usize = 1_000_000;
 const COLUMNS: usize = 16;
 fn control() -> RelationControl {
@@ -61,7 +62,9 @@ fn filter_scan(
     let filtered = relation.filter(&RelationPredicate {
         column: "c0".into(),
         comparison: RelationComparison::Greater,
-        value: Some(RelationLiteral::Decimal("999".into())),
+        value: Some(FilterLiteral::Decimal(
+            yss_data_contract::DecimalLiteral::new("999").unwrap(),
+        )),
     })?;
     let (rows, maximum, first) = scan(engine, &filtered)?;
     assert_eq!(rows, if edited { 1000 } else { 999 });
@@ -80,7 +83,8 @@ fn verify_rewritten_rows(
     casted: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let query = snapshot.query(engine, "verify")?;
-    let row_columns = yss_database_arrow::dataset_row_columns(&snapshot.metadata().schema)?.unwrap();
+    let row_columns =
+        yss_database_arrow::dataset_row_columns(&snapshot.metadata().schema)?.unwrap();
     for id in [0, ROWS as i64 - 1] {
         let row = query.row(id, &control())?.unwrap();
         assert_eq!(

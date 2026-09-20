@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
+use yss_data_contract::FilterLiteral;
 
 use super::*;
 use arrow::array::{Array, Decimal128Array, TimestampNanosecondArray, UInt64Array};
@@ -37,10 +38,8 @@ fn control() -> RelationControl {
 #[test]
 fn semantic_edits_persist_restore_and_guard_numeric_execution() {
     use arrow::array::Int64Array;
-    use yss_relational_contract::{
-        NumericOperation, NumericType, RelationExecutor, RelationLiteral, SeriesOperand,
-    };
     use yss_database_arrow::{ColumnSemantic, SemanticType, SemanticValue, column_semantic};
+    use yss_relational_contract::{NumericOperation, NumericType, RelationExecutor, SeriesOperand};
     let directory = Directory::new();
     let store = DatasetStore::create(directory.path()).unwrap();
     let batch = RecordBatch::try_new(
@@ -112,7 +111,7 @@ fn semantic_edits_persist_restore_and_guard_numeric_execution() {
     let greater = yss_relational_contract::RelationPredicate {
         column: "code".into(),
         comparison: yss_relational_contract::RelationComparison::Greater,
-        value: Some(RelationLiteral::Integer(2)),
+        value: Some(FilterLiteral::Integer(2)),
     };
     let ranked = ordered_relation
         .filter(&greater)
@@ -247,7 +246,7 @@ fn semantic_edits_persist_restore_and_guard_numeric_execution() {
                 NumericOperation::Add,
                 &[
                     SeriesOperand::Series(series),
-                    SeriesOperand::Scalar(RelationLiteral::Integer(1))
+                    SeriesOperand::Scalar(yss_data_contract::TabularScalar::Integer(1))
                 ],
                 NumericType::Int64
             )
@@ -935,7 +934,7 @@ fn native_profiles_follow_the_snapshot_and_preserve_finite_mode_and_empty_table_
 #[test]
 fn sparse_edits_merge_before_filters_and_nulls_survive_column_rename_and_reopen() {
     use arrow::array::Float64Array;
-    use yss_relational_contract::{RelationComparison, RelationLiteral, RelationPredicate};
+    use yss_relational_contract::{RelationComparison, RelationPredicate};
     let (directory, store, original, engine) = editable_fixture();
     let column_id = yss_database_arrow::column_identity(original.metadata().schema.field(0))
         .unwrap()
@@ -963,7 +962,7 @@ fn sparse_edits_merge_before_filters_and_nulls_survive_column_rename_and_reopen(
             .filter(&RelationPredicate {
                 column: name.into(),
                 comparison: RelationComparison::Greater,
-                value: Some(RelationLiteral::Integer(8500)),
+                value: Some(FilterLiteral::Integer(8500)),
             })
             .unwrap()
             .page(0, limit, &control())
@@ -1085,7 +1084,7 @@ fn sparse_edits_merge_before_filters_and_nulls_survive_column_rename_and_reopen(
 #[test]
 fn filtered_edit_branches_preserve_multicolumn_null_insert_delete_and_snapshot_semantics() {
     use arrow::array::{Float64Array, Int64Array};
-    use yss_relational_contract::{RelationComparison, RelationLiteral, RelationPredicate};
+    use yss_relational_contract::{RelationComparison, RelationPredicate};
 
     let directory = Directory::new();
     let store = DatasetStore::create(directory.path()).unwrap();
@@ -1168,7 +1167,7 @@ fn filtered_edit_branches_preserve_multicolumn_null_insert_delete_and_snapshot_s
             .filter(&RelationPredicate {
                 column: "x".into(),
                 comparison: RelationComparison::Greater,
-                value: Some(RelationLiteral::Integer(2)),
+                value: Some(FilterLiteral::Integer(2)),
             })
             .unwrap();
         relation
@@ -1534,9 +1533,10 @@ fn imported_dictionary_domains_survive_reordered_parquet_batches() {
         )
         .unwrap()
         .snapshot;
-    let domain = yss_database_arrow::CategoryDomain::from_field(snapshot.metadata().schema.field(0))
-        .unwrap()
-        .unwrap();
+    let domain =
+        yss_database_arrow::CategoryDomain::from_field(snapshot.metadata().schema.field(0))
+            .unwrap()
+            .unwrap();
     assert_eq!(
         domain
             .labels

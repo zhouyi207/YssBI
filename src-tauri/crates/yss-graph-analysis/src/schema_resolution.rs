@@ -508,7 +508,7 @@ impl EditorSchemaResolver<'_> {
         &self,
         node_id: NodeId,
     ) -> Result<Vec<SchemaField>, GraphSchemaIssue> {
-        use yss_tabular_contract::TabularScalar;
+        use yss_data_contract::TabularScalar;
         let node = self
             .document
             .nodes
@@ -543,7 +543,7 @@ impl EditorSchemaResolver<'_> {
                         TabularScalar::Unsigned(value) if i64::try_from(*value).is_ok() => Some(
                             RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
                         ),
-                        TabularScalar::Unsigned(_) | TabularScalar::Decimal(_) => Some(
+                        TabularScalar::Unsigned(_) | TabularScalar::Float64(_) => Some(
                             RelationalScalarType::Known(yss_node_protocol::SemanticType::Numeric),
                         ),
                         TabularScalar::String(_) => Some(RelationalScalarType::Known(

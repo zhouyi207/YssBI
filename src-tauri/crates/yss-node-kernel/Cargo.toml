@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
 yss-canonical-hash = { path = "../yss-canonical-hash" }
 yss-data-contract = { path = "../yss-data-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }
@@ -13,4 +15,3 @@ yss-sci-contract = { path = "../yss-sci-contract" }
 yss-sci-runtime = { path = "../yss-sci-runtime" }
 thiserror.workspace = true
 yss-database-arrow = { path = "../yss-database-arrow" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }

@@ -12,12 +12,12 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
+use yss_data_contract::TabularScalar;
 use yss_data_contract::{
     ColumnSemantic, ConversionMetadata, DatetimeRepresentation, NumericConstraints,
     NumericRepresentation, SemanticConversion, SemanticType, SemanticValue, TemporalPrecision,
     TemporalType,
 };
-use yss_tabular_contract::TabularScalar;
 
 pub struct ConvertedValues {
     pub values: Vec<TabularScalar>,
@@ -143,7 +143,7 @@ fn materialized_values(array: &dyn Array) -> Result<Vec<TabularScalar>, TabularA
             .iter()
             .map(|value| match value {
                 None => Ok(TabularScalar::Null),
-                Some(value) => Ok(TabularScalar::Decimal(
+                Some(value) => Ok(TabularScalar::Float64(
                     value
                         .try_into()
                         .map_err(|_| TabularArrowError::InvalidValue)?,

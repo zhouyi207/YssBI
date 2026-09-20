@@ -64,11 +64,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
             data_type: ValueType::DataSeries(Box::new(ValueType::Scalar(
                 yss_data_contract::SemanticType::Numeric,
             ))),
-            data_value: yss_data_contract::DataValue::DataSeries(
-                yss_data_contract::DataSeriesValue::with_element_type(
-                    serde_json::json!({"value": values}).to_string(),
-                    ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                ),
+            data_value: yss_data_contract::DataValue::String(
+                (serde_json::json!({"value": values}).to_string()).into(),
             ),
             tabular: None,
             description: String::new(),

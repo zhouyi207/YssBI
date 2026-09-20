@@ -1,4 +1,5 @@
 use super::support::*;
+use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 
 pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyError> {
@@ -85,14 +86,14 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             ID,
             key,
             concrete("core.text")?,
-            Some(ParameterValue {
+            Some(TypedValue {
                 value_type: concrete("core.text")?,
-                value: Value::String(default.into()),
+                value: DataValue::String(default.into()),
             }),
             vec![ParameterConstraint::OneOf(
                 options
                     .into_iter()
-                    .map(|value| Value::String(value.into()))
+                    .map(|value| DataValue::String(value.into()))
                     .collect(),
             )],
             ParameterEditorSpec::Select,
@@ -102,9 +103,9 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
         ID,
         "datetime_format",
         concrete("core.text")?,
-        Some(ParameterValue {
+        Some(TypedValue {
             value_type: concrete("core.text")?,
-            value: Value::String("".into()),
+            value: DataValue::String("".into()),
         }),
         vec![ParameterConstraint::Length {
             min: None,
@@ -116,9 +117,9 @@ pub(super) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
         ID,
         "semantic_domain",
         concrete("core.object")?,
-        Some(ParameterValue {
+        Some(TypedValue {
             value_type: concrete("core.object")?,
-            value: Value::Object(Default::default()),
+            value: DataValue::Object(Default::default()),
         }),
         vec![],
         ParameterEditorSpec::SemanticDomain,

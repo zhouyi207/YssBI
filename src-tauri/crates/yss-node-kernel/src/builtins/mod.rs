@@ -1,3 +1,4 @@
+use yss_data_contract::TabularScalar;
 mod boolean;
 mod comparison;
 mod conversion;
@@ -299,7 +300,9 @@ fn execute_kernel(
         BuiltinKernel::Relational(kind) => relational::execute(kind, invocation),
         BuiltinKernel::Decompose => return relational::decompose(invocation),
         BuiltinKernel::Constant => relational::constant(invocation),
-        BuiltinKernel::FixedNumber(value) => Ok(RuntimeValue::Decimal(value)),
+        BuiltinKernel::FixedNumber(value) => {
+            RuntimeValue::float64(value).map_err(|_| KernelError::NonFiniteResult)
+        }
         BuiltinKernel::Numeric(operation) => numeric::execute(operation, invocation),
         BuiltinKernel::Boolean(operation) => boolean::execute(operation, invocation),
         BuiltinKernel::Comparison(operation) => comparison::execute(operation, invocation),
@@ -317,7 +320,9 @@ fn execute_kernel(
             if !materialized(left) || !materialized(right) {
                 return Err(KernelError::Failed);
             }
-            Ok(RuntimeValue::Bool(left.semantic_eq(right)))
+            Ok(RuntimeValue::Scalar(TabularScalar::Bool(
+                left.semantic_eq(right),
+            )))
         }
         BuiltinKernel::Convert => conversion::execute(invocation),
         BuiltinKernel::Observe => return Ok(Vec::new()),
@@ -327,13 +332,17 @@ fn execute_kernel(
 
 pub(crate) fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelError> {
     match value {
-        Some(RuntimeValue::Integer(value)) if (*value as f64) as i128 == i128::from(*value) => {
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(value)))
+            if (*value as f64) as i128 == i128::from(*value) =>
+        {
             Ok(*value as f64)
         }
-        Some(RuntimeValue::Unsigned(value)) if (*value as f64) as u128 == u128::from(*value) => {
+        Some(RuntimeValue::Scalar(TabularScalar::Unsigned(value)))
+            if (*value as f64) as u128 == u128::from(*value) =>
+        {
             Ok(*value as f64)
         }
-        Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
+        Some(RuntimeValue::Scalar(TabularScalar::Float64(value))) => Ok(value.as_f64()),
         _ => Err(KernelError::InvalidNumericInput),
     }
 }

@@ -58,7 +58,7 @@ fn output_fan_out_preserves_other_branches_when_an_input_is_replaced_and_undone(
             &mut document,
             node,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(1),
+            yss_data_contract::DataValue::Integer(1),
         );
     }
     let first = insert_node(&mut document, document_node("yssbi.debug.view", 200.0));
@@ -118,7 +118,7 @@ fn connect_preserves_a_structurally_valid_draft_for_semantic_analysis() {
         &mut document,
         source,
         ValueType::Scalar(yss_data_contract::SemanticType::Text),
-        yss_data_contract::DataValue::String(String::new()),
+        yss_data_contract::DataValue::String("".into()),
     );
     let target = insert_node(
         &mut document,
@@ -172,7 +172,7 @@ fn move_connections_uses_current_document_authority() {
         &mut document,
         source,
         ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(0),
+        yss_data_contract::DataValue::Integer(0),
     );
     let target = insert_node(
         &mut document,
@@ -223,7 +223,7 @@ fn create_and_connect_plans_one_atomic_patch() {
         &mut document,
         source,
         ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(0),
+        yss_data_contract::DataValue::Integer(0),
     );
     let source_output = declared(source, "value");
     let catalog = CatalogMutationValidationSnapshot {
@@ -352,7 +352,7 @@ fn constant_edits_preserve_reference_identity_and_reject_duplicate_names_atomica
                 id,
                 name: " Count ".into(),
                 data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                data_value: yss_data_contract::DataValue::Int64(42),
+                data_value: yss_data_contract::DataValue::Integer(42),
                 tabular: None,
                 description: String::new(),
                 tags: vec![],
@@ -437,7 +437,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
         &mut source,
         node,
         ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-        yss_data_contract::DataValue::Int64(42),
+        yss_data_contract::DataValue::Integer(42),
     );
     let snapshot = crate::export_subgraph(&source, &registry, &catalog, vec![node]).unwrap();
     let bytes = serde_json::to_vec(&snapshot).unwrap();
@@ -445,7 +445,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
     assert_eq!(snapshot.constants.len(), 1);
     let mut target = source.clone();
     target.constants.values_mut().next().unwrap().data_value =
-        yss_data_contract::DataValue::Int64(99);
+        yss_data_contract::DataValue::Integer(99);
     let before = target.clone();
     let patch = EditorGraphMutation::InsertSubgraph {
         snapshot,
@@ -468,7 +468,7 @@ fn clipboard_constants_preserve_values_resolve_collisions_and_undo_atomically() 
         .unwrap();
     assert_eq!(
         target.constants[&id].data_value,
-        yss_data_contract::DataValue::Int64(42)
+        yss_data_contract::DataValue::Integer(42)
     );
     assert_ne!(
         target.constants[&id].name,

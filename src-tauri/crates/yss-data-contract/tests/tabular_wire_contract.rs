@@ -1,5 +1,5 @@
-use yss_tabular_contract::{
-    FiniteTabularDecimal, TabularColumn, TabularColumnName, TabularContractError, TabularScalar,
+use yss_data_contract::{
+    FiniteFloat64, TabularColumn, TabularColumnName, TabularContractError, TabularScalar,
     TabularSnapshot,
 };
 
@@ -57,15 +57,15 @@ fn ordered_contract_preserves_wire_shapes_numeric_kinds_and_validates_shape() {
     ));
     assert!(matches!(
         serde_json::from_str::<TabularScalar>("1.5"),
-        Ok(TabularScalar::Decimal(value)) if (value.as_f64() - 1.5).abs() < f64::EPSILON
+        Ok(TabularScalar::Float64(value)) if (value.as_f64() - 1.5).abs() < f64::EPSILON
     ));
     assert!(matches!(
         serde_json::from_str::<TabularScalar>(r#""text""#),
         Ok(TabularScalar::String(value)) if value.as_ref() == "text"
     ));
     assert_eq!(
-        FiniteTabularDecimal::try_from(f64::INFINITY),
-        Err(TabularContractError::NonFiniteDecimal)
+        FiniteFloat64::try_from(f64::INFINITY),
+        Err(TabularContractError::NonFiniteFloat)
     );
     assert!(serde_json::from_str::<TabularScalar>("1e999").is_err());
 

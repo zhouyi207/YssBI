@@ -1,5 +1,25 @@
 # Database runtime
 
+## Crate responsibilities
+
+| Crate                   | Responsibility                                                           |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `yss-database-contract` | Public database identities, declarations and operation contracts         |
+| `yss-database-schema`   | Database schema facts exposed to consumers                               |
+| `yss-database-engine`   | SQL and relational execution using DataFusion                            |
+| `yss-database-store`    | Dataset catalog, immutable snapshots, sparse patches and persistence     |
+| `yss-database-source`   | Read-only external SQLite, PostgreSQL and MySQL sources                  |
+| `yss-database-io`       | CSV, Parquet and Arrow IPC encoding/decoding, and Excel input            |
+| `yss-database-arrow`    | Arrow value conversion, semantic validation and database schema metadata |
+| `yss-database-runtime`  | Session-scoped instances, edit history and publication handoff           |
+
+Backend-neutral scalar values and ordered table literals belong to `yss-data-contract`.
+They are shared by graph documents, node kernels and database adapters. They do not represent
+independently managed cells. Arrow conversion remains a shared adapter consumed by both
+database operations and node kernels; the pure data contract does not depend on this adapter.
+
+## Runtime ownership
+
 This crate owns session-scoped dataset handles, read admission, runtime revisions, edit history,
 and the storage/publication handoff. `yss-database-store` owns committed SQLite catalog state and
 immutable Parquet generations; `yss-database-engine` owns native relational execution. Project owns
@@ -39,6 +59,12 @@ and restores metadata at the batch boundary. GraphSemanticSnapshot remains the s
 Graph authority.
 
 ## Editing and publication
+
+An edit request identifies a row, a column and a replacement value in a captured snapshot.
+The store resolves the column name to its stable column identity and validates the value
+against the exact Arrow field. Persistent patches contain `column_id`, `row_ids` and typed
+Arrow values. Column renames preserve that identity, and row IDs are independent of display
+positions. No separate cell identity or cell object lifecycle is maintained.
 
 The private `edit_history::EditHistory` owns before/after snapshot references. Its public
 projection, `EditState`, belongs to `yss-database-contract`; Application and IPC consume that

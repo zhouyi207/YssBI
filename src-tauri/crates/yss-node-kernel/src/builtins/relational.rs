@@ -1,9 +1,9 @@
 use crate::KernelInvocation;
 use std::collections::BTreeMap;
+use yss_data_contract::FilterLiteral;
+use yss_data_contract::TabularScalar;
 
-use yss_relational_contract::{
-    RelationComparison, RelationError, RelationLiteral, RelationPredicate,
-};
+use yss_relational_contract::{RelationComparison, RelationError, RelationPredicate};
 
 use crate::KernelError;
 use crate::RuntimeValue;
@@ -69,7 +69,10 @@ fn materialize(
     inputs: &[&RuntimeValue],
     invocation: &KernelInvocation<'_>,
 ) -> Result<RuntimeValue, KernelError> {
-    use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
+    use arrow_array::RecordBatch;
+    use arrow_schema::Schema;
+    use std::sync::Arc;
+    use yss_data_contract::TabularScalar;
     let mut rows = None;
     let mut bytes = 0usize;
     // Validate all lengths and the complete conversion budget before copying any columns.
@@ -87,14 +90,14 @@ fn materialize(
             }
             let size = size_of::<TabularScalar>()
                 + match value.unannotated() {
-                    RuntimeValue::String(value) => value.len(),
+                    RuntimeValue::Scalar(TabularScalar::String(value)) => value.len(),
                     _ => 0,
                 };
             bytes = invocation.control.check_bytes(bytes.checked_add(size))?;
         }
     }
     let mut columns = Vec::with_capacity(fields.len());
-    let mut metadata = Vec::with_capacity(fields.len());
+    let mut arrow_fields = Vec::with_capacity(fields.len());
     for (field, input) in fields.iter().zip(inputs) {
         let RuntimeValue::List(values) = input.unannotated() else {
             unreachable!()
@@ -110,32 +113,34 @@ fn materialize(
                     .map_err(|_| KernelError::InvalidParameter)?,
             );
         }
-        columns.push(TabularColumn::new(
-            TabularColumnName::try_from(field.name.as_ref())
-                .map_err(|_| KernelError::InvalidParameter)?,
-            scalars.into_boxed_slice(),
-        ));
-        metadata.push(
-            input
-                .metadata()
-                .cloned()
-                .or_else(|| match &field.data_type {
-                    yss_data_contract::ValueType::Scalar(semantic) => {
-                        Some(yss_data_contract::ConversionMetadata {
-                            semantic: yss_data_contract::ColumnSemantic::new(*semantic),
-                            temporal: None,
-                        })
-                    }
-                    _ => None,
-                }),
-        );
+        let metadata = input
+            .metadata()
+            .cloned()
+            .or_else(|| match &field.data_type {
+                yss_data_contract::ValueType::Scalar(semantic) => {
+                    Some(yss_data_contract::ConversionMetadata {
+                        semantic: yss_data_contract::ColumnSemantic::new(*semantic),
+                        temporal: None,
+                    })
+                }
+                _ => None,
+            });
+        let (field, array) =
+            yss_database_arrow::materialized_column(&field.name, &scalars, metadata.as_ref())
+                .map_err(|_| KernelError::InvalidParameter)?;
+        arrow_fields.push(field);
+        columns.push(array);
     }
-    let data = TabularSnapshot::try_from_columns(columns.into_boxed_slice())
-        .map_err(|_| KernelError::ShapeMismatch)?;
+    let schema = Arc::new(Schema::new(arrow_fields));
+    let data = if columns.is_empty() {
+        RecordBatch::new_empty(schema)
+    } else {
+        RecordBatch::try_new(schema, columns).map_err(|_| KernelError::ShapeMismatch)?
+    };
     invocation
         .relations
         .clone()
-        .materialize(&data, &metadata, &invocation.relation_control())
+        .materialize(data, &invocation.relation_control())
         .map(RuntimeValue::Relation)
         .map_err(kernel_error)
 }
@@ -302,7 +307,7 @@ pub(crate) fn execute(
                 .map_err(kernel_error);
         }
         RelationalKernel::Limit => {
-            let RuntimeValue::Integer(rows) = parameter("rows")? else {
+            let RuntimeValue::Scalar(TabularScalar::Integer(rows)) = parameter("rows")? else {
                 return Err(KernelError::Failed);
             };
             relation.limit(0, usize::try_from(*rows).map_err(|_| KernelError::Failed)?)
@@ -317,7 +322,7 @@ pub(crate) fn execute(
 
 fn text(value: &RuntimeValue) -> Result<Box<str>, KernelError> {
     match value {
-        RuntimeValue::String(value) => Ok(value.clone()),
+        RuntimeValue::Scalar(TabularScalar::String(value)) => Ok(value.clone()),
         _ => Err(KernelError::Failed),
     }
 }
@@ -336,20 +341,25 @@ fn predicate(fields: &BTreeMap<Box<str>, RuntimeValue>) -> Result<RelationPredic
         _ => return Err(KernelError::Failed),
     };
     let value = match fields.get("value") {
-        None | Some(RuntimeValue::Null) => None,
+        None | Some(RuntimeValue::Scalar(TabularScalar::Null)) => None,
         Some(RuntimeValue::Record(literal)) => {
             let value = literal.get("value").ok_or(KernelError::Failed)?;
             Some(
                 match literal.get("type").map(text).transpose()?.as_deref() {
                     Some("boolean") => match value {
-                        RuntimeValue::Bool(value) => RelationLiteral::Boolean(*value),
+                        RuntimeValue::Scalar(TabularScalar::Bool(value)) => {
+                            FilterLiteral::Boolean(*value)
+                        }
                         _ => return Err(KernelError::Failed),
                     },
-                    Some("integer") => RelationLiteral::Integer(
+                    Some("integer") => FilterLiteral::Integer(
                         text(value)?.parse().map_err(|_| KernelError::Failed)?,
                     ),
-                    Some("decimal") => RelationLiteral::Decimal(text(value)?),
-                    Some("string") => RelationLiteral::String(text(value)?),
+                    Some("decimal") => FilterLiteral::Decimal(
+                        yss_data_contract::DecimalLiteral::new(text(value)?)
+                            .map_err(|_| KernelError::InvalidParameter)?,
+                    ),
+                    Some("string") => FilterLiteral::String(text(value)?),
                     _ => return Err(KernelError::Failed),
                 },
             )

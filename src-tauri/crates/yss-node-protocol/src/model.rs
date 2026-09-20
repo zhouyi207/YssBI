@@ -383,7 +383,8 @@ pub fn validate_execution(execution: ExecutionSemantics) -> Result<(), ProtocolE
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TypeId, Value};
+    use crate::TypeId;
+    use yss_data_contract::DataValue;
 
     fn key(value: &str) -> PortKey {
         PortKey::new(value).unwrap()
@@ -402,7 +403,7 @@ mod tests {
                 literal_policy: LiteralPolicy::Allowed,
                 default_value: Some(TypedValue {
                     value_type,
-                    value: Value::Integer(1),
+                    value: DataValue::Integer(1),
                 }),
             }),
             consumption: Some(InputConsumption::FullyMaterialized),

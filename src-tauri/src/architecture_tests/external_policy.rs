@@ -31,6 +31,18 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yss-node-kernel",
         mode: RustDependencyMode::Runtime,
+        package_name: "arrow-array",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-node-kernel",
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yss-node-kernel",
+        mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
         target_condition: None,
     },
@@ -1337,18 +1349,6 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
         target_condition: None,
     },
     ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-contract",
-        mode: RustDependencyMode::Runtime,
-        package_name: "serde",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
-        owning_package: "yss-tabular-contract",
-        mode: RustDependencyMode::Runtime,
-        package_name: "thiserror",
-        target_condition: None,
-    },
-    ExternalDependencyDeclarationAllowance {
         owning_package: "yss-database-io",
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
@@ -2018,6 +2018,16 @@ const RUST_EXTERNAL_USES: &[ExternalDependencyUseAllowance] = &[
         source_layer: RustLayer::Execution,
         mode: RustDependencyMode::Runtime,
         package_name: "thiserror",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::NodeKernel,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-array",
+    },
+    ExternalDependencyUseAllowance {
+        source_layer: RustLayer::NodeKernel,
+        mode: RustDependencyMode::Runtime,
+        package_name: "arrow-schema",
     },
     ExternalDependencyUseAllowance {
         source_layer: RustLayer::NodeKernel,

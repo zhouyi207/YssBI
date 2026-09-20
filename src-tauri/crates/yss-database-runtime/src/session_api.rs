@@ -10,6 +10,7 @@ use crate::runtime::{
     DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeSession, DatabaseRuntimeSnapshot,
 };
 use arrow::datatypes::DataType;
+use yss_data_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 use yss_database_contract::EditState;
 use yss_database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
@@ -18,7 +19,6 @@ use yss_database_contract::{
 use yss_database_schema::{
     DatabaseColumnFact, DatabaseRuntimeRevision, DatabaseSchemaFact, DatabaseSchemaRevision,
 };
-use yss_tabular_contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {

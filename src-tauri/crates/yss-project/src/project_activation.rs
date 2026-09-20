@@ -224,7 +224,7 @@ mod tests {
                 id,
                 name: "invalid table".into(),
                 data_type: ValueType::DataFrame,
-                data_value: DataValue::DataFrame("not-json".into()),
+                data_value: DataValue::String("not-json".into()),
                 tabular: None,
                 description: String::new(),
                 tags: vec![],

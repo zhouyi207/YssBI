@@ -3,8 +3,8 @@ pub use change::{GraphDocumentOperation, GraphDocumentPatch};
 mod constant_value;
 mod identity;
 pub use constant_value::{
-    ConstantValueError, InvalidConstantDefinition, constant_handle, default_value_for,
-    normalize_constant_value, validate_constant_definitions,
+    ConstantValueError, InvalidConstantDefinition, default_value_for, normalize_constant_value,
+    validate_constant_definitions,
 };
 mod model;
 mod resource_path;
@@ -29,9 +29,8 @@ mod tests {
         JsonValue, NodeId, NodePosition, ParameterValues, PortAddress,
     };
     use serde_json::json;
-    use yss_node_protocol::{
-        NodeTypeId, ParameterKey, PortKey, TypeExpr, TypeId, TypedValue, Value,
-    };
+    use yss_data_contract::DataValue;
+    use yss_node_protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr, TypeId, TypedValue};
 
     #[test]
     fn parameter_json_and_typed_input_literal_keep_distinct_wire_contracts() {
@@ -64,7 +63,7 @@ mod tests {
             InputState {
                 literal_override: Some(TypedValue {
                     value_type: TypeExpr::Concrete(TypeId::new("core.numeric").unwrap()),
-                    value: Value::Integer(7),
+                    value: DataValue::Integer(7),
                 }),
             },
         );
@@ -92,7 +91,7 @@ mod tests {
                     {
                         "literal_override": {
                             "value_type": { "Concrete": "core.numeric" },
-                            "value": { "Integer": 7 }
+                            "value": { "Integer": "7" }
                         }
                     }
                 ]]

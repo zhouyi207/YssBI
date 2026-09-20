@@ -266,7 +266,7 @@ pub fn write_ipc_batches(
 
 pub fn write_ipc_snapshot(
     path: &Path,
-    snapshot: &yss_tabular_contract::TabularSnapshot,
+    snapshot: &yss_data_contract::TabularSnapshot,
 ) -> Result<(), TabularIoError> {
     let batch = yss_database_arrow::to_record_batch(snapshot).map_err(|source| {
         failure(

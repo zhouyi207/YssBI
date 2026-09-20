@@ -628,6 +628,7 @@ fn map_catalog_error(error: CatalogQueryApplicationError) -> CapabilityFailure {
 mod tests {
     use super::graph::editor_mutation;
     use super::*;
+    use yss_data_contract::TabularScalar;
     use yss_graph_document::{NodeId, NodePosition};
     use yss_graph_editor::EditorGraphMutation;
     use yss_harness_contract::GraphEditOperation;
@@ -654,10 +655,17 @@ mod tests {
         let text = "x".repeat(2_000_000);
         let mut value = RuntimeValue::Record(std::sync::Arc::new(
             [
-                ("text".into(), RuntimeValue::String(text.clone().into())),
+                (
+                    "text".into(),
+                    RuntimeValue::Scalar(TabularScalar::String(text.clone().into())),
+                ),
                 (
                     "coefficients".into(),
-                    RuntimeValue::List((0..150).map(RuntimeValue::Integer).collect()),
+                    RuntimeValue::List(
+                        (0..150)
+                            .map(|value| RuntimeValue::Scalar(TabularScalar::Integer(value)))
+                            .collect(),
+                    ),
                 ),
             ]
             .into(),

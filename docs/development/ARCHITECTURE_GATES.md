@@ -69,7 +69,7 @@ Pure Leaf
 
 `yss-node-protocol`、`yss-node-registry`、`yss-node-catalog` 的全部生产模块归 Node。Graph 可以消费节点定义、注册表和目录；其他层按原有纯契约权限消费 Node Protocol。`rust.internal.node-boundary` 禁止 Node 引用任何 Graph crate，包括按 Pure Leaf 分类的图文档，精确 capability 也不能绕过此约束。Cargo 声明检查同时覆盖 Node 的开发依赖。
 
-`yss-node-kernel` 的生产模块归 Node Kernel。Application 负责装配，Execution 消费中立内核契约；Node Kernel 使用中立契约、精确授权的 SCI Runtime 入口，以及 `builtins::conversion` 对 Arrow 语义值转换函数的单一授权。该转换入口仅接收和返回中立 TabularScalar，不授予 Kernel 直接使用 Arrow/DataFusion 或数据集读写的权限。`rust.internal.kernel-boundary` 禁止其依赖 Graph、Project 或 Application，包括按 Pure Leaf 分类的图/项目身份类型；Tauri 仍没有该层的依赖权限。
+`yss-node-kernel` 的生产模块归 Node Kernel。Application 负责装配，Execution 消费中立内核契约；Node Kernel 使用中立契约、精确授权的 SCI Runtime 入口，以及 Arrow 语义转换与列物化入口。Kernel 可使用 `arrow-array` 和 `arrow-schema` 构造物化批，以 `RecordBatch` 交给中立 RelationFactory。该权限不包括 DataFusion 查询上下文或数据集读写。`rust.internal.kernel-boundary` 继续禁止依赖 Graph、Project 或 Application，包括图/项目身份类型；Tauri 仍没有该层的依赖权限。
 
 Frontend 当前 taxonomy：
 
@@ -168,6 +168,8 @@ React Flow 的运行时、类型与基础样式依赖仅开放给 Views；Applic
 Graph read snapshot 和既有 viewport 契约，不增加 projection 写权限。
 
 数据库的语义 Schema/revision facts 归 `yss-database-schema`，按 Pure Leaf 分类；具体引擎映射归适配器。
+通用标量、列和表格字面量契约统一归 `yss-data-contract`，按 Pure Leaf 分类；数据库 patch
+仍由 Store 持有，以列身份、行身份和带类型的新值表示，不为单元格增加独立状态 owner。
 `yss-relational-contract` 是执行期关系句柄、快照绑定和 Arrow 流端口的 Pure Leaf 契约。
 `yss-database-arrow` 与 `yss-database-engine` 按 Database Core 分类，Arrow/DataFusion 外部依赖只授予实际声明的包；
 持久化 Graph 和统计数值算法不直接依赖 DataFusion。IPC/CSV/Parquet 宿主 I/O 不再获 Polars 物化权限。

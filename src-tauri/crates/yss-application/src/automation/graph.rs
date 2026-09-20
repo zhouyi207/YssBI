@@ -428,19 +428,22 @@ fn transform_graph_edit(
             let (data_type, data_value) = match value {
                 GraphConstantLiteral::Boolean(value) => (
                     ValueType::Scalar(yss_data_contract::SemanticType::Binary),
-                    DataValue::Boolean(value),
+                    DataValue::Bool(value),
                 ),
                 GraphConstantLiteral::Integer(value) => (
                     ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                    DataValue::Int64(value),
+                    DataValue::Integer(value),
                 ),
                 GraphConstantLiteral::Decimal(value) => (
                     ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                    DataValue::Float64(value),
+                    DataValue::Decimal(
+                        yss_data_contract::DecimalLiteral::try_from(value)
+                            .map_err(|_| invalid_edit_identity("value"))?,
+                    ),
                 ),
                 GraphConstantLiteral::String(value) => (
                     ValueType::Scalar(yss_data_contract::SemanticType::Text),
-                    DataValue::String(value),
+                    DataValue::String(value.into()),
                 ),
             };
             let id = yss_graph_document::ConstantId::new();
@@ -836,7 +839,7 @@ fn inspect_projection(
         .collect();
     let constants = document.constants.iter().map(|(id, constant)| {
         let mut value = serde_json::json!({ "id": id, "name": constant.name, "dataType": constant.data_type, "description": constant.description, "tags": constant.tags, "hasTabularData": constant.tabular.is_some() });
-        let primitive = match &constant.data_value { yss_data_contract::DataValue::Boolean(_) | yss_data_contract::DataValue::Int64(_) | yss_data_contract::DataValue::Float64(_) | yss_data_contract::DataValue::Null => true, yss_data_contract::DataValue::String(value) => value.len() <= 4096, _ => false };
+        let primitive = match &constant.data_value { yss_data_contract::DataValue::Bool(_) | yss_data_contract::DataValue::Integer(_) | yss_data_contract::DataValue::Decimal(_) | yss_data_contract::DataValue::Null => true, yss_data_contract::DataValue::String(value) => value.len() <= 4096, _ => false };
         value["valueIncluded"] = serde_json::json!(primitive);
         if primitive { value["dataValue"] = serde_json::to_value(&constant.data_value).map_err(|_| graph_failure(CapabilityFailureCode::InternalFailure))?; }
         Ok((id.to_string(), value))

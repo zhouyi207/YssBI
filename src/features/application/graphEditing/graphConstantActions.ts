@@ -46,7 +46,7 @@ export function createGraphConstant(graphPath: string, baseName: string) {
             id,
             name,
             dataType: { kind: "Scalar", inner: "Numeric" },
-            dataValue: { Int64: 0 },
+            dataValue: { Integer: "0" },
           },
         },
       };
@@ -70,22 +70,12 @@ export function updateGraphConstant(
         ...(patch.dataType ? { dataType: patch.dataType } : {}),
       };
       if (patch.dataValue !== undefined) {
-        const value = serializeDataValue(patch.dataValue);
-        const previous = current.dataValue;
-        if (
-          typeof value === "object" &&
-          "DataSeries" in value &&
-          typeof previous === "object" &&
-          "DataSeries" in previous &&
-          typeof previous.DataSeries === "object"
-        ) {
-          value.DataSeries = {
-            ...previous.DataSeries,
-            ...(typeof value.DataSeries === "string" ? { id: value.DataSeries } : value.DataSeries),
-          };
-        }
-        constant.dataValue = value;
-      } else if (patch.dataType && patch.dataType.kind !== current.dataType.kind) {
+        constant.dataValue = serializeDataValue(patch.dataValue);
+        delete constant.tabular;
+      } else if (
+        patch.dataType &&
+        JSON.stringify(patch.dataType) !== JSON.stringify(current.dataType)
+      ) {
         constant.dataValue = serializeDataValue(
           dataValueFromRaw(getDefaultValue(patch.dataType), patch.dataType),
         );

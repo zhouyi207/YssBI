@@ -1,11 +1,12 @@
 use crate::{KernelError, KernelInvocation, RuntimeValue};
+use yss_data_contract::TabularScalar;
 use yss_data_contract::{SemanticType, ValueType};
 use yss_relational_contract::{BooleanOperand, BooleanOperation};
 
 fn scalar(value: &RuntimeValue) -> Result<Option<bool>, KernelError> {
     match value {
-        RuntimeValue::Bool(value) => Ok(Some(*value)),
-        RuntimeValue::Null => Ok(None),
+        RuntimeValue::Scalar(TabularScalar::Bool(value)) => Ok(Some(*value)),
+        RuntimeValue::Scalar(TabularScalar::Null) => Ok(None),
         _ => Err(KernelError::Failed),
     }
 }
@@ -56,7 +57,11 @@ pub(super) fn execute(
     let evaluate = |values: &[Option<bool>]| {
         operation
             .evaluate(values)
-            .map(|v| v.map_or(RuntimeValue::Null, RuntimeValue::Bool))
+            .map(|v| {
+                v.map_or(RuntimeValue::Scalar(TabularScalar::Null), |value| {
+                    RuntimeValue::Scalar(TabularScalar::Bool(value))
+                })
+            })
             .map_err(super::relational::kernel_error)
     };
     let Some(rows) = rows else {

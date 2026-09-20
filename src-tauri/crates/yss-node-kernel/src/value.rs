@@ -1,28 +1,21 @@
-//! Runtime values shared by kernels and their callers, independent of graph identities.
+//! Runtime containers shared by kernels and callers, independent of graph identities.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-
 use thiserror::Error;
-
 use yss_data_contract::DataValue;
-use yss_tabular_contract::TabularScalar;
+use yss_data_contract::TabularScalar;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeValue {
-    Annotated(std::sync::Arc<AnnotatedRuntimeValue>),
-    Null,
-    Bool(bool),
-    Integer(i64),
-    Unsigned(u64),
-    Decimal(f64),
-    String(Box<str>),
+    Annotated(Arc<AnnotatedRuntimeValue>),
+    Scalar(TabularScalar),
     List(Arc<[RuntimeValue]>),
     Record(Arc<BTreeMap<Box<str>, RuntimeValue>>),
     Resource(Box<str>),
     Relation(yss_relational_contract::RelationHandle),
     Series(yss_relational_contract::SeriesHandle),
-    LinearRegression(std::sync::Arc<yss_sci_contract::scientific::LinearRegressionResult>),
+    LinearRegression(Arc<yss_sci_contract::scientific::LinearRegressionResult>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -47,14 +40,7 @@ pub enum RuntimeValueError {
 
 impl From<TabularScalar> for RuntimeValue {
     fn from(value: TabularScalar) -> Self {
-        match value {
-            TabularScalar::Null => Self::Null,
-            TabularScalar::Bool(value) => Self::Bool(value),
-            TabularScalar::Integer(value) => Self::Integer(value),
-            TabularScalar::Unsigned(value) => Self::Unsigned(value),
-            TabularScalar::Decimal(value) => Self::Decimal(value.as_f64()),
-            TabularScalar::String(value) => Self::String(value),
-        }
+        Self::Scalar(value)
     }
 }
 
@@ -62,35 +48,48 @@ impl TryFrom<&DataValue> for RuntimeValue {
     type Error = RuntimeValueError;
 
     fn try_from(value: &DataValue) -> Result<Self, Self::Error> {
-        match value {
-            DataValue::Null => Ok(Self::Null),
-            DataValue::Boolean(value) => Ok(Self::Bool(*value)),
-            DataValue::Int64(value) => Ok(Self::Integer(*value)),
-            DataValue::Float64(value) if value.is_finite() => Ok(Self::Decimal(*value)),
-            DataValue::Float64(_) => Err(RuntimeValueError::NonFinite),
-            DataValue::String(value) => Ok(Self::String(value.clone().into_boxed_str())),
-            DataValue::Array(values) => values
-                .iter()
-                .map(Self::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map(|values| Self::List(values.into())),
-            DataValue::Object(values) => values
-                .iter()
-                .map(|(key, value)| Ok((key.clone().into_boxed_str(), Self::try_from(value)?)))
-                .collect::<Result<BTreeMap<_, _>, RuntimeValueError>>()
-                .map(|values| Self::Record(Arc::new(values))),
-            DataValue::DataFrame(id) => Ok(Self::Resource(id.clone().into_boxed_str())),
-            DataValue::DataSeries(series) => Ok(Self::Resource(series.id.clone().into_boxed_str())),
-            DataValue::Struct { handle_id, .. } => {
-                Ok(Self::Resource(handle_id.clone().into_boxed_str()))
-            }
-        }
+        Ok(match value {
+            DataValue::Null => Self::Scalar(TabularScalar::Null),
+            DataValue::Bool(value) => Self::Scalar(TabularScalar::Bool(*value)),
+            DataValue::Integer(value) => Self::Scalar(TabularScalar::Integer(*value)),
+            DataValue::Unsigned(value) => Self::Scalar(TabularScalar::Unsigned(*value)),
+            DataValue::Decimal(value) => Self::float64(
+                value
+                    .as_str()
+                    .parse()
+                    .map_err(|_| RuntimeValueError::NonFinite)?,
+            )?,
+            DataValue::String(value) => Self::Scalar(TabularScalar::String(value.clone())),
+            DataValue::Bytes(values) => Self::List(
+                values
+                    .iter()
+                    .map(|value| Self::Scalar(TabularScalar::Unsigned(u64::from(*value))))
+                    .collect(),
+            ),
+            DataValue::List(values) => Self::List(
+                values
+                    .iter()
+                    .map(Self::try_from)
+                    .collect::<Result<_, _>>()?,
+            ),
+            DataValue::Object(values) => Self::Record(Arc::new(
+                values
+                    .iter()
+                    .map(|(key, value)| Ok((key.clone(), Self::try_from(value)?)))
+                    .collect::<Result<_, RuntimeValueError>>()?,
+            )),
+        })
     }
 }
 
 impl RuntimeValue {
-    /// Validate the outer carrier without rescanning immutable column buffers. Element semantics
-    /// remain the responsibility of Graph's resolved types and the producing kernel/adapter.
+    pub fn float64(value: f64) -> Result<Self, RuntimeValueError> {
+        Ok(Self::Scalar(TabularScalar::Float64(
+            value.try_into().map_err(|_| RuntimeValueError::NonFinite)?,
+        )))
+    }
+
+    /// Check the carrier; Graph's resolved types and producers own element semantics.
     pub(crate) fn matches_carrier(&self, expected: &yss_data_contract::ValueType) -> bool {
         use yss_data_contract::{SemanticType, ValueType};
         match expected {
@@ -99,34 +98,29 @@ impl RuntimeValue {
             ValueType::Scalar(semantic) => {
                 if let Some(metadata) = self.metadata() {
                     return metadata.semantic.kind == *semantic
-                        && !matches!(self.unannotated(), Self::List(_));
+                        && matches!(self.unannotated(), Self::Scalar(_));
                 }
-                match (semantic, self.unannotated()) {
-                    (_, Self::Null) => true,
-                    (
-                        SemanticType::Numeric,
-                        Self::Integer(_) | Self::Unsigned(_) | Self::Decimal(_),
-                    ) => true,
-                    (SemanticType::Binary, Self::Bool(_)) => true,
-                    (SemanticType::Text, Self::String(_)) => true,
-                    (
-                        SemanticType::Categorical
-                        | SemanticType::Ordinal
-                        | SemanticType::Datetime
-                        | SemanticType::Identifier,
-                        value,
-                    ) => {
-                        matches!(
-                            value,
-                            Self::Null
-                                | Self::Bool(_)
-                                | Self::Integer(_)
-                                | Self::Unsigned(_)
-                                | Self::String(_)
-                        ) || matches!(value, Self::Decimal(number) if number.is_finite())
-                    }
-                    _ => false,
-                }
+                matches!(
+                    (semantic, self.unannotated()),
+                    (_, Self::Scalar(TabularScalar::Null))
+                        | (
+                            SemanticType::Numeric,
+                            Self::Scalar(
+                                TabularScalar::Integer(_)
+                                    | TabularScalar::Unsigned(_)
+                                    | TabularScalar::Float64(_),
+                            ),
+                        )
+                        | (SemanticType::Binary, Self::Scalar(TabularScalar::Bool(_)))
+                        | (SemanticType::Text, Self::Scalar(TabularScalar::String(_)))
+                        | (
+                            SemanticType::Categorical
+                                | SemanticType::Ordinal
+                                | SemanticType::Datetime
+                                | SemanticType::Identifier,
+                            Self::Scalar(_),
+                        )
+                )
             }
             ValueType::DataFrame => matches!(self, Self::Relation(_)),
             ValueType::DataSeries(_) => {
@@ -141,8 +135,7 @@ impl RuntimeValue {
         }
     }
 
-    /// Retain conversion metadata when primitive carriers cannot express the meaning.
-    /// An annotation contains only a scalar or flat scalar list, never another annotation or a handle.
+    /// Annotate materialized scalar values only; annotations never wrap handles or annotations.
     pub fn with_metadata(
         self,
         metadata: yss_data_contract::ConversionMetadata,
@@ -151,17 +144,11 @@ impl RuntimeValue {
             Self::List(values) => values.as_ref(),
             value => std::slice::from_ref(value),
         };
-        for value in scalars {
-            match value {
-                Self::Null
-                | Self::Bool(_)
-                | Self::Integer(_)
-                | Self::Unsigned(_)
-                | Self::String(_) => {}
-                Self::Decimal(value) if value.is_finite() => {}
-                Self::Decimal(_) => return Err(RuntimeValueError::NonFinite),
-                _ => return Err(RuntimeValueError::Unrepresentable),
-            }
+        if scalars
+            .iter()
+            .any(|value| !matches!(value, Self::Scalar(_)))
+        {
+            return Err(RuntimeValueError::Unrepresentable);
         }
         if matches!(
             metadata.semantic.kind,
@@ -171,12 +158,10 @@ impl RuntimeValue {
         ) {
             return Ok(self);
         }
-        Ok(Self::Annotated(std::sync::Arc::new(
-            AnnotatedRuntimeValue {
-                value: self,
-                metadata,
-            },
-        )))
+        Ok(Self::Annotated(Arc::new(AnnotatedRuntimeValue {
+            value: self,
+            metadata,
+        })))
     }
 
     pub fn metadata(&self) -> Option<&yss_data_contract::ConversionMetadata> {
@@ -193,20 +178,11 @@ impl RuntimeValue {
         }
     }
 
-    pub(crate) fn tabular_scalar(
-        &self,
-    ) -> Result<yss_tabular_contract::TabularScalar, RuntimeValueError> {
-        Ok(match self.unannotated() {
-            Self::Null => TabularScalar::Null,
-            Self::Bool(v) => TabularScalar::Bool(*v),
-            Self::Integer(v) => TabularScalar::Integer(*v),
-            Self::Unsigned(v) => TabularScalar::Unsigned(*v),
-            Self::Decimal(v) => {
-                TabularScalar::Decimal((*v).try_into().map_err(|_| RuntimeValueError::NonFinite)?)
-            }
-            Self::String(v) => TabularScalar::String(v.clone()),
-            _ => return Err(RuntimeValueError::Unrepresentable),
-        })
+    pub(crate) fn tabular_scalar(&self) -> Result<TabularScalar, RuntimeValueError> {
+        match self.unannotated() {
+            Self::Scalar(value) => Ok(value.clone()),
+            _ => Err(RuntimeValueError::Unrepresentable),
+        }
     }
 
     pub(crate) fn numeric_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
@@ -216,11 +192,12 @@ impl RuntimeValue {
     }
 
     pub(crate) fn semantic_eq(&self, other: &Self) -> bool {
-        use RuntimeValue::{Decimal, Integer, Unsigned};
+        use TabularScalar::{Float64, Integer, Unsigned};
         match (self.unannotated(), other.unannotated()) {
-            (Integer(_) | Unsigned(_) | Decimal(_), Integer(_) | Unsigned(_) | Decimal(_)) => {
-                self.numeric_cmp(other) == Some(std::cmp::Ordering::Equal)
-            }
+            (
+                Self::Scalar(Integer(_) | Unsigned(_) | Float64(_)),
+                Self::Scalar(Integer(_) | Unsigned(_) | Float64(_)),
+            ) => self.numeric_cmp(other) == Some(std::cmp::Ordering::Equal),
             (Self::List(a), Self::List(b)) => {
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| a.semantic_eq(b))
             }

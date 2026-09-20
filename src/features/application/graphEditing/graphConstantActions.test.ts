@@ -31,7 +31,7 @@ beforeEach(() => {
       id,
       name: "Before",
       dataType: { kind: "Scalar", inner: "Numeric" },
-      dataValue: { Int64: 0 },
+      dataValue: { Integer: "0" },
     },
   };
   useGraphEditingStore.getState().install(graphPath, session);
@@ -63,13 +63,16 @@ it("merges queued constant edits against the preceding Rust result", async () =>
       };
     });
   const rename = updateGraphConstant(graphPath, id, { name: "After" });
-  const value = updateGraphConstant(graphPath, id, { dataValue: { kind: "Float64", value: 7 } });
+  const value = updateGraphConstant(graphPath, id, { dataValue: { kind: "Float64", value: "7" } });
   await vi.waitFor(() => expect(transform).toHaveBeenCalledTimes(1));
   release();
   const outcomes = await Promise.all([rename, value]);
   expect(outcomes.map((outcome) => outcome.status)).toEqual(["applied", "applied"]);
   const session = useGraphEditingStore.getState().sessions[graphPath];
-  expect(session.document.constants![id]).toMatchObject({ name: "After", dataValue: { Int64: 7 } });
+  expect(session.document.constants![id]).toMatchObject({
+    name: "After",
+    dataValue: { Decimal: "7" },
+  });
   expect(session.version.revision).toBe("2");
   expect(session.canUndo).toBe(true);
   expect(session.saveDirty).toBe(true);

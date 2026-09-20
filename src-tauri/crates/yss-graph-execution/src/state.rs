@@ -1275,7 +1275,7 @@ mod tests {
     use crate::plan::{
         ExecutionPlan, ExecutionPlanPackage, PlanBasis, PlanExecutionDemand, PlanGraphId, PlanId,
         PlanInputBinding, PlanInputSource, PlanOperation, PlanOutputBinding, PlanOutputRef,
-        PlanParameterBundleBuilder, PlanParameterHandle, PlanParameterPayload, PlanParameterScalar,
+        PlanParameterBundleBuilder, PlanParameterHandle, PlanParameterPayload,
         PlanParameterSchemaId, PlanParameterValue, PlanPortAddress, PlanProjectSessionId,
         PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
         PlanResourceRequirement, PlanResourceVersion, PlanSourceIdentity, ResourceAccess,
@@ -1286,6 +1286,7 @@ mod tests {
     use crate::run_registry::{RunId, RunState};
     use std::collections::BTreeMap;
     use std::time::Duration;
+    use yss_data_contract::TabularScalar;
 
     fn prepared_plan(state: &ExecutionRuntimeState) -> PreparedExecutionPlan {
         let resource = PlanResourceId::from_existing("databases/answer".into());
@@ -1329,7 +1330,7 @@ mod tests {
             [RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing("v1".into()),
-                yss_node_kernel::RuntimeValue::Integer(4),
+                yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(4)),
             )],
         )
     }
@@ -1439,11 +1440,15 @@ mod tests {
             assert_eq!(bindings.len(), 1);
             assert_eq!(
                 resources.value(&PlanResourceId::from_existing("databases/answer".into())),
-                Some(&yss_node_kernel::RuntimeValue::Integer(4))
+                Some(&yss_node_kernel::RuntimeValue::Scalar(
+                    TabularScalar::Integer(4)
+                ))
             );
             Ok(SchedulerOutput::new(
                 vec![SchedulerResult {
-                    value: StoredResult::new(yss_node_kernel::RuntimeValue::Integer(5)),
+                    value: StoredResult::new(yss_node_kernel::RuntimeValue::Scalar(
+                        TabularScalar::Integer(5),
+                    )),
                     category: crate::plan::ResultCategory::Value,
                     output: operation_output("test-executor", ValueRef::new(0))
                         .output()
@@ -1543,7 +1548,9 @@ mod tests {
                 parameter_handle,
                 PlanParameterPayload::new(
                     PlanParameterSchemaId::from_existing("graph.constant".into()),
-                    PlanParameterValue::Scalar(PlanParameterScalar::Integer(7)),
+                    PlanParameterValue::Literal(std::sync::Arc::new(
+                        yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(7)),
+                    )),
                 ),
             )],
         );
@@ -1561,9 +1568,9 @@ mod tests {
         assert!(candidate.results().iter().all(|result| {
             result.value().value()
                 == &if result.output().port().as_str().starts_with("consumer:") {
-                    RuntimeValue::Decimal(49.0)
+                    RuntimeValue::float64(49.0).unwrap()
                 } else {
-                    RuntimeValue::Integer(7)
+                    RuntimeValue::Scalar(TabularScalar::Integer(7))
                 }
         }));
         let outputs = candidate
@@ -1653,7 +1660,9 @@ mod tests {
                 parameter_handle,
                 PlanParameterPayload::new(
                     PlanParameterSchemaId::from_existing("graph.constant".into()),
-                    PlanParameterValue::Scalar(PlanParameterScalar::Integer(7)),
+                    PlanParameterValue::Literal(std::sync::Arc::new(
+                        yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(7)),
+                    )),
                 ),
             )],
         );
@@ -1675,7 +1684,7 @@ mod tests {
 
         assert_eq!(
             executed.handoff().results()[0].value().value(),
-            &yss_node_kernel::RuntimeValue::Integer(7)
+            &yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(7))
         );
     }
 
@@ -1698,7 +1707,7 @@ mod tests {
         assert_eq!(handoff.results()[0].result_id(), ResultId::from_existing(1));
         assert_eq!(
             handoff.results()[0].value().value(),
-            &yss_node_kernel::RuntimeValue::Integer(5)
+            &yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Integer(5))
         );
         assert_eq!(
             handoff.results()[0].category(),

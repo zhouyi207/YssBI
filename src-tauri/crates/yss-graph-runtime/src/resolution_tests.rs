@@ -59,7 +59,7 @@ fn constant_document() -> (GraphDocument, NodeId, ConstantId) {
             id,
             name: "Threshold".into(),
             data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            data_value: DataValue::Int64(1),
+            data_value: DataValue::Integer(1),
             tabular: None,
             description: String::new(),
             tags: vec![],
@@ -144,7 +144,7 @@ fn layout_reuses_semantics_and_projects_current_display_but_constant_metadata_re
             .as_deref(),
         Some("Renamed")
     );
-    document.constants.get_mut(&id).unwrap().data_value = DataValue::Int64(2);
+    document.constants.get_mut(&id).unwrap().data_value = DataValue::Integer(2);
     let edited = resolve(&runtime, &document, &resources());
     assert_ne!(edited.semantic_input_hash(), renamed.semantic_input_hash());
     assert_eq!(edited, resolve(&self::runtime(), &document, &resources()));
@@ -385,7 +385,7 @@ fn snapshot_rechecks_transitive_function_bodies() {
         &catalog.clone().with_function_document(&b, b_body.clone()),
     );
     assert_reused(&missing, &present, constant, false);
-    b_body.constants.get_mut(&id).unwrap().data_value = DataValue::Int64(7);
+    b_body.constants.get_mut(&id).unwrap().data_value = DataValue::Integer(7);
     let changed_catalog = catalog.with_function_document(&b, b_body);
     let changed = resolve(&runtime, &document, &changed_catalog);
     assert_reused(&present, &changed, constant, false);

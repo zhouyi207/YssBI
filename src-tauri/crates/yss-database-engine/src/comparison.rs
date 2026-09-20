@@ -9,8 +9,8 @@ use datafusion::{
     logical_expr::{ColumnarValue, Expr, Volatility, create_udf},
 };
 use std::sync::Arc;
+use yss_data_contract::TabularScalar;
 use yss_relational_contract::{ComparisonOperand, ComparisonOperation, RelationError, SeriesPlan};
-use yss_tabular_contract::TabularScalar;
 
 pub(crate) fn compare(
     operation: ComparisonOperation,
@@ -48,7 +48,7 @@ pub(crate) fn compare(
                     TabularScalar::Bool(v) => ScalarValue::Boolean(Some(*v)),
                     TabularScalar::Integer(v) => ScalarValue::Int64(Some(*v)),
                     TabularScalar::Unsigned(v) => ScalarValue::UInt64(Some(*v)),
-                    TabularScalar::Decimal(v) => ScalarValue::Float64(Some(v.as_f64())),
+                    TabularScalar::Float64(v) => ScalarValue::Float64(Some(v.as_f64())),
                     TabularScalar::String(v) => ScalarValue::Utf8(Some(v.to_string())),
                 };
                 (value.data_type(), Expr::Literal(value, None))
@@ -185,7 +185,7 @@ fn compare_arrays(
             return Ok(TabularScalar::Unsigned(v.value(row)));
         }
         if let Some(v) = array.as_any().downcast_ref::<Float64Array>() {
-            return Ok(TabularScalar::Decimal(
+            return Ok(TabularScalar::Float64(
                 v.value(row).try_into().map_err(|_| failure())?,
             ));
         }

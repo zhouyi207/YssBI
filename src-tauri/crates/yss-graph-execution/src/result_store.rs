@@ -807,6 +807,7 @@ mod tests {
     use crate::finalization::ReadyPinResult;
     use crate::plan::{PlanGraphId, PlanPortAddress, ResultCategory};
     use crate::result::ResultProvenance;
+    use yss_data_contract::TabularScalar;
 
     fn output() -> PlanOutputRef {
         PlanOutputRef::new(
@@ -854,7 +855,9 @@ mod tests {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
             id,
-            StoredResult::new(yss_node_kernel::RuntimeValue::Integer(id.get() as i64)),
+            StoredResult::new(yss_node_kernel::RuntimeValue::Scalar(
+                TabularScalar::Integer(id.get() as i64),
+            )),
             ResultCategory::Value,
             ReadyPinResult::new(
                 output,
@@ -1185,7 +1188,7 @@ mod tests {
         let id = ResultId::from_existing(id);
         ReadyResult::from_scheduler(
             id,
-            StoredResult::new(yss_node_kernel::RuntimeValue::Decimal(id.get() as f64)),
+            StoredResult::new(yss_node_kernel::RuntimeValue::float64(id.get() as f64).unwrap()),
             ResultCategory::Value,
             ReadyPinResult::new(
                 output(),
@@ -1202,7 +1205,9 @@ mod tests {
     #[test]
     fn publication_reuses_the_prepared_result_and_immutable_nested_buffers() {
         use yss_node_kernel::RuntimeValue;
-        let numbers: Arc<[_]> = (0..4096).map(RuntimeValue::Integer).collect();
+        let numbers: Arc<[_]> = (0..4096)
+            .map(|value| RuntimeValue::Scalar(TabularScalar::Integer(value)))
+            .collect();
         let fields = Arc::new(BTreeMap::from([(
             "values".into(),
             RuntimeValue::List(numbers.clone()),
@@ -1370,7 +1375,7 @@ mod tests {
         let other_result = |id, run| {
             ReadyResult::from_scheduler(
                 ResultId::from_existing(id),
-                StoredResult::new(yss_node_kernel::RuntimeValue::Decimal(1.0)),
+                StoredResult::new(yss_node_kernel::RuntimeValue::float64(1.0).unwrap()),
                 ResultCategory::Value,
                 ReadyPinResult::new(
                     other.clone(),

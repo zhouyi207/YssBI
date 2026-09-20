@@ -239,6 +239,7 @@ pub fn contains_value_dependency_cycle(document: &GraphDocument) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yss_data_contract::DataValue;
     use yss_graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, InputState, NodeId, NodePosition, OrderKey,
         ParameterValues,
@@ -247,7 +248,7 @@ mod tests {
         ColumnSchema, DataSchema, GraphResourceId, ResourceCatalogFingerprint,
         ResourceCatalogSnapshot,
     };
-    use yss_node_protocol::{PortKey, TypeId, TypedValue, Value};
+    use yss_node_protocol::{PortKey, TypeId, TypedValue};
 
     fn node(document: &mut GraphDocument, kind: &str) -> NodeId {
         let id = NodeId::new();
@@ -309,7 +310,7 @@ mod tests {
             &mut document,
             source,
             yss_data_contract::ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(0),
+            yss_data_contract::DataValue::Integer(0),
         );
         let consumer = node(&mut document, "yssbi.numeric.subtract");
         connect(
@@ -336,7 +337,7 @@ mod tests {
                 InputState {
                     literal_override: Some(TypedValue {
                         value_type: TypeExpr::Concrete(TypeId::new("core.text").unwrap()),
-                        value: Value::String("invalid".into()),
+                        value: DataValue::String("invalid".into()),
                     }),
                 },
             );

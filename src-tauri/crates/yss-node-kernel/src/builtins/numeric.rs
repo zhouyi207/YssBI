@@ -1,6 +1,7 @@
 use crate::KernelInvocation;
+use yss_data_contract::TabularScalar;
 use yss_data_contract::ValueType;
-use yss_relational_contract::{NumericOperation, NumericType, RelationLiteral, SeriesOperand};
+use yss_relational_contract::{NumericOperation, NumericType, SeriesOperand};
 
 use super::numeric_input;
 use crate::KernelError;
@@ -48,17 +49,24 @@ pub(crate) fn execute(
             .iter()
             .map(|value| match value {
                 RuntimeValue::Series(series) => Ok(SeriesOperand::Series(series.clone())),
-                RuntimeValue::Integer(value) => {
-                    Ok(SeriesOperand::Scalar(RelationLiteral::Integer(*value)))
+                RuntimeValue::Scalar(TabularScalar::Integer(value)) => {
+                    Ok(SeriesOperand::Scalar(TabularScalar::Integer(*value)))
                 }
-                RuntimeValue::Unsigned(value) if numeric_type == NumericType::Int64 => {
-                    Ok(SeriesOperand::Scalar(RelationLiteral::Integer(
+                RuntimeValue::Scalar(TabularScalar::Unsigned(value))
+                    if numeric_type == NumericType::Int64 =>
+                {
+                    Ok(SeriesOperand::Scalar(TabularScalar::Integer(
                         i64::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)?,
                     )))
                 }
-                RuntimeValue::Decimal(_) | RuntimeValue::Unsigned(_) => Ok(SeriesOperand::Scalar(
-                    RelationLiteral::Decimal(numeric_input(Some(value))?.to_string().into()),
-                )),
+                RuntimeValue::Scalar(TabularScalar::Float64(_))
+                | RuntimeValue::Scalar(TabularScalar::Unsigned(_)) => {
+                    Ok(SeriesOperand::Scalar(TabularScalar::Float64(
+                        numeric_input(Some(value))?
+                            .try_into()
+                            .map_err(|_| KernelError::InvalidNumericInput)?,
+                    )))
+                }
                 // A materialized list carries no proof of alignment with a live row domain.
                 _ => Err(KernelError::InvalidNumericInput),
             })
@@ -103,8 +111,8 @@ pub(crate) fn execute(
 
 fn integer(value: Option<&RuntimeValue>) -> Result<i64, KernelError> {
     match value {
-        Some(RuntimeValue::Integer(value)) => Ok(*value),
-        Some(RuntimeValue::Unsigned(value)) => {
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(value))) => Ok(*value),
+        Some(RuntimeValue::Scalar(TabularScalar::Unsigned(value))) => {
             i64::try_from(*value).map_err(|_| KernelError::InvalidNumericInput)
         }
         _ => Err(KernelError::InvalidNumericInput),
@@ -138,7 +146,7 @@ fn scalar<'a>(
                 }
                 .ok_or(KernelError::NonFiniteResult)?;
             }
-            Ok(RuntimeValue::Integer(result))
+            Ok(RuntimeValue::Scalar(TabularScalar::Integer(result)))
         }
         NumericType::Float64 => {
             let mut result = numeric_input(values.next())?;
@@ -153,14 +161,14 @@ fn scalar<'a>(
                     .evaluate_float(result, right)
                     .map_err(super::relational::kernel_error)?;
             }
-            Ok(RuntimeValue::Decimal(result))
+            RuntimeValue::float64(result).map_err(|_| KernelError::NonFiniteResult)
         }
     }
 }
 
 fn needs_float(value: &RuntimeValue) -> bool {
     match value {
-        RuntimeValue::Decimal(_) => true,
+        RuntimeValue::Scalar(TabularScalar::Float64(_)) => true,
         RuntimeValue::List(values) => values.iter().any(needs_float),
         RuntimeValue::Series(series) => !series.plan().field().data_type().is_integer(),
         _ => false,

@@ -3,6 +3,7 @@ use super::builtin::{
     assembled_parameters, configuration_parameter, leaf, sid,
 };
 use crate::Message;
+use yss_data_contract::DataValue;
 use yss_node_protocol::*;
 use yss_node_registry::CategoryRegistration;
 
@@ -519,14 +520,14 @@ fn configuration_field(
 ) -> Result<ConfigurationFieldSpec, BuiltinAssemblyError> {
     let value_type = concrete(field.value_type.type_id())?;
     let value = match field.value_type {
-        NumericRepresentation::Int64 => Value::Integer(match field.key {
+        NumericRepresentation::Int64 => DataValue::Integer(match field.key {
             "sample_count" => 100,
             "population_size" | "trial_count" => 10,
             "success_population" => 5,
             "lower_bound" => 0,
             _ => 1,
         }),
-        NumericRepresentation::Float64 => Value::Decimal(assembled_decimal(
+        NumericRepresentation::Float64 => DataValue::Decimal(assembled_decimal(
             spec.id,
             match field.key {
                 "mean" | "location" | "mu" | "minimum" | "lower_bound" => "0",
@@ -553,7 +554,7 @@ fn configuration_field(
             key: sid(field.key, ParameterKey::new)?,
             title_key: field_key(spec.id, field.key)?,
             description_key: None,
-            default_value: Some(ParameterValue {
+            default_value: Some(TypedValue {
                 value_type: value_type.clone(),
                 value,
             }),

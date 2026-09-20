@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use yss_node_kernel::KernelParameterKey;
 
 use crate::identity::RuntimeGeneration;
 use crate::plan::{
@@ -23,11 +22,6 @@ pub enum ParameterPreparationError {
     InvalidResource {
         handle: PlanParameterHandle,
         resource: PlanResourceId,
-    },
-    #[error("prepared parameter field identity is invalid")]
-    InvalidField {
-        handle: PlanParameterHandle,
-        field: KernelParameterKey,
     },
 }
 
@@ -159,7 +153,7 @@ fn validate_parameter_value(
     value: &PlanParameterValue,
 ) -> Result<(), PackagePreparationError> {
     match value {
-        PlanParameterValue::Scalar(_) | PlanParameterValue::Literal(_) => Ok(()),
+        PlanParameterValue::Literal(_) => Ok(()),
         PlanParameterValue::Resource(resource) => {
             if resource.as_str().is_empty() {
                 Err(PackagePreparationError::Parameters(
@@ -171,23 +165,6 @@ fn validate_parameter_value(
             } else {
                 Ok(())
             }
-        }
-        PlanParameterValue::List(values) => values
-            .iter()
-            .try_for_each(|value| validate_parameter_value(handle, value)),
-        PlanParameterValue::Record(fields) => {
-            for (field, value) in fields {
-                if field.as_str().is_empty() {
-                    return Err(PackagePreparationError::Parameters(
-                        ParameterPreparationError::InvalidField {
-                            handle: handle.clone(),
-                            field: field.clone(),
-                        },
-                    ));
-                }
-                validate_parameter_value(handle, value)?;
-            }
-            Ok(())
         }
     }
 }

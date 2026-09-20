@@ -1,6 +1,7 @@
-use super::{I18nKey, ParameterKey, ParameterValue, ResourceDisplayKind, TypeExpr, Value};
+use super::{I18nKey, ParameterKey, ResourceDisplayKind, TypeExpr, TypedValue};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use yss_data_contract::DataValue;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParameterSpec {
@@ -8,7 +9,7 @@ pub struct ParameterSpec {
     pub title_key: I18nKey,
     pub description_key: Option<I18nKey>,
     pub value_type: TypeExpr,
-    pub default_value: Option<ParameterValue>,
+    pub default_value: Option<TypedValue>,
     pub constraints: Vec<ParameterConstraint>,
     pub editor: ParameterEditorSpec,
     #[serde(default)]
@@ -47,7 +48,7 @@ pub type ParameterValues = BTreeMap<ParameterKey, serde_json::Value>;
 pub enum ParameterConstraint {
     Required,
     Positive,
-    OneOf(Vec<Value>),
+    OneOf(Vec<DataValue>),
     IntegerRange { min: Option<i64>, max: Option<i64> },
     Length { min: Option<u32>, max: Option<u32> },
 }

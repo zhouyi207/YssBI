@@ -475,8 +475,8 @@ fn real_workspace_discovery_includes_production_targets_and_member_alias() {
         workspace
             .roots
             .iter()
-            .any(|root| root.package == "yss-tabular-contract"
-                && root.target == "yss_tabular_contract"
+            .any(|root| root.package == "yss-data-contract"
+                && root.target == "yss_data_contract"
                 && root.kind == ProductionRootKind::Library)
     );
     assert!(
@@ -863,10 +863,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     };
     let tabular_contract_root = ProductionRoot {
         package_id: "tabular-contract-package".to_owned(),
-        package: "yss-tabular-contract".to_owned(),
-        target: "yss_tabular_contract".to_owned(),
+        package: "yss-data-contract".to_owned(),
+        target: "yss_data_contract".to_owned(),
         kind: ProductionRootKind::Library,
-        source_path: PathBuf::from("src-tauri/crates/yss-tabular-contract/src/lib.rs"),
+        source_path: PathBuf::from("src-tauri/crates/yss-data-contract/src/lib.rs"),
     };
     let watcher_notify_root = ProductionRoot {
         package_id: "watcher-notify-package".to_owned(),
@@ -1031,8 +1031,8 @@ fn rust_layer_classifier_is_total_and_exclusive() {
             ),
             module(
                 &tabular_contract_root,
-                "src-tauri/crates/yss-tabular-contract/src/lib.rs",
-                "yss_tabular_contract",
+                "src-tauri/crates/yss-data-contract/src/lib.rs",
+                "yss_data_contract",
             ),
             module(
                 &watcher_notify_root,
@@ -1142,7 +1142,7 @@ fn rust_layer_classifier_is_total_and_exclusive() {
         RustLayer::Project
     );
     assert_eq!(
-        classified["src-tauri/crates/yss-tabular-contract/src/lib.rs"],
+        classified["src-tauri/crates/yss-data-contract/src/lib.rs"],
         RustLayer::PureLeaf
     );
     assert_eq!(
@@ -1297,17 +1297,13 @@ fn collect_forbidden_type_aliases(
 }
 
 fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]> {
-    const PERSISTED_SYMBOLS: &[&str] = &[
-        "CategoricalRole",
-        "DataSeriesValue",
-        "DataType",
-        "DataValue",
-        "DummyInfo",
-        "TimeSeriesState",
-    ];
-    const SCI_SYMBOLS: &[&str] = &["CategoricalRole"];
+    const PERSISTED_SYMBOLS: &[&str] =
+        &["ValueType", "DataValue", "DecimalLiteral", "FilterLiteral"];
+    const SCI_SYMBOLS: &[&str] = &["DataValue"];
 
-    if source_file.starts_with("src-tauri/src/graph/") {
+    if source_file.starts_with("src-tauri/src/graph/")
+        || source_file.starts_with("src-tauri/crates/yss-graph-")
+    {
         Some(PERSISTED_SYMBOLS)
     } else if source_file.starts_with("src-tauri/crates/yss-sci-runtime/src/")
         || source_file.starts_with("plugins/julia/native/crates/yss-bayes-model/src/")
@@ -1821,32 +1817,25 @@ fn filesystem_has_no_internal_dependencies_and_project_policy_stays_above_it() {
 }
 
 #[test]
-fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
+fn literal_owner_policy_requires_the_shared_contract_owner() {
     let expectation = CanonicalOwnerExpectation {
         required_origin: "src-tauri/crates/yss-data-contract/src/data_value.rs",
-        allowed_origins: &[
-            "src-tauri/crates/yss-data-contract/src/data_value.rs",
-            "src-tauri/crates/yss-sci-contract/src/computation.rs",
-        ],
+        allowed_origins: &["src-tauri/crates/yss-data-contract/src/data_value.rs"],
     };
-
     assert!(canonical_owner_origins_are_valid(
         &expectation,
-        &BTreeSet::from([
-            "src-tauri/crates/yss-data-contract/src/data_value.rs",
-            "src-tauri/crates/yss-sci-contract/src/computation.rs",
-        ]),
+        &BTreeSet::from(["src-tauri/crates/yss-data-contract/src/data_value.rs",])
     ));
     assert!(!canonical_owner_origins_are_valid(
         &expectation,
         &BTreeSet::from([
             "src-tauri/crates/yss-data-contract/src/data_value.rs",
-            "src-tauri/src/sci/api/arbitrary.rs",
-        ]),
+            "src-tauri/crates/yss-node-protocol/src/value.rs",
+        ])
     ));
     assert!(!canonical_owner_origins_are_valid(
         &expectation,
-        &BTreeSet::from(["src-tauri/crates/yss-sci-contract/src/computation.rs"]),
+        &BTreeSet::from(["src-tauri/crates/yss-node-protocol/src/value.rs",])
     ));
 }
 
@@ -1970,12 +1959,10 @@ fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources(
     fixture.write(
         "src-tauri/src/graph/value/aliases.rs",
         r#"
-pub type PersistedDataType = yss_data_contract::ValueType;
+pub type PersistedValueType = yss_data_contract::ValueType;
 pub type PersistedDataValue = yss_data_contract::DataValue;
-pub type PersistedDataSeriesValue = yss_data_contract::DataSeriesValue;
-pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
-pub type PersistedTimeSeriesState = yss_data_contract::TimeSeriesState;
-pub type PersistedDummyInfo = yss_data_contract::DummyInfo;
+pub type PersistedDecimalLiteral = yss_data_contract::DecimalLiteral;
+pub type PersistedFilterLiteral = yss_data_contract::FilterLiteral;
 
 #[cfg(test)]
 pub type TestOnlyAlias = yss_data_contract::ValueType;
@@ -1992,11 +1979,7 @@ pub type TestOnlyAlias = yss_data_contract::ValueType;
     fixture.write(
         "src-tauri/crates/yss-sci-runtime/src/api/computation.rs",
         r#"
-pub enum CategoricalRole {
-    Individual,
-}
-
-pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
+pub type PersistedDataValue = yss_data_contract::DataValue;
 "#,
     );
     let modules = collect_production_modules(
@@ -2030,13 +2013,11 @@ pub type PersistedCategoricalRole = yss_data_contract::CategoricalRole;
     assert_eq!(
         aliases,
         vec![
-            "src-tauri/crates/yss-sci-runtime/src/api/computation.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
-            "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|yss_data_contract::CategoricalRole",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|yss_data_contract::DataSeriesValue",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|yss_data_contract::ValueType",
+            "src-tauri/crates/yss-sci-runtime/src/api/computation.rs|PersistedDataValue|yss_data_contract::DataValue",
             "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|yss_data_contract::DataValue",
-            "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|yss_data_contract::DummyInfo",
-            "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|yss_data_contract::TimeSeriesState",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDecimalLiteral|yss_data_contract::DecimalLiteral",
+            "src-tauri/src/graph/value/aliases.rs|PersistedFilterLiteral|yss_data_contract::FilterLiteral",
+            "src-tauri/src/graph/value/aliases.rs|PersistedValueType|yss_data_contract::ValueType",
         ]
     );
 }

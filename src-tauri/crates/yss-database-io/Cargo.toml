@@ -10,7 +10,7 @@ calamine = "0.36"
 arrow.workspace = true
 parquet.workspace = true
 thiserror.workspace = true
-yss-tabular-contract = { path = "../yss-tabular-contract" }
+yss-data-contract = { path = "../yss-data-contract" }
 yss-database-arrow = { path = "../yss-database-arrow" }
 
 [dev-dependencies]

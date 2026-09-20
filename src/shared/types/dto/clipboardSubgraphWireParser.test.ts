@@ -55,7 +55,7 @@ const completeSnapshot = {
       state: {
         literalOverride: {
           value_type: { Concrete: "core.numeric" },
-          value: { Integer: 42 },
+          value: { Integer: "42" },
         },
       },
     },

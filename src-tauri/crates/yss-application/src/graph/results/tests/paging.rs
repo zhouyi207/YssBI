@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use yss_data_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 use yss_graph_document::{
     DocumentNode, GraphDocument, GraphResourcePath, NodeId, NodePosition, ParameterValues,
 };
@@ -22,7 +23,6 @@ use yss_relational_contract::{
     RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle, RelationPage,
     RelationPlan, RelationPredicate, SeriesHandle, SeriesOperand, SeriesPlan,
 };
-use yss_tabular_contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
 
 use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState};
 

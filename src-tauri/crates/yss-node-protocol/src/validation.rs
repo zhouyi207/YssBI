@@ -1,7 +1,9 @@
 use super::{
-    CanonicalDecimal, NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey,
-    ParameterValues, TypeClassId, TypeConstructorId, TypeExpr, TypeId, TypedValue, Value,
+    NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey, ParameterValues,
+    TypeClassId, TypeConstructorId, TypeExpr, TypeId, TypedValue,
 };
+use yss_data_contract::DataValue;
+use yss_data_contract::DecimalLiteral;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocatedParameterIssue {
@@ -64,7 +66,7 @@ pub fn validate_typed_value(
 fn json_literal_to_protocol_value(
     raw: &serde_json::Value,
     declared_type: &TypeExpr,
-) -> Result<Value, LiteralValidationIssue> {
+) -> Result<DataValue, LiteralValidationIssue> {
     if matches!(declared_type, TypeExpr::Concrete(type_id) if type_id.as_str() == "core.bytes") {
         let bytes = raw
             .as_array()
@@ -77,39 +79,31 @@ fn json_literal_to_protocol_value(
                     .ok_or(LiteralValidationIssue::ValueTypeMismatch)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(Value::Bytes(bytes));
+        return Ok(DataValue::Bytes(bytes));
     }
 
     match raw {
-        serde_json::Value::Null => Ok(Value::Null),
-        serde_json::Value::Bool(value) => Ok(Value::Bool(*value)),
+        serde_json::Value::Null => Ok(DataValue::Null),
+        serde_json::Value::Bool(value) => Ok(DataValue::Bool(*value)),
         serde_json::Value::Number(value) if value.is_i64() => {
-            Ok(Value::Integer(value.as_i64().expect("checked i64")))
+            Ok(DataValue::Integer(value.as_i64().expect("checked i64")))
         }
         serde_json::Value::Number(value) if value.is_u64() => {
-            Ok(Value::Unsigned(value.as_u64().expect("checked u64")))
+            Ok(DataValue::Unsigned(value.as_u64().expect("checked u64")))
         }
-        serde_json::Value::Number(value) => CanonicalDecimal::new(
+        serde_json::Value::Number(value) => DecimalLiteral::try_from(
             value
                 .as_f64()
-                .filter(|value| value.is_finite())
-                .map(|value| {
-                    if value == 0.0 {
-                        "0".to_owned()
-                    } else {
-                        value.to_string()
-                    }
-                })
                 .ok_or(LiteralValidationIssue::MalformedWire)?,
         )
-        .map(Value::Decimal)
+        .map(DataValue::Decimal)
         .map_err(|_| LiteralValidationIssue::MalformedWire),
-        serde_json::Value::String(value) => Ok(Value::String(value.as_str().into())),
+        serde_json::Value::String(value) => Ok(DataValue::String(value.as_str().into())),
         serde_json::Value::Array(values) => values
             .iter()
             .map(|value| json_literal_to_protocol_value(value, &TypeExpr::Unknown))
             .collect::<Result<Vec<_>, _>>()
-            .map(Value::List),
+            .map(DataValue::List),
         serde_json::Value::Object(values) => values
             .iter()
             .map(|(key, value)| {
@@ -119,7 +113,7 @@ fn json_literal_to_protocol_value(
                 ))
             })
             .collect::<Result<_, LiteralValidationIssue>>()
-            .map(Value::Object),
+            .map(DataValue::Object),
     }
 }
 
@@ -255,20 +249,20 @@ fn infer_unconstrained_literal_type(raw: &serde_json::Value) -> Option<TypeExpr>
 }
 
 fn protocol_value_matches_type(
-    value: &Value,
+    value: &DataValue,
     value_type: &TypeExpr,
     nominal: &impl TypeValidationContext,
 ) -> bool {
     match value_type {
         TypeExpr::Concrete(type_id) => match type_id.as_str() {
-            "core.binary" => matches!(value, Value::Bool(_)),
+            "core.binary" => matches!(value, DataValue::Bool(_)),
             "core.numeric" => matches!(
                 value,
-                Value::Integer(_) | Value::Unsigned(_) | Value::Decimal(_)
+                DataValue::Integer(_) | DataValue::Unsigned(_) | DataValue::Decimal(_)
             ),
-            "core.text" => matches!(value, Value::String(_)),
-            "core.bytes" => matches!(value, Value::Bytes(_)),
-            "core.object" => matches!(value, Value::Object(_)),
+            "core.text" => matches!(value, DataValue::String(_)),
+            "core.bytes" => matches!(value, DataValue::Bytes(_)),
+            "core.object" => matches!(value, DataValue::Object(_)),
             _ => nominal
                 .validate_nominal_parameter(type_id, &protocol_value_to_json(value))
                 .is_some_and(|result| result.is_ok()),
@@ -280,15 +274,17 @@ fn protocol_value_matches_type(
             (
                 "core.list" | "core.array" | "core.data_series",
                 [element_type],
-                Value::List(values),
+                DataValue::List(values),
             ) => values
                 .iter()
                 .all(|value| protocol_value_matches_type(value, element_type, nominal)),
-            ("core.map" | "core.struct" | "core.object", [value_type], Value::Object(values)) => {
-                values
-                    .values()
-                    .all(|value| protocol_value_matches_type(value, value_type, nominal))
-            }
+            (
+                "core.map" | "core.struct" | "core.object",
+                [value_type],
+                DataValue::Object(values),
+            ) => values
+                .values()
+                .all(|value| protocol_value_matches_type(value, value_type, nominal)),
             _ => false,
         },
         TypeExpr::Union(options) => options
@@ -298,22 +294,22 @@ fn protocol_value_matches_type(
     }
 }
 
-pub fn protocol_value_to_json(value: &Value) -> serde_json::Value {
+pub fn protocol_value_to_json(value: &DataValue) -> serde_json::Value {
     match value {
-        Value::Null => serde_json::Value::Null,
-        Value::Bool(value) => (*value).into(),
-        Value::Integer(value) => (*value).into(),
-        Value::Unsigned(value) => (*value).into(),
-        Value::Decimal(value) => value.as_str().into(),
-        Value::String(value) => value.as_ref().into(),
-        Value::Bytes(values) => serde_json::Value::Array(
+        DataValue::Null => serde_json::Value::Null,
+        DataValue::Bool(value) => (*value).into(),
+        DataValue::Integer(value) => (*value).into(),
+        DataValue::Unsigned(value) => (*value).into(),
+        DataValue::Decimal(value) => value.as_str().into(),
+        DataValue::String(value) => value.as_ref().into(),
+        DataValue::Bytes(values) => serde_json::Value::Array(
             values
                 .iter()
                 .map(|value| serde_json::Value::from(*value))
                 .collect(),
         ),
-        Value::List(values) => values.iter().map(protocol_value_to_json).collect(),
-        Value::Object(values) => values
+        DataValue::List(values) => values.iter().map(protocol_value_to_json).collect(),
+        DataValue::Object(values) => values
             .iter()
             .map(|(key, value)| (key.to_string(), protocol_value_to_json(value)))
             .collect(),
@@ -503,28 +499,30 @@ fn parameter_length(value: &serde_json::Value) -> Option<usize> {
     }
 }
 
-fn protocol_value_matches_json(expected: &Value, actual: &serde_json::Value) -> bool {
+fn protocol_value_matches_json(expected: &DataValue, actual: &serde_json::Value) -> bool {
     match (expected, actual) {
-        (Value::Null, serde_json::Value::Null) => true,
-        (Value::Bool(expected), serde_json::Value::Bool(actual)) => expected == actual,
-        (Value::Integer(expected), actual) => actual.as_i64() == Some(*expected),
-        (Value::Unsigned(expected), actual) => actual.as_u64() == Some(*expected),
-        (Value::Decimal(expected), serde_json::Value::String(actual)) => {
+        (DataValue::Null, serde_json::Value::Null) => true,
+        (DataValue::Bool(expected), serde_json::Value::Bool(actual)) => expected == actual,
+        (DataValue::Integer(expected), actual) => actual.as_i64() == Some(*expected),
+        (DataValue::Unsigned(expected), actual) => actual.as_u64() == Some(*expected),
+        (DataValue::Decimal(expected), serde_json::Value::String(actual)) => {
             expected.as_str() == actual
         }
-        (Value::String(expected), serde_json::Value::String(actual)) => expected.as_ref() == actual,
-        (Value::Bytes(expected), serde_json::Value::Array(actual)) => actual
+        (DataValue::String(expected), serde_json::Value::String(actual)) => {
+            expected.as_ref() == actual
+        }
+        (DataValue::Bytes(expected), serde_json::Value::Array(actual)) => actual
             .iter()
             .map(serde_json::Value::as_u64)
             .eq(expected.iter().map(|byte| Some(u64::from(*byte)))),
-        (Value::List(expected), serde_json::Value::Array(actual)) => {
+        (DataValue::List(expected), serde_json::Value::Array(actual)) => {
             expected.len() == actual.len()
                 && expected
                     .iter()
                     .zip(actual)
                     .all(|(expected, actual)| protocol_value_matches_json(expected, actual))
         }
-        (Value::Object(expected), serde_json::Value::Object(actual)) => {
+        (DataValue::Object(expected), serde_json::Value::Object(actual)) => {
             expected.len() == actual.len()
                 && expected.iter().all(|(key, expected)| {
                     actual
@@ -539,7 +537,7 @@ fn protocol_value_matches_json(expected: &Value, actual: &serde_json::Value) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TypeConstructorId, TypeParameterId, TypedValue, Value};
+    use crate::{TypeConstructorId, TypeParameterId, TypedValue};
     use std::collections::BTreeMap;
 
     struct NoNominalValidator;
@@ -604,7 +602,7 @@ mod tests {
         let declared = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let wire = serde_json::to_value(TypedValue {
             value_type: declared.clone(),
-            value: Value::String("not-an-integer".into()),
+            value: DataValue::String("not-an-integer".into()),
         })
         .unwrap();
 
@@ -622,7 +620,10 @@ mod tests {
         };
         let wire = serde_json::to_value(TypedValue {
             value_type: list.clone(),
-            value: Value::List(vec![Value::Integer(1), Value::String("wrong".into())]),
+            value: DataValue::List(vec![
+                DataValue::Integer(1),
+                DataValue::String("wrong".into()),
+            ]),
         })
         .unwrap();
 
@@ -637,7 +638,7 @@ mod tests {
         let nominal = TypeExpr::Concrete(TypeId::new("acme.unknown").unwrap());
         let wire = serde_json::to_value(TypedValue {
             value_type: nominal.clone(),
-            value: Value::Object(Default::default()),
+            value: DataValue::Object(Default::default()),
         })
         .unwrap();
 
@@ -653,27 +654,27 @@ mod tests {
         let cases = [
             (
                 TypeExpr::Concrete(TypeId::new("core.bytes").unwrap()),
-                Value::Bytes(vec![0, 127, 255]),
+                DataValue::Bytes(vec![0, 127, 255]),
             ),
             (
                 TypeExpr::Concrete(TypeId::new("core.object").unwrap()),
-                Value::Object(BTreeMap::from([("value".into(), Value::Integer(1))])),
+                DataValue::Object(BTreeMap::from([("value".into(), DataValue::Integer(1))])),
             ),
             (
                 TypeExpr::Applied {
                     constructor: TypeConstructorId::new("core.list").unwrap(),
                     arguments: vec![int64.clone()],
                 },
-                Value::List(vec![Value::Integer(1), Value::Integer(2)]),
+                DataValue::List(vec![DataValue::Integer(1), DataValue::Integer(2)]),
             ),
             (
                 TypeExpr::Applied {
                     constructor: TypeConstructorId::new("core.struct").unwrap(),
                     arguments: vec![int64],
                 },
-                Value::Object(BTreeMap::from([
-                    ("first".into(), Value::Integer(1)),
-                    ("second".into(), Value::Integer(2)),
+                DataValue::Object(BTreeMap::from([
+                    ("first".into(), DataValue::Integer(1)),
+                    ("second".into(), DataValue::Integer(2)),
                 ])),
             ),
         ];
@@ -699,7 +700,7 @@ mod tests {
         ]);
         let wire = serde_json::to_value(TypedValue {
             value_type: oneof.clone(),
-            value: Value::String("selected-option".into()),
+            value: DataValue::String("selected-option".into()),
         })
         .unwrap();
 
@@ -728,7 +729,7 @@ mod tests {
         let nominal = TypeExpr::Concrete(TypeId::new("acme.count").unwrap());
         let wire = serde_json::to_value(TypedValue {
             value_type: nominal.clone(),
-            value: Value::Unsigned(7),
+            value: DataValue::Unsigned(7),
         })
         .unwrap();
 
@@ -750,7 +751,7 @@ mod tests {
         for value_type in cases {
             let wire = serde_json::to_value(TypedValue {
                 value_type: value_type.clone(),
-                value: Value::Integer(1),
+                value: DataValue::Integer(1),
             })
             .unwrap();
             assert!(validate_typed_literal(&wire, &value_type, &NoNominalValidator).is_err());
@@ -759,7 +760,7 @@ mod tests {
         let generic = TypeExpr::Generic(TypeParameterId::new("item").unwrap());
         let concrete_wire = serde_json::to_value(TypedValue {
             value_type: TypeExpr::Concrete(TypeId::new("core.numeric").unwrap()),
-            value: Value::Integer(1),
+            value: DataValue::Integer(1),
         })
         .unwrap();
         assert!(validate_typed_literal(&concrete_wire, &generic, &NoNominalValidator).is_ok());
@@ -770,7 +771,7 @@ mod tests {
         let declared = TypeExpr::Concrete(TypeId::new("core.numeric").unwrap());
         let wire = serde_json::to_value(TypedValue {
             value_type: TypeExpr::Concrete(TypeId::new("core.text").unwrap()),
-            value: Value::String("value".into()),
+            value: DataValue::String("value".into()),
         })
         .unwrap();
 

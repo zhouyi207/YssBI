@@ -1,11 +1,12 @@
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
+use yss_data_contract::FilterLiteral;
 
 use arrow::array::{Float64Array, StringArray};
 use arrow::datatypes::{Field, Schema};
 use arrow::record_batch::RecordBatch;
 use yss_database_contract::DatabaseId;
-use yss_relational_contract::{RelationComparison, RelationLiteral, RelationPredicate};
+use yss_relational_contract::{RelationComparison, RelationPredicate};
 
 use super::*;
 
@@ -37,13 +38,13 @@ fn predicate(comparison: RelationComparison, value: i64) -> RelationPredicate {
     RelationPredicate {
         column: "x.value".into(),
         comparison,
-        value: Some(RelationLiteral::Integer(value)),
+        value: Some(FilterLiteral::Integer(value)),
     }
 }
 
 #[test]
 fn drop_rows_and_columns_preserve_nulls_order_and_source() {
-    use yss_tabular_contract::TabularScalar as V;
+    use yss_data_contract::TabularScalar as V;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let schema = Arc::new(Schema::new(vec![
         Field::new("x.value", DataType::Int64, true),
@@ -118,9 +119,52 @@ fn drop_rows_and_columns_preserve_nulls_order_and_source() {
 }
 
 #[test]
+fn decimal_filters_preserve_precision_beyond_float64() {
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
+    let source = runtime
+        .batch_relation(
+            binding(),
+            RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new(
+                    "amount",
+                    DataType::Decimal128(20, 2),
+                    false,
+                )])),
+                vec![Arc::new(
+                    arrow::array::Decimal128Array::from(vec![
+                        900_719_925_474_099_301_i128,
+                        900_719_925_474_099_302_i128,
+                    ])
+                    .with_precision_and_scale(20, 2)
+                    .unwrap(),
+                )],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let page = source
+        .drop_rows(&RelationPredicate {
+            column: "amount".into(),
+            comparison: RelationComparison::Equal,
+            value: Some(FilterLiteral::Decimal(
+                yss_data_contract::DecimalLiteral::new("9007199254740993.01").unwrap(),
+            )),
+        })
+        .unwrap()
+        .page(0, 10, &control())
+        .unwrap();
+    assert_eq!(
+        page.data.columns()[0].values(),
+        &[yss_data_contract::TabularScalar::String(
+            "9007199254740993.02".into()
+        )]
+    );
+}
+
+#[test]
 fn table_composition_preserves_order_alignment_and_combined_sources() {
+    use yss_data_contract::TabularScalar as V;
     use yss_data_contract::table::{RowConcatMode as Mode, TableJoin, TableJoinKind as Join};
-    use yss_tabular_contract::TabularScalar as V;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let make = |id: &str, keys: Vec<Option<i64>>, texts: Vec<&str>| {
         let mut source = binding();
@@ -277,7 +321,9 @@ fn table_composition_preserves_order_alignment_and_combined_sources() {
         .unwrap()
         .rename("label", "other")
         .unwrap();
-    let padded = left.concat_rows(&[missing.clone()], Mode::ByName).unwrap();
+    let padded = left
+        .concat_rows(std::slice::from_ref(&missing), Mode::ByName)
+        .unwrap();
     let page = padded.page(0, 10, &control()).unwrap();
     assert_eq!(page.data.columns()[2].values()[0], V::Null);
     assert_eq!(page.data.columns()[0].values()[3], V::Null);
@@ -390,8 +436,8 @@ fn composed_plans_are_lazy_and_retain_every_source_lease() {
 fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
     use arrow::array::BooleanArray;
     use datafusion::logical_expr::{Expr, Operator};
+    use yss_data_contract::TabularScalar as V;
     use yss_relational_contract::{BooleanOperand as O, BooleanOperation as Op};
-    use yss_tabular_contract::TabularScalar as V;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let path = std::env::temp_dir().join(format!(
         "yss-boolean-{}-{}.parquet",
@@ -516,8 +562,8 @@ fn boolean_series_use_native_lazy_expressions_with_nulls_and_alignment() {
 
 #[test]
 fn comparison_series_are_lazy_exact_nullable_and_aligned() {
+    use yss_data_contract::TabularScalar as V;
     use yss_relational_contract::{ComparisonOperand as O, ComparisonOperation as C};
-    use yss_tabular_contract::TabularScalar as V;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let path = std::env::temp_dir().join(format!(
         "yss-comparison-{}-{}.parquet",
@@ -674,10 +720,10 @@ fn comparison_series_are_lazy_exact_nullable_and_aligned() {
 
 #[test]
 fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithmetic() {
+    use yss_data_contract::TabularScalar;
     use yss_relational_contract::{
         NumericOperation as Op, NumericType as Type, SeriesOperand as Operand,
     };
-    use yss_tabular_contract::TabularScalar;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let schema = Arc::new(
         yss_database_arrow::with_row_columns(
@@ -710,7 +756,7 @@ fn computed_series_remain_lazy_and_aligned_through_broadcasts_and_chained_arithm
         .unwrap();
     let x = source.select_series("x.value").unwrap();
     let count = source.select_series("count").unwrap();
-    let scalar = |value| Operand::Scalar(RelationLiteral::Integer(value));
+    let scalar = |value| Operand::Scalar(yss_data_contract::TabularScalar::Integer(value));
     let unary = [Op::Ln, Op::Log2, Op::Log10, Op::Square, Op::Sqrt].map(|operation| {
         source
             .numeric_series(operation, &[Operand::Series(x.clone())], Type::Float64)
@@ -861,7 +907,7 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
             .unwrap(),
         )
         .unwrap();
-    let scalar = |value| Operand::Scalar(RelationLiteral::Integer(value));
+    let scalar = |value| Operand::Scalar(yss_data_contract::TabularScalar::Integer(value));
     let series = |name| Operand::Series(source.select_series(name).unwrap());
     let filtered = source
         .filter(&predicate(RelationComparison::Greater, 1))
@@ -982,8 +1028,8 @@ fn computed_series_reject_unaligned_inputs_and_propagate_numeric_errors_and_budg
 
 #[test]
 fn semantic_conversion_is_lazy_aligned_and_preserves_configuration_identity() {
+    use yss_data_contract::TabularScalar as V;
     use yss_data_contract::{NumericRepresentation as N, SemanticConversion, SemanticType as S};
-    use yss_tabular_contract::TabularScalar as V;
     let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 2).unwrap();
     let path = std::env::temp_dir().join(format!(
         "yss-conversion-{}-{}.parquet",
@@ -1060,10 +1106,10 @@ fn semantic_conversion_is_lazy_aligned_and_preserves_configuration_identity() {
     assert_eq!(
         page.data.columns()[1].values(),
         &[
-            V::Decimal(1.0.try_into().unwrap()),
+            V::Float64(1.0.try_into().unwrap()),
             V::Null,
-            V::Decimal(2.0.try_into().unwrap()),
-            V::Decimal(3.0.try_into().unwrap())
+            V::Float64(2.0.try_into().unwrap()),
+            V::Float64(3.0.try_into().unwrap())
         ]
     );
     assert_eq!(
@@ -1311,8 +1357,12 @@ fn managed_file_prefixes_preserve_projection_offset_and_filter_order() {
                 .into_iter()
                 .enumerate()
                 .map(|(index, field)| {
-                    yss_database_arrow::with_column_metadata(field, &format!("column-{index}"), None)
-                        .unwrap()
+                    yss_database_arrow::with_column_metadata(
+                        field,
+                        &format!("column-{index}"),
+                        None,
+                    )
+                    .unwrap()
                 })
                 .collect::<Vec<_>>(),
             ),
@@ -1505,7 +1555,7 @@ fn numeric_materialization_enforces_missing_values_cancellation_and_memory_budge
 #[test]
 fn relation_pages_probe_one_extra_row_and_preserve_wide_integer_display() {
     use arrow::array::UInt64Array;
-    use yss_tabular_contract::TabularScalar;
+    use yss_data_contract::TabularScalar;
     let runtime = DataFusionRuntime::new(32 * 1024 * 1024, 2).unwrap();
     let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::UInt64, true)]));
     let source = runtime

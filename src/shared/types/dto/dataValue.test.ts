@@ -1,12 +1,36 @@
 import { expect, it } from "vitest";
-import { deserializeDataValue, serializeDataValue, type DataValue } from "../domain/dataValue";
+import {
+  deserializeDataValue,
+  serializeDataValue,
+  inferDataValueFromJson,
+} from "../domain/dataValue";
 import { isRustDataValueWire } from "./dataValue";
 
+it("round trips full-width integers without JavaScript rounding", () => {
+  for (const wire of [
+    { Integer: "-9223372036854775808" },
+    { Integer: "9223372036854775807" },
+    { Unsigned: "18446744073709551615" },
+  ]) {
+    expect(isRustDataValueWire(wire)).toBe(true);
+    expect(serializeDataValue(deserializeDataValue(wire))).toEqual(wire);
+  }
+  for (const wire of [
+    { Integer: 7 },
+    { Integer: "01" },
+    { Integer: "-0" },
+    { Integer: "9223372036854775808" },
+    { Unsigned: "18446744073709551616" },
+  ]) {
+    expect(isRustDataValueWire(wire)).toBe(false);
+  }
+});
+
 it("preserves nested constant objects, arrays and null through the Rust wire", () => {
-  const value: DataValue = {
-    kind: "Object",
-    value: { "": null, nested: { items: [1, true, null, "text", { x: 1.5 }] } },
-  };
+  const value = inferDataValueFromJson({
+    "": null,
+    nested: { items: [1, true, null, "text", { x: 1.5 }] },
+  });
   const wire = serializeDataValue(value);
   expect(isRustDataValueWire(wire)).toBe(true);
   expect(wire).toEqual({
@@ -15,12 +39,12 @@ it("preserves nested constant objects, arrays and null through the Rust wire", (
       nested: {
         Object: {
           items: {
-            Array: [
-              { Int64: 1 },
-              { Boolean: true },
+            List: [
+              { Integer: "1" },
+              { Bool: true },
               "Null",
               { String: "text" },
-              { Object: { x: { Float64: 1.5 } } },
+              { Object: { x: { Decimal: "1.5" } } },
             ],
           },
         },

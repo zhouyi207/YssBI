@@ -2,7 +2,7 @@ use std::{any::Any, fmt, sync::Arc};
 
 use arrow_schema::Field;
 
-use crate::{RelationError, RelationHandle, RelationLiteral};
+use crate::{RelationError, RelationHandle};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericOperation {
@@ -105,13 +105,13 @@ pub enum NumericType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SeriesOperand {
     Series(SeriesHandle),
-    Scalar(RelationLiteral),
+    Scalar(yss_data_contract::TabularScalar),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ComparisonOperand {
     Series(SeriesHandle),
-    Scalar(yss_tabular_contract::TabularScalar),
+    Scalar(yss_data_contract::TabularScalar),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

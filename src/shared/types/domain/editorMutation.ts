@@ -128,20 +128,9 @@ export type TypeExprDto =
   | { Union: TypeExprDto[] }
   | "Unknown";
 
-export type ProtocolValueDto =
-  | "Null"
-  | { Bool: boolean }
-  | { Integer: number }
-  | { Unsigned: number }
-  | { Decimal: string }
-  | { String: string }
-  | { Bytes: number[] }
-  | { List: ProtocolValueDto[] }
-  | { Object: Record<string, ProtocolValueDto> };
-
 export interface TypedLiteralDto {
   value_type: TypeExprDto;
-  value: ProtocolValueDto;
+  value: import("./dataValue").SerializedDataValue;
 }
 
 export type DynamicPortBindingDto =

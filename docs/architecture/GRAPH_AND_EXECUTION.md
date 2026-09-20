@@ -60,7 +60,9 @@ NumericFold 只推导语义与标量/数列结构，整数/浮点选择、广播
 
 常量、函数签名、编辑器投影和前端解析器共享该契约。标量类型 wire 为
 `{ "kind": "Scalar", "inner": "Numeric" }`，数列在 `DataSeries.inner` 中引用它。
-`DataValue` / `RuntimeValue` 的整数、浮点、布尔和字符串载体保留实际表示，不定义第二套基础语义。
+`yss-data-contract::DataValue` 是常量、端口字面量及节点默认值共用的持久化值树。`TypedValue` 附加协议 `TypeExpr`；参数不再定义另一份相同的 typed value。整数使用带标签的十进制字符串传输，避免 JavaScript 舍入 `i64/u64`。`DecimalLiteral` 保存规范数字文本，支持精确的 Arrow Decimal 筛选输入，不代表内核定点算术。
+
+`RuntimeValue` 负责运行期列表、记录、资源及模型的容器。其 `Scalar(TabularScalar)` 复用中立标量；`Float64(FiniteFloat64)` 明确表示有限二进制浮点数，所有入口共用有限性校验。Arrow `DataType`、数组及 `RecordBatch` 负责列的物理表示。这些载体不定义第二套基础语义。
 项目尚未发布，文件读取与实时命令均直接使用当前类型契约，不提供旧类型声明的迁移或兼容转换。
 
 `yss-graph-editor::projection` 拥有编辑器投影模型与纯映射，消费 Graph Analysis 的语义事实，
@@ -220,7 +222,9 @@ Analysis Graph 只含数据依赖。Print、Control/Effect 等副作用属于 Wo
 
 命名常量由 `GraphDocument.constants` 持有，使用稳定 `ConstantId`。Event 和 Function 的 Details 面板编辑名称、类型和值；增删改通过 `SetConstant` 和同一 当前图文档 FIFO、undo/redo、Save 路径处理，没有独立的变量 Store、revision、作用域或项目资源文件。名称在所属图内唯一，重命名不会改变引用身份。
 
-前端共享数据类型层定义图文档使用的 `SerializedDataValue` 及其与编辑值的纯转换；传输层校验 Rust 返回的值结构。常量编辑不依赖 IPC 编码器，也不维护另一份已提交数据。
+前端常量、端口和协议默认值共用 `SerializedDataValue` 及严格校验器；编辑字段是临时输入状态。常量编辑不依赖 IPC 编码器，也不维护另一份已提交数据。
+
+表格常量保存 `tabular` 快照，`dataValue` 为 Null，不再保存由常量 ID 派生的资源句柄。编辑时提交的 JSON 文本由 Graph 原子解析、按外层 `ValueType` 校验；序列不另存元素类型、dummy 或 time-series 状态。
 
 图内自定义常量通过 `yssbi.constant.get` 访问，其 `constant` 参数引用当前图内的常量。Details 面板可直接插入引用节点，也可在 Get 节点的参数中选择常量。尚未选择或已删除的引用可保留在草稿中，编辑解析会报告阻断诊断。单次使用的输入值仍可通过端口 literal 编辑。
 固定数学常量 `yssbi.constant.pi` 和 `yssbi.constant.e` 同样位于常量目录，无输入和参数，输出 Numeric 标量。Kernel 从 Rust 标准库读取对应 Float64 常量，不创建或引用 GraphConstant；类型推导、缓存及下游广播使用现有固定节点契约。
@@ -288,7 +292,9 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 
 每个 Output contract 保留类型、Schema/lineage、类别和 source identity；scheduler 按 output address 校验返回值，Results 使用该 output 的类别。Operation 不再拥有一个供所有 output 共享的类别。
 
-协议默认参数在 semantic snapshot 中保留 typed literal，Execution 按协议类型构造参数；用于显示的 Decimal 字符串不作为运行时 String。执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
+协议默认参数在 semantic snapshot 中保留 typed literal。计划参数只区分已准备的 `Literal(Arc<RuntimeValue>)` 与待授权 `Resource`；标量、列表和记录在准备时构造一次，调用时借用。`DecimalLiteral` 在求值边界检查并转换为 `Float64`；已求值的数列算术直接传递 `TabularScalar`，不经过数字文本往返。过滤请求共用 Data Contract 的 `FilterLiteral` 保留精确十进制输入。
+
+执行阶段使用 `ExecutePreparedError` 表达失败，`RunFailure` 携带稳定的 `RunFailureCode`、`RunPhase` 及 source identity，RunErrored 传递实际阶段、原因（如 divisionByZero、invalidNumericInput、nonFiniteResult）和节点；不传递原始输入值或后端错误文案。
 
 `RunRegistry` 通过 `RunState` 记录运行状态和终态。成功执行通过 `ExecutionFinalizationHandoff` 将候选结果交给 Application 完成 finalization。
 
@@ -301,7 +307,7 @@ Execution 的 `kernel_invocation` 在已授权的 PreparedRunResources 中解析
 原始列和计算数列都由 `SeriesHandle` 持有 adapter-owned 表达式，表达式不进入持久化 Graph 文档。
 数据帧组合使用原生 Union、Join、Projection 及用于稳定顺序的 Window/Sort 计划。按行拼接保留重复行、输入顺序及各来源行序；列名模式补齐缺失列，位置模式使用首表列名。公共列要求相同物理类型和兼容语义，不进行隐式有损提升。连接支持多列键和 inner/left/right/full，空键不匹配，重复键保留全部匹配组合；输出保留两侧键，右侧重名列使用后缀消歧。
 `RelationHandle::bindings` 保留全部来源绑定，组合执行检查项目会话、执行环境及同一数据集的快照一致性。来源租约由组合结果和输出流共同持有；资源准备入口仍要求每个数据源授权值只有一个匹配绑定。多来源结果不伪装成单一数据集，自动化只读检查按预算列出其来源。
-DataFrame 字面量和内存列组合通过注入的 `RelationFactory` 一次性导入同一 DataFusion runtime，之后复用上述关系运算及分页。它们的来源绑定为空；空绑定不授权任何外部数据集。旧的 Record 表执行分支已移除，普通结构化值仍使用 Record。
+DataFrame 字面量和内存列组合在 Kernel 内通过 Arrow 适配器物化列及语义元数据，以 `RecordBatch` 交给注入的 `RelationFactory`，一次性导入同一 DataFusion runtime，之后复用上述关系运算及分页。`TabularSnapshot` 只用于文档和展示边界，不作为内核物化的中转。字面量关系的来源绑定为空；空绑定不授权任何外部数据集。普通结构化值仍使用 Record。
 DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命名和数列投影保留行域证明；筛选行、截取、行拼接和连接建立新行域。按列拼接与组装只组合可证明对齐的惰性输入，不以长度或行号猜测独立数据帧的对应关系。组装也支持等长内存数列，保留其已物化形式，不混用惰性与内存数列。
 源行顺序的内部字段仅留在 adapter 的域计划中；组合时由显式排序的行号窗口生成内部位置，确保分页稳定，不复用源表的可编辑行标识。输出只暴露用户列，并保留语义元数据；组合输出的字段身份由图的派生 Schema 负责。动态输入顺序进入 Schema 缓存指纹，连接键编辑器和校验分别使用对应一侧的 Schema。
 同一关系的数列可以连续运算并联合投影，名称重复的计算列按投影位置区分；不同关系或无对齐证明的物化列表

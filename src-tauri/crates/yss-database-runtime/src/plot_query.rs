@@ -8,8 +8,8 @@ use crate::error::{DatabaseError, DatabaseErrorCode, DatabaseOperation};
 use crate::runtime::DatabaseRuntimeSession;
 use crate::session_api::{self, DatabaseQueryBasis};
 use yss_data_contract::SemanticType;
+use yss_data_contract::TabularColumnName;
 use yss_database_contract::DatabaseId;
-use yss_tabular_contract::TabularColumnName;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericColumnKind {

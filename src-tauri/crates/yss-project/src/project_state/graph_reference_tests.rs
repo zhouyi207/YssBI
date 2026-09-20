@@ -59,7 +59,7 @@ fn caller(function: &GraphResourcePath) -> GraphResourceDocument {
                         value_type: yss_node_protocol::TypeExpr::Concrete(
                             "core.text".parse().unwrap(),
                         ),
-                        value: yss_node_protocol::Value::String(function.as_str().into()),
+                        value: yss_data_contract::DataValue::String(function.as_str().into()),
                     }),
                 },
             );

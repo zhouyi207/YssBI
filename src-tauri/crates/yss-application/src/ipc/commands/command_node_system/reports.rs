@@ -9,6 +9,7 @@ use tauri::State;
 
 pub(super) fn report_query_error(error: ReportQueryError) -> CommandError {
     match error {
+        ReportQueryError::UnrepresentableValue => CommandError::expected("result_value_not_json"),
         ReportQueryError::Session(error) => super::results::session_capture_command_error(error),
         ReportQueryError::Stale => CommandError::expected("stale_result_reference"),
         ReportQueryError::Unavailable => CommandError::expected("result_not_found"),

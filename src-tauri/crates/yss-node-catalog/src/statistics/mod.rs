@@ -4,6 +4,7 @@
 //! node-system contracts. Runtime adapters consume the `sci` and `tabular`
 //! application boundaries.
 
+use yss_data_contract::DataValue;
 mod families;
 
 use super::builtin::{
@@ -267,7 +268,7 @@ fn linear_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyE
         parameter.constraints.push(ParameterConstraint::OneOf(
             choices
                 .iter()
-                .map(|value| Value::String((*value).into()))
+                .map(|value| DataValue::String((*value).into()))
                 .collect(),
         ));
         Ok::<_, BuiltinAssemblyError>(parameter)
@@ -277,7 +278,7 @@ fn linear_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyE
             parameter,
             visible_when: Some(ConfigurationCondition {
                 key: sid("covariance", ParameterKey::new)?,
-                values: vec![Value::String(covariance.into())].into_boxed_slice(),
+                values: vec![DataValue::String(covariance.into())].into_boxed_slice(),
             }),
         })
     };
@@ -417,7 +418,7 @@ fn positive_integer_parameter(
         key,
         concrete("core.numeric")?,
         ParameterEditorSpec::Number,
-        Value::Integer(default),
+        DataValue::Integer(default),
         vec![ParameterConstraint::IntegerRange {
             min: Some(1),
             max: None,
@@ -432,7 +433,7 @@ fn decimal_parameter(
         key,
         concrete("core.numeric")?,
         ParameterEditorSpec::Number,
-        Value::Decimal(assembled_decimal("statistics.parameter", default)?),
+        DataValue::Decimal(assembled_decimal("statistics.parameter", default)?),
         vec![],
     )
 }
@@ -444,7 +445,7 @@ fn toggle_parameter(
         key,
         concrete("core.binary")?,
         ParameterEditorSpec::Toggle,
-        Value::Bool(default),
+        DataValue::Bool(default),
         vec![],
     )
 }
@@ -456,7 +457,7 @@ fn select_parameter(
         key,
         concrete("core.text")?,
         ParameterEditorSpec::Select,
-        Value::String(default.into()),
+        DataValue::String(default.into()),
         vec![ParameterConstraint::Required],
     )
 }
@@ -464,7 +465,7 @@ fn parameter(
     key: &'static str,
     value_type: TypeExpr,
     editor: ParameterEditorSpec,
-    value: Value,
+    value: DataValue,
     constraints: Vec<ParameterConstraint>,
 ) -> Result<ParameterSpec, BuiltinAssemblyError> {
     Ok(ParameterSpec {
@@ -473,7 +474,7 @@ fn parameter(
         description_key: Some(iid(leak(format!(
             "parameters.statistics.{key}.description"
         )))?),
-        default_value: Some(ParameterValue {
+        default_value: Some(TypedValue {
             value_type: value_type.clone(),
             value,
         }),

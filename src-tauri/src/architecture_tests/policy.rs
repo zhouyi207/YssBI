@@ -208,6 +208,12 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     },
     InternalDependencyCapability {
         source_layer: RustLayer::NodeKernel,
+        repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/relational.rs",
+        fully_qualified_owner: "yss_node_kernel::builtins::relational",
+        canonical_origin_targets: &["yss_database_arrow::conversion::materialized_column"],
+    },
+    InternalDependencyCapability {
+        source_layer: RustLayer::NodeKernel,
         repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/conversion.rs",
         fully_qualified_owner: "yss_node_kernel::builtins::conversion",
         canonical_origin_targets: &["yss_database_arrow::conversion::convert_semantic_values"],
@@ -1601,7 +1607,6 @@ fn non_build_memberships(
             | "yss-resource-naming"
             | "yss-sci-contract"
             | "yss-relational-contract"
-            | "yss-tabular-contract"
             | "yss-chart-document"
     ) {
         layers.insert(RustLayer::PureLeaf);

@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
+use yss_data_contract::FilterLiteral;
 
 use arrow::datatypes::{DataType, Schema, SchemaRef};
 use datafusion::common::{Column, ScalarValue};
@@ -9,8 +10,8 @@ use datafusion::logical_expr::Expr;
 use futures_util::StreamExt;
 use yss_relational_contract::{
     NumericOperation, NumericType, RelationBatchStream, RelationBinding, RelationComparison,
-    RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle,
-    RelationLiteral, RelationPlan, RelationPredicate, SeriesHandle, SeriesOperand, SeriesPlan,
+    RelationControl, RelationError, RelationExecutor, RelationFuture, RelationHandle, RelationPlan,
+    RelationPredicate, SeriesHandle, SeriesOperand, SeriesPlan,
 };
 
 pub(crate) struct DataFusionRelation {
@@ -66,11 +67,10 @@ impl DataFusionRelation {
                 }
                 if ordering && semantic.kind == yss_database_arrow::SemanticType::Ordinal {
                     let value = match value {
-                        RelationLiteral::Boolean(value) => serde_json::json!(value),
-                        RelationLiteral::Integer(value) => serde_json::json!(value),
-                        RelationLiteral::Decimal(value) | RelationLiteral::String(value) => {
-                            serde_json::json!(value)
-                        }
+                        FilterLiteral::Boolean(value) => serde_json::json!(value),
+                        FilterLiteral::Integer(value) => serde_json::json!(value),
+                        FilterLiteral::Decimal(value) => serde_json::json!(value.as_str()),
+                        FilterLiteral::String(value) => serde_json::json!(value),
                     };
                     let array = yss_database_arrow::json_to_array(field, &[value])
                         .map_err(|_| RelationError::InvalidInput)?;
@@ -105,8 +105,8 @@ impl DataFusionRelation {
                         .in_list(selected, false)
                 } else {
                     let value = match value {
-                        RelationLiteral::Boolean(value) => ScalarValue::Boolean(Some(*value)),
-                        RelationLiteral::Integer(value) if field.data_type().is_floating() => {
+                        FilterLiteral::Boolean(value) => ScalarValue::Boolean(Some(*value)),
+                        FilterLiteral::Integer(value) if field.data_type().is_floating() => {
                             let exact = yss_database_arrow::lossless_cast(
                                 &arrow::array::Int64Array::from(vec![*value]),
                                 field.data_type(),
@@ -116,8 +116,8 @@ impl DataFusionRelation {
                             ScalarValue::try_from_array(exact.as_ref(), 0)
                                 .map_err(|_| RelationError::InvalidInput)?
                         }
-                        RelationLiteral::Integer(value) => ScalarValue::Int64(Some(*value)),
-                        RelationLiteral::Decimal(value) => {
+                        FilterLiteral::Integer(value) => ScalarValue::Int64(Some(*value)),
+                        FilterLiteral::Decimal(value) => {
                             if matches!(
                                 field.data_type(),
                                 DataType::Decimal32(..)
@@ -127,7 +127,7 @@ impl DataFusionRelation {
                             ) {
                                 let array = yss_database_arrow::json_to_array(
                                     field,
-                                    &[serde_json::Value::String(value.to_string())],
+                                    &[serde_json::Value::String(value.as_str().to_owned())],
                                 )
                                 .map_err(|_| RelationError::InvalidInput)?;
                                 ScalarValue::try_from_array(array.as_ref(), 0)
@@ -135,6 +135,7 @@ impl DataFusionRelation {
                             } else {
                                 ScalarValue::Float64(Some(
                                     value
+                                        .as_str()
                                         .parse::<f64>()
                                         .ok()
                                         .filter(|v| v.is_finite())
@@ -142,11 +143,11 @@ impl DataFusionRelation {
                                 ))
                             }
                         }
-                        RelationLiteral::String(value) => {
+                        FilterLiteral::String(value) => {
                             if field.data_type().is_temporal() {
                                 let array = yss_database_arrow::json_to_array(
                                     field,
-                                    &[serde_json::Value::String(value.to_string())],
+                                    &[serde_json::Value::String(value.as_ref().to_owned())],
                                 )
                                 .map_err(|_| RelationError::InvalidInput)?;
                                 ScalarValue::try_from_array(array.as_ref(), 0)

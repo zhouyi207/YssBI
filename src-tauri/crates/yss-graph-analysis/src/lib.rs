@@ -195,7 +195,7 @@ impl<'a> ReadyGraphSemanticSnapshot<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GraphResolvedParameterValue {
     Literal(serde_json::Value),
-    DefaultLiteral(yss_node_protocol::Value),
+    DefaultLiteral(yss_data_contract::DataValue),
     Resource(GraphResourceId),
 }
 
@@ -1044,14 +1044,13 @@ mod tests {
                     user_label: None,
                 },
             );
-            match *node_type {
-                "core.numeric" => set_constant(
+            if *node_type == "core.numeric" {
+                set_constant(
                     &mut document,
                     source_id,
                     ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                    yss_data_contract::DataValue::Int64(0),
-                ),
-                _ => {}
+                    yss_data_contract::DataValue::Integer(0),
+                );
             }
             let instance = PortAddress::instance(
                 add_id,
@@ -1217,7 +1216,7 @@ mod tests {
             &mut document,
             source,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(1),
+            yss_data_contract::DataValue::Integer(1),
         );
         let resources = empty_resources();
         let mut cache = GraphSemanticCache::default();
@@ -1228,7 +1227,7 @@ mod tests {
             &mut document,
             source,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(2),
+            yss_data_contract::DataValue::Integer(2),
         );
         let incremental = resolve_graph_semantics_with_cache(
             &document,
@@ -1254,7 +1253,7 @@ mod tests {
                 id,
                 name: "Threshold".into(),
                 data_type: ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-                data_value: yss_data_contract::DataValue::Int64(42),
+                data_value: yss_data_contract::DataValue::Integer(42),
                 tabular: None,
                 description: String::new(),
                 tags: vec![],
@@ -1284,7 +1283,7 @@ mod tests {
         document.constants.get_mut(&id).unwrap().data_type =
             ValueType::Scalar(yss_data_contract::SemanticType::Identifier);
         document.constants.get_mut(&id).unwrap().data_value =
-            yss_data_contract::DataValue::Int64(42);
+            yss_data_contract::DataValue::Integer(42);
         let float = resolve_graph_semantics_with_cache(
             &document,
             &builtin.registry,
@@ -1346,7 +1345,7 @@ mod tests {
             &mut document,
             right,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(0),
+            yss_data_contract::DataValue::Integer(0),
         );
         for (index, source) in [left, right].into_iter().enumerate() {
             let operand = PortAddress::instance(
@@ -1395,7 +1394,9 @@ mod tests {
             &mut document,
             right,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Float64(0.0),
+            yss_data_contract::DataValue::Decimal(
+                yss_data_contract::DecimalLiteral::try_from(0.0).expect("finite literal"),
+            ),
         );
         let widened = resolve_graph_semantics(&document, &builtin.registry, &empty_resources());
 
@@ -1482,7 +1483,7 @@ mod tests {
             &mut document,
             source,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(1),
+            yss_data_contract::DataValue::Integer(1),
         );
         document.connections.get_mut(&connection).unwrap().output =
             PortAddress::declared(source, "value".parse().unwrap());
@@ -1525,7 +1526,7 @@ mod tests {
             &mut document,
             source,
             ValueType::Scalar(yss_data_contract::SemanticType::Numeric),
-            yss_data_contract::DataValue::Int64(0),
+            yss_data_contract::DataValue::Integer(0),
         );
         let mean = PortAddress::declared(target, PortKey::new("mean").unwrap());
         let connection_id = ConnectionId::new();

@@ -8,8 +8,8 @@ use arrow::error::ArrowError;
 use arrow::record_batch::RecordBatch;
 use uuid::Uuid;
 use yss_database_contract::DatabaseId;
-use yss_relational_contract::DatasetOverlay;
 use yss_database_io::ParquetBatchWriter;
+use yss_relational_contract::DatasetOverlay;
 
 use crate::{DatasetFile, DatasetMetadata, DatasetSnapshot, DatasetStore, DatasetStoreError};
 

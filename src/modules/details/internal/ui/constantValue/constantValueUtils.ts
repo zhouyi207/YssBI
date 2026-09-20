@@ -26,7 +26,7 @@ export function getConstantLiteralPayload(dataType: ValueType, dataValue: DataVa
   }
 
   if (dataType.kind === "DataSeries" && dataValue.kind === "DataSeries") {
-    return typeof dataValue.value === "string" ? dataValue.value : dataValue.value.id;
+    return dataValue.value;
   }
 
   return "";
@@ -208,7 +208,7 @@ export function dataValueToEditableJson(dataType: ValueType, dataValue: DataValu
 
   if (dataType.kind === "Object") {
     if (dataValue.kind === "Object" && Object.keys(dataValue.value).length > 0) {
-      return JSON.stringify(dataValue.value, null, 2);
+      return JSON.stringify(dataValueToRaw(dataValue), null, 2);
     }
 
     return DEFAULT_OBJECT_JSON;

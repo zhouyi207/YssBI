@@ -1,6 +1,7 @@
-use crate::{ParameterKey, ParameterSpec, Value, protocol_value_to_json};
+use crate::{ParameterKey, ParameterSpec, protocol_value_to_json};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value as JsonValue};
+use yss_data_contract::DataValue;
 
 /// Fields for a configuration object owned by one node parameter.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,7 +18,7 @@ pub struct ConfigurationFieldSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigurationCondition {
     pub key: ParameterKey,
-    pub values: Box<[Value]>,
+    pub values: Box<[DataValue]>,
 }
 
 impl ConfigurationFieldSpec {

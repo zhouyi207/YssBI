@@ -334,6 +334,7 @@ mod tests {
     use crate::state::ExecutionRuntimeState;
     use std::collections::BTreeMap;
     use std::sync::Arc;
+    use yss_data_contract::TabularScalar;
 
     fn prepared_plan() -> PreparedExecutionPlan {
         let resource = PlanResourceId::from_existing("databases/answer".into());
@@ -385,7 +386,7 @@ mod tests {
             [RunResourceBinding::new(
                 requirement,
                 PlanResourceVersion::from_existing("v1".into()),
-                RuntimeValue::Integer(4),
+                RuntimeValue::Scalar(TabularScalar::Integer(4)),
             )],
         )));
         RunResourceRequest::new(plan, bindings)
@@ -400,7 +401,7 @@ mod tests {
             .expect("matching neutral binding must prepare");
         assert_eq!(
             prepared.value(&PlanResourceId::from_existing("databases/answer".into())),
-            Some(&RuntimeValue::Integer(4))
+            Some(&RuntimeValue::Scalar(TabularScalar::Integer(4)))
         );
     }
 

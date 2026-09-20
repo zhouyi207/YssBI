@@ -325,8 +325,8 @@ impl DatasetQuery {
                     let array =
                         yss_database_arrow::lossless_cast(arrays[0].as_ref(), &result_type, force)
                             .map_err(|error| {
-                            datafusion::common::DataFusionError::External(Box::new(error))
-                        })?;
+                                datafusion::common::DataFusionError::External(Box::new(error))
+                            })?;
                     if arguments
                         .iter()
                         .all(|value| matches!(value, ColumnarValue::Scalar(_)))

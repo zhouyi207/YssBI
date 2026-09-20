@@ -1,5 +1,6 @@
 //! An ordinary numeric extension using only public composition and registration APIs.
 
+use yss_data_contract::TabularScalar;
 use yss_node_kernel::KernelId;
 
 use std::collections::BTreeMap;
@@ -57,7 +58,7 @@ fn definition() -> NodeProtocol {
             literal_policy: LiteralPolicy::Allowed,
             default_value: Some(TypedValue {
                 value_type: integer.clone(),
-                value: Value::Integer(2),
+                value: yss_data_contract::DataValue::Integer(2),
             }),
         }),
         consumption: (direction == PortDirection::Input)
@@ -85,9 +86,9 @@ fn definition() -> NodeProtocol {
             title_key: "example.increment.step.title".parse().unwrap(),
             description_key: None,
             value_type: integer.clone(),
-            default_value: Some(ParameterValue {
+            default_value: Some(TypedValue {
                 value_type: integer,
-                value: Value::Integer(1),
+                value: yss_data_contract::DataValue::Integer(1),
             }),
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Number,
@@ -122,15 +123,17 @@ fn definitions() -> (Arc<NodeRegistry>, Arc<BuiltinCatalog>) {
 }
 
 fn increment(invocation: &KernelInvocation<'_>) -> Result<Vec<RuntimeValue>, KernelError> {
-    let ([RuntimeValue::Integer(input)], Some(RuntimeValue::Integer(step))) =
-        (invocation.inputs, invocation.parameter("step"))
+    let (
+        [RuntimeValue::Scalar(TabularScalar::Integer(input))],
+        Some(RuntimeValue::Scalar(TabularScalar::Integer(step))),
+    ) = (invocation.inputs, invocation.parameter("step"))
     else {
         return Err(KernelError::InvalidNumericInput);
     };
     let result = input
         .checked_add(*step)
         .ok_or(KernelError::NonFiniteResult)?;
-    Ok(vec![RuntimeValue::Integer(result)])
+    Ok(vec![RuntimeValue::Scalar(TabularScalar::Integer(result))])
 }
 
 fn kernels(revision: Option<u32>) -> KernelRegistryBuilder {
@@ -254,7 +257,7 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
         .unwrap();
     assert_eq!(
         executed.handoff().results()[0].value().value(),
-        &RuntimeValue::Integer(3)
+        &RuntimeValue::Scalar(TabularScalar::Integer(3))
     );
 
     let updated = kernels(Some(2)).freeze();

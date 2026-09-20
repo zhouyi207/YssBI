@@ -15,4 +15,3 @@ thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-schema = { path = "../yss-database-schema" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }

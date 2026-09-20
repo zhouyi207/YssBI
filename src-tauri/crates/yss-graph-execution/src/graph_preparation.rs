@@ -3,15 +3,17 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
+use yss_data_contract::DataValue;
+use yss_data_contract::TabularScalar;
 use yss_graph_analysis::{
     GraphAnalysis, GraphNodeSemanticFact, GraphPlotDataKind, GraphPortSemanticFact,
     GraphResolvedInputSource, GraphResolvedParameterValue, GraphResultCategory,
     GraphSemanticSnapshot, GraphStatisticalReportKind,
 };
 use yss_graph_document::{GraphResourcePath, PortAddress};
-use yss_node_kernel::KernelId;
 use yss_node_kernel::KernelParameterKey;
-use yss_node_protocol::{PortDirection, Value};
+use yss_node_kernel::{KernelId, RuntimeValue};
+use yss_node_protocol::PortDirection;
 
 use crate::plan::*;
 use crate::state::ExecutionRuntimeState;
@@ -32,8 +34,6 @@ pub enum GraphPlanError {
     ParameterIdentity(#[from] InvalidPlanParameterId),
     #[error("kernel identity is invalid")]
     KernelIdentity(#[from] yss_node_kernel::InvalidKernelIdentity),
-    #[error("graph parameter is not a finite decimal")]
-    Decimal(#[from] CanonicalDecimalError),
     #[error("graph parameter handle is duplicated")]
     DuplicateParameter(#[from] PlanParameterBundleError),
     #[error("resolved graph type is unsupported by execution")]
@@ -355,85 +355,48 @@ fn output_contract(
 }
 
 fn parameter_value(value: &serde_json::Value) -> Result<PlanParameterValue, GraphPlanError> {
+    Ok(PlanParameterValue::Literal(Arc::new(json_runtime_value(
+        value,
+    )?)))
+}
+
+fn json_runtime_value(value: &serde_json::Value) -> Result<RuntimeValue, GraphPlanError> {
     use serde_json::Value as Json;
     Ok(match value {
-        Json::Null => PlanParameterValue::Scalar(PlanParameterScalar::Null),
-        Json::Bool(value) => PlanParameterValue::Scalar(PlanParameterScalar::Bool(*value)),
-        Json::Number(value) => PlanParameterValue::Scalar(if let Some(value) = value.as_i64() {
-            PlanParameterScalar::Integer(value)
-        } else if let Some(value) = value.as_u64() {
-            PlanParameterScalar::Unsigned(value)
-        } else {
-            PlanParameterScalar::Decimal(CanonicalDecimal::try_new(
-                value.as_f64().ok_or(GraphPlanError::InvalidLiteral)?,
-            )?)
-        }),
-        Json::String(value) => {
-            PlanParameterValue::Scalar(PlanParameterScalar::String(value.clone().into()))
+        Json::Null => RuntimeValue::Scalar(TabularScalar::Null),
+        Json::Bool(value) => RuntimeValue::Scalar(TabularScalar::Bool(*value)),
+        Json::Number(value) => {
+            if let Some(value) = value.as_i64() {
+                RuntimeValue::Scalar(TabularScalar::Integer(value))
+            } else if let Some(value) = value.as_u64() {
+                RuntimeValue::Scalar(TabularScalar::Unsigned(value))
+            } else {
+                RuntimeValue::float64(value.as_f64().ok_or(GraphPlanError::InvalidLiteral)?)?
+            }
         }
-        Json::Array(values) => PlanParameterValue::List(
+        Json::String(value) => RuntimeValue::Scalar(TabularScalar::String(value.clone().into())),
+        Json::Array(values) => RuntimeValue::List(
             values
                 .iter()
-                .map(parameter_value)
-                .collect::<Result<Box<[_]>, _>>()?,
+                .map(json_runtime_value)
+                .collect::<Result<_, _>>()?,
         ),
-        Json::Object(values) => PlanParameterValue::Record(
+        Json::Object(values) => RuntimeValue::Record(Arc::new(
             values
                 .iter()
                 .map(|(key, value)| {
-                    Ok((
-                        KernelParameterKey::new(key.clone().into())?,
-                        parameter_value(value)?,
-                    ))
+                    KernelParameterKey::new(key.clone().into())?;
+                    Ok((key.clone().into(), json_runtime_value(value)?))
                 })
                 .collect::<Result<_, GraphPlanError>>()?,
-        ),
+        )),
     })
 }
 
-fn protocol_value(value: &Value) -> Result<PlanParameterValue, GraphPlanError> {
-    Ok(match value {
-        Value::Null => PlanParameterValue::Scalar(PlanParameterScalar::Null),
-        Value::Bool(value) => PlanParameterValue::Scalar(PlanParameterScalar::Bool(*value)),
-        Value::Integer(value) => PlanParameterValue::Scalar(PlanParameterScalar::Integer(*value)),
-        Value::Unsigned(value) => PlanParameterValue::Scalar(PlanParameterScalar::Unsigned(*value)),
-        Value::Decimal(value) => {
-            PlanParameterValue::Scalar(PlanParameterScalar::Decimal(CanonicalDecimal::try_new(
-                value
-                    .as_str()
-                    .parse::<f64>()
-                    .map_err(|_| GraphPlanError::InvalidLiteral)?,
-            )?))
-        }
-        Value::String(value) => {
-            PlanParameterValue::Scalar(PlanParameterScalar::String(value.clone()))
-        }
-        Value::Bytes(values) => PlanParameterValue::List(
-            values
-                .iter()
-                .map(|value| {
-                    PlanParameterValue::Scalar(PlanParameterScalar::Unsigned(u64::from(*value)))
-                })
-                .collect(),
-        ),
-        Value::List(values) => PlanParameterValue::List(
-            values
-                .iter()
-                .map(protocol_value)
-                .collect::<Result<_, _>>()?,
-        ),
-        Value::Object(values) => PlanParameterValue::Record(
-            values
-                .iter()
-                .map(|(key, value)| {
-                    Ok((
-                        KernelParameterKey::new(key.clone())?,
-                        protocol_value(value)?,
-                    ))
-                })
-                .collect::<Result<_, GraphPlanError>>()?,
-        ),
-    })
+fn protocol_value(value: &DataValue) -> Result<PlanParameterValue, GraphPlanError> {
+    Ok(PlanParameterValue::Literal(Arc::new(
+        RuntimeValue::try_from(value)?,
+    )))
 }
 
 fn plan_specialization(
@@ -489,7 +452,7 @@ fn constant_runtime_value(
     let Some(snapshot) = &constant.tabular else {
         return RuntimeValue::try_from(&constant.data_value).map_err(GraphPlanError::ConstantValue);
     };
-    let column_value = |column: &yss_tabular_contract::TabularColumn| {
+    let column_value = |column: &yss_data_contract::TabularColumn| {
         RuntimeValue::List(
             column
                 .values()

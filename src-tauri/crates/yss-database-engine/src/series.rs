@@ -1,4 +1,5 @@
 use std::{any::Any, sync::Arc};
+use yss_data_contract::TabularScalar;
 
 use arrow::array::{Array, ArrayRef, Float64Array};
 use arrow::compute::kernels::numeric;
@@ -6,8 +7,8 @@ use arrow::datatypes::{DataType, Field};
 use datafusion::common::{Column, DataFusionError, ScalarValue};
 use datafusion::logical_expr::{ColumnarValue, Expr, Volatility, create_udf};
 use yss_relational_contract::{
-    BooleanOperand, BooleanOperation, NumericOperation, NumericType, RelationError,
-    RelationLiteral, SeriesHandle, SeriesOperand, SeriesPlan,
+    BooleanOperand, BooleanOperation, NumericOperation, NumericType, RelationError, SeriesHandle,
+    SeriesOperand, SeriesPlan,
 };
 
 pub(crate) struct DataFusionSeries {
@@ -208,18 +209,16 @@ pub(crate) fn arithmetic(
                 }
                 expression(series)
             }
-            SeriesOperand::Scalar(RelationLiteral::Integer(value)) => {
+            SeriesOperand::Scalar(TabularScalar::Integer(value)) => {
                 Ok(Expr::Literal(ScalarValue::Int64(Some(*value)), None))
             }
-            SeriesOperand::Scalar(RelationLiteral::Decimal(value))
+            SeriesOperand::Scalar(TabularScalar::Float64(value))
                 if output_type == NumericType::Float64 =>
             {
-                let value = value
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|value| value.is_finite())
-                    .ok_or(RelationError::InvalidInput)?;
-                Ok(Expr::Literal(ScalarValue::Float64(Some(value)), None))
+                Ok(Expr::Literal(
+                    ScalarValue::Float64(Some(value.as_f64())),
+                    None,
+                ))
             }
             _ => Err(RelationError::InvalidInput),
         })
@@ -243,7 +242,7 @@ pub(crate) fn arithmetic(
         .iter()
         .map(|operand| match operand {
             SeriesOperand::Series(series) => series.plan().field().data_type().clone(),
-            SeriesOperand::Scalar(RelationLiteral::Integer(_)) => DataType::Int64,
+            SeriesOperand::Scalar(TabularScalar::Integer(_)) => DataType::Int64,
             _ => DataType::Float64,
         })
         .collect();

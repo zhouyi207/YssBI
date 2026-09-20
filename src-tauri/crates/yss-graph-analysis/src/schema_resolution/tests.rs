@@ -599,7 +599,7 @@ fn schema_cache_rechecks_tabular_constant_cells_without_recomputing_unchanged_do
             id,
             name: "Table".into(),
             data_type: ValueType::DataFrame,
-            data_value: DataValue::DataFrame(json.into()),
+            data_value: DataValue::String(json.into()),
             tabular: None,
             description: String::new(),
             tags: vec![],

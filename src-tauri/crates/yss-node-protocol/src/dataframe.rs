@@ -1,6 +1,7 @@
-use crate::{CanonicalDecimal, RelationalScalarType};
+use crate::RelationalScalarType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeSet;
+use yss_data_contract::FilterLiteral;
 
 pub const PROJECT_COLUMNS_TYPE_ID: &str = "yssbi.dataframe.project_columns";
 pub const FILTER_PREDICATE_TYPE_ID: &str = "yssbi.dataframe.filter_predicate";
@@ -60,66 +61,6 @@ pub enum FilterOperator {
 impl FilterOperator {
     pub fn requires_value(self) -> bool {
         !matches!(self, Self::IsNull | Self::IsNotNull)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FilterLiteral {
-    Boolean(bool),
-    Integer(i64),
-    Decimal(CanonicalDecimal),
-    String(Box<str>),
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
-enum FilterLiteralWire {
-    Boolean { value: bool },
-    Integer { value: Box<str> },
-    Decimal { value: CanonicalDecimal },
-    String { value: Box<str> },
-}
-
-impl Serialize for FilterLiteral {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let wire = match self {
-            Self::Boolean(value) => FilterLiteralWire::Boolean { value: *value },
-            Self::Integer(value) => FilterLiteralWire::Integer {
-                value: value.to_string().into(),
-            },
-            Self::Decimal(value) => FilterLiteralWire::Decimal {
-                value: value.clone(),
-            },
-            Self::String(value) => FilterLiteralWire::String {
-                value: value.clone(),
-            },
-        };
-        wire.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for FilterLiteral {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        match FilterLiteralWire::deserialize(deserializer)? {
-            FilterLiteralWire::Boolean { value } => Ok(Self::Boolean(value)),
-            FilterLiteralWire::Integer { value } => {
-                let parsed = value.parse::<i64>().map_err(serde::de::Error::custom)?;
-                if parsed.to_string() != value.as_ref() {
-                    return Err(serde::de::Error::custom(
-                        "integer must use canonical spelling",
-                    ));
-                }
-                Ok(Self::Integer(parsed))
-            }
-            FilterLiteralWire::Decimal { value } => Ok(Self::Decimal(value)),
-            FilterLiteralWire::String { value } => Ok(Self::String(value)),
-        }
     }
 }
 
@@ -259,8 +200,8 @@ pub fn validate_filter_predicate_json(value: &serde_json::Value) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CanonicalDecimal;
     use serde_json::json;
+    use yss_data_contract::DecimalLiteral;
 
     #[test]
     fn project_columns_roundtrip_exact_persisted_array() {
@@ -302,7 +243,7 @@ mod tests {
             ),
             (
                 json!({"column":"amount","operator":"lessThanOrEqual","value":{"type":"decimal","value":"10.5"}}),
-                FilterLiteral::Decimal(CanonicalDecimal::new("10.5").unwrap()),
+                FilterLiteral::Decimal(DecimalLiteral::new("10.5").unwrap()),
             ),
             (
                 json!({"column":"status","operator":"notEqual","value":{"type":"string","value":"paid"}}),
@@ -352,9 +293,9 @@ mod tests {
     fn comparison_compatibility_is_typed_and_exact() {
         let integer = FilterLiteral::Integer(42);
         let inexact_integer = FilterLiteral::Integer(9_007_199_254_740_993);
-        let decimal = FilterLiteral::Decimal(CanonicalDecimal::new("10.5").unwrap());
+        let decimal = FilterLiteral::Decimal(DecimalLiteral::new("10.5").unwrap());
         let huge_decimal =
-            FilterLiteral::Decimal(CanonicalDecimal::new(format!("1{}", "0".repeat(400))).unwrap());
+            FilterLiteral::Decimal(DecimalLiteral::new(format!("1{}", "0".repeat(400))).unwrap());
 
         assert!(filter_comparison_is_compatible(
             RelationalScalarType::Known(crate::SemanticType::Numeric),

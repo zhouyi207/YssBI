@@ -600,7 +600,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       Pure Leaf，由该 crate 唯一拥有 declaration、engine/session identity、observation 与
       fingerprint，并统一拥有 CSV/Parquet export format 与严格 parser；消费方直接依赖该 crate，
       不保留主 crate 兼容 re-export。
-- [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-tabular-contract/` Pure Leaf，
+- [ ] 将有序 tabular contract 迁入独立 `src-tauri/crates/yss-data-contract/` Pure Leaf，
       集中 wire/shape invariants；Polars materialization 与 variable normalization 继续由各自
       adapter/application owner 持有，主 crate 不保留兼容 module。
 - [ ] 将 Polars materialization 与 JSON-to-`AnyValue` 严格转换迁入独立

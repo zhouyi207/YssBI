@@ -10,7 +10,7 @@ use arrow::datatypes::i256;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use serde_json::Value;
-use yss_tabular_contract::{TabularScalar, TabularSnapshot};
+use yss_data_contract::{TabularScalar, TabularSnapshot};
 
 use crate::{CategoryDomain, TabularArrowError};
 
@@ -418,7 +418,7 @@ pub(crate) fn scalars_to_array(values: &[TabularScalar]) -> Result<ArrayRef, Tab
             TabularScalar::Bool(_) => DataType::Boolean,
             TabularScalar::Integer(_) => DataType::Int64,
             TabularScalar::Unsigned(_) => DataType::UInt64,
-            TabularScalar::Decimal(_) => DataType::Float64,
+            TabularScalar::Float64(_) => DataType::Float64,
             TabularScalar::String(_) => DataType::Utf8,
         };
         dtype = match (&dtype, &next) {
@@ -497,7 +497,7 @@ pub(crate) fn scalars_to_array(values: &[TabularScalar]) -> Result<ArrayRef, Tab
                 .iter()
                 .map(|value| match value {
                     TabularScalar::Null => Ok(None),
-                    TabularScalar::Decimal(value) => Ok(Some(value.as_f64())),
+                    TabularScalar::Float64(value) => Ok(Some(value.as_f64())),
                     TabularScalar::Integer(value) => Ok(Some(*value as f64)),
                     TabularScalar::Unsigned(value) => Ok(Some(*value as f64)),
                     _ => Err(invalid()),

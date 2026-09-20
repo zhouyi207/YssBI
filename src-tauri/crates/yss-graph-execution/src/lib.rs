@@ -23,8 +23,7 @@ fn test_relations() -> std::sync::Arc<dyn yss_relational_contract::RelationFacto
     impl yss_relational_contract::RelationFactory for UnusedRelations {
         fn materialize(
             self: std::sync::Arc<Self>,
-            _: &yss_tabular_contract::TabularSnapshot,
-            _: &[Option<yss_data_contract::ConversionMetadata>],
+            _: arrow_array::RecordBatch,
             _: &yss_relational_contract::RelationControl,
         ) -> Result<yss_relational_contract::RelationHandle, yss_relational_contract::RelationError>
         {

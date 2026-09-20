@@ -9,4 +9,3 @@ publish = false
 thiserror.workspace = true
 yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
-yss-tabular-contract = { path = "../yss-tabular-contract" }

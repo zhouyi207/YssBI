@@ -3,7 +3,7 @@ use yss_data_contract::{
     ValueType,
 };
 
-use yss_tabular_contract::TabularScalar;
+use yss_data_contract::TabularScalar;
 
 use crate::{KernelError, KernelInvocation, RuntimeValue};
 
@@ -13,10 +13,14 @@ pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue,
     };
     let metadata = original.metadata();
     let input = original.unannotated();
-    let Some(RuntimeValue::String(target)) = invocation.parameter("target_type") else {
+    let Some(RuntimeValue::Scalar(TabularScalar::String(target))) =
+        invocation.parameter("target_type")
+    else {
         return Err(KernelError::Failed);
     };
-    let Some(RuntimeValue::String(numeric)) = invocation.parameter("numeric_mode") else {
+    let Some(RuntimeValue::Scalar(TabularScalar::String(numeric))) =
+        invocation.parameter("numeric_mode")
+    else {
         return Err(KernelError::Failed);
     };
     let target = if target.as_ref() == "auto" {
@@ -42,7 +46,7 @@ pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue,
             .ok_or(KernelError::Failed)?,
     )?;
     let text = |name| match invocation.parameter(name) {
-        Some(RuntimeValue::String(value)) => Ok(value.as_ref()),
+        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Ok(value.as_ref()),
         _ => Err(KernelError::Failed),
     };
     conversion.datetime = DatetimeRepresentation::from_parameter(text("datetime_kind")?)
@@ -79,7 +83,7 @@ pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue,
         if index % 1024 == 0 {
             invocation.check_control()?;
         }
-        if let RuntimeValue::String(value) = value {
+        if let RuntimeValue::Scalar(TabularScalar::String(value)) = value {
             budget = invocation.control.check_bytes(
                 value
                     .len()
@@ -150,8 +154,10 @@ fn conversion_domain(value: &RuntimeValue) -> Result<ConversionDomain, KernelErr
                 let RuntimeValue::Record(value) = value else {
                     return Err(KernelError::Failed);
                 };
-                let (Some(RuntimeValue::String(code)), Some(RuntimeValue::String(label))) =
-                    (value.get("value"), value.get("label"))
+                let (
+                    Some(RuntimeValue::Scalar(TabularScalar::String(code))),
+                    Some(RuntimeValue::Scalar(TabularScalar::String(label))),
+                ) = (value.get("value"), value.get("label"))
                 else {
                     return Err(KernelError::Failed);
                 };
@@ -167,8 +173,8 @@ fn conversion_domain(value: &RuntimeValue) -> Result<ConversionDomain, KernelErr
         _ => return Err(KernelError::Failed),
     };
     let positive_value = match fields.get("positiveValue") {
-        None | Some(RuntimeValue::Null) => None,
-        Some(RuntimeValue::String(value)) => Some(value.to_string()),
+        None | Some(RuntimeValue::Scalar(TabularScalar::Null)) => None,
+        Some(RuntimeValue::Scalar(TabularScalar::String(value))) => Some(value.to_string()),
         _ => return Err(KernelError::Failed),
     };
     let domain = ConversionDomain {

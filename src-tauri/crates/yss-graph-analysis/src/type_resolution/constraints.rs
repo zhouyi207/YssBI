@@ -481,7 +481,7 @@ mod tests {
             &mut document,
             threshold,
             SemanticType::Numeric,
-            DataValue::Int64(1),
+            DataValue::Integer(1),
         );
         connect(&mut document, threshold, "value", numeric, "right");
         let numeric_edge = connect(&mut document, convert, "output", numeric, "left");
@@ -542,7 +542,7 @@ mod tests {
             &mut document,
             other,
             SemanticType::Binary,
-            DataValue::Boolean(true),
+            DataValue::Bool(true),
         );
         connect(&mut document, other, "value", equal, "right");
         let mut cache = GraphSemanticCache::default();
@@ -554,7 +554,7 @@ mod tests {
             &mut document,
             other,
             SemanticType::Numeric,
-            DataValue::Int64(1),
+            DataValue::Integer(1),
         );
         assert_eq!(
             resolve(&document, convert, &mut cache),
@@ -581,9 +581,7 @@ mod tests {
         let constant = document.constants.get_mut(&id).unwrap();
         let element = ValueType::Scalar(SemanticType::Text);
         constant.data_type = ValueType::DataSeries(Box::new(element.clone()));
-        constant.data_value = DataValue::DataSeries(
-            yss_data_contract::DataSeriesValue::with_element_type(r#"{"value":["1"]}"#, element),
-        );
+        constant.data_value = DataValue::String((r#"{"value":["1"]}"#).into());
         assert_eq!(
             resolve(&document, convert, &mut cache),
             TypeState::Exact(ResolvedType::Applied {

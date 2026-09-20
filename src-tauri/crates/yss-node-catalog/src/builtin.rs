@@ -1,5 +1,7 @@
 use super::{core_nodes, dataframe, distribution, plot, project, statistics};
 use crate::{Aliases, BuiltinCatalog, Message, Text, data_connections};
+use yss_data_contract::DataValue;
+use yss_data_contract::{DecimalLiteral, InvalidDecimal};
 use yss_node_protocol::*;
 use yss_node_registry::*;
 
@@ -198,9 +200,9 @@ pub(crate) fn configuration_parameter(
         key: sid("configuration", ParameterKey::new)?,
         title_key: iid(title_key)?,
         description_key: None,
-        default_value: Some(ParameterValue {
+        default_value: Some(TypedValue {
             value_type: value_type.clone(),
-            value: Value::Object(defaults),
+            value: DataValue::Object(defaults),
         }),
         value_type,
         constraints: vec![ParameterConstraint::Required],
@@ -224,8 +226,8 @@ pub(crate) fn assembled_parameters(
 pub(crate) fn assembled_decimal(
     node_type: &str,
     value: &'static str,
-) -> Result<CanonicalDecimal, BuiltinAssemblyError> {
-    CanonicalDecimal::new(value).map_err(|source| BuiltinAssemblyError::InvalidDecimal {
+) -> Result<DecimalLiteral, BuiltinAssemblyError> {
+    DecimalLiteral::new(value).map_err(|source| BuiltinAssemblyError::InvalidDecimal {
         node_type: node_type.into(),
         source,
     })

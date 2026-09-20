@@ -25,9 +25,9 @@ pub use model::{
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::ExecutionPlanPackage;
 pub use parameter::{
-    CanonicalDecimal, CanonicalDecimalError, InvalidPlanParameterId, PlanParameterBundle,
-    PlanParameterBundleBuilder, PlanParameterBundleError, PlanParameterHandle,
-    PlanParameterPayload, PlanParameterScalar, PlanParameterSchemaId, PlanParameterValue,
+    InvalidPlanParameterId, PlanParameterBundle, PlanParameterBundleBuilder,
+    PlanParameterBundleError, PlanParameterHandle, PlanParameterPayload, PlanParameterSchemaId,
+    PlanParameterValue,
 };
 pub use result_category::{PlotDataKind, ResultCategory, StatisticalReportKind};
 pub use validation::PlanValidationError;
@@ -36,6 +36,7 @@ pub use validation::PlanValidationError;
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+    use yss_data_contract::TabularScalar;
 
     fn basis() -> PlanBasis {
         PlanBasis::new(
@@ -69,7 +70,9 @@ mod tests {
         let handle = PlanParameterHandle::from_existing("parameter".into());
         let payload = PlanParameterPayload::new(
             PlanParameterSchemaId::from_existing("schema".into()),
-            PlanParameterValue::Scalar(PlanParameterScalar::Null),
+            PlanParameterValue::Literal(std::sync::Arc::new(
+                yss_node_kernel::RuntimeValue::Scalar(TabularScalar::Null),
+            )),
         );
         builder.insert(handle.clone(), payload.clone()).unwrap();
         assert_eq!(

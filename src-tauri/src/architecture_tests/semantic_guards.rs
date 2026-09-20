@@ -135,7 +135,7 @@ pub(super) fn pure_leaf_graph_document_json_violations(
 }
 
 pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<String> {
-    const TABULAR_CONTRACT_SOURCE: &str = "src-tauri/crates/yss-tabular-contract/src/lib.rs";
+    const TABULAR_CONTRACT_SOURCE: &str = "src-tauri/crates/yss-data-contract/src/tabular.rs";
     const CONSTANT_VALUE_SOURCE: &str = "src-tauri/crates/yss-graph-document/src/constant_value.rs";
     let files = [
         TABULAR_CONTRACT_SOURCE,

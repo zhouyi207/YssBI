@@ -101,11 +101,14 @@ export function ConstantValueFields({ constant, onUpdate }: ConstantValueFieldsP
               <DetailCommitInput
                 className={detailInlineInputClass}
                 type={numeric ? "number" : "text"}
-                value={String(dataValueToRaw(constant.dataValue) ?? "")}
-                onCommit={(draft) => {
-                  const val = numeric ? Number(draft) : draft;
-                  onUpdate({ dataValue: dataValueFromRaw(val, constant.dataType) });
-                }}
+                value={
+                  numeric && "value" in constant.dataValue
+                    ? String(constant.dataValue.value)
+                    : String(dataValueToRaw(constant.dataValue) ?? "")
+                }
+                onCommit={(draft) =>
+                  onUpdate({ dataValue: dataValueFromRaw(draft, constant.dataType) })
+                }
               />
             )}
           </DetailFieldRow>

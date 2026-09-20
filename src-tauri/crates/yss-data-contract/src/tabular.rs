@@ -30,20 +30,20 @@ impl ComparisonOperation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FiniteTabularDecimal(f64);
+pub struct FiniteFloat64(f64);
 
-impl TryFrom<f64> for FiniteTabularDecimal {
+impl TryFrom<f64> for FiniteFloat64 {
     type Error = TabularContractError;
 
     fn try_from(value: f64) -> Result<Self, Self::Error> {
         value
             .is_finite()
-            .then_some(Self(value))
-            .ok_or(TabularContractError::NonFiniteDecimal)
+            .then_some(Self(if value == 0.0 { 0.0 } else { value }))
+            .ok_or(TabularContractError::NonFiniteFloat)
     }
 }
 
-impl FiniteTabularDecimal {
+impl FiniteFloat64 {
     pub fn as_f64(self) -> f64 {
         self.0
     }
@@ -55,7 +55,7 @@ pub enum TabularScalar {
     Bool(bool),
     Integer(i64),
     Unsigned(u64),
-    Decimal(FiniteTabularDecimal),
+    Float64(FiniteFloat64),
     String(Box<str>),
 }
 
@@ -63,25 +63,21 @@ impl TabularScalar {
     /// Exact comparison of primitive carriers. Missing or incompatible values have no ordering.
     pub fn compare(&self, other: &Self) -> Option<std::cmp::Ordering> {
         use TabularScalar::*;
-        fn integer_decimal(integer: i128, decimal: f64) -> std::cmp::Ordering {
-            integer.cmp(&(decimal as i128)).then_with(|| {
-                0.0_f64
-                    .partial_cmp(&decimal.fract())
-                    .expect("finite decimal")
-            })
+        fn integer_float(integer: i128, decimal: f64) -> std::cmp::Ordering {
+            integer
+                .cmp(&(decimal as i128))
+                .then_with(|| 0.0_f64.partial_cmp(&decimal.fract()).expect("finite float"))
         }
         match (self, other) {
             (Integer(a), Integer(b)) => Some(a.cmp(b)),
             (Unsigned(a), Unsigned(b)) => Some(a.cmp(b)),
             (Integer(a), Unsigned(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
             (Unsigned(a), Integer(b)) => Some(i128::from(*a).cmp(&i128::from(*b))),
-            (Integer(a), Decimal(b)) => Some(integer_decimal(i128::from(*a), b.as_f64())),
-            (Unsigned(a), Decimal(b)) => Some(integer_decimal(i128::from(*a), b.as_f64())),
-            (Decimal(a), Integer(b)) => Some(integer_decimal(i128::from(*b), a.as_f64()).reverse()),
-            (Decimal(a), Unsigned(b)) => {
-                Some(integer_decimal(i128::from(*b), a.as_f64()).reverse())
-            }
-            (Decimal(a), Decimal(b)) => a.as_f64().partial_cmp(&b.as_f64()),
+            (Integer(a), Float64(b)) => Some(integer_float(i128::from(*a), b.as_f64())),
+            (Unsigned(a), Float64(b)) => Some(integer_float(i128::from(*a), b.as_f64())),
+            (Float64(a), Integer(b)) => Some(integer_float(i128::from(*b), a.as_f64()).reverse()),
+            (Float64(a), Unsigned(b)) => Some(integer_float(i128::from(*b), a.as_f64()).reverse()),
+            (Float64(a), Float64(b)) => a.as_f64().partial_cmp(&b.as_f64()),
             (String(a), String(b)) => Some(a.cmp(b)),
             (Bool(a), Bool(b)) => Some(a.cmp(b)),
             _ => None,
@@ -113,7 +109,7 @@ impl Serialize for TabularScalar {
             Self::Bool(value) => serializer.serialize_bool(*value),
             Self::Integer(value) => serializer.serialize_i64(*value),
             Self::Unsigned(value) => serializer.serialize_u64(*value),
-            Self::Decimal(value) => serializer.serialize_f64(value.as_f64()),
+            Self::Float64(value) => serializer.serialize_f64(value.as_f64()),
             Self::String(value) => serializer.serialize_str(value),
         }
     }
@@ -172,8 +168,8 @@ impl<'de> Deserialize<'de> for TabularScalar {
             where
                 E: de::Error,
             {
-                FiniteTabularDecimal::try_from(value)
-                    .map(TabularScalar::Decimal)
+                FiniteFloat64::try_from(value)
+                    .map(TabularScalar::Float64)
                     .map_err(E::custom)
             }
 
@@ -393,8 +389,8 @@ impl<'de> Deserialize<'de> for TabularSnapshot {
 pub enum TabularContractError {
     #[error("invalid column name")]
     InvalidColumnName,
-    #[error("non-finite decimal")]
-    NonFiniteDecimal,
+    #[error("non-finite float")]
+    NonFiniteFloat,
     #[error("duplicate column name")]
     DuplicateColumnName { column: TabularColumnName },
     #[error("unequal column lengths")]

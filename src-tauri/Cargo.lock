@@ -9240,12 +9240,15 @@ dependencies = [
  "yss-canonical-hash",
  "yss-chart-document",
  "yss-data-contract",
+ "yss-database-arrow",
  "yss-database-contract",
+ "yss-database-engine",
+ "yss-database-io",
  "yss-database-runtime",
  "yss-database-schema",
- "yss-database-engine",
- "yss-dataset-profile",
+ "yss-database-source",
  "yss-database-store",
+ "yss-dataset-profile",
  "yss-display-naming",
  "yss-filesystem",
  "yss-function-editor-projection",
@@ -9285,10 +9288,6 @@ dependencies = [
  "yss-resource-naming",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-database-source",
- "yss-database-arrow",
- "yss-tabular-contract",
- "yss-database-io",
 ]
 
 [[package]]
@@ -9400,6 +9399,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "yss-database-arrow"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "arrow-schema",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-database-contract",
+ "yss-database-schema",
+]
+
+[[package]]
 name = "yss-database-contract"
 version = "0.1.0"
 dependencies = [
@@ -9407,36 +9421,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "thiserror 2.0.20",
-]
-
-[[package]]
-name = "yss-database-runtime"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "serde_json",
- "thiserror 2.0.20",
- "uuid",
- "yss-data-contract",
- "yss-database-contract",
- "yss-database-schema",
- "yss-database-engine",
- "yss-dataset-profile",
- "yss-database-store",
- "yss-relational-contract",
- "yss-database-arrow",
- "yss-tabular-contract",
- "yss-database-io",
-]
-
-[[package]]
-name = "yss-database-schema"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.20",
- "yss-data-contract",
- "yss-database-contract",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9450,19 +9434,65 @@ dependencies = [
  "tokio",
  "url",
  "yss-data-contract",
+ "yss-database-arrow",
  "yss-database-contract",
+ "yss-database-io",
  "yss-dataset-profile",
  "yss-relational-contract",
- "yss-database-arrow",
- "yss-tabular-contract",
- "yss-database-io",
 ]
 
 [[package]]
-name = "yss-dataset-profile"
+name = "yss-database-io"
 version = "0.1.0"
 dependencies = [
- "serde",
+ "arrow",
+ "calamine",
+ "parquet",
+ "serde_json",
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-database-arrow",
+]
+
+[[package]]
+name = "yss-database-runtime"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "serde_json",
+ "thiserror 2.0.20",
+ "uuid",
+ "yss-data-contract",
+ "yss-database-arrow",
+ "yss-database-contract",
+ "yss-database-engine",
+ "yss-database-io",
+ "yss-database-schema",
+ "yss-database-store",
+ "yss-dataset-profile",
+ "yss-relational-contract",
+]
+
+[[package]]
+name = "yss-database-schema"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "yss-data-contract",
+ "yss-database-contract",
+]
+
+[[package]]
+name = "yss-database-source"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "futures-util",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "yss-database-contract",
+ "yss-relational-contract",
 ]
 
 [[package]]
@@ -9475,14 +9505,21 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "uuid",
+ "yss-data-contract",
+ "yss-database-arrow",
  "yss-database-contract",
  "yss-database-engine",
+ "yss-database-io",
  "yss-dataset-profile",
  "yss-project-layout",
  "yss-relational-contract",
- "yss-database-arrow",
- "yss-tabular-contract",
- "yss-database-io",
+]
+
+[[package]]
+name = "yss-dataset-profile"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -9533,7 +9570,6 @@ dependencies = [
  "yss-node-catalog",
  "yss-node-protocol",
  "yss-node-registry",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9568,7 +9604,6 @@ dependencies = [
  "yss-node-protocol",
  "yss-project-layout",
  "yss-resource-naming",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9604,6 +9639,7 @@ dependencies = [
 name = "yss-graph-execution"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
@@ -9623,7 +9659,6 @@ dependencies = [
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -9810,6 +9845,7 @@ name = "yss-node-catalog"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "yss-data-contract",
  "yss-node-protocol",
  "yss-node-registry",
  "yss-sci-contract",
@@ -9819,14 +9855,15 @@ dependencies = [
 name = "yss-node-kernel"
 version = "0.1.0"
 dependencies = [
+ "arrow-array",
+ "arrow-schema",
  "thiserror 2.0.20",
  "yss-canonical-hash",
  "yss-data-contract",
+ "yss-database-arrow",
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-database-arrow",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -10022,7 +10059,6 @@ dependencies = [
  "thiserror 2.0.20",
  "yss-data-contract",
  "yss-database-contract",
- "yss-tabular-contract",
 ]
 
 [[package]]
@@ -10086,57 +10122,6 @@ dependencies = [
  "thiserror 2.0.20",
  "yss-sci",
  "yss-sci-contract",
-]
-
-[[package]]
-name = "yss-database-source"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "futures-util",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "yss-database-contract",
- "yss-relational-contract",
-]
-
-[[package]]
-name = "yss-database-arrow"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "arrow-schema",
- "chrono",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "yss-data-contract",
- "yss-database-contract",
- "yss-database-schema",
- "yss-tabular-contract",
-]
-
-[[package]]
-name = "yss-tabular-contract"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "yss-database-io"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "calamine",
- "parquet",
- "serde_json",
- "thiserror 2.0.20",
- "yss-database-arrow",
- "yss-tabular-contract",
 ]
 
 [[package]]

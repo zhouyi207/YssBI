@@ -470,7 +470,7 @@ mod tests {
             RuntimeDatabaseMutationOperation::EditCell {
                 row: 0,
                 column: "value".into(),
-                value: yss_tabular_contract::TabularScalar::Null,
+                value: yss_data_contract::TabularScalar::Null,
                 row_id: None,
             },
             yss_project_identity::OperationId::new(),
@@ -520,7 +520,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             relation.page(0, 1, &control).unwrap().data.columns()[0].values(),
-            &[yss_tabular_contract::TabularScalar::Null]
+            &[yss_data_contract::TabularScalar::Null]
         );
     }
 

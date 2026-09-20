@@ -4,9 +4,9 @@
 //! contracts, and transport adapters. Physical adapters map their exact storage schemas into
 //! this semantic vocabulary; these facts are never used to reconstruct storage types.
 
+use yss_data_contract::TabularColumnName;
 use yss_data_contract::{ColumnSemantic, ValueType};
 use yss_database_contract::DatabaseId;
-use yss_tabular_contract::TabularColumnName;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct DatabaseRuntimeRevision(u64);

@@ -111,7 +111,8 @@ impl Project {
             .unwrap()
     }
     fn native(&self, id: &str, columns: &[&str], offset: usize, limit: usize) -> Native {
-        let store = yss_database_store::DatasetStore::open(self.metadata.parent().unwrap()).unwrap();
+        let store =
+            yss_database_store::DatasetStore::open(self.metadata.parent().unwrap()).unwrap();
         let decl = self.state.get_data().unwrap().databases[id].clone();
         let instance = yss_database_runtime::bind_dataset_instance(&decl, &store);
         let control = yss_relational_contract::RelationControl {
