@@ -3,7 +3,6 @@ import { portAddressKey } from "@/shared/types/domain/editorProjectionParser";
 import { isResultPlotKind } from "./result";
 import type {
   GraphOutputRefDto,
-  ResultDataSeriesMetadata,
   ResultMetadata,
   ResultDescriptor,
   ResultPage,
@@ -36,16 +35,7 @@ const REPORT_KINDS = new Set([
   "vecSummary",
   "vecRankSummary",
 ]);
-const VALUE_KINDS = new Set(["scalar", "sequence", "dataSeries"]);
-const ELEMENT_TYPES = new Set([
-  "int64",
-  "float64",
-  "string",
-  "boolean",
-  "date",
-  "datetime",
-  "categorical",
-]);
+const VALUE_KINDS = new Set(["scalar", "sequence"]);
 
 function fail(contract: string): never {
   throw new Error(`Invalid ${contract}`);
@@ -207,18 +197,7 @@ function parseMetadata(value: unknown): ResultMetadata | null {
       }),
     };
   }
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["elementType", "length", "nullCount", "name", "format"]) ||
-    typeof value.elementType !== "string" ||
-    !ELEMENT_TYPES.has(value.elementType) ||
-    !isNonNegativeInteger(value.length) ||
-    !isNonNegativeInteger(value.nullCount) ||
-    !(value.name === null || typeof value.name === "string") ||
-    !(value.format === null || typeof value.format === "string")
-  )
-    return fail("result metadata");
-  return value as unknown as ResultDataSeriesMetadata;
+  return fail("result metadata");
 }
 
 function parseValueKind(value: unknown): ResultValueKind {
@@ -268,7 +247,7 @@ export function parseResultLease(value: unknown): ResultLease {
 export function parseResultValue(value: unknown): ResultValue {
   if (!isRecord(value) || !hasExactKeys(value, ["kind", "value"])) return fail("result value");
   if (value.kind === "value") return { kind: "value", value: value.value };
-  if ((value.kind === "sequence" || value.kind === "dataSeries") && Array.isArray(value.value)) {
+  if (value.kind === "sequence" && Array.isArray(value.value)) {
     return { kind: value.kind, value: value.value };
   }
   return fail("result value kind");
@@ -316,9 +295,9 @@ export function parseResultPage(value: unknown): ResultPage {
     return fail("result page bounds");
   const metadata = parseMetadata(value.metadata);
   if (
-    metadata &&
-    "columns" in metadata &&
-    value.values.some((row) => !Array.isArray(row) || row.length !== metadata.columns.length)
+    value.valueKind === "sequence" &&
+    (!metadata ||
+      value.values.some((row) => !Array.isArray(row) || row.length !== metadata.columns.length))
   )
     return fail("result table row");
   return {

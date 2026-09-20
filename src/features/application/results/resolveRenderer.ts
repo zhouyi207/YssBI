@@ -6,8 +6,6 @@ export function resolveResultRenderer(descriptor: ResultDescriptor): ResultRende
   switch (descriptor.valueKind) {
     case "sequence":
       return "sequence";
-    case "dataSeries":
-      return "dataseries";
     case "scalar":
       return "scalar";
   }

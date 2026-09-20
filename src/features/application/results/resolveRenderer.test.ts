@@ -26,7 +26,6 @@ function descriptor(valueKind: ResultDescriptor["valueKind"]): ResultDescriptor 
 describe("resolveResultRenderer", () => {
   it("selects renderers from result value kind", () => {
     expect(resolveResultRenderer(descriptor("sequence"))).toBe("sequence");
-    expect(resolveResultRenderer(descriptor("dataSeries"))).toBe("dataseries");
     expect(resolveResultRenderer(descriptor("scalar"))).toBe("scalar");
   });
 

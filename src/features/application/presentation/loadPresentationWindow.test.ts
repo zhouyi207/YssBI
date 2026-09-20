@@ -89,7 +89,7 @@ describe("loadPresentationWindow", () => {
   it("leaves inspector payload loading to its mounted renderer", async () => {
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(
       descriptor("22", {
-        valueKind: "dataSeries",
+        valueKind: "sequence",
         totalCount: 2,
       }),
     );
@@ -101,9 +101,9 @@ describe("loadPresentationWindow", () => {
       totalCount: 2,
       hasMore: false,
       nextOffset: null,
-      valueKind: "dataSeries",
-      metadata: null,
-      values: [1, 2],
+      valueKind: "sequence",
+      metadata: { columns: [{ name: "value", type: "Numeric" }] },
+      values: [[1], [2]],
     });
 
     await expect(loadPresentationWindow(resultReferenceFixture("22"))).resolves.toMatchObject({

@@ -99,29 +99,13 @@ export interface ResultProvenance {
   createdAtMs: string;
 }
 
-export type ResultValueKind = "scalar" | "sequence" | "dataSeries";
-export type DataSeriesElementType =
-  | "int64"
-  | "float64"
-  | "string"
-  | "boolean"
-  | "date"
-  | "datetime"
-  | "categorical";
-
-export interface ResultDataSeriesMetadata {
-  elementType: DataSeriesElementType;
-  length: number;
-  nullCount: number;
-  name: string | null;
-  format: string | null;
-}
+export type ResultValueKind = "scalar" | "sequence";
 
 export interface ResultTableMetadata {
   columns: { name: string; type: string }[];
 }
 
-export type ResultMetadata = ResultDataSeriesMetadata | ResultTableMetadata;
+export type ResultMetadata = ResultTableMetadata;
 
 export interface ResultDescriptor extends ResultReference {
   provenance: ResultProvenance;
@@ -134,8 +118,7 @@ export interface ResultDescriptor extends ResultReference {
 
 export type ResultValue =
   | { kind: "value"; value: unknown }
-  | { kind: "sequence"; value: unknown[] }
-  | { kind: "dataSeries"; value: unknown[] };
+  | { kind: "sequence"; value: unknown[] };
 
 export interface ResultPage {
   resultId: ResultId;

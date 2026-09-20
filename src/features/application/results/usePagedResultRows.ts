@@ -43,7 +43,8 @@ export interface PagedResultRowsState {
 
 function rowsFromPage(page: DeepReadonly<ResultPage> | null): readonly (readonly unknown[])[] {
   if (!page || page.valueKind !== "sequence") return EMPTY_ROWS;
-  return page.values.map((value) => (Array.isArray(value) ? value : [value]));
+  // The IPC parser verifies table rows against the Rust-owned column schema.
+  return page.values as readonly (readonly unknown[])[];
 }
 
 export function usePagedResultRows(
@@ -125,7 +126,7 @@ export function usePagedResultRows(
   );
 
   useEffect(() => {
-    if (reference === null || totalCount === 0) {
+    if (reference === null) {
       setLoading(false);
       return;
     }

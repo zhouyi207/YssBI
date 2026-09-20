@@ -3,7 +3,7 @@ import { resultSessionFixture } from "@/tests/helpers/resultFixture";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { DataSeriesResultView } from "./ResultRenderers";
+import { SequenceResultView } from "./ResultRenderers";
 import type { ResultDescriptor } from "../../types";
 
 const paging = vi.hoisted(() => ({
@@ -14,7 +14,10 @@ const paging = vi.hoisted(() => ({
   hasMore: true,
   pageSize: 200,
   loading: false,
-  values: [1, 2],
+  values: [[1], [2]],
+  rows: [[1], [2]],
+  columns: [{ name: "value", type: "Numeric" }],
+  offset: 0,
   error: null,
   goToPreviousPage: vi.fn(),
   goToNextPage: vi.fn(),
@@ -30,7 +33,7 @@ it("makes later DataSeries pages accessible through the existing paging actions"
     resultId: "1",
     title: "Series",
     presentation: { kind: "inspector" },
-    valueKind: "dataSeries",
+    valueKind: "sequence",
     metadata: null,
     totalCount: 401,
     executionSessionId: resultSessionFixture,
@@ -45,7 +48,7 @@ it("makes later DataSeries pages accessible through the existing paging actions"
   const host = document.createElement("div");
   const root = createRoot(host);
   try {
-    act(() => root.render(<DataSeriesResultView payload={payload} />));
+    act(() => root.render(<SequenceResultView payload={payload} />));
     expect(host.textContent).toContain("1–200 of 401");
     const next = [...host.querySelectorAll("button")].find(
       (button) => button.textContent === "Next",

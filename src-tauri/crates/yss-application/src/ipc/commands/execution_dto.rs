@@ -1,4 +1,6 @@
-use crate::graph::results::{ResultPageKind, ResultPageProjection, runtime_value_to_json};
+use crate::graph::results::{
+    ResultPageKind, ResultPageProjection, ResultStructure, runtime_value_to_json,
+};
 use crate::graph::run::RunDemand;
 use crate::ipc::channel::execution::{RunEventDtoError, output_dto};
 use serde::Serialize;
@@ -9,7 +11,6 @@ use yss_ipc_contract::execution::{
     ExecutionDemandDto, GraphOutputRefDto, MAX_SAFE_PREVIEW_GENERATION,
 };
 use yss_ipc_contract::graph::PortAddressDto;
-use yss_node_kernel::RuntimeValue;
 
 fn plan_output_ref(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
     let port: yss_graph_document::PortAddress = value.port.try_into().map_err(|_| ())?;
@@ -102,6 +103,15 @@ pub enum ResultValueKindDto {
     Sequence,
 }
 
+impl From<ResultPageKind> for ResultValueKindDto {
+    fn from(kind: ResultPageKind) -> Self {
+        match kind {
+            ResultPageKind::Scalar => Self::Scalar,
+            ResultPageKind::Sequence => Self::Sequence,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultDescriptorDto {
@@ -110,7 +120,7 @@ pub struct ResultDescriptorDto {
     provenance: ResultProvenanceDto,
     presentation: ResultPresentationDto,
     value_kind: ResultValueKindDto,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<ResultTableMetadataDto>,
     total_count: Option<usize>,
     title: Box<str>,
 }
@@ -120,14 +130,7 @@ impl ResultDescriptorDto {
         result_id: ResultId,
         result: &StoredResultSnapshot,
     ) -> Result<Self, RunEventDtoError> {
-        let stored = result.value().value().unannotated();
-        let (value_kind, total_count) = match stored {
-            RuntimeValue::List(values) => (ResultValueKindDto::Sequence, Some(values.len())),
-            RuntimeValue::Relation(_) | RuntimeValue::Series(_) => {
-                (ResultValueKindDto::Sequence, None)
-            }
-            _ => (ResultValueKindDto::Scalar, Some(1)),
-        };
+        let structure = ResultStructure::project(result.value());
         let output = result.output();
         let provenance = result.provenance();
         let execution_session_id = provenance
@@ -153,9 +156,9 @@ impl ResultDescriptorDto {
             result_id: result_id.get().to_string(),
             provenance,
             presentation: result_presentation(result.value().category()),
-            value_kind,
-            metadata: None,
-            total_count,
+            value_kind: structure.kind.into(),
+            metadata: structure.columns.map(ResultTableMetadataDto::from),
+            total_count: structure.total_count,
             title: "Result".into(),
         })
     }
@@ -263,6 +266,21 @@ struct ResultColumnDto {
     data_type: Box<str>,
 }
 
+impl From<Box<[yss_relational_contract::RelationColumn]>> for ResultTableMetadataDto {
+    fn from(columns: Box<[yss_relational_contract::RelationColumn]>) -> Self {
+        Self {
+            columns: columns
+                .into_vec()
+                .into_iter()
+                .map(|column| ResultColumnDto {
+                    name: column.name,
+                    data_type: column.data_type,
+                })
+                .collect(),
+        }
+    }
+}
+
 impl ResultPageDto {
     pub(crate) fn from_application(
         result_id: ResultId,
@@ -279,17 +297,8 @@ impl ResultPageDto {
             .offset
             .checked_add(actual_count)
             .ok_or(RunEventDtoError::InvalidOutput)?;
-        let metadata = (!page.columns.is_empty()).then(|| ResultTableMetadataDto {
-            columns: page
-                .columns
-                .into_vec()
-                .into_iter()
-                .map(|column| ResultColumnDto {
-                    name: column.name,
-                    data_type: column.data_type,
-                })
-                .collect(),
-        });
+        let metadata = (page.kind == ResultPageKind::Sequence)
+            .then(|| ResultTableMetadataDto::from(page.columns));
         Ok(Self {
             result_id: result_id.get().to_string(),
             offset: page.offset,
@@ -298,10 +307,7 @@ impl ResultPageDto {
             total_count: page.total_count,
             has_more: page.has_more,
             next_offset: page.has_more.then_some(next),
-            value_kind: match page.kind {
-                ResultPageKind::Scalar => ResultValueKindDto::Scalar,
-                ResultPageKind::Sequence => ResultValueKindDto::Sequence,
-            },
+            value_kind: page.kind.into(),
             metadata,
             values,
         })
@@ -312,6 +318,7 @@ impl ResultPageDto {
 mod tests {
     use super::*;
     use yss_data_contract::TabularScalar;
+    use yss_node_kernel::RuntimeValue;
 
     #[test]
     fn relation_page_wire_keeps_unknown_count_and_exact_wide_integer_text() {
@@ -355,5 +362,148 @@ mod tests {
             runtime_value_to_json(&annotated).unwrap(),
             serde_json::json!(["001", null])
         );
+    }
+    #[test]
+    fn materialized_node_results_publish_matching_descriptor_and_table_pages() {
+        use crate::session::{ApplicationSessionEpoch, ApplicationSessionSlot, ApplicationState};
+        use std::collections::BTreeMap;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        use yss_graph_document::{
+            DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues,
+        };
+        use yss_graph_execution::plan::{
+            PlanBasis, PlanExecutionDemand, PlanProjectSessionId, PlanRegistryFingerprint,
+        };
+        use yss_graph_execution::resource_preparation::RunResourceBindings;
+        use yss_graph_execution::result::ResultReference;
+        use yss_graph_execution::state::RunExecutionControl;
+        use yss_graph_resource_contract::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
+        let app = ApplicationState::new(Arc::new(ApplicationSessionSlot::new(
+            crate::session::NodeComponents::builtins().unwrap(),
+        )));
+        app.install_candidate(
+            crate::session::build_current_project_candidate(
+                ApplicationSessionEpoch::INITIAL,
+                Arc::new(yss_project::ProjectState::new()),
+                [],
+                &crate::session::NodeComponents::builtins().unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let captured = app.capture_session().unwrap();
+        let runtime = captured.execution();
+        let session =
+            PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into());
+        let graph = GraphResourcePath::new("events/materialized.yssbi-event").unwrap();
+        let mut document = GraphDocument::default();
+        for (kind, config) in [
+            (
+                "yssbi.dataframe.series.int_range",
+                serde_json::json!({"start": 1, "end": 4, "step": 1}),
+            ),
+            (
+                "yssbi.dataframe.series.int_range",
+                serde_json::json!({"start": 1, "end": 1, "step": 1}),
+            ),
+            (
+                "yssbi.distribution.normal.sample",
+                serde_json::json!({"mean":"0", "standard_deviation":"1", "sample_count":3}),
+            ),
+        ] {
+            let id = NodeId::new();
+            document.nodes.insert(
+                id,
+                DocumentNode {
+                    id,
+                    node_type: kind.parse().unwrap(),
+                    position: NodePosition { x: 0., y: 0. },
+                    parameters: ParameterValues::from([("configuration".parse().unwrap(), config)]),
+                    user_label: None,
+                },
+            );
+        }
+        let catalog = ResourceCatalogSnapshot::new(
+            BTreeMap::new(),
+            BTreeMap::new(),
+            ResourceCatalogFingerprint::from_bytes([0; 32]),
+        );
+        let analysis = captured.graph().resolve_graph_document(
+            &graph,
+            &document,
+            &yss_graph_analysis_contract::GraphAnalysisBasis {
+                registry_fingerprint: yss_node_registry::RegistryFingerprint::from_bytes(
+                    captured.graph().registry_fingerprint(),
+                ),
+                kernel_fingerprint: runtime.kernels().fingerprint().as_bytes(),
+                resource_versions: BTreeMap::new(),
+                resource_observations: BTreeMap::new(),
+            },
+            &catalog,
+            &[],
+            "en-US",
+        );
+        let package = runtime
+            .prepare_graph_package(
+                &graph,
+                &analysis,
+                PlanBasis::new(
+                    session.clone(),
+                    PlanRegistryFingerprint::from_bytes([0; 32]),
+                    runtime.kernels().fingerprint(),
+                    BTreeMap::new(),
+                    BTreeMap::new(),
+                ),
+            )
+            .unwrap();
+        let plan = runtime
+            .prepare_package(package, runtime.generation())
+            .unwrap();
+        let execution = runtime
+            .execute_prepared_handoff(
+                &plan,
+                RunResourceBindings::new(session, [], []),
+                captured.resource_provider_factory(),
+                &RunExecutionControl::with_cancellation(
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                    Instant::now() + Duration::from_secs(10),
+                ),
+                &PlanExecutionDemand::Default,
+                None,
+                |_| {},
+            )
+            .unwrap();
+        assert!(runtime.publish_committed_results(execution.handoff()));
+        assert_eq!(execution.handoff().results().len(), 3);
+        for ready in execution.handoff().results() {
+            let id = ready.result_id();
+            let snapshot = runtime.query_result(id).unwrap();
+            assert!(snapshot.value().output_contract().is_some());
+            let descriptor =
+                serde_json::to_value(ResultDescriptorDto::from_execution(id, &snapshot).unwrap())
+                    .unwrap();
+            assert_eq!(descriptor["valueKind"], "sequence");
+            assert_eq!(descriptor["metadata"]["columns"][0]["type"], "Numeric");
+            let reference = ResultReference {
+                execution_session_id: captured.execution_session_id(),
+                result_id: id,
+            };
+            for offset in [0, 1, 2, 9] {
+                let page = app
+                    .query_result_page(reference, offset, 1)
+                    .unwrap()
+                    .unwrap();
+                let page = serde_json::to_value(ResultPageDto::from_application(id, page).unwrap())
+                    .unwrap();
+                assert_eq!(descriptor["metadata"], page["metadata"]);
+                assert_eq!(descriptor["valueKind"], page["valueKind"]);
+                assert_eq!(descriptor["totalCount"], page["totalCount"]);
+                for row in page["values"].as_array().unwrap() {
+                    assert_eq!(row.as_array().unwrap().len(), 1);
+                    assert!(row[0].is_number());
+                }
+            }
+        }
     }
 }

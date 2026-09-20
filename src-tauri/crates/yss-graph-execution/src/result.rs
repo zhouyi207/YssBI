@@ -100,6 +100,7 @@ pub enum ResultRetentionError {
 pub struct StoredResult {
     value: RuntimeValue,
     category: ResultCategory,
+    contract: Option<Arc<crate::plan::PlanOutputContract>>,
 }
 
 impl StoredResult {
@@ -107,6 +108,7 @@ impl StoredResult {
         Self {
             value,
             category: ResultCategory::Value,
+            contract: None,
         }
     }
 
@@ -117,6 +119,16 @@ impl StoredResult {
 
     pub fn value(&self) -> &RuntimeValue {
         &self.value
+    }
+
+    pub fn with_output_contract(mut self, contract: crate::plan::PlanOutputContract) -> Self {
+        self.category = contract.category;
+        self.contract = Some(Arc::new(contract));
+        self
+    }
+
+    pub fn output_contract(&self) -> Option<&crate::plan::PlanOutputContract> {
+        self.contract.as_deref()
     }
 
     pub const fn category(&self) -> ResultCategory {

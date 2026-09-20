@@ -326,7 +326,7 @@ impl PreparedPlanExecutor for NeutralPlanExecutor {
                     return Err(OperationExecutionError::Failed);
                 }
                 results.push(SchedulerResult {
-                    value: StoredResult::new(value),
+                    value: StoredResult::new(value).with_output_contract(output.contract().clone()),
                     category: output.contract().category,
                     output: output.output().clone(),
                 });

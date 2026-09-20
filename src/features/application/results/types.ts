@@ -9,7 +9,7 @@ export type {
   ResultValue,
 } from "@/shared/types/domain/result";
 
-export type ResultRendererKind = "sequence" | "dataseries" | "scalar" | "json" | "plot" | "info";
+export type ResultRendererKind = "sequence" | "scalar" | "json" | "plot" | "info";
 
 export interface ResultPageState {
   offset: number;

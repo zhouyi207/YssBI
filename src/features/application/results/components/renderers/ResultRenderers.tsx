@@ -44,39 +44,6 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
   );
 }
 
-export function DataSeriesResultView({ payload }: { payload: ResultDescriptor }) {
-  const totalCount =
-    payload.totalCount ??
-    (payload.metadata && "length" in payload.metadata ? payload.metadata.length : null);
-  const paging = usePagedResultRows(payload, totalCount);
-  return (
-    <ResultViewShell
-      title={payload.title}
-      toolbar={
-        <ResultPageToolbar
-          pageIndex={paging.pageIndex}
-          totalPages={paging.totalPages}
-          totalCount={paging.totalCount}
-          actualCount={paging.actualCount}
-          hasMore={paging.hasMore}
-          pageSize={paging.pageSize}
-          loading={paging.loading}
-          onPrevious={paging.goToPreviousPage}
-          onNext={paging.goToNextPage}
-        />
-      }
-    >
-      {paging.error ? (
-        <ResultReadError error={paging.error} />
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <JsonTreeView value={paging.values} />
-        </ScrollArea>
-      )}
-    </ResultViewShell>
-  );
-}
-
 export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
   const { value, loading, error } = useResultValue(payload);
   return (

@@ -58,9 +58,9 @@ function page(resultId: string, offset: number, value: number): ResultPage {
     totalCount: 3,
     hasMore: offset < 2,
     nextOffset: offset < 2 ? offset + 2 : null,
-    valueKind: "dataSeries",
-    metadata: null,
-    values: [value],
+    valueKind: "sequence",
+    metadata: { columns: [{ name: "value", type: "Numeric" }] },
+    values: [[value]],
   };
 }
 
@@ -306,7 +306,7 @@ describe("ResultQueryCoordinator", () => {
     await expect(second).resolves.toEqual({ status: "stale" });
     await expect(independent).resolves.toEqual({ status: "published" });
     await expect(first).resolves.toEqual({ status: "stale" });
-    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual([3]);
+    expect(fixture.publication.pages.map((value) => value.values[0])).toEqual([[3]]);
   });
 
   it("publishes every typed query through the matching publication and safely maps failures", async () => {

@@ -46,6 +46,7 @@ const DEFAULT_COLUMN_DEF: ColDef<GridRow> = {
 function dtypeToKind(dtype?: string): ColumnDataKind {
   const normalized = (dtype ?? "").toLowerCase();
   if (
+    normalized === "numeric" ||
     normalized.includes("int") ||
     normalized.includes("float") ||
     normalized.includes("double") ||

@@ -54,10 +54,6 @@ describe("result DTO parsers", () => {
       kind: "sequence",
       value: [1, 2],
     });
-    expect(parseResultValue({ kind: "dataSeries", value: [1, null] })).toEqual({
-      kind: "dataSeries",
-      value: [1, null],
-    });
 
     const page = {
       resultId: "17",
@@ -67,15 +63,9 @@ describe("result DTO parsers", () => {
       totalCount: 3,
       hasMore: true,
       nextOffset: 2,
-      valueKind: "dataSeries" as const,
-      metadata: {
-        elementType: "float64" as const,
-        length: 3,
-        nullCount: 1,
-        name: "x",
-        format: null,
-      },
-      values: [1, null],
+      valueKind: "sequence" as const,
+      metadata: { columns: [{ name: "x", type: "Numeric" }] },
+      values: [[1], [null]],
     };
     expect(parseResultPage(page)).toEqual(page);
 

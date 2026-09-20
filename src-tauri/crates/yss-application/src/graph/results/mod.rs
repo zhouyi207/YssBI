@@ -15,6 +15,8 @@ use yss_relational_contract::{RelationColumn, RelationControl, RelationError};
 
 pub mod report;
 mod retention;
+mod structure;
+pub(crate) use structure::ResultStructure;
 
 pub struct ResultPinQuery {
     graph_path: GraphResourcePath,
@@ -253,6 +255,8 @@ fn project_result_page(
     if limit == 0 || limit > MAX_RESULT_PAGE_ROWS || offset.checked_add(limit).is_none() {
         return Err(ResultQueryApplicationError::InvalidPageRequest);
     }
+    control.check()?;
+    let structure = ResultStructure::project(result);
     let result = result.value().unannotated();
     let relation = match result {
         RuntimeValue::Relation(relation) => Some(relation.clone()),
@@ -267,6 +271,12 @@ fn project_result_page(
                 error => ResultQueryApplicationError::Relation(error),
             })?;
         if page.row_count > limit
+            || structure.columns.as_ref().is_some_and(|columns| {
+                columns.len() != page.columns.len()
+                    || columns.iter().zip(&page.columns).any(|(expected, actual)| {
+                        expected.name != actual.name || expected.data_type != actual.data_type
+                    })
+            })
             || (page.has_more && page.row_count == 0)
             || page.columns.len() != page.data.columns().len()
             || page
@@ -304,10 +314,9 @@ fn project_result_page(
             values,
         }
     } else {
-        let (count, kind) = match result {
-            RuntimeValue::List(values) => (values.len(), ResultPageKind::Sequence),
-            _ => (1, ResultPageKind::Scalar),
-        };
+        let count = structure
+            .total_count
+            .ok_or(ResultQueryApplicationError::InvalidPageRequest)?;
         let mut budget = MAX_RESULT_PAGE_BYTES;
         match result {
             RuntimeValue::List(values) => {
@@ -319,7 +328,12 @@ fn project_result_page(
             _ => {}
         }
         let values: Box<[_]> = match result {
-            RuntimeValue::List(values) => values.iter().skip(offset).take(limit).cloned().collect(),
+            RuntimeValue::List(values) => values
+                .iter()
+                .skip(offset)
+                .take(limit)
+                .map(|value| RuntimeValue::List(Arc::from([value.clone()])))
+                .collect(),
             value if offset == 0 => Box::new([value.clone()]),
             _ => Box::new([]),
         };
@@ -328,8 +342,8 @@ fn project_result_page(
             requested_limit: limit,
             total_count: Some(count),
             has_more: offset.saturating_add(values.len()) < count,
-            kind,
-            columns: Box::new([]),
+            kind: structure.kind,
+            columns: structure.columns.unwrap_or_default(),
             values,
         }
     };
@@ -349,6 +363,7 @@ fn project_result_page(
     for value in &page.values {
         charge_value(value, &mut remaining, 0)?;
     }
+    control.check()?;
     Ok(page)
 }
 
@@ -456,9 +471,113 @@ mod tests {
         assert_eq!(page.total_count, Some(2));
         assert_eq!(
             page.values.as_ref(),
-            &[RuntimeValue::Scalar(TabularScalar::Null)]
+            &[RuntimeValue::List(Arc::from([RuntimeValue::Scalar(
+                TabularScalar::Null
+            )]))]
         );
+        assert_eq!(page.columns.len(), 1);
+        assert_eq!(page.columns[0].data_type.as_ref(), "Identifier");
         assert!(!page.has_more);
+
+        use yss_data_contract::ValueType;
+        use yss_graph_execution::plan::{PlanOutputContract, PlanSourceIdentity, ResultCategory};
+        let contract = PlanOutputContract {
+            data_type: ValueType::DataSeries(Box::new(ValueType::number())),
+            schema: None,
+            category: ResultCategory::Value,
+            source: PlanSourceIdentity::new(PlanGraphId::from_existing("test".into()), None, None),
+        };
+        for values in [vec![], vec![RuntimeValue::Scalar(TabularScalar::Null); 3]] {
+            let count = values.len();
+            let stored = StoredResult::new(RuntimeValue::List(values.into()))
+                .with_output_contract(contract.clone());
+            let descriptor = ResultStructure::project(&stored);
+            for offset in [0, 1, 9] {
+                let page = project_result_page(&stored, offset, 1, &control).unwrap();
+                assert_eq!(page.columns[0].data_type.as_ref(), "Numeric");
+                assert_eq!(
+                    page.columns[0].name,
+                    descriptor.columns.as_ref().unwrap()[0].name
+                );
+                assert_eq!(page.total_count, Some(count));
+                assert_eq!(page.offset, offset.min(count));
+                assert!(
+                    page.values
+                        .iter()
+                        .all(|row| matches!(row, RuntimeValue::List(v) if v.len() == 1))
+                );
+            }
+        }
+        // A nested list is one structured cell, never mistaken for a multi-column row.
+        let nested =
+            RuntimeValue::List(Arc::from([RuntimeValue::Scalar(TabularScalar::Integer(7))]));
+        let stored = StoredResult::new(RuntimeValue::List(Arc::from([nested.clone()])));
+        let page = project_result_page(&stored, 0, 1, &control).unwrap();
+        assert_eq!(
+            runtime_value_to_json(&page.values[0]).unwrap(),
+            serde_json::json!([[7]])
+        );
+        assert_eq!(page.columns[0].data_type.as_ref(), "Any");
+        let scalar = StoredResult::new(RuntimeValue::Scalar(TabularScalar::Integer(7)));
+        let page = project_result_page(&scalar, 0, 1, &control).unwrap();
+        assert_eq!(page.kind, ResultStructure::project(&scalar).kind);
+        assert!(page.columns.is_empty());
+        assert_eq!(
+            runtime_value_to_json(&page.values[0]).unwrap(),
+            serde_json::json!(7)
+        );
+    }
+
+    #[test]
+    fn relation_and_series_pages_share_descriptor_column_names_and_types() {
+        use arrow::{
+            array::{ArrayRef, Date32Array, StringArray, UInt64Array},
+            datatypes::{DataType, Field, Schema},
+            record_batch::RecordBatch,
+        };
+        use yss_relational_contract::RelationFactory;
+        let control = RelationControl {
+            cancellation: Arc::new(AtomicBool::new(false)),
+            deadline: Instant::now() + Duration::from_secs(10),
+            max_input_bytes: 1024 * 1024,
+        };
+        let factory = yss_database_runtime::dataset_query_engine().unwrap();
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("label", DataType::Utf8, false),
+                Field::new("date", DataType::Date32, false),
+                Field::new("id", DataType::UInt64, false),
+            ])),
+            vec![
+                Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef,
+                Arc::new(Date32Array::from(vec![0, 1])),
+                Arc::new(UInt64Array::from(vec![u64::MAX, 1])),
+            ],
+        )
+        .unwrap();
+        let relation = factory.materialize(batch, &control).unwrap();
+        for value in [
+            RuntimeValue::Relation(relation.clone()),
+            RuntimeValue::Series(relation.select_series("label").unwrap()),
+        ] {
+            let result = StoredResult::new(value);
+            let descriptor = ResultStructure::project(&result);
+            let columns = descriptor.columns.unwrap();
+            assert_eq!(columns[0].data_type.as_ref(), "String");
+            for offset in [0, 1, 2] {
+                let page = project_result_page(&result, offset, 1, &control).unwrap();
+                assert_eq!(page.columns.len(), columns.len());
+                for (expected, actual) in columns.iter().zip(&page.columns) {
+                    assert_eq!(expected.name, actual.name);
+                    assert_eq!(expected.data_type, actual.data_type);
+                }
+                if offset == 0 && columns.len() == 3 {
+                    let row = runtime_value_to_json(&page.values[0]).unwrap();
+                    assert_eq!(row[0], "a");
+                    assert_eq!(row[2], u64::MAX.to_string());
+                }
+            }
+        }
     }
 
     #[test]
