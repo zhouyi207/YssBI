@@ -290,7 +290,7 @@ describe("executeFunctionSignatureMutation", () => {
       dependencies(mutateSignature),
     );
 
-    expect(mutateSignature).toHaveBeenCalledWith(projectInstanceId, functionPath, "zh-CN", {
+    expect(mutateSignature).toHaveBeenCalledWith(projectInstanceId, functionPath, {
       resource: { kind: "function", key: functionPath },
       baseRevision: 2,
       operationId,

@@ -44,6 +44,12 @@ A command handler may:
 
 A command handler may not own filesystem transactions, long workflows, duplicated domain validation, Project/Graph reconciliation, statistical computation, or durable state. A delivery failure can produce a transport failure, but it does not pretend that an already committed authority mutation never occurred.
 
+Flat revision-checked commands retain their required wire fields. Where Tauri's
+injected app/state parameters push a handler over Clippy's argument threshold,
+the handler records a local lint expectation with that reason. Internal use cases
+still remove redundant inputs. Boxing the project event payload only changes its
+in-memory representation; the tagged event wire remains unchanged.
+
 Standalone statistical commands convert DTOs and directly call the stateless
 `yss-sci-runtime` functions. ACF/PACF retains Application session admission and its
 60-second deadline. Analyses of retained graph results go through Application's
@@ -56,6 +62,10 @@ remain in `yss-sci` and shared data/control types in `yss-sci-contract`.
 Graph tools call Application directly through the capability gateway. Application reads the Project-owned editing state and validates the current revision/hash before editing, validating, running or saving. Rust returns the capability result; Graph Activity carries editing and execution notifications to frontend consumers.
 
 Assistant `apply_graph_edit` atomically persists its complete current graph through the Project file transaction, retaining undo history. It needs no editor panel or Webview acknowledgement. A successful receipt confirms both the edit and persistence; a file failure leaves the prior graph state intact and returns `persistence_unavailable`. GUI edits, validation and execution keep their existing explicit-save behavior.
+
+`update_function_signature` accepts `projectInstanceId`, `functionPath` and the
+revisioned `request`. The mutation is locale-independent; localized projection
+refreshes supply their locale through the projection query.
 
 ## DTO ownership
 

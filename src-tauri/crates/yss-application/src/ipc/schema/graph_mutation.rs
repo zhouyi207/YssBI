@@ -127,11 +127,11 @@ pub struct NodePositionMutationDto {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum EditorMutationMappingError {
     #[error("editor mutation contains an invalid port address")]
-    InvalidPortAddress,
+    PortAddress,
     #[error("editor mutation contains an invalid node creation descriptor")]
-    InvalidNodeCreation,
+    NodeCreation,
     #[error("editor mutation contains an invalid clipboard subgraph")]
-    InvalidClipboardSubgraph,
+    ClipboardSubgraph,
 }
 
 impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
@@ -139,7 +139,7 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
 
     fn try_from(value: EditorGraphMutationDto) -> Result<Self, Self::Error> {
         let address = |value: PortAddressDto| {
-            PortAddress::try_from(value).map_err(|_| EditorMutationMappingError::InvalidPortAddress)
+            PortAddress::try_from(value).map_err(|_| EditorMutationMappingError::PortAddress)
         };
         Ok(match value {
             EditorGraphMutationDto::InsertConstantReference { id, position } => {
@@ -156,7 +156,7 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
             } => yss_graph_editor::EditorGraphMutation::CreateNode {
                 descriptor: descriptor
                     .try_into()
-                    .map_err(|_| EditorMutationMappingError::InvalidNodeCreation)?,
+                    .map_err(|_| EditorMutationMappingError::NodeCreation)?,
                 position,
                 user_label,
                 connect_from: connect_from.map(address).transpose()?,
@@ -262,7 +262,7 @@ impl TryFrom<EditorGraphMutationDto> for yss_graph_editor::EditorGraphMutation {
                 snapshot: crate::ipc::schema::graph_clipboard::parse_clipboard_snapshot(
                     &snapshot_json,
                 )
-                .map_err(|_| EditorMutationMappingError::InvalidClipboardSubgraph)?,
+                .map_err(|_| EditorMutationMappingError::ClipboardSubgraph)?,
                 anchor,
             },
         })

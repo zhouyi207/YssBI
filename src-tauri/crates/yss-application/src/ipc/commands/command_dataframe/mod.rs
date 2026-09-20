@@ -64,9 +64,9 @@ fn emit_application_database_result<T>(
 ) -> Result<(), CommandError> {
     emit_project_event_result(
         app,
-        &Event::Project(EventProject::ResourceMutationCommitted {
+        &Event::Project(Box::new(EventProject::ResourceMutationCommitted {
             result: result.mutation.clone(),
-        }),
+        })),
     )
     .map_err(|error| CommandError::diagnosed("database_event_emit_failed", error))
 }
@@ -422,6 +422,10 @@ pub async fn get_dataset_overview(
 // ==================== Edit Commands ====================
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn edit_cell(
     app: AppHandle,
     application: State<crate::session::ApplicationState>,
@@ -472,6 +476,10 @@ pub fn add_row(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn delete_rows(
     app: AppHandle,
     application: State<crate::session::ApplicationState>,
@@ -494,6 +502,10 @@ pub fn delete_rows(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn add_column(
     app: AppHandle,
     application: State<crate::session::ApplicationState>,
@@ -537,6 +549,10 @@ pub fn delete_column(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub async fn cast_column(
     app: AppHandle,
     application: State<'_, crate::session::ApplicationState>,
@@ -599,6 +615,10 @@ pub async fn set_column_semantic(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn rename_column(
     app: AppHandle,
     application: State<crate::session::ApplicationState>,

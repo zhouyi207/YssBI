@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "payload")]
 pub enum Event {
     // 项目级事件
-    Project(EventProject),
+    Project(Box<EventProject>),
 
     // 统一资源事件
     Resource(EventResource),

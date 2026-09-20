@@ -57,9 +57,9 @@ fn emit_chart_application_result(
 ) -> Result<(), CommandError> {
     emit_project_event_result(
         app,
-        &Event::Project(EventProject::ResourceMutationCommitted {
+        &Event::Project(Box::new(EventProject::ResourceMutationCommitted {
             result: result.clone(),
-        }),
+        })),
     )
     .map_err(|error| CommandError::diagnosed("chart_event_emit_failed", error))
 }
@@ -139,6 +139,10 @@ pub fn save_chart(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn rename_chart_resource(
     app: AppHandle,
     application: State<crate::session::ApplicationState>,

@@ -34,7 +34,6 @@ export interface FunctionSignatureCoordinatorDependencies {
   mutateSignature(
     projectInstanceId: string,
     functionPath: string,
-    locale: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto>;
   hydrateGraph(graphPath: string, locale: string): Promise<unknown>;
@@ -49,8 +48,8 @@ export type ExecuteFunctionSignatureMutationOutcome =
 let coordinatorEpoch = 0;
 
 const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
-  mutateSignature: (projectInstanceId, functionPath, locale, request) =>
-    FunctionMutationService.updateSignature(projectInstanceId, functionPath, locale, request),
+  mutateSignature: (projectInstanceId, functionPath, request) =>
+    FunctionMutationService.updateSignature(projectInstanceId, functionPath, request),
   hydrateGraph: hydrateGraphProjection,
   refreshResourceIndex: () => projectPublicationCoordinator.refreshIndex(),
 };
@@ -154,7 +153,6 @@ export async function executeFunctionSignatureMutation(
     result = await dependencies.mutateSignature(
       identity.projectInstanceId,
       input.functionPath,
-      input.locale,
       request,
     );
     if (!isCurrentProjectIdentity(identity)) return { status: "stale", result };

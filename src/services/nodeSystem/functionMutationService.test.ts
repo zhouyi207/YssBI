@@ -35,7 +35,6 @@ describe("FunctionMutationService", () => {
       FunctionMutationService.updateSignature(
         "00000000-0000-0000-0000-000000000601",
         "functions/Compute.yssbi-function",
-        "zh-CN",
         request,
       ),
     ).resolves.toBe(result);
@@ -43,7 +42,6 @@ describe("FunctionMutationService", () => {
     expect(invoke).toHaveBeenCalledWith("update_function_signature", {
       projectInstanceId: "00000000-0000-0000-0000-000000000601",
       functionPath: "functions/Compute.yssbi-function",
-      locale: "zh-CN",
       request,
     });
   });

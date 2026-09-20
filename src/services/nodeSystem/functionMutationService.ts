@@ -9,13 +9,11 @@ export class FunctionMutationService {
   static updateSignature(
     projectInstanceId: string,
     functionPath: string,
-    locale: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto> {
     return invokeCommand<ResourceMutationResultDto>("update_function_signature", {
       projectInstanceId,
       functionPath,
-      locale,
       request,
     });
   }

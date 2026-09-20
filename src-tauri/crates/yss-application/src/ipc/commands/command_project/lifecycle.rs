@@ -23,7 +23,10 @@ use yss_project_identity::OperationId;
 use yss_project_identity::ProjectInstanceId;
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
-    emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
+    emit_project_event(
+        app,
+        Event::Project(Box::new(EventProject::ProjectLoaded { result })),
+    );
 }
 
 pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> CommandError {
@@ -293,9 +296,9 @@ pub(crate) fn publish_lifecycle_result_with(
     result: &LifecycleMutationResultDto,
     emit: impl FnOnce(&Event) -> Result<(), String>,
 ) {
-    let event = Event::Project(EventProject::ProjectLifecycleCommitted {
+    let event = Event::Project(Box::new(EventProject::ProjectLifecycleCommitted {
         result: result.clone(),
-    });
+    }));
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| emit(&event)));
 }
 
@@ -324,9 +327,9 @@ pub(crate) fn flush_project_with_emitter(
         .flush_project_documents(&project_instance_id, operation_id)
         .map_err(crate::ipc::commands::project_failure::application_project_command_error)?;
     let result = crate::ipc::schema::project::project_save_to_transport(result);
-    emit(Event::Project(EventProject::ProjectSaved {
+    emit(Event::Project(Box::new(EventProject::ProjectSaved {
         result: result.clone(),
-    }));
+    })));
     Ok(result)
 }
 
@@ -349,9 +352,9 @@ pub fn flush_project(
     let result = crate::ipc::schema::project::project_save_to_transport(result);
     emit_project_event(
         &app,
-        Event::Project(EventProject::ProjectSaved {
+        Event::Project(Box::new(EventProject::ProjectSaved {
             result: result.clone(),
-        }),
+        })),
     );
     Ok(result)
 }
@@ -374,7 +377,7 @@ pub fn new_project(
         .clear_project_for_application()
         .map_err(map_application_project_lifecycle_error)?;
     watcher.stop();
-    emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
+    emit_project_event(&app, Event::Project(Box::new(EventProject::ProjectCleared)));
     Ok(())
 }
 
@@ -481,7 +484,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(matches!(
             &events[0],
-            Event::Project(EventProject::ProjectSaved { result: emitted }) if emitted == &result
+            Event::Project(event) if matches!(event.as_ref(), EventProject::ProjectSaved { result: emitted } if emitted == &result)
         ));
 
         state.activate_project_fixture(

@@ -169,6 +169,10 @@ pub fn remove_graph(
 }
 
 #[tauri::command]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects app/state into the flat revision-checked command wire"
+)]
 pub fn rename_graph_resource(
     app: AppHandle,
     application: State<'_, crate::session::ApplicationState>,
@@ -200,14 +204,12 @@ pub fn update_function_signature(
     application: State<'_, crate::session::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     function_path: String,
-    locale: String,
     request: MutationRequest<yss_project_history::FunctionDocumentPatch>,
 ) -> Result<ResourceMutationResultDto, CommandError> {
     let result = application
         .update_function_signature(
             project_instance_id,
             parse_graph_path(function_path)?,
-            locale,
             request,
         )
         .map_err(map_resource_mutation_error)?;
@@ -222,9 +224,9 @@ fn emit_application_resource_result(
 ) -> Result<(), CommandError> {
     emit_project_event_result(
         app,
-        &Event::Project(EventProject::ResourceMutationCommitted {
+        &Event::Project(Box::new(EventProject::ResourceMutationCommitted {
             result: result.clone(),
-        }),
+        })),
     )
     .map_err(|error| CommandError::diagnosed("resource_event_emit_failed", error))
 }

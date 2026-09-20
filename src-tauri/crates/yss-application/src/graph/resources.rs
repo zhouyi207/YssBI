@@ -226,10 +226,8 @@ impl ApplicationState {
         &self,
         project_instance_id: ProjectInstanceId,
         function_path: GraphResourcePath,
-        locale: String,
         request: MutationRequest<FunctionDocumentPatch>,
     ) -> Result<CommittedResourceMutation, ResourceMutationApplicationError> {
-        let _ = locale;
         let captured = self.capture_resource_session(&project_instance_id)?;
         let result = captured
             .project()
