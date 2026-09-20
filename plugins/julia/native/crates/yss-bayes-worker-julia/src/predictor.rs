@@ -193,7 +193,7 @@ fn emit_number(value: f64) -> Result<String, JuliaModelGenerationError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{JuliaMathFunction, JuliaModelGenerationError, generate_julia_model};
+    use super::generate_julia_model;
     use yss_bayes_model::BayesModelSpec;
 
     fn model(predictor: serde_json::Value) -> BayesModelSpec {
@@ -253,5 +253,4 @@ mod tests {
         assert!(generated.likelihood.contains("theta[2]"));
         assert!(generated.likelihood.contains("logpdf(Normal("));
     }
-
 }

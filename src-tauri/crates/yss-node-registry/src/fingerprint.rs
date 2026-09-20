@@ -199,7 +199,8 @@ mod tests {
         };
         schema.fields[0].visible_when = Some(ConfigurationCondition {
             key: "method".parse().unwrap(),
-            values: vec![Value::String("WLS".into())].into_boxed_slice(),
+            values: vec![serde_json::from_value(serde_json::json!({"String": "WLS"})).unwrap()]
+                .into_boxed_slice(),
         });
         assert_ne!(constrained, protocol_fingerprint(&protocol).unwrap());
     }

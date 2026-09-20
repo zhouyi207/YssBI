@@ -1521,15 +1521,14 @@ mod tests {
     fn configurable_driver_starts_unavailable_and_can_be_cleared() {
         let driver = ConfigurableAgentDriver::new();
         assert!(!driver.is_configured());
-        assert_eq!(
-            driver
+        assert!(
+            !driver
                 .configure(
                     "https://api.openai.com/v1".to_owned(),
                     "gpt-test".to_owned(),
                     None
                 )
-                .expect("clearing provider settings is valid"),
-            false
+                .expect("clearing provider settings is valid")
         );
         assert!(!driver.is_configured());
     }

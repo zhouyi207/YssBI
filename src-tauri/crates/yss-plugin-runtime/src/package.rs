@@ -253,6 +253,12 @@ pub(crate) fn finish_file_publication(
         PluginFailure::new("plugin_file_publication_uncertain")
     })
 }
+pub(crate) fn package_path(root: &Path, digest: &str) -> Result<PathBuf, PluginFailure> {
+    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(invalid());
+    }
+    Ok(root.join("packages").join(digest))
+}
 
 #[cfg(test)]
 mod publication_tests {
@@ -293,10 +299,4 @@ mod publication_tests {
         fs::remove_file(destination).unwrap();
         fs::remove_dir(directory).unwrap();
     }
-}
-pub(crate) fn package_path(root: &Path, digest: &str) -> Result<PathBuf, PluginFailure> {
-    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(invalid());
-    }
-    Ok(root.join("packages").join(digest))
 }

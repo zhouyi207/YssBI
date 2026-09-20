@@ -1191,7 +1191,7 @@ mod tests {
         ));
         assert_eq!(
             store.load_running_invocations().await.unwrap(),
-            [invocation.clone()]
+            std::slice::from_ref(&invocation)
         );
         let mut finished = invocation.clone();
         finished.state = ToolInvocationState::Failed;
