@@ -127,15 +127,14 @@ pub(super) fn rust_workspace_model_from_metadata(
                 kind: target_kind,
                 source_path: source_path.clone(),
             });
-            if target_kind == ProductionRootKind::Library {
-                if library_targets
+            if target_kind == ProductionRootKind::Library
+                && library_targets
                     .insert(member_id.clone(), (target_name.clone(), source_path))
                     .is_some()
-                {
-                    return Err(invalid(format!(
-                        "workspace member '{package_name}' has multiple library targets"
-                    )));
-                }
+            {
+                return Err(invalid(format!(
+                    "workspace member '{package_name}' has multiple library targets"
+                )));
             }
         }
     }

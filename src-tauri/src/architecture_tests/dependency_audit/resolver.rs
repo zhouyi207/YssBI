@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::rc::Rc;
 
 use syn::{Expr, ExprLit, Item, Lit, Meta, UseTree};
 
@@ -30,7 +30,7 @@ pub(super) fn resolve_canonical_dependencies_detailed(
         resolver.resolution_steps = 0;
         let origin = resolver.resolve_dependency(dependency).map_err(|error| {
             DependencyResolutionFailure {
-                dependency: dependency.clone(),
+                dependency: Box::new(dependency.clone()),
                 error,
             }
         })?;
@@ -83,7 +83,7 @@ struct Resolver<'a> {
     unresolved_targets: BTreeSet<RepositoryTargetKey>,
     active_aliases: BTreeSet<(PathBuf, String, ImportVisibility)>,
     alias_candidates: BTreeMap<(PathBuf, String, ImportVisibility), ImportAliasCandidates>,
-    parsed_sources: BTreeMap<PathBuf, Arc<syn::File>>,
+    parsed_sources: BTreeMap<PathBuf, Rc<syn::File>>,
     symbol_declarations: BTreeMap<(PathBuf, String), Option<PathBuf>>,
     canonical_repository_root: Option<PathBuf>,
     resolution_steps: usize,
@@ -158,8 +158,7 @@ impl<'a> Resolver<'a> {
             &dependency.owning_package,
             &root.target.replace('-', "_"),
             &root.source_path,
-            &scope_file,
-            &owner_segments,
+            (&scope_file, &owner_segments),
             &segments,
             dependency.mode,
         )
@@ -204,11 +203,11 @@ impl<'a> Resolver<'a> {
         owning_package: &str,
         root_owner: &str,
         root_path: &Path,
-        scope_file: &Path,
-        current_module: &[String],
+        scope: (&Path, &[String]),
         segments: &[String],
         mode: RustDependencyMode,
     ) -> Result<CanonicalOrigin, ArchitectureAuditError> {
+        let (scope_file, current_module) = scope;
         self.resolution_steps += 1;
         if self.resolution_steps > 1_000 {
             return Err(ArchitectureAuditError::ResolverStepLimit {
@@ -410,8 +409,7 @@ impl<'a> Resolver<'a> {
                     owning_package,
                     root_owner,
                     root_path,
-                    &scope_file,
-                    current_module,
+                    (&scope_file, current_module),
                     &candidate,
                     mode,
                 ) {
@@ -462,24 +460,23 @@ impl<'a> Resolver<'a> {
     fn parsed_source(
         &mut self,
         file: &Path,
-    ) -> Result<(PathBuf, Arc<syn::File>), ArchitectureAuditError> {
+    ) -> Result<(PathBuf, Rc<syn::File>), ArchitectureAuditError> {
         let file = self.canonical_source_file(file)?;
         if let Some(syntax) = self.parsed_sources.get(&file) {
-            return Ok((file, Arc::clone(syntax)));
+            return Ok((file, Rc::clone(syntax)));
         }
         let source =
             std::fs::read_to_string(&file).map_err(|source| ArchitectureAuditError::Io {
                 path: file.clone(),
                 source,
             })?;
-        let syntax = Arc::new(syn::parse_file(&source).map_err(|source| {
+        let syntax = Rc::new(syn::parse_file(&source).map_err(|source| {
             ArchitectureAuditError::SourceParse {
                 path: file.clone(),
                 source,
             }
         })?);
-        self.parsed_sources
-            .insert(file.clone(), Arc::clone(&syntax));
+        self.parsed_sources.insert(file.clone(), Rc::clone(&syntax));
         Ok((file, syntax))
     }
 
@@ -909,11 +906,9 @@ fn resolve_module_file(root: &Path, modules: &[String]) -> Option<PathBuf> {
             continue;
         }
         let parent = current.parent()?;
-        let child_dir = if current.file_name().is_some_and(|name| name == "mod.rs") {
-            parent.to_path_buf()
-        } else if matches!(
+        let child_dir = if matches!(
             current.file_name().and_then(|name| name.to_str()),
-            Some("lib.rs" | "main.rs" | "build.rs")
+            Some("mod.rs" | "lib.rs" | "main.rs" | "build.rs")
         ) {
             parent.to_path_buf()
         } else {

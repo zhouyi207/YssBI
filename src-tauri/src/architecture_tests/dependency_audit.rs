@@ -20,7 +20,7 @@ use crate::test_support::source_audit::{
 };
 
 pub(super) struct DependencyResolutionFailure {
-    dependency: RawDependency,
+    dependency: Box<RawDependency>,
     error: ArchitectureAuditError,
 }
 
@@ -171,11 +171,15 @@ fn collect_module_file(
         &syntax.items,
         &module,
         mode,
-        visited,
-        modules,
-        dependencies,
+        (visited, modules, dependencies),
     )
 }
+
+type DependencyCollection<'a> = (
+    &'a mut BTreeSet<(PathBuf, Vec<String>)>,
+    &'a mut Vec<RustModule>,
+    &'a mut Vec<RawDependency>,
+);
 
 fn collect_items(
     repository_root: &Path,
@@ -184,10 +188,9 @@ fn collect_items(
     items: &[Item],
     module: &ModuleSource,
     mode: RustDependencyMode,
-    visited: &mut BTreeSet<(PathBuf, Vec<String>)>,
-    modules: &mut Vec<RustModule>,
-    dependencies: &mut Vec<RawDependency>,
+    output: DependencyCollection<'_>,
 ) -> Result<(), ArchitectureAuditError> {
+    let (visited, modules, dependencies) = output;
     for item in items {
         if is_test_only(item_attributes(item)) {
             continue;
@@ -219,9 +222,7 @@ fn collect_items(
                     inline_items,
                     &inline,
                     mode,
-                    visited,
-                    modules,
-                    dependencies,
+                    (visited, modules, dependencies),
                 )?;
             } else {
                 let child = resolve_external_module(repository_root, module, item_mod)

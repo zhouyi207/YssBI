@@ -709,10 +709,11 @@ fn resolve_worker_symbol(path: &[String], scopes: &[WorkerScope]) -> Option<Work
         return None;
     }
 
-    if !absolute && let Some(scope_index) = alias_scope {
-        if let Some(symbol) = scopes[scope_index].symbols.get(&remainder[0]) {
-            return extend_worker_symbol(symbol, &remainder[1..]);
-        }
+    if !absolute
+        && let Some(scope_index) = alias_scope
+        && let Some(symbol) = scopes[scope_index].symbols.get(&remainder[0])
+    {
+        return extend_worker_symbol(symbol, &remainder[1..]);
     }
 
     let mut relative = actual_base;
@@ -1141,12 +1142,10 @@ fn bayes_worker_surface_violations(
                     }
                     if function.sig.receiver().is_none()
                         && WORKER_SURFACE_TYPES.contains(&owner.as_str())
-                    {
-                        if let Some(kind) =
+                        && let Some(kind) =
                             disallowed_associated_function_kind(&owner, &name, &function.vis, true)
-                        {
-                            violations.push(surface_violation(kind, format!("{owner}::{name}")));
-                        }
+                    {
+                        violations.push(surface_violation(kind, format!("{owner}::{name}")));
                     }
                 }
             }

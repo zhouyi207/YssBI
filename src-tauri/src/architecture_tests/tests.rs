@@ -1726,7 +1726,8 @@ fn node_definitions_and_kernels_do_not_depend_on_graph_instances_or_analysis() {
         line: 1,
         column: 1,
     };
-    let findings = rust_dependency_findings(&[dependency.clone()], &facts.classification).unwrap();
+    let findings =
+        rust_dependency_findings(std::slice::from_ref(&dependency), &facts.classification).unwrap();
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].key.rule_id, "rust.internal.node-boundary");
     let kernel_dependency = CanonicalDependency {
@@ -2224,7 +2225,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
     };
     assert!(
         rust_dependency_findings_with_capabilities(
-            &[approved_command_seam.clone()],
+            std::slice::from_ref(&approved_command_seam),
             &classification,
             INTERNAL_CAPABILITIES,
         )
@@ -2349,7 +2350,7 @@ fn sample_catalog_composition_capability_does_not_grant_business_queries() {
         column: 1,
     };
     assert!(
-        rust_dependency_findings(&[dependency.clone()], &classification)
+        rust_dependency_findings(std::slice::from_ref(&dependency), &classification)
             .unwrap()
             .is_empty()
     );
