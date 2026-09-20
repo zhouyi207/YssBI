@@ -609,7 +609,7 @@ ols model 可以引申出一个新的节点 predict，这个节点可以使用 e
       `u64`，修复 1970 年前时间戳投影，并移除从未构造的 `UnsupportedColumnType` 分支和零调用的
       `database/row_mapping` 重复实现。
 - [ ] 将 Polars-backed typed IPC/CSV/Parquet filesystem I/O 迁入独立
-      `src-tauri/crates/yss-tabular-io/` Database Core；删除根 `database/tabular_io` owner/facade，
+      `src-tauri/crates/yss-database-io/` Database Core；删除根 `database/tabular_io` owner/facade，
       四个 database/Bayes 消费方直接依赖 crate，并允许不带目录的相对输出路径写入当前目录。
 - [ ] 将 dataset profile DTO 与内存 Polars 统计迁入独立
       `src-tauri/crates/yss-dataset-profile/` Database Core；DuckDB physical profiling 保持

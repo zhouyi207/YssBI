@@ -54,7 +54,7 @@ pub enum SampleError {
     #[error("sample resource is unavailable")]
     Unavailable(#[from] std::io::Error),
     #[error("sample resource cannot be decoded")]
-    Decode(#[from] yss_tabular_io::TabularIoError),
+    Decode(#[from] yss_database_io::TabularIoError),
     #[error("sample catalog cannot be decoded")]
     CatalogDecode(#[from] serde_json::Error),
 }
@@ -167,7 +167,7 @@ impl SampleCatalog {
             return Err(SampleError::Integrity);
         }
         file.rewind()?;
-        let mut reader = yss_tabular_io::read_parquet_file_batches(file, 10_000, None)?;
+        let mut reader = yss_database_io::read_parquet_file_batches(file, 10_000, None)?;
         let original_schema = reader.schema();
         if original_schema.fields().len() != entry.column_count {
             return Err(SampleError::Integrity);

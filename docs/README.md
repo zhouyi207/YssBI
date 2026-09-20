@@ -46,7 +46,7 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 - [Node definitions, registry and catalog](../src-tauri/crates/yss-node-catalog/README.md)
 - [Node kernel contracts and implementations](../src-tauri/crates/yss-node-kernel/README.md)
 - [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
-- [Dataset snapshot store](../src-tauri/crates/yss-dataset-store/README.md)
+- [Dataset snapshot store](../src-tauri/crates/yss-database-store/README.md)
 - [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
 - [SCI numerical models](../src-tauri/crates/yss-sci/README.md)
 - [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)

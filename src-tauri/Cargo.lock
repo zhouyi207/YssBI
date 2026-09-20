@@ -9243,9 +9243,9 @@ dependencies = [
  "yss-database-contract",
  "yss-database-runtime",
  "yss-database-schema",
- "yss-datafusion",
+ "yss-database-engine",
  "yss-dataset-profile",
- "yss-dataset-store",
+ "yss-database-store",
  "yss-display-naming",
  "yss-filesystem",
  "yss-function-editor-projection",
@@ -9285,10 +9285,10 @@ dependencies = [
  "yss-resource-naming",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-sql-source",
- "yss-tabular-arrow",
+ "yss-database-source",
+ "yss-database-arrow",
  "yss-tabular-contract",
- "yss-tabular-io",
+ "yss-database-io",
 ]
 
 [[package]]
@@ -9420,13 +9420,13 @@ dependencies = [
  "yss-data-contract",
  "yss-database-contract",
  "yss-database-schema",
- "yss-datafusion",
+ "yss-database-engine",
  "yss-dataset-profile",
- "yss-dataset-store",
+ "yss-database-store",
  "yss-relational-contract",
- "yss-tabular-arrow",
+ "yss-database-arrow",
  "yss-tabular-contract",
- "yss-tabular-io",
+ "yss-database-io",
 ]
 
 [[package]]
@@ -9440,7 +9440,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-datafusion"
+name = "yss-database-engine"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -9453,9 +9453,9 @@ dependencies = [
  "yss-database-contract",
  "yss-dataset-profile",
  "yss-relational-contract",
- "yss-tabular-arrow",
+ "yss-database-arrow",
  "yss-tabular-contract",
- "yss-tabular-io",
+ "yss-database-io",
 ]
 
 [[package]]
@@ -9466,7 +9466,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-dataset-store"
+name = "yss-database-store"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -9476,13 +9476,13 @@ dependencies = [
  "tokio",
  "uuid",
  "yss-database-contract",
- "yss-datafusion",
+ "yss-database-engine",
  "yss-dataset-profile",
  "yss-project-layout",
  "yss-relational-contract",
- "yss-tabular-arrow",
+ "yss-database-arrow",
  "yss-tabular-contract",
- "yss-tabular-io",
+ "yss-database-io",
 ]
 
 [[package]]
@@ -9825,7 +9825,7 @@ dependencies = [
  "yss-relational-contract",
  "yss-sci-contract",
  "yss-sci-runtime",
- "yss-tabular-arrow",
+ "yss-database-arrow",
  "yss-tabular-contract",
 ]
 
@@ -9905,7 +9905,7 @@ dependencies = [
  "yss-chart-document",
  "yss-data-contract",
  "yss-database-contract",
- "yss-dataset-store",
+ "yss-database-store",
  "yss-display-naming",
  "yss-filesystem",
  "yss-function-editor-projection",
@@ -10089,7 +10089,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-sql-source"
+name = "yss-database-source"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -10102,7 +10102,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-tabular-arrow"
+name = "yss-database-arrow"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -10127,7 +10127,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "yss-tabular-io"
+name = "yss-database-io"
 version = "0.1.0"
 dependencies = [
  "arrow",
@@ -10135,7 +10135,7 @@ dependencies = [
  "parquet",
  "serde_json",
  "thiserror 2.0.20",
- "yss-tabular-arrow",
+ "yss-database-arrow",
  "yss-tabular-contract",
 ]
 

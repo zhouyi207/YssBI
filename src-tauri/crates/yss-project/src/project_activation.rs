@@ -169,7 +169,7 @@ impl ProjectState {
         let instance_id = published.dispose();
         // Activation publishes a complete declaration index rebuilt from the catalog. Old
         // session handoffs no longer require individual deltas; failed cleanup remains pending.
-        let _ = yss_dataset_store::DatasetStore::open(root.as_path()).and_then(|store| {
+        let _ = yss_database_store::DatasetStore::open(root.as_path()).and_then(|store| {
             for publication in store.pending_publications()? {
                 store.acknowledge_publication(&publication)?;
             }

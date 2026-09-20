@@ -559,7 +559,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 | 失败与释放       | 未完成句柄在 `Drop` 中释放登记，成功调用 `complete()` 后保留操作 ID；文件回滚、数据库恢复仍由各自事务负责，释放登记不等于回滚副作用                                                                                                   |
 | 项目替换         | [激活流程](../../src-tauri/crates/yss-project/src/project_state/activation.rs)在 publication 与 ledger 锁内重置登记；旧句柄完成或释放前比较捕获的 instance/session，不操作新会话登记                                                  |
 | 锁顺序           | 准入和激活均先取得 publication、再取得 ledger；句柄完成与释放只锁 ledger。本次所查调用链未发现这两把锁的相反获取顺序                                                                                                                  |
-| 相近状态是否重复 | `ResourceLifecycleRegistry` 管理资源路径/token 的生命周期所有权，资源 revision 管理版本；[dataset_operations](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)保存持久化提交及 publication 交接。它们不能由会话内操作登记替代 |
+| 相近状态是否重复 | `ResourceLifecycleRegistry` 管理资源路径/token 的生命周期所有权，资源 revision 管理版本；[dataset_operations](../../src-tauri/crates/yss-database-store/src/catalog.rs)保存持久化提交及 publication 交接。它们不能由会话内操作登记替代 |
 | 无效函数与旧兼容 | `new`、`reserve`、`reset_for_project`、`complete` 和 `Drop` 都有实际生产用途；登记 crate 与准入适配中未发现 deprecated 兼容入口或被屏蔽的 dead code                                                                                   |
 
 检查中需要随合并处理或明确的事项：
@@ -606,7 +606,7 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 - **生命周期两路结果**：[后端发送事件并返回相同回执](../../src-tauri/crates/yss-application/src/ipc/commands/command_project/lifecycle.rs)、[前端事件入口](../../src/features/application/initialization/useProjectSync.ts)、[回执登记与合并](../../src/features/application/projectLifecycleReceipt.ts)。`recoverProjectLifecycleDirectFailure` 查看的是前端已经收到的回执状态，并不向后端查询或重新执行请求。
 - **资源关联与版本排序**：[图表保存确认](../../src/features/application/chart/saveChartDocument.ts)、[数据库结果确认](../../src/features/application/dataManagement/databaseMutation.ts)、[函数签名协调](../../src/features/application/editorMutation/functionSignatureCoordinator.ts)、[publication coordinator](../../src/features/application/editorMutation/projectPublicationCoordinator.ts)。按版本发布、按请求确认修改是两个用途；重复回执不是一概需要报错的异常。
-- **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-dataset-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-dataset-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database/mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
+- **持久化与文件事务**：[catalog 提交和 publication 确认](../../src-tauri/crates/yss-database-store/src/catalog.rs)、[publication_committed](../../src-tauri/crates/yss-database-store/src/lib.rs)、[Application 数据库提交衔接](../../src-tauri/crates/yss-application/src/database/mutation.rs)、[文件暂存目录](../../src-tauri/crates/yss-filesystem/src/transaction.rs)。Project 的内存登记与 catalog 的持久化记录保存周期不同，不能按字段同名直接视为第二事实源。
 
 #### 已完成的精简
 
@@ -654,8 +654,8 @@ Windows 验证结果：模型与 registry 的 15 项测试、Application 项目�
 
 #### 当前职责与可替换范围
 
-- [yss-datafusion](../../src-tauri/crates/yss-datafusion/src/lib.rs)负责查询计划和 Arrow 数据执行，包括筛选、连接、聚合与数据分析。
-- [yss-sql-source](../../src-tauri/crates/yss-sql-source/src/lib.rs)负责外部 SQLite、PostgreSQL、MySQL 的连接、表发现、类型解码和有界 Arrow 批次读取。它已承担连接器职责，目前通过 SQLx 实现数据库访问。
+- [yss-datafusion](../../src-tauri/crates/yss-database-engine/src/lib.rs)负责查询计划和 Arrow 数据执行，包括筛选、连接、聚合与数据分析。
+- [yss-sql-source](../../src-tauri/crates/yss-database-source/src/lib.rs)负责外部 SQLite、PostgreSQL、MySQL 的连接、表发现、类型解码和有界 Arrow 批次读取。它已承担连接器职责，目前通过 SQLx 实现数据库访问。
 - `yss-dataset-store`、`yss-project-registry-sqlite`、`yss-harness-sqlite` 和宿主 `yss-plugin-runtime` 使用 SQLx 读写内部 SQLite，持久化数据集提交、项目登记、Assistant 状态和插件回执。数据库事务与提交恢复继续由这些 owner 管理；现成外部数据源连接器不能直接替代这部分业务职责。
 
 连接器是查询引擎与数据源之间的适配模块，负责建立连接、获取表结构、发送查询并将结果转换成引擎可处理的数据。采用现成连接器的潜在收益，是减少 `yss-sql-source` 自维护的连接和 Arrow 转换逻辑；是否替换整个 crate，还需检查保留下来的项目规则和调用边界，不能只按代码量决定。
@@ -677,7 +677,7 @@ DataFusion 提供 `TableProvider` 扩展接口。[datafusion-table-providers](ht
 #### 重新考虑替换的条件
 
 - 连接器与当前 DataFusion、Arrow、SQLite 底层依赖兼容，并有 macOS、Windows、Linux 的构建与运行证据。
-- 核对并保留现有表发现、连接选项、空表 schema、NULL/二进制数据、严格类型错误、有界批次、取消与截止时间行为，复用 [SQL 数据源测试](../../src-tauri/crates/yss-sql-source/src/tests.rs)验证迁移。
+- 核对并保留现有表发现、连接选项、空表 schema、NULL/二进制数据、严格类型错误、有界批次、取消与截止时间行为，复用 [SQL 数据源测试](../../src-tauri/crates/yss-database-source/src/tests.rs)验证迁移。
 - 确认减少的自维护逻辑能够抵消新增驱动、传递依赖、版本跟进和适配成本，再决定是否替换外部读取实现、收窄 SQLx features 或合并 crate。
 
 本次仅补充选型结论与条件，没有引入连接器、修改依赖或执行迁移测试。

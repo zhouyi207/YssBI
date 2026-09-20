@@ -10,7 +10,7 @@ use super::{
 use crate::filesystem::project_root_from_path;
 use crate::manifest::{CURRENT_PROJECT_SCHEMA_VERSION, ProjectManifest};
 use yss_database_contract::{DatabaseDecl, DatabaseEngine};
-use yss_dataset_store::DatasetStore;
+use yss_database_store::DatasetStore;
 use yss_function_editor_projection::FunctionEditorProjection;
 use yss_graph_document::{GraphDocument as NodeGraphDocument, GraphResourceKind};
 use yss_project_identity::ProjectResourcePath;

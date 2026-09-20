@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use crate::database_instance::{PreparedInstanceMutation, query_control};
 use arrow::array::Int64Array;
 use std::path::Path;
-use yss_dataset_store::{DatasetPublication, DatasetStoreError};
+use yss_database_store::{DatasetPublication, DatasetStoreError};
 
 use crate::DatabaseInstance;
 use crate::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
@@ -166,7 +166,7 @@ impl DatabaseRuntimePhysicalState {
                     .map_err(Into::into)
             })
             .map_err(|error| failure(database, DatabaseOperation::Query, error))?;
-        let roles = yss_tabular_arrow::dataset_row_columns(
+        let roles = yss_database_arrow::dataset_row_columns(
             &instance
                 .snapshot()
                 .map_err(|error| failure(database, DatabaseOperation::Query, error))?
@@ -195,7 +195,7 @@ impl DatabaseRuntimePhysicalState {
                     .ok_or_else(|| {
                         DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
                     })?;
-                for value in yss_tabular_arrow::array_to_json(array.as_ref()).map_err(|_| {
+                for value in yss_database_arrow::array_to_json(array.as_ref()).map_err(|_| {
                     DatabaseError::schema(DatabaseOperation::Query, Some(database.clone()))
                 })? {
                     values.push(serde_json::from_value(value).map_err(|_| {

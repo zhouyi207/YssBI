@@ -48,7 +48,7 @@ Schema、血缘与诊断仍由 `GraphSemanticSnapshot` 统一管理。`yss-graph
 节点目录接收调用方提供的资源创建描述，不读取项目状态，也不解析图中连接。
 
 数据 Detail 中的 Physical 与七种 Semantic 是独立的字段元数据，契约由
-[Dataset store](../../src-tauri/crates/yss-dataset-store/README.md#field-meaning-and-physical-conversion) 维护。
+[Dataset store](../../src-tauri/crates/yss-database-store/README.md#field-meaning-and-physical-conversion) 维护。
 七种基础语义统一由 `yss-data-contract::SemanticType` 定义，`ValueType::Scalar` 引用它。
 DataSeries、DataFrame 及内部结构/专用产物描述保留各自职责，Physical 不进入端口类型层级。
 旧 `DataType` 枚举已删除，Graph 不再将 Int64、Float64、Boolean、String、Date、Time 注册为基础语义。
@@ -318,7 +318,7 @@ Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的
 `yss-node-kernel` 的统计适配、`yss-graph-execution` 的结果分析及独立 OLS benchmark、`yss-application::ipc` 的独立统计命令直接调用 runtime。独立统计命令在 IPC 层转换中性请求/结果；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和普通 Application 模块不注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
-`yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-datafusion` 内；计划构造不 collect。
+`yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-database-engine` 内；计划构造不 collect。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
 计划准备将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
 也不为每列提前扫描数据；下游统计消费或 Results 分页时才交由 DataFusion 投影和读取。

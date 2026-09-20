@@ -59,7 +59,7 @@ impl Project {
         let path = self
             .directory
             .join(format!("input-{}.parquet", uuid::Uuid::new_v4()));
-        yss_tabular_io::write_parquet_batches(&path, batch.schema(), [Ok(batch.clone())]).unwrap();
+        yss_database_io::write_parquet_batches(&path, batch.schema(), [Ok(batch.clone())]).unwrap();
         self.import(DatabaseImportSource::Parquet {
             path: path.to_string_lossy().into(),
             columns: None,
@@ -111,7 +111,7 @@ impl Project {
             .unwrap()
     }
     fn native(&self, id: &str, columns: &[&str], offset: usize, limit: usize) -> Native {
-        let store = yss_dataset_store::DatasetStore::open(self.metadata.parent().unwrap()).unwrap();
+        let store = yss_database_store::DatasetStore::open(self.metadata.parent().unwrap()).unwrap();
         let decl = self.state.get_data().unwrap().databases[id].clone();
         let instance = yss_database_runtime::bind_dataset_instance(&decl, &store);
         let control = yss_relational_contract::RelationControl {

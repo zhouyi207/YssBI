@@ -140,8 +140,8 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
     let files = [
         TABULAR_CONTRACT_SOURCE,
         CONSTANT_VALUE_SOURCE,
-        "src-tauri/crates/yss-tabular-arrow/src/lib.rs",
-        "src-tauri/crates/yss-tabular-io/src/lib.rs",
+        "src-tauri/crates/yss-database-arrow/src/lib.rs",
+        "src-tauri/crates/yss-database-io/src/lib.rs",
     ];
     let mut violations = Vec::new();
     for relative in files {
@@ -183,12 +183,12 @@ pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<
         if relative == CONSTANT_VALUE_SOURCE && !source.contains("ConstantValueError") {
             violations.push(format!("{relative}: missing typed normalization error"));
         }
-        if relative == "src-tauri/crates/yss-tabular-arrow/src/lib.rs"
+        if relative == "src-tauri/crates/yss-database-arrow/src/lib.rs"
             && !source.contains("TabularArrowError")
         {
             violations.push(format!("{relative}: missing typed materialization error"));
         }
-        if relative == "src-tauri/crates/yss-tabular-io/src/lib.rs"
+        if relative == "src-tauri/crates/yss-database-io/src/lib.rs"
             && !source.contains("TabularIoError")
         {
             violations.push(format!("{relative}: missing typed I/O error"));

@@ -113,7 +113,7 @@ the values or physical type labels shown in DataView.
 
 Database column projections carry `name`, the existing `type` display label, exact `physical`,
 and `semantic: { kind, values, positiveValue, numeric }`. Semantic is one of the seven field
-meanings specified by the [dataset contract](../../../yss-dataset-store/README.md#field-meaning-and-physical-conversion).
+meanings specified by the [dataset contract](../../../yss-database-store/README.md#field-meaning-and-physical-conversion).
 Codes and numeric bounds are strings, preserving wide integers and decimal precision. The
 `set_column_semantic` mutation takes `projectInstanceId`, `operationId`, `expectedRevision`,
 `id`, `colName` and that Semantic configuration. It returns the existing database mutation
@@ -126,7 +126,7 @@ conversion on the blocking pool, then publish the normal revision-checked resour
 关系页面的 metadata 为 `{ columns: [{ name, type }] }`，values 为按该列顺序排列的行数组。
 超出 JavaScript safe-integer 范围的单元格使用十进制文本，精确存储类型保留在列元数据中。
 日期时间单元格使用不带时区的日历/钟面字符串，类型名只包含时间单位；其转换语义由
-[Dataset store](../../../yss-dataset-store/README.md) 维护。
+[Dataset store](../../../yss-database-store/README.md) 维护。
 
 Choose the transport by semantics:
 

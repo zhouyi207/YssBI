@@ -148,7 +148,7 @@ impl From<SessionCandidateBuildError> for InvalidSessionCandidateError {
 #[derive(Debug, Error)]
 pub enum ProjectSessionCandidateError {
     #[error("shared query engine could not be initialized")]
-    QueryEngine(#[source] yss_dataset_store::DatasetStoreError),
+    QueryEngine(#[source] yss_database_store::DatasetStoreError),
     #[error("project snapshot could not be captured for the application session")]
     ProjectSnapshot(#[source] ProjectOperationError),
     #[error("project database declaration observations could not be captured")]
@@ -282,7 +282,7 @@ pub fn build_current_project_candidate(
         .collect::<BTreeMap<_, _>>();
     let dataset_store = root
         .as_ref()
-        .map(|root| yss_dataset_store::DatasetStore::open(root.as_path()));
+        .map(|root| yss_database_store::DatasetStore::open(root.as_path()));
     let database_instances = data
         .databases
         .values()

@@ -385,7 +385,7 @@ mod tests {
             Field::new("value", DataType::UInt64, true),
             Field::new("label", DataType::Utf8, true),
         ]);
-        let fact = yss_tabular_arrow::database_schema_fact(&database, &schema).unwrap();
+        let fact = yss_database_arrow::database_schema_fact(&database, &schema).unwrap();
 
         let wire = serde_json::to_value(column_info_from_schema(fact.columns()))
             .expect("column info DTOs should serialize");

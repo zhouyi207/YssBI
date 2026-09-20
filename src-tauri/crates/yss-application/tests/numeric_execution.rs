@@ -1341,7 +1341,7 @@ fn assembled_memory_columns_share_the_relational_path_and_preserve_column_order(
     let RuntimeValue::Relation(table) = &semantic_table[0] else {
         panic!("semantic columns must remain queryable");
     };
-    let category = yss_tabular_arrow::column_semantic(table.schema().field(0)).unwrap();
+    let category = yss_database_arrow::column_semantic(table.schema().field(0)).unwrap();
     assert_eq!(category.kind, SemanticType::Categorical);
     assert_eq!(category.values.len(), 2);
     let page = table.page(0, 10, &query_control).unwrap();
@@ -1507,7 +1507,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
     ));
     let path = lease.0.join("part.parquet");
     let schema = Arc::new(
-        yss_tabular_arrow::with_row_columns(
+        yss_database_arrow::with_row_columns(
             Schema::new(vec![
                 Field::new("count", DataType::Int64, true),
                 Field::new("label.列", DataType::Utf8, true),
@@ -1520,7 +1520,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         )
         .unwrap(),
     );
-    let engine = yss_datafusion::DataFusionRuntime::new(32 * 1024 * 1024, 2).unwrap();
+    let engine = yss_database_engine::DataFusionRuntime::new(32 * 1024 * 1024, 2).unwrap();
     let relation = engine
         .parquet_relation(
             RelationBinding {
@@ -1668,7 +1668,7 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
         ],
     )
     .unwrap();
-    yss_tabular_io::write_parquet_batches(&path, schema, [Ok(batch)]).unwrap();
+    yss_database_io::write_parquet_batches(&path, schema, [Ok(batch)]).unwrap();
     let control = RelationControl {
         cancellation: Arc::new(AtomicBool::new(false)),
         deadline: Instant::now() + Duration::from_secs(30),

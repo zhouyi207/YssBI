@@ -14,7 +14,7 @@ pub struct DatabaseExportError {
 #[derive(Debug, thiserror::Error)]
 enum DatabaseExportSource {
     #[error("dataset export failed")]
-    Dataset(#[source] yss_dataset_store::DatasetStoreError),
+    Dataset(#[source] yss_database_store::DatasetStoreError),
     #[error("relation export failed")]
     Relation(#[source] yss_relational_contract::RelationError),
     #[error("Arrow export failed")]
@@ -22,10 +22,10 @@ enum DatabaseExportSource {
     #[error("file export failed")]
     Io(#[source] std::io::Error),
     #[error("batch export failed")]
-    Encoding(#[source] yss_tabular_io::TabularIoError),
+    Encoding(#[source] yss_database_io::TabularIoError),
 }
-impl From<yss_dataset_store::DatasetStoreError> for DatabaseExportError {
-    fn from(source: yss_dataset_store::DatasetStoreError) -> Self {
+impl From<yss_database_store::DatasetStoreError> for DatabaseExportError {
+    fn from(source: yss_database_store::DatasetStoreError) -> Self {
         Self {
             source: DatabaseExportSource::Dataset(source),
         }
@@ -52,8 +52,8 @@ impl From<std::io::Error> for DatabaseExportError {
         }
     }
 }
-impl From<yss_tabular_io::TabularIoError> for DatabaseExportError {
-    fn from(source: yss_tabular_io::TabularIoError) -> Self {
+impl From<yss_database_io::TabularIoError> for DatabaseExportError {
+    fn from(source: yss_database_io::TabularIoError) -> Self {
         Self {
             source: DatabaseExportSource::Encoding(source),
         }
@@ -169,9 +169,9 @@ impl DatabaseError {
     pub fn dataset(
         operation: DatabaseOperation,
         resource: Option<DatabaseId>,
-        source: yss_dataset_store::DatasetStoreError,
+        source: yss_database_store::DatasetStoreError,
     ) -> Self {
-        use yss_dataset_store::DatasetStoreError as Store;
+        use yss_database_store::DatasetStoreError as Store;
         use yss_relational_contract::RelationError;
         let code = match &source {
             Store::NotFound | Store::RowNotFound => DatabaseErrorCode::NotFound,
@@ -213,7 +213,7 @@ pub(crate) enum DatabaseDriverError {
     #[error("database export failed")]
     Export(#[source] DatabaseExportError),
     #[error("dataset driver failure")]
-    Dataset(#[source] yss_dataset_store::DatasetStoreError),
+    Dataset(#[source] yss_database_store::DatasetStoreError),
 }
 
 #[cfg(test)]
@@ -226,7 +226,7 @@ mod tests {
         let error = DatabaseError::dataset(
             DatabaseOperation::Query,
             None,
-            yss_dataset_store::DatasetStoreError::Batch(arrow::error::ArrowError::ComputeError(
+            yss_database_store::DatasetStoreError::Batch(arrow::error::ArrowError::ComputeError(
                 secret.into(),
             )),
         );

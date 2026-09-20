@@ -3,7 +3,7 @@ use crate::DatabaseInstance;
 use arrow::record_batch::RecordBatch;
 use std::path::PathBuf;
 use yss_database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
-use yss_dataset_store::DatasetStore;
+use yss_database_store::DatasetStore;
 
 pub const SALES_ID: &str = "00000000-0000-4000-8000-000000000001";
 

@@ -99,7 +99,7 @@ pub(super) fn execute(invocation: &KernelInvocation<'_>) -> Result<RuntimeValue,
                 .map_err(|_| KernelError::InvalidParameter)?,
         );
     }
-    let result = yss_tabular_arrow::convert_semantic_values(&values, metadata, &conversion)
+    let result = yss_database_arrow::convert_semantic_values(&values, metadata, &conversion)
         .map_err(|_| KernelError::InvalidParameter)?;
     let metadata = result.metadata;
     let mut output_bytes = invocation

@@ -42,9 +42,9 @@ yss-database-runtime = { path = "../yss-database-runtime" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
 yss-display-naming = { path = "../yss-display-naming" }
-yss-dataset-store = { path = "../yss-dataset-store" }
+yss-database-store = { path = "../yss-database-store" }
 arrow.workspace = true
-yss-tabular-arrow = { path = "../yss-tabular-arrow" }
+yss-database-arrow = { path = "../yss-database-arrow" }
 yss-graph-execution = { path = "../yss-graph-execution" }
 yss-function-editor-projection = { path = "../yss-function-editor-projection" }
 yss-graph-analysis = { path = "../yss-graph-analysis" }
@@ -70,15 +70,15 @@ yss-project-registry-contract = { path = "../yss-project-registry-contract" }
 yss-resource-naming = { path = "../yss-resource-naming" }
 yss-sci-contract = { path = "../yss-sci-contract" }
 yss-harness-core = { path = "../yss-harness-core" }
-yss-sql-source = { path = "../yss-sql-source" }
+yss-database-source = { path = "../yss-database-source" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
 yss-relational-contract = { path = "../yss-relational-contract" }
-yss-tabular-io = { path = "../yss-tabular-io" }
+yss-database-io = { path = "../yss-database-io" }
 yss-chart-document = { path = "../yss-chart-document" }
 
 [dev-dependencies]
 yss-harness-core = { path = "../yss-harness-core", features = ["test-support"] }
-yss-datafusion = { path = "../yss-datafusion" }
+yss-database-engine = { path = "../yss-database-engine" }
 yss-project-layout = { path = "../yss-project-layout" }
 yss-database-runtime = { path = "../yss-database-runtime", features = ["test-support"] }
 sqlx.workspace = true

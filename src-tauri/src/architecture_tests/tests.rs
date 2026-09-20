@@ -589,7 +589,7 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         "yss-bayes-artifact-contract",
         "yss-bayes-result"
     ));
-    for backwards_dependency in ["polars", "tauri", "yss-application", "yss-tabular-io"] {
+    for backwards_dependency in ["polars", "tauri", "yss-application", "yss-database-io"] {
         assert!(
             !declares_dependency_family("yss-bayes-artifact-contract", backwards_dependency),
             "Bayes artifact contract must not depend on {backwards_dependency}"
@@ -612,7 +612,7 @@ fn bayes_artifact_contract_and_datafusion_adapter_have_distinct_acyclic_owners()
         "yss-application",
         "yssbi",
         "yss-sci-runtime",
-        "yss-tabular-io",
+        "yss-database-io",
     ] {
         assert!(
             !declares_dependency_family("yss-bayes-artifact-datafusion", backwards_dependency),
@@ -1580,11 +1580,11 @@ fn database_schema_and_arrow_adapter_have_separate_owners() {
             RustLayer::PureLeaf,
         ),
         (
-            "src-tauri/crates/yss-tabular-arrow/src/lib.rs",
+            "src-tauri/crates/yss-database-arrow/src/lib.rs",
             RustLayer::DatabaseCore,
         ),
         (
-            "src-tauri/crates/yss-tabular-arrow/src/schema.rs",
+            "src-tauri/crates/yss-database-arrow/src/schema.rs",
             RustLayer::DatabaseCore,
         ),
     ] {
@@ -1659,7 +1659,7 @@ fn chart_resource_cutover_does_not_keep_a_retired_rust_path() {
                 .expect("Rust source path must remain inside the repository")
                 .to_string_lossy()
                 .replace('\\', "/");
-            if relative == "src-tauri/crates/yss-tabular-io/src/excel.rs" {
+            if relative == "src-tauri/crates/yss-database-io/src/excel.rs" {
                 continue;
             }
             assert!(

@@ -77,18 +77,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             // Inspect all input rows once during preparation, so late nulls and fractional
             // values cannot change the schema when users import the released artifact.
-            let reader = yss_tabular_io::read_csv_batches(&input, b',', true, usize::MAX, 10_000)?;
+            let reader = yss_database_io::read_csv_batches(&input, b',', true, usize::MAX, 10_000)?;
             fs::create_dir_all(output.parent().ok_or("missing output parent")?)?;
             let mut writer =
-                yss_tabular_io::ParquetBatchWriter::new(File::create(&output)?, reader.schema())?;
+                yss_database_io::ParquetBatchWriter::new(File::create(&output)?, reader.schema())?;
             for batch in reader {
                 writer.write(&batch?)?;
             }
             writer.finish()?;
         }
-        let reader = yss_tabular_io::read_parquet_batches(&output, 10_000, None)?;
+        let reader = yss_database_io::read_parquet_batches(&output, 10_000, None)?;
         let schema = reader.schema();
-        if yss_tabular_arrow::timezone_free_schema(&schema) != *schema {
+        if yss_database_arrow::timezone_free_schema(&schema) != *schema {
             return Err(format!(
                 "{} contains timezone-bearing timestamps; rebuild its sample resources",
                 source.id

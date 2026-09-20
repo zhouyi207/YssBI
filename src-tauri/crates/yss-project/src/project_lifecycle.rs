@@ -204,7 +204,7 @@ impl ProjectState {
         destination_binding.revalidate()?;
         let committed = prepared.commit()?;
         destination_binding.revalidate()?;
-        yss_dataset_store::DatasetStore::create(destination_root.as_path())
+        yss_database_store::DatasetStore::create(destination_root.as_path())
             .map_err(prepare_error)?;
         committed.finalize();
         root_guard.disarm();
@@ -386,7 +386,7 @@ fn copy_mutations(
     source: &Path,
     authority: &ProjectData,
 ) -> Result<Vec<StagedFilesystemMutation>, ProjectOperationError> {
-    let catalog = yss_dataset_store::DatasetStore::open(source)
+    let catalog = yss_database_store::DatasetStore::open(source)
         .and_then(|store| store.catalog_snapshot())
         .map_err(prepare_error)?;
     let source_tree = read_file_inventory(source)?;

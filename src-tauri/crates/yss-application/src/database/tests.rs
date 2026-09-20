@@ -82,7 +82,7 @@ fn bundled_samples_import_edit_and_reopen_as_independent_project_datasets() {
     let catalog = SampleCatalog::new(sample_resources());
     let samples = catalog.list().unwrap();
     assert_eq!(samples.len(), 5);
-    let store = yss_dataset_store::DatasetStore::open(&project_root).unwrap();
+    let store = yss_database_store::DatasetStore::open(&project_root).unwrap();
     let mut iris_id = String::new();
     let mut iris_operation = OperationId::new();
     for sample in samples {
@@ -403,7 +403,7 @@ fn project_import_edit_cast_undo_save_and_reopen_use_committed_dataset_snapshots
     assert_eq!(semantic_kind(), yss_data_contract::SemanticType::Numeric);
     edit(&app, &id, DatabaseMutation::Redo);
     assert_eq!(semantic_kind(), yss_data_contract::SemanticType::Identifier);
-    let store = yss_dataset_store::DatasetStore::open(&root).unwrap();
+    let store = yss_database_store::DatasetStore::open(&root).unwrap();
     let generation = store
         .snapshot(&database_id(&id))
         .unwrap()

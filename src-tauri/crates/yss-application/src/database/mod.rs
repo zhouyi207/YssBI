@@ -47,9 +47,9 @@ use yss_display_naming::allocate_unique_display_name;
 use yss_project::ProjectOperationError;
 use yss_project::{ProjectDatabaseError, ProjectState};
 use yss_project_identity::{OperationId, ProjectInstanceId, ResourceRevision};
-use yss_sql_source::list_tables as list_sql_source_tables;
+use yss_database_source::list_tables as list_sql_source_tables;
 use yss_tabular_contract::TabularSnapshot;
-use yss_tabular_io::list_excel_sheets as list_workbook_sheets;
+use yss_database_io::list_excel_sheets as list_workbook_sheets;
 
 #[derive(Debug)]
 pub struct LoadDatabaseResult {
@@ -862,7 +862,7 @@ fn runtime_database_mutation(
         }
         DatabaseMutation::AddColumn { name, dtype } => Ok(DatabaseMutationOperation::AddColumn {
             name: name.into_boxed_str(),
-            data_type: yss_tabular_arrow::editable_data_type(&dtype)
+            data_type: yss_database_arrow::editable_data_type(&dtype)
                 .map_err(|_| invalid("dtype"))?,
         }),
         DatabaseMutation::DeleteColumn { name } => Ok(DatabaseMutationOperation::DeleteColumn {
@@ -874,7 +874,7 @@ fn runtime_database_mutation(
             force,
         } => Ok(DatabaseMutationOperation::CastColumn {
             name: column.into_boxed_str(),
-            data_type: yss_tabular_arrow::editable_data_type(&dtype)
+            data_type: yss_database_arrow::editable_data_type(&dtype)
                 .map_err(|_| invalid("dtype"))?,
             force,
         }),

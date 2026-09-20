@@ -37,8 +37,8 @@ enum DatabaseCommittedRecordState {
 
 #[derive(Clone)]
 pub(crate) struct DatasetStorageRecovery {
-    pub store: Arc<yss_dataset_store::DatasetStore>,
-    pub publication: yss_dataset_store::DatasetPublication,
+    pub store: Arc<yss_database_store::DatasetStore>,
+    pub publication: yss_database_store::DatasetPublication,
 }
 impl std::fmt::Debug for DatasetStorageRecovery {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

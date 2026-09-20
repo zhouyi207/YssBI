@@ -1,6 +1,6 @@
 use super::*;
 use arrow::record_batch::RecordBatchReader;
-use yss_dataset_store::DatasetStore;
+use yss_database_store::DatasetStore;
 use yss_relational_contract::RelationControl;
 
 struct TemporarySource(PathBuf);
@@ -56,7 +56,7 @@ fn read_source(
             infer_schema_length,
         } => {
             let delimiter = u8::try_from(u32::from(delimiter)).map_err(import_error)?;
-            let reader = yss_tabular_io::read_csv_batches(
+            let reader = yss_database_io::read_csv_batches(
                 Path::new(&path),
                 delimiter,
                 has_header,
@@ -67,7 +67,7 @@ fn read_source(
             (path, Box::new(reader))
         }
         DatabaseImportSource::Parquet { path, columns } => {
-            let reader = yss_tabular_io::read_parquet_batches(Path::new(&path), 50_000, None)
+            let reader = yss_database_io::read_parquet_batches(Path::new(&path), 50_000, None)
                 .map_err(import_error)?;
             let projection = columns
                 .map(|columns| {
@@ -78,7 +78,7 @@ fn read_source(
                 })
                 .transpose()
                 .map_err(import_error)?;
-            let reader = yss_tabular_io::read_parquet_batches(
+            let reader = yss_database_io::read_parquet_batches(
                 Path::new(&path),
                 50_000,
                 projection.as_deref(),
@@ -95,9 +95,9 @@ fn read_source(
                 .create_new(true)
                 .open(&staged.0)
                 .map_err(import_error)?;
-            yss_tabular_io::export_excel_sheet_to_csv(Path::new(&path), &sheet, &staged.0)
+            yss_database_io::export_excel_sheet_to_csv(Path::new(&path), &sheet, &staged.0)
                 .map_err(import_error)?;
-            let reader = yss_tabular_io::read_csv_batches(&staged.0, b',', true, 10_000, 50_000)
+            let reader = yss_database_io::read_csv_batches(&staged.0, b',', true, 10_000, 50_000)
                 .map_err(import_error)?;
             temporary = Some(staged);
             (path, Box::new(reader))
@@ -107,7 +107,7 @@ fn read_source(
             connection_string,
             table,
         } => {
-            let reader = yss_sql_source::read_table_batches(
+            let reader = yss_database_source::read_table_batches(
                 &engine,
                 &connection_string,
                 &table,
@@ -190,7 +190,7 @@ pub(super) fn import_in_captured_session(
         .map_err(import_error)?;
     drop(temporary);
     let metadata = prepared.metadata();
-    let columns = yss_tabular_arrow::database_schema_fact(&id, &metadata.schema)
+    let columns = yss_database_arrow::database_schema_fact(&id, &metadata.schema)
         .map_err(import_error)?
         .columns()
         .to_vec();

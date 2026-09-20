@@ -7,7 +7,7 @@ use arrow::record_batch::RecordBatch;
 use yss_database_contract::EditState;
 use yss_database_contract::{DatabaseDecl, DatabaseExportFormat};
 use yss_database_schema::DatabaseSchemaFact;
-use yss_dataset_store::{
+use yss_database_store::{
     DatasetCellEdit, DatasetColumnCast, DatasetPublication, DatasetSnapshot, DatasetStoreError,
     PreparedDataset,
 };
@@ -49,20 +49,20 @@ impl DatabaseInstance {
     }
     pub(crate) fn engine(
         &self,
-    ) -> Result<&Arc<yss_datafusion::DataFusionRuntime>, DatasetStoreError> {
+    ) -> Result<&Arc<yss_database_engine::DataFusionRuntime>, DatasetStoreError> {
         match &self.state {
             DatabaseState::Dataset { engine, .. } => Ok(engine),
             DatabaseState::Failed => Err(DatasetStoreError::NotFound),
         }
     }
     pub fn data_schema(&self) -> Result<DatabaseSchemaFact, DatasetStoreError> {
-        yss_tabular_arrow::database_schema_fact(&self.decl.id, &self.snapshot()?.metadata().schema)
+        yss_database_arrow::database_schema_fact(&self.decl.id, &self.snapshot()?.metadata().schema)
             .map_err(|_| DatasetStoreError::InvalidSchema)
     }
     pub fn row_count(&self) -> Result<usize, DatasetStoreError> {
         Ok(self.snapshot()?.metadata().row_count)
     }
-    pub(crate) fn query(&self) -> Result<yss_datafusion::DatasetQuery, DatasetStoreError> {
+    pub(crate) fn query(&self) -> Result<yss_database_engine::DatasetQuery, DatasetStoreError> {
         self.snapshot()?.query(self.engine()?, "database-read")
     }
     pub fn relation(
@@ -118,7 +118,7 @@ impl DatabaseInstance {
         let relation = self.query()?.relation()?;
         let engine = self.engine()?;
         let control = query_control(128 * 1024 * 1024);
-        let schema = Arc::new(yss_tabular_arrow::timezone_free_schema(&relation.schema()));
+        let schema = Arc::new(yss_database_arrow::timezone_free_schema(&relation.schema()));
         let file = std::fs::File::create(path)?;
         match format {
             DatabaseExportFormat::Csv => {
@@ -126,7 +126,7 @@ impl DatabaseInstance {
                 writer.write(&RecordBatch::new_empty(schema))?;
                 let mut failure = None;
                 let result = engine.visit_relation(&relation, &control, &mut |batch| {
-                    let batch = yss_tabular_arrow::timezone_free_batch(&batch)
+                    let batch = yss_database_arrow::timezone_free_batch(&batch)
                         .map_err(|_| RelationError::QueryFailed)?;
                     writer.write(&batch).map_err(|error| {
                         failure = Some(error);
@@ -140,10 +140,10 @@ impl DatabaseInstance {
                 writer.into_inner().sync_all()?;
             }
             DatabaseExportFormat::Parquet => {
-                let mut writer = yss_tabular_io::ParquetBatchWriter::new(file, schema)?;
+                let mut writer = yss_database_io::ParquetBatchWriter::new(file, schema)?;
                 let mut failure = None;
                 let result = engine.visit_relation(&relation, &control, &mut |batch| {
-                    let batch = yss_tabular_arrow::timezone_free_batch(&batch)
+                    let batch = yss_database_arrow::timezone_free_batch(&batch)
                         .map_err(|_| RelationError::QueryFailed)?;
                     writer.write(&batch).map_err(|error| {
                         failure = Some(error);
@@ -313,7 +313,7 @@ impl DatabaseInstance {
     fn row_id_at(&self, index: usize, control: &RelationControl) -> Result<i64, DatasetStoreError> {
         let page = self.query()?.page(index, 1, control)?;
         let batch = page.batches.first().ok_or(DatasetStoreError::RowNotFound)?;
-        let rows = yss_tabular_arrow::dataset_row_columns(&batch.schema())
+        let rows = yss_database_arrow::dataset_row_columns(&batch.schema())
             .map_err(|_| DatasetStoreError::InvalidSchema)?
             .ok_or(DatasetStoreError::InvalidSchema)?;
         let array = batch
@@ -336,7 +336,7 @@ impl PreparedInstanceMutation {
     }
     pub fn recovery(
         &self,
-    ) -> Result<(Arc<yss_dataset_store::DatasetStore>, DatasetPublication), DatasetStoreError> {
+    ) -> Result<(Arc<yss_database_store::DatasetStore>, DatasetPublication), DatasetStoreError> {
         Ok((
             self.before.snapshot()?.store().clone(),
             self.prepared.publication(),

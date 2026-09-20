@@ -210,7 +210,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         source_layer: RustLayer::NodeKernel,
         repository_relative_source_file: "src-tauri/crates/yss-node-kernel/src/builtins/conversion.rs",
         fully_qualified_owner: "yss_node_kernel::builtins::conversion",
-        canonical_origin_targets: &["yss_tabular_arrow::conversion::convert_semantic_values"],
+        canonical_origin_targets: &["yss_database_arrow::conversion::convert_semantic_values"],
     },
     InternalDependencyCapability {
         source_layer: RustLayer::NodeKernel,
@@ -437,13 +437,13 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-project/src/project_activation.rs",
         fully_qualified_owner: "yss_project::project_activation",
         canonical_origin_targets: &[
-            "yss_dataset_store::DatasetStore",
-            "yss_dataset_store::DatasetStoreError",
-            "yss_dataset_store::DatasetStore::open",
-            "yss_dataset_store::DatasetStore::pending_publications",
-            "yss_dataset_store::DatasetStore::acknowledge_publication",
-            "yss_dataset_store::DatasetStore::collect_garbage",
-            "yss_dataset_store::DatasetPublication",
+            "yss_database_store::DatasetStore",
+            "yss_database_store::DatasetStoreError",
+            "yss_database_store::DatasetStore::open",
+            "yss_database_store::DatasetStore::pending_publications",
+            "yss_database_store::DatasetStore::acknowledge_publication",
+            "yss_database_store::DatasetStore::collect_garbage",
+            "yss_database_store::DatasetPublication",
         ],
     },
     InternalDependencyCapability {
@@ -451,11 +451,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-project/src/project_lifecycle.rs",
         fully_qualified_owner: "yss_project::project_lifecycle",
         canonical_origin_targets: &[
-            "yss_dataset_store::DatasetStore",
-            "yss_dataset_store::DatasetStoreError",
-            "yss_dataset_store::DatasetStore::open",
-            "yss_dataset_store::DatasetStore::create",
-            "yss_dataset_store::DatasetStore::catalog_snapshot",
+            "yss_database_store::DatasetStore",
+            "yss_database_store::DatasetStoreError",
+            "yss_database_store::DatasetStore::open",
+            "yss_database_store::DatasetStore::create",
+            "yss_database_store::DatasetStore::catalog_snapshot",
         ],
     },
     InternalDependencyCapability {
@@ -463,11 +463,11 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         repository_relative_source_file: "src-tauri/crates/yss-project/src/project_io.rs",
         fully_qualified_owner: "yss_project::project_io",
         canonical_origin_targets: &[
-            "yss_dataset_store::DatasetStore",
-            "yss_dataset_store::DatasetStore::open",
-            "yss_dataset_store::DatasetStore::catalog_metadata",
-            "yss_dataset_store::DatasetMetadata",
-            "yss_dataset_store::DatasetStoreError",
+            "yss_database_store::DatasetStore",
+            "yss_database_store::DatasetStore::open",
+            "yss_database_store::DatasetStore::catalog_metadata",
+            "yss_database_store::DatasetMetadata",
+            "yss_database_store::DatasetStoreError",
         ],
     },
     InternalDependencyCapability {
@@ -1657,11 +1657,11 @@ fn non_build_memberships(
         package,
         "yss-database-runtime"
             | "yss-dataset-profile"
-            | "yss-dataset-store"
-            | "yss-sql-source"
-            | "yss-tabular-io"
-            | "yss-tabular-arrow"
-            | "yss-datafusion"
+            | "yss-database-store"
+            | "yss-database-source"
+            | "yss-database-io"
+            | "yss-database-arrow"
+            | "yss-database-engine"
     ) {
         layers.insert(RustLayer::DatabaseCore);
     } else if matches!(package, "yss-sci" | "yss-sci-runtime") {

@@ -14,7 +14,7 @@
 原有 Project、图计划准备、GraphSemanticSnapshot、历史、ScientificBackend 和 ResultStore 保留其职责。
 
 当前行为由 [Database runtime](../../src-tauri/crates/yss-database-runtime/README.md)、
-[Dataset store](../../src-tauri/crates/yss-dataset-store/README.md)、
+[Dataset store](../../src-tauri/crates/yss-database-store/README.md)、
 [Graph / Execution](../architecture/GRAPH_AND_EXECUTION.md) 和
 [系统架构](../architecture/ARCHITECTURE.md) 说明。
 

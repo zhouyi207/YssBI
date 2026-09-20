@@ -29,7 +29,7 @@ AND/OR/NOT 同样支持标量、内存数列及同一行域的惰性数列；内
 Graph 的广播说明不提前改写标量值。数值、转换、比较和关系筛选适配的行为变化会推进实现 revision。
 
 类型转换支持七种 Semantic，保留标量/数列结构。`builtins::conversion` 仅通过
-`yss-tabular-arrow::convert_semantic_values` 的精确能力调用处理已物化值，输入输出使用中立
+`yss-database-arrow::convert_semantic_values` 的精确能力调用处理已物化值，输入输出使用中立
 `TabularScalar` 和 `ConversionMetadata`，不在 Kernel 内直接使用 Arrow 或 DataFusion。Arrow 适配器直接从借用的中立值构建数组，复用 `PreparedConversion` 的转换与校验。
 已物化的分类、顺序、日期时间及标识输出通过 `RuntimeValue::with_metadata` 保留含义、值域和已确定的时间表示。标注载荷只允许标量或平坦标量列表，字段私有，不能嵌套标注或包装资源句柄；后续转换继承元数据，展示端剥离标注投影原值。惰性数列通过 `RelationHandle::convert_series`
 生成表达式，持有共享的预编译转换对象；每个批次继续执行值域、精度和范围检查。数值表示策略、Null 和失败规则见内置节点帮助。

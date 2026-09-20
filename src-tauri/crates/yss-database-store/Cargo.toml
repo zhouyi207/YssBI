@@ -1,0 +1,24 @@
+[package]
+name = "yss-database-store"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+arrow.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio = { workspace = true, features = ["time"] }
+thiserror.workspace = true
+uuid.workspace = true
+yss-database-contract = { path = "../yss-database-contract" }
+yss-project-layout = { path = "../yss-project-layout" }
+yss-database-arrow = { path = "../yss-database-arrow" }
+yss-database-io = { path = "../yss-database-io" }
+yss-database-engine = { path = "../yss-database-engine" }
+yss-relational-contract = { path = "../yss-relational-contract" }
+
+[dev-dependencies]
+yss-dataset-profile = { path = "../yss-dataset-profile" }
+yss-tabular-contract = { path = "../yss-tabular-contract" }

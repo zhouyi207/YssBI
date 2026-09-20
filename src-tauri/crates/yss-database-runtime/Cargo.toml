@@ -16,10 +16,10 @@ yss-data-contract = { path = "../yss-data-contract" }
 yss-database-contract = { path = "../yss-database-contract" }
 yss-database-schema = { path = "../yss-database-schema" }
 yss-dataset-profile = { path = "../yss-dataset-profile" }
-yss-datafusion = { path = "../yss-datafusion" }
-yss-dataset-store = { path = "../yss-dataset-store" }
+yss-database-engine = { path = "../yss-database-engine" }
+yss-database-store = { path = "../yss-database-store" }
 yss-relational-contract = { path = "../yss-relational-contract" }
 yss-tabular-contract = { path = "../yss-tabular-contract" }
-yss-tabular-arrow = { path = "../yss-tabular-arrow" }
-yss-tabular-io = { path = "../yss-tabular-io" }
+yss-database-arrow = { path = "../yss-database-arrow" }
+yss-database-io = { path = "../yss-database-io" }
 uuid.workspace = true

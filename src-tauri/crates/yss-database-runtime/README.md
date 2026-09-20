@@ -1,8 +1,8 @@
 # Database runtime
 
 This crate owns session-scoped dataset handles, read admission, runtime revisions, edit history,
-and the storage/publication handoff. `yss-dataset-store` owns committed SQLite catalog state and
-immutable Parquet generations; `yss-datafusion` owns native relational execution. Project owns
+and the storage/publication handoff. `yss-database-store` owns committed SQLite catalog state and
+immutable Parquet generations; `yss-database-engine` owns native relational execution. Project owns
 its declaration/index publication, and Application coordinates the existing owners.
 
 ## Storage and activation
@@ -25,7 +25,7 @@ row IDs; relation reads hide internal identity/order fields. Display DTOs conver
 JavaScript integers to decimal strings. `DatabaseColumnFact` carries a semantic Graph type and
 an independent display label, exact Physical label and the field's Semantic configuration;
 none reconstructs the stored Arrow schema. The seven Semantic types and conversion constraints
-are owned by the [dataset metadata contract](../yss-dataset-store/README.md#field-meaning-and-physical-conversion).
+are owned by the [dataset metadata contract](../yss-database-store/README.md#field-meaning-and-physical-conversion).
 
 Profile queries aggregate the fixed effective snapshot in DataFusion. Numeric summaries ignore
 non-finite values while reporting nulls separately; category ties sort deterministically and

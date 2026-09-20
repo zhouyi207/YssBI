@@ -2,8 +2,8 @@ use crate::edit_history::EditHistory;
 use crate::{DatabaseInstance, DatabaseState};
 use std::sync::{Arc, OnceLock};
 use yss_database_contract::DatabaseDecl;
-use yss_datafusion::DataFusionRuntime;
-use yss_dataset_store::{DatasetStore, DatasetStoreError};
+use yss_database_engine::DataFusionRuntime;
+use yss_database_store::{DatasetStore, DatasetStoreError};
 use yss_relational_contract::RelationError;
 
 pub fn dataset_query_engine() -> Result<Arc<DataFusionRuntime>, DatasetStoreError> {

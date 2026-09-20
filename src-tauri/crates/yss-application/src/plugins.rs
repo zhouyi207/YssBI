@@ -154,7 +154,7 @@ impl HostServices for PluginHostServices {
                 }
                 let id = uuid::Uuid::new_v4().to_string();
                 let path = directory.join(format!("{id}.arrow"));
-                yss_tabular_io::write_ipc_batches(
+                yss_database_io::write_ipc_batches(
                     &path,
                     &snapshot.schema,
                     snapshot.batches.iter().cloned().map(Ok),

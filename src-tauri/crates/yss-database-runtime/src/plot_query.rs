@@ -157,7 +157,7 @@ pub fn read_numeric_column_pair(
             let column = batch.column(index);
             let physical = match column.data_type() {
                 ArrowDataType::Timestamp(..) => {
-                    yss_tabular_arrow::timezone_free_array(column.as_ref())
+                    yss_database_arrow::timezone_free_array(column.as_ref())
                         .map_err(|error| arrow::error::ArrowError::ExternalError(Box::new(error)))
                         .and_then(|array| {
                             arrow::compute::cast(

@@ -2,7 +2,7 @@
 
 > Status: Current
 > Scope: 2026-09-10 写入编码、有序前缀读取和编辑过滤优化后的本地测量
-> Canonical owners: `src-tauri/crates/yss-dataset-store/examples/dataset_engine_bench.rs`、`src-tauri/crates/yss-graph-execution/examples/ols_bench.rs` 与实际运行输出
+> Canonical owners: `src-tauri/crates/yss-database-store/examples/dataset_engine_bench.rs`、`src-tauri/crates/yss-graph-execution/examples/ols_bench.rs` 与实际运行输出
 > Update when: 数据规模、构建配置或数据引擎实现改变后重新测量
 
 本次在 Windows、Intel Core i9-13900HX（24 核、32 逻辑处理器）、约 32 GiB RAM 上运行。

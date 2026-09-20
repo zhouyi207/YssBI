@@ -153,7 +153,7 @@ database transport mapper 仅获 `SampleDataset` 的读取权限。示例数据�
 Database import、DatasetStore 和 Project publication 进入项目，不开放新的跨层通配边。
 Application 的 `serde` 直接依赖用于静态目录和离线源定义的反序列化，外部依赖声明清单与 Cargo 保持一致。
 
-`yss-tabular-arrow` 的 `chrono` 依赖用于将外部带时区的时间转换为保留钟面的无时区值；
+`yss-database-arrow` 的 `chrono` 依赖用于将外部带时区的时间转换为保留钟面的无时区值；
 这属于 Database Core 的类型适配职责。Project 与 Logging 自己生成无时区的展示时间，
 不依赖 tabular adapter 作为时钟服务。
 
@@ -169,7 +169,7 @@ Graph read snapshot 和既有 viewport 契约，不增加 projection 写权限�
 
 数据库的语义 Schema/revision facts 归 `yss-database-schema`，按 Pure Leaf 分类；具体引擎映射归适配器。
 `yss-relational-contract` 是执行期关系句柄、快照绑定和 Arrow 流端口的 Pure Leaf 契约。
-`yss-tabular-arrow` 与 `yss-datafusion` 按 Database Core 分类，Arrow/DataFusion 外部依赖只授予实际声明的包；
+`yss-database-arrow` 与 `yss-database-engine` 按 Database Core 分类，Arrow/DataFusion 外部依赖只授予实际声明的包；
 持久化 Graph 和统计数值算法不直接依赖 DataFusion。IPC/CSV/Parquet 宿主 I/O 不再获 Polars 物化权限。
 
 `yss-dataset-profile` 只拥有中性的统计 DTO 与显示规则，DataFusion 适配器在固定快照上执行聚合。
@@ -177,15 +177,15 @@ SCI runtime 的输入准备使用 Arrow；其 Polars/Polars Arrow 使用权限�
 profile 的行为由真实快照回归覆盖，不再用断言源码包含 Polars 代码的历史迁移测试固定旧实现。
 旧 DuckDB/Polars 适配器及其依赖权限已删除。`yss-bayes-artifact-datafusion` 按 Backend Adapter 审计，
 只为该包声明 DataFusion 查询依赖；Julia exchange 的两个消费者使用 Arrow。密度计算权限绑定到该适配器的 `plots` 模块。
-`yss-dataset-store` 的 `dataset_engine_bench` example 测量数据引擎与统计输入准备，复用该包的存储与查询依赖；OLS 计算测量归
+`yss-database-store` 的 `dataset_engine_bench` example 测量数据引擎与统计输入准备，复用该包的存储与查询依赖；OLS 计算测量归
 `yss-graph-execution` 的 `ols_bench` example，仅开放 `yss_sci_runtime::ols` 的精确调用权限。
 
 图编辑器投影归 `yss-graph-editor::projection`，按 Graph 分类；其错误类型使用该包显式声明的 `thiserror`。
 IPC 的 editor projection 与 graph draft mapper 只获对应 Graph 投影类型的精确读取权限。
 执行计划构建及缓存位于 `yss-graph-execution::graph_preparation`，直接使用已有执行计划和参数契约。该文件按 Execution 分类，只允许读取列明的 Graph Analysis 语义事实；其他 Execution 文件不因此获得 Graph Runtime、编辑器或 Project 状态访问权限。中立 kernel 已归 Node Kernel 层。诊断定义统一归 `yss-graph-diagnostics`。
-Application 的 `yss-datafusion`、`yss-project-layout`、`yss-project-registry-sqlite` 仅用于测试，声明为 dev-dependencies。
+Application 的 `yss-database-engine`、`yss-project-layout`、`yss-project-registry-sqlite` 仅用于测试，声明为 dev-dependencies。
 
-`yss-dataset-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
+`yss-database-store` 按 Database Core 分类，只拥有数据集目录和文件提交，不接管 Project 文档或 publication authority。
 结果页 command 只调用 Application 查询；页面预算、快照读取和查询结束后的 currentness 检查位于 Application。
 其 DTO converter 仅获 ResultPageProjection/ResultPageKind 的精确读取权限。
 结果租约 commands 只获 Application state、结果快照及引用 DTO 的登记权限；报告 commands 只获报告查询错误和相关 DTO。
