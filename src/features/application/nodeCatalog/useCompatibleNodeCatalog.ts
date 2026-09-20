@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import {
+  captureProjectReadContext,
+  useProjectIOStore,
+} from "@/features/application/project/projectIOStore";
 import { useGraphEditingStore } from "@/features/core/graphEditing";
 import { getLocalizedSearchIndex } from "@/features/core/nodeCatalog/localizedSearchIndex";
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
   type LocalizedCatalogResponse,
 } from "@/features/core/nodeCatalog/nodeCatalogStore";
-import {
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { CatalogService } from "@/services/nodeSystem/catalogService";
 import { toErrorReference } from "@/features/application/errorReference";
 import type { PortAddressDto } from "@/shared/types/domain/editorProjection";
@@ -56,14 +55,11 @@ export function useCompatibleNodeCatalog({
       return;
     }
 
-    let identity: ReturnType<typeof captureProjectIdentity>;
-    try {
-      identity = captureProjectIdentity();
-    } catch {
+    const context = captureProjectReadContext(projectInstanceId);
+    if (!context) {
       setState(IDLE_STATE);
       return;
     }
-    if (identity.projectInstanceId !== projectInstanceId) return;
 
     let current = true;
     setState({ status: "loading", error: null, catalog: null });
@@ -75,9 +71,8 @@ export function useCompatibleNodeCatalog({
       locale,
     })
       .then((catalog) => {
-        if (!current || !isCurrentProjectIdentity(identity)) return;
-        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-        if (catalog.projectInstanceId !== identity.projectInstanceId || catalog.locale !== locale) {
+        if (!current || !context.isCurrent()) return;
+        if (catalog.projectInstanceId !== context.projectInstanceId || catalog.locale !== locale) {
           setState({
             status: "error",
             error: {
@@ -91,8 +86,7 @@ export function useCompatibleNodeCatalog({
         setState({ status: "ready", error: null, catalog });
       })
       .catch((error: unknown) => {
-        if (!current || !isCurrentProjectIdentity(identity)) return;
-        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
+        if (!current || !context.isCurrent()) return;
         setState({
           status: "error",
           error: toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),

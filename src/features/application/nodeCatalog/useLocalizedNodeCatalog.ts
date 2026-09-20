@@ -1,7 +1,10 @@
 import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import { useProjectIOStore } from "@/features/application/project/projectIOStore";
+import {
+  captureProjectReadContext,
+  useProjectIOStore,
+} from "@/features/application/project/projectIOStore";
 import {
   getLocalizedSearchIndex,
   type LocalizedSearchIndex,
@@ -16,10 +19,6 @@ import {
 } from "@/features/core/nodeCatalog/nodeCatalogStore";
 import { CatalogService } from "@/services/nodeSystem/catalogService";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
-import {
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 
 export interface LocalizedNodeCatalogState {
   status: CatalogLoadStatus;
@@ -50,26 +49,19 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
     )
       return;
 
-    let identity: ReturnType<typeof captureProjectIdentity>;
-    try {
-      identity = captureProjectIdentity();
-    } catch {
-      return;
-    }
-    if (identity.projectInstanceId !== projectInstanceId) return;
+    const context = captureProjectReadContext(projectInstanceId);
+    if (!context) return;
 
     const requestIdentity = useNodeCatalogStore.getState().beginRequest(projectInstanceId, locale);
     if (!requestIdentity) return;
 
     void CatalogService.getLocalizedCatalog(projectInstanceId, locale)
       .then((response) => {
-        if (!isCurrentProjectIdentity(identity)) return;
-        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
+        if (!context.isCurrent()) return;
         useNodeCatalogStore.getState().storeResponse(requestIdentity, response);
       })
       .catch((error: unknown) => {
-        if (!isCurrentProjectIdentity(identity)) return;
-        if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
+        if (!context.isCurrent()) return;
         useNodeCatalogStore
           .getState()
           .storeError(

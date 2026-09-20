@@ -1,3 +1,7 @@
+import {
+  captureProjectLifecycleState,
+  isProjectLifecycleStateCurrent,
+} from "@/features/core/projectLifecycle/projectLifecycleAuthority";
 import { createBoundApplicationStore } from "@/features/core/state/applicationStore";
 import { LoadStatus } from "@/shared/types/ui/common";
 import { toErrorReference, type ErrorReference } from "@/features/application/errorReference";
@@ -94,3 +98,22 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
 
 setProjectPathForViewport(useProjectIOStore.getState().currentPath);
 useProjectIOStore.subscribe((state) => setProjectPathForViewport(state.currentPath));
+
+/** Capture a read against the displayed projection, which may lag activation. */
+export function captureProjectReadContext(projectInstanceId: string | null) {
+  const identity = captureProjectLifecycleState();
+  if (
+    !projectInstanceId ||
+    identity.projectInstanceId !== projectInstanceId ||
+    useProjectIOStore.getState().projectInstanceId !== projectInstanceId
+  ) {
+    return null;
+  }
+
+  return {
+    projectInstanceId,
+    isCurrent: () =>
+      isProjectLifecycleStateCurrent(identity) &&
+      useProjectIOStore.getState().projectInstanceId === projectInstanceId,
+  };
+}

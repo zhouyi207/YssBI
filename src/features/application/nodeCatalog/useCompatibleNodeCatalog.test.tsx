@@ -20,6 +20,7 @@ import { useCompatibleNodeCatalog } from "./useCompatibleNodeCatalog";
 const localeState = vi.hoisted(() => ({ language: "en-US" }));
 
 vi.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({
     i18n: {
       language: localeState.language,
@@ -149,7 +150,7 @@ describe("useCompatibleNodeCatalog", () => {
     useGraphEditingStore.getState().clear();
   });
 
-  it("queries the compatible catalog against the current unsaved Graph Draft", async () => {
+  it("queries the compatible catalog against the current graph editing version", async () => {
     vi.mocked(CatalogService.getCompatibleNodeCatalog).mockResolvedValue(
       catalog("project-1", "compatible.node"),
     );
@@ -160,7 +161,7 @@ describe("useCompatibleNodeCatalog", () => {
     expect(CatalogService.getCompatibleNodeCatalog).toHaveBeenCalledWith({
       projectInstanceId: "project-1",
       graphPath,
-      document: draftDocument,
+      version: useGraphEditingStore.getState().sessions[graphPath].version,
       sourcePort,
       locale: "en-US",
     });

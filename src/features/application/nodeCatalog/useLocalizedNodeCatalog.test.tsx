@@ -14,6 +14,7 @@ import { useLocalizedNodeCatalog } from "./useLocalizedNodeCatalog";
 const localeState = vi.hoisted(() => ({ language: "zh-CN" }));
 
 vi.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: () => undefined },
   useTranslation: () => ({
     i18n: {
       language: localeState.language,
