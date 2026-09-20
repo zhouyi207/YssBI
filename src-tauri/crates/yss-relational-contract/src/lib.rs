@@ -126,7 +126,35 @@ pub struct RelationPredicate {
     pub value: Option<yss_data_contract::FilterLiteral>,
 }
 
+/// Which Null pattern removes a row or column. NaN and empty text are ordinary values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropNaMode {
+    Any,
+    All,
+}
+
 pub trait RelationPlan: Send + Sync {
+    /// Deferred schemas are unavailable until consumption; `schema()` is then an empty marker.
+    fn schema_is_deferred(&self) -> bool {
+        false
+    }
+    fn resolve(&self, _control: RelationControl) -> RelationFuture<'_, Option<RelationHandle>> {
+        Box::pin(async { Ok(None) })
+    }
+    fn drop_na_rows(
+        &self,
+        _columns: &[Box<str>],
+        _mode: DropNaMode,
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
+    fn drop_na_columns(
+        &self,
+        _columns: &[Box<str>],
+        _mode: DropNaMode,
+    ) -> Result<RelationHandle, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn as_any(&self) -> &dyn std::any::Any;
     fn concat_rows(
         &self,
@@ -183,6 +211,35 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn schema_is_deferred(&self) -> bool {
+        self.plan.schema_is_deferred()
+    }
+    /// Resolve data-dependent columns only at an execution/consumption boundary.
+    pub fn resolve(&self, control: RelationControl) -> RelationFuture<'_, Self> {
+        Box::pin(async move {
+            control.check()?;
+            Ok(self
+                .plan
+                .resolve(control)
+                .await?
+                .unwrap_or_else(|| self.clone()))
+        })
+    }
+    pub fn drop_na_rows(
+        &self,
+        columns: &[Box<str>],
+        mode: DropNaMode,
+    ) -> Result<Self, RelationError> {
+        self.plan.drop_na_rows(columns, mode)
+    }
+    pub fn drop_na_columns(
+        &self,
+        columns: &[Box<str>],
+        mode: DropNaMode,
+    ) -> Result<Self, RelationError> {
+        self.plan.drop_na_columns(columns, mode)
+    }
+
     pub fn boolean_series(
         &self,
         operation: BooleanOperation,

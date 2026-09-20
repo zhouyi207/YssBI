@@ -3,6 +3,7 @@ use yss_node_protocol::ResolvedSchemaFact;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum GraphSchemaIssue {
+    DataDependent,
     UnconnectedInput,
     UnresolvedUpstream,
     MissingResource,
@@ -16,6 +17,8 @@ pub enum GraphSchemaIssue {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub enum GraphSchemaState {
     NotApplicable,
+    /// Column membership is resolved only when the relation is consumed.
+    Deferred,
     Exact(ResolvedSchemaFact),
     Pending(GraphSchemaIssue),
     Unavailable(GraphSchemaIssue),
@@ -33,6 +36,7 @@ impl GraphSchemaState {
 
     pub fn issue(&self) -> Option<GraphSchemaIssue> {
         match self {
+            Self::Deferred => Some(GraphSchemaIssue::DataDependent),
             Self::Pending(issue)
             | Self::Unavailable(issue)
             | Self::Conflict(issue)
@@ -43,6 +47,7 @@ impl GraphSchemaState {
 
     pub(crate) fn from_issue(issue: GraphSchemaIssue) -> Self {
         match issue {
+            GraphSchemaIssue::DataDependent => Self::Deferred,
             GraphSchemaIssue::UnconnectedInput | GraphSchemaIssue::UnresolvedUpstream => {
                 Self::Pending(issue)
             }

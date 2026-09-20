@@ -323,6 +323,7 @@ pub enum SchemaAwareParameterEditorDto {
         options: Vec<Box<str>>,
     },
     ProjectColumns {
+        allow_empty: bool,
         available: bool,
         unavailable_reason: Option<Box<str>>,
         options: Vec<DataframeColumnOptionDto>,

@@ -27,9 +27,6 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
         let unavailable_reason = schema
             .is_none()
             .then(|| "editors.dataframe.connect_source".into());
-        let TypeExpr::Concrete(type_id) = &parameter.value_type else {
-            continue;
-        };
         let value = match &parameter.effective_value {
             Some(GraphResolvedParameterValue::Literal(value)) => Some(value.clone()),
             Some(GraphResolvedParameterValue::DefaultLiteral(value)) => {
@@ -37,9 +34,52 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
             }
             _ => None,
         };
+        if parameter.key.as_str() == "subset"
+            && matches!(
+                node.node_type.as_str(),
+                "yssbi.dataframe.dropna.rows" | "yssbi.dataframe.dropna.columns"
+            )
+        {
+            parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
+                allow_empty: true,
+                available: schema.is_some(),
+                unavailable_reason: if node
+                    .ports
+                    .iter()
+                    .filter(|port| port.direction == PortDirection::Input)
+                    .any(|port| matches!(port.schema_state, GraphSchemaState::Deferred))
+                {
+                    Some("editors.dataframe.deferred_columns".into())
+                } else {
+                    unavailable_reason.clone()
+                },
+                options: fields
+                    .iter()
+                    .map(|field| GraphColumnFact {
+                        name: field.name.0.clone(),
+                        data_type: field.scalar_type,
+                    })
+                    .collect(),
+                value: value
+                    .as_ref()
+                    .and_then(|value| value.as_array())
+                    .map(|columns| {
+                        columns
+                            .iter()
+                            .filter_map(|column| column.as_str().map(Into::into))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            });
+            continue;
+        }
+        let TypeExpr::Concrete(type_id) = &parameter.value_type else {
+            continue;
+        };
         match type_id.as_str() {
             PROJECT_COLUMNS_TYPE_ID => {
                 parameter.configuration = Some(GraphParameterConfigurationFact::ProjectColumns {
+                    allow_empty: false,
                     available: schema.is_some(),
                     unavailable_reason: unavailable_reason.clone(),
                     options: fields

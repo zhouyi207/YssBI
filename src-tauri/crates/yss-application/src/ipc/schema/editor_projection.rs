@@ -250,11 +250,13 @@ fn map_parameter_configuration(
             }
         }
         EditorParameterConfiguration::ProjectColumns {
+            allow_empty,
             available,
             unavailable_reason,
             options,
             value,
         } => SchemaAwareParameterEditorDto::ProjectColumns {
+            allow_empty: *allow_empty,
             available: *available,
             unavailable_reason: unavailable_reason.clone(),
             options: options
@@ -495,6 +497,7 @@ mod tests {
                     multiline: false,
                     value: Some(json!(["sales"])),
                     configuration: Some(EditorParameterConfiguration::ProjectColumns {
+                        allow_empty: false,
                         available: true,
                         unavailable_reason: None,
                         options: Box::new([EditorColumnOption {
@@ -553,6 +556,7 @@ mod tests {
             wire["nodes"][0]["parameterEditors"][0]["configuration"],
             json!({
                 "kind": "projectColumns",
+                "allowEmpty": false,
                 "available": true,
                 "unavailableReason": null,
                 "options": [{"name": "sales", "dataType": "Numeric"}],

@@ -1,6 +1,7 @@
 //! DataFusion plan construction and controlled Arrow execution. No Graph document or UI state.
 
 mod dataset;
+mod drop_na;
 mod page;
 mod profile;
 pub use dataset::{DatasetQuery, DatasetQueryPage};

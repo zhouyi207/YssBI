@@ -469,6 +469,12 @@ impl EditorSchemaResolver<'_> {
             {
                 self.resolve_constant_schema(node_id)
             }
+            SchemaExpr::Derived { resolver, .. }
+                if resolver.as_str() == "yssbi.dataframe.schema.dropna" =>
+            {
+                self.resolve_input(node_id, &"source".parse().expect("static port"))?;
+                Err(GraphSchemaIssue::DataDependent)
+            }
             SchemaExpr::Derived { .. } => Err(GraphSchemaIssue::UnsupportedResolver),
         }
     }

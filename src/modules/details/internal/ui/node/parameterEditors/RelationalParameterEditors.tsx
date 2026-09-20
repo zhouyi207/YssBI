@@ -86,7 +86,7 @@ export function ProjectColumnsEditor({
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
-        if (selected.length > 0) void onCommit(selected);
+        if (editor.allowEmpty || selected.length > 0) void onCommit(selected);
       }}
     >
       <div className="space-y-2">
@@ -134,7 +134,11 @@ export function ProjectColumnsEditor({
         ))}
       </div>
       <EditorMessages errors={errors} />
-      <Button type="submit" size="sm" disabled={disabled || selected.length === 0}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={disabled || (!editor.allowEmpty && selected.length === 0)}
+      >
         {t("detail.parameterEditor.apply")}
       </Button>
     </form>

@@ -14,6 +14,7 @@ pub(crate) async fn read_page(
     if limit == 0 {
         return Err(RelationError::InvalidInput);
     }
+    let relation = relation.resolve(control.clone()).await?;
     let probe = limit.checked_add(1).ok_or(RelationError::InvalidInput)?;
     let page = relation.limit(offset, probe)?;
     let schema = page.schema();

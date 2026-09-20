@@ -57,10 +57,38 @@ fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
         port(columns, "source"),
     );
     connect(&mut document, port(columns, "result"), port(rows, "source"));
+    let na_rows = node(&mut document, "yssbi.dataframe.dropna.rows", &[]);
+    let na_columns = node(&mut document, "yssbi.dataframe.dropna.columns", &[]);
+    let after_na = node(&mut document, "yssbi.dataframe.dropna.rows", &[]);
+    connect(&mut document, port(rows, "result"), port(na_rows, "source"));
+    connect(
+        &mut document,
+        port(na_rows, "result"),
+        port(na_columns, "source"),
+    );
+    connect(
+        &mut document,
+        port(na_columns, "result"),
+        port(after_na, "source"),
+    );
     let mut cache = GraphSemanticCache::default();
     for extra in [false, true] {
         let snapshot =
             assert_matches_full(&document, &builtin.registry, &resource(extra), &mut cache);
+        for id in [na_rows, na_columns] {
+            assert!(matches!(
+                &snapshot.node(id).unwrap().parameters[0].configuration,
+                Some(crate::GraphParameterConfigurationFact::ProjectColumns {
+                    allow_empty: true, available: true, options, value, ..
+                }) if options.len() == if extra { 3 } else { 2 } && value.is_empty()
+            ));
+        }
+        assert!(matches!(
+            &snapshot.node(after_na).unwrap().parameters[0].configuration,
+            Some(crate::GraphParameterConfigurationFact::ProjectColumns {
+                allow_empty: true, available: false, unavailable_reason: Some(reason), ..
+            }) if reason.as_ref() == "editors.dataframe.deferred_columns"
+        ));
         assert!(matches!(
             &snapshot.node(columns).unwrap().parameters[0].configuration,
             Some(crate::GraphParameterConfigurationFact::ProjectColumns { available: true, options, .. })
@@ -87,7 +115,23 @@ fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
             .into_iter()
             .filter(|f| f.name.0.as_ref() != "unused")
             .collect();
-        for id in [columns, rows] {
+        assert!(
+            !snapshot.has_blocking_diagnostics(),
+            "{:?}",
+            snapshot.diagnostics()
+        );
+        for id in [na_columns, after_na] {
+            let result = snapshot
+                .node(id)
+                .unwrap()
+                .ports
+                .iter()
+                .find(|p| p.address == port(id, "result"))
+                .unwrap();
+            assert!(matches!(result.schema_state, GraphSchemaState::Deferred));
+            assert!(result.schema_state.exact().is_none());
+        }
+        for id in [columns, rows, na_rows] {
             let result = snapshot
                 .node(id)
                 .unwrap()
@@ -98,6 +142,20 @@ fn drop_nodes_resolve_remaining_fields_and_refresh_after_upstream_changes() {
             assert_eq!(result.schema_state.exact().unwrap().fields, expected);
         }
     }
+    // A deferred frame is executable, but cannot promise a statically selected column.
+    let mut dependent = document.clone();
+    let select = node(
+        &mut dependent,
+        "yssbi.dataframe.series.select",
+        &[("column", serde_json::json!("amount"))],
+    );
+    connect(
+        &mut dependent,
+        port(na_columns, "result"),
+        port(select, "dataframe"),
+    );
+    let blocked = resolve_graph_semantics(&dependent, &builtin.registry, &resource(false));
+    assert!(blocked.has_blocking_diagnostics());
     for (selection, issue) in [
         (
             serde_json::json!(["absent"]),

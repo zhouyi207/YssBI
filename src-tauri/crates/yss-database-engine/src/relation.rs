@@ -233,7 +233,7 @@ impl DataFusionRelation {
         let executor = self.executor.clone();
         Ok(RelationHandle::new(Arc::new(self), executor))
     }
-    fn derived(
+    pub(crate) fn derived(
         &self,
         frame: DataFrame,
         schema: SchemaRef,
@@ -266,6 +266,21 @@ impl DataFusionRelation {
 }
 
 impl RelationPlan for DataFusionRelation {
+    fn drop_na_rows(
+        &self,
+        columns: &[Box<str>],
+        mode: yss_relational_contract::DropNaMode,
+    ) -> Result<RelationHandle, RelationError> {
+        crate::drop_na::rows(self, columns, mode)
+    }
+    fn drop_na_columns(
+        &self,
+        columns: &[Box<str>],
+        mode: yss_relational_contract::DropNaMode,
+    ) -> Result<RelationHandle, RelationError> {
+        crate::drop_na::columns(self, columns, mode)
+    }
+
     fn boolean_series(
         &self,
         operation: yss_relational_contract::BooleanOperation,

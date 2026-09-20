@@ -193,6 +193,7 @@ pub enum EditorParameterConfiguration {
         options: Box<[Box<str>]>,
     },
     ProjectColumns {
+        allow_empty: bool,
         available: bool,
         unavailable_reason: Option<Box<str>>,
         options: Box<[EditorColumnOption]>,

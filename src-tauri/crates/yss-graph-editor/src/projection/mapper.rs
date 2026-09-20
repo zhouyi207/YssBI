@@ -355,11 +355,13 @@ fn project_configuration(fact: &GraphParameterConfigurationFact) -> EditorParame
             }
         }
         GraphParameterConfigurationFact::ProjectColumns {
+            allow_empty,
             available,
             unavailable_reason,
             options,
             value,
         } => EditorParameterConfiguration::ProjectColumns {
+            allow_empty: *allow_empty,
             available: *available,
             unavailable_reason: unavailable_reason.clone(),
             options: options

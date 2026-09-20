@@ -101,6 +101,7 @@ describe("ProjectColumnsEditor", () => {
     const onCommit = vi.fn();
     const editor: Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }> = {
       kind: "projectColumns",
+      allowEmpty: false,
       available: true,
       unavailableReason: null,
       options: [
@@ -127,6 +128,7 @@ describe("ProjectColumnsEditor", () => {
     const onCommit = vi.fn();
     const editor: Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }> = {
       kind: "projectColumns",
+      allowEmpty: false,
       available: true,
       unavailableReason: null,
       options: [
@@ -148,6 +150,7 @@ describe("ProjectColumnsEditor", () => {
   it("renders the Rust-issued unavailable reason and validation errors", () => {
     const editor: Extract<SchemaAwareParameterEditorDto, { kind: "projectColumns" }> = {
       kind: "projectColumns",
+      allowEmpty: false,
       available: false,
       unavailableReason: "Connect DataFrame input",
       options: [],

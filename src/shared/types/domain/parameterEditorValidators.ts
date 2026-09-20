@@ -95,8 +95,16 @@ export function isSchemaAwareParameterEditorDto(
     (candidate.unavailableReason === null || typeof candidate.unavailableReason === "string");
   if (candidate.kind === "projectColumns") {
     return (
-      hasExactKeys(candidate, ["kind", "available", "unavailableReason", "options", "value"]) &&
+      hasExactKeys(candidate, [
+        "kind",
+        "allowEmpty",
+        "available",
+        "unavailableReason",
+        "options",
+        "value",
+      ]) &&
       commonValid &&
+      typeof candidate.allowEmpty === "boolean" &&
       Array.isArray(candidate.options) &&
       candidate.options.every((option) => isColumnOption(option, false)) &&
       Array.isArray(candidate.value) &&

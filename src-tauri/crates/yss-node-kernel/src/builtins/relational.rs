@@ -152,6 +152,8 @@ pub(crate) enum RelationalKernel {
     Filter,
     DropColumns,
     DropRows,
+    DropNaRows,
+    DropNaColumns,
     Series,
     Limit,
     Rename,
@@ -278,6 +280,22 @@ pub(crate) fn execute(
                     right_suffix: text(parameter("right_suffix")?)?.into(),
                 },
             )
+        }
+        RelationalKernel::DropNaRows | RelationalKernel::DropNaColumns => {
+            let RuntimeValue::List(columns) = parameter("subset")? else {
+                return Err(KernelError::Failed);
+            };
+            let columns = columns.iter().map(text).collect::<Result<Vec<_>, _>>()?;
+            let mode = match text(parameter("how")?)?.as_ref() {
+                "any" => yss_relational_contract::DropNaMode::Any,
+                "all" => yss_relational_contract::DropNaMode::All,
+                _ => return Err(KernelError::Failed),
+            };
+            if matches!(kind, RelationalKernel::DropNaRows) {
+                relation.drop_na_rows(&columns, mode)
+            } else {
+                relation.drop_na_columns(&columns, mode)
+            }
         }
         RelationalKernel::Project | RelationalKernel::DropColumns => {
             let RuntimeValue::List(columns) = parameter("columns")? else {

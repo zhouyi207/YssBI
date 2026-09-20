@@ -1806,7 +1806,21 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         relational_document(&resource);
     let drop_columns = NodeId::new();
     let drop_rows = NodeId::new();
+    let na_rows = NodeId::new();
+    let na_columns = NodeId::new();
     for (id, kind, key, value) in [
+        (
+            na_rows,
+            "yssbi.dataframe.dropna.rows",
+            "subset",
+            serde_json::json!([]),
+        ),
+        (
+            na_columns,
+            "yssbi.dataframe.dropna.columns",
+            "subset",
+            serde_json::json!([]),
+        ),
         (
             drop_columns,
             "yssbi.dataframe.drop.columns",
@@ -1838,6 +1852,8 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         (source, "dataframe", drop_columns),
         (drop_columns, "result", drop_rows),
         (drop_rows, "result", project_columns),
+        (drop_rows, "result", na_rows),
+        (na_rows, "result", na_columns),
     ] {
         let id = ConnectionId::new();
         document.connections.insert(
@@ -2172,6 +2188,8 @@ fn project_dataset_graph_runs_through_application_authority_and_paged_results() 
         (source, "dataframe", 6, vec!["x", "y", "unused"]),
         (drop_columns, "result", 6, vec!["x", "y"]),
         (drop_rows, "result", 5, vec!["x", "y"]),
+        (na_rows, "result", 5, vec!["x", "y"]),
+        (na_columns, "result", 5, vec!["x", "y"]),
         (assemble, "dataframe", 4, vec!["预测.value", "y"]),
         (rows, "result", 8, vec!["x", "y"]),
         (columns, "result", 4, vec!["预测.value", "y"]),

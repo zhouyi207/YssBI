@@ -323,6 +323,20 @@ Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的
 
 `yss-node-kernel` 的统计适配、`yss-graph-execution` 的结果分析及独立 OLS benchmark、`yss-application::ipc` 的独立统计命令直接调用 runtime。独立统计命令在 IPC 层转换中性请求/结果；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和普通 Application 模块不注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
+Drop NA 的检查列复用列选择器，参数投影通过 `allowEmpty` 允许清空选择以检查全部列；
+已有的投影选列参数仍要求非空。输入列结构尚未确定时，选择器显示延迟确定提示，不触发扫描。
+
+DataFrame 的 `dropna.rows` 生成原生 Null 过滤计划，保留列结构；`dropna.columns` 生成
+数据依赖的延迟选列请求。两者的节点调用及 Graph Resolve 都不扫描行。Graph 用 `Deferred`
+标记后者的列结构，并沿缺失值处理及 Limit 传播；依赖固定列名/类型的下游端口仍要求 Exact。
+这一状态由 `GraphSemanticSnapshot` 拥有，消费结果不会回写或替代语义快照。
+
+Relation 的 `schema_is_deferred()` 区分未确定的 Schema 与真正的零列表；Deferred 时 `schema()`
+的空标记不能作为列清单。分页先通过 `resolve` 消费受控批流，统计完整输入的候选列是否含 Null
+或非 Null，再构造投影及分页计划。批流消费也经过同一解析入口。只缓存成功解析的不可变关系计划，
+不缓存全表数据或失败；来源绑定、租约、取消、deadline 及批内存预算贯穿统计和输出阶段。
+统计不把 NaN/空字符串/零值算作缺失；空表保留列，零列结果继续保留行数。
+
 Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-database-engine` 内；计划构造不 collect。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），

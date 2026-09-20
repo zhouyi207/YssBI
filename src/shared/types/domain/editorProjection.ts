@@ -221,6 +221,7 @@ export type SchemaAwareParameterEditorDto =
   | { kind: "selectOptions"; options: string[] }
   | {
       kind: "projectColumns";
+      allowEmpty: boolean;
       available: boolean;
       unavailableReason: string | null;
       options: DataframeColumnOptionDto[];

@@ -275,6 +275,7 @@ pub enum GraphParameterConfigurationFact {
         options: Box<[Box<str>]>,
     },
     ProjectColumns {
+        allow_empty: bool,
         available: bool,
         unavailable_reason: Option<Box<str>>,
         options: Box<[GraphColumnFact]>,
@@ -852,7 +853,16 @@ fn resolve_graph_semantics_inner(
             if requires_schema && matches!(port.schema_state, GraphSchemaState::NotApplicable) {
                 port.schema_state = GraphSchemaState::Pending(GraphSchemaIssue::UnresolvedUpstream);
             }
+            let accepts_deferred = port.direction == PortDirection::Output
+                || matches!(
+                    document.nodes[&node.node_id].node_type.as_str(),
+                    "yssbi.dataframe.dropna.rows"
+                        | "yssbi.dataframe.dropna.columns"
+                        | "yssbi.dataframe.limit"
+                        | "yssbi.debug.view"
+                );
             if requires_schema
+                && !(accepts_deferred && matches!(port.schema_state, GraphSchemaState::Deferred))
                 && port.schema_state.exact().is_none()
                 && !matches!(port.schema_state, GraphSchemaState::InternalFailure(_))
             {

@@ -1604,3 +1604,186 @@ fn relation_pages_probe_one_extra_row_and_preserve_wide_integer_display() {
         .unwrap();
     assert_eq!(source.page(0, 2, &control()).unwrap(), first);
 }
+
+#[test]
+fn drop_na_rows_and_columns_preserve_values_and_resolve_before_paging() {
+    use yss_relational_contract::DropNaMode::{All, Any};
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 1).unwrap();
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("a.b", DataType::Int64, true),
+            Field::new("empty", DataType::Int64, true),
+            Field::new("text", DataType::Utf8, true),
+            Field::new("float", DataType::Float64, true),
+        ])),
+        vec![
+            Arc::new(Int64Array::from(vec![Some(1), None, Some(3)])),
+            Arc::new(Int64Array::from(vec![None, None, None])),
+            Arc::new(StringArray::from(vec!["", "ok", "last"])),
+            Arc::new(Float64Array::from(vec![f64::NAN, 0.0, 1.0])),
+        ],
+    )
+    .unwrap();
+    let source = runtime.batch_relation(binding(), batch.clone()).unwrap();
+    let subset = vec!["a.b".into(), "empty".into()];
+    assert_eq!(
+        source
+            .drop_na_rows(&subset, Any)
+            .unwrap()
+            .page(0, 5, &control())
+            .unwrap()
+            .row_count,
+        0
+    );
+    assert_eq!(
+        source
+            .drop_na_rows(&subset, All)
+            .unwrap()
+            .page(0, 5, &control())
+            .unwrap()
+            .row_count,
+        2
+    );
+    assert_eq!(
+        source
+            .drop_na_rows(&["text".into(), "float".into()], Any)
+            .unwrap()
+            .page(0, 5, &control())
+            .unwrap()
+            .row_count,
+        3
+    );
+    let any = source.drop_na_columns(&[], Any).unwrap();
+    assert!(any.schema_is_deferred());
+    // a.b is non-null in the first page but must still be removed for its later Null.
+    let page = any.page(0, 1, &control()).unwrap();
+    assert_eq!(
+        page.columns
+            .iter()
+            .map(|c| c.name.as_ref())
+            .collect::<Vec<_>>(),
+        ["text", "float"]
+    );
+    assert_eq!(page.row_count, 1);
+    assert!(page.has_more);
+    let all = source.drop_na_columns(&[], All).unwrap();
+    assert_eq!(all.page(0, 5, &control()).unwrap().columns.len(), 3);
+    assert_eq!(
+        all.drop_na_rows(&["a.b".into()], Any)
+            .unwrap()
+            .page(0, 5, &control())
+            .unwrap()
+            .row_count,
+        2
+    );
+    let one = source
+        .project(&["empty".into()])
+        .unwrap()
+        .drop_na_columns(&[], All)
+        .unwrap()
+        .page(0, 5, &control())
+        .unwrap();
+    assert!(one.columns.is_empty());
+    assert_eq!(one.row_count, 3);
+    let empty = source
+        .limit(0, 0)
+        .unwrap()
+        .drop_na_columns(&[], All)
+        .unwrap()
+        .page(0, 5, &control())
+        .unwrap();
+    assert_eq!(empty.columns.len(), 4);
+    assert_eq!(empty.row_count, 0);
+    assert!(source.drop_na_rows(&["missing".into()], Any).is_err());
+    assert!(
+        source
+            .drop_na_columns(&["a.b".into(), "a.b".into()], All)
+            .is_err()
+    );
+    assert_eq!(source.schema(), batch.schema());
+    let cancelled = control();
+    cancelled
+        .cancellation
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert_eq!(any.page(0, 1, &cancelled), Err(RelationError::Cancelled));
+}
+
+#[test]
+fn drop_na_planning_never_scans_and_streaming_retains_the_source_lease() {
+    use yss_relational_contract::DropNaMode::{All, Any};
+    let runtime = DataFusionRuntime::new(64 * 1024 * 1024, 1).unwrap();
+    let schema = Arc::new(
+        yss_database_arrow::with_row_columns(
+            Schema::new(vec![
+                Field::new("x", DataType::Int64, true),
+                Field::new("row_id", DataType::Int64, false),
+                Field::new("order", DataType::Utf8, false),
+            ]),
+            "row_id",
+            "order",
+        )
+        .unwrap(),
+    );
+    let path = std::env::temp_dir().join(format!(
+        "yss-dropna-{}-{}.parquet",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let lease = Arc::new(RemoveFile(path.clone()));
+    let weak = Arc::downgrade(&lease);
+    let source = runtime
+        .parquet_relation(
+            binding(),
+            schema.clone(),
+            std::slice::from_ref(&path),
+            lease.clone(),
+        )
+        .unwrap();
+    let rows = source.drop_na_rows(&[], Any).unwrap();
+    let columns = rows.drop_na_columns(&[], All).unwrap();
+    assert!(!path.exists());
+    assert_eq!(columns.bindings(), source.bindings());
+    let cancelled = control();
+    cancelled
+        .cancellation
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert_eq!(
+        columns.page(0, 1, &cancelled),
+        Err(RelationError::Cancelled)
+    );
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int64Array::from(vec![None, Some(2)])),
+            Arc::new(Int64Array::from(vec![0, 1])),
+            Arc::new(StringArray::from(vec!["0", "1"])),
+        ],
+    )
+    .unwrap();
+    yss_database_io::write_parquet_batches(&path, schema, [Ok(batch)]).unwrap();
+    drop(source);
+    drop(rows);
+    drop(lease);
+    let mut stream = runtime
+        .runtime
+        .as_ref()
+        .unwrap()
+        .block_on(columns.stream(control()))
+        .unwrap();
+    drop(columns);
+    assert!(weak.upgrade().is_some());
+    let first = runtime
+        .runtime
+        .as_ref()
+        .unwrap()
+        .block_on(stream.next())
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.num_rows(), 1);
+    drop(stream);
+    assert!(weak.upgrade().is_none());
+    assert!(!path.exists());
+}

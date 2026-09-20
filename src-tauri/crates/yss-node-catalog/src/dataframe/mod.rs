@@ -16,6 +16,8 @@ use yss_node_registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
 
 use families::{InterfaceKind, NODES, NodeSpec};
 
+pub const DATAFRAME_DROP_NA_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.dropna";
+
 pub const DATAFRAME_COLUMNS_RESOLVER: &str = "yssbi.dataframe.interface.columns";
 pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 pub const DATAFRAME_PANEL_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.panel";
@@ -37,6 +39,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         categories: dataframe_categories()?,
         interface_resolvers: vec![sid(DATAFRAME_COLUMNS_RESOLVER, InterfaceResolverId::new)?],
         schema_resolvers: vec![
+            sid(DATAFRAME_DROP_NA_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_PANEL_SCHEMA_RESOLVER, SchemaResolverId::new)?,
             sid(DATAFRAME_COMPOSITION_SCHEMA_RESOLVER, SchemaResolverId::new)?,
@@ -152,6 +155,44 @@ fn interface(
                 required_text_parameter("to")?,
             ],
         )),
+        DropNaRows | DropNaColumns => {
+            let subset_type = data_series_type(concrete("core.text")?);
+            Ok((
+                vec![
+                    streaming_input("source", "Source", dataframe_type()?, None)?,
+                    streaming_output(
+                        "result",
+                        "Result",
+                        dataframe_type()?,
+                        Some(if kind == DropNaRows {
+                            SchemaExpr::Input(port_key("source")?)
+                        } else {
+                            derived_schema(
+                                DATAFRAME_DROP_NA_SCHEMA_RESOLVER,
+                                vec![SchemaDependency::Port(port_key("source")?)],
+                            )?
+                        }),
+                    )?,
+                ],
+                vec![
+                    parameter(
+                        "subset",
+                        subset_type.clone(),
+                        ParameterEditorSpec::Auto,
+                        Some(TypedValue {
+                            value_type: subset_type,
+                            value: DataValue::List(vec![]),
+                        }),
+                        vec![],
+                    )?,
+                    choice_parameter(
+                        "how",
+                        if kind == DropNaRows { "any" } else { "all" },
+                        &["any", "all"],
+                    )?,
+                ],
+            ))
+        }
         Project | DropColumns => Ok((
             relational_ports(SchemaExpr::Project {
                 input: Box::new(SchemaExpr::Input(port_key("source")?)),
@@ -770,6 +811,8 @@ fn category(kind: InterfaceKind) -> &'static str {
         | InterfaceKind::FilterRows
         | InterfaceKind::DropColumns
         | InterfaceKind::DropRows
+        | InterfaceKind::DropNaRows
+        | InterfaceKind::DropNaColumns
         | InterfaceKind::Decompose
         | InterfaceKind::Combine
         | InterfaceKind::ConcatRows
@@ -877,6 +920,14 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
             "Removes selected columns, preserving the order of the remaining columns.",
             "移除指定列，并保留其余列的原始顺序。",
         ),
+        InterfaceKind::DropNaRows => (
+            "Lazily removes rows with any/all Null values in the subset (empty means all columns). NaN and empty text are retained.",
+            "惰性删除检查列中任一/全部为 Null 的行；检查列为空表示全部列。NaN 和空字符串保留。",
+        ),
+        InterfaceKind::DropNaColumns => (
+            "Lazily removes candidate columns with any/all Null values. Columns are resolved on consumption over the entire input, before paging. Empty input retains columns. Output schema is data-dependent; static column selection/decomposition is unavailable.",
+            "惰性删除候选列中任一/全部为 Null 的列；消费结果时检查完整输入，再分页。空表保留列。输出列由数据决定，不能提前选择或拆分确定的列。",
+        ),
         InterfaceKind::DropRows => (
             "Removes rows where the condition is true; false and null results are retained.",
             "移除条件为真的行；条件为假或空值的行保留。",
@@ -927,6 +978,11 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "Connect DataFrame input",
             "连接数据框输入",
         ),
+        (
+            "editors.dataframe.deferred_columns",
+            "Columns are determined when results are consumed; an empty selection checks all columns.",
+            "列将在读取结果时确定；未选择检查列时检查全部列。",
+        ),
     ] {
         out.push(("en-US", key, Text(en)));
         out.push(("zh-CN", key, Text(zh)));
@@ -948,6 +1004,20 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", description, Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "subset",
+            "Columns to Check (empty means all)",
+            "检查列（不选表示全部）",
+            "Empty checks all columns; otherwise supply unique column names.",
+            "空列表检查全部列；也可填写不重复的列名。",
+        ),
+        (
+            "how",
+            "Missing Rule",
+            "缺失规则",
+            "any: at least one Null; all: every value is Null.",
+            "any：任一值为 Null；all：全部值为 Null。",
+        ),
         (
             "column_match",
             "Column Matching",
