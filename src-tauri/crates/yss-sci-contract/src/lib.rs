@@ -1,6 +1,7 @@
 //! Backend-neutral scientific-computing contracts.
 
 mod computation;
+pub mod distribution;
 mod error;
 pub mod regression;
 pub mod scientific;

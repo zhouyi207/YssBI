@@ -10,6 +10,7 @@ mod computation;
 pub use computation::{acf_pacf, linear_regression, ols};
 
 pub mod density;
+pub mod distribution;
 pub mod hypothesis;
 pub mod panel;
 pub mod regression;

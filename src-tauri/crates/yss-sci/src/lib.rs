@@ -1,4 +1,5 @@
 pub mod diagnostics;
+pub mod distribution;
 mod error;
 pub mod regression;
 pub mod stats;
