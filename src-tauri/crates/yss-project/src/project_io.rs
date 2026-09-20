@@ -448,7 +448,7 @@ fn graph_relative_path_for_save(
 ) -> Result<String, ProjectError> {
     let target_dir = root.join(dir);
     std::fs::create_dir_all(&target_dir)?;
-    let existing_path = find_graph_file_path(root, dir, extension, graph_path)?;
+    let existing_path = find_graph_file_path(root, dir, graph_path)?;
     let file_name = unique_graph_file_name(
         target_dir.as_path(),
         graph_name,
@@ -472,7 +472,6 @@ fn graph_relative_path_for_save(
 fn find_graph_file_path(
     root: &Path,
     dir: &str,
-    _extension: &str,
     graph_path: &GraphResourcePath,
 ) -> Result<Option<PathBuf>, ProjectError> {
     let graph_resources = match load_graph_resource_index(root) {

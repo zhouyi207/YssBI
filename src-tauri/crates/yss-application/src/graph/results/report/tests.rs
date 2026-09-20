@@ -258,8 +258,10 @@ fn fixture_with_method(
                 Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 Instant::now() + Duration::from_secs(30),
             ),
-            &PlanExecutionDemand::Default,
-            None,
+            yss_graph_execution::state::ExecutionResultRequest {
+                demand: &PlanExecutionDemand::Default,
+                basis: None,
+            },
             |_| {},
         )
         .unwrap();

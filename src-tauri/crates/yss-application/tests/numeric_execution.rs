@@ -819,8 +819,10 @@ fn execute(
             Arc::new(AtomicBool::new(false)),
             Instant::now() + Duration::from_secs(10),
         ),
-        &PlanExecutionDemand::Default,
-        None,
+        yss_graph_execution::state::ExecutionResultRequest {
+            demand: &PlanExecutionDemand::Default,
+            basis: None,
+        },
         |_| {},
     )?;
     let result = run
@@ -2036,7 +2038,7 @@ fn literal_tables_feed_relational_statistics_and_page_without_dataset_bindings()
     );
     let joined = table
         .concat_rows(
-            &[table.clone()],
+            std::slice::from_ref(&table),
             yss_data_contract::table::RowConcatMode::ByName,
         )
         .unwrap();
@@ -2421,14 +2423,16 @@ fn decompose_returns_lazy_typed_columns_before_the_data_file_exists() {
                 Arc::new(AtomicBool::new(false)),
                 Instant::now() + Duration::from_secs(30),
             ),
-            &PlanExecutionDemand::Outputs {
-                outputs: outputs
-                    .iter()
-                    .map(|output| output.output().clone())
-                    .collect(),
-                include_default_results: false,
+            yss_graph_execution::state::ExecutionResultRequest {
+                demand: &PlanExecutionDemand::Outputs {
+                    outputs: outputs
+                        .iter()
+                        .map(|output| output.output().clone())
+                        .collect(),
+                    include_default_results: false,
+                },
+                basis: None,
             },
-            None,
             |_| {},
         )
         .unwrap();

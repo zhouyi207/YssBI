@@ -4,7 +4,7 @@ use yss_graph_diagnostics::GraphDiagnosticKind;
 use yss_graph_document::{GraphDocument, NodeId, PortAddress, PortRef};
 use yss_node_protocol::{
     InputCoercionKind, NodeTypingSpec, PortDirection, PortKey, PortSelector, ResolvedType,
-    ShapeRule, TypeConflict, TypeDomain, TypeExpr, TypeParameterId, TypeState, TypeUnknownReason,
+    TypeConflict, TypeDomain, TypeExpr, TypeParameterId, TypeState, TypeUnknownReason,
 };
 use yss_node_registry::{NodeRegistry, TypeRegistry};
 
@@ -570,13 +570,9 @@ fn apply_node_rule(
                 states.insert(output.address.clone(), state);
             }
         }
-        NodeTypingSpec::NumericFold {
-            inputs,
-            output,
-            shape,
-        } => {
+        NodeTypingSpec::NumericFold { inputs, output, .. } => {
             let selected = selected_ports(ports, inputs);
-            let state = numeric_fold_state(&selected, states, *shape);
+            let state = numeric_fold_state(&selected, states);
             if let Some(output) = declared_port(ports, output) {
                 if let Some(result) = state.exact() {
                     coercions.extend(numeric_coercions(&selected, states, result));
@@ -783,7 +779,6 @@ fn binary_predicate_result(left: &ResolvedType, right: &ResolvedType) -> Option<
 fn numeric_fold_state(
     ports: &[&GraphPortSemanticFact],
     states: &BTreeMap<PortAddress, TypeState>,
-    _shape: ShapeRule,
 ) -> TypeState {
     if ports.is_empty() {
         return TypeState::Unknown(TypeUnknownReason::UnconnectedInput);

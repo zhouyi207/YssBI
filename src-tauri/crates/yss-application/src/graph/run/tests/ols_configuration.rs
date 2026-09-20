@@ -241,8 +241,10 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
                     Arc::new(AtomicBool::new(false)),
                     Instant::now() + Duration::from_secs(30),
                 ),
-                &PlanExecutionDemand::Default,
-                None,
+                yss_graph_execution::state::ExecutionResultRequest {
+                    demand: &PlanExecutionDemand::Default,
+                    basis: None,
+                },
                 |_| {},
             )
             .unwrap();
@@ -261,7 +263,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         results
     };
     let default_results = execute(&document);
-    for target in [fit] {
+    {
+        let target = fit;
         apply(
             &mut document,
             EditorGraphMutation::SetConfiguration {
@@ -294,7 +297,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     assert_eq!(local, execute(&saved));
     // Isolate covariance from the intercept setting: coefficients stay fixed,
     // while the uncertainty reported by the real scientific backend changes.
-    for target in [fit] {
+    {
+        let target = fit;
         apply(
             &mut document,
             EditorGraphMutation::SetConfiguration {
@@ -319,7 +323,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
         coefficients(&local[&model_key])
     );
     assert_ne!(fixed_scale[&report_key], local[&report_key]);
-    for target in [fit] {
+    {
+        let target = fit;
         document
             .nodes
             .get_mut(&target)
@@ -334,7 +339,8 @@ fn node_owned_ols_configuration_changes_the_prepared_plan_and_results() {
     }
     assert_eq!(execute(&document)[&report_key], fixed_scale[&report_key]);
     for covariance in ["HAC", "newey"] {
-        for target in [fit] {
+        {
+            let target = fit;
             apply(
                 &mut document,
                 EditorGraphMutation::SetConfiguration {

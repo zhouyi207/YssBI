@@ -380,8 +380,10 @@ where
         bindings,
         captured.resource_provider_factory(),
         &control,
-        &plan_demand,
-        Some(&result_basis),
+        yss_graph_execution::state::ExecutionResultRequest {
+            demand: &plan_demand,
+            basis: Some(&result_basis),
+        },
         |event| match event {
             PreparedExecutionEvent::RunStarted { run_id, outputs } => {
                 let identity = RunIdentity::new(

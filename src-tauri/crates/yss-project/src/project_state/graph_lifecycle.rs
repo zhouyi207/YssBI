@@ -657,8 +657,7 @@ impl ProjectState {
         if let Some(update) = self.prepare_graph_editing_remap(
             graph_path,
             &target,
-            graph_path,
-            &target,
+            (graph_path, &target),
             &source.document,
             &persisted_source.document,
             true,
@@ -701,8 +700,7 @@ impl ProjectState {
             let editing_update = self.prepare_graph_editing_remap(
                 &path,
                 &path,
-                graph_path,
-                &target,
+                (graph_path, &target),
                 &changed.document,
                 &persisted.document,
                 current_changed || saved_changed,

@@ -209,6 +209,11 @@ struct PreparedPlanExecution<'a> {
     selection: ExecutionSelection,
 }
 
+pub struct ExecutionResultRequest<'a> {
+    pub demand: &'a crate::plan::PlanExecutionDemand,
+    pub basis: Option<&'a ResultRunBasis>,
+}
+
 struct PreparedExecutionDispatch<'a> {
     demand: &'a crate::plan::PlanExecutionDemand,
     result_basis: Option<&'a ResultRunBasis>,
@@ -818,8 +823,7 @@ impl ExecutionRuntimeState {
         bindings: RunResourceBindings,
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
-        demand: &crate::plan::PlanExecutionDemand,
-        result_basis: Option<&ResultRunBasis>,
+        results: ExecutionResultRequest<'_>,
         mut on_event: impl FnMut(PreparedExecutionEvent),
     ) -> Result<ExecutedPreparedRun, ExecutePreparedError> {
         self.execute_prepared_inner(
@@ -828,8 +832,8 @@ impl ExecutionRuntimeState {
             resources,
             control,
             PreparedExecutionDispatch {
-                demand,
-                result_basis,
+                demand: results.demand,
+                result_basis: results.basis,
                 executor: &self.executor,
                 on_event: Some(&mut on_event),
             },
@@ -905,7 +909,6 @@ impl ExecutionRuntimeState {
         if !self.results.begin_run(run_id, &outputs, result_basis) {
             let result = terminate_run(
                 &mut lifecycle,
-                run_id,
                 ExecutePreparedError::Cancelled {
                     phase: RunPhase::Admission,
                 },
@@ -922,7 +925,6 @@ impl ExecutionRuntimeState {
             Err(error) => {
                 let result = terminate_run(
                     &mut lifecycle,
-                    run_id,
                     ExecutePreparedError::ResourcePreparation(error),
                 );
                 self.remove_active_control(run_id);
@@ -930,7 +932,7 @@ impl ExecutionRuntimeState {
             }
         };
         if let Err(error) = control.check(RunPhase::Execution) {
-            let result = terminate_run(&mut lifecycle, run_id, error);
+            let result = terminate_run(&mut lifecycle, error);
             self.remove_active_control(run_id);
             return result;
         }
@@ -948,7 +950,6 @@ impl ExecutionRuntimeState {
             Err(OperationExecutionError::Kernel(KernelError::Cancelled)) => {
                 let result = terminate_run(
                     &mut lifecycle,
-                    run_id,
                     ExecutePreparedError::Cancelled {
                         phase: RunPhase::Execution,
                     },
@@ -959,7 +960,6 @@ impl ExecutionRuntimeState {
             Err(OperationExecutionError::Kernel(KernelError::DeadlineExceeded)) => {
                 let result = terminate_run(
                     &mut lifecycle,
-                    run_id,
                     ExecutePreparedError::DeadlineExceeded {
                         phase: RunPhase::Execution,
                     },
@@ -968,14 +968,13 @@ impl ExecutionRuntimeState {
                 return result;
             }
             Err(error) => {
-                let result =
-                    terminate_run(&mut lifecycle, run_id, ExecutePreparedError::Kernel(error));
+                let result = terminate_run(&mut lifecycle, ExecutePreparedError::Kernel(error));
                 self.remove_active_control(run_id);
                 return result;
             }
         };
         if let Err(error) = control.check(RunPhase::Finalization) {
-            let result = terminate_run(&mut lifecycle, run_id, error);
+            let result = terminate_run(&mut lifecycle, error);
             self.remove_active_control(run_id);
             return result;
         }
@@ -987,7 +986,7 @@ impl ExecutionRuntimeState {
             let result_id = match self.allocate_result_id() {
                 Ok(result_id) => result_id,
                 Err(error) => {
-                    let result = terminate_run(&mut lifecycle, run_id, error);
+                    let result = terminate_run(&mut lifecycle, error);
                     self.remove_active_control(run_id);
                     return result;
                 }
@@ -1008,7 +1007,6 @@ impl ExecutionRuntimeState {
             let Some(result_id) = result_ids_by_output.get(&observation.output).copied() else {
                 let result = terminate_run(
                     &mut lifecycle,
-                    run_id,
                     ExecutePreparedError::Kernel(OperationExecutionError::Failed),
                 );
                 self.remove_active_control(run_id);
@@ -1243,7 +1241,6 @@ impl ExecutionRuntimeState {
 
 fn terminate_run(
     lifecycle: &mut RunLifecycleGuard<'_>,
-    run_id: crate::run_registry::RunId,
     error: ExecutePreparedError,
 ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
     let transition = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
@@ -1252,7 +1249,6 @@ fn terminate_run(
         lifecycle.fail()
     };
     transition.map_err(ExecutePreparedError::RunRegistry)?;
-    let _ = run_id;
     Err(error)
 }
 
@@ -1673,11 +1669,13 @@ mod tests {
                 empty_bindings(),
                 &ResourceProviderFactory::new("session".into()),
                 &RunExecutionControl::new(Instant::now() + Duration::from_secs(1)),
-                &PlanExecutionDemand::Outputs {
-                    outputs: vec![requested].into_boxed_slice(),
-                    include_default_results: false,
+                ExecutionResultRequest {
+                    demand: &PlanExecutionDemand::Outputs {
+                        outputs: vec![requested].into_boxed_slice(),
+                        include_default_results: false,
+                    },
+                    basis: None,
                 },
-                None,
                 |_| {},
             )
             .expect("an unrelated unsupported component must not be scheduled");

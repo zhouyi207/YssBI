@@ -109,11 +109,7 @@ fn node_facts(
     }
 }
 
-fn analysis_with_facts(
-    _document: &GraphDocument,
-    _path: &GraphResourcePath,
-    facts: GraphSemanticSnapshot,
-) -> yss_graph_analysis::GraphAnalysis {
+fn analysis_with_facts(facts: GraphSemanticSnapshot) -> yss_graph_analysis::GraphAnalysis {
     let basis = GraphAnalysisBasis {
         kernel_fingerprint: [0; 32],
         registry_fingerprint: RegistryFingerprint::from_bytes([6; 32]),
@@ -201,7 +197,7 @@ fn editor_projection_closes_resource_node_port_and_connection_facts() {
         [],
         yss_graph_analysis::GraphResolutionOutcome::Complete,
     );
-    let analysis = analysis_with_facts(&document, &path, facts);
+    let analysis = analysis_with_facts(facts);
 
     let model = build_editor_projection(EditorProjectionInput {
         graph_path: &path,
@@ -342,7 +338,7 @@ fn editor_projection_preserves_canonical_diagnostics_and_builds_node_indexes() {
     );
     let path =
         GraphResourcePath::new("events/problems.yssbi-event").expect("test graph path is valid");
-    let analysis = analysis_with_facts(&document, &path, facts);
+    let analysis = analysis_with_facts(facts);
 
     let model = build_editor_projection(EditorProjectionInput {
         graph_path: &path,

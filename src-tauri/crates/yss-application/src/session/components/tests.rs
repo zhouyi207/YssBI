@@ -250,8 +250,10 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             RunResourceBindings::new(plan_session.clone(), [], []),
             session.resource_provider_factory(),
             &control,
-            &PlanExecutionDemand::Default,
-            None,
+            yss_graph_execution::state::ExecutionResultRequest {
+                demand: &PlanExecutionDemand::Default,
+                basis: None,
+            },
             |_| {},
         )
         .unwrap();
@@ -301,8 +303,10 @@ fn numeric_extension_uses_actual_capabilities_and_rejects_old_artifacts() {
             RunResourceBindings::new(plan_session.clone(), [], []),
             session.resource_provider_factory(),
             &control,
-            &PlanExecutionDemand::Default,
-            None,
+            yss_graph_execution::state::ExecutionResultRequest {
+                demand: &PlanExecutionDemand::Default,
+                basis: None
+            },
             |_| {}
         ),
         Err(ExecutePreparedError::KernelCapabilitiesChanged)

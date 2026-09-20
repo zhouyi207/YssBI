@@ -51,7 +51,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters(spec)?)?,
         instance_display: NodeInstanceDisplaySpec::Static,
-        execution: execution(spec.stage),
+        execution: execution(),
         typing: NodeTypingSpec::Fixed,
         scope: NodeScope::Any,
         managed_role: None,
@@ -327,7 +327,7 @@ fn linear_configuration_schema() -> Result<ConfigurationSchema, BuiltinAssemblyE
     })
 }
 
-fn execution(_stage: Stage) -> ExecutionSemantics {
+fn execution() -> ExecutionSemantics {
     ExecutionSemantics {
         determinism: Determinism::Deterministic,
         cache: CachePolicy::PerRun,

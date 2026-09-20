@@ -17,7 +17,6 @@ pub mod run_registry;
 pub mod state;
 
 #[cfg(test)]
-
 fn test_relations() -> std::sync::Arc<dyn yss_relational_contract::RelationFactory> {
     struct UnusedRelations;
     impl yss_relational_contract::RelationFactory for UnusedRelations {

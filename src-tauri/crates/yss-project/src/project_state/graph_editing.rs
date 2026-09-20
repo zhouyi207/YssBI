@@ -297,8 +297,7 @@ impl ProjectState {
         &self,
         source: &GraphResourcePath,
         target: &GraphResourcePath,
-        from: &GraphResourcePath,
-        to: &GraphResourcePath,
+        remap: (&GraphResourcePath, &GraphResourcePath),
         current: &GraphDocument,
         saved: &GraphDocument,
         documents_changed: bool,
@@ -308,7 +307,7 @@ impl ProjectState {
         };
         let mut history_changed = false;
         for entry in metadata.undo.iter_mut().chain(metadata.redo.iter_mut()) {
-            if !super::graph_references::remap_patch(&mut entry.patch, from, to) {
+            if !super::graph_references::remap_patch(&mut entry.patch, remap.0, remap.1) {
                 continue;
             }
             history_changed = true;
