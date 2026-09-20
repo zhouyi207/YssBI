@@ -12,6 +12,94 @@ use std::sync::Arc;
 use yss_data_contract::TabularScalar;
 use yss_relational_contract::{ComparisonOperand, ComparisonOperation, RelationError, SeriesPlan};
 
+pub(crate) fn with_tolerance(
+    operation: ComparisonOperation,
+    operands: &[ComparisonOperand],
+    tolerance: yss_relational_contract::NumericTolerance,
+) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+    let mut expressions = Vec::new();
+    let mut types = Vec::new();
+    for operand in operands {
+        let (dtype, expr) = match operand {
+            ComparisonOperand::Series(series) => {
+                if !yss_database_arrow::is_numeric_field(series.plan().field()) {
+                    return Err(RelationError::InvalidInput);
+                }
+                (
+                    series.plan().field().data_type().clone(),
+                    expression(series)?,
+                )
+            }
+            ComparisonOperand::Scalar(value) => {
+                let value = match value {
+                    TabularScalar::Null => ScalarValue::Float64(None),
+                    TabularScalar::Integer(v) => ScalarValue::Int64(Some(*v)),
+                    TabularScalar::Unsigned(v) => ScalarValue::UInt64(Some(*v)),
+                    TabularScalar::Float64(v) => ScalarValue::Float64(Some(v.as_f64())),
+                    _ => return Err(RelationError::InvalidInput),
+                };
+                (value.data_type(), Expr::Literal(value, None))
+            }
+        };
+        types.push(dtype);
+        expressions.push(expr);
+    }
+    if expressions.len() != 2 {
+        return Err(RelationError::InvalidInput);
+    }
+    for value in [tolerance.absolute(), tolerance.relative()] {
+        types.push(DataType::Float64);
+        expressions.push(Expr::Literal(ScalarValue::Float64(Some(value)), None));
+    }
+    let function = create_udf(
+        &format!("yss_tolerance_{operation:?}"),
+        types,
+        DataType::Boolean,
+        Volatility::Immutable,
+        Arc::new(move |args| {
+            let arrays = ColumnarValue::values_to_arrays(args)?;
+            let numeric = arrays[..2]
+                .iter()
+                .map(|a| {
+                    yss_database_arrow::lossless_cast(a.as_ref(), &DataType::Float64, false)
+                        .map_err(|_| failure())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let left = numeric[0]
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or_else(failure)?;
+            let right = numeric[1]
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or_else(failure)?;
+            let values = left
+                .iter()
+                .zip(right.iter())
+                .map(|(a, b)| match (a, b) {
+                    (Some(a), Some(b)) => tolerance
+                        .evaluate(operation, a, b)
+                        .map(Some)
+                        .map_err(|_| failure()),
+                    _ => Ok(None),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let result = BooleanArray::from(values);
+            if args.iter().all(|v| matches!(v, ColumnarValue::Scalar(_))) {
+                Ok(ColumnarValue::Scalar(ScalarValue::try_from_array(
+                    &result, 0,
+                )?))
+            } else {
+                Ok(ColumnarValue::Array(Arc::new(result)))
+            }
+        }),
+    );
+    Ok(Arc::new(DataFusionSeries {
+        expression: function.call(expressions),
+        field: Arc::new(Field::new("result", DataType::Boolean, true)),
+    }))
+}
+
 pub(crate) fn compare(
     operation: ComparisonOperation,
     operands: &[ComparisonOperand],

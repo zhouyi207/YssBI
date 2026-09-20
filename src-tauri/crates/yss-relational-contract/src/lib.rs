@@ -4,8 +4,8 @@ mod dataset;
 pub use dataset::{DatasetColumnPatch, DatasetOverlay, DatasetRelationInput};
 mod series;
 pub use series::{
-    BooleanOperand, BooleanOperation, ComparisonOperand, NumericOperation, NumericType,
-    SeriesHandle, SeriesOperand, SeriesPlan,
+    BooleanOperand, BooleanOperation, ComparisonOperand, NumericOperation, NumericTolerance,
+    NumericType, SeriesHandle, SeriesOperand, SeriesPlan,
 };
 pub use yss_data_contract::ComparisonOperation;
 
@@ -134,6 +134,14 @@ pub enum DropNaMode {
 }
 
 pub trait RelationPlan: Send + Sync {
+    fn compare_series_with_tolerance(
+        &self,
+        _operation: ComparisonOperation,
+        _operands: &[ComparisonOperand],
+        _tolerance: NumericTolerance,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     /// Deferred schemas are unavailable until consumption; `schema()` is then an empty marker.
     fn schema_is_deferred(&self) -> bool {
         false
@@ -201,6 +209,16 @@ pub trait RelationPlan: Send + Sync {
         series: &SeriesHandle,
         conversion: yss_data_contract::SemanticConversion,
     ) -> Result<Arc<dyn SeriesPlan>, RelationError>;
+    /// Null-preserving standardization on the existing row domain; statistics are precomputed.
+    fn standardize_series(
+        &self,
+        _series: &SeriesHandle,
+        _mean: f64,
+        _standard_deviation: f64,
+        _inverse: bool,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        Err(RelationError::InvalidInput)
+    }
     fn stream(&self, control: RelationControl) -> RelationFuture<'_, RelationBatchStream>;
 }
 
@@ -211,6 +229,50 @@ pub struct RelationHandle {
 }
 
 impl RelationHandle {
+    pub fn compare_series_with_tolerance(
+        &self,
+        operation: ComparisonOperation,
+        operands: &[ComparisonOperand],
+        tolerance: NumericTolerance,
+    ) -> Result<SeriesHandle, RelationError> {
+        if operands.len() != 2
+            || !operands
+                .iter()
+                .any(|v| matches!(v, ComparisonOperand::Series(_)))
+        {
+            return Err(RelationError::InvalidInput);
+        }
+        if operands
+            .iter()
+            .any(|v| matches!(v, ComparisonOperand::Series(s) if s.relation() != self))
+        {
+            return Err(RelationError::UnalignedSeries);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan
+                .compare_series_with_tolerance(operation, operands, tolerance)?,
+        ))
+    }
+    pub fn standardize_series(
+        &self,
+        series: &SeriesHandle,
+        mean: f64,
+        standard_deviation: f64,
+        inverse: bool,
+    ) -> Result<SeriesHandle, RelationError> {
+        if series.relation() != self {
+            return Err(RelationError::UnalignedSeries);
+        }
+        if !mean.is_finite() || !standard_deviation.is_finite() || standard_deviation <= 0.0 {
+            return Err(RelationError::InvalidInput);
+        }
+        Ok(SeriesHandle::new(
+            self.clone(),
+            self.plan
+                .standardize_series(series, mean, standard_deviation, inverse)?,
+        ))
+    }
     /// Consume Arrow batches on an existing compute worker, with adapter-owned async execution.
     pub fn visit_batches(
         &self,

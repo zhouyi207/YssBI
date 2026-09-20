@@ -266,6 +266,14 @@ impl DataFusionRelation {
 }
 
 impl RelationPlan for DataFusionRelation {
+    fn compare_series_with_tolerance(
+        &self,
+        operation: yss_relational_contract::ComparisonOperation,
+        operands: &[yss_relational_contract::ComparisonOperand],
+        tolerance: yss_relational_contract::NumericTolerance,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::comparison::with_tolerance(operation, operands, tolerance)
+    }
     fn drop_na_rows(
         &self,
         columns: &[Box<str>],
@@ -476,6 +484,16 @@ impl RelationPlan for DataFusionRelation {
         conversion: yss_data_contract::SemanticConversion,
     ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
         crate::series::convert(series, conversion)
+    }
+
+    fn standardize_series(
+        &self,
+        series: &SeriesHandle,
+        mean: f64,
+        standard_deviation: f64,
+        inverse: bool,
+    ) -> Result<Arc<dyn SeriesPlan>, RelationError> {
+        crate::series::standardize(series, mean, standard_deviation, inverse)
     }
 }
 

@@ -4,6 +4,96 @@ use arrow_schema::Field;
 
 use crate::{RelationError, RelationHandle};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumericTolerance {
+    absolute: f64,
+    relative: f64,
+}
+
+impl NumericTolerance {
+    pub fn new(absolute: f64, relative: f64) -> Result<Self, RelationError> {
+        if !absolute.is_finite() || !relative.is_finite() || absolute < 0.0 || relative < 0.0 {
+            return Err(RelationError::InvalidInput);
+        }
+        Ok(Self { absolute, relative })
+    }
+    pub fn absolute(self) -> f64 {
+        self.absolute
+    }
+    pub fn relative(self) -> f64 {
+        self.relative
+    }
+    /// Treat values within tolerance as equal before applying the comparison operator.
+    pub fn evaluate(
+        self,
+        operation: crate::ComparisonOperation,
+        left: f64,
+        right: f64,
+    ) -> Result<bool, RelationError> {
+        let ordering = if self.compare(left, right)? {
+            std::cmp::Ordering::Equal
+        } else {
+            left.partial_cmp(&right)
+                .ok_or(RelationError::InvalidInput)?
+        };
+        Ok(operation.evaluate(ordering))
+    }
+    pub fn compare(self, left: f64, right: f64) -> Result<bool, RelationError> {
+        if !left.is_finite() || !right.is_finite() {
+            return Err(RelationError::InvalidInput);
+        }
+        if left == right {
+            return Ok(true);
+        }
+        let scale = left.abs().max(right.abs());
+        let distance = (left - right).abs();
+        let threshold = self.absolute + self.relative * scale;
+        if distance.is_finite() && threshold.is_finite() {
+            return Ok(distance <= threshold);
+        }
+        // Normalize only the overflow case; inf <= inf would otherwise accept an arbitrary pair.
+        Ok((left / scale - right / scale).abs() <= self.relative + self.absolute / scale)
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn numeric_tolerance_is_symmetric_finite_and_safe_at_extreme_scales() {
+    let tolerance = NumericTolerance::new(1e-12, 1e-9).unwrap();
+    for (a, b, expected) in [
+        (0.1 + 0.2, 0.3, true),
+        (0.0, 1e-13, true),
+        (0.0, 1e-6, false),
+        (1e100, 1e100 + 1e90, true),
+        (f64::MAX, -f64::MAX, false),
+    ] {
+        assert_eq!(tolerance.compare(a, b).unwrap(), expected);
+        assert_eq!(tolerance.compare(b, a).unwrap(), expected);
+    }
+    assert!(
+        !NumericTolerance::new(0.0, 0.0)
+            .unwrap()
+            .compare(0.1 + 0.2, 0.3)
+            .unwrap()
+    );
+    assert!(
+        !NumericTolerance::new(f64::MAX, 0.5)
+            .unwrap()
+            .compare(f64::MAX, -f64::MAX)
+            .unwrap()
+    );
+    assert!(
+        NumericTolerance::new(0.0, 2.0)
+            .unwrap()
+            .compare(f64::MAX, -f64::MAX)
+            .unwrap()
+    );
+    assert!(tolerance.compare(f64::NAN, 0.0).is_err());
+    assert!(tolerance.compare(f64::INFINITY, f64::INFINITY).is_err());
+    assert!(NumericTolerance::new(-1.0, 0.0).is_err());
+    assert!(NumericTolerance::new(0.0, f64::INFINITY).is_err());
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NumericOperation {
     Add,
