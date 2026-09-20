@@ -42,6 +42,8 @@ add or commit them unless explicitly requested.
 - Preserve observable behavior during refactors unless the request changes it.
 - This is a 0.x project: remove obsolete internal paths directly unless
   compatibility is an explicit requirement.
+- Remove unused interface parameters and update all callers directly; do not retain
+  placeholder parameters for possible future use.
 - Do not add parallel models, compatibility facades, speculative abstractions,
   dependencies, or features merely to make a local edit easier.
 - Comments should explain non-obvious reasoning, invariants, or trade-offs, not

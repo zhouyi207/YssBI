@@ -11,6 +11,7 @@
 
 ## Active tasks
 
+- [ ] clippy::too_many_arguments 需要处理
 - [ ] 按 [节点执行链路修复记录](docs/reviews/2026-09-19-node-execution-fixes.md) 测量完整静态调度缓存、紧凑数值缓冲及目录重复装配的收益；矩阵分解中途取消与工作区硬限额需在 SCI/Linalg 所有者内另行设计。
 - [ ] 核对兼容节点目录对 Union 类型的保守匹配与 `function_signature_resolves_stable_projected_call_ports` 断言；该失败已在原始 `a8f3b74c` 提交复现，见 [基线验证](docs/reviews/2026-09-19-node-execution-fixes.md#验证范围)。
 - [ ] 按产品需求补齐 DataFrame Series 的 `length`、`count`、`sum`、`mean` 执行实现；当前仅有定义，不进入 GUI 创建目录与 AI 节点搜索，已有图通过缺少内核诊断阻断执行。

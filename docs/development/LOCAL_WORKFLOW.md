@@ -96,12 +96,12 @@ Rust 局部写入格式化使用 `pnpm format:rs:package -p <crate-name>`，可�
 pnpm test:ts <test-file>
 pnpm test:ts <test-file> -t "test name"
 pnpm check:rs:package -p <crate-name> --tests
-pnpm lint:rs:package -p <crate-name> --all-targets '--' -D warnings
+pnpm lint:rs:package -p <crate-name> --all-targets
 pnpm test:rs:package -p <crate-name> --lib <test-name>
 pnpm test:rs:package -p <crate-name> --test <integration-target> <test-name>
 ```
 
-Clippy 示例将参数分隔符 `'--'` 写成字符串，避免 PowerShell 调用 `pnpm.ps1` 时消耗分隔符，确保 `-D warnings` 传给 Clippy。
+Clippy 保留默认 warning 级别，不将所有 warning 提升为 error；检查发现的实际问题仍应按影响处理。
 
 Rust 的 `-p` 选择 package，`--lib` / `--test` 选择测试目标，测试名称过滤目标内运行的用例。只过滤名称不会只编译那个测试函数。`--tests`、`--all-targets` 也应按需要选择，迭代时可以先用 `--lib`；不要默认追加 `--all-features`。
 
