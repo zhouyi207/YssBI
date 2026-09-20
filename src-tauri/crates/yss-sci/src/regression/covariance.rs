@@ -234,10 +234,10 @@ fn newey_west_1994_bandwidth(
     }
     let mut shatq = 0.0;
     let mut shat0 = sigmahat[0];
-    for j in 1..=mstar {
+    for (j, &sigma) in sigmahat.iter().enumerate().skip(1) {
         let jf = j as f64;
-        shatq += 2.0 * sigmahat[j] * jf.powi(q as i32);
-        shat0 += 2.0 * sigmahat[j];
+        shatq += 2.0 * sigma * jf.powi(q);
+        shat0 += 2.0 * sigma;
     }
     let expon = 1.0 / (2.0 * q as f64 + 1.0);
     let gammahat = cgamma * (shatq / shat0).powf(2.0).powf(expon);
@@ -368,161 +368,6 @@ fn cov_newey(
     Ok(sandwich)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::regression::linear_model::OLS;
-
-    #[test]
-    fn test_hac_bartlett_bw1_equals_hc0() {
-        // HAC bw(1) 无 lag 项，meat = HC0 meat，sandwich 无 n/(n-k) => 等于 HC0
-        let n = 30;
-        let k = 3;
-        let mut exog_data = Vec::with_capacity(n * k);
-        for i in 0..n {
-            exog_data.push(1.0);
-            exog_data.push((i as f64 * 0.1).sin());
-            exog_data.push((i as f64 * 0.2).cos());
-        }
-        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
-        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
-
-        let ols_hc0 = OLS {
-            endog: endog.clone(),
-            exog: exog.clone(),
-            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
-                true,
-                &("HC0".to_string()),
-                (None).as_ref(),
-            )
-            .expect("valid OLS covariance options"),
-        };
-        let ols_hac = OLS {
-            endog,
-            exog,
-            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
-                true,
-                &("HAC".to_string()),
-                (Some(CovParams::HAC {
-                    kernel: "Bartlett".to_string(),
-                    bandwidth: Some(1),
-                }))
-                .as_ref(),
-            )
-            .expect("valid OLS covariance options"),
-        };
-
-        let r_hc0 = ols_hc0.fit().unwrap();
-        let r_hac = ols_hac.fit().unwrap();
-
-        for i in 0..k {
-            for j in 0..k {
-                assert!(
-                    (r_hac.cov_beta[(i, j)] - r_hc0.cov_beta[(i, j)]).abs() < 1e-9,
-                    "HAC Bartlett bw(1) should equal HC0 at ({},{}): {} vs {}",
-                    i,
-                    j,
-                    r_hac.cov_beta[(i, j)],
-                    r_hc0.cov_beta[(i, j)]
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_newey_lag0_equals_hc1() {
-        // Stata newey lag(0) = regress vce(robust) = HC1
-        let n = 30;
-        let k = 3;
-        let mut exog_data = Vec::with_capacity(n * k);
-        for i in 0..n {
-            exog_data.push(1.0);
-            exog_data.push((i as f64 * 0.1).sin());
-            exog_data.push((i as f64 * 0.2).cos());
-        }
-        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
-        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
-
-        let ols_hc1 = OLS {
-            endog: endog.clone(),
-            exog: exog.clone(),
-            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
-                true,
-                &("HC1".to_string()),
-                (None).as_ref(),
-            )
-            .expect("valid OLS covariance options"),
-        };
-        let ols_newey = OLS {
-            endog,
-            exog,
-            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
-                true,
-                &("newey".to_string()),
-                (Some(CovParams::Newey { lag: Some(0) })).as_ref(),
-            )
-            .expect("valid OLS covariance options"),
-        };
-
-        let r_hc1 = ols_hc1.fit().unwrap();
-        let r_newey = ols_newey.fit().unwrap();
-
-        for i in 0..k {
-            for j in 0..k {
-                assert!(
-                    (r_newey.cov_beta[(i, j)] - r_hc1.cov_beta[(i, j)]).abs() < 1e-9,
-                    "Newey lag=0 should equal HC1 (Stata newey lag(0)) at ({},{}): {} vs {}",
-                    i,
-                    j,
-                    r_newey.cov_beta[(i, j)],
-                    r_hc1.cov_beta[(i, j)]
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn test_hac_bartlett_with_lag() {
-        let n = 50;
-        let k = 2;
-        let mut exog_data = Vec::with_capacity(n * k);
-        for i in 0..n {
-            exog_data.push(1.0);
-            exog_data.push(i as f64 / n as f64);
-        }
-        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
-        let endog = Col::from_fn(n, |i| {
-            (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos()
-        });
-
-        let ols = OLS {
-            endog,
-            exog,
-            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
-                true,
-                &("HAC".to_string()),
-                (Some(CovParams::HAC {
-                    kernel: "Bartlett".to_string(),
-                    bandwidth: Some(5),
-                }))
-                .as_ref(),
-            )
-            .expect("valid OLS covariance options"),
-        };
-
-        let r = ols.fit().unwrap();
-        for i in 0..k {
-            assert!(r.cov_beta[(i, i)] > 0.0, "variance should be positive");
-            for j in 0..k {
-                assert!(
-                    (r.cov_beta[(i, j)] - r.cov_beta[(j, i)]).abs() < 1e-10,
-                    "covariance should be symmetric"
-                );
-            }
-        }
-    }
-}
-
 /// Cluster: (X'X)⁻¹ [Σ_g (X_g' u_g)(X_g' u_g)'] (X'X)⁻¹
 fn cov_cluster(
     x: &Mat<f64>,
@@ -586,4 +431,159 @@ fn cov_cluster(
     let meat_scaled = yss_sci_linalg::Scale(scale) * meat;
     let sandwich = (xtx_inv.as_ref() * meat_scaled.as_ref()).as_ref() * xtx_inv.as_ref();
     Ok(sandwich)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::regression::linear_model::OLS;
+
+    #[test]
+    fn test_hac_bartlett_bw1_equals_hc0() {
+        // HAC bw(1) 无 lag 项，meat = HC0 meat，sandwich 无 n/(n-k) => 等于 HC0
+        let n = 30;
+        let k = 3;
+        let mut exog_data = Vec::with_capacity(n * k);
+        for i in 0..n {
+            exog_data.push(1.0);
+            exog_data.push((i as f64 * 0.1).sin());
+            exog_data.push((i as f64 * 0.2).cos());
+        }
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
+
+        let ols_hc0 = OLS {
+            endog: endog.clone(),
+            exog: exog.clone(),
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "HC0",
+                (None).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
+        };
+        let ols_hac = OLS {
+            endog,
+            exog,
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "HAC",
+                (Some(CovParams::HAC {
+                    kernel: "Bartlett".to_string(),
+                    bandwidth: Some(1),
+                }))
+                .as_ref(),
+            )
+            .expect("valid OLS covariance options"),
+        };
+
+        let r_hc0 = ols_hc0.fit().unwrap();
+        let r_hac = ols_hac.fit().unwrap();
+
+        for i in 0..k {
+            for j in 0..k {
+                assert!(
+                    (r_hac.cov_beta[(i, j)] - r_hc0.cov_beta[(i, j)]).abs() < 1e-9,
+                    "HAC Bartlett bw(1) should equal HC0 at ({},{}): {} vs {}",
+                    i,
+                    j,
+                    r_hac.cov_beta[(i, j)],
+                    r_hc0.cov_beta[(i, j)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_newey_lag0_equals_hc1() {
+        // Stata newey lag(0) = regress vce(robust) = HC1
+        let n = 30;
+        let k = 3;
+        let mut exog_data = Vec::with_capacity(n * k);
+        for i in 0..n {
+            exog_data.push(1.0);
+            exog_data.push((i as f64 * 0.1).sin());
+            exog_data.push((i as f64 * 0.2).cos());
+        }
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| (i as f64 * 0.15).sin() + (i as f64 * 0.08).cos());
+
+        let ols_hc1 = OLS {
+            endog: endog.clone(),
+            exog: exog.clone(),
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "HC1",
+                (None).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
+        };
+        let ols_newey = OLS {
+            endog,
+            exog,
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "newey",
+                (Some(CovParams::Newey { lag: Some(0) })).as_ref(),
+            )
+            .expect("valid OLS covariance options"),
+        };
+
+        let r_hc1 = ols_hc1.fit().unwrap();
+        let r_newey = ols_newey.fit().unwrap();
+
+        for i in 0..k {
+            for j in 0..k {
+                assert!(
+                    (r_newey.cov_beta[(i, j)] - r_hc1.cov_beta[(i, j)]).abs() < 1e-9,
+                    "Newey lag=0 should equal HC1 (Stata newey lag(0)) at ({},{}): {} vs {}",
+                    i,
+                    j,
+                    r_newey.cov_beta[(i, j)],
+                    r_hc1.cov_beta[(i, j)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_hac_bartlett_with_lag() {
+        let n = 50;
+        let k = 2;
+        let mut exog_data = Vec::with_capacity(n * k);
+        for i in 0..n {
+            exog_data.push(1.0);
+            exog_data.push(i as f64 / n as f64);
+        }
+        let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog_data), n, k).to_owned();
+        let endog = Col::from_fn(n, |i| {
+            (i as f64 * 0.2).sin() * 2.0 + (i as f64 * 0.05).cos()
+        });
+
+        let ols = OLS {
+            endog,
+            exog,
+            config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
+                true,
+                "HAC",
+                (Some(CovParams::HAC {
+                    kernel: "Bartlett".to_string(),
+                    bandwidth: Some(5),
+                }))
+                .as_ref(),
+            )
+            .expect("valid OLS covariance options"),
+        };
+
+        let r = ols.fit().unwrap();
+        for i in 0..k {
+            assert!(r.cov_beta[(i, i)] > 0.0, "variance should be positive");
+            for j in 0..k {
+                assert!(
+                    (r.cov_beta[(i, j)] - r.cov_beta[(j, i)]).abs() < 1e-10,
+                    "covariance should be symmetric"
+                );
+            }
+        }
+    }
 }

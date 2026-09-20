@@ -17,7 +17,6 @@ fn compute_fe_stats(
     endog: &Col<f64>,
     exog: &Mat<f64>,
     entity_id: &[usize],
-    n_entities: usize,
     betas: &Col<f64>,
     const_coef: f64,
     r2_within: f64,
@@ -57,6 +56,7 @@ fn compute_fe_stats(
         .into_iter()
         .collect();
     eids.sort_unstable();
+    let n_entities = eids.len();
     let mut y_bar = Vec::with_capacity(n_entities);
     let mut x_bar = Vec::with_capacity(n_entities);
     let mut obs_per_entity = Vec::with_capacity(n_entities);
@@ -220,7 +220,6 @@ fn compute_fe_stats_time(
     endog: &Col<f64>,
     exog: &Mat<f64>,
     time_id: &[usize],
-    n_times: usize,
     betas: &Col<f64>,
     const_coef: f64,
     r2_within: f64,
@@ -260,6 +259,7 @@ fn compute_fe_stats_time(
         .into_iter()
         .collect();
     tids.sort_unstable();
+    let n_times = tids.len();
     let mut y_bar = Vec::with_capacity(n_times);
     let mut x_bar = Vec::with_capacity(n_times);
     let mut obs_per_time = Vec::with_capacity(n_times);
@@ -729,7 +729,6 @@ pub fn fit_panel_fe(
         endog,
         &exog_kept,
         entity_id,
-        n_entities,
         &result.betas,
         const_coef,
         result.r2,
@@ -1006,7 +1005,6 @@ pub fn fit_panel_fe_time(
         endog,
         &exog_kept,
         time_id,
-        n_times,
         &result.betas,
         const_coef,
         result.r2,
@@ -1278,7 +1276,6 @@ pub fn fit_panel_fe_twoway(
         endog,
         &exog_kept,
         entity_id,
-        n_entities,
         &result.betas,
         const_coef,
         result.r2,

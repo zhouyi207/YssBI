@@ -1,3 +1,8 @@
+struct RandomEffectVariances {
+    sigma2_u: f64,
+    sigma2_e: f64,
+}
+
 /// RE MLE log likelihood (Stata xtreg, mle formula). Generic over group_id (entity or time).
 fn re_mle_log_lik(
     endog: &[f64],
@@ -5,10 +10,10 @@ fn re_mle_log_lik(
     group_id: &[usize],
     betas: &[f64],
     kept: &[usize],
-    sigma2_u: f64,
-    sigma2_e: f64,
     obs_per_group: &HashMap<usize, usize>,
+    input: RandomEffectVariances,
 ) -> f64 {
+    let RandomEffectVariances { sigma2_u, sigma2_e } = input;
     let (gids, _, _) = group_means(endog, exog, group_id);
     let mut ll = 0.0;
     let two_pi = std::f64::consts::PI * 2.0;
@@ -71,9 +76,8 @@ fn re_mle_neg_ll_from_params(
         group_id,
         &betas,
         kept,
-        sigma2_u,
-        sigma2_e,
         obs_per_group,
+        RandomEffectVariances { sigma2_u, sigma2_e },
     )
 }
 
@@ -266,7 +270,8 @@ pub fn fit_panel_re_mle(
                 .collect();
             // Quasi-demeaned constant: 1 - θ (not 1), so OLS gives α = ȳ
             let x_star_const: Vec<f64> = (0..n).map(|i| 1.0 - theta_arr[i]).collect();
-            let x_const = yss_sci_linalg::MatRef::from_row_major_slice(&(x_star_const), n, 1).to_owned();
+            let x_const =
+                yss_sci_linalg::MatRef::from_row_major_slice(&(x_star_const), n, 1).to_owned();
             let (x_use, _) = drop_collinear_columns(&x_const, &[false], Some(0))
                 .map_err(|e| format!("const-only init: {}", e))?;
             let res = OLS {
@@ -288,9 +293,11 @@ pub fn fit_panel_re_mle(
                 entity_id,
                 &[alpha],
                 &[0],
-                su,
-                se,
                 obs_per_entity,
+                RandomEffectVariances {
+                    sigma2_u: su,
+                    sigma2_e: se,
+                },
             );
             Ok((alpha, ll))
         }
@@ -321,9 +328,11 @@ pub fn fit_panel_re_mle(
             entity_id,
             &[y_global_mean],
             &[0],
-            sigma2_u_sa,
-            sigma2_e_sa,
             &obs_per_entity,
+            RandomEffectVariances {
+                sigma2_u: sigma2_u_sa,
+                sigma2_e: sigma2_e_sa,
+            },
         );
         let (alpha_init, sigma2_e_init, sigma2_u_init, ll_init) = {
             let (alpha_sa, _) = gls_alpha_and_ll(
@@ -414,8 +423,7 @@ pub fn fit_panel_re_mle(
             })
             .collect();
         let y_bar = between_transform(&endog_vec, entity_id);
-        let y_star: Col<f64> =
-            Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
+        let y_star: Col<f64> = Col::from_fn(n, |i| endog_vec[i] - theta_arr[i] * y_bar[i]);
         let mut x_star = Mat::zeros(n, k);
         for c in 0..k {
             let col: Vec<f64> = exog.col(c).iter().cloned().collect();
@@ -451,9 +459,8 @@ pub fn fit_panel_re_mle(
             entity_id,
             &betas,
             &kept,
-            sigma2_u,
-            sigma2_e,
             &obs_per_entity,
+            RandomEffectVariances { sigma2_u, sigma2_e },
         );
         mle_iter_log_lik.push(ll0_full);
     }
@@ -580,9 +587,8 @@ pub fn fit_panel_re_mle(
         entity_id,
         &betas_vec,
         &kept,
-        sigma2_u,
-        sigma2_e,
         &obs_per_entity,
+        RandomEffectVariances { sigma2_u, sigma2_e },
     );
     let k_slopes = if constant && kept.len() > 1 {
         kept.len() - 1
@@ -631,9 +637,11 @@ pub fn fit_panel_re_mle(
             entity_id,
             &ols_betas,
             &ols_kept,
-            0.0,
-            sigma2_e_ols,
             &obs_per_entity,
+            RandomEffectVariances {
+                sigma2_u: 0.0,
+                sigma2_e: sigma2_e_ols,
+            },
         )
     };
     let chibar2 = {

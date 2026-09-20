@@ -59,7 +59,10 @@ pub fn fit_panel_re_fgls_twoway(
             let first_col = x_w.col(0);
             let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
             if is_const {
-                (x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(), false)
+                (
+                    x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(),
+                    false,
+                )
             } else {
                 (x_w.clone(), constant)
             }
@@ -104,13 +107,12 @@ pub fn fit_panel_re_fgls_twoway(
     let (_, y_b_e, x_b_e) = group_means(&y_vec, exog, entity_id);
     let n_b_e = y_b_e.len();
     let mut x_b_e_data = Vec::with_capacity(n_b_e * k);
-    for i in 0..n_b_e {
-        for c in 0..k {
-            x_b_e_data.push(x_b_e[i][c]);
-        }
+    for row in x_b_e.iter().take(n_b_e) {
+        x_b_e_data.extend_from_slice(&row[..k]);
     }
     let y_b_e_arr = (y_b_e).into_iter().collect::<Col<f64>>();
-    let x_b_e_arr = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
+    let x_b_e_arr =
+        yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -140,13 +142,12 @@ pub fn fit_panel_re_fgls_twoway(
     let (_, y_b_t, x_b_t) = group_means(&y_vec, exog, time_id);
     let n_b_t = y_b_t.len();
     let mut x_b_t_data = Vec::with_capacity(n_b_t * k);
-    for i in 0..n_b_t {
-        for c in 0..k {
-            x_b_t_data.push(x_b_t[i][c]);
-        }
+    for row in x_b_t.iter().take(n_b_t) {
+        x_b_t_data.extend_from_slice(&row[..k]);
     }
     let y_b_t_arr = (y_b_t).into_iter().collect::<Col<f64>>();
-    let x_b_t_arr = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_t_data), n_b_t, k).to_owned();
+    let x_b_t_arr =
+        yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_t_data), n_b_t, k).to_owned();
     let (x_b_t_use, _) = {
         let col_is_dummy = vec![false; k];
         let intercept_col = if constant { Some(0) } else { None };
@@ -379,7 +380,9 @@ pub fn fit_panel_re_fgls_twoway(
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
             (
                 betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned(),
-                cov_beta.submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1).to_owned(),
+                cov_beta
+                    .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
+                    .to_owned(),
                 k_b - 1,
             )
         } else {
@@ -468,6 +471,16 @@ fn twoway_theta(
     (theta_id, theta_time, theta_total)
 }
 
+struct TwoWayLikelihoodParameters {
+    sigma2_alpha: f64,
+    sigma2_lambda: f64,
+    sigma2_e: f64,
+    n_entities: usize,
+    n_times: usize,
+    t_bar: f64,
+    n_bar: f64,
+}
+
 /// Two-way RE log-likelihood: LL = -0.5 [n ln(2π) + ln|Ω| + r'Ω^{-1}r].
 /// Uses quasi-demeaned SSR for r'Ω^{-1}r = SSR_star/σ²_e; ln|Ω| from balanced approximation.
 fn re_mle_log_lik_twoway(
@@ -477,28 +490,24 @@ fn re_mle_log_lik_twoway(
     time_id: &[usize],
     betas: &[f64],
     kept: &[usize],
-    sigma2_alpha: f64,
-    sigma2_lambda: f64,
-    sigma2_e: f64,
-    n_entities: usize,
-    n_times: usize,
-    t_bar: f64,
-    n_bar: f64,
+    input: TwoWayLikelihoodParameters,
 ) -> f64 {
+    let TwoWayLikelihoodParameters {
+        sigma2_alpha,
+        sigma2_lambda,
+        sigma2_e,
+        n_entities,
+        n_times,
+        t_bar,
+        n_bar,
+    } = input;
     let n = endog.len();
     let se = sigma2_e.max(1e-300);
     let sa = sigma2_alpha.max(1e-12);
     let sl = sigma2_lambda.max(1e-12);
 
     let r: Vec<f64> = (0..n)
-        .map(|i| {
-            endog[i]
-                - kept
-                    .iter()
-                    .enumerate()
-                    .map(|(_j, &c)| exog[(i, c)] * betas[c])
-                    .sum::<f64>()
-        })
+        .map(|i| endog[i] - kept.iter().map(|&c| exog[(i, c)] * betas[c]).sum::<f64>())
         .collect();
 
     let (theta_id, theta_time, theta_total) = twoway_theta(sa, sl, se, t_bar, n_bar);
@@ -606,12 +615,11 @@ pub fn fit_panel_re_mle_twoway(
     let (_, y_b_e, x_b_e) = group_means(&y_vec, exog, entity_id);
     let n_b_e = y_b_e.len();
     let mut x_b_e_data = Vec::with_capacity(n_b_e * k);
-    for i in 0..n_b_e {
-        for c in 0..k {
-            x_b_e_data.push(x_b_e[i][c]);
-        }
+    for row in x_b_e.iter().take(n_b_e) {
+        x_b_e_data.extend_from_slice(&row[..k]);
     }
-    let x_b_e_arr = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
+    let x_b_e_arr =
+        yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_e_data), n_b_e, k).to_owned();
     let (x_b_e_use, _) = drop_collinear_columns(
         &x_b_e_arr,
         &vec![false; k],
@@ -635,15 +643,18 @@ pub fn fit_panel_re_mle_twoway(
 
     let (_, y_b_t, x_b_t) = group_means(&y_vec, exog, time_id);
     let n_b_t = y_b_t.len();
-    let x_b_t_arr = yss_sci_linalg::MatRef::from_row_major_slice(&({
-        let mut v = Vec::with_capacity(n_b_t * k);
-        for i in 0..n_b_t {
-            for c in 0..k {
-                v.push(x_b_t[i][c]);
+    let x_b_t_arr = yss_sci_linalg::MatRef::from_row_major_slice(
+        &({
+            let mut v = Vec::with_capacity(n_b_t * k);
+            for row in x_b_t.iter().take(n_b_t) {
+                v.extend_from_slice(&row[..k]);
             }
-        }
-        v
-    }), n_b_t, k).to_owned();
+            v
+        }),
+        n_b_t,
+        k,
+    )
+    .to_owned();
     let (x_b_t_use, _) = drop_collinear_columns(
         &x_b_t_arr,
         &vec![false; k],
@@ -685,7 +696,8 @@ pub fn fit_panel_re_mle_twoway(
         let x_const_star: Vec<f64> = (0..n)
             .map(|_| 1.0 - theta_id - theta_time + theta_total)
             .collect();
-        let x_const = yss_sci_linalg::MatRef::from_row_major_slice(&(x_const_star), n, 1).to_owned();
+        let x_const =
+            yss_sci_linalg::MatRef::from_row_major_slice(&(x_const_star), n, 1).to_owned();
         let res_const = OLS {
             endog: y_star_const,
             exog: x_const,
@@ -706,13 +718,15 @@ pub fn fit_panel_re_mle_twoway(
             time_id,
             &[alpha_init],
             &[0],
-            sigma2_alpha,
-            sigma2_lambda,
-            sigma2_e,
-            n_entities,
-            n_times,
-            t_bar,
-            n_bar,
+            TwoWayLikelihoodParameters {
+                sigma2_alpha,
+                sigma2_lambda,
+                sigma2_e,
+                n_entities,
+                n_times,
+                t_bar,
+                n_bar,
+            },
         );
         mle_iter_log_lik_const.push(ll_const);
         for _ in 0..30 {
@@ -768,13 +782,15 @@ pub fn fit_panel_re_mle_twoway(
                 time_id,
                 &[alpha],
                 &[0],
-                sigma2_alpha,
-                sigma2_lambda,
-                sigma2_e,
-                n_entities,
-                n_times,
-                t_bar,
-                n_bar,
+                TwoWayLikelihoodParameters {
+                    sigma2_alpha,
+                    sigma2_lambda,
+                    sigma2_e,
+                    n_entities,
+                    n_times,
+                    t_bar,
+                    n_bar,
+                },
             );
             mle_iter_log_lik_const.push(ll_const);
         }
@@ -795,7 +811,8 @@ pub fn fit_panel_re_mle_twoway(
         let x_ac = if constant && k > 0 {
             let fc = x_w2.col(0);
             if fc.iter().all(|&v| v.abs() < 1e-10) {
-                x_w2.submatrix(0, 1, x_w2.nrows(), x_w2.ncols() - 1).to_owned()
+                x_w2.submatrix(0, 1, x_w2.nrows(), x_w2.ncols() - 1)
+                    .to_owned()
             } else {
                 x_w2.clone()
             }
@@ -876,25 +893,20 @@ pub fn fit_panel_re_mle_twoway(
             time_id,
             &betas,
             &kept,
-            sigma2_alpha,
-            sigma2_lambda,
-            sigma2_e,
-            n_entities,
-            n_times,
-            t_bar,
-            n_bar,
+            TwoWayLikelihoodParameters {
+                sigma2_alpha,
+                sigma2_lambda,
+                sigma2_e,
+                n_entities,
+                n_times,
+                t_bar,
+                n_bar,
+            },
         );
         mle_iter_log_lik.push(ll);
 
         let r: Vec<f64> = (0..n)
-            .map(|i| {
-                y_vec[i]
-                    - kept
-                        .iter()
-                        .enumerate()
-                        .map(|(_j, &c)| exog[(i, c)] * betas[c])
-                        .sum::<f64>()
-            })
+            .map(|i| y_vec[i] - kept.iter().map(|&c| exog[(i, c)] * betas[c]).sum::<f64>())
             .collect();
         let r_w = within_transform_twoway(&r, entity_id, time_id);
         let ss_w: f64 = r_w.iter().map(|x| x * x).sum();
@@ -987,13 +999,15 @@ pub fn fit_panel_re_mle_twoway(
         time_id,
         &betas_vec,
         &kept,
-        sigma2_alpha,
-        sigma2_lambda,
-        sigma2_e,
-        n_entities,
-        n_times,
-        t_bar,
-        n_bar,
+        TwoWayLikelihoodParameters {
+            sigma2_alpha,
+            sigma2_lambda,
+            sigma2_e,
+            n_entities,
+            n_times,
+            t_bar,
+            n_bar,
+        },
     );
 
     if result.ms_residual > 1e-300 {
@@ -1048,13 +1062,15 @@ pub fn fit_panel_re_mle_twoway(
             time_id,
             &ols_betas,
             &ols_kept,
-            0.0,
-            0.0,
-            sigma2_e_ols,
-            n_entities,
-            n_times,
-            t_bar,
-            n_bar,
+            TwoWayLikelihoodParameters {
+                sigma2_alpha: 0.0,
+                sigma2_lambda: 0.0,
+                sigma2_e: sigma2_e_ols,
+                n_entities,
+                n_times,
+                t_bar,
+                n_bar,
+            },
         )
     };
     let chibar2 = 2.0 * (log_likelihood - ll_ols).max(0.0);

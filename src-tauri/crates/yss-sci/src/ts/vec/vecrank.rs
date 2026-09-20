@@ -44,9 +44,9 @@ pub fn vec_vecrank_stats(
     };
 
     let mut trace = vec![0.0_f64; k];
-    for r in 0..k {
+    for (r, statistic) in trace.iter_mut().enumerate() {
         let s: f64 = (r..k).map(|j| log_1m(evals[j])).sum();
-        trace[r] = -t * s;
+        *statistic = -t * s;
     }
 
     let mut maxe = vec![0.0_f64; k];
@@ -55,44 +55,44 @@ pub fn vec_vecrank_stats(
     }
 
     let mut sel_tr_95 = k;
-    for r in 0..k {
+    for (r, &statistic) in trace.iter().enumerate().take(k) {
         let dim = k - r;
-        if let Some(cv) = trace_critical_row(dim, det_order) {
-            if trace[r] < cv[1] {
-                sel_tr_95 = r;
-                break;
-            }
+        if let Some(cv) = trace_critical_row(dim, det_order)
+            && statistic < cv[1]
+        {
+            sel_tr_95 = r;
+            break;
         }
     }
     let mut sel_tr_99 = k;
-    for r in 0..k {
+    for (r, &statistic) in trace.iter().enumerate().take(k) {
         let dim = k - r;
-        if let Some(cv) = trace_critical_row(dim, det_order) {
-            if trace[r] < cv[2] {
-                sel_tr_99 = r;
-                break;
-            }
+        if let Some(cv) = trace_critical_row(dim, det_order)
+            && statistic < cv[2]
+        {
+            sel_tr_99 = r;
+            break;
         }
     }
 
     let mut sel_mx_95 = k;
-    for r in 0..k {
+    for (r, &statistic) in maxe.iter().enumerate().take(k) {
         let dim = k - r;
-        if let Some(cv) = max_eigen_critical_row(dim, det_order) {
-            if maxe[r] < cv[1] {
-                sel_mx_95 = r;
-                break;
-            }
+        if let Some(cv) = max_eigen_critical_row(dim, det_order)
+            && statistic < cv[1]
+        {
+            sel_mx_95 = r;
+            break;
         }
     }
     let mut sel_mx_99 = k;
-    for r in 0..k {
+    for (r, &statistic) in maxe.iter().enumerate().take(k) {
         let dim = k - r;
-        if let Some(cv) = max_eigen_critical_row(dim, det_order) {
-            if maxe[r] < cv[2] {
-                sel_mx_99 = r;
-                break;
-            }
+        if let Some(cv) = max_eigen_critical_row(dim, det_order)
+            && statistic < cv[2]
+        {
+            sel_mx_99 = r;
+            break;
         }
     }
 

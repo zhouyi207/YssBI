@@ -13,6 +13,14 @@ use statrs::{
 use yss_sci_linalg::Mat;
 use yss_sci_linalg::{MatrixExt, Solve};
 
+pub(crate) struct FirstStageOptions<'a> {
+    pub(crate) has_constant: bool,
+    pub(crate) cov_type: &'a str,
+    pub(crate) cov_params: Option<&'a CovParams>,
+    pub(crate) small: bool,
+    pub(crate) for_liml: bool,
+}
+
 /// When true, use LIML Stock-Yogo size critical values (bias=None). When false, use 2SLS.
 pub(crate) fn compute_first_stage_summary(
     z: &Mat<f64>,
@@ -20,17 +28,20 @@ pub(crate) fn compute_first_stage_summary(
     endog_reg: &Mat<f64>,
     exog: &Mat<f64>,
     instruments: &Mat<f64>,
-    n: usize,
-    k_z: usize,
-    k_exog: usize,
-    k_iv: usize,
-    k_endog: usize,
-    has_constant: bool,
-    cov_type: &str,
-    cov_params: Option<&CovParams>,
-    small: bool,
-    for_liml: bool,
+    input: FirstStageOptions<'_>,
 ) -> Result<FirstStageSummary, String> {
+    let FirstStageOptions {
+        has_constant,
+        cov_type,
+        cov_params,
+        small,
+        for_liml,
+    } = input;
+    let n = z.nrows();
+    let k_z = z.ncols();
+    let k_exog = exog.ncols();
+    let k_iv = instruments.ncols();
+    let k_endog = endog_reg.ncols();
     let k1 = if has_constant { k_exog + 1 } else { k_exog };
     let df_z = n.saturating_sub(k_z);
 

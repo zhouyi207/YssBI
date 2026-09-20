@@ -9,6 +9,12 @@ pub struct StandardizeTransform1D {
     data: Option<StandardizeStats1D>,
 }
 
+impl Default for StandardizeTransform1D {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StandardizeTransform1D {
     pub fn new() -> Self {
         Self { data: None }

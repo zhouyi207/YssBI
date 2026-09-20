@@ -11,14 +11,14 @@ pub fn var_regression_times_stata(
     let t = y.nrows();
     let k = y.ncols();
     let p_model = *lags.iter().max().expect("lags non-empty");
-    if let Some(ex) = exog {
-        if ex.nrows() != t {
-            return Err(format!(
-                "VAR: exog has {} rows, expected {} (must match Y)",
-                ex.nrows(),
-                t
-            ));
-        }
+    if let Some(ex) = exog
+        && ex.nrows() != t
+    {
+        return Err(format!(
+            "VAR: exog has {} rows, expected {} (must match Y)",
+            ex.nrows(),
+            t
+        ));
     }
     let mut out = Vec::new();
     for row_t in p_model..t {

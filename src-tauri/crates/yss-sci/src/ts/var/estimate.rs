@@ -33,14 +33,14 @@ impl VAR {
         let n_exog = self.exog.as_ref().map(|x| x.ncols()).unwrap_or(0);
         let n_z = n_lag_coefs + n_exog + if constant { 1 } else { 0 };
 
-        if let Some(ref exog) = self.exog {
-            if exog.nrows() != t {
-                return Err(format!(
-                    "VAR: exog has {} rows, expected {} (must match Y length)",
-                    exog.nrows(),
-                    t
-                ));
-            }
+        if let Some(ref exog) = self.exog
+            && exog.nrows() != t
+        {
+            return Err(format!(
+                "VAR: exog has {} rows, expected {} (must match Y length)",
+                exog.nrows(),
+                t
+            ));
         }
 
         let row_indices: Vec<usize> = if let Some(ref rt) = self.regression_times {
@@ -143,7 +143,7 @@ impl VAR {
             });
 
             let mut labels = Vec::with_capacity(n_z);
-            let names = self.var_names.as_ref().map(|n| n.as_slice()).unwrap_or(&[]);
+            let names = self.var_names.as_deref().unwrap_or(&[]);
             // 先遍历每个 y，再遍历其 L1, L2, ... → L1.y1, L2.y1; L1.y2, L2.y2; ...
             for v in 0..k {
                 for &lag in lags.iter() {
@@ -281,8 +281,8 @@ impl VAR {
         // OIRF: Θ_s = Φ_s G
         let mut theta: Vec<Mat<f64>> = Vec::with_capacity(step + 1);
         let mut oirf: Vec<Vec<Vec<f64>>> = Vec::with_capacity(step + 1);
-        for s in 0..=step {
-            let theta_s = phi[s].as_ref() * g_nd.as_ref();
+        for phi_s in phi.iter().take(step + 1) {
+            let theta_s = phi_s.as_ref() * g_nd.as_ref();
             oirf.push(
                 (0..k)
                     .map(|i| (0..k).map(|j| theta_s[(i, j)]).collect())
@@ -303,14 +303,14 @@ impl VAR {
                 if mse_ii > 1e-300 {
                     for j in 0..k {
                         let mut sum = 0.0;
-                        for m in 0..=s {
-                            sum += theta[m][(i, j)].powi(2);
+                        for theta_m in theta.iter().take(s + 1) {
+                            sum += theta_m[(i, j)].powi(2);
                         }
                         fevd_s[i][j] = sum / mse_ii;
                     }
                 } else {
-                    for j in 0..k {
-                        fevd_s[i][j] = if i == j { 1.0 } else { 0.0 };
+                    for (j, value) in fevd_s[i].iter_mut().enumerate() {
+                        *value = if i == j { 1.0 } else { 0.0 };
                     }
                 }
             }
@@ -495,7 +495,8 @@ impl VAR {
                 }
             }
 
-            let sigma_tilde = (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
+            let sigma_tilde =
+                (u_aug.transpose() * u_aug.as_ref()) / yss_sci_linalg::Scale(n_obs as f64);
             let mut det_tilde = sigma_tilde.clone();
             cholesky_lower_in_place(&mut det_tilde)
                 .map_err(|_| "VAR varlmar: Sigma_tilde not positive definite".to_string())?;

@@ -70,14 +70,14 @@ pub fn wald_test(
         match alternative {
             Alternative::Greater => {
                 if c > 0.0 {
-                    p_value = p_value / 2.0;
+                    p_value /= 2.0;
                 } else {
                     p_value = 1.0 - p_value / 2.0;
                 }
             }
             Alternative::Less => {
                 if c < 0.0 {
-                    p_value = p_value / 2.0;
+                    p_value /= 2.0;
                 } else {
                     p_value = 1.0 - p_value / 2.0;
                 }

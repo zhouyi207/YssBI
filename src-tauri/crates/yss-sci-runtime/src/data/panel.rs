@@ -3,6 +3,8 @@
 //! 复用 TS align 思路：按 entity 分组，每组内补齐时间轴到规则网格，缺失为 NaN。
 //! panel_diff 在 align 后的数据上对相邻行做一阶差分（仅当两侧均非 NaN 时输出）。
 
+pub type PanelDifference = (Vec<usize>, Vec<usize>, Vec<Vec<f64>>);
+
 use std::collections::HashMap;
 
 use super::time_series::align::{time_array, time_numbers};
@@ -93,7 +95,7 @@ pub fn align_panel(
         }
 
         // 建立 time -> row_idx 映射
-        let time_to_idx: HashMap<usize, usize> = rows.into_iter().map(|(t, i)| (t, i)).collect();
+        let time_to_idx: HashMap<usize, usize> = rows.into_iter().collect();
 
         for &tid in &full_times {
             out_entity.push(eid);
@@ -125,9 +127,7 @@ pub fn align_panel(
 /// 支持时间有缺失时仍正确计算 Δy_t = y_t - y_{t'}，其中 t' 为上一期有效观测时间。
 ///
 /// 返回 (diff_entity, diff_time_id, diff_cols)，其中 diff_time_id 为每个 diff 行对应的 time_id（当前观测时间）
-pub fn panel_diff(
-    aligned: &AlignedPanel,
-) -> Result<(Vec<usize>, Vec<usize>, Vec<Vec<f64>>), String> {
+pub fn panel_diff(aligned: &AlignedPanel) -> Result<PanelDifference, String> {
     let n = aligned.entity_id.len();
     if n == 0 {
         return Err("panel_diff: empty aligned panel".to_string());

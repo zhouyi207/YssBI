@@ -40,7 +40,6 @@ fn test_fd_fe_identical_for_t2() {
         &endog,
         &exog,
         &entity_id,
-        &time_id,
         &time_values,
         true,
         "nonrobust",
@@ -86,14 +85,13 @@ fn test_fd_slope_t3() {
     )
     .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1, 1];
-    let time_id = vec![0, 1, 2, 0, 1, 2];
+    let time_id = [0, 1, 2, 0, 1, 2];
 
     let time_values: Vec<i64> = time_id.iter().map(|&t| t as i64).collect();
     let fd = fit_panel_fd(
         &endog,
         &exog,
         &entity_id,
-        &time_id,
         &time_values,
         true,
         "nonrobust",
@@ -130,14 +128,13 @@ fn test_fd_with_time_gap() {
     )
     .to_owned();
     let entity_id = vec![0, 0, 0, 1, 1];
-    let time_id = vec![0, 1, 2, 0, 2]; // entity 1 has gap at t=1
+    let time_id = [0, 1, 2, 0, 2]; // entity 1 has gap at t=1
 
     let time_values: Vec<i64> = time_id.iter().map(|&t| t as i64).collect();
     let fd = fit_panel_fd(
         &endog,
         &exog,
         &entity_id,
-        &time_id,
         &time_values,
         true,
         "nonrobust",

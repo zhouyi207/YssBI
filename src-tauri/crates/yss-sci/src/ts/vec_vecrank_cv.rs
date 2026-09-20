@@ -102,7 +102,7 @@ pub const MAX_OL_CASE2: [[f64; 3]; 12] = [
 /// dim = K − r（协整秩检验维度），返回 [10% / 5% / 1% 显著性] 的右尾临界值
 #[inline]
 pub fn trace_critical_row(dim: usize, det_order: i32) -> Option<[f64; 3]> {
-    if dim < 1 || dim > 12 {
+    if !(1..=12).contains(&dim) {
         return None;
     }
     let i = dim - 1;
@@ -116,7 +116,7 @@ pub fn trace_critical_row(dim: usize, det_order: i32) -> Option<[f64; 3]> {
 
 #[inline]
 pub fn max_eigen_critical_row(dim: usize, det_order: i32) -> Option<[f64; 3]> {
-    if dim < 1 || dim > 12 {
+    if !(1..=12).contains(&dim) {
         return None;
     }
     let i = dim - 1;

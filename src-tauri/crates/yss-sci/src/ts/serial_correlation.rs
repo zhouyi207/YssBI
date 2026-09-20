@@ -56,7 +56,7 @@ pub fn ljung_box_q(residuals: &[f64], lags: usize) -> Option<(f64, f64)> {
 /// TR² ~ χ²(p)
 ///
 /// * `nomiss0`: true = 缺失的滞后残差用 0 填充，保留 n 个观测（Stata nomiss0）
-///              false = 去掉前 p 个观测，仅用 n-p 个观测做辅助回归
+///   false = 去掉前 p 个观测，仅用 n-p 个观测做辅助回归
 pub fn breusch_godfrey(
     residuals: &[f64],
     exog: &[Vec<f64>],
@@ -64,7 +64,7 @@ pub fn breusch_godfrey(
     nomiss0: bool,
 ) -> Option<(f64, f64)> {
     let n = residuals.len();
-    let k = exog.get(0).map(|r| r.len()).unwrap_or(0);
+    let k = exog.first().map(|r| r.len()).unwrap_or(0);
     if n < 4 || k == 0 || lags < 1 || exog.len() != n {
         return None;
     }

@@ -10,6 +10,10 @@ Tabular input alignment and transformations belong to `yss-sci-runtime::data`.
 results. `ts::models` prepares ADF/VAR/VEC computations. DID randomization inference
 belongs to `regression::panel::did`, and kernel density estimation to `stats::density`.
 
+Panel first differences take entity IDs and original time values; they do not
+require a second time-ID vector. First-stage IV summaries derive dimensions from
+their matrices and receive covariance/estimator choices through `FirstStageOptions`.
+
 `stats::linear_hypothesis` owns constraint parsing, linearization, parameter order,
 matrix construction, test selection and `at()` interpretation. It uses
 `yss-math-expr` for generic syntax and validated t/Wald inputs in `stats::linear_test`.

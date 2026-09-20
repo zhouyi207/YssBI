@@ -25,10 +25,8 @@ pub fn fit_panel_re_be(
     let k = exog.ncols();
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
-    for i in 0..n_b {
-        for c in 0..k {
-            x_b_data.push(x_b_vec[i][c]);
-        }
+    for row in x_b_vec.iter().take(n_b) {
+        x_b_data.extend_from_slice(&row[..k]);
     }
     let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
     let x_b = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();

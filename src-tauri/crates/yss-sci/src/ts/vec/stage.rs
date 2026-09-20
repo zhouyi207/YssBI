@@ -40,15 +40,15 @@ pub(crate) fn johansen_stage1(
     let (n_full, k) = (y.nrows(), y.ncols());
     let dy = diff_y(y);
     let n = n_full - p;
-    if n <= 0 {
+    if n == 0 {
         return Err("VEC: not enough observations after lag adjustment".to_string());
     }
 
     let m_si = sindicators.map(|s| s.ncols()).unwrap_or(0);
-    if let Some(si) = sindicators {
-        if si.nrows() != n_full {
-            return Err("VEC: sindicators rows must match y".to_string());
-        }
+    if let Some(si) = sindicators
+        && si.nrows() != n_full
+    {
+        return Err("VEC: sindicators rows must match y".to_string());
     }
 
     let (m1, has_const, has_trend): (usize, bool, bool) = match trend_spec {

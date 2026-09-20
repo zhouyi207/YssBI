@@ -199,7 +199,7 @@ impl Probit {
                 } else {
                     k
                 };
-                let lr_p_value = if df_model <= 0 {
+                let lr_p_value = if df_model == 0 {
                     1.0
                 } else {
                     1.0 - ChiSquared::new(df_model as f64)

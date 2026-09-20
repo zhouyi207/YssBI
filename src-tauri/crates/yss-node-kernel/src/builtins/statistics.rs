@@ -10,19 +10,19 @@ use yss_sci_contract::scientific::{
 };
 
 #[derive(Clone, Copy)]
-pub(crate) enum StatisticalKernel {
-    LinearFit,
-    LinearRegressionSummary,
-    LinearPredict,
+pub(crate) enum LinearKernel {
+    Fit,
+    Summary,
+    Predict,
 }
 
 pub(crate) fn execute(
-    kind: StatisticalKernel,
+    kind: LinearKernel,
     invocation: &KernelInvocation<'_>,
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     invocation.check_control()?;
     let values = match kind {
-        StatisticalKernel::LinearRegressionSummary => {
+        LinearKernel::Summary => {
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
                 return Err(KernelError::InvalidNumericInput);
             };
@@ -31,7 +31,7 @@ pub(crate) fn execute(
                 RuntimeValue::LinearRegression(model.clone()),
             ]
         }
-        StatisticalKernel::LinearPredict => {
+        LinearKernel::Predict => {
             let Some(RuntimeValue::LinearRegression(model)) = invocation.inputs.first() else {
                 return Err(KernelError::InvalidNumericInput);
             };
@@ -75,7 +75,7 @@ pub(crate) fn execute(
             }
             vec![RuntimeValue::List(prediction.into())]
         }
-        StatisticalKernel::LinearFit => {
+        LinearKernel::Fit => {
             let Some(RuntimeValue::Record(configuration)) = invocation.parameter("configuration")
             else {
                 return Err(KernelError::InvalidParameter);

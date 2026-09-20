@@ -17,7 +17,7 @@ pub fn durbin_waston(resid: &Col<f64>) -> f64 {
         .map(|i| (resid[i] - resid[i - 1]).powi(2))
         .sum::<f64>();
     let num = resid.iter().map(|value| value.powi(2)).sum::<f64>();
-    return diff / num;
+    diff / num
 }
 
 // 残差的正态性检验

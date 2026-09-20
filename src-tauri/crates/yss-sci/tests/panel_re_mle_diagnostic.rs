@@ -8,7 +8,9 @@ use std::io::Write;
 use yss_sci::regression::panel::fit_panel_re_mle;
 use yss_sci_linalg::{Col, Mat};
 
-fn load_lin_csv() -> Result<(Col<f64>, Mat<f64>, Vec<usize>), Box<dyn std::error::Error>> {
+type PanelSample = (Col<f64>, Mat<f64>, Vec<usize>);
+
+fn load_lin_csv() -> Result<PanelSample, Box<dyn std::error::Error>> {
     let mut rdr = csv::Reader::from_path("tests/data/lin.csv")?;
     let headers = rdr.headers()?.clone();
     let mut records: Vec<csv::StringRecord> = rdr.records().filter_map(|r| r.ok()).collect();
@@ -150,12 +152,12 @@ fn panel_re_mle_lin() {
     let mut out = std::io::stdout().lock();
     writeln!(out, "=== Panel RE MLE Diagnostic (lin.csv) ===").ok();
     writeln!(out, "N={}, n_entities={}", n, n_entities).ok();
-    writeln!(out, "").ok();
+    writeln!(out).ok();
     writeln!(out, "Stata reference:").ok();
     writeln!(out, "  Log likelihood = 334.64947").ok();
     writeln!(out, "  sigma_u = 0.2166, sigma_e = 0.1056").ok();
     writeln!(out, "  LR chi2(9) = 964.50").ok();
-    writeln!(out, "").ok();
+    writeln!(out).ok();
     writeln!(out, "Our results:").ok();
     writeln!(out, "  Log likelihood = {:?}", result.log_likelihood).ok();
     if let Some(ref fe) = result.fe_stats {
@@ -168,21 +170,21 @@ fn panel_re_mle_lin() {
         writeln!(out, "  rho = {:.4}", fe.sigma.rho).ok();
     }
     writeln!(out, "  LR chi2 = {:?}", result.lr_chi2).ok();
-    writeln!(out, "").ok();
+    writeln!(out).ok();
     writeln!(out, "Constant-only iterations:").ok();
     if let Some(ref v) = result.mle_iter_log_lik_const {
         for (i, ll) in v.iter().enumerate() {
             writeln!(out, "  Iteration {}: Log likelihood = {:.5}", i, ll).ok();
         }
     }
-    writeln!(out, "").ok();
+    writeln!(out).ok();
     writeln!(out, "Full model iterations:").ok();
     if let Some(ref v) = result.mle_iter_log_lik {
         for (i, ll) in v.iter().enumerate() {
             writeln!(out, "  Iteration {}: Log likelihood = {:.5}", i, ll).ok();
         }
     }
-    writeln!(out, "").ok();
+    writeln!(out).ok();
     writeln!(out, "Coefficients:").ok();
     let names = [
         "const", "ltlan", "ltwlab", "ltpow", "ltfer", "hrs", "mipric1", "giprice", "mci", "ngca",

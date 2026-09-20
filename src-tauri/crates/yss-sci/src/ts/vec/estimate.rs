@@ -343,7 +343,7 @@ pub fn vec_estimate(
 
     // Cointegrating equations chi2 (Stata formula: Wald on free params in beta)
     let cointegrating_equations =
-        compute_cointegrating_equations_chi2(&beta_y, &alpha_nd, &omega_nd, &s11, n, d, r, k);
+        compute_cointegrating_equations_chi2(&beta_y, &alpha_nd, &omega_nd, &s11, n, d);
 
     // beta 表 Stata 风格：Std. err., z, P>|z|, [95% conf. interval]（Stata 公式 15）
     let (
@@ -352,7 +352,7 @@ pub fn vec_estimate(
         mut beta_p_value,
         mut beta_ci_lower,
         mut beta_ci_upper,
-    ) = compute_beta_ce_stats(&beta_y, &alpha_nd, &omega_nd, &s11, n, d, r, k);
+    ) = compute_beta_ce_stats(&beta_y, &alpha_nd, &omega_nd, &s11, n, d);
     if has_const {
         beta_std_err.push(vec![None; r]);
         beta_z_value.push(vec![None; r]);

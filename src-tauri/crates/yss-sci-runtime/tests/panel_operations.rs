@@ -8,7 +8,7 @@ fn test_panel_align_diff() {
     let time_id = vec![0, 1, 2, 0, 2];
     let col = vec![10.0, 20.0, 30.0, 5.0, 25.0]; // entity 0: 10,20,30; entity 1: 5,25
 
-    let aligned = align_panel(&entity_id, &time_id, &[col.clone()], Some(1)).unwrap();
+    let aligned = align_panel(&entity_id, &time_id, std::slice::from_ref(&col), Some(1)).unwrap();
     // Entity 0: full grid 0,1,2 -> 10,20,30
     // Entity 1: full grid 0,1,2 -> 5, NaN, 25
     assert_eq!(aligned.entity_id.len(), 6);

@@ -13,5 +13,5 @@ mod first_stage;
 mod fit;
 mod types;
 
-pub(crate) use first_stage::compute_first_stage_summary;
+pub(crate) use first_stage::{FirstStageOptions, compute_first_stage_summary};
 pub use types::*;

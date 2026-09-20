@@ -140,7 +140,7 @@ fn test_ols_golden() {
         exog: exog.clone(),
         config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             true,
-            &("nonrobust".to_string()),
+            "nonrobust",
             (None).as_ref(),
         )
         .expect("valid OLS covariance options"),
@@ -212,7 +212,7 @@ fn test_ols_golden() {
         aic
     );
     assert!(
-        approx_eq(bic, 94.04209384112551, TOL, TOL_REL),
+        approx_eq(bic, 94.042_093_841_125_5, TOL, TOL_REL),
         "BIC: got {}",
         bic
     );
@@ -522,7 +522,7 @@ fn test_wls_golden() {
         aic_w
     );
     assert!(
-        approx_eq(bic_w, 90.79276493894810, TOL, TOL_REL),
+        approx_eq(bic_w, 90.792_764_938_948_1, TOL, TOL_REL),
         "BIC: got {}",
         bic_w
     );
@@ -769,7 +769,7 @@ fn test_diagnostics_direct_helpers() {
         exog: exog.clone(),
         config: yss_sci_contract::regression::OlsOptions::from_covariance_parts(
             true,
-            &("nonrobust".to_string()),
+            "nonrobust",
             (None).as_ref(),
         )
         .expect("valid OLS covariance options"),

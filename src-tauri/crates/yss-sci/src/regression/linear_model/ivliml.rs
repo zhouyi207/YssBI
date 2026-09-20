@@ -455,16 +455,13 @@ impl IVLIML {
             &self.endog_reg,
             &self.exog,
             &self.instruments,
-            n,
-            k_z,
-            k_exog,
-            k_iv,
-            k_endog,
-            self.config.constant,
-            &covariance_type,
-            self.config.cov_params.as_ref(),
-            self.config.small,
-            true, // for_liml: use LIML Stock-Yogo size critical values
+            crate::regression::linear_model::iv2sls::FirstStageOptions {
+                has_constant: self.config.constant,
+                cov_type: &covariance_type,
+                cov_params: self.config.cov_params.as_ref(),
+                small: self.config.small,
+                for_liml: true,
+            },
         )?;
 
         // Overidentification test (estat overid): Anderson-Rubin chi2, Basmann F.

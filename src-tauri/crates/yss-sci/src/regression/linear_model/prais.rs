@@ -339,9 +339,9 @@ mod tests {
             .collect();
         let x: Vec<f64> = (0..n).map(|i| i as f64 * 1.2 + 2.0).collect();
         let mut exog = Vec::with_capacity(n * 2);
-        for i in 0..n {
+        for &value in &x {
             exog.push(1.0);
-            exog.push(x[i]);
+            exog.push(value);
         }
         let endog = (y).into_iter().collect::<Col<f64>>();
         let exog = yss_sci_linalg::MatRef::from_row_major_slice(&(exog), n, 2).to_owned();

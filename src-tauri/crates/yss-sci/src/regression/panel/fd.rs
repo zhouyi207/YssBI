@@ -15,7 +15,6 @@ pub fn fit_panel_fd(
     endog: &Col<f64>,
     exog: &Mat<f64>,
     entity_id: &[usize],
-    time_id: &[usize],
     time_values: &[i64],
     constant: bool,
     cov_type: &str,
@@ -29,8 +28,8 @@ pub fn fit_panel_fd(
             n
         ));
     }
-    if entity_id.len() != n || time_id.len() != n || time_values.len() != n {
-        return Err("Panel FD: entity_id, time_id, time_values must match data length".to_string());
+    if entity_id.len() != n || time_values.len() != n {
+        return Err("Panel FD: entity_id, time_values must match data length".to_string());
     }
 
     let k = exog.ncols();
@@ -59,13 +58,7 @@ pub fn fit_panel_fd(
 
     let dy_arr = (dy).into_iter().collect::<Col<f64>>();
 
-    let mut dx_data = Vec::with_capacity(n_fd * k);
-    for i in 0..n_fd {
-        for c in 0..k {
-            dx_data.push(dx_cols[c][i]);
-        }
-    }
-    let dx_arr = yss_sci_linalg::MatRef::from_row_major_slice(&(dx_data), n_fd, k).to_owned();
+    let dx_arr = Mat::from_fn(n_fd, k, |i, c| dx_cols[c][i]);
 
     // 若存在常数列，差分后全为 0，需剔除
     let (dx_use, has_const) = if constant && k > 0 {

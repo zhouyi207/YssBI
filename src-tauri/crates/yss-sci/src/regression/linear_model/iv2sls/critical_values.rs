@@ -314,6 +314,8 @@ pub(super) fn stock_yogo_cv_2_endog(k2: usize) -> Option<StockYogoCriticalValues
                 pct_10: 16.87,
                 pct_15: 9.93,
                 pct_20: 7.54,
+                // Published Stock-Yogo table entry, not an approximation of tau.
+                #[expect(clippy::approx_constant, reason = "empirical critical value")]
                 pct_25: 6.28,
             },
         ),

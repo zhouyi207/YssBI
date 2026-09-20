@@ -1,3 +1,11 @@
+type BetaCoefficientStatistics = (
+    Vec<Vec<Option<f64>>>,
+    Vec<Vec<Option<f64>>>,
+    Vec<Vec<Option<f64>>>,
+    Vec<Vec<Option<f64>>>,
+    Vec<Vec<Option<f64>>>,
+);
+
 /// 协整方程 chi2 (Stata Cointegrating equations 表): Wald 检验自由参数
 fn compute_cointegrating_equations_chi2(
     beta: &Mat<f64>,
@@ -6,9 +14,9 @@ fn compute_cointegrating_equations_chi2(
     s11: &Mat<f64>,
     n: usize,
     d: usize,
-    r: usize,
-    k: usize,
 ) -> Vec<VECCointegratingEquationStats> {
+    let k = alpha.nrows();
+    let r = alpha.ncols();
     let n_free = k.saturating_sub(r);
     if n_free == 0 {
         return (0..r)
@@ -86,15 +94,9 @@ fn compute_beta_ce_stats(
     s11: &Mat<f64>,
     n: usize,
     d: usize,
-    r: usize,
-    k: usize,
-) -> (
-    Vec<Vec<Option<f64>>>,
-    Vec<Vec<Option<f64>>>,
-    Vec<Vec<Option<f64>>>,
-    Vec<Vec<Option<f64>>>,
-    Vec<Vec<Option<f64>>>,
-) {
+) -> BetaCoefficientStatistics {
+    let k = alpha.nrows();
+    let r = alpha.ncols();
     let n_free = k.saturating_sub(r);
     let mut std_err = vec![vec![None; r]; k];
     let mut z_val = vec![vec![None; r]; k];

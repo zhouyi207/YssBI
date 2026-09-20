@@ -52,7 +52,10 @@ pub fn fit_panel_re_fgls(
             let first_col = x_w.col(0);
             let is_const = first_col.iter().all(|&v| v.abs() < 1e-10);
             if is_const {
-                (x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(), false)
+                (
+                    x_w.submatrix(0, 1, x_w.nrows(), x_w.ncols() - 1).to_owned(),
+                    false,
+                )
             } else {
                 (x_w.clone(), constant)
             }
@@ -89,10 +92,8 @@ pub fn fit_panel_re_fgls(
         entity_means(&endog.iter().cloned().collect::<Vec<_>>(), exog, entity_id);
     let n_b = y_b_vec.len();
     let mut x_b_data = Vec::with_capacity(n_b * k);
-    for i in 0..n_b {
-        for c in 0..k {
-            x_b_data.push(x_b_vec[i][c]);
-        }
+    for row in x_b_vec.iter().take(n_b) {
+        x_b_data.extend_from_slice(&row[..k]);
     }
     let y_b = (y_b_vec).into_iter().collect::<Col<f64>>();
     let x_b = yss_sci_linalg::MatRef::from_row_major_slice(&(x_b_data), n_b, k).to_owned();
@@ -364,7 +365,9 @@ pub fn fit_panel_re_fgls(
         let k_b = betas_nd.nrows();
         let (beta_s, v_s, df_wald) = if constant && k_b > 1 {
             let beta_s = betas_nd.subrows(1, betas_nd.nrows() - 1).to_owned();
-            let v_s = cov_beta.submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1).to_owned();
+            let v_s = cov_beta
+                .submatrix(1, 1, cov_beta.nrows() - 1, cov_beta.ncols() - 1)
+                .to_owned();
             (beta_s, v_s, k_b - 1)
         } else {
             (betas_nd.clone(), cov_beta.clone(), k_b)

@@ -14,7 +14,7 @@ use yss_relational_contract::NumericOperation;
 #[derive(Clone, Copy)]
 enum BuiltinKernel {
     Distribution(distribution::DistributionKernel),
-    Statistical(statistics::StatisticalKernel),
+    Statistical(statistics::LinearKernel),
     Relational(relational::RelationalKernel),
     Series(series::SeriesKernel),
     Decompose,
@@ -32,7 +32,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
     use NumericOperation::{
         Add, Divide, Ln, Log2, Log10, Logarithm, Multiply, Power, Sqrt, Square, Subtract,
     };
-    use statistics::StatisticalKernel::{LinearFit, LinearPredict, LinearRegressionSummary};
+    use statistics::LinearKernel::{Fit, Predict, Summary};
     let entries: &[(
         &str,
         BuiltinKernel,
@@ -257,19 +257,19 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         ),
         (
             "yssbi.statistics.linear.fit",
-            Statistical(LinearFit),
+            Statistical(Fit),
             &["configuration"],
             3..=3,
         ),
         (
             "yssbi.statistics.linear.summary",
-            Statistical(LinearRegressionSummary),
+            Statistical(Summary),
             &[],
             2..=2,
         ),
         (
             "yssbi.statistics.linear.predict",
-            Statistical(LinearPredict),
+            Statistical(Predict),
             &[],
             1..=1,
         ),
@@ -472,7 +472,7 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
                         | series::SeriesKernel::InverseStandardize,
                     ) => 3,
                     Boolean(_) => 3,
-                    Statistical(LinearFit | LinearRegressionSummary | LinearPredict) => 4,
+                    Statistical(Fit | Summary | Predict) => 4,
                     Convert => 6,
                     Numeric(_) | Relational(relational::RelationalKernel::Filter) => 3,
                     _ => 2,
@@ -489,7 +489,7 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
     use crate::KernelInputSpec as Input;
     use BuiltinKernel::*;
     use relational::RelationalKernel as Table;
-    use statistics::StatisticalKernel as Stats;
+    use statistics::LinearKernel as Stats;
     match kind {
         Distribution(_) => vec![],
         Series(series::SeriesKernel::Range) => vec![],
@@ -503,17 +503,17 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
             vec![Input::fixed("aligned"), Input::fixed("series")]
         }
         Series(_) => vec![Input::fixed("series")],
-        Statistical(Stats::LinearFit) => vec![
+        Statistical(Stats::Fit) => vec![
             Input::fixed("response"),
             Input::repeated("predictors", 1..=usize::MAX),
             Input::repeated("weights", 0..=1),
             Input::repeated("sigma", 0..=usize::MAX),
         ],
-        Statistical(Stats::LinearPredict) => vec![
+        Statistical(Stats::Predict) => vec![
             Input::fixed("model"),
             Input::repeated("predictors", 1..=usize::MAX),
         ],
-        Statistical(Stats::LinearRegressionSummary) => vec![Input::fixed("model")],
+        Statistical(Stats::Summary) => vec![Input::fixed("model")],
         Relational(Table::Source) | Constant | FixedNumber(_) => vec![],
         Relational(Table::Assemble) => vec![Input::repeated("series", 1..=usize::MAX)],
         Relational(Table::ConcatRows | Table::ConcatColumns) => {
