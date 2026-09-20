@@ -51,6 +51,503 @@ fn analyze_document(
     )
 }
 
+#[test]
+fn series_catalog_nodes_execute_through_graph_planning_and_standardization_roundtrip() {
+    let mut document = GraphDocument::default();
+    let mut ids = BTreeMap::new();
+    for (suffix, parameters) in [
+        (
+            "series.int_range",
+            vec![(
+                "configuration",
+                serde_json::json!({"start":1,"end":5,"step":1}),
+            )],
+        ),
+        ("series.standardize", vec![]),
+        ("series.inverse_standardize", vec![]),
+        ("series.length", vec![]),
+        ("series.count", vec![]),
+        ("series.sum", vec![]),
+        ("series.mean", vec![]),
+        ("timeseries.difference", vec![]),
+        ("timeseries.percent_change", vec![]),
+        (
+            "timeseries.rolling_mean",
+            vec![("window", serde_json::json!(2))],
+        ),
+        ("timeseries.lag", vec![]),
+        ("literal.category", vec![]),
+        ("literal.frame", vec![]),
+        ("series.annotate_dummy", vec![]),
+        ("series.select", vec![("column", serde_json::json!("x"))]),
+        (
+            "panel.difference",
+            vec![
+                ("entity_column", serde_json::json!("entity")),
+                ("time_column", serde_json::json!("time")),
+            ],
+        ),
+    ] {
+        let id = NodeId::new();
+        ids.insert(suffix, id);
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: format!("yssbi.dataframe.{suffix}").parse().unwrap(),
+                position: NodePosition { x: 0., y: 0. },
+                user_label: None,
+                parameters: parameters
+                    .into_iter()
+                    .map(|(key, value)| (key.parse().unwrap(), value))
+                    .collect(),
+            },
+        );
+    }
+    use yss_data_contract::{DataValue, SemanticType, ValueType};
+    set_constant(
+        &mut document,
+        ids["literal.category"],
+        ValueType::DataSeries(Box::new(ValueType::Scalar(SemanticType::Categorical))),
+        DataValue::String(r#"{"value":["a","b"]}"#.into()),
+    );
+    set_constant(
+        &mut document,
+        ids["literal.frame"],
+        ValueType::DataFrame,
+        DataValue::String(
+            r#"{"x":[4,1,15,10],"entity":["a","a","b","b"],"time":[2,1,2,1]}"#.into(),
+        ),
+    );
+    for constant in document.constants.values_mut() {
+        yss_graph_document::normalize_constant_value(constant).unwrap();
+    }
+    let mut links = vec![
+        (
+            "literal.category",
+            "value",
+            "series.annotate_dummy",
+            "source",
+        ),
+        ("literal.frame", "value", "series.select", "dataframe"),
+        ("literal.frame", "value", "panel.difference", "aligned"),
+        ("series.select", "series", "panel.difference", "series"),
+        ("series.int_range", "series", "series.standardize", "series"),
+        (
+            "series.standardize",
+            "standardized",
+            "series.inverse_standardize",
+            "standardized",
+        ),
+        (
+            "series.standardize",
+            "mean",
+            "series.inverse_standardize",
+            "mean",
+        ),
+        (
+            "series.standardize",
+            "standard_deviation",
+            "series.inverse_standardize",
+            "standard_deviation",
+        ),
+    ];
+    for suffix in [
+        "series.length",
+        "series.count",
+        "series.sum",
+        "series.mean",
+        "timeseries.difference",
+        "timeseries.percent_change",
+        "timeseries.rolling_mean",
+        "timeseries.lag",
+    ] {
+        links.push(("series.int_range", "series", suffix, "series"));
+    }
+    for (source, output, target, input) in links {
+        let id = ConnectionId::new();
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(ids[source], output.parse().unwrap()),
+                input: PortAddress::declared(ids[target], input.parse().unwrap()),
+                order: None,
+            },
+        );
+    }
+    let output = execute(&document, "yssbi.dataframe.series.inverse_standardize").unwrap();
+    let RuntimeValue::List(values) = output else {
+        panic!("expected materialized roundtrip");
+    };
+    for (i, value) in values.iter().enumerate() {
+        let RuntimeValue::Scalar(TabularScalar::Float64(value)) = value else {
+            panic!();
+        };
+        assert!((value.as_f64() - (i + 1) as f64).abs() < 1e-12);
+    }
+}
+
+#[test]
+fn series_kernels_consume_arrow_nulls_metadata_and_grouped_order_with_budgets() {
+    use arrow::{
+        array::{Int64Array, StringArray},
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    };
+    use std::borrow::Cow;
+    use yss_data_contract::{SemanticType as S, ValueType as V};
+    use yss_node_kernel::{
+        KernelControl, KernelError, KernelId, KernelInvocation, KernelOutputSpec, KernelRegistry,
+    };
+    let factory: Arc<dyn yss_relational_contract::RelationFactory> =
+        yss_database_runtime::dataset_query_engine().unwrap();
+    let control = KernelControl::new(
+        Arc::new(AtomicBool::new(false)),
+        Instant::now() + Duration::from_secs(10),
+    );
+    let relation_control = yss_relational_contract::RelationControl {
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+        max_input_bytes: control.max_input_bytes,
+    };
+    let category = yss_database_arrow::with_column_semantic(
+        Field::new("entity", DataType::Utf8, false),
+        &yss_data_contract::ColumnSemantic {
+            kind: S::Categorical,
+            values: ["a", "b"]
+                .into_iter()
+                .map(|code| yss_data_contract::SemanticValue {
+                    value: code.into(),
+                    label: code.into(),
+                })
+                .collect(),
+            positive_value: None,
+            numeric: None,
+        },
+    )
+    .unwrap();
+    let data = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("x", DataType::Int64, true),
+            category,
+            Field::new("time", DataType::Int64, false),
+        ])),
+        vec![
+            Arc::new(Int64Array::from(vec![
+                Some(4),
+                Some(10),
+                Some(1),
+                None,
+                Some(15),
+            ])),
+            Arc::new(StringArray::from(vec!["a", "b", "a", "a", "b"])),
+            Arc::new(Int64Array::from(vec![2, 1, 1, 3, 2])),
+        ],
+    )
+    .unwrap();
+    let frame = factory
+        .clone()
+        .materialize(data, &relation_control)
+        .unwrap();
+    let x = RuntimeValue::Series(frame.select_series("x").unwrap());
+    let run = |suffix: &str,
+               inputs: &[RuntimeValue],
+               parameters: Vec<(&str, RuntimeValue)>,
+               output_types: Vec<V>,
+               control: &KernelControl| {
+        let keys = match suffix {
+            "series.int_range" => vec![],
+            "series.annotate_dummy" => vec!["source"],
+            "series.inverse_standardize" => vec!["standardized", "mean", "standard_deviation"],
+            "panel.difference" => vec!["aligned", "series"],
+            _ => vec!["series"],
+        };
+        KernelRegistry::default().execute(
+            &KernelId::new(format!("yssbi.dataframe.{suffix}").into()).unwrap(),
+            &KernelInvocation {
+                relations: &factory,
+                inputs,
+                input_keys: &keys,
+                parameters: parameters
+                    .into_iter()
+                    .map(|(key, value)| {
+                        (
+                            yss_node_kernel::KernelParameterKey::new(key.into()).unwrap(),
+                            Cow::Owned(value),
+                        )
+                    })
+                    .collect(),
+                outputs: &output_types
+                    .into_iter()
+                    .map(|data_type| KernelOutputSpec {
+                        data_type,
+                        fields: None,
+                    })
+                    .collect::<Vec<_>>(),
+                control,
+            },
+        )
+    };
+    let number = |n| RuntimeValue::Scalar(TabularScalar::Integer(n));
+    let numeric_series = || V::DataSeries(Box::new(V::Scalar(S::Numeric)));
+    let as_json = |value: &RuntimeValue| {
+        let RuntimeValue::List(values) = value.unannotated() else {
+            panic!("expected series");
+        };
+        serde_json::to_value(
+            values
+                .iter()
+                .map(|value| match value {
+                    RuntimeValue::Scalar(value) => value,
+                    _ => panic!(),
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    };
+    for (kind, expected) in [
+        ("series.length", 5),
+        ("series.count", 4),
+        ("series.sum", 30),
+    ] {
+        assert_eq!(
+            run(
+                kind,
+                std::slice::from_ref(&x),
+                vec![],
+                vec![V::Scalar(S::Numeric)],
+                &control
+            )
+            .unwrap()[0],
+            number(expected)
+        );
+    }
+    for (kind, param, size, expected) in [
+        (
+            "timeseries.difference",
+            "order",
+            1,
+            serde_json::json!([null, 6, -9, null, null]),
+        ),
+        (
+            "timeseries.difference",
+            "order",
+            2,
+            serde_json::json!([null, null, -15, null, null]),
+        ),
+        (
+            "timeseries.percent_change",
+            "order",
+            1,
+            serde_json::json!([null, 1.5, -0.9, null, null]),
+        ),
+        (
+            "timeseries.rolling_mean",
+            "window",
+            2,
+            serde_json::json!([null, 7, 5.5, null, null]),
+        ),
+        (
+            "timeseries.lag",
+            "window",
+            2,
+            serde_json::json!([null, null, 4, 10, 1]),
+        ),
+    ] {
+        let result = run(
+            kind,
+            std::slice::from_ref(&x),
+            vec![(param, number(size))],
+            vec![numeric_series()],
+            &control,
+        )
+        .unwrap();
+        let actual = as_json(&result[0]);
+        for (actual, expected) in actual
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(expected.as_array().unwrap())
+        {
+            if expected.is_null() {
+                assert!(actual.is_null());
+            } else {
+                assert!(
+                    (actual.as_f64().unwrap() - expected.as_f64().unwrap()).abs() < 1e-10,
+                    "{kind}: {actual}"
+                );
+            }
+        }
+    }
+    let panel = run(
+        "panel.difference",
+        &[RuntimeValue::Relation(frame.clone()), x.clone()],
+        vec![
+            ("order", number(1)),
+            (
+                "entity_column",
+                RuntimeValue::Scalar(TabularScalar::String("entity".into())),
+            ),
+            (
+                "time_column",
+                RuntimeValue::Scalar(TabularScalar::String("time".into())),
+            ),
+        ],
+        vec![numeric_series()],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        as_json(&panel[0]),
+        serde_json::json!([3.0, null, null, null, 5.0])
+    );
+    let categorical = RuntimeValue::Series(frame.select_series("entity").unwrap());
+    let dummy = run(
+        "series.annotate_dummy",
+        &[categorical],
+        vec![(
+            "base_level",
+            RuntimeValue::Scalar(TabularScalar::String("a".into())),
+        )],
+        vec![V::DataSeries(Box::new(V::Scalar(S::Categorical)))],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        dummy[0].metadata().unwrap().dummy_base_level.as_deref(),
+        Some("a")
+    );
+    assert_eq!(
+        as_json(&dummy[0]),
+        serde_json::json!(["a", "b", "a", "a", "b"])
+    );
+    let (field, _) = yss_database_arrow::materialized_column(
+        "entity",
+        &[TabularScalar::String("a".into())],
+        dummy[0].metadata(),
+    )
+    .unwrap();
+    assert_eq!(
+        field
+            .metadata()
+            .get("yssbi.dummy_base_level")
+            .map(String::as_str),
+        Some("a")
+    );
+    let standardized = run(
+        "series.standardize",
+        std::slice::from_ref(&x),
+        vec![],
+        vec![
+            numeric_series(),
+            V::Scalar(S::Numeric),
+            V::Scalar(S::Numeric),
+        ],
+        &control,
+    )
+    .unwrap();
+    let restored = run(
+        "series.inverse_standardize",
+        &standardized,
+        vec![],
+        vec![numeric_series()],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(
+        as_json(&restored[0]),
+        serde_json::json!([4.0, 10.0, 1.0, null, 15.0])
+    );
+    let empty = RuntimeValue::List(Arc::from([]));
+    assert_eq!(
+        run(
+            "series.mean",
+            &[empty],
+            vec![],
+            vec![V::Scalar(S::Numeric)],
+            &control
+        )
+        .unwrap()[0],
+        RuntimeValue::Scalar(TabularScalar::Null)
+    );
+    let range = |start, end, step| {
+        vec![(
+            "configuration",
+            RuntimeValue::Record(Arc::new(BTreeMap::from([
+                ("start".into(), number(start)),
+                ("end".into(), number(end)),
+                ("step".into(), number(step)),
+            ]))),
+        )]
+    };
+    assert_eq!(
+        as_json(
+            &run(
+                "series.int_range",
+                &[],
+                range(5, 0, -2),
+                vec![numeric_series()],
+                &control
+            )
+            .unwrap()[0]
+        ),
+        serde_json::json!([5, 3, 1])
+    );
+    assert!(matches!(
+        run(
+            "series.int_range",
+            &[],
+            range(0, 10, 0),
+            vec![numeric_series()],
+            &control
+        ),
+        Err(KernelError::InvalidParameter)
+    ));
+    let tiny = KernelControl {
+        max_input_bytes: 1,
+        cancellation: control.cancellation.clone(),
+        deadline: control.deadline,
+    };
+    assert!(matches!(
+        run(
+            "series.standardize",
+            std::slice::from_ref(&x),
+            vec![],
+            vec![
+                numeric_series(),
+                V::Scalar(S::Numeric),
+                V::Scalar(S::Numeric)
+            ],
+            &tiny
+        ),
+        Err(KernelError::BudgetExceeded)
+    ));
+    assert!(matches!(
+        run(
+            "series.int_range",
+            &[],
+            range(i64::MIN, i64::MAX, 1),
+            vec![numeric_series()],
+            &tiny
+        ),
+        Err(KernelError::BudgetExceeded)
+    ));
+    control
+        .cancellation
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert!(matches!(
+        run(
+            "series.length",
+            &[x],
+            vec![],
+            vec![V::Scalar(S::Numeric)],
+            &control
+        ),
+        Err(KernelError::Cancelled)
+    ));
+}
+
 fn execute(
     document: &GraphDocument,
     output_node_type: &str,

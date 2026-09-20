@@ -343,7 +343,10 @@ fn interface(
                                         value_type: concrete("core.numeric")?,
                                         value: DataValue::Integer(default),
                                     }),
-                                    vec![],
+                                    vec![ParameterConstraint::IntegerRange {
+                                        min: None,
+                                        max: None,
+                                    }],
                                 )?,
                                 visible_when: None,
                             })
@@ -406,7 +409,16 @@ fn interface(
                 data_input("source", "Source", generic_series_type("element")?, None)?,
                 data_output("result", "Result", generic_series_type("element")?, None)?,
             ],
-            vec![text_parameter("base_level", false)?],
+            vec![parameter(
+                "base_level",
+                concrete("core.text")?,
+                ParameterEditorSpec::Text { multiline: false },
+                Some(TypedValue {
+                    value_type: concrete("core.text")?,
+                    value: DataValue::String("".into()),
+                }),
+                vec![],
+            )?],
         )),
         TimeAlign => Ok((
             vec![
@@ -470,7 +482,11 @@ fn interface(
                 data_input("series", "DataSeries", numeric_series_type(), None)?,
                 data_output("result", "Result", float_series_type()?, None)?,
             ],
-            vec![positive_integer_parameter("order", 1)?],
+            vec![
+                positive_integer_parameter("order", 1)?,
+                column_parameter("entity_column")?,
+                column_parameter("time_column")?,
+            ],
         )),
     }
 }
@@ -671,19 +687,6 @@ fn nominal_parameter(
         ParameterEditorSpec::Auto,
         None,
         vec![ParameterConstraint::Required],
-    )
-}
-
-fn text_parameter(
-    key: &'static str,
-    multiline: bool,
-) -> Result<ParameterSpec, BuiltinAssemblyError> {
-    parameter(
-        key,
-        concrete("core.text")?,
-        ParameterEditorSpec::Text { multiline },
-        None,
-        vec![],
     )
 }
 
@@ -904,6 +907,14 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
     let documentation = leak(format!("nodes.{}.documentation", spec.id));
     let aliases = leak(format!("nodes.{}.aliases", spec.id));
     let (en_documentation, zh_documentation) = match spec.interface {
+        InterfaceKind::IntRange => (
+            "Generates integers from start (inclusive) to end (exclusive). Step must be a nonzero integer; negative steps are supported. Output allocation is bounded by the execution budget.",
+            "生成从 start（包含）到 end（不包含）的整数序列。step 必须是非零整数，支持负步长；输出分配受执行内存预算限制。",
+        ),
+        InterfaceKind::SeriesCount => (
+            "Counts non-null elements as an integer. Empty/all-null input returns zero; relation inputs are counted in controlled batches.",
+            "统计非 Null 元素个数，输出整数。空序列或全空序列返回零；关系数列按受控批流计数。",
+        ),
         InterfaceKind::Rename => (
             "Renames the column identified by 'from' to 'to'.",
             "将“源列”指定的列重命名为“目标列”。",
@@ -1004,6 +1015,20 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         out.push(("zh-CN", description, Text("类型化节点参数。")));
     }
     for (key, en_title, zh_title, en_description, zh_description) in [
+        (
+            "entity_column",
+            "Entity Column",
+            "实体列",
+            "Groups panel differences by this column; missing keys are rejected.",
+            "按此列分组计算面板差分，键不允许缺失。",
+        ),
+        (
+            "time_column",
+            "Time Column",
+            "时间列",
+            "Orders rows within each entity; duplicate entity-time keys are rejected.",
+            "按此列在实体内排序，实体与时间组合不允许重复。",
+        ),
         (
             "subset",
             "Columns to Check (empty means all)",

@@ -167,7 +167,10 @@ pub(super) fn project_schema_parameter_editors(node: &mut GraphNodeSemanticFact)
             }
             "core.text"
                 if matches!(parameter.editor, ParameterEditorSpec::Select)
-                    && parameter.key.as_str() == "column"
+                    && matches!(
+                        parameter.key.as_str(),
+                        "column" | "entity_column" | "time_column"
+                    )
                     && schema.is_some() =>
             {
                 parameter.configuration = Some(GraphParameterConfigurationFact::SelectOptions {

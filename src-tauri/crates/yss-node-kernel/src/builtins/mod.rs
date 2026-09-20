@@ -4,6 +4,7 @@ mod comparison;
 mod conversion;
 mod numeric;
 mod relational;
+mod series;
 mod statistics;
 
 use crate::{KernelError, KernelInvocation, RuntimeValue};
@@ -13,6 +14,7 @@ use yss_relational_contract::NumericOperation;
 enum BuiltinKernel {
     Statistical(statistics::StatisticalKernel),
     Relational(relational::RelationalKernel),
+    Series(series::SeriesKernel),
     Decompose,
     Constant,
     FixedNumber(f64),
@@ -36,6 +38,84 @@ pub(crate) fn register_builtin_kernels(builder: &mut crate::KernelRegistryBuilde
         &[&str],
         std::ops::RangeInclusive<usize>,
     )] = &[
+        (
+            "yssbi.dataframe.series.int_range",
+            Series(series::SeriesKernel::Range),
+            &["configuration"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.length",
+            Series(series::SeriesKernel::Length),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.count",
+            Series(series::SeriesKernel::Count),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.sum",
+            Series(series::SeriesKernel::Sum),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.mean",
+            Series(series::SeriesKernel::Mean),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.standardize",
+            Series(series::SeriesKernel::Standardize),
+            &[],
+            3..=3,
+        ),
+        (
+            "yssbi.dataframe.series.inverse_standardize",
+            Series(series::SeriesKernel::InverseStandardize),
+            &[],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.series.annotate_dummy",
+            Series(series::SeriesKernel::Dummy),
+            &["base_level"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.timeseries.difference",
+            Series(series::SeriesKernel::Difference),
+            &["order"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.timeseries.percent_change",
+            Series(series::SeriesKernel::PercentChange),
+            &["order"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.timeseries.rolling_mean",
+            Series(series::SeriesKernel::RollingMean),
+            &["window"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.timeseries.lag",
+            Series(series::SeriesKernel::Lag),
+            &["window"],
+            1..=1,
+        ),
+        (
+            "yssbi.dataframe.panel.difference",
+            Series(series::SeriesKernel::PanelDifference),
+            &["order", "entity_column", "time_column"],
+            1..=1,
+        ),
         (
             "yssbi.statistics.linear.fit",
             Statistical(LinearFit),
@@ -269,6 +349,17 @@ fn input_contract(kind: BuiltinKernel) -> Vec<crate::KernelInputSpec> {
     use relational::RelationalKernel as Table;
     use statistics::StatisticalKernel as Stats;
     match kind {
+        Series(series::SeriesKernel::Range) => vec![],
+        Series(series::SeriesKernel::InverseStandardize) => vec![
+            Input::fixed("standardized"),
+            Input::fixed("mean"),
+            Input::fixed("standard_deviation"),
+        ],
+        Series(series::SeriesKernel::Dummy) => vec![Input::fixed("source")],
+        Series(series::SeriesKernel::PanelDifference) => {
+            vec![Input::fixed("aligned"), Input::fixed("series")]
+        }
+        Series(_) => vec![Input::fixed("series")],
         Statistical(Stats::LinearFit) => vec![
             Input::fixed("response"),
             Input::repeated("predictors", 1..=usize::MAX),
@@ -306,6 +397,7 @@ fn execute_kernel(
 ) -> Result<Vec<RuntimeValue>, KernelError> {
     let inputs = invocation.inputs;
     let value = match kind {
+        BuiltinKernel::Series(kind) => return series::execute(kind, invocation),
         BuiltinKernel::Statistical(kind) => {
             return statistics::execute(kind, invocation);
         }
