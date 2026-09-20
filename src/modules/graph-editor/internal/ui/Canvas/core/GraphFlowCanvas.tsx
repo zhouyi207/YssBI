@@ -121,6 +121,7 @@ function GraphFlowRuntime({
   const positionsRef = useRef(positions);
   const drag = useRef<{ lease: GestureLease; owner: object } | null>(null);
   const pan = useRef<GestureLease | null>(null);
+  const contextMenuPress = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const selectionGesture = useRef<GestureLease | null>(null);
   const selectionPointer = useRef<SelectionPointerSnapshot | null>(null);
   const suppressClick = useRef(false);
@@ -569,17 +570,28 @@ function GraphFlowRuntime({
           if (!event.shiftKey && !suppressClick.current && interaction.isInteractive())
             commands.setSelectedNodeIds([], groupId);
         }}
-        onPaneContextMenu={
-          interactive
-            ? (event) => {
-                if (pan.current && !pan.current.isCurrent()) {
-                  event.preventDefault();
-                  return;
-                }
-                onContextMenu(event);
-              }
-            : undefined
-        }
+        onContextMenuCapture={(event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          if (!target?.classList.contains("react-flow__pane")) return;
+          // Right-button panning consumes React Flow's pane context-menu callback.
+          // Handle the native event once, allowing click jitter but not a completed drag.
+          event.preventDefault();
+          event.stopPropagation();
+          if (
+            !interactive ||
+            !interaction.isInteractive() ||
+            contextMenuPress.current?.moved ||
+            (pan.current && !pan.current.isCurrent())
+          )
+            return;
+          onContextMenu(event);
+        }}
+        onMove={(event) => {
+          const press = contextMenuPress.current;
+          if (press && event && "clientX" in event && (event.buttons & 2) !== 0) {
+            press.moved ||= Math.hypot(event.clientX - press.x, event.clientY - press.y) > 3;
+          }
+        }}
         onEdgeClick={(event, edge) => {
           if (!interaction.isInteractive() || event.detail > 1) return;
           const before = {
@@ -637,6 +649,8 @@ function GraphFlowRuntime({
           setEdgeMenu({ x: event.clientX, y: event.clientY, ids });
         }}
         onPointerDownCapture={(event) => {
+          contextMenuPress.current =
+            event.button === 2 ? { x: event.clientX, y: event.clientY, moved: false } : null;
           suppressClick.current = false;
           // A new press also recovers an aborted gesture whose release happened outside the view.
           if (selectionGesture.current && !selectionGesture.current.isCurrent()) {
