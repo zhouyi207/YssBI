@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **Low**, **High**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>`. Use for non-informative priors, randomization baselines, and uniform random number generation in Monte Carlo workflows.
+Lower Bound and Upper Bound must be finite, with lower < upper and a finite width. Samples belong to [lower, upper); the upper bound is excluded.

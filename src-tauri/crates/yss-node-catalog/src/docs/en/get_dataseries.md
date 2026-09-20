@@ -2,8 +2,8 @@
 
 Extract one column from a **DataFrame** as a **DataSeries**.
 
-**Int64** / **Date** columns are tagged as unaligned time series (`Unaligned`) for downstream **TS** nodes.
+Preserves the column type, semantic metadata and row domain. Selecting a column returns a lazy reference and does not scan data.
 
 ## Usage
 
-Connect **Get DataFrame** or a database query result, and set **Column Name** (or wire a **String** constant). Pipe the output into comparison, transform, plot, or econometric nodes.
+Connect a DataFrame and choose an existing column in the column parameter. The output can feed comparison, transformation or statistical nodes.

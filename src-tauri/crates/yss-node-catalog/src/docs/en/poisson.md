@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Wire **Lambda** and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of non-negative integers. Use for event counts per unit time or space, queue arrivals, and rare-event simulation.
+Set rate and sample count in Configuration. Rate must be finite and within [0, 2^53]; a zero rate produces zeros. Outputs non-negative Int64 samples. Samples exceeding the exact count limit of 2^53 fail the operation.

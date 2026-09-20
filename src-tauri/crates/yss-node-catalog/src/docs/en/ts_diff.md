@@ -1,13 +1,3 @@
-# TS Diff
+# Time-Series Difference
 
-Differences a **Value Series**:
-
-$$
-\Delta y_t = y_t - y_{t-\text{lag}}
-$$
-
-With an optional **Time Series**, matches Stata `D.`: differences only across adjacent **Interval** steps (no gaps). Without a time column, uses positional lag.
-
-## Usage
-
-Use on aligned series directly. For irregular times, connect **Time Series** and **Interval**, or run **TS Align** first.
+Order is the positive difference order: order 2 means applying the first difference twice. Uses existing row order and preserves row count; leading and missing-dependent positions are Null. No calendar grid or gap filling is inferred. Output is Float64.

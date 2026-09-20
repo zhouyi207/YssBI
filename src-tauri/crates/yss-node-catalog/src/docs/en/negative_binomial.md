@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **R**, **P**, and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of non-negative integers. Use for overdispersed count data and modeling failures before a fixed number of successes.
+Success Count is a positive real shape r; success probability must satisfy 0 < p ≤ 1. Outputs Int64 failure counts, excluding successes; p = 1 produces zeros. Samples exceeding the exact count limit of 2^53 fail the operation.

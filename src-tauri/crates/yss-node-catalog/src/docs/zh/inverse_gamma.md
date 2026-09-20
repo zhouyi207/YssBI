@@ -10,4 +10,4 @@ $$
 
 在 **Detail → 配置** 中设置分布参数和样本数，画布上保留 **Samples** 数据输出。
 
-设置 **Shape**、**Scale** 与 **N** 后执行图。**Samples** 输出正的 `DataSeries<Float64>`。适用于 Bayesian 中方差/精度先验及正随机倒数量的模拟。
+形状和尺度必须有限且严格为正。Scale 为 exp(-beta / x) 中的 beta，等价于 Gamma(shape, rate = scale) 样本的倒数。输出正 Float64 样本。

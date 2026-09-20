@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **Mean**, **Std**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>`. Use for measurement error, central limit theorem demos, random noise, and as a baseline continuous distribution.
+Mean must be finite; Standard Deviation must be finite and strictly positive. Produces Float64 samples. New samples are generated each execution; results are not cached.

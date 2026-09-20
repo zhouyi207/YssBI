@@ -1,7 +1,3 @@
 # DataSeries Mean
 
-计算数值 **DataSeries** 的算术均值，输出 **Float64** 标量。
-
-## 用法
-
-连接 **Get DataSeries** 或其它数值序列。无法计算均值（如全 null）时节点报错。
+返回非空数值的算术均值，输出 Float64；空序列或全空序列返回 Null。非有限值及有损数值转换报错。

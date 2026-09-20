@@ -1,7 +1,3 @@
-# Add Dummy Info
+# Add Dummy Information
 
-Attach dummy-encoding metadata to a **Categorical** **DataSeries** for **OLS** and related regression nodes. The series values are unchanged; encoding rules travel with the output reference.
-
-## Usage
-
-Place after extracting a categorical column (e.g. from **Decompose DataFrame**). Set **Drop Category** to the reference level Stata-style (that level gets coefficient 0). Choose **Role** when the factor is an entity ID (**Individual**) or time index (**Time**). Wire the output into **OLS** exogenous pins that accept categorical regressors.
+Attaches a reference-category hint to a Categorical, Ordinal or Binary series without changing its values or element type. Base Level is a stored category code, not a label; a supplied code must occur in the series. Empty means the downstream encoder chooses the reference category. The hint survives materialized series and Arrow table assembly. This node does not generate indicator columns; the current numeric regression nodes do not perform automatic dummy expansion.

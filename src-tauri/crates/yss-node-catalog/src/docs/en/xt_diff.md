@@ -1,9 +1,3 @@
-# XT Diff
+# Panel Difference
 
-First-differences an **XT Align** output **DataFrame** within each **entity** (panel Stata `D.` semantics).
-
-Keeps only valid differenced rows; numeric columns are differenced over time per entity.
-
-## Usage
-
-Run **XT Align** first. **Entity Col** and **Time Col** must match the alignment step.
+Connect the context DataFrame and a numeric series from the same row domain. Select Entity Column and Time Column from the frame. Rows are ordered within each entity by the time key, differenced repeatedly according to Order, and restored to original row positions. Missing/duplicate entity-time keys fail. Leading and missing-dependent values remain Null; rows are never dropped and calendar gaps are not filled. No separate alignment node is required.

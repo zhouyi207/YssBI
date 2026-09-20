@@ -1,7 +1,3 @@
 # DataSeries Sum
 
-Sums a numeric **DataSeries** and returns a **Float64** scalar.
-
-## Usage
-
-Connect a numeric column from **Get DataSeries** or any **Float64** / **Int64** series. Null handling follows Polars aggregation defaults.
+Sums non-null numeric values. Empty/all-null input returns zero. Integer sums retain an exact integer representation; floating sums use compensated addition. Overflow, non-finite values and lossy numeric conversions fail.

@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **N Trials**, **P**, and **N Samples**, then run the graph. **Samples** is a `DataSeries<Int64>` where each element is the success count from one batch of $n$ trials. Common for repeated experiments, defect counts, and binomial proportion simulation.
+Trial Count is an integer in [0, 2^53], and success probability is in [0, 1]. Outputs Int64 success counts. Zero trials or p = 0 returns zero; p = 1 returns Trial Count.

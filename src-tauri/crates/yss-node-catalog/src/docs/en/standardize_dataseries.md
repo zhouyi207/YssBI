@@ -1,13 +1,3 @@
 # Standardize DataSeries
 
-Apply z-score standardization to a **Float64** **DataSeries**. Each value is scaled using the sample mean and standard deviation:
-
-$$
-z = \frac{x - \mu}{\sigma}
-$$
-
-The node also emits a **Transform** handle so the mapping can be reversed later.
-
-## Usage
-
-Connect a **Float64** **DataSeries**, run the graph, and wire **Standardized** to models or further transforms. Keep **Transform** when you need original-scale values—pass it to **Inverse Standardize DataSeries** together with standardized data.
+Computes z = (x - mean) / standard_deviation. Outputs the standardized series, mean, and sample standard deviation (ddof = 1). Null positions are preserved and excluded from the statistics. Fewer than two non-null values, zero variance, or non-finite statistics fail. Connect both scalar outputs to Inverse Standardize.

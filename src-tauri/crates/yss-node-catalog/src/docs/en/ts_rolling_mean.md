@@ -1,7 +1,3 @@
-# TS Rolling Mean
+# Time-Series Rolling Mean
 
-Computes a rolling mean over **Window** observations; first **Window − 1** values are null.
-
-## Usage
-
-Use for smoothing or moving averages. **Window** must be positive; nulls inside the window follow Polars rolling rules.
+Window is a positive trailing row count, including the current row. Requires a complete window with no Null values; all other positions are Null. Preserves row count and uses existing row order. Outputs Float64.

@@ -1,7 +1,3 @@
-# Add Dummy Info
+# Add Dummy Information
 
-为 **Categorical** **DataSeries** 附加哑变量编码元数据，供 **OLS** 等回归节点使用。序列取值不变，编码规则随输出引用一并传递。
-
-## 用法
-
-在提取分类列（如 **Decompose DataFrame**）之后接入。**Drop Category** 设为参照组（Stata 风格，该组系数为 0）。因子为个体 ID 或时间索引时选择对应 **Role**。将输出接到 **OLS** 等接受分类自变量的 exog pin。
+为分类、有序分类或二元数列附加参照组提示，不改变取值和元素类型。Base Level 填写实际分类编码而非标签，指定的编码必须存在于输入中；留空表示由下游编码器选择参照组。提示随物化数列和 Arrow 表格组装保留。该节点不生成指示列，目前数值回归节点也不会自动展开虚拟变量。

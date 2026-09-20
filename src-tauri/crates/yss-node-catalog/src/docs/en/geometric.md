@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Wire **P** and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of positive integers. Use for time-to-first-success, waiting counts in repeated trials, and related survival-style discrete models.
+Set success probability and sample count in Configuration. Require 0 < p ≤ 1; p = 1 returns 1. Samples count the successful trial too. A sample exceeding the exact count limit of 2^53 fails the operation.

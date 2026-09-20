@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **K**, **Rate**, and **N**, then run the graph. **Samples** is a non-negative `DataSeries<Float64>`. Use for total waiting time in $K$-stage queues, telephony systems, and service-process modeling.
+Integer Shape is in [1, 2^53], and Rate must be finite and positive. Uses the Gamma shape/rate convention and outputs positive Float64 samples.

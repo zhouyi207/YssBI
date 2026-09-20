@@ -1,7 +1,3 @@
-# TS Rolling Mean
+# Time-Series Rolling Mean
 
-对 **DataSeries** 计算长度为 **Window** 的滚动均值；前 **Window − 1** 个值为 null。
-
-## 用法
-
-用于平滑或移动平均。**Window** 须大于 0；窗口内 null 按 Polars 滚动规则处理。
+Window 为包含当前行的正整数向后窗口长度。仅完整且没有 Null 的窗口输出均值，其余位置为 Null。保留行数并按现有行顺序计算，输出 Float64。

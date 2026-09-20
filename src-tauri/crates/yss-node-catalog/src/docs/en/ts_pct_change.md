@@ -1,13 +1,3 @@
-# TS Pct Change
+# Time-Series Percent Change
 
-Computes percentage change:
-
-$$
-\frac{y_t - y_{t-\text{lag}}}{y_{t-\text{lag}}}
-$$
-
-First **lag** observations and zero denominators yield null.
-
-## Usage
-
-Use for returns or growth rates. Uses positional lag without a time column; for strict calendar semantics, use **TS Diff** and divide manually.
+Order is the positive lag in rows. Computes current / previous - 1; 0.1 means 10%. Leading positions, missing operands and a zero denominator produce Null. Values are not forward-filled. Uses existing row order and outputs Float64.

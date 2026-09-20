@@ -1,13 +1,3 @@
 # Standardize DataSeries
 
-对 **Float64** **DataSeries** 做 z-score 标准化，按样本均值与标准差缩放：
-
-$$
-z = \frac{x - \mu}{\sigma}
-$$
-
-节点同时输出 **Transform** 句柄，便于后续还原到原始量纲。
-
-## 用法
-
-连接 **Float64** **DataSeries** 并执行图，将 **Standardized** 接到模型或后续变换。**Transform** 需保留以便还原量纲——与标准化数据一并接入 **Inverse Standardize DataSeries**。
+按 z = (x − 均值) / 标准差计算，输出标准化序列、均值和样本标准差（ddof = 1）。Null 不参与统计，输出中保留原位置。非空样本不足两个、方差为零或统计量非有限时报错。还原时将两个标量输出连接到逆标准化节点。

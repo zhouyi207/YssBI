@@ -1,9 +1,3 @@
-# TS Lag
+# Lag Time Series
 
-Strict time-aligned lag (Stata `L.` semantics). Lags **Value Series** by **Lag** steps after aligning on **Time Series**.
-
-When the time column is marked **Aligned** and matches the value length, re-alignment is skipped; otherwise **Interval** is inferred and values are aligned.
-
-## Usage
-
-First **Lag** observations are null. Duplicate time keys error; prefer **TS Align** for a regular grid first.
+Window is a positive row lag. Preserves the element type and semantic metadata, and fills leading positions with Null. A lag at least as large as the series produces all Null values. Uses existing row order; this node has no time-key input and does not infer calendar alignment.

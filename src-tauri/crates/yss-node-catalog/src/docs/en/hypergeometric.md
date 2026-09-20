@@ -10,4 +10,4 @@ $$
 
 Set distribution parameters and sample count in **Detail → Configuration**. The canvas exposes the **Samples** output.
 
-Set **N**, **K**, **n**, and **N Samples**, then run the graph. **Samples** is a `DataSeries<Int64>` where each element is the success count from one without-replacement draw. Use for QC sampling, finite-population proportion studies, and comparisons with the binomial model.
+Population Size, Successes in Population and Draw Count are non-negative integers; successes and draws cannot exceed the population. Zero draws return zero and drawing the whole population returns its success count. Each output is an independent experiment from the same population. Sampling uses exact integers and checks cancellation within long draw loops.

@@ -321,6 +321,18 @@ DataFusion adapter 单独持有行域及域内列表达式。筛选列、重命�
 
 Runtime 将普通数组交给 SCI 拟合；SCI 通过 `yss-sci-linalg` 封装的矩阵计算，faer 不越过 Linalg 边界。Results 的 ACF/PACF、序列检验和假设检验由 Application 读取并复核结果身份，再由 `yss_graph_execution::result::analysis` 从同一 OLS 结果构造输入并调用 runtime。Application 保留请求范围校验、会话和结果有效性检查；SCI 完成约束解析、线性化和 t/Wald 检验。
 
+概率分布目录的 23 个采样节点由 Node Kernel 解析配置，调用 SCI Runtime 的 `sample_into`，
+再由 SCI 使用既有 statrs/rand 实现。中立的分布参数与整数/浮点采样值由 SCI Contract 定义。
+采样节点无数据输入，执行时生成物化数列，保持 NonDeterministic 与 Disabled cache；图分析不采样。
+Kernel 在分配前检查样本缓冲及运行时输出的总预算；SCI 写入调用方提供的切片，不另存全量副本。
+分布构造前校验参数范围与有限性，各样本间检查取消/deadline；超几何整数抽取循环也定期检查控制。
+底层库内部的单次采样不承诺即时中断。数值溢出或不能表示的样本使整次节点执行失败，不返回部分结果。
+
+几何分布计数包含成功试验，负二项分布计数仅包含失败次数；Gamma 使用 shape/rate，
+Inverse Gamma 使用 shape/scale，离散均匀分布包含两个端点。涉及浮点计数的二项试验数、
+Erlang 形状及泊松率限制在 2^53 内，泊松/负二项/几何输出超出精确计数范围时报错。
+离散均匀分布和超几何抽样使用精确整数，不通过 Float64 中转。
+
 `yss-node-kernel` 的统计适配、`yss-graph-execution` 的结果分析及独立 OLS benchmark、`yss-application::ipc` 的独立统计命令直接调用 runtime。独立统计命令在 IPC 层转换中性请求/结果；ACF/PACF 命令保留会话准入检查和 60 秒 deadline。桌面入口和普通 Application 模块不注入或持有科学后端对象。取消与 deadline 保留同步计算前后的检查，不承诺中断正在进行的矩阵分解。通用数学语法由 `yss-math-expr` 拥有。
 
 Drop NA 的检查列复用列选择器，参数投影通过 `allowEmpty` 允许清空选择以检查全部列；
@@ -339,6 +351,18 @@ Relation 的 `schema_is_deferred()` 区分未确定的 Schema 与真正的零列
 
 Node Kernel 已注册 DataFrame source/project/filter.rows/series.select/decompose/limit/rename kernel。它们组合
 `yss-relational-contract` 的关系句柄，DataFusion 原生计划保持在 `yss-database-engine` 内；计划构造不 collect。
+
+数据序列目录的整数序列、长度、非空计数、求和、均值、标准化、逆标准化、虚拟变量信息、
+时间差分、变化率、滚动均值、滞后及面板差分均由 Node Kernel 执行。它们沿用目录声明的
+FullyMaterialized 输出契约；Graph Resolve 不执行计算。关系输入在节点执行时通过
+`RelationExecutor::visit_batches` 消费受控 Arrow 批流，长度和计数不保留整列，其他变换
+在输入与输出预算内物化。数值运算拒绝非有限值或有损提升；空值规则由各节点帮助明确。
+标准化使用样本标准差并分别输出均值和标准差，不存在额外 Transform 句柄。
+
+面板差分显式选择上下文数据帧的实体列和时间列，与待计算数列联合投影以证明行对齐；
+拒绝缺失及重复键，组内排序计算后恢复原始行位置，不推断日历间隔或删除缺失行。
+参照组提示由 `ConversionMetadata::dummy_base_level` 持有，组装 Arrow 列时写入
+`yssbi.dummy_base_level` 字段元数据；不会改变分类值，也不会隐式启用回归的虚拟变量展开。
 Decompose 的每个动态输出在 semantic snapshot 中携带单列 Schema（当前列名、类型和 lineage），
 计划准备将其保留到输出契约。执行按该列名返回共享上游关系的 `SeriesHandle`，不按端口顺序或显示标签猜列，
 也不为每列提前扫描数据；下游统计消费或 Results 分页时才交由 DataFusion 投影和读取。
