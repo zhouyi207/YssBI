@@ -1,105 +1,57 @@
-# YssBI Documentation
+# YssBI 文档索引
 
 > Status: Current
-> Scope: 文档分类、事实源优先级和维护入口
-> Canonical owners: 本文件拥有文档路由；各链接文档拥有其声明的专项内容
-> Update when: 新增、移动、归档或改变维护中文档的职责时
+> Scope: 当前文档入口、事实源优先级和维护约定
+> Canonical owners: 本文件拥有文档路由；专项文档和源码拥有各自内容
+> Update when: 新增、删除、移动文档或调整文档职责时
 
-YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、框架和当前文件清单不是拆分依据；同一知识只在一个 canonical owner 中维护，其他位置只写摘要并链接。
+文档保留当前架构、规则、重构计划和仍有用途的参考资料。已完成事项简记在 [v0.3](roadmap/v0_3.md)，过时方案和详细变更历史通过 Git 追溯。
 
-## 事实源优先级
+## 按用途查找
 
-1. **Code / tests / manifests**：可执行事实、版本、路径、常量、依赖和 command registry。
-2. **`docs/architecture/`**：当前架构模型与稳定 contract；已接受的目标契约必须显式区分设计约束与生产实现。
-3. **`.rules`**：coding agent 行为和不可破坏的跨系统 guardrails。
-4. **`docs/development/`**：如何修改、检查和交付。
-5. **`docs/decisions/`**：为什么采用当前设计，以及被拒绝的替代方案。
-6. **`docs/roadmap/`**：尚未实现或尚未接入生产的目标。
-7. **`docs/version/`**：历史状态和版本记录，不是当前实现 authority。
+| 目录            | 内容                                       | 阅读入口                                    |
+| --------------- | ------------------------------------------ | ------------------------------------------- |
+| `architecture/` | 当前系统架构、稳定契约及明确标注的目标契约 | [架构索引](architecture/README.md)          |
+| `development/`  | 仓库规则、开发命令、变更流程和验证要求     | [本地工作流](development/LOCAL_WORKFLOW.md) |
+| `decisions/`    | 仍适用的设计理由与取舍                     | [决策索引](decisions/README.md)             |
+| `roadmap/`      | 重构计划、开放事项和简要完成记录           | [路线图索引](roadmap/README.md)             |
+| `reference/`    | 生成的模块清单和源码旁专项说明             | [参考索引](reference/README.md)             |
+| `benchmark/`    | 数据引擎、Graph 同步与解析的测量资料       | [基准索引](benchmark/README.md)             |
 
-发生冲突时先核对代码、测试和 manifest，再在同一变更中修正文档。Roadmap 和历史记录不能用来证明当前行为。
+跨领域开放工作见根目录 [TODO](../TODO.md)。组件化重构的阶段与验收清单保留在[重构计划](roadmap/COMPONENT_REFACTOR.md)。[JSON Driver](roadmap/jsonDriver.md) 与 [motion](roadmap/motion.md) 的整体目标尚未完成，分别保留专项计划。
 
-## Current architecture
+## 当前架构与目标契约
 
-- [架构文档入口](architecture/README.md)：专项架构的阅读方式与状态说明。
-- [系统架构总览](architecture/ARCHITECTURE.md)：系统上下文、authority、依赖方向和主要运行链路。
-- [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：Draft、Projection、Save、运行准备、Execute、Problems、Results 与运行失败反馈。
-- [Workbench FlexLayout](architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)：布局 authority、panel identity、close/reset/replacement 与持久化。
-- [Runtime Signals](architecture/RUNTIME_SIGNALS.md)：logging、operational diagnostics、错误、反馈和各类运行信号的语义边界。
-- [Statistical Harness](architecture/STATISTICAL_HARNESS.md)：当前 Harness、Gateway、Rig、SQLite、Tauri 和 Assistant 投影。
+先读[系统架构总览](architecture/ARCHITECTURE.md)，再按子系统查阅：
 
-## Accepted architecture contracts
+- [Graph 与 Execution](architecture/GRAPH_AND_EXECUTION.md)：图文档、解析、投影、保存、执行、Problems 和 Results。
+- [Workbench FlexLayout](architecture/WORKBENCH_LAYOUT_ARCHITECTURE.md)：布局、面板身份、生命周期和持久化。
+- [Runtime Signals](architecture/RUNTIME_SIGNALS.md)：结构化日志、运行观测、错误与反馈边界。
+- [Statistical Harness](architecture/STATISTICAL_HARNESS.md)：Harness、Gateway、Rig、持久化与 Assistant 投影。
+- [Plugin 架构与契约](architecture/PLUGIN.md)：已接受的目标契约；具体接入范围见[插件开发说明](../plugins/julia/README.md)。
 
-- [数据引擎迁移分析](architecture/迁移.md)：基于源码的目标边界、实施顺序和验收，优先细化下面两份方向讨论。
-- [DataFusion 目标方向](architecture/DATAFUSION.md)：关系计算和数据集存储的目标职责；实际迁移范围由迁移分析收敛。
-- [Polars 边界分析](architecture/POLARS.md)：移除宿主重复 DataFrame 计算层的理由；引擎选择由 DataFusion 目标方向更新。
+各 crate、IPC 和前端模块的说明见[参考索引](reference/README.md)，完整模块列表见[生成的模块索引](reference/MODULE_MAP.md)。
 
-- [Plugin 架构与契约](architecture/PLUGIN.md)：通用插件宿主、独立进程、声明式 UI、Webview、IPC、数据、生命周期和验收；状态为已接受的目标设计，不代表当前生产已全部实现。
+## 开发与交付
 
-## Focused implementation contracts
+- [仓库 Agent 规则](development/AGENT_RULES.md)：根 `.rules` 加载的全仓策略、跨系统约束和验证纪律。
+- [本地开发工作流](development/LOCAL_WORKFLOW.md)：环境、根命令和按改动范围验证。
+- [变更流程](development/CHANGE_PROCESS.md)：设计、实现、自审和交付问题。
+- [架构门禁](development/ARCHITECTURE_GATES.md)：源码分类、依赖审计、语义检查和文档契约。
 
-- [Application 用例与会话](../src-tauri/crates/yss-application/README.md)：职责、依赖分组与跨子系统调用流程。
-- [Tauri / IPC transport](../src-tauri/crates/yss-application/src/ipc/README.md)
-- [结构化日志与运行观测](../src-tauri/crates/tauri-plugin-tracing/README.md)
-- [Project runtime authority](../src-tauri/crates/yss-project/README.md)
-- [Filesystem primitives and watcher lifecycle](../src-tauri/crates/yss-filesystem/README.md)
-- [Node definitions, registry and catalog](../src-tauri/crates/yss-node-catalog/README.md)
-- [Node kernel contracts and implementations](../src-tauri/crates/yss-node-kernel/README.md)
-- [Database runtime](../src-tauri/crates/yss-database-runtime/README.md)
-- [Dataset snapshot store](../src-tauri/crates/yss-database-store/README.md)
-- [SCI neutral contracts](../src-tauri/crates/yss-sci-contract/README.md)
-- [SCI numerical models](../src-tauri/crates/yss-sci/README.md)
-- [SCI synchronous runtime](../src-tauri/crates/yss-sci-runtime/README.md)
-- [Linear algebra backend boundary](../src-tauri/crates/yss-sci-linalg/README.md)
-- [Julia Bayes worker protocol](../plugins/julia/runtime/julia/README.md)
+## 事实源与维护约定
 
-## Development
+代码、测试和 manifests 拥有可执行事实；`architecture/` 维护当前架构与稳定契约；根 `.rules` 及其加载的规则约束 Agent 行为；`development/` 定义工作流程；`decisions/` 解释设计取舍；`roadmap/` 跟踪计划与完成记录。发生冲突时先核对实现，再更新对应正式文档。
 
-- [仓库 Agent 规则](development/AGENT_RULES.md)：变更纪律、跨系统边界和验证要求，由根 `.rules` 加载。
-- [本地开发工作流](development/LOCAL_WORKFLOW.md)：环境和唯一命令矩阵。
-- [变更流程](development/CHANGE_PROCESS.md)：feature、fix、refactor 和行为变更的设计与交付问题。
-- [架构门禁](development/ARCHITECTURE_GATES.md)：production source discovery、分类、依赖审计和 semantic checks。
+每份 Markdown 在开头声明 `Status`、`Scope`、`Canonical owners` 和 `Update when`。状态含义如下：
 
-## Decisions, roadmap, and reference
+| 状态                | 含义                                                           |
+| ------------------- | -------------------------------------------------------------- |
+| `Current`           | 当前实现、维护中的索引或流程                                   |
+| `Accepted Decision` | 已接受的设计；架构目标另标 `Contract: Target Architecture`     |
+| `Planned`           | 计划及进度；`- [ ]` 为未完成，`- [x]` 只表示该条明确范围已完成 |
+| `Historical`        | 保留环境和方法边界的测量记录，不代表当前性能保证               |
 
-- [JSON Driver 页面计划](roadmap/jsonDriver.md)：保留组件目录、AI 生成与增量更新的未完成目标；现有报告章节配置只覆盖局部。
-- [motion 共用入口与同步计划](roadmap/motion.md)：Graph 已有部分实现，跨业务覆盖、UI 意图和整体同步目标继续跟踪。
+目标契约、局部自动检查和历史完成记录都不能代替当前生产接入或桌面人工验收。尚未完成的验收继续使用 `- [ ]`。
 
-- [Decision 0001：Statistical Harness](decisions/0001-statistical-harness.md)
-- [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
-- [v0.3 roadmap](roadmap/v0_3.md)
-- [v1.0 roadmap](roadmap/v1_0.md)
-- [Graph 编辑与执行后续工作](roadmap/v0_3.md)：条件性后续项按 release backlog 维护。
-- [组件化架构重构计划（实施中）](draft/component-plan.md)：组件边界、七类代码审计、执行遗留清理、结果缓存与租约，以及解析/缓存驱动的图状态和撤销恢复；按阶段记录剩余工作。
-- [Open cross-domain backlog](../TODO.md)：未归入专项计划的其他开放事项。
-- [Generated module map](reference/MODULE_MAP.md)
-- [数据引擎测量记录](benchmark/DATA_ENGINE_BENCHMARK.md)：百万行查询、编辑、压实与 OLS 的本地观察。
-
-## History
-
-- [2026-09-19 节点执行链路修复](reviews/2026-09-19-node-execution-fixes.md)：必要性判断、共享载体、关系入口、资源控制、调用契约和验证边界。
-
-- [2026-09-15 Graph 与 JSON 报告实施](reviews/2026-09-15-motion-json-driver-implementation.md)：语义报告试点、同一真实 OLS 样本的 renderer 对比，以及人工验收结果与明确跳过项。
-
-- [2026-09-15 Graph 实时解析优化](reviews/2026-09-15-graph-resolution-optimization.md)：语义快照复用、Schema 增量缓存、批次解析与投影索引的实现和测量边界。
-- [2026-09-15 当前图数据编辑实施记录](reviews/2026-09-15-current-graph-editing.md)：直接编辑后端当前文档、统一历史、显式保存与增量投影的实现、测试和性能测量边界。
-- [2026-09-15 Graph 草稿后端化与 JSON 界面评估](reviews/2026-09-15-motion-json-driver-analysis.md)：两份方案的源码对照、合成传输测量、后端草稿与报告 JSON 的实施建议及性能验收边界。
-- [Version history](version/README.md)
-- [2026-09-10 数据引擎迁移验收](reviews/2026-09-10-data-engine-migration.md)：DuckDB/宿主 Polars 替换的逐项证据与验证边界。
-- [2026-09-07 深度清理审计](reviews/2026-09-07-deep-cleanup-audit.md)：该次源码检查、复现证据和清理建议的快照。
-- [2026-09-07 Tolerance 分析](reviews/2026-09-07-tolerance-analysis.md)：删除全局近似比较配置后的取舍、数值问题与后续改造边界。
-
-## 文档状态
-
-维护中文档在开头声明以下元数据：
-
-```text
-Status: Current | Accepted Decision | Planned | Historical
-Scope: 本文负责什么
-Canonical owners: 哪个文档或源码拥有具体事实
-Update when: 什么变化要求更新本文
-```
-
-`Current` 只描述当前生产实现；`Accepted Decision` 记录已接受的设计；`Planned` 不代表已实现；`Historical` 仅供追溯。架构目录中的 `Accepted Decision` 文档必须额外声明 `Contract: Target Architecture`，明确其约束未来实现，不能作为已实现功能的证据。开发工作流文档保持 `Current`，设计理由记录仍可放在 `docs/decisions/`。容量、阈值、版本和完整模块列表等易变化事实应引用源码或由脚本生成，不手工复制到总架构文档。
-
-Current 文档应明确已确认的实现缺口，并链接到 Planned/TODO 中的修复目标。模块边界、DTO 或前端测试已具备，不能据此声称生产 producer、端到端恢复或全部语义覆盖已完成；旧提交的审查结论也必须先按当前实现重新核对。
+新增内容先由现有文档承接。过时或不适用内容直接删除，已完成工作可在对应版本路线图中留下 `- [x]` 摘要；旧方案的移除不表示其功能已经实现。规则和重构计划继续维护，生成文件通过原生成器更新。删除或移动文件时同步处理链接、命令入口与文档契约，并按[本地工作流](development/LOCAL_WORKFLOW.md)验证。

@@ -214,7 +214,8 @@ Documentation contract 是轻量 Vitest gate，保护机器可验证的漂移：
 - 维护中文档的相对链接和明确 source path 存在；
 - 文档中的 root `pnpm` 命令对应 `package.json` script 或 package-manager builtin；
 - `AGENTS.md`、`CLAUDE.md` 和 `GEMINI.md` 都指向 `.rules`；
-- `docs/version/` 只包含 Historical 文档；
+- `docs/roadmap/` 的计划文档使用 Planned 状态，可同时记录已完成条目和未完成验收；
+- 删除旧文档后，保留文档的相对链接仍必须有效，不为旧版本目录保留跳过检查的例外；
 - generated `docs/reference/MODULE_MAP.md` 与 Cargo metadata/目录一致。
 
 该 gate 不把 prose 内容、未来 roadmap 或历史源码路径当作可执行事实，也不尝试建设复杂文档平台。

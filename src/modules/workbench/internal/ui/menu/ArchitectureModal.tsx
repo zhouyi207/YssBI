@@ -99,7 +99,7 @@ type DiagramNode =
   | CommunicationArchitectureNode
   | FrontendArchitectureNode;
 
-// Fixed overview from docs/draft/architecture.md; no project graph or runtime state is involved.
+// Static system overview; independent of project graphs and runtime state.
 const nodes: ArchitectureNode[] = [
   {
     id: "frontend",

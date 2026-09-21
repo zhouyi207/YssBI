@@ -1,9 +1,9 @@
 # 数据引擎测量记录
 
-> Status: Current
+> Status: Historical
 > Scope: 2026-09-10 写入编码、有序前缀读取和编辑过滤优化后的本地测量
 > Canonical owners: `src-tauri/crates/yss-database-store/examples/dataset_engine_bench.rs`、`src-tauri/crates/yss-graph-execution/examples/ols_bench.rs` 与实际运行输出
-> Update when: 数据规模、构建配置或数据引擎实现改变后重新测量
+> Update when: 修正本次测量记录时；后续复测单独注明环境和范围
 
 本次在 Windows、Intel Core i9-13900HX（24 核、32 逻辑处理器）、约 32 GiB RAM 上运行。
 使用仓库固定 Rust 工具链和 debug 构建。每组先生成数据，再由独立进程测量；完整测量使用新的目录。

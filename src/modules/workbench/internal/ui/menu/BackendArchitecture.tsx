@@ -33,7 +33,7 @@ export type BackendArchitectureNode = Node<
   "backendSubsystem"
 >;
 
-// Ownership and representative collaboration follow docs/draft/backend.md, not a Cargo dependency graph.
+// This diagram shows subsystem ownership and representative collaboration, not Cargo dependencies.
 export const backendNodes: BackendArchitectureNode[] = [
   {
     id: "support",
@@ -80,12 +80,7 @@ export const backendNodes: BackendArchitectureNode[] = [
       color: "var(--chart-3)",
       icon: FiMessageSquare,
       parts: ["turns", "tools", "gateway", "adapters"],
-      crates: [
-        "yss-harness-contract",
-        "yss-harness-core",
-        "yss-harness-rig",
-        "yss-harness-sqlite",
-      ],
+      crates: ["yss-harness-contract", "yss-harness-core", "yss-harness-rig", "yss-harness-sqlite"],
     },
   },
   {

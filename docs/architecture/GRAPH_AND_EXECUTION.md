@@ -5,7 +5,7 @@
 > Canonical owners: Graph/Execution/Project 源码与测试拥有可执行事实；本文拥有阶段之间的稳定 contract
 > Update when: Graph authority、阶段语义、projection、execution result 或 output 边界改变时
 
-本文描述当前实现。条件性后续工作见 [v0.3 roadmap](../roadmap/v0_3.md)。Workbench 布局和 operational logging 不复制 Graph 领域状态。
+本文描述当前实现。条件性后续工作见 [v0.3 roadmap](../roadmap/v0_3.md)。[motion 计划](../roadmap/motion.md)覆盖更广的 React / Harness 共用入口与投影同步目标，不能因本文中的 Graph 链路已有实现而视为整体完成。Workbench 布局和 operational logging 不复制 Graph 领域状态。
 
 ## 1. Authority and identities
 
@@ -385,7 +385,7 @@ Parquet 关系数据源要求精确 Schema 显式标记独立的 RowId 与 Displ
 固定 Parquet 链路与真实项目的 CSV 导入 → Graph Execute → OLS → Results 分页均已通过集成验证。
 最终提交使用准备时捕获的同一组资源授权，Project 在发布前再次检查版本；不以空授权跳过数据集依赖。
 关系候选 Results 持有懒句柄，不保存所有中间批次；计划准备不表示全部行已经成功扫描，分页扫描失败通过结果读取错误交付。
-逐项证据见[数据引擎迁移验收](../reviews/2026-09-10-data-engine-migration.md)。
+数据存储与查询边界见 [Dataset store](../../src-tauri/crates/yss-database-store/README.md)，局部性能测量见[数据引擎基准](../benchmark/DATA_ENGINE_BENCHMARK.md)。
 
 ## 6. Results
 
@@ -408,7 +408,7 @@ Graph 提供包含参数、类型、输入绑定与 coercion 的节点指纹；A
 重验时同时检查当前绑定与源结果有效性。该记录不复制数据，也不增加结果持有者；新连线不能仅凭源 Pin 有缓存显示已执行。
 前端以这份投影组合实际 RunStarted demand 和诊断，驱动连线、Pin 与节点样式；尚无匹配结果时显示未运行，不以内部计划缓存代替执行结果，也不再持有执行录制、回放或逐节点动画队列。
 节点按有效输出数量显示完整或部分结果，仅有输入的查看节点按实际消费的连线汇总；运行效果遵守减少动态效果设置。编辑使本地运行请求失效，迟到回执不能覆盖后续运行。
-真实桌面人工验收仍在[组件化计划](../draft/component-plan.md#p0确认范围清理执行遗留并建立图状态契约)中记录，不以接口与测试具备代表该验收已完成。
+真实桌面人工验收仍在[组件化计划](../roadmap/COMPONENT_REFACTOR.md#p0确认范围清理执行遗留并建立图状态契约)中记录，不以接口与测试具备代表该验收已完成。
 
 Run admission 按 demand/DAG 得到实际重算的 operation outputs，在准备资源和计算前解除这些输出的旧结果绑定。
 一个 operation 的所有当前 outputs 同时失效；未参与本次 demand 的输出保留当前结果。已打开报告的租约保留旧快照，
@@ -496,7 +496,7 @@ Spec 只含版本、固定报告类型、当前结果引用及带稳定 ID 的�
 首个试点只保存当前挂载报告视图的布局，不写入 Project 或持久化 Workbench。关闭／重新打开恢复默认布局。
 Spec 不申请结果租约，继续使用真实 Result panel／独立窗口的既有租约与会话清理；隐藏章节不释放面板租约，
 重跑造成当前输出失效不销毁已保留报告快照，结果回收或执行会话结束仍遵循上述 Results 契约。
-与受限 json-render catalog 的对比和真实桌面验收边界见[实施记录](../reviews/2026-09-15-motion-json-driver-implementation.md)。
+上述能力只覆盖固定的线性回归报告章节配置。通用组件目录、JSON 页面组合、受控动作、AI 生成和流式/增量 UI 更新仍由 [JSON Driver 计划](../roadmap/jsonDriver.md) 跟踪，不能据此宣称整份 JSON 驱动页面方案已实现。其他后续工作与待验收项见 [v0.3](../roadmap/v0_3.md)。
 
 ## 7. Graph Problems
 

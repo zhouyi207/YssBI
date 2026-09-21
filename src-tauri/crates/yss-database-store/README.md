@@ -1,8 +1,8 @@
 # Dataset store
 
 This adapter owns the dataset catalog and immutable data generations used by production Project
-activation, DataView editing, and relation sources. Validation and scope are recorded in the
-[migration acceptance](../../../docs/reviews/2026-09-10-data-engine-migration.md).
+activation, DataView editing, and relation sources. Cross-module boundaries are described in
+[Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
 
 The project layout is `database/catalog.sqlite` plus
 `database/datasets/<dataset-id>/<generation-id>/part-000000.parquet`. SQLite owns the committed

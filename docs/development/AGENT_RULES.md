@@ -21,8 +21,9 @@ Use repository knowledge in this order:
 3. `.rules` owns coding-agent behavior and cross-system guardrails.
 4. `docs/development/` owns change, validation, and delivery workflows.
 5. `docs/decisions/` explains accepted design choices.
-6. `docs/roadmap/` contains work that is not yet current behavior.
-7. `docs/version/` is historical context only.
+6. `docs/roadmap/` contains plans, remaining acceptance work, and explicitly
+   checked completion summaries. These records do not replace current contracts.
+   Git retains obsolete design discussions, review snapshots, and version history.
 
 When maintained documentation and code disagree, inspect the implementation and
 tests, then update the stale canonical document in the same change. Never infer
@@ -49,7 +50,8 @@ add or commit them unless explicitly requested.
 - Comments should explain non-obvious reasoning, invariants, or trade-offs, not
   restate the code.
 - `TODO.md` contains open work only. Do not append completed change summaries;
-  Git and `docs/version/` retain implementation history.
+  Completed items may be summarized with `- [x]` in the relevant release roadmap;
+  Git retains detailed implementation history. Keep unfinished acceptance items open.
 - When a change alters current architecture, a public contract, or the
   development workflow, update its canonical document in the same change.
 

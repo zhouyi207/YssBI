@@ -67,9 +67,7 @@ describe("documentation contract", () => {
   });
 
   it("keeps maintained relative Markdown links resolvable", () => {
-    const maintained = markdownFiles(DOCS_ROOT).filter(
-      (path) => !repositoryPath(path).startsWith("docs/version/"),
-    );
+    const maintained = markdownFiles(DOCS_ROOT);
     const missing: string[] = [];
 
     for (const documentPath of maintained) {
@@ -146,7 +144,6 @@ describe("documentation contract", () => {
       ["decisions", "Accepted Decision"],
       ["roadmap", "Planned"],
       ["reference", "Current"],
-      ["version", "Historical"],
     ].flatMap(([directory, expectedStatus]) =>
       markdownFiles(resolve(DOCS_ROOT, directory))
         .filter((path) => documentStatus(readFileSync(path, "utf8")) !== expectedStatus)

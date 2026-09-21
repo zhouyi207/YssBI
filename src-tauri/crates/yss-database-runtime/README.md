@@ -111,5 +111,6 @@ transaction staging area. Source roots require leases; copied files must have ab
 and source metadata is checked during staging. Project documents retain their typed validation.
 
 The DuckDB and Polars adapter crates have been removed. Julia plugins also use DataFusion and
-Arrow within their process boundary. The original host migration scope and validation are recorded in the
-[migration acceptance](../../../docs/reviews/2026-09-10-data-engine-migration.md).
+Arrow within their process boundary. Current storage and graph integration contracts are described in
+[Dataset store](../yss-database-store/README.md) and
+[Graph and Execution](../../../docs/architecture/GRAPH_AND_EXECUTION.md).
