@@ -62,6 +62,9 @@ YssBI 文档按稳定责任、生命周期和 authority 边界组织。语言、
 
 ## Decisions, roadmap, and reference
 
+- [JSON Driver 页面计划](roadmap/jsonDriver.md)：保留组件目录、AI 生成与增量更新的未完成目标；现有报告章节配置只覆盖局部。
+- [motion 共用入口与同步计划](roadmap/motion.md)：Graph 已有部分实现，跨业务覆盖、UI 意图和整体同步目标继续跟踪。
+
 - [Decision 0001：Statistical Harness](decisions/0001-statistical-harness.md)
 - [Statistical Harness roadmap](roadmap/STATISTICAL_HARNESS.md)
 - [v0.3 roadmap](roadmap/v0_3.md)
