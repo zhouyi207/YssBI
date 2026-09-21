@@ -10,7 +10,8 @@ import { hydrateDatabaseEditorMetadata } from "@/features/application/dataManage
 import { databasePublication } from "@/features/core/database/publication";
 import { ChartDetailPanel } from "./ChartDetailPanel";
 
-vi.mock("react-i18next", () => ({
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("@/features/core/database/read", () => ({

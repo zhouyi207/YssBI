@@ -10,10 +10,12 @@ export type DeepReadonly<T> = T extends (...args: never[]) => unknown
           ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
           : T;
 
+const publishedObjects = new WeakSet<object>();
 function freezeDeep(value: unknown): unknown {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) {
+  if (value === null || typeof value !== "object" || publishedObjects.has(value)) {
     return value;
   }
+  publishedObjects.add(value);
 
   if (Array.isArray(value)) {
     for (const item of value) freezeDeep(item);
@@ -34,4 +36,9 @@ function freezeDeep(value: unknown): unknown {
 /** Clone once at publication time, then expose a recursively frozen snapshot. */
 export function freezeProjectionSnapshot<T>(value: T): DeepReadonly<T> {
   return freezeDeep(structuredClone(value)) as DeepReadonly<T>;
+}
+
+/** Publish an owned, immutably updated value without making a second data copy. */
+export function freezePublishedValue<T>(value: T): DeepReadonly<T> {
+  return freezeDeep(value) as DeepReadonly<T>;
 }

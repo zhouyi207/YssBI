@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useEditorStore, type EditorContextMenuState } from "./stores/useEditorStore";
@@ -19,38 +19,17 @@ export interface EditorUiCapability {
 
 function buildSnapshot(): DeepReadonly<EditorUiSnapshot> {
   const state = useEditorStore.getState();
-  return Object.freeze({
-    contextMenu: state.contextMenu ? Object.freeze({ ...state.contextMenu }) : null,
+  return {
+    contextMenu: state.contextMenu,
     detailFocus: state.detailFocus,
-  });
+  };
 }
 
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useEditorStore.subscribe(refreshSnapshot);
-
-export function getEditorUiSnapshot(): DeepReadonly<EditorUiSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeEditorUi(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
+const projection = createReadProjection(buildSnapshot, [useEditorStore]);
+export const getEditorUiSnapshot = projection.getSnapshot;
+export const subscribeEditorUi = projection.subscribe;
 export function useEditorUi<T>(selector: (snapshot: DeepReadonly<EditorUiSnapshot>) => T): T {
-  const snapshot = useSyncExternalStore(
-    subscribeEditorUi,
-    getEditorUiSnapshot,
-    getEditorUiSnapshot,
-  );
-  return selector(snapshot);
+  return useReadProjection(projection, selector);
 }
 
 export const editorUi: EditorUiCapability = {

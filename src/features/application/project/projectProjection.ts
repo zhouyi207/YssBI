@@ -1,4 +1,9 @@
 import { useProjectIOStore } from "./projectIOStore";
+import { useShallow } from "zustand/react/shallow";
+
+export function useGraphLoadStatus(graphPath: string) {
+  return useProjectIOStore((state) => state.graphLoadStatus[graphPath]);
+}
 
 export interface ProjectProjection {
   readonly status: "idle" | "loading" | "ready" | "error";
@@ -9,13 +14,15 @@ export interface ProjectProjection {
 }
 
 export function useProjectProjection(): ProjectProjection {
-  return useProjectIOStore((state) => ({
-    status: state.status,
-    error: state.error,
-    graphLoadStatus: state.graphLoadStatus,
-    currentPath: state.currentPath,
-    projectInstanceId: state.projectInstanceId,
-  }));
+  return useProjectIOStore(
+    useShallow((state) => ({
+      status: state.status,
+      error: state.error,
+      graphLoadStatus: state.graphLoadStatus,
+      currentPath: state.currentPath,
+      projectInstanceId: state.projectInstanceId,
+    })),
+  );
 }
 
 export function getProjectProjection(): ProjectProjection {

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useGraphProjectionStore } from "@/features/core/dataStore/graphProjectionStore";
@@ -11,71 +11,20 @@ export interface GraphProjectionSnapshot {
   readonly graphMeta: DeepReadonly<Record<GraphPath, GraphMeta>>;
 }
 
-export interface GraphReadCapability {
-  readonly getSnapshot: () => DeepReadonly<GraphProjectionSnapshot>;
-  readonly subscribe: (listener: () => void) => () => void;
-}
-
-function cloneAndFreeze<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(cloneAndFreeze)) as T;
-  }
-  if (value === null || typeof value !== "object") return value;
-  if (value instanceof Date) {
-    return Object.freeze(new Date(value.getTime())) as T;
-  }
-  if (value instanceof Map) {
-    return new Map(
-      [...value.entries()].map(([key, nested]) => [cloneAndFreeze(key), cloneAndFreeze(nested)]),
-    ) as T;
-  }
-  if (value instanceof Set) {
-    return new Set([...value].map(cloneAndFreeze)) as T;
-  }
-  const copy = Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
-      key,
-      cloneAndFreeze(nested),
-    ]),
-  );
-  return Object.freeze(copy) as T;
-}
-
 function buildSnapshot(): DeepReadonly<GraphProjectionSnapshot> {
-  return Object.freeze({
-    graphEntities: cloneAndFreeze(useGraphProjectionStore.getState().graphEntities),
-    graphMeta: cloneAndFreeze(useGraphMetaStore.getState().graphs),
-  });
+  return {
+    graphEntities: useGraphProjectionStore.getState().graphEntities,
+    graphMeta: useGraphMetaStore.getState().graphs,
+  };
 }
 
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useGraphProjectionStore.subscribe(refreshSnapshot);
-useGraphMetaStore.subscribe(refreshSnapshot);
-
-export function getGraphSnapshot(): DeepReadonly<GraphProjectionSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeGraphRead(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
+const projection = createReadProjection(buildSnapshot, [
+  useGraphProjectionStore,
+  useGraphMetaStore,
+]);
+export const getGraphSnapshot = projection.getSnapshot;
 export function useGraphRead<T>(
   selector: (snapshot: DeepReadonly<GraphProjectionSnapshot>) => T,
 ): T {
-  const snapshot = useSyncExternalStore(subscribeGraphRead, getGraphSnapshot, getGraphSnapshot);
-  return selector(snapshot);
+  return useReadProjection(projection, selector);
 }
-
-export const graphRead: GraphReadCapability = {
-  getSnapshot: getGraphSnapshot,
-  subscribe: subscribeGraphRead,
-};

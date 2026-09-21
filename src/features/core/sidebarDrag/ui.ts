@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import type { SidebarDragState } from "@/features/core/dnd";
@@ -22,53 +22,19 @@ export interface SidebarDragUiCapability {
   readonly subscribeCanvasDropHandlers: (listener: () => void) => () => void;
 }
 
-function cloneAndFreeze<T>(value: T): T {
-  if (Array.isArray(value)) return Object.freeze(value.map(cloneAndFreeze)) as T;
-  if (value === null || typeof value !== "object") return value;
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
-        key,
-        cloneAndFreeze(nested),
-      ]),
-    ),
-  ) as T;
-}
-
 function buildSnapshot(): DeepReadonly<SidebarDragUiSnapshot> {
-  return Object.freeze({
-    activeDrag: cloneAndFreeze(useSidebarDragStore.getState().activeDrag),
-  });
+  return {
+    activeDrag: useSidebarDragStore.getState().activeDrag,
+  };
 }
 
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useSidebarDragStore.subscribe(refreshSnapshot);
-
-export function getSidebarDragUiSnapshot(): DeepReadonly<SidebarDragUiSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeSidebarDragUi(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
+const projection = createReadProjection(buildSnapshot, [useSidebarDragStore]);
+export const getSidebarDragUiSnapshot = projection.getSnapshot;
+export const subscribeSidebarDragUi = projection.subscribe;
 export function useSidebarDragUi<T>(
   selector: (snapshot: DeepReadonly<SidebarDragUiSnapshot>) => T,
 ): T {
-  const snapshot = useSyncExternalStore(
-    subscribeSidebarDragUi,
-    getSidebarDragUiSnapshot,
-    getSidebarDragUiSnapshot,
-  );
-  return selector(snapshot);
+  return useReadProjection(projection, selector);
 }
 
 export const sidebarDragUi: SidebarDragUiCapability = {

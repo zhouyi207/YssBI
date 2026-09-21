@@ -1,6 +1,10 @@
-import { useSyncExternalStore } from "react";
+import {
+  createReadProjection,
+  useReadProjection,
+  shareProjection,
+} from "@/features/core/state/readProjection";
 
-import { freezeProjectionSnapshot, type DeepReadonly } from "@/shared/types/deepReadonly";
+import { type DeepReadonly } from "@/shared/types/deepReadonly";
 import { useExecutionStore } from "./useExecutionStore";
 import type {
   ExecutionStatus,
@@ -20,60 +24,34 @@ export interface ExecutionReadSnapshot {
   readonly graphs: DeepReadonly<Record<string, GraphExecutionProjection>>;
 }
 
-export interface ExecutionReadCapability {
-  readonly getSnapshot: () => DeepReadonly<ExecutionReadSnapshot>;
-  readonly subscribe: (listener: () => void) => () => void;
-}
-
+const graphViews = new WeakMap<GraphExecutionState, GraphExecutionProjection>();
 function projectGraph(graph: GraphExecutionState): GraphExecutionProjection {
-  return {
+  const existing = graphViews.get(graph);
+  if (existing) return existing;
+  const projection: GraphExecutionProjection = {
     status: graph.status,
     runId: graph.runId,
     runFailure: graph.runFailure,
     pinPreviews: graph.pinPreviews,
   };
+  graphViews.set(graph, projection);
+  return projection;
 }
 
+let previousGraphs: ExecutionReadSnapshot["graphs"] = {};
 function buildSnapshot(): DeepReadonly<ExecutionReadSnapshot> {
   const { graphs } = useExecutionStore.getState();
-  return freezeProjectionSnapshot({
-    graphs: Object.fromEntries(
-      Object.entries(graphs).map(([graphPath, graph]) => [graphPath, projectGraph(graph)]),
-    ),
-  });
-}
-
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useExecutionStore.subscribe(refreshSnapshot);
-
-export function getExecutionSnapshot(): DeepReadonly<ExecutionReadSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeExecutionRead(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-export function useExecutionRead<T>(
-  selector: (state: DeepReadonly<ExecutionReadSnapshot>) => T,
-): T {
-  const snapshot = useSyncExternalStore(
-    subscribeExecutionRead,
-    getExecutionSnapshot,
-    getExecutionSnapshot,
+  previousGraphs = shareProjection(
+    previousGraphs,
+    Object.fromEntries(Object.entries(graphs).map(([path, graph]) => [path, projectGraph(graph)])),
   );
-  return selector(snapshot);
+  return { graphs: previousGraphs };
 }
 
-export const executionRead: ExecutionReadCapability = {
-  getSnapshot: getExecutionSnapshot,
-  subscribe: subscribeExecutionRead,
-};
+const projection = createReadProjection(buildSnapshot, [useExecutionStore]);
+export const getExecutionSnapshot = projection.getSnapshot;
+export function useExecutionRead<T>(
+  selector: (snapshot: DeepReadonly<ExecutionReadSnapshot>) => T,
+): T {
+  return useReadProjection(projection, selector);
+}

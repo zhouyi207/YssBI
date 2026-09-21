@@ -9,7 +9,7 @@ import {
   getRememberedColorTheme,
 } from "@/shared/theme/colorThemePresets";
 import { setClientSettingsPublisher, useSettingsStore } from "./settingsStore";
-import { settingsRead } from "./read";
+import { getSettingsSnapshot, subscribeSettingsRead } from "./read";
 import { settingsUi } from "./ui";
 
 vi.mock("@/features/application/observability/appLogger", () => ({
@@ -60,7 +60,7 @@ describe("settingsStore appearance persistence", () => {
       }),
     );
     await useSettingsStore.getState().load();
-    expect(settingsRead.getSnapshot().theme).toEqual(COLOR_THEME_PRESETS["OLED Black"]);
+    expect(getSettingsSnapshot().theme).toEqual(COLOR_THEME_PRESETS["OLED Black"]);
     await useSettingsStore.getState().save();
 
     const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) ?? "{}");
@@ -97,35 +97,35 @@ describe("settingsStore appearance persistence", () => {
 
   it("switches and remembers presets atomically, reuses palettes, and resets via appearance", async () => {
     const listener = vi.fn();
-    const unsubscribe = settingsRead.subscribe(listener);
+    const unsubscribe = subscribeSettingsRead(listener);
     try {
       settingsUi.setTheme("OLED Black");
       expect(listener).toHaveBeenCalledOnce();
-      expect(settingsRead.getSnapshot().theme).toBe(COLOR_THEME_PRESETS["OLED Black"]);
-      expect(settingsRead.getSnapshot().appearance.lastDarkColorTheme).toBe("OLED Black");
+      expect(getSettingsSnapshot().theme).toBe(COLOR_THEME_PRESETS["OLED Black"]);
+      expect(getSettingsSnapshot().appearance.lastDarkColorTheme).toBe("OLED Black");
 
       settingsUi.setTheme("Light Modern");
       expect(listener).toHaveBeenCalledTimes(2);
-      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_LIGHT_THEME);
-      const { lastLightColorTheme, lastDarkColorTheme } = settingsRead.getSnapshot().appearance;
+      expect(getSettingsSnapshot().theme).toBe(DEFAULT_LIGHT_THEME);
+      const { lastLightColorTheme, lastDarkColorTheme } = getSettingsSnapshot().appearance;
       expect(lastLightColorTheme).toBe("Light Modern");
       settingsUi.setTheme(getRememberedColorTheme("dark", lastLightColorTheme, lastDarkColorTheme));
-      const palette = settingsRead.getSnapshot().theme;
+      const palette = getSettingsSnapshot().theme;
       expect(palette).toBe(COLOR_THEME_PRESETS["OLED Black"]);
 
       settingsUi.updateAi({ openAiModel: "gpt-test" });
-      expect(settingsRead.getSnapshot().theme).toBe(palette);
+      expect(getSettingsSnapshot().theme).toBe(palette);
       expect(Object.isFrozen(palette)).toBe(true);
 
       await settingsUi.resetAppearanceToDefaults();
-      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
-      expect(settingsRead.getSnapshot().appearance).toEqual(DEFAULT_APPEARANCE);
-      expect(settingsRead.getSnapshot().ai.openAiModel).toBe("gpt-test");
+      expect(getSettingsSnapshot().theme).toBe(DEFAULT_DARK_THEME);
+      expect(getSettingsSnapshot().appearance).toEqual(DEFAULT_APPEARANCE);
+      expect(getSettingsSnapshot().ai.openAiModel).toBe("gpt-test");
 
       settingsUi.setTheme("Light Modern");
       await settingsUi.resetAllToDefaults();
-      expect(settingsRead.getSnapshot().theme).toBe(DEFAULT_DARK_THEME);
-      expect(settingsRead.getSnapshot().ai).toEqual(DEFAULT_AI);
+      expect(getSettingsSnapshot().theme).toBe(DEFAULT_DARK_THEME);
+      expect(getSettingsSnapshot().ai).toEqual(DEFAULT_AI);
     } finally {
       unsubscribe();
     }

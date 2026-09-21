@@ -1,7 +1,6 @@
-import { useSyncExternalStore } from "react";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
-import { freezeProjectionSnapshot } from "@/shared/types/deepReadonly";
 import { resolveColorThemePreset, type ThemePalette } from "@/shared/theme/colorThemePresets";
 import { useSettingsStore } from "./settingsStore";
 import type { AiSettings, AppSettings, AppearanceSettings } from "@/shared/types/settings";
@@ -13,58 +12,24 @@ export interface SettingsReadSnapshot {
   readonly isLoading: boolean;
 }
 
-export interface SettingsReadCapability {
-  readonly getSnapshot: () => DeepReadonly<SettingsReadSnapshot>;
-  readonly subscribe: (listener: () => void) => () => void;
-}
-
 function buildSnapshot(): DeepReadonly<SettingsReadSnapshot> {
   const state = useSettingsStore.getState();
-  const snapshot = freezeProjectionSnapshot({
+  return {
     ai: state.ai,
     appearance: state.appearance,
     isLoading: state.isLoading,
-  });
-  return Object.freeze({
-    ...snapshot,
     // Reuse the immutable preset so unrelated preferences do not invalidate theme consumers.
     theme: resolveColorThemePreset(state.appearance.colorTheme),
-  });
+  };
 }
 
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useSettingsStore.subscribe(refreshSnapshot);
-
-export function getSettingsSnapshot(): DeepReadonly<SettingsReadSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeSettingsRead(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
+const projection = createReadProjection(buildSnapshot, [useSettingsStore]);
+export const getSettingsSnapshot = projection.getSnapshot;
+export const subscribeSettingsRead = projection.subscribe;
 export function useSettingsRead<T>(
   selector: (snapshot: DeepReadonly<SettingsReadSnapshot>) => T,
 ): T {
-  const snapshot = useSyncExternalStore(
-    subscribeSettingsRead,
-    getSettingsSnapshot,
-    getSettingsSnapshot,
-  );
-  return selector(snapshot);
+  return useReadProjection(projection, selector);
 }
-
-export const settingsRead: SettingsReadCapability = {
-  getSnapshot: getSettingsSnapshot,
-  subscribe: subscribeSettingsRead,
-};
 
 export type { AppSettings };

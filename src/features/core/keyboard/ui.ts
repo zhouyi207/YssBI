@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createReadProjection, useReadProjection } from "@/features/core/state/readProjection";
 
 import type { DeepReadonly } from "@/shared/types/deepReadonly";
 import { useModifierKeyStore } from "./useModifierKeyStore";
@@ -18,39 +18,18 @@ export interface KeyboardUiCapability {
 
 function buildSnapshot(): DeepReadonly<KeyboardUiSnapshot> {
   const state = useModifierKeyStore.getState();
-  return Object.freeze({
+  return {
     altKey: state.altKey,
     ctrlKey: state.ctrlKey,
     shiftKey: state.shiftKey,
-  });
+  };
 }
 
-let currentSnapshot = buildSnapshot();
-const listeners = new Set<() => void>();
-
-function refreshSnapshot(): void {
-  currentSnapshot = buildSnapshot();
-  for (const listener of listeners) listener();
-}
-
-useModifierKeyStore.subscribe(refreshSnapshot);
-
-export function getKeyboardUiSnapshot(): DeepReadonly<KeyboardUiSnapshot> {
-  return currentSnapshot;
-}
-
-export function subscribeKeyboardUi(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
+const projection = createReadProjection(buildSnapshot, [useModifierKeyStore]);
+export const getKeyboardUiSnapshot = projection.getSnapshot;
+export const subscribeKeyboardUi = projection.subscribe;
 export function useKeyboardUi<T>(selector: (snapshot: DeepReadonly<KeyboardUiSnapshot>) => T): T {
-  const snapshot = useSyncExternalStore(
-    subscribeKeyboardUi,
-    getKeyboardUiSnapshot,
-    getKeyboardUiSnapshot,
-  );
-  return selector(snapshot);
+  return useReadProjection(projection, selector);
 }
 
 export const keyboardUi: KeyboardUiCapability = {
