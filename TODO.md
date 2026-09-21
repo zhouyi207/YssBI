@@ -11,6 +11,9 @@
 
 ## Active tasks
 
+- [ ] 完善线性回归报告的变量与配置元数据：当前 `yss-sci-runtime/src/regression/report.rs` 使用固定的 response 名称，报告仅携带协方差类型，需按实际展示需求传递训练列名及 HAC/Newey 等配置；沿用现有模型和报告契约局部扩展。
+- [ ] 核对并修正线性回归配置对 Newey lag=0 的限制：`yss-node-catalog/src/statistics/mod.rs` 当前使用最小值为 1 的正整数参数，应与 SCI 支持的非负滞后范围一致。
+
 - [ ] clippy::too_many_arguments 需要处理
 - [ ] 按 [节点执行链路修复记录](docs/reviews/2026-09-19-node-execution-fixes.md) 测量完整静态调度缓存、紧凑数值缓冲及目录重复装配的收益；矩阵分解中途取消与工作区硬限额需在 SCI/Linalg 所有者内另行设计。
 - [ ] 核对兼容节点目录对 Union 类型的保守匹配与 `function_signature_resolves_stable_projected_call_ports` 断言；该失败已在原始 `a8f3b74c` 提交复现，见 [基线验证](docs/reviews/2026-09-19-node-execution-fixes.md#验证范围)。
