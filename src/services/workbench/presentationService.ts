@@ -1,0 +1,120 @@
+import { Channel } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
+import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
+import { clearChannelMessageHandler } from "@/shared/platform/tauriWebview";
+import {
+  parseUiEvent,
+  parseUiPage,
+  parseUiUpdate,
+  parseUiIntentReceipt,
+} from "@/shared/types/dto/uiPresentation";
+import type { ResultReference } from "@/shared/types/domain/result";
+import type {
+  UiAction,
+  UiEvent,
+  UiIntent,
+  UiIntentStatus,
+} from "@/shared/types/domain/uiPresentation";
+import { isRecord } from "@/shared/types/report/guards";
+
+export async function readUiPage(projectInstanceId: string, source: ResultReference) {
+  const result = await invokeCommand<unknown>("inspect_ui", {
+    projectInstanceId,
+    request: { kind: "page", source },
+  });
+  if (!isRecord(result) || result.kind !== "page" || Object.keys(result).length !== 2)
+    throw new Error("ui_spec_invalid");
+  return parseUiPage(result.page);
+}
+export async function updateUiPage(
+  projectInstanceId: string,
+  source: ResultReference,
+  baseRevision: number,
+  action: UiAction,
+) {
+  return parseUiUpdate(
+    await invokeCommand("update_ui", {
+      projectInstanceId,
+      request: { source, baseRevision, action },
+    }),
+  );
+}
+export async function activateUiElement(
+  projectInstanceId: string,
+  source: ResultReference,
+  baseRevision: number,
+  id: string,
+) {
+  return parseUiIntentReceipt(
+    await invokeCommand("activate_ui_element", {
+      projectInstanceId,
+      request: { source, baseRevision, id, clientKey: crypto.randomUUID() },
+    }),
+  );
+}
+export async function requestUiIntent(projectInstanceId: string, intent: UiIntent) {
+  return parseUiIntentReceipt(
+    await invokeCommand("request_ui_intent", {
+      projectInstanceId,
+      request: { intent, clientKey: crypto.randomUUID() },
+    }),
+  );
+}
+export async function pendingUiIntents(projectInstanceId: string) {
+  const value = await invokeCommand<unknown>("pending_ui_intents", { projectInstanceId });
+  if (!Array.isArray(value) || value.length > 128) throw new Error("ui_spec_invalid");
+  return value.map(parseUiIntentReceipt);
+}
+export async function settleUiIntent(
+  projectInstanceId: string,
+  id: string,
+  status: UiIntentStatus,
+) {
+  const value = await invokeCommand<unknown>("settle_ui_intent", { projectInstanceId, id, status });
+  if (typeof value !== "boolean") throw new Error("ui_spec_invalid");
+  return value;
+}
+export async function subscribeUi(
+  projectInstanceId: string,
+  workbench: boolean,
+  onEvent: (event: UiEvent) => void,
+  onError: (error: unknown) => void,
+) {
+  let id: string | null = null;
+  let closed = false;
+  const cleanup = () => {
+    closed = true;
+    untrackChannel(channel);
+    clearChannelMessageHandler(channel);
+  };
+  const channel = trackChannel(new Channel<unknown>(), () => {
+    cleanup();
+    if (id) void invokeCommand("unsubscribe_ui", { subscriptionId: id }).catch(onError);
+  });
+  channel.onmessage = (raw) => {
+    if (closed) return;
+    try {
+      onEvent(parseUiEvent(raw));
+    } catch (error) {
+      onError(error);
+    }
+  };
+  try {
+    const result = await invokeCommand<unknown>("subscribe_ui", {
+      projectInstanceId,
+      workbench,
+      channel,
+    });
+    if (typeof result !== "string" || !result) throw new Error("ui_spec_invalid");
+    id = result;
+    if (closed) await invokeCommand("unsubscribe_ui", { subscriptionId: id });
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
+  return async () => {
+    if (closed) return;
+    cleanup();
+    if (id) await invokeCommand("unsubscribe_ui", { subscriptionId: id });
+  };
+}

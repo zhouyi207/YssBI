@@ -173,6 +173,9 @@ impl CapabilityInvocationContext {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityId {
+    InspectUi,
+    UpdateUi,
+    RequestUiIntent,
     InspectGraph,
     SearchNodeCatalog,
     InspectDatasetSchema,
@@ -189,6 +192,9 @@ pub enum CapabilityId {
 impl CapabilityId {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::InspectUi => "inspect_ui",
+            Self::UpdateUi => "update_ui",
+            Self::RequestUiIntent => "request_ui_intent",
             Self::InspectGraph => "inspect_graph",
             Self::SearchNodeCatalog => "search_node_catalog",
             Self::InspectDatasetSchema => "inspect_dataset_schema",
@@ -205,6 +211,9 @@ impl CapabilityId {
 
     pub const fn descriptor(self) -> &'static CapabilityDescriptor {
         match self {
+            Self::InspectUi => &CAPABILITY_DESCRIPTORS[11],
+            Self::UpdateUi => &CAPABILITY_DESCRIPTORS[12],
+            Self::RequestUiIntent => &CAPABILITY_DESCRIPTORS[13],
             Self::InspectGraph => &CAPABILITY_DESCRIPTORS[0],
             Self::SearchNodeCatalog => &CAPABILITY_DESCRIPTORS[1],
             Self::InspectDatasetSchema => &CAPABILITY_DESCRIPTORS[2],
@@ -246,7 +255,7 @@ pub struct CapabilityDescriptor {
     pub maximum_results: u16,
 }
 
-pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 11] = [
+pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 14] = [
     CapabilityDescriptor {
         id: CapabilityId::InspectGraph,
         effect: ToolEffect::Inspect,
@@ -312,6 +321,24 @@ pub const CAPABILITY_DESCRIPTORS: [CapabilityDescriptor; 11] = [
         effect: ToolEffect::Inspect,
         approval: ApprovalPolicy::Automatic,
         maximum_results: 100,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::InspectUi,
+        effect: ToolEffect::Inspect,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 128,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::UpdateUi,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 128,
+    },
+    CapabilityDescriptor {
+        id: CapabilityId::RequestUiIntent,
+        effect: ToolEffect::Mutate,
+        approval: ApprovalPolicy::Automatic,
+        maximum_results: 1,
     },
 ];
 
@@ -489,6 +516,9 @@ pub struct ApplyGraphEditRequest {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AutomationCapabilityRequest {
+    InspectUi(yss_ui_contract::InspectUiRequest),
+    UpdateUi(yss_ui_contract::UpdateUiRequest),
+    RequestUiIntent(yss_ui_contract::RequestUiIntent),
     InspectGraph(InspectGraphRequest),
     SearchNodeCatalog(SearchNodeCatalogRequest),
     InspectDatasetSchema(InspectDatasetSchemaRequest),
@@ -505,6 +535,9 @@ pub enum AutomationCapabilityRequest {
 impl AutomationCapabilityRequest {
     pub const fn capability_id(&self) -> CapabilityId {
         match self {
+            Self::InspectUi(_) => CapabilityId::InspectUi,
+            Self::UpdateUi(_) => CapabilityId::UpdateUi,
+            Self::RequestUiIntent(_) => CapabilityId::RequestUiIntent,
             Self::InspectGraph(_) => CapabilityId::InspectGraph,
             Self::SearchNodeCatalog(_) => CapabilityId::SearchNodeCatalog,
             Self::InspectDatasetSchema(_) => CapabilityId::InspectDatasetSchema,
@@ -521,6 +554,19 @@ impl AutomationCapabilityRequest {
 
     pub fn validate(&self) -> Result<(), CapabilityContractError> {
         match self {
+            Self::InspectUi(request) => match request {
+                yss_ui_contract::InspectUiRequest::Page { source } => source
+                    .validate()
+                    .map_err(|_| CapabilityContractError::InvalidField("source")),
+                yss_ui_contract::InspectUiRequest::Intent { id } => validate_resource_id("id", id),
+                yss_ui_contract::InspectUiRequest::Catalog => Ok(()),
+            },
+            Self::UpdateUi(request) => request
+                .validate()
+                .map_err(|_| CapabilityContractError::InvalidField("page")),
+            Self::RequestUiIntent(request) => request
+                .validate()
+                .map_err(|_| CapabilityContractError::InvalidField("intent")),
             Self::InspectGraph(request) => validate_resource_id("graphPath", &request.graph_path),
             Self::InspectDatasetSchema(request) => {
                 validate_resource_id("databaseId", &request.database_id)
@@ -967,6 +1013,9 @@ pub struct GraphEditReceipt {
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum AutomationCapabilityResult {
+    UiInspection(yss_ui_contract::UiInspection),
+    UiUpdate(yss_ui_contract::UiUpdate),
+    UiIntentReceipt(yss_ui_contract::UiIntentReceipt),
     GraphInspection(GraphInspection),
     NodeCatalogSearch(NodeCatalogSearchResult),
     DatasetSchemaInspection(DatasetSchemaInspection),
@@ -1014,6 +1063,9 @@ impl AutomationCapabilityResult {
             Self::GraphExecution(_) => CapabilityId::ExecuteGraph,
             Self::GraphSaved(_) => CapabilityId::SaveGraph,
             Self::GraphResults(_) => CapabilityId::ListGraphResults,
+            Self::UiInspection(_) => CapabilityId::InspectUi,
+            Self::UiUpdate(_) => CapabilityId::UpdateUi,
+            Self::UiIntentReceipt(_) => CapabilityId::RequestUiIntent,
         }
     }
 }
@@ -1161,6 +1213,9 @@ pub trait CapabilityGatewayPort: Send + Sync {
 
 pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema {
     match capability_id {
+        CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::InspectUiRequest),
+        CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UpdateUiRequest),
+        CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::RequestUiIntent),
         CapabilityId::InspectGraph => schemars::schema_for!(InspectGraphRequest),
         CapabilityId::SearchNodeCatalog => schemars::schema_for!(SearchNodeCatalogRequest),
         CapabilityId::InspectDatasetSchema => {
@@ -1181,6 +1236,9 @@ pub fn capability_input_schema(capability_id: CapabilityId) -> schemars::Schema 
 
 pub fn capability_output_schema(capability_id: CapabilityId) -> schemars::Schema {
     match capability_id {
+        CapabilityId::InspectUi => schemars::schema_for!(yss_ui_contract::UiInspection),
+        CapabilityId::UpdateUi => schemars::schema_for!(yss_ui_contract::UiUpdate),
+        CapabilityId::RequestUiIntent => schemars::schema_for!(yss_ui_contract::UiIntentReceipt),
         CapabilityId::InspectGraph => schemars::schema_for!(GraphInspection),
         CapabilityId::SearchNodeCatalog => schemars::schema_for!(NodeCatalogSearchResult),
         CapabilityId::InspectDatasetSchema => schemars::schema_for!(DatasetSchemaInspection),
@@ -1219,7 +1277,7 @@ mod tests {
 
     #[test]
     fn capability_registry_is_closed_and_schema_generation_is_available() {
-        assert_eq!(CAPABILITY_DESCRIPTORS.len(), 11);
+        assert_eq!(CAPABILITY_DESCRIPTORS.len(), 14);
         assert!(CAPABILITY_DESCRIPTORS[..6].iter().all(|descriptor| {
             descriptor.effect == ToolEffect::Inspect
                 && descriptor.approval == ApprovalPolicy::Automatic

@@ -7,6 +7,8 @@
 
 工作台使用一个原生 FlexLayout Model 保存已提交的物理布局。React 的 Layout 和组件注册表呈现该模型，Application 通过语义操作协调面板生命周期。工作台布局、Graph 文档和统计结果具有独立的 owner。
 
+Rust 可以通过受控界面意图请求打开图、定位节点、打开结果或显示固定目录中的面板。工作台先认领请求，再调用现有编辑器、结果租约与面板入口，并回传实际执行状态。页面内容的 JSON 与增量由 Rust Application session 拥有，不能直接 patch FlexLayout；具体协议见 [JSON 页面与界面意图](../../src-tauri/crates/yss-ui-contract/README.md)。
+
 Assistant 面板的挂载只拥有事件订阅和界面投影；对话列表与历史由 Harness 持久化，关闭或移动面板不结束对话。项目归属、恢复与多对话切换见 [Harness 会话契约](STATISTICAL_HARNESS.md#5-session-turn-and-events)。
 
 ## 1. 渲染层级与 authority

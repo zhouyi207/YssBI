@@ -217,6 +217,17 @@ Unchanged indexes do not republish sidebar state. Watcher refreshes do not react
 project snapshot before returning the document. Save and publication ownership are defined in
 [Graph and Execution](../../../../../docs/architecture/GRAPH_AND_EXECUTION.md#save).
 
+## Presentation delivery
+
+JSON result pages and UI intents use the shared `yss-ui-contract` protocol and Application's
+session-scoped presentation use cases. Commands only adapt input, dispatch blocking work and
+map stable failures. Page mutations return and push the same revision-based element delta;
+subscriptions attach before the initial snapshot, recover broadcast lag with resync and end
+on Application session replacement. Only the main workbench may claim/settle UI intents.
+The channel adapter receives neutral events and a release callback, not an Application state
+dependency. Scope, bounds, receipts and recovery are owned by
+[Presentation](../../../yss-ui-contract/README.md).
+
 ## Error contract
 
 Every command rejection serializes the Rust-owned `CommandError` with exactly three camelCase keys:

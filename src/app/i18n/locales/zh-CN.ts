@@ -40,11 +40,13 @@ export const zhCN = {
   },
   reportLayout: {
     title: "报告布局",
-    sessionOnly: "调整章节顺序和显示内容。布局仅用于当前报告视图，重新打开后恢复默认。",
+    sessionOnly:
+      "调整页面顺序和显示内容。同一项目运行会话内重新打开可保留布局，重启或切换项目后恢复默认。",
     moveUp: "上移{{section}}",
     moveDown: "下移{{section}}",
     json: "导入或导出布局",
-    jsonHelp: "载入当前布局后可复制或编辑 JSON。导入的布局必须引用当前报告的结果。",
+    jsonHelp:
+      "载入当前布局后可复制或编辑 JSON，组合容器、文本、报告章节和按钮。报告章节始终使用当前结果。",
     export: "载入当前布局",
     apply: "应用布局",
     sections: {

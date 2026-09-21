@@ -16,6 +16,14 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 
     tauri::generate_handler![
         get_activity_panel_document,
+        inspect_ui,
+        update_ui,
+        request_ui_intent,
+        activate_ui_element,
+        subscribe_ui,
+        unsubscribe_ui,
+        pending_ui_intents,
+        settle_ui_intent,
         get_localized_node_catalog,
         get_compatible_node_catalog,
         create_event,

@@ -24,6 +24,7 @@ impl CommandRuntime {
 
     pub(crate) fn install(self, app: &tauri::AppHandle, harness: HarnessServices) {
         app.manage(ActivityPanelSyncState::default());
+        app.manage(crate::ipc::channel::presentation::PresentationChannels::default());
         app.manage(crate::ipc::graph_editor_sync::GraphEditorSyncState::default());
         app.manage(crate::ipc::channel::graph_activity::GraphActivityChannels::default());
         app.manage(HarnessRuntimeState::new(

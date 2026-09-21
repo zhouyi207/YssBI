@@ -8,6 +8,7 @@ pub mod graph;
 pub mod harness;
 mod ipc;
 pub mod plugins;
+pub mod presentation;
 pub mod project;
 pub mod runtime;
 pub mod session;

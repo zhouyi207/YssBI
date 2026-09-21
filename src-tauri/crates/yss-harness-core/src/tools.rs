@@ -25,6 +25,9 @@ impl ToolRegistry {
     pub fn graph_assistant() -> Result<Self, AutomationIdentityError> {
         let mut registry = Self::read_only_foundation()?;
         for capability in [
+            CapabilityId::InspectUi,
+            CapabilityId::UpdateUi,
+            CapabilityId::RequestUiIntent,
             CapabilityId::ApplyGraphEdit,
             CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,
@@ -603,6 +606,9 @@ mod tests {
         assert!(registry.descriptor(CapabilityId::ApplyGraphEdit).is_none());
         let editor = ToolRegistry::graph_assistant().unwrap();
         for id in [
+            CapabilityId::InspectUi,
+            CapabilityId::UpdateUi,
+            CapabilityId::RequestUiIntent,
             CapabilityId::ApplyGraphEdit,
             CapabilityId::ValidateGraph,
             CapabilityId::ExecuteGraph,

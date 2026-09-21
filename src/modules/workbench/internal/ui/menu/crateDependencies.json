@@ -301,6 +301,12 @@
         "kind": "normal",
         "optional": false,
         "target": null
+      },
+      {
+        "name": "yss-ui-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
       }
     ]
   },
@@ -1122,6 +1128,12 @@
         "kind": "normal",
         "optional": false,
         "target": null
+      },
+      {
+        "name": "yss-ui-contract",
+        "kind": "normal",
+        "optional": false,
+        "target": null
       }
     ]
   },
@@ -1884,6 +1896,11 @@
         "target": null
       }
     ]
+  },
+  {
+    "name": "yss-ui-contract",
+    "manifest": "src-tauri/crates/yss-ui-contract/Cargo.toml",
+    "dependencies": []
   },
   {
     "name": "yssbi",

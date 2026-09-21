@@ -1,4 +1,7 @@
 export type HarnessCapabilityId =
+  | "inspect_ui"
+  | "update_ui"
+  | "request_ui_intent"
   | "inspect_graph"
   | "search_node_catalog"
   | "inspect_dataset_schema"
@@ -130,6 +133,9 @@ export class InvalidHarnessPayloadError extends Error {
 }
 
 const CAPABILITY_IDS = new Set<HarnessCapabilityId>([
+  "inspect_ui",
+  "update_ui",
+  "request_ui_intent",
   "inspect_graph",
   "search_node_catalog",
   "inspect_dataset_schema",

@@ -1,49 +1,31 @@
 # JSON Driver：语义组件驱动页面计划
 
 > Status: Planned
-> Scope: 语义组件目录、JSON 页面描述、数据绑定、受控动作、AI 生成和增量更新
-> Canonical owners: 本文维护未完成目标；当前报告能力由 Graph 与 Execution 及 Results 源码维护
-> Update when: 页面范围、组件契约、AI 接入、增量协议或验收状态改变时
+> Scope: 语义组件目录、JSON 页面、数据绑定、动作、AI 修改与剩余验收
+> Canonical owners: 本文维护进度；当前页面协议由 Presentation 架构与源码维护
+> Update when: 页面范围、组件、持久化、AI 接入或验收状态改变时
 
-原始方案见 Git 提交 `8fa05bf4` 中的 `docs/architecture/jsonDriver.md`。它提出的是 **JSON 页面描述 → 组件目录 → React 渲染**，包含 AI 生成与局部更新。后续线性回归报告的章节配置只实现了其中很窄的展示场景，不能代表整份方案完成；本计划继续保留。
+首个完整接入场景是线性回归结果报告：GUI 和 Harness 共用 Rust Application 的页面状态与动作，后端提交 JSON 并生成稳定元素增量，React 安装投影。当前契约见 [JSON 页面与界面意图](../../src-tauri/crates/yss-ui-contract/README.md)，统计数据仍归 [Results](../architecture/GRAPH_AND_EXECUTION.md#6-results)。
 
-## 原始目标
+## 已接入
 
-先定义可以使用的语义组件模板、props、events/actions 和 children，再由 JSON 组合页面。AI 只能生成目录允许的结构，不能生成任意 HTML、JavaScript 或未经登记的操作。
+- [x] 封闭组件目录：column、row、text、reportSection、button；稳定元素 ID、受限 props/children、单根树和完整结构校验。
+- [x] Rust 生成默认页面与组件 JSON Schema；Renderer 组合目录内的已有报告组件，支持嵌套布局和当前结果绑定。
+- [x] GUI 的排序、显隐、重置及 JSON 导入调用后端动作；前端不再持有独立的已提交报告布局。
+- [x] 页面修改使用修订比较和原子提交；后端生成 set/remove/root 元素差分，通过命令回复与 Channel 交付。
+- [x] 订阅先于快照；重复回复忽略，缺口和非法增量只读恢复，失败保留有效页面；窗口卸载和会话替换隔离迟到回复。
+- [x] Harness 接入 inspect_ui / update_ui，可读取目录、生成完整页面并提交有效的增量批次；按钮仅调用登记的界面意图。
+- [x] 同一结果在当前 Application session 内关闭重开保留页面；页面本身不取得结果租约，不写入 Project 或工作台布局。
+- [x] 未引入 json-render、Zod、Immer 或 JSON Patch npm 包；复用现有 Results、错误与生命周期入口，选型理由见当前契约。
 
-候选组件包括结果表、统计摘要、图表、表单、Markdown 和布局容器。组件目录同时提供 React 实现、输入校验、动作约定及供 AI 使用的描述。数据绑定引用已有结果或资源；统计值由 Rust 与 Results 提供，不能把模型生成的数值当作计算事实。
-
-页面需要局部变化时，只更新受影响的组件和绑定。流式生成、动作响应和模板复用需要自己的身份、安装与恢复语义，不复用 Graph 编辑补丁作为 UI 协议。
-
-## 当前实现与缺口
-
-| 能力                                       | 当前状态与依据                                                                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 线性回归报告章节配置                       | 已有局部实现：[LinearRegressionReportSpec](../../src/shared/types/domain/linearRegressionReportSpec.ts) 只允许固定报告类型、当前结果引用和平面章节列表 |
-| 报告 JSON 导入、导出与校验                 | 已接入[布局控件](../../src/modules/results/internal/ui/info/LinearRegressionReportLayoutControls.tsx)，可调整顺序和显示状态                            |
-| 报告呈现                                   | [报告组件](../../src/modules/results/internal/ui/info/LinearRegressionComponent.tsx) 按固定章节类型渲染；配置保存在当前挂载视图的 React state 中       |
-| 通用组件目录和页面 Renderer                | 尚未按本方案接入。报告中的固定章节分支不等于可供不同页面与 AI 共用的组件目录                                                                           |
-| 通用 props / children / 数据绑定 / actions | 当前报告 Spec 不支持这些页面契约；已有节点配置表单也不能作为通用页面能力的完成证据                                                                     |
-| AI 生成、流式安装和局部修改页面            | 尚未接入生产能力；当前 [Harness capability](../../src-tauri/crates/yss-harness-contract/src/lib.rs) 没有生成或修改 UI Spec 的入口                      |
-| 跨结果模板与持久化                         | 当前报告布局不能据此跨结果、跨执行会话或重新打开后恢复；尚需定义需求和资源归属                                                                         |
-
-当前已实现的报告契约见 [Graph 与 Execution](../architecture/GRAPH_AND_EXECUTION.md#线性回归语义报告布局)。本次核对只确认源码接入范围，没有执行桌面验收。
+这些勾选表示源码接入和对应自动检查的范围，不表示桌面人工验收或整个页面产品已完成。当前元素差分是专用协议，不是完整 RFC 6902。
 
 ## 剩余工作
 
-- [ ] 明确首个 JSON 页面场景和必需组件，区分页面布局、组件数据与工作台布局；用该场景验证完整链路，不能把现有章节排序作为整份计划的验收。
-- [ ] 定义封闭的 UI Spec 与组件目录，包括稳定元素 ID、允许的 props/children、数据引用、动作及校验错误。复用现有组件，不默认重写全部页面。
-- [ ] 实现目录到 React 的呈现入口，让前端和 AI 使用同一份组件能力描述；未知组件、非法字段和未授权动作必须被拒绝。
-- [ ] 接入已有数据查询和 Application 操作，保留项目、资源、结果会话和租约校验；UI Spec 不持有新的业务事实源。
-- [ ] 定义增量更新与流式安装协议，明确基线身份、顺序、大小和深度限制、失败回退及重连恢复，保留未变化组件的交互状态。
-- [ ] 在 Harness 的受控能力边界内接入 UI 生成与修改，区分展示变更和业务写入；原始 JSON 文本不能直接调用任意 IPC 或执行脚本。
-- [ ] 明确是否支持模板复用、保存及重新打开，定义归属和引用重绑定；按当前契约实施，不添加旧格式迁移逻辑。
-- [ ] 人工验收组件组合、受限动作、流式/局部更新、错误配置保留上一有效页面，以及项目或结果切换后的迟到更新隔离；测量代表性页面的更新成本。
+- [ ] 人工验收嵌套布局、受控按钮、GUI/Harness 交错修改、重复消息、错误配置保留页面、关闭重开、独立报告窗口和项目/结果会话切换。
+- [ ] 人工验收连续有效生成批次的呈现；测量代表性页面的请求量、传输量、安装与绘制成本。未完成的原始 JSON 文本不直接安装。
+- [ ] 按第二个实际页面场景扩展通用结果表、图表、Markdown、表单和数据引用；每项继续使用现有数据/业务 owner，不能把当前报告组件当作这些能力已完成。
+- [ ] 按产品需求定义模板落盘、跨结果复用和引用重绑定；当前只保留会话内配置，不支持应用重启恢复或跨结果模板。
+- [ ] 在有需求时增加生成进度、取消未提交批次和大页面分段安装；继续保留页面原子校验，不增加旧格式迁移。
 
-## 技术选择与边界
-
-原讨论涉及 json-render、Zod、Zustand + Immer、JSON Patch / JsonDiffPatch，以及表单和图表库。这些是候选方案，没有因为早期报告试点而完成选型，也不意味着必须增加这些依赖。实现时先核对现有校验、组件与状态更新能力，再验证确实需要的增量。
-
-GraphDocumentPatch 是业务编辑契约，Graph projection delta 是只读同步契约，UI Spec 及其增量是展示契约；三者即使都可表示为 JSON，也不能直接混用。Workbench 拓扑继续由 FlexLayout 拥有，结果数值继续由 Results 拥有。
-
-[返回专项计划](README.md) · [React / Harness 共用入口计划](motion.md)
+[返回专项计划](README.md) · [React / Harness 共用入口](motion.md)

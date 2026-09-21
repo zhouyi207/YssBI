@@ -32,6 +32,7 @@ members = [
   "crates/yss-harness-rig",
   "crates/yss-application",
   "crates/yss-harness-contract",
+  "crates/yss-ui-contract",
   "crates/yss-harness-core",
   "crates/yss-harness-sqlite",
   "crates/yss-canonical-hash",

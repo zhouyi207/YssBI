@@ -84,6 +84,7 @@ Cargo packages are listed from `cargo metadata`; a README link appears only when
 | `yss-sci-contract` | `src-tauri/crates/yss-sci-contract` | [Cargo.toml](../../src-tauri/crates/yss-sci-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-contract/README.md) |
 | `yss-sci-linalg` | `src-tauri/crates/yss-sci-linalg` | [Cargo.toml](../../src-tauri/crates/yss-sci-linalg/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-linalg/README.md) |
 | `yss-sci-runtime` | `src-tauri/crates/yss-sci-runtime` | [Cargo.toml](../../src-tauri/crates/yss-sci-runtime/Cargo.toml) | [README](../../src-tauri/crates/yss-sci-runtime/README.md) |
+| `yss-ui-contract` | `src-tauri/crates/yss-ui-contract` | [Cargo.toml](../../src-tauri/crates/yss-ui-contract/Cargo.toml) | [README](../../src-tauri/crates/yss-ui-contract/README.md) |
 | `yssbi` | `src-tauri` | [Cargo.toml](../../src-tauri/Cargo.toml) | — |
 
 ## Frontend modules

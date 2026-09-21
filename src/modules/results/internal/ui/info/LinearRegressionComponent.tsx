@@ -1,4 +1,5 @@
-import { Fragment, useState, type FC, type ReactNode } from "react";
+import { useState, type FC, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLinearRegressionReport } from "@/features/application/stats/useLinearRegressionReport";
@@ -13,11 +14,10 @@ import { ResultReadError } from "@/features/application/results/components/Resul
 import { ScatterChart } from "@/shared/charts/cartesian/ScatterChart";
 import type { LinearRegressionReportData } from "@/shared/types/domain/resultReport";
 import type { ResultReference } from "@/shared/types/domain/result";
-import {
-  defaultLinearRegressionReportSpec,
-  type LinearRegressionReportSectionKind,
-} from "@/shared/types/domain/linearRegressionReportSpec";
-import { LinearRegressionReportLayoutControls } from "./LinearRegressionReportLayoutControls";
+import type { ReportSectionKind } from "@/shared/types/domain/uiPresentation";
+import { useUiPage } from "@/features/application/presentation/useUiPage";
+import { UiPageRenderer } from "@/components/ui-presentation/UiPageRenderer";
+import { ResultPageLayoutControls } from "./ResultPageLayoutControls";
 import {
   ReportLayout,
   ReportLazyBoundary,
@@ -168,11 +168,12 @@ export const LinearRegressionComponent: FC<{ data: LinearRegressionReportData }>
 );
 
 function LinearRegressionReport({ data }: { data: LinearRegressionReportData }) {
-  const [spec, setSpec] = useState(() => defaultLinearRegressionReportSpec(data.resultRef));
+  const { t } = useTranslation();
+  const presentation = useUiPage(data.resultRef);
   const { page, coefficients, coefficientError, hypothesisSource, computeAcf, computeSerialTests } =
     useLinearRegressionReport(data);
   const info = data.model_basic_info;
-  const renderSection = (kind: LinearRegressionReportSectionKind): ReactNode => {
+  const renderSection = (kind: ReportSectionKind): ReactNode => {
     switch (kind) {
       case "equation":
         return coefficients.length === data.coefficients.rowCount && coefficients.length > 0 ? (
@@ -256,12 +257,27 @@ function LinearRegressionReport({ data }: { data: LinearRegressionReportData }) 
         </>
       }
     >
-      <LinearRegressionReportLayoutControls spec={spec} onChange={setSpec} />
-      {spec.sections
-        .filter((section) => section.visible)
-        .map((section) => (
-          <Fragment key={section.id}>{renderSection(section.kind)}</Fragment>
-        ))}
+      {presentation.error && (
+        <ResultReadError error={presentation.error} onRetry={() => void presentation.reload()} />
+      )}
+      {!presentation.page && !presentation.error && (
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+      )}
+      {presentation.page && (
+        <>
+          <ResultPageLayoutControls
+            spec={presentation.page.spec}
+            busy={presentation.busy}
+            onAction={presentation.act}
+          />
+          <UiPageRenderer
+            spec={presentation.page.spec}
+            renderReportSection={renderSection}
+            disabled={presentation.busy}
+            onActivate={(id) => void presentation.activate(id)}
+          />
+        </>
+      )}
     </ReportLayout>
   );
 }

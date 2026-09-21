@@ -59,6 +59,22 @@ fn invoke_capability(
     ensure_project_binding(&captured, &context)?;
 
     let result = match request {
+        AutomationCapabilityRequest::InspectUi(request) => application
+            .inspect_ui(captured.project_instance_id(), request)
+            .map(AutomationCapabilityResult::UiInspection)
+            .map_err(map_ui_error),
+        AutomationCapabilityRequest::UpdateUi(request) => application
+            .update_ui(captured.project_instance_id(), request)
+            .map(AutomationCapabilityResult::UiUpdate)
+            .map_err(map_ui_error),
+        AutomationCapabilityRequest::RequestUiIntent(request) => application
+            .request_ui_intent(
+                captured.project_instance_id(),
+                &format!("harness:{}", context.harness_session_id().as_str()),
+                request,
+            )
+            .map(AutomationCapabilityResult::UiIntentReceipt)
+            .map_err(map_ui_error),
         request @ (AutomationCapabilityRequest::InspectGraph(_)
         | AutomationCapabilityRequest::ApplyGraphEdit(_)
         | AutomationCapabilityRequest::ValidateGraph(_)
@@ -100,6 +116,18 @@ fn invoke_capability(
         .revalidate_captured_session(&captured)
         .map_err(map_session_revalidation_error)?;
     Ok(result)
+}
+
+fn map_ui_error(error: crate::presentation::UiError) -> CapabilityFailure {
+    use crate::presentation::UiError;
+    let code = match error {
+        UiError::Invalid => CapabilityFailureCode::InvalidRequest,
+        UiError::Conflict => CapabilityFailureCode::RevisionConflict,
+        UiError::Session => CapabilityFailureCode::ProjectSessionChanged,
+        UiError::Capacity => CapabilityFailureCode::ResultTooLarge,
+        UiError::Unavailable | UiError::Workbench => CapabilityFailureCode::ResultUnavailable,
+    };
+    CapabilityFailure::new(code).with_detail("uiCode", error.to_string())
 }
 
 fn ensure_project_binding(

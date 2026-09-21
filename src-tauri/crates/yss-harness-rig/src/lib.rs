@@ -680,6 +680,15 @@ fn decode_request(
             serde_json::from_value::<yss_harness_contract::SaveGraphRequest>(arguments)
                 .map(AutomationCapabilityRequest::SaveGraph)
         }
+        CapabilityId::InspectUi => {
+            serde_json::from_value(arguments).map(AutomationCapabilityRequest::InspectUi)
+        }
+        CapabilityId::UpdateUi => {
+            serde_json::from_value(arguments).map(AutomationCapabilityRequest::UpdateUi)
+        }
+        CapabilityId::RequestUiIntent => {
+            serde_json::from_value(arguments).map(AutomationCapabilityRequest::RequestUiIntent)
+        }
         CapabilityId::ListGraphResults => {
             serde_json::from_value::<yss_harness_contract::ListGraphResultsRequest>(arguments)
                 .map(AutomationCapabilityRequest::ListGraphResults)
@@ -690,6 +699,15 @@ fn decode_request(
 
 fn tool_description(capability_id: CapabilityId) -> &'static str {
     match capability_id {
+        CapabilityId::InspectUi => {
+            "Inspect the closed UI catalog/schema, a retained linear regression result's current page and revision, or an intent receipt by ID. UI pages contain presentation only; report sections bind to actual Results. Page state lasts for the current project execution session."
+        }
+        CapabilityId::UpdateUi => {
+            "Update a result page using its inspected baseRevision. Replace the spec or apply one atomic batch of stable-element patches, change visibility, move an element within its parent, or reset. Only catalog components/actions are accepted. Send complete valid batches, never partial JSON text. Conflicts require a fresh inspection; numerical facts remain in Results."
+        }
+        CapabilityId::RequestUiIntent => {
+            "Request opening an existing graph, focusing its node, opening a retained result, or revealing an allowed panel. Use a unique clientKey, reused only for the identical request. Pending is acceptance, not success: inspect the receipt ID until applied/failed/expired. Requires the workbench to be attached; does not edit/save project data or own FlexLayout."
+        }
         CapabilityId::InspectGraph => {
             "Inspect the current Project graph by graphPath, whether or not an editor panel is open: revision, graphHash, parameters, concrete port IDs/types/column names, connection limits, constants and diagnostics. Inspect before editing or running."
         }

@@ -6,6 +6,7 @@ pub mod command_node_system;
 pub mod command_panel_did;
 pub mod command_parse_at;
 pub mod command_plugin;
+pub mod command_presentation;
 pub mod command_project;
 pub(crate) mod execution_dto;
 
@@ -22,6 +23,7 @@ pub use command_node_system::*;
 pub use command_panel_did::*;
 pub use command_parse_at::*;
 pub use command_plugin::*;
+pub use command_presentation::*;
 pub use command_project::*;
 
 pub use command_chart::*;

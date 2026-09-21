@@ -25,6 +25,7 @@ import { rootPanelRegistry } from "./rootPanelRegistry";
 import { WorkbenchStatusBarContribution } from "./statusBarContributionRegistry";
 import { PluginProvider } from "./integrations/PluginProvider";
 import { useResultPanelLeases } from "@/features/application/results/useResultPanelLeases";
+import { useUiIntents } from "@/features/application/presentation/useUiIntents";
 
 const overlayRegistry = {
   settings: SettingsView,
@@ -50,6 +51,7 @@ function WorkbenchReadyComposition() {
   useProjectionLocaleSync();
   useEditorKeyboard(commands);
   useResultPanelLeases();
+  useUiIntents();
 
   return (
     <PluginProvider>

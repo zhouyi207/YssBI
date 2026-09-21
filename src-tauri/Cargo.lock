@@ -9288,6 +9288,7 @@ dependencies = [
  "yss-resource-naming",
  "yss-sci-contract",
  "yss-sci-runtime",
+ "yss-ui-contract",
 ]
 
 [[package]]
@@ -9709,6 +9710,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "yss-project-identity",
+ "yss-ui-contract",
 ]
 
 [[package]]
@@ -10122,6 +10124,16 @@ dependencies = [
  "thiserror 2.0.20",
  "yss-sci",
  "yss-sci-contract",
+]
+
+[[package]]
+name = "yss-ui-contract"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

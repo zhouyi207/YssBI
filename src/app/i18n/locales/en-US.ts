@@ -42,12 +42,12 @@ export const enUS = {
   reportLayout: {
     title: "Report layout",
     sessionOnly:
-      "Choose and reorder sections for this report view. Reopening restores the default layout.",
+      "Arrange this page's content. Reopening keeps the layout during the same project runtime session; restarting or switching projects restores defaults.",
     moveUp: "Move {{section}} up",
     moveDown: "Move {{section}} down",
     json: "Import or export layout",
     jsonHelp:
-      "Load the current layout to copy or edit its JSON. Imported layouts must reference this report's result.",
+      "Load the layout to copy or edit its JSON and combine containers, text, report sections and buttons. Report sections always use the current result.",
     export: "Load current layout",
     apply: "Apply layout",
     sections: {

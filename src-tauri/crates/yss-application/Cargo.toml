@@ -15,6 +15,7 @@ test-support = [
 ]
 
 [dependencies]
+yss-ui-contract = { path = "../yss-ui-contract" }
 yss-node-kernel = { path = "../yss-node-kernel" }
 yss-ipc-contract = { path = "../yss-ipc-contract" }
 yss-ipc-event = { path = "../yss-ipc-event" }

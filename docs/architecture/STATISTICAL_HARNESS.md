@@ -79,6 +79,9 @@ adapter 不得把 framework type 带入 Core，也不得拥有 policy。Applicat
 | `execute_graph`           | 自动准备当前图文档的计划并执行，返回实际 run 状态、失败位置与结果 IDs |
 | `list_graph_results`      | 查询图当前保留的结果 IDs，包括手动运行产物                            |
 | `save_graph`              | 用户要求保存时调用正常的独立 Save                                     |
+| `inspect_ui`              | 读取组件 Schema、当前结果页面或界面意图回执                           |
+| `update_ui`               | 按页面修订原子替换、局部修改、排序、显隐或重置展示                    |
+| `request_ui_intent`       | 请求打开图/结果、定位节点或显示允许的面板，返回待执行回执             |
 
 `inspect_result` 与界面复用 Application 的 `query_result_json`，返回 `ResultValueInspection::Json` 中的完整 JSON。结果字段、嵌套对象、统计数组与文本不做 AI 专用裁剪；不保留 title/observations/rSquared 三字段白名单，也不使用原有 100 项、4 层或 4096 字符截断。工具的通用响应字节预算不限制此 JSON 分支。
 

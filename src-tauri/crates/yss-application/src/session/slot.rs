@@ -51,6 +51,7 @@ pub struct ApplicationSession {
     resource_provider_factory: Arc<ResourceProviderFactory>,
     graph_activity: crate::graph::editing::GraphActivitySource,
     graph_editing: crate::graph::editing::GraphEditingCoordinator,
+    pub(crate) presentation: crate::presentation::PresentationSession,
 }
 
 impl ApplicationSession {
@@ -83,6 +84,7 @@ impl ApplicationSession {
             resource_provider_factory,
             graph_activity: crate::graph::editing::GraphActivitySource::default(),
             graph_editing: crate::graph::editing::GraphEditingCoordinator::default(),
+            presentation: crate::presentation::PresentationSession::default(),
         }
     }
 
@@ -116,6 +118,7 @@ impl ApplicationSession {
             resource_provider_factory,
             graph_activity: crate::graph::editing::GraphActivitySource::default(),
             graph_editing: crate::graph::editing::GraphEditingCoordinator::default(),
+            presentation: crate::presentation::PresentationSession::default(),
         }
     }
 
@@ -842,7 +845,9 @@ impl ApplicationSessionSlot {
         }
         *state = SessionSlotState::Active(Arc::new(session));
         replacement.worker.completed = true;
-        replacement.worker.old.take();
+        if let Some(old) = replacement.worker.old.take() {
+            old.presentation.session_changed();
+        }
         Ok(())
     }
 
