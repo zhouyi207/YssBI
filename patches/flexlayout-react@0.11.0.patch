@@ -1,3 +1,29 @@
+diff --git a/dist/index.js b/dist/index.js
+index 6c4d4495a1da33235f6184dc38aad42040435617..2f853e8971d855969ecb4dfa8412221a7f2653fa 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5082,7 +5082,7 @@ var FloatWindow = (props) => {
+ 				ref: headerRef,
+ 				className: cm(CLASSES.FLEXLAYOUT__FLOAT_WINDOW_HEADER),
+ 				onPointerDown: onPointerDownHeader,
+-				children: [
++				children: controller.getProps().renderFloatHeader?.(layout) ?? [
+ 					/* @__PURE__ */ jsx("div", {
+ 						"data-layout-path": "/floatwindow/drag-handle",
+ 						className: cm(CLASSES.FLEXLAYOUT__FLOAT_WINDOW_DRAG_HANDLE),
+@@ -8619,6 +8619,12 @@ var LayoutController = class LayoutController {
+ 		}
+ 	};
+ 	onModelChange = (action) => {
++		// FloatWindow updates its own rect while dragging; its ResizeObserver handles size changes.
++		// Rebuilding the root layout per pointer event needlessly invalidates every tabset.
++		if (action.isAdjusting() && action.type === Actions.MOVE_FLOAT) {
++			if (this._props.onModelChange) this._props.onModelChange(this._props.model, action);
++			return;
++		}
+ 		const subActions = action instanceof GroupAction ? action.actions : [action];
+ 		for (const sub of subActions) if (sub.type == Actions.DELETE_TAB && this._state.showHiddenBorder !== DockLocation.CENTER) {
+ 			const borderNode = this._props.model.getBorderSet().getBorderMap().get(this._state.showHiddenBorder);
 diff --git a/style/combined.css b/style/combined.css
 index 249c53bde806a2bd3c3f80b8d5e01aaaa2a669f2..12efbf2376240a90b042e4ff9ec6747bd2223f98 100644
 --- a/style/combined.css
@@ -8,3 +34,16 @@ index 249c53bde806a2bd3c3f80b8d5e01aaaa2a669f2..12efbf2376240a90b042e4ff9ec6747b
  }
 -
 -/*# sourceMappingURL=combined.css.map */
+diff --git a/types/view/Layout.d.ts b/types/view/Layout.d.ts
+index c2d071f6a446045366304e4d00899c93c6090cd9..58e74119659187784acb3f7a486465e4c97e1d5a 100644
+--- a/types/view/Layout.d.ts
++++ b/types/view/Layout.d.ts
+@@ -9,6 +9,8 @@ import { Model } from "../model/Model";
+ import { DragRectRenderCallback, NodeMouseEvent, ShowOverflowMenuCallback, TabSetPlaceHolderCallback, ITabSetRenderValues, ITabRenderValues, IIcons, IKeyMap } from "./layout/LayoutTypes";
+ import { ModelLayout } from "../model/ModelLayout";
+ export interface ILayoutProps {
++    /** Render floating-window header content inside the native drag surface. Buttons should stop pointer-down propagation. */
++    renderFloatHeader?: (layout: ModelLayout) => React.ReactNode;
+     /** the model for this layout */
+     model: Model;
+     /** factory function for creating the tab components */
