@@ -2,9 +2,9 @@ import {
   Actions,
   BorderNode,
   DockLocation,
+  Model,
   TabNode,
   TabSetNode,
-  type Model,
   type Node,
   type Action,
 } from "flexlayout-react";
@@ -18,14 +18,20 @@ import {
   WORKBENCH_ACTIVITY_GROUP_ID,
   WORKBENCH_BOTTOM_DEFAULT_ORDER,
   WORKBENCH_EDGE_GROUP_IDS,
-  WORKBENCH_HOME_EDGE,
+  WORKBENCH_HOME_LOCATION,
 } from "./workbenchLayoutDefaults";
+import { isIntermediateLayoutAction } from "./layoutModelBinding";
 export { WORKBENCH_ACTIVITY_GROUP_ID } from "./workbenchLayoutDefaults";
+export function canFloatWorkbenchPanel(metadata: WorkbenchPanelMetadata): boolean {
+  return metadata.role === "view" && metadata.viewId === "settings";
+}
 export function canMoveWorkbenchPanel(
   metadata: WorkbenchPanelMetadata,
   targetGroupId: string,
-  targetPosition?: "grid" | "top" | "bottom" | "left" | "right",
+  targetPosition?: "grid" | "top" | "bottom" | "left" | "right" | "float",
 ): boolean {
+  if (canFloatWorkbenchPanel(metadata)) return targetPosition === "float";
+  if (targetPosition === "float") return false;
   if (targetGroupId === WORKBENCH_EDGE_GROUP_IDS.bottom || targetPosition === "bottom")
     return (
       metadata.role === "view" &&
@@ -41,6 +47,7 @@ export function canSplitWorkbenchPanel(
   referenceGroupId: string,
 ): boolean {
   return (
+    !canFloatWorkbenchPanel(metadata) &&
     !isWorkbenchActivityMetadata(metadata) &&
     !isWorkbenchPersistentViewMetadata(metadata) &&
     referenceGroupId !== WORKBENCH_ACTIVITY_GROUP_ID
@@ -55,7 +62,7 @@ export function canRemoveWorkbenchPanel(metadata: WorkbenchPanelMetadata): boole
 export function hasWorkbenchPanelCloseButton(metadata: WorkbenchPanelMetadata): boolean {
   return (
     canRemoveWorkbenchPanel(metadata) &&
-    (metadata.role !== "view" || WORKBENCH_HOME_EDGE[metadata.viewId] !== "bottom")
+    (metadata.role !== "view" || WORKBENCH_HOME_LOCATION[metadata.viewId] !== "bottom")
   );
 }
 export function configureWorkbenchModel(model: Model): void {
@@ -63,7 +70,12 @@ export function configureWorkbenchModel(model: Model): void {
     if (!initial && model.getActiveTabset()?.getSelectedNode()) return;
     const groups: TabSetNode[] = [];
     model.visitNodes((node) => {
-      if (node instanceof TabSetNode && node.getTabNodes().length) groups.push(node);
+      if (
+        node instanceof TabSetNode &&
+        node.getLayoutId() === Model.MAIN_LAYOUT_ID &&
+        node.getTabNodes().length
+      )
+        groups.push(node);
     });
     const actions: Action[] = groups.flatMap((group) =>
       group.getSelectedNode() ? [] : [Actions.selectTab(group.getTabNodes()[0].getId())],
@@ -75,7 +87,11 @@ export function configureWorkbenchModel(model: Model): void {
     if (actions.length) model.doAction(Actions.group(actions));
   };
   ensureActiveTabset(true);
-  model.addChangeListener({ onAfterAction: () => ensureActiveTabset() });
+  model.addChangeListener({
+    onAfterAction: (action) => {
+      if (!isIntermediateLayoutAction(action)) ensureActiveTabset();
+    },
+  });
   model.setOnAllowDrop((source, drop) => {
     const tabs: TabNode[] = [];
     const visit = (node: Node): void => {
@@ -88,9 +104,15 @@ export function configureWorkbenchModel(model: Model): void {
     return tabs.every((tab) => {
       const metadata: unknown = tab.getConfig()?.metadata;
       if (!isWorkbenchPanelMetadata(metadata)) return false;
+      if (target.getLayoutId() !== Model.MAIN_LAYOUT_ID && !canFloatWorkbenchPanel(metadata))
+        return false;
       if (drop.location !== DockLocation.CENTER)
         return canSplitWorkbenchPanel(metadata, target.getId()) && !(target instanceof BorderNode);
-      return canMoveWorkbenchPanel(metadata, target.getId());
+      return canMoveWorkbenchPanel(
+        metadata,
+        target.getId(),
+        target.getLayoutId() !== Model.MAIN_LAYOUT_ID ? "float" : undefined,
+      );
     });
   });
 }

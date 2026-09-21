@@ -7,6 +7,10 @@
 
 ## Canvas presentation and input
 
+每个图面板只订阅自身的加载状态。Graph、Resource 等 owner 以不可变更新提交记录，在发布边界冻结并直接共享只读引用；读取端不再深拷贝或维护克隆缓存。React 统一通过选择器订阅实际使用的数据，打开另一张图或更新其他资源不重新构建当前画布模型。调用方不能原地修改已发布对象。
+
+可见性负责调用唯一的 `loadGraph` 用例，项目恢复复用同一入口确保可见图就绪。活动标签只同步焦点和 Details，不触发加载、重试或卸载。需要等待数据的显式用例（例如 Assistant 定位节点）直接等待该加载入口，然后执行定位。
+
 节点画布使用 React Flow，每个 FlexLayout panel/group/resource 挂载独立 provider。
 节点、连线及稳定 handle ID 单向派生自现有 editor projection；React Flow 的测量、
 临时坐标和连接手势只是 UI 状态，不参与 Graph document 序列化，不创建第二套草稿或历史。

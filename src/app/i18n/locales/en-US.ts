@@ -1628,8 +1628,8 @@ export const enUS = {
       "The extension marketplace is not connected. Online search and recommendations are not available yet.",
   },
   settings: {
-    title: "Settings",
     close: "Close settings",
+    title: "Settings",
     noResults: "No matching settings categories",
     noResultsHint: "Try another keyword or clear the search to see all settings.",
     clearSearch: "Clear search",

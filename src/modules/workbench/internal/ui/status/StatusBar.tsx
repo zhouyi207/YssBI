@@ -3,7 +3,7 @@ import { VscSettingsGear } from "react-icons/vsc";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STATUS_BAR_ICON_SIZE } from "@/shared/theme/statusBarTokens";
-import { useWorkbenchUi, workbenchUi } from "../../state/ui";
+import { revealWorkbenchView } from "../../application/workbenchLayoutActions";
 import { StatusBarItem, type WorkbenchStatusBarItem } from "./StatusBarItem";
 
 export function StatusBar({
@@ -31,7 +31,6 @@ export function StatusBar({
 export function WorkbenchSettingsButton() {
   const { t } = useTranslation();
   const settingsTitle = t("menubar.settings");
-  const settingsOpen = useWorkbenchUi((state) => state.isSettingsOpen);
 
   return (
     <Tooltip>
@@ -41,9 +40,7 @@ export function WorkbenchSettingsButton() {
           className="flexlayout__border_toolbar_button"
           data-workbench-settings
           aria-label={settingsTitle}
-          aria-haspopup="dialog"
-          aria-expanded={settingsOpen}
-          onClick={workbenchUi.openSettings}
+          onClick={() => void revealWorkbenchView("settings")}
         >
           <VscSettingsGear size={STATUS_BAR_ICON_SIZE} aria-hidden />
         </button>

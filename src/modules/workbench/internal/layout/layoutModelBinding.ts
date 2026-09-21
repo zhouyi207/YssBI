@@ -1,4 +1,20 @@
-import { Actions, Model, type IJsonModel, type ModelChangeListener } from "flexlayout-react";
+import {
+  GroupAction,
+  Model,
+  type Action,
+  type IJsonModel,
+  type ModelChangeListener,
+} from "flexlayout-react";
+
+/** Gesture producers mark intermediate actions; their final unmarked action commits notification. */
+export function isIntermediateLayoutAction(action: Action): boolean {
+  return (
+    action.isAdjusting() ||
+    (action instanceof GroupAction &&
+      action.actions.length > 0 &&
+      action.actions.every(isIntermediateLayoutAction))
+  );
+}
 
 /** Holds the mounted native model; snapshots are notifications, never a second layout. */
 export class LayoutModelBinding {
@@ -6,14 +22,12 @@ export class LayoutModelBinding {
   private revision = 0;
   private snapshot: Readonly<{ model: Model; revision: number }>;
   private readonly listeners = new Set<() => void>();
+  private readonly modelListeners = new Set<() => void>();
   private readonly modelListener: ModelChangeListener = {
     onAfterAction: (action) => {
-      const resizing =
-        action.isAdjusting() &&
-        (action.type === Actions.ADJUST_WEIGHTS || action.type === Actions.ADJUST_BORDER_SPLIT);
-      // Native resize updates measured geometry directly. Notify application subscribers
+      // Native geometry gestures update their own rendering. Notify application subscribers
       // on release; keep the revision current so speculative transactions still go stale.
-      this.publish(!resizing);
+      this.publish(!isIntermediateLayoutAction(action));
     },
   };
 
@@ -32,6 +46,10 @@ export class LayoutModelBinding {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+  subscribeModel = (listener: () => void): (() => void) => {
+    this.modelListeners.add(listener);
+    return () => this.modelListeners.delete(listener);
+  };
   replace(json: IJsonModel): void {
     // Validate candidates before this commit: adoption transfers mounted tab content.
     const previous = this.model;
@@ -41,11 +59,15 @@ export class LayoutModelBinding {
     this.model = next;
     next.addChangeListener(this.modelListener);
     this.publish();
+    this.notify(this.modelListeners);
   }
   private publish(notify = true): void {
     this.snapshot = { model: this.model, revision: ++this.revision };
     if (!notify) return;
-    for (const listener of Array.from(this.listeners)) {
+    this.notify(this.listeners);
+  }
+  private notify(listeners: ReadonlySet<() => void>): void {
+    for (const listener of Array.from(listeners)) {
       try {
         listener();
       } catch {

@@ -331,6 +331,7 @@ function viewPanel(
     plugins: "Plugins",
     details: "Details",
     assistant: "Assistant",
+    settings: "Settings",
     logs: "Logs",
     output: "Output",
     problems: "Problems",
@@ -642,9 +643,15 @@ describe("workbench panel close coordinator", () => {
 
   it("allows projectless tool closes but rejects project-scoped panels", async () => {
     mocks.project.available = false;
-    seedPanels([viewPanel("logs-a", "logs"), viewPanel("output-a", "output")]);
+    seedPanels([
+      viewPanel("logs-a", "logs"),
+      viewPanel("output-a", "output"),
+      viewPanel("settings-a", "settings"),
+    ]);
 
-    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a"])).resolves.toBe(true);
+    await expect(requestCloseWorkbenchPanels(["logs-a", "output-a", "settings-a"])).resolves.toBe(
+      true,
+    );
 
     seedPanels([
       editorPanel("editor-a", "events/Main.yssbi-event"),

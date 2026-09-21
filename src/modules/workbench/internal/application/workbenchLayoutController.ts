@@ -162,8 +162,15 @@ function configurePermanentDetailsSidebar(
 
 function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
   const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
+  const right = readSerializedEdge(transaction.serialize(), "right");
   const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
   configurePermanentDetailsSidebar(transaction, details);
+  if (right) {
+    if (right.activePanelId && transaction.getPanel(right.activePanelId)) {
+      transaction.activate(right.activePanelId);
+    }
+    transaction.configureEdge({ position: "right", size: right.size, collapsed: right.collapsed });
+  }
   if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
     transaction.activate(activePanelInstanceId);
   }
@@ -443,7 +450,7 @@ export function createWorkbenchLayoutController(
     pausePersistence();
     persistenceCycle = cycle;
     const schedule = () => schedulePersistence(cycle);
-    persistenceDisposers = [read.subscribe(schedule), logsRead.subscribe(schedule)];
+    persistenceDisposers = [read.subscribePersistence(schedule), logsRead.subscribe(schedule)];
   };
 
   const failCycle = (cycle: HydrationCycle, error: unknown): void => {

@@ -149,6 +149,7 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo["com
       plugins: "Plugins",
       details: "Details",
       assistant: "Assistant",
+      settings: "Settings",
       logs: "Logs",
       output: "Output",
       problems: "Problems",

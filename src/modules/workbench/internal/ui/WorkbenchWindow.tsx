@@ -7,6 +7,7 @@ import type { WorkbenchOverlayRegistry } from "./overlay/overlayContribution";
 
 export interface WorkbenchWindowProps {
   readonly panelRegistry: RootPanelRegistry;
+  readonly floatingHeaderComponent?: RootLayoutHostProps["floatingHeaderComponent"];
   readonly tabComponent: RootPanelTabComponent;
   readonly dndCoordinator: RootLayoutHostProps["dndCoordinator"];
   readonly onActiveEditorPanelChange: RootLayoutHostProps["onActiveEditorPanelChange"];
@@ -22,6 +23,7 @@ export interface WorkbenchWindowProps {
 
 export function WorkbenchWindow({
   panelRegistry,
+  floatingHeaderComponent,
   tabComponent,
   dndCoordinator,
   onActiveEditorPanelChange,
@@ -43,6 +45,7 @@ export function WorkbenchWindow({
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
         <RootLayoutHost
           panelRegistry={panelRegistry}
+          floatingHeaderComponent={floatingHeaderComponent}
           tabComponent={tabComponent}
           dndCoordinator={dndCoordinator}
           onActiveEditorPanelChange={onActiveEditorPanelChange}

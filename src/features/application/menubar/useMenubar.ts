@@ -4,6 +4,7 @@ import { captureActiveEditorCommandTarget } from "@/features/application/editor/
 import { splitEditorPanel } from "@/features/application/editor/editorGroupCommands";
 import {
   resetWorkbenchLayout,
+  revealWorkbenchView,
   toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
   WORKBENCH_ACTIVITY_GROUP_ID,
@@ -12,7 +13,6 @@ import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application
 
 import { workbenchLayoutRead } from "@/modules/workbench/public";
 import type { WorkbenchViewId } from "@/modules/workbench/public";
-import { useWorkbenchUiStore } from "@/modules/workbench/public";
 import type { MenubarViewState } from "./menubarViewItems";
 
 function openViewIds(): ReadonlySet<WorkbenchViewId> {
@@ -25,7 +25,9 @@ function openViewIds(): ReadonlySet<WorkbenchViewId> {
 
 /** Menubar model projected from live root FlexLayout state and semantic application actions. */
 export function useMenubar() {
-  const openSettings = useWorkbenchUiStore((state) => state.openSettings);
+  const openSettings = useCallback(() => {
+    void revealWorkbenchView("settings");
+  }, []);
   const flexlayoutSnapshot = useSyncExternalStore(
     workbenchLayoutRead.subscribe,
     workbenchLayoutRead.getSnapshot,

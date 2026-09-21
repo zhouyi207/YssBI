@@ -1,3 +1,4 @@
+import { shallow } from "zustand/shallow";
 import type { DetailFocus } from "@/features/core/editor/detail/detailTypes";
 import { useEditorStore } from "@/features/core/editor";
 import { useResourceStore } from "@/features/core/resource";
@@ -28,7 +29,7 @@ export function setPassiveDetailContext(focus: DetailFocus): void {
     (focus.kind === "event" || focus.kind === "function") &&
     current?.kind === "node" &&
     current.graphPath === focus.path;
-  if (preservesNodeFocus) {
+  if (preservesNodeFocus || shallow(current, focus)) {
     return;
   }
   setDetailContext(focus);

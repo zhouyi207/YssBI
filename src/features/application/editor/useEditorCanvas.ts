@@ -126,7 +126,12 @@ export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): Editor
     (
       descriptor: Parameters<typeof nodeCommands.createNode>[0],
       position: Parameters<typeof nodeCommands.createNode>[1],
-    ) => nodeCommands.createNode(descriptor, position, resolveCommandTarget()),
+    ) => {
+      const target = resolveCommandTarget();
+      return target
+        ? nodeCommands.createNode(descriptor, position, target)
+        : Promise.resolve(false);
+    },
     [nodeCommands.createNode, resolveCommandTarget],
   );
 

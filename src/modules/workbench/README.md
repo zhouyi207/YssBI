@@ -26,7 +26,7 @@ WorkbenchWindow
 └─ WorkbenchOverlayHost
 ```
 
-Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。浮动窗口、浏览器 popout 和标签分组禁用。
+Model 是拓扑、分组、顺序、选择、尺寸与边栏折叠的唯一可写 authority。border 的 selected 为 -1 表示折叠；折叠后仍显示 FlexLayout 原生边栏标签。Activity 只在 left border 内排序，Details 固定在 right border，普通面板可在允许的区域移动和分屏。Settings 支持窗口内 float；其余面板的 float、浏览器 popout 和标签分组禁用。
 
 FlexLayout 的 selected tab 与 active tabset 分别拥有组内选择和顶部活动分组；各 border 独立保存选择，不覆盖顶部活动 tab。`getActivePanel` 只读取顶部活动 tabset 的 selected tab。非空顶部分组始终有选中 tab，活动分组被删除后通过原生 Action 选定剩余分组。输入焦点由 DOM 和事件路径决定，不写入布局配置或另建状态库。
 
@@ -177,6 +177,7 @@ bottom edge 只接受 Problems、Output、Logs 三种 singleton tab，允许标�
 | `view:commands`  | Commands activity panel                   | left Activity edge                  |
 | `view:details`   | permanent fixed Details                   | right edge index 0                  |
 | `view:assistant` | movable/closable Assistant                | right edge index 1 on default/reset |
+| `view:settings`  | application Settings                      | 独立 float 子布局                   |
 | `result`         | 一个可检查结果                            | right edge                          |
 | `view:logs`      | Logs workspace                            | bottom edge                         |
 | `view:output`    | Graph 运行失败摘要                        | bottom edge                         |
@@ -227,10 +228,11 @@ result → { role, reference, leaseId, title, presentation }
 
 Singleton 与 multi-instance contract：
 
-- Project、Nodes、Commands、Plugins、Details、Assistant、Logs、Output、Problems 由 `viewId` 保证 singleton；
+- Project、Nodes、Commands、Plugins、Details、Assistant、Settings、Logs、Output、Problems 由 `viewId` 保证 singleton；
 - Project、Nodes、Commands、Plugins 随默认 Activity group 安装且保持存在；
 - Details 是 permanent fixed singleton；
 - Assistant 是普通 layout-persisted singleton；
+- Settings 按需打开，是普通 layout-persisted singleton；
 - Result 按完整结果引用复用并 reveal，不同运行产生的新引用创建独立面板；
 - 重复打开同一快照保留既有面板和租约，调用方释放重复申请的临时租约。
 
@@ -255,7 +257,21 @@ publication transaction 可以在准备期间等待业务查询。提交前重�
 
 ### 5.1 拖动与订阅
 
-Layout 只在 Model 实例被替换时通过宿主订阅更新；Model 内部动作由 FlexLayout 自己处理。连续调整尺寸时保留原生几何更新路径，不逐帧通知应用订阅者，松手后的最终动作发布应用通知。所有动作仍推进绑定 revision，避免尺寸拖动期间的旧候选覆盖新布局。
+Layout 通过 `subscribeModel` 只订阅 Model 实例替换；Model 内部动作由 FlexLayout 自己处理。所有带 `isAdjusting()` 标记的中间动作统一延迟应用通知，全由中间动作组成的嵌套 GroupAction 同样处理，不再维护手势动作名称清单。原生几何路径继续实时更新，结束动作再提交通知；无论是否通知，每次动作都推进绑定 revision，避免拖动期间的旧候选覆盖新布局。活动分组补全也跳过中间动作，避免空中央区时逐帧扫描布局。
+
+提交后从原生 Model 生成轻量面板、分组和边栏只读投影，复用未变化的记录与嵌套字段引用，按实际状态变化通知消费者。没有 JSON 签名、全量字符串序列化或面板排序，也不根据动作名称猜测影响：
+
+- `subscribePersistence` 接收提交及生命周期通知，用于布局保存调度；纯几何变化不会广播到业务订阅者。
+- `subscribe` / `getSnapshot` 反映面板、分组和边栏语义变化，菜单使用此入口，不因尺寸或浮窗坐标变化重算。
+- `subscribeActivePanel` / `getActiveSnapshot` 只反映中央活动面板及就绪状态，供活动 Graph 上下文和激活协调者使用。
+- `subscribePanelSet` 只反映面板身份和 metadata 集合变化，供结果租约对账使用；排序、选择、可见性和尺寸变化不触发它。
+- `subscribePanel(id, listener)` 只反映该面板及所在边栏的状态变化，供内容、标签菜单和浮动设置的呈现使用。
+
+绑定、解除绑定及 hydration 状态变化会通知相关订阅者。公共查询读取同一份冻结的提交投影，保证记录引用稳定；中间手势只改变原生 Model 与 mutation revision，结束后发布读投影。投影没有写入口，不是第二份可写面板布局。
+
+异步命令的过期检查使用 `getMutationRevision()`，它包含绑定/操作代际、hydration 及原生动作 revision，中间动作也会改变此 token。`getSnapshot().revision` 与 `getActiveSnapshot().revision` 仅表示对应通知投影的变化，不用于并发提交校验；图问题定位和内部布局事务分别使用 mutation token 和 binding revision。
+
+当前 FlexLayout 依赖补丁跳过 adjusting `MOVE_FLOAT` 引起的整棵 Layout 重绘：FloatWindow 自己更新矩形，尺寸变化继续由原生 ResizeObserver 处理，结束动作恢复正常布局通知。补丁与缺失 CSS source map 的修正同由 `patches/flexlayout-react@0.11.0.patch` 管理，升级依赖时应核对上游实现。
 
 PanelContent 按自身 group、title、metadata 和 visible 订阅，未变化时返回相同快照。父级回调和 drag overlay 保持稳定，减少画布、标签和无关面板的重渲染。查询面板集合时只计算一次活动面板。
 
@@ -310,17 +326,25 @@ Coordinator 按顺序执行：
 
 Reveal 已存在的 panel 时保持其实际位置，不把它搬回 deterministic home；若位于 edge group，则显示并展开该 edge。缺失的 singleton 才在 home edge 创建。Details 由 permanent placement 规则固定；缺失 Assistant 通过 View 菜单在 Details 后创建并激活；同一结果引用的 Result 只 reveal 既有 panel。
 
+设置菜单、底栏齿轮和 Ctrl+, 共用 `revealWorkbenchView("settings")`。缺失时通过原生 `Actions.createSubLayout` 直接创建 singleton float，不经过中央标签；已存在时置前同一浮窗。Settings 不能停靠、分屏或拖入中央与边栏区域，中央区不提供 float 图标或转换入口。其打开状态、位置和尺寸只来自 FlexLayout，不在 UI store 保留第二份状态。布局恢复与项目切换保留浮窗，关闭后恢复不会重新创建。
+
+Settings 模块继续拥有分类、搜索、表单和标题内容；设置值由现有 Settings store 持久化，不进入布局 JSON。页面根据浮窗宽度适配。工作台不再为设置挂载 Dialog；项目管理页的简化设置弹窗仍属于独立页面。恢复布局不承诺恢复 Settings 的搜索和分类选择。
+
+浮动页使用同一根 Model 的 `subLayouts`，位置、尺寸和层级由 FlexLayout 管理，并限制在工作台窗口内。中央分组最大化不隐藏它，重置主布局保留已打开设置的浮动位置。恢复校验拒绝停靠的 Settings、其他浮动内容和浏览器窗口子布局；不存在旧格式迁移。浮动设置不改变顶部活动编辑器的命令目标。
+
+浮动 Settings 的齿轮、标题和关闭按钮通过依赖补丁提供的 `renderFloatHeader` 扩展点渲染在原生 float header 内；标题区域由库直接处理拖动，按钮隔离 pointer-down，关闭经过统一协调者。内部 tabset 通过原生 `enableTabStrip: false` 隐藏标签。没有透明覆盖层、固定按钮避让宽度或自建拖动几何状态；加载期间也保留标题与关闭操作。
+
 ### 7.2 Reset
 
 Reset 在独立的原生 FlexLayout Model 上准备布局，校验后一次提交，并保留既有 editor、Result 与 panel identities：
 
 - Project、Nodes、Commands、Plugins 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
-- editor panels 按 deterministic snapshot order 集中到第一个 central tabset；
+- editor panels 按 deterministic snapshot order 集中到第一个 central tabset；Settings 保留浮窗，reset 不创建已关闭的 Settings；
 - Details 与 Assistant 始终确保存在并回到 right edge index 0/1；Result 回到其后，reset 不凭空创建 Result；
 - Logs、Output、Problems 回到 bottom edge，恢复 Problems → Output → Logs 的原生 tab 顺序；重置完成时收起内容面板，用户点击底部 tab 再次展开；
 - left/right/bottom 恢复 `WORKBENCH_EDGE_SIZES` 的当前默认值，left/right 展开，bottom 收起，保留原生 border 标签条；
 - main Logs nested FlexLayout 恢复七 domain 默认布局；
-- 优先恢复 reset 前顶部活动 editor，否则选择第一个 editor；无 editor 时显示 Project。
+- 优先恢复 reset 前顶部活动 editor，否则选择第一个 editor；没有 editor 时显示 Project。
 
 ### 7.3 Project replacement
 
@@ -350,7 +374,7 @@ value 为：
 }
 ```
 
-root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。恢复时重新施加宿主的浮动、关闭和拖放约束。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。
+root 与 nested.logs 独立验证和恢复。解析在原生 Model 标准化前检查树结构、稳定 ID、深度/数量限制、面板 metadata、组件匹配、singleton 和受限位置。root 的 Settings float 与主树共用 ID、singleton 和数量校验，浮动矩形必须包含有限坐标及正尺寸；nested.logs 不接受浮动子布局。恢复时重新施加宿主的浮动、关闭和拖放约束。底部包含 Problems、Output、Logs 之外面板的已保存 root 判为无效，沿用默认布局回退。
 
 窗口关闭在当前 hydration 和 FIFO idle 后 flush。Result 从持久化快照移除；Project replacement 另外清理 editor。用户关闭 Assistant 后，恢复不自动重建；显式重置会重新安装它。插件缺失状态仍由插件注册协调者处理。
 

@@ -23,6 +23,7 @@ export interface WorkbenchPanelInfo {
   readonly visible?: boolean;
   readonly location:
     | { readonly type: "grid" }
+    | { readonly type: "float"; readonly layoutId: string }
     | { readonly type: "edge"; readonly position: WorkbenchEdgePosition };
 }
 
@@ -37,6 +38,7 @@ export interface WorkbenchGroupInfo {
   readonly active: boolean;
   readonly location:
     | { readonly type: "grid" }
+    | { readonly type: "float"; readonly layoutId: string }
     | { readonly type: "edge"; readonly position: WorkbenchEdgePosition };
 }
 
@@ -118,7 +120,14 @@ export interface WorkbenchLayoutReadContract {
   readonly isReady: boolean;
   readonly isHydrated: boolean;
   whenHydrated(): Promise<{ readonly status: "hydrated" | "unbound" }>;
+  /** Committed changes to the panel/group/edge read projection, excluding geometry-only changes. */
   subscribe(listener: () => void): () => void;
+  subscribePersistence(listener: () => void): () => void;
+  subscribeActivePanel(listener: () => void): () => void;
+  subscribePanelSet(listener: () => void): () => void;
+  subscribePanel(panelInstanceId: string, listener: () => void): () => void;
+  getActiveSnapshot(): Readonly<{ revision: number; ready: boolean; hydrated: boolean }>;
+  getMutationRevision(): string;
   getSnapshot(): Readonly<{ revision: number; ready: boolean; hydrated: boolean }>;
   getPanel(panelInstanceId: string): WorkbenchPanelInfo | undefined;
   getActivePanel(): WorkbenchPanelInfo | undefined;

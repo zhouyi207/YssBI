@@ -1,3 +1,5 @@
+import { shareProjection } from "@/features/core/state/readProjection";
+import { freezePublishedValue } from "@/shared/types/deepReadonly";
 import { Actions, type Action } from "flexlayout-react";
 import { LayoutModelBinding } from "./layoutModelBinding";
 import { WorkbenchModelOperations, metadataEqual } from "./workbenchLayoutOperations";
@@ -8,6 +10,10 @@ import {
   type WorkbenchLayoutReadContract,
   type WorkbenchLayoutControlContract,
   type WorkbenchEditorPanelInfo,
+  type WorkbenchPanelInfo,
+  type WorkbenchGroupInfo,
+  type WorkbenchEdgeState,
+  type WorkbenchEdgePosition,
   type WorkbenchPanelCommitToken,
   type WorkbenchLayoutTransaction,
   type WorkbenchPublicationTransaction,
@@ -49,24 +55,101 @@ export function createWorkbenchLayoutRuntime(): {
   let hydrated = false;
   let revision = 0;
   let snapshot = { revision, ready: false, hydrated };
+  let activeSnapshot = snapshot;
+  type Projection = {
+    readonly panels: Readonly<Record<string, WorkbenchPanelInfo>>;
+    readonly groups: readonly WorkbenchGroupInfo[];
+    readonly edges: Readonly<Record<WorkbenchEdgePosition, WorkbenchEdgeState>>;
+  };
+  const positions = ["left", "right", "top", "bottom"] as const;
+  let projection: Projection = {
+    panels: {},
+    groups: [],
+    edges: Object.fromEntries(
+      positions.map((position) => [
+        position,
+        { position, exists: false, visible: false, collapsed: true },
+      ]),
+    ) as Record<WorkbenchEdgePosition, WorkbenchEdgeState>,
+  };
+  let activePanel: WorkbenchPanelInfo | undefined;
   let draining = false;
   const listeners = new Set<() => void>();
+  const persistenceListeners = new Set<() => void>();
+  const activeListeners = new Set<() => void>();
+  const panelSetListeners = new Set<() => void>();
+  const panelListeners = new Map<string, Set<() => void>>();
   const hydrationWaiters = new Set<(result: { status: "hydrated" | "unbound" }) => void>();
   const idleWaiters = new Set<() => void>();
   type Pending = { run: () => Promise<void>; reject: (error: unknown) => void };
   const queue: Pending[] = [];
   const stale = () => new WorkbenchLayoutError("layout_not_ready", { reason: "stale_binding" });
-  const publish = () => {
-    snapshot = { revision: ++revision, ready: Boolean(binding), hydrated };
-    for (const listener of [...listeners]) {
+  const ops = () => (binding ? new WorkbenchModelOperations(binding.getModel()) : undefined);
+  const subscribe = (subscribers: Set<() => void>, listener: () => void) => {
+    subscribers.add(listener);
+    return () => {
+      subscribers.delete(listener);
+    };
+  };
+  const notify = (subscribers: ReadonlySet<() => void>) => {
+    for (const listener of Array.from(subscribers)) {
       try {
         listener();
       } catch {
-        /* Isolate subscribers from layout commits. */
+        /* Observers cannot interrupt a committed layout change. */
       }
     }
   };
-  const ops = () => (binding ? new WorkbenchModelOperations(binding.getModel()) : undefined);
+  // Stable read records are derived only from Model commits and cannot write layout state.
+  const publish = () => {
+    const model = ops();
+    const next = shareProjection(projection, {
+      panels: Object.fromEntries(
+        (model?.listPanels() ?? []).map((panel) => [panel.panelInstanceId, panel]),
+      ),
+      groups: model?.listGroups() ?? [],
+      edges: Object.fromEntries(
+        positions.map((position) => [
+          position,
+          model?.getEdgeState(position) ?? {
+            position,
+            exists: false,
+            visible: false,
+            collapsed: true,
+          },
+        ]),
+      ) as Record<WorkbenchEdgePosition, WorkbenchEdgeState>,
+    });
+    const lifecycleChanged = snapshot.ready !== Boolean(binding) || snapshot.hydrated !== hydrated;
+    const nextActive = Object.values(next.panels).find((panel) => panel.active);
+    const semanticChanged = lifecycleChanged || next !== projection;
+    const activeChanged = lifecycleChanged || nextActive !== activePanel;
+    const panelSetChanged =
+      lifecycleChanged ||
+      Object.keys(next.panels).length !== Object.keys(projection.panels).length ||
+      Object.values(next.panels).some(
+        (panel) => projection.panels[panel.panelInstanceId]?.metadata !== panel.metadata,
+      );
+    const changedPanelListeners = new Set<() => void>();
+    for (const [id, subscribers] of panelListeners) {
+      const panel = next.panels[id];
+      const edgeChanged =
+        panel?.location.type === "edge" &&
+        next.edges[panel.location.position] !== projection.edges[panel.location.position];
+      if (lifecycleChanged || panel !== projection.panels[id] || edgeChanged) {
+        for (const subscriber of subscribers) changedPanelListeners.add(subscriber);
+      }
+    }
+    projection = freezePublishedValue(next);
+    activePanel = nextActive;
+    if (semanticChanged) snapshot = { revision: ++revision, ready: Boolean(binding), hydrated };
+    if (activeChanged) activeSnapshot = snapshot;
+    if (semanticChanged) notify(listeners);
+    if (activeChanged) notify(activeListeners);
+    if (panelSetChanged) notify(panelSetListeners);
+    notify(changedPanelListeners);
+    notify(persistenceListeners);
+  };
   const settleIdle = () => {
     if (!draining && !queue.length) {
       for (const resolve of idleWaiters) resolve();
@@ -141,39 +224,54 @@ export function createWorkbenchLayoutRuntime(): {
       hydrated
         ? Promise.resolve({ status: "hydrated" })
         : new Promise((resolve) => hydrationWaiters.add(resolve)),
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
+    subscribe: (listener) => subscribe(listeners, listener),
+    subscribePersistence: (listener) => subscribe(persistenceListeners, listener),
+    subscribeActivePanel: (listener) => subscribe(activeListeners, listener),
+    subscribePanelSet: (listener) => subscribe(panelSetListeners, listener),
+    subscribePanel: (id, listener) => {
+      let subscribers = panelListeners.get(id);
+      if (!subscribers) {
+        subscribers = new Set();
+        panelListeners.set(id, subscribers);
+      }
+      const unsubscribe = subscribe(subscribers, listener);
+      return () => {
+        unsubscribe();
+        if (subscribers.size === 0 && panelListeners.get(id) === subscribers)
+          panelListeners.delete(id);
+      };
     },
+    getActiveSnapshot: () => activeSnapshot,
+    getMutationRevision: () =>
+      `${generation}:${hydrationEpoch}:${hydrated}:${binding?.getSnapshot().revision ?? -1}`,
     getSnapshot: () => snapshot,
-    getPanel: (id) => ops()?.getPanel(id),
-    getActivePanel: () => ops()?.getActivePanel(),
+    getPanel: (id) => projection.panels[id],
+    getActivePanel: () => activePanel,
     getActiveEditorPanel: () => {
-      const panel = ops()?.getActivePanel();
+      const panel = activePanel;
       return panel?.metadata.role === "editor" ? (panel as WorkbenchEditorPanelInfo) : undefined;
     },
     getActiveEditorPanelInGroup: (id) => {
-      const model = ops();
-      const group = model?.listGroups().find((entry) => entry.groupId === id);
+      const group = projection.groups.find((entry) => entry.groupId === id);
       const panel = group?.activePanelInstanceId
-        ? model?.getPanel(group.activePanelInstanceId)
+        ? projection.panels[group.activePanelInstanceId]
         : undefined;
       return panel?.metadata.role === "editor" ? (panel as WorkbenchEditorPanelInfo) : undefined;
     },
-    listPanels: () => ops()?.listPanels() ?? [],
-    listGroups: () => ops()?.listGroups() ?? [],
-    listGroupPanels: (id) => ops()?.listGroupPanels(id) ?? [],
+    listPanels: () => Object.values(projection.panels),
+    listGroups: () => projection.groups,
+    listGroupPanels: (id) =>
+      Object.values(projection.panels).filter((panel) => panel.groupId === id),
     listEditorPanelsInGroup: (id) =>
-      (ops()?.listGroupPanels(id) ?? []).filter(
-        (panel): panel is WorkbenchEditorPanelInfo => panel.metadata.role === "editor",
-      ),
+      Object.values(projection.panels)
+        .filter((panel) => panel.groupId === id)
+        .filter((panel): panel is WorkbenchEditorPanelInfo => panel.metadata.role === "editor"),
     findEditorPanelsByResource: (resourceRef) =>
-      (ops()?.listPanels() ?? []).filter(
+      Object.values(projection.panels).filter(
         (panel): panel is WorkbenchEditorPanelInfo =>
           panel.metadata.role === "editor" && panel.metadata.resourceRef === resourceRef,
       ),
-    getEdgeState: (position) =>
-      ops()?.getEdgeState(position) ?? { position, exists: false, visible: false, collapsed: true },
+    getEdgeState: (position) => projection.edges[position],
   };
   const control: WorkbenchLayoutControlContract = {
     ensureCentralGroup: () => mutate((model) => model.ensureCentralGroup()),

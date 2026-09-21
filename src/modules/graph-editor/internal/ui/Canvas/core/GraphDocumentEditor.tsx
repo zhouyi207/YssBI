@@ -2,7 +2,7 @@ import { memo } from "react";
 import { GraphCanvasController } from "./GraphCanvasController";
 import { CanvasDropZone } from "./CanvasDropZone";
 import { useGraphRead } from "@/features/core/graph/read";
-import { useProjectProjection } from "@/features/application/project/projectProjection";
+import { useGraphLoadStatus } from "@/features/application/project/projectProjection";
 import { resourceKey } from "@/features/core/resource";
 import { useResourceRead } from "@/features/core/resource/read";
 import type { EditorPanelScope } from "@/modules/workbench/public";
@@ -29,8 +29,7 @@ export const GraphDocumentEditor = memo(function GraphDocumentEditor({
   useVisibleGraphPanel(isVisible, { groupId, graphPath });
   const { saving } = useGraphEditingUi(graphPath);
   const mode = isVisible && !saving ? "interactive" : "preview";
-  const { graphLoadStatus: graphLoads } = useProjectProjection();
-  const graphLoadStatus = graphLoads[graphPath];
+  const graphLoadStatus = useGraphLoadStatus(graphPath);
   const graphProjectionReady = useGraphRead((snapshot) =>
     Boolean(snapshot.graphEntities[graphPath]),
   );

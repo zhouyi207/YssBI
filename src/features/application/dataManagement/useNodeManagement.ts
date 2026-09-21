@@ -3,14 +3,13 @@ import { useTranslation } from "react-i18next";
 import type { NodeCreationDescriptor } from "@/features/domain/nodeCatalog/creationDescriptor";
 import { createNodeFromDescriptor } from "@/features/application/nodeCatalog/createNodeFromDescriptor";
 import { DEFAULT_LANGUAGE } from "@/shared/types/settings";
-import { useActiveGraphContext } from "@/features/application/editor/editorGroupContext";
 import {
   isEditorCommandTargetCurrent,
+  captureActiveEditorCommandTarget,
   type EditorCommandTarget,
 } from "@/features/application/editor/editorCommandFocus";
 
 export function useNodeManagement() {
-  const activeResourceRef = useActiveGraphContext()?.graphPath ?? null;
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
 
@@ -20,16 +19,15 @@ export function useNodeManagement() {
       position: { x: number; y: number },
       target?: EditorCommandTarget,
     ): Promise<boolean> => {
-      const graphPath = target?.resourceRef ?? activeResourceRef;
+      const currentTarget = target ?? captureActiveEditorCommandTarget();
       if (
-        !graphPath ||
-        (target &&
-          ((target.resourceKind !== "event" && target.resourceKind !== "function") ||
-            !isEditorCommandTargetCurrent(target)))
+        !currentTarget ||
+        (currentTarget.resourceKind !== "event" && currentTarget.resourceKind !== "function") ||
+        !isEditorCommandTargetCurrent(currentTarget)
       )
         return false;
       const outcome = await createNodeFromDescriptor({
-        graphPath,
+        graphPath: currentTarget.resourceRef,
         locale,
         descriptor,
         position,
@@ -37,7 +35,7 @@ export function useNodeManagement() {
       });
       return outcome.status === "applied";
     },
-    [activeResourceRef, locale],
+    [locale],
   );
 
   return { createNode };

@@ -1,6 +1,7 @@
-import { useLayoutPortSnapshot, workbenchLayoutRead } from "@/modules/workbench/public";
+import { useSyncExternalStore } from "react";
+import { workbenchLayoutRead } from "@/modules/workbench/public";
 
-/** Read the native central selection; hydration bookkeeping is not an active-tab fallback. */
+/** Read the native central selection; session bookkeeping is not an active-tab fallback. */
 export function getActiveGraphContext() {
   const panel = workbenchLayoutRead.getActiveEditorPanel();
   const kind = panel?.metadata.resourceKind;
@@ -9,6 +10,10 @@ export function getActiveGraphContext() {
 }
 
 export function useActiveGraphContext() {
-  useLayoutPortSnapshot(workbenchLayoutRead);
+  useSyncExternalStore(
+    workbenchLayoutRead.subscribeActivePanel,
+    workbenchLayoutRead.getActiveSnapshot,
+    workbenchLayoutRead.getActiveSnapshot,
+  );
   return getActiveGraphContext();
 }

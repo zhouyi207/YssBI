@@ -102,7 +102,6 @@ function click(element: Element): void {
 describe("SettingsView preferences", () => {
   let host: HTMLDivElement;
   let root: Root;
-  const onRequestClose = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,7 +121,7 @@ describe("SettingsView preferences", () => {
   });
 
   function render(): void {
-    act(() => root.render(<SettingsView onRequestClose={onRequestClose} />));
+    act(() => root.render(<SettingsView />));
   }
 
   async function flushPromises(): Promise<void> {
@@ -276,15 +275,4 @@ describe("SettingsView preferences", () => {
       expect(settings[action]).toHaveBeenCalledOnce();
     },
   );
-
-  it("closes after switching between immediately applied preference sections", async () => {
-    const confirm = vi.spyOn(uiStore, "confirm").mockResolvedValue(false);
-    render();
-    await openSection("appearance");
-    await openSection("ai");
-
-    click(host.querySelector('button[aria-label="settings.close"]')!);
-    expect(onRequestClose).toHaveBeenCalledOnce();
-    expect(confirm).not.toHaveBeenCalled();
-  });
 });

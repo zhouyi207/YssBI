@@ -1,1 +1,1 @@
-export { SettingsView } from "./internal/ui/SettingsView";
+export { SettingsView, SettingsWindowHeader } from "./internal/ui/SettingsView";

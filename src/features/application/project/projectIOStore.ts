@@ -1,3 +1,4 @@
+import { enforceGraphDocumentCacheLimit } from "@/features/application/editor/graphDocumentCachePolicy";
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
@@ -48,9 +49,13 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
   setCurrentPath: (path) => set({ currentPath: path || null }),
   loadGraph: async (graphPath) => {
     if (isGraphCachedInMemory(graphPath)) {
-      set((state) => ({
-        graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "ready" },
-      }));
+      set((state) =>
+        state.graphLoadStatus[graphPath] === "ready"
+          ? state
+          : {
+              graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: "ready" },
+            },
+      );
       return true;
     }
 
@@ -72,7 +77,7 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
         }
         return false;
       })
-      .then((loaded) => {
+      .then(async (loaded) => {
         const current = loadGraphInFlight.get(graphPath);
         if (current?.lifecycleToken === lifecycleToken && current.promise === pending) {
           set((state) => ({
@@ -81,6 +86,13 @@ export const useProjectIOStore = createBoundApplicationStore<ProjectIOStore>((se
               [graphPath]: loaded ? "ready" : "error",
             },
           }));
+          if (loaded) {
+            try {
+              await enforceGraphDocumentCacheLimit();
+            } catch {
+              logger.graph.warn("Graph cache cleanup failed", "ProjectIOStore");
+            }
+          }
         }
         return loaded;
       })

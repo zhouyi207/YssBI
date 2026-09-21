@@ -1,4 +1,3 @@
-export { useLayoutPortSnapshot } from "./useLayoutPortSnapshot";
 export {
   EMPTY_EDITOR_PANE_SELECTION,
   getPaneSelection,
@@ -32,7 +31,7 @@ export {
   WORKBENCH_ACTIVITY_GROUP_ID,
   WORKBENCH_EDGE_GROUP_IDS,
   WORKBENCH_EDGE_SIZES,
-  WORKBENCH_HOME_EDGE,
+  WORKBENCH_HOME_LOCATION,
   WORKBENCH_RESET_BUCKET_ORDER,
 } from "./workbenchLayoutDefaults";
 export { workbenchLayoutRead, type WorkbenchLayoutRead } from "./workbenchRead";

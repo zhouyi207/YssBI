@@ -52,11 +52,8 @@ vi.mock("@/features/core/graphSession/graphSessionStore", () => ({
     }),
   },
 }));
-vi.mock("./graphSessionLifecycle", () => ({
-  suspendEditorGroupGraphSession: vi.fn(async () => undefined),
-}));
 vi.mock("./graphPanelSession", () => ({
-  activateGraphPanelSession: vi.fn(async () => true),
+  focusGraphPanelSession: vi.fn(),
 }));
 vi.mock("./rightSidebarActions", () => ({
   detailFocusForEditorResource: (
@@ -72,7 +69,6 @@ vi.mock("./rightSidebarActions", () => ({
 import {
   activateCurrentEditorPanel,
   activateEditorPanelAndSyncSession,
-  focusEditorGroupSync,
   synchronizeActiveEditorPanel,
 } from "./activateEditorPanelAndSyncSession";
 
@@ -113,13 +109,8 @@ describe("editor panel FlexLayout synchronization", () => {
     useEditorStore.setState({});
   });
 
-  it("does not write to FlexLayout while passively focusing its already active group", () => {
-    expect(focusEditorGroupSync("group-a")).toBe(false);
-    expect(mocks.activate).not.toHaveBeenCalled();
-  });
-
-  it("synchronizes a FlexLayout activation with passive detail context only", async () => {
-    await synchronizeActiveEditorPanel(mocks.panels[0]);
+  it("synchronizes a FlexLayout activation with passive detail context only", () => {
+    synchronizeActiveEditorPanel(mocks.panels[0]);
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({
@@ -153,11 +144,11 @@ describe("editor panel FlexLayout synchronization", () => {
     });
   });
 
-  it("hydrates a restored chart with passive context and no FlexLayout write-back", async () => {
+  it("synchronizes a restored chart with passive context and no FlexLayout write-back", () => {
     mocks.panels = [editorPanel("chart-panel", "charts/Summary.yssbi-chart", true, "chart")];
     mocks.groups = [group("chart-panel")];
 
-    await expect(activateCurrentEditorPanel("group-a")).resolves.toBe(true);
+    expect(activateCurrentEditorPanel("group-a")).toBe(true);
 
     expect(mocks.activate).not.toHaveBeenCalled();
     expect(mocks.setDetailContext).toHaveBeenCalledWith({

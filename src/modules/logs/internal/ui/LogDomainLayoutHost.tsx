@@ -17,7 +17,7 @@ export interface LogDomainLayoutHostProps {
 export function LogDomainLayoutHost({ layout }: LogDomainLayoutHostProps) {
   const { t } = useTranslation();
   const [binding] = useState(logsLayoutRootBinding.create);
-  const model = useSyncExternalStore(binding.subscribe, binding.getModel, binding.getModel);
+  const model = useSyncExternalStore(binding.subscribeModel, binding.getModel, binding.getModel);
   const themeMode = useSettingsRead((state) => state.theme.mode);
   const isMainLayout = layout.kind === "main";
   useEffect(() => {

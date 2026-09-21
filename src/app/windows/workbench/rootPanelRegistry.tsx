@@ -1,3 +1,5 @@
+import { SettingsView, SettingsWindowHeader } from "@/modules/settings/public";
+import { requestCloseWorkbenchPanel } from "@/features/application/editor/workbenchPanelClose";
 import { AssistantPanel } from "@/modules/assistant/public";
 import { PluginsPanel, PluginViewFrame } from "@/modules/plugins/public";
 import { usePlugins } from "./integrations/PluginProvider";
@@ -68,6 +70,10 @@ const ResultDockPanel: RootPanelComponent = ({ params }) => {
   return metadata.role === "result" ? <ResultPanel reference={metadata.reference} /> : null;
 };
 
+export const floatingPanelHeader: RootPanelComponent = ({ panelInstanceId }) => (
+  <SettingsWindowHeader onRequestClose={() => void requestCloseWorkbenchPanel(panelInstanceId)} />
+);
+
 export const rootPanelRegistry = {
   EditorResource: RegisteredEditorPanel,
   Project: projectActivityPanelContribution,
@@ -77,6 +83,7 @@ export const rootPanelRegistry = {
   Plugin: PluginDockPanel,
   Details: DetailsPane,
   Assistant: AssistantPanel,
+  Settings: SettingsView,
   Result: ResultDockPanel,
   Logs: MainLogsDockPanel,
   Output: RunFailurePanel,

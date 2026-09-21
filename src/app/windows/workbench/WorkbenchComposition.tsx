@@ -9,7 +9,6 @@ import { useProjectionLocaleSync } from "@/features/application/editor/useProjec
 import { useAppInitialization, useProjectSync } from "@/features/application/initialization";
 import { WatermarkView } from "@/modules/graph-editor/public";
 import { NodeDocumentationModal } from "@/modules/node-catalog/public";
-import { SettingsView } from "@/modules/settings/public";
 import { WorkbenchWindow, type WorkbenchOverlayRegistry } from "@/modules/workbench/public";
 import { useApplicationThemeMode } from "@/features/application/settings/applicationSettings";
 import { LoadStatus } from "@/shared/types/ui";
@@ -20,14 +19,13 @@ import { panelActivationCoordinator } from "./integrations/panelActivationCoordi
 import { useWorkbenchCommandCoordinator } from "./integrations/workbenchCommandCoordinator";
 import { WorkbenchMenuContribution } from "./menuContributionRegistry";
 import { rootPanelTabRenderer } from "./rootPanelTabRenderer";
-import { rootPanelRegistry } from "./rootPanelRegistry";
+import { rootPanelRegistry, floatingPanelHeader } from "./rootPanelRegistry";
 import { WorkbenchStatusBarContribution } from "./statusBarContributionRegistry";
 import { PluginProvider } from "./integrations/PluginProvider";
 import { useResultPanelLeases } from "@/features/application/results/useResultPanelLeases";
 import { useUiIntents } from "@/features/application/presentation/useUiIntents";
 
 const overlayRegistry = {
-  settings: SettingsView,
   nodeDocumentation: NodeDocumentationModal,
 } satisfies WorkbenchOverlayRegistry;
 
@@ -55,6 +53,7 @@ function WorkbenchReadyComposition() {
     <PluginProvider>
       <WorkbenchWindow
         panelRegistry={rootPanelRegistry}
+        floatingHeaderComponent={floatingPanelHeader}
         tabComponent={rootPanelTabRenderer}
         dndCoordinator={dndCoordinator}
         onActiveEditorPanelChange={panelActivationCoordinator}

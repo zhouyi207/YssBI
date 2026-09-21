@@ -91,6 +91,7 @@ function panel(
               plugins: "Plugins",
               details: "Details",
               assistant: "Assistant",
+              settings: "Settings",
               logs: "Logs",
               output: "Output",
               problems: "Problems",
@@ -179,6 +180,7 @@ describe("project workbench lifecycle", () => {
         presentation: { kind: "inspector" },
       }),
       panel("details-old", { role: "view", viewId: "details" }),
+      panel("settings-stable", { role: "view", viewId: "settings" }),
       panel("project-stable", { role: "view", viewId: "project" }),
       panel("nodes-stable", { role: "view", viewId: "nodes" }),
       panel("commands-stable", { role: "view", viewId: "commands" }),
@@ -191,6 +193,7 @@ describe("project workbench lifecycle", () => {
 
     expect(lifecycleMocks.state.panels.map((candidate) => candidate.panelInstanceId)).toEqual([
       "details-old",
+      "settings-stable",
       "project-stable",
       "nodes-stable",
       "commands-stable",

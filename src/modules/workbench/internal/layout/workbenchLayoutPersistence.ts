@@ -10,7 +10,11 @@ import {
 import { isLayoutJson, isRecord } from "./layoutSerialization";
 import { isValidLogsLayout } from "./logsLayoutModel";
 import { createEmptyWorkbenchLayout } from "./workbenchLayoutDefaults";
-import { canMoveWorkbenchPanel, hasWorkbenchPanelCloseButton } from "./workbenchActivityGroup";
+import {
+  canMoveWorkbenchPanel,
+  hasWorkbenchPanelCloseButton,
+  canFloatWorkbenchPanel,
+} from "./workbenchActivityGroup";
 import {
   componentForWorkbenchMetadata,
   isWorkbenchPanelMetadata,
@@ -31,31 +35,39 @@ export interface ParsedPersistedWorkbenchLayout {
 
 export function isValidRootLayout(candidate: unknown): candidate is IJsonModel {
   const identities = new Set<string>();
-  return isLayoutJson(candidate, (tab, parent) => {
-    if (
-      !isRecord(tab.config) ||
-      Object.keys(tab.config).length !== 1 ||
-      !isWorkbenchPanelMetadata(tab.config.metadata)
-    )
-      return false;
-    const metadata = tab.config.metadata;
-    if (
-      componentForWorkbenchMetadata(metadata) !== tab.component ||
-      !canMoveWorkbenchPanel(metadata, parent)
-    )
-      return false;
-    const key =
-      metadata.role === "view"
-        ? "view:" + metadata.viewId
-        : metadata.role === "plugin"
-          ? "plugin:" + metadata.pluginId + ":" + metadata.viewId
-          : metadata.role === "result"
-            ? "result:" + metadata.reference.executionSessionId + ":" + metadata.reference.resultId
-            : undefined;
-    if (key && identities.has(key)) return false;
-    if (key) identities.add(key);
-    return true;
-  });
+  return isLayoutJson(
+    candidate,
+    (tab, parent, floating) => {
+      if (
+        !isRecord(tab.config) ||
+        Object.keys(tab.config).length !== 1 ||
+        !isWorkbenchPanelMetadata(tab.config.metadata)
+      )
+        return false;
+      const metadata = tab.config.metadata;
+      if (floating && !canFloatWorkbenchPanel(metadata)) return false;
+      if (
+        componentForWorkbenchMetadata(metadata) !== tab.component ||
+        !canMoveWorkbenchPanel(metadata, parent, floating ? "float" : undefined)
+      )
+        return false;
+      const key =
+        metadata.role === "view"
+          ? "view:" + metadata.viewId
+          : metadata.role === "plugin"
+            ? "plugin:" + metadata.pluginId + ":" + metadata.viewId
+            : metadata.role === "result"
+              ? "result:" +
+                metadata.reference.executionSessionId +
+                ":" +
+                metadata.reference.resultId
+              : undefined;
+      if (key && identities.has(key)) return false;
+      if (key) identities.add(key);
+      return true;
+    },
+    true,
+  );
 }
 function normalize(layout: IJsonModel): IJsonModel {
   const copy = structuredClone(layout);
@@ -65,13 +77,18 @@ function normalize(layout: IJsonModel): IJsonModel {
       if (child.type !== "tab") continue;
       const tab = child as IJsonTabNode;
       const metadata: unknown = tab.config?.metadata;
-      if (isWorkbenchPanelMetadata(metadata))
+      if (isWorkbenchPanelMetadata(metadata)) {
         tab.enableClose = hasWorkbenchPanelCloseButton(metadata);
+        tab.enableFloat = false;
+        tab.enableFloatIcon = false;
+        if (canFloatWorkbenchPanel(metadata)) tab.enableDrag = false;
+        tab.enablePopout = false;
+      }
     }
   };
   const normalizeTabsets = (node: IJsonRowNode | IJsonTabSetNode): void => {
     if (node.type === "tabset") {
-      // Older layouts pinned empty groups with per-node overrides of these defaults.
+      // Host policy requires empty groups to be reclaimed regardless of per-node overrides.
       const tabset = node as IJsonTabSetNode;
       delete tabset.enableClose;
       delete tabset.enableDeleteWhenEmpty;
@@ -83,6 +100,17 @@ function normalize(layout: IJsonModel): IJsonModel {
     }
   };
   normalizeTabsets(copy.layout);
+  for (const layout of Object.values(copy.subLayouts ?? {})) {
+    normalizeTabsets(layout.layout);
+    for (const group of layout.layout.children ?? []) {
+      if (group.type === "tabset") {
+        const tabset = group as IJsonTabSetNode;
+        tabset.enableTabStrip = false;
+        tabset.enableDrag = false;
+        tabset.enableDivide = false;
+      }
+    }
+  }
   const borders = copy.borders ?? [];
   for (const border of createEmptyWorkbenchLayout().borders ?? []) {
     const existing = borders.find((candidate) => candidate.location === border.location);

@@ -38,6 +38,7 @@ describe("workbench panel metadata", () => {
       { metadata: { role: "view", viewId: "nodes" }, component: "Nodes" },
       { metadata: { role: "view", viewId: "commands" }, component: "Commands" },
       { metadata: { role: "view", viewId: "details" }, component: "Details" },
+      { metadata: { role: "view", viewId: "settings" }, component: "Settings" },
       { metadata: { role: "view", viewId: "logs" }, component: "Logs" },
       { metadata: { role: "view", viewId: "output" }, component: "Output" },
       { metadata: { role: "view", viewId: "problems" }, component: "Problems" },
@@ -106,7 +107,7 @@ describe("workbench panel metadata", () => {
         pinned: true,
       },
       { role: "view", viewId: "result" },
-      { role: "view", viewId: "settings" },
+      { role: "view", viewId: "unknown" },
       { role: "unknown", viewId: "obsolete-view" },
       {
         role: "result",

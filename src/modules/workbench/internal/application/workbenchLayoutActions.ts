@@ -28,6 +28,7 @@ const VIEW_TITLE_KEYS = {
   plugins: "activityBar.plugins",
   details: "panel.details",
   assistant: "panel.assistant",
+  settings: "settings.title",
   logs: "panel.logs",
   output: "panel.output",
   problems: "panel.problems",
@@ -265,12 +266,12 @@ export async function resetWorkbenchLayout(): Promise<void> {
         before.map((panel) => panel.panelInstanceId),
       ).map((panelId) => beforeById.get(panelId)!);
 
+      const centralPanels = ordered.filter((panel) => panel.metadata.role === "editor");
       const physicallyActive = tx.getActivePanel();
-      const editorToRestore =
-        (physicallyActive?.metadata.role === "editor" ? physicallyActive : undefined) ??
-        ordered.find((panel) => panel.metadata.role === "editor");
-
-      const editors = ordered.filter((panel) => panel.metadata.role === "editor");
+      const panelToRestore =
+        centralPanels.find(
+          (panel) => panel.panelInstanceId === physicallyActive?.panelInstanceId,
+        ) ?? centralPanels[0];
       const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
         tx.ensureView(viewRequest(viewId)),
       );
@@ -298,10 +299,10 @@ export async function resetWorkbenchLayout(): Promise<void> {
         tx.listGroups().find((group) => group.location.type === "grid")?.groupId ??
         tx.ensureCentralGroup();
 
-      const firstEditor = editors[0];
-      if (firstEditor) {
+      const firstCentralPanel = centralPanels[0];
+      if (firstCentralPanel) {
         tx.move({
-          panelInstanceId: firstEditor.panelInstanceId,
+          panelInstanceId: firstCentralPanel.panelInstanceId,
           groupId: centralGroupId,
           index: 0,
         });
@@ -335,7 +336,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
         });
       }
 
-      for (const [offset, panel] of editors.slice(1).entries()) {
+      for (const [offset, panel] of centralPanels.slice(1).entries()) {
         tx.move({
           panelInstanceId: panel.panelInstanceId,
           groupId: centralGroupId,
@@ -355,7 +356,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const project = activityPanels.find(
         (panel) => panel.metadata.role === "view" && panel.metadata.viewId === "project",
       );
-      tx.activate(editorToRestore?.panelInstanceId ?? project?.panelInstanceId ?? "");
+      tx.activate(panelToRestore?.panelInstanceId ?? project?.panelInstanceId ?? "");
     });
     // Hide the bottom strip after FlexLayout settles panel activation during reset.
     await workbenchLayoutControl.setEdgeCollapsed("bottom", true);

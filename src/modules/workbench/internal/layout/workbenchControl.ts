@@ -7,7 +7,6 @@ import type {
   OpenEditorRequest,
   SplitWorkbenchPanelRequest,
   UpsertResultRequest,
-  WorkbenchLayoutControlContract,
   WorkbenchEdgePosition,
   WorkbenchPanelInfo,
 } from "./workbenchTypes";
@@ -29,5 +28,3 @@ export interface WorkbenchLayoutControl {
 }
 
 export const workbenchLayoutControl: WorkbenchLayoutControl = workbenchLayoutRuntime.control;
-
-export type WorkbenchLayoutControlContractType = WorkbenchLayoutControlContract;

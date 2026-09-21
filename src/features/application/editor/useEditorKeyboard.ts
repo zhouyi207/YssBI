@@ -29,6 +29,7 @@ import { workbenchLayoutRead } from "@/modules/workbench/public";
 import { requestCloseWorkbenchPanel } from "./workbenchPanelClose";
 import {
   toggleActivityWorkbenchGroup,
+  revealWorkbenchView,
   toggleBottomWorkbenchGroup,
 } from "@/modules/workbench/public";
 
@@ -117,6 +118,12 @@ export function useEditorKeyboard(commands: WorkbenchCommandCapability): void {
           event.preventDefault();
           clearEditorGroupGraphSelection(target.groupId);
         }
+        return;
+      }
+
+      if (isControlKey && key === ",") {
+        event.preventDefault();
+        void revealWorkbenchView("settings");
         return;
       }
 

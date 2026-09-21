@@ -21,11 +21,31 @@ import { i18n, type AppLanguage } from "@/app/i18n";
 import { formatInlineUserError } from "@/features/application/userErrorSummary";
 import "./settings.css";
 
-interface SettingsViewProps {
-  onRequestClose?: () => void;
+export function SettingsWindowHeader({ onRequestClose }: { readonly onRequestClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="settings-header">
+      <div className="settings-title">
+        <VscSettingsGear aria-hidden="true" />
+        <h1>{t("settings.title")}</h1>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="settings-close"
+        aria-label={t("settings.close")}
+        title={t("settings.close")}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={onRequestClose}
+      >
+        <VscClose aria-hidden="true" />
+      </Button>
+    </div>
+  );
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) => {
+export const SettingsView: React.FC = () => {
   const { t } = useTranslation();
   const ai = useSettingsRead((s) => s.ai);
   const appearance = useSettingsRead((s) => s.appearance);
@@ -147,11 +167,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
 
   if (isLoading) {
     return (
-      <div className="settings-view settings-loading" role="status" aria-busy="true">
-        <div className="text-sm text-muted-foreground">{t("settings.loading")}</div>
-        <div aria-hidden="true" className="settings-skeleton" />
-        <div aria-hidden="true" className="settings-skeleton" />
-        <div aria-hidden="true" className="settings-skeleton" />
+      <div className="settings-view">
+        <div
+          className="settings-loading flex min-h-0 flex-1 flex-col"
+          role="status"
+          aria-busy="true"
+        >
+          <div className="text-sm text-muted-foreground">{t("settings.loading")}</div>
+          <div aria-hidden="true" className="settings-skeleton" />
+          <div aria-hidden="true" className="settings-skeleton" />
+          <div aria-hidden="true" className="settings-skeleton" />
+        </div>
       </div>
     );
   }
@@ -275,25 +301,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
 
   return (
     <div className="settings-view">
-      <div className="settings-header">
-        <div className="settings-title">
-          <VscSettingsGear aria-hidden="true" />
-          <h1>{t("settings.title")}</h1>
-        </div>
-        {onRequestClose && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={t("settings.close")}
-            className="settings-close"
-            onClick={onRequestClose}
-          >
-            <VscClose aria-hidden="true" />
-          </Button>
-        )}
-      </div>
-
       {resetAllError ? (
         <div className="shrink-0 px-6 pt-4">
           <Alert data-settings-reset-all-error variant="destructive">
@@ -303,7 +310,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose }) =>
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden max-[720px]:flex-col">
+      <div className="settings-body">
         {/* Sidebar Navigation */}
         <aside className="settings-sidebar">
           <div className="settings-search">

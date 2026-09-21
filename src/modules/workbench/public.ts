@@ -2,7 +2,6 @@ export type { EditorPanelScope, EditorRendererRegistry } from "./internal/layout
 export { EditorResourcePanel } from "./internal/layout/EditorResourcePanel";
 export * from "./internal/layout/index";
 export { DEFAULT_LOGS_LAYOUT, LOGS_LAYOUT_COMPONENT_ID } from "./internal/layout/logsLayoutModel";
-export type { LogsLayoutPanelParams } from "./internal/layout/logsLayoutModel";
 export type { WorkbenchPanelCommitToken } from "./internal/layout/workbenchTypes";
 export { canRemoveWorkbenchPanel } from "./internal/layout/workbenchActivityGroup";
 export type {

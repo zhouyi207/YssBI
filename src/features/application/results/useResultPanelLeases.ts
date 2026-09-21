@@ -11,7 +11,7 @@ export function useResultPanelLeases() {
         .listPanels()
         .flatMap((panel) => (panel.metadata.role === "result" ? [panel.metadata.leaseId] : []));
     });
-    const unsubscribe = workbenchLayoutRead.subscribe(resultLeases.reconcile);
+    const unsubscribe = workbenchLayoutRead.subscribePanelSet(resultLeases.reconcile);
     return () => {
       unsubscribe();
       unbind();

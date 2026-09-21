@@ -1,97 +1,48 @@
-import { workbenchLayoutControl } from "@/modules/workbench/public";
-import { workbenchLayoutRead, type WorkbenchEditorPanelInfo } from "@/modules/workbench/public";
+import {
+  workbenchLayoutControl,
+  workbenchLayoutRead,
+  type WorkbenchEditorPanelInfo,
+} from "@/modules/workbench/public";
 import { useGraphSessionStore } from "@/features/core/graphSession/graphSessionStore";
-
-import { activateGraphPanelSession } from "./graphPanelSession";
-import { suspendEditorGroupGraphSession } from "./graphSessionLifecycle";
+import { focusGraphPanelSession } from "./graphPanelSession";
 import { detailFocusForEditorResource, setPassiveDetailContext } from "./rightSidebarActions";
 
-let editorGroupSessionChain: Promise<void> = Promise.resolve();
 let latestPanelActivationRequest = 0;
-const pendingGroupSuspensions = new Set<string>();
-
 type ActiveEditorPanelTarget = Pick<
   WorkbenchEditorPanelInfo,
   "panelInstanceId" | "groupId" | "metadata"
 >;
 
-function scheduleSuspendPreviousGroup(prevGroupId: string): void {
-  if (pendingGroupSuspensions.has(prevGroupId)) return;
-  pendingGroupSuspensions.add(prevGroupId);
-  editorGroupSessionChain = editorGroupSessionChain
-    .then(() => suspendEditorGroupGraphSession(prevGroupId))
-    .catch(() => undefined)
-    .finally(() => pendingGroupSuspensions.delete(prevGroupId));
-}
-
-function groupContainsEditor(groupId: string): boolean {
-  return workbenchLayoutRead.listEditorPanelsInGroup(groupId).length > 0;
-}
-
-/** Synchronize application session focus without writing layout focus back to FlexLayout. */
-export function focusEditorGroupSync(groupId: string): boolean {
-  const groupExists = workbenchLayoutRead.listGroups().some((group) => group.groupId === groupId);
-  if (!groupExists || !groupContainsEditor(groupId)) return false;
-
-  const previousGroupId = useGraphSessionStore.getState().getFocusedGroupId();
-  if (previousGroupId && previousGroupId !== groupId) {
-    scheduleSuspendPreviousGroup(previousGroupId);
+/** Model selection drives focus and Details; it never loads or unloads a graph. */
+export function synchronizeActiveEditorPanel(panel: ActiveEditorPanelTarget): boolean {
+  const current = workbenchLayoutRead.getPanel(panel.panelInstanceId);
+  if (
+    current?.metadata.role !== "editor" ||
+    current.groupId !== panel.groupId ||
+    current.metadata.resourceRef !== panel.metadata.resourceRef
+  )
+    return false;
+  const { metadata, groupId } = current;
+  setPassiveDetailContext(
+    detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
+  );
+  if (metadata.resourceKind === "event" || metadata.resourceKind === "function")
+    focusGraphPanelSession(metadata.resourceRef, groupId);
+  else {
+    const sessions = useGraphSessionStore.getState();
+    const focusedGroup = sessions.getFocusedGroupId();
+    if (focusedGroup) sessions.clearFocusedSession(focusedGroup);
   }
-  return previousGroupId !== groupId;
+  return true;
 }
 
-export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
-  await editorGroupSessionChain;
-  return activateCurrentEditorPanel(groupId);
-}
-
-async function synchronizePanelSession(
-  request: number,
-  panel: ActiveEditorPanelTarget,
-): Promise<boolean> {
-  const { groupId, metadata } = panel;
-  if (metadata.resourceKind === "event" || metadata.resourceKind === "function") {
-    setPassiveDetailContext(
-      detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
-    );
-    const loaded = await activateGraphPanelSession(metadata.resourceRef, groupId);
-    if (!loaded || request !== latestPanelActivationRequest) return false;
-    return true;
-  }
-
-  if (metadata.resourceKind === "chart" || metadata.resourceKind === "database") {
-    setPassiveDetailContext(
-      detailFocusForEditorResource(metadata.resourceKind, metadata.resourceRef),
-    );
-    const sessionStore = useGraphSessionStore.getState();
-    if (sessionStore.getFocusedGroupId() === groupId) {
-      sessionStore.clearFocusedSession(groupId);
-    }
-    return true;
-  }
-  return false;
-}
-
-/** Synchronize a user-originated FlexLayout activation without writing back to FlexLayout. */
-export async function synchronizeActiveEditorPanel(
-  panel: ActiveEditorPanelTarget,
-): Promise<boolean> {
-  const request = ++latestPanelActivationRequest;
-  focusEditorGroupSync(panel.groupId);
-  await editorGroupSessionChain;
-  if (request !== latestPanelActivationRequest) return false;
-  return synchronizePanelSession(request, panel);
-}
-
-/** Activate an application-requested editor, then synchronize its business session. */
+/** Application requests physical selection; all focus updates use the same idempotent coordinator. */
 export async function activateEditorPanelAndSyncSession(
   panel: WorkbenchEditorPanelInfo,
 ): Promise<boolean> {
   const request = ++latestPanelActivationRequest;
-  focusEditorGroupSync(panel.groupId);
-  await editorGroupSessionChain;
+  await Promise.resolve();
   if (request !== latestPanelActivationRequest) return false;
-
   const current = workbenchLayoutRead.getPanel(panel.panelInstanceId);
   if (current?.metadata.role !== "editor" || current.groupId !== panel.groupId) return false;
   if (
@@ -100,15 +51,11 @@ export async function activateEditorPanelAndSyncSession(
   )
     return false;
   if (request !== latestPanelActivationRequest) return false;
-  return synchronizePanelSession(request, { ...current, metadata: current.metadata });
+  return synchronizeActiveEditorPanel({ ...current, metadata: current.metadata });
 }
 
-export async function activateCurrentEditorPanel(groupId: string): Promise<boolean> {
+export function activateCurrentEditorPanel(groupId: string): boolean {
   const active = workbenchLayoutRead.getActiveEditorPanelInGroup(groupId);
-  if (!active) {
-    useGraphSessionStore.getState().clearFocusedSession(groupId);
-    return false;
-  }
-  const request = ++latestPanelActivationRequest;
-  return synchronizePanelSession(request, active);
+  if (!active) return false;
+  return synchronizeActiveEditorPanel(active);
 }

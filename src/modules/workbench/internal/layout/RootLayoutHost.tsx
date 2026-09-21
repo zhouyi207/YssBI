@@ -30,17 +30,17 @@ import type {
   RootPanelRegistry,
   RootPanelTabComponent,
   RootPanelProps,
+  RootPanelComponent,
 } from "./panelContribution";
 
 export interface RootLayoutDndCoordinator {
   readonly onDragStart: (event: DragStartEvent) => void;
   readonly onDragEnd: (event: DragEndEvent) => void;
 }
-export type RootPanelActivationCoordinator = (
-  panel: RootPanelActivationTarget,
-) => void | Promise<void>;
+export type RootPanelActivationCoordinator = (panel: RootPanelActivationTarget) => void;
 export interface RootLayoutHostProps {
   readonly panelRegistry: RootPanelRegistry;
+  readonly floatingHeaderComponent?: RootPanelComponent;
   readonly tabComponent: RootPanelTabComponent;
   readonly dndCoordinator: RootLayoutDndCoordinator;
   readonly onActiveEditorPanelChange: RootPanelActivationCoordinator;
@@ -96,7 +96,11 @@ const PanelContent = memo(function PanelContent({
       return previous;
     };
   }, [id]);
-  const props = useSyncExternalStore(workbenchLayoutRead.subscribe, selectPanel, selectPanel);
+  const subscribePanel = useCallback(
+    (listener: () => void) => workbenchLayoutRead.subscribePanel(id, listener),
+    [id],
+  );
+  const props = useSyncExternalStore(subscribePanel, selectPanel, selectPanel);
   if (!props) return null;
   const component = workbenchLayoutRead.getPanel(id)?.component;
   if (!component) return null;
@@ -132,6 +136,7 @@ export const RootLayoutHost = memo(
     (
       {
         panelRegistry,
+        floatingHeaderComponent: FloatingHeader,
         tabComponent: TabComponent,
         dndCoordinator,
         onActiveEditorPanelChange,
@@ -145,14 +150,18 @@ export const RootLayoutHost = memo(
       ref,
     ) => {
       const [binding] = useState(workbenchLayoutRootBinding.create);
-      const model = useSyncExternalStore(binding.subscribe, binding.getModel, binding.getModel);
+      const model = useSyncExternalStore(
+        binding.subscribeModel,
+        binding.getModel,
+        binding.getModel,
+      );
       const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
       );
       useWorkbenchLayout(binding);
       useEffect(() => {
         let lastTarget: string | undefined;
-        return workbenchLayoutRead.subscribe(() => {
+        return workbenchLayoutRead.subscribeActivePanel(() => {
           if (!workbenchLayoutRead.isHydrated || !workbenchLayoutController.projectResourcesReady)
             return;
           const panel = workbenchLayoutRead.getActivePanel();
@@ -167,7 +176,7 @@ export const RootLayoutHost = memo(
           ]);
           if (lastTarget === key) return;
           lastTarget = key;
-          void onActiveEditorPanelChange({ ...panel, metadata: panel.metadata });
+          onActiveEditorPanelChange({ ...panel, metadata: panel.metadata });
         });
       }, [onActiveEditorPanelChange]);
       const factory = useCallback(
@@ -189,7 +198,30 @@ export const RootLayoutHost = memo(
             <Layout
               model={model}
               factory={factory}
+              renderFloatHeader={
+                FloatingHeader
+                  ? (layout) => {
+                      let tab: TabNode | undefined;
+                      model.visitLayoutNodes(layout.getLayoutId(), (node) => {
+                        if (node instanceof TabNode) tab = node;
+                      });
+                      const props = tab ? panelProps(tab) : undefined;
+                      return props ? (
+                        <div
+                          className="w-full"
+                          data-panel-instance-id={props.panelInstanceId}
+                          onFocusCapture={() =>
+                            workbenchLayoutRootBinding.activatePanel(props.panelInstanceId)
+                          }
+                        >
+                          <FloatingHeader {...props} />
+                        </div>
+                      ) : undefined;
+                    }
+                  : undefined
+              }
               supportsPopout={false}
+              constrainFloatPanels
               realtimeResize
               invalidateTabContentOnParentRender={false}
               onAction={(action) => {

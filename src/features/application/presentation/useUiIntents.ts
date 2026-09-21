@@ -1,3 +1,4 @@
+import { useProjectIOStore } from "@/features/application/project/projectIOStore";
 import { useEffect, useState } from "react";
 import { getI18n } from "react-i18next";
 import {
@@ -33,6 +34,8 @@ async function execute(intent: UiIntent, current: () => boolean): Promise<boolea
       if (!meta) return false;
       const panel = await openGraphInEditor(intent.graphPath, meta.name, meta.type);
       if (!panel || !current()) return false;
+      if (!(await useProjectIOStore.getState().loadGraph(intent.graphPath)) || !current())
+        return false;
       // A Harness edit notification can still be in flight when its focus request arrives.
       if (
         !(await hydrateGraphProjection(intent.graphPath, currentProjectionLocale())) ||

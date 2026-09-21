@@ -1,4 +1,4 @@
-import { bootstrapEditorGraphSession } from "@/features/application/editor/bootstrapEditorGraphSession";
+import { synchronizeActiveEditorPanel } from "@/features/application/editor/activateEditorPanelAndSyncSession";
 import { pruneEditorPanelsForMissingResources } from "@/features/application/editor/pruneEditorPanels";
 import { synchronizeVisibleGraphPanels } from "@/features/application/editor/synchronizeVisibleGraphPanel";
 import { workbenchLayoutController } from "@/modules/workbench/public";
@@ -14,7 +14,7 @@ export function synchronizeProjectPresentation(): void {
     if (!context.isCurrent()) return;
     const active = workbenchLayoutRead.getActiveEditorPanel();
     if (active?.metadata.role === "editor") {
-      await bootstrapEditorGraphSession(active.groupId);
+      synchronizeActiveEditorPanel(active);
     }
   });
 }

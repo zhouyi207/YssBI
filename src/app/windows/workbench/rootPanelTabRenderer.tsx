@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 
 import { buildEditorPanelTabMenu } from "@/features/application/editor/editorPanelTabMenu";
@@ -8,7 +8,6 @@ import { useEditorPanelDirty } from "@/features/application/editor/useEditorPane
 import {
   RootPanelTabRenderer,
   showWorkbenchLayoutError,
-  useLayoutPortSnapshot,
   workbenchLayoutControl,
   workbenchLayoutRead,
   type RootPanelTabActions,
@@ -20,12 +19,21 @@ const WorkbenchRootPanelTabRenderer: RootPanelTabComponent = (props) => {
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const dirty = useEditorPanelDirty(metadata.role === "editor" ? metadata : null);
-  const contentCollapsed = useLayoutPortSnapshot(workbenchLayoutRead, () => {
+  const subscribe = useCallback(
+    (listener: () => void) => workbenchLayoutRead.subscribePanel(props.panelInstanceId, listener),
+    [props.panelInstanceId],
+  );
+  const getContentCollapsed = () => {
     const panel = workbenchLayoutRead.getPanel(props.panelInstanceId);
     return panel?.location.type === "edge"
       ? workbenchLayoutRead.getEdgeState(panel.location.position).collapsed
       : undefined;
-  });
+  };
+  const contentCollapsed = useSyncExternalStore(
+    subscribe,
+    getContentCollapsed,
+    getContentCollapsed,
+  );
 
   const requestClose = useCallback((target: WorkbenchTabTarget) => {
     if (target.metadata.role === "editor") void requestCloseEditorPanel(target.panelInstanceId);

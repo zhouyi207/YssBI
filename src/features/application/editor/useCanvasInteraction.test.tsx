@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
     resourceRef: string;
     resourceKind: "event";
   },
-  prepare: vi.fn(),
+  focusGroup: vi.fn(),
   selection: { nodeIds: new Set<string>(), connectionIds: new Set<string>() },
   setConnections: vi.fn(),
 }));
@@ -26,7 +26,9 @@ vi.mock("./editorCommandFocus", () => ({
   captureEditorCommandTarget: () => mocks.target,
   isEditorCommandTargetCurrent: (target: unknown) => target === mocks.target,
 }));
-vi.mock("./editorGroupInteraction", () => ({ prepareEditorGroupForInteraction: mocks.prepare }));
+vi.mock("./activateEditorPanelAndSyncSession", () => ({
+  activateCurrentEditorPanel: mocks.focusGroup,
+}));
 vi.mock("@/modules/workbench/public", () => ({
   getEditorGroupGraphSelection: () => mocks.selection,
   updateEditorGroupSelectedConnectionIds: mocks.setConnections,

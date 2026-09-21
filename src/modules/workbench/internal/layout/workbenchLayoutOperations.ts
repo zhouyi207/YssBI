@@ -15,10 +15,13 @@ import {
   canSplitWorkbenchPanel,
   hasWorkbenchPanelCloseButton,
 } from "./workbenchActivityGroup";
-import { WORKBENCH_HOME_EDGE, WORKBENCH_EDGE_SIZES } from "./workbenchLayoutDefaults";
+import {
+  WORKBENCH_HOME_LOCATION,
+  WORKBENCH_EDGE_SIZES,
+  SETTINGS_FLOAT_RECT,
+} from "./workbenchLayoutDefaults";
 import {
   componentForWorkbenchMetadata,
-  isWorkbenchActivityMetadata,
   isWorkbenchPanelMetadata,
   isWorkbenchPersistentViewMetadata,
   type WorkbenchPanelMetadata,
@@ -67,12 +70,14 @@ export function panelIsVisible(tab: TabNode): boolean {
     (parent instanceof TabSetNode || parent instanceof BorderNode) &&
     parent.getSelectedNode() === tab &&
     (!(parent instanceof BorderNode) || parent.isShowing()) &&
-    (!tab.getModel().getMaximizedTabset() ||
+    (!tab.getModel().getMaximizedTabset(tab.getLayoutId()) ||
       parent instanceof BorderNode ||
-      tab.getModel().getMaximizedTabset() === parent)
+      tab.getModel().getMaximizedTabset(tab.getLayoutId()) === parent)
   );
 }
 function nodeLocation(group: TabSetNode | BorderNode): WorkbenchGroupInfo["location"] {
+  if (group.getLayoutId() !== Model.MAIN_LAYOUT_ID)
+    return { type: "float", layoutId: group.getLayoutId() };
   return group instanceof BorderNode
     ? { type: "edge", position: group.getLocation().getName() as WorkbenchEdgePosition }
     : { type: "grid" };
@@ -172,8 +177,9 @@ export class WorkbenchModelOperations {
       component: componentForWorkbenchMetadata(metadata),
       config: { metadata },
       enableClose: hasWorkbenchPanelCloseButton(metadata),
+      enableFloat: false,
+      enableFloatIcon: false,
       enableDrag: !isWorkbenchPersistentViewMetadata(metadata),
-      ...(isWorkbenchActivityMetadata(metadata) ? { enableFloat: false, enablePopout: false } : {}),
     };
     this.model.doAction(
       Actions.addTab(json, this.group(groupId).getId(), DockLocation.CENTER, index, false),
@@ -191,10 +197,47 @@ export class WorkbenchModelOperations {
       this.reveal(existing.panelInstanceId);
       return this.getPanel(existing.panelInstanceId)!;
     }
+    if (request.viewId === "settings") {
+      const id = crypto.randomUUID();
+      this.model.doAction(
+        Actions.createSubLayout(
+          {
+            type: "row",
+            children: [
+              {
+                type: "tabset",
+                enableTabStrip: false,
+                enableDrag: false,
+                enableDivide: false,
+                children: [
+                  {
+                    type: "tab",
+                    id,
+                    name: request.title,
+                    component: "Settings",
+                    config: { metadata: { role: "view", viewId: "settings" } },
+                    enableDrag: false,
+                    enableFloat: false,
+                    enableFloatIcon: false,
+                    enableClose: true,
+                  },
+                ],
+              },
+            ],
+          },
+          { ...SETTINGS_FLOAT_RECT },
+          "float",
+        ),
+      );
+      this.activate(id);
+      const panel = this.getPanel(id);
+      if (!panel) throw new WorkbenchLayoutError("panel_open_failed");
+      return panel;
+    }
     return this.add(
       { role: "view", viewId: request.viewId },
       request.title,
-      "border_" + WORKBENCH_HOME_EDGE[request.viewId],
+      "border_" + WORKBENCH_HOME_LOCATION[request.viewId],
     );
   };
   ensurePluginView = (request: EnsurePluginViewRequest): WorkbenchPanelInfo => {
@@ -259,7 +302,11 @@ export class WorkbenchModelOperations {
       this.reveal(existing.panelInstanceId);
       return this.getPanel(existing.panelInstanceId)!;
     }
-    return this.add({ role: "result", ...request }, request.title, "border_right");
+    return this.add(
+      { role: "result", ...request },
+      request.title,
+      "border_" + WORKBENCH_HOME_LOCATION.result,
+    );
   };
   activate = (id: string): boolean => {
     const tab = this.tab(id);
@@ -273,8 +320,10 @@ export class WorkbenchModelOperations {
       actions.push(Actions.selectTab(id));
     if (parent instanceof BorderNode && !parent.isShowing())
       actions.push(Actions.updateNodeAttributes(parent.getId(), { show: true }));
-    if (parent instanceof TabSetNode && this.model.getActiveTabset() !== parent)
-      actions.push(Actions.setActiveTabset(parent.getId()));
+    if (parent instanceof TabSetNode && this.model.getActiveTabset(parent.getLayoutId()) !== parent)
+      actions.push(Actions.setActiveTabset(parent.getId(), parent.getLayoutId()));
+    if (tab.getLayoutId() !== Model.MAIN_LAYOUT_ID)
+      actions.push(Actions.movePopoutToFront(tab.getLayoutId()));
     if (actions.length) this.model.doAction(Actions.group(actions));
     return true;
   };
@@ -283,7 +332,17 @@ export class WorkbenchModelOperations {
     const tab = this.tab(request.panelInstanceId);
     const metadata = readMetadata(tab);
     const target = this.group(request.groupId);
-    if (!tab || !metadata || !canMoveWorkbenchPanel(metadata, target.getId())) return false;
+    const location = nodeLocation(target);
+    if (
+      !tab ||
+      !metadata ||
+      !canMoveWorkbenchPanel(
+        metadata,
+        target.getId(),
+        location.type === "edge" ? location.position : location.type,
+      )
+    )
+      return false;
     const index =
       request.index ?? (tab.getParent() === target ? target.getTabNodes().indexOf(tab) : -1);
     if (tab.getParent() !== target || index !== target.getTabNodes().indexOf(tab))
@@ -301,6 +360,7 @@ export class WorkbenchModelOperations {
       !tab ||
       !metadata ||
       !(target instanceof TabSetNode) ||
+      target.getLayoutId() !== Model.MAIN_LAYOUT_ID ||
       !canSplitWorkbenchPanel(metadata, target.getId())
     )
       return false;

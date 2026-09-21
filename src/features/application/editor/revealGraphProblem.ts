@@ -86,12 +86,9 @@ export async function revealGraphProblem(
   if (nodeId) await revealDetails({ kind: "node", id: nodeId, graphPath });
   if (!panel) return true;
   if (location.kind !== "parameter") await workbenchLayoutControl.activate(panel.panelInstanceId);
-  const revision = workbenchLayoutRead.getSnapshot().revision;
+  const revision = workbenchLayoutRead.getMutationRevision();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  if (
-    !isCurrentProjectIdentity(identity) ||
-    workbenchLayoutRead.getSnapshot().revision !== revision
-  )
+  if (!isCurrentProjectIdentity(identity) || workbenchLayoutRead.getMutationRevision() !== revision)
     return false;
   const canvas = document.querySelector<HTMLElement>(
     `[data-editor-panel-instance-id="${CSS.escape(panel.panelInstanceId)}"]`,

@@ -23,7 +23,7 @@ import { isGraphSaving } from "@/features/core/graphEditing";
 import type { PinData } from "@/features/domain/editorProjection/graphRuntimeTypes";
 import { toInteractionPinData } from "@/features/domain/editorProjection/interactionPinData";
 import { captureEditorCommandTarget, isEditorCommandTargetCurrent } from "./editorCommandFocus";
-import { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
+import { activateCurrentEditorPanel } from "./activateEditorPanelAndSyncSession";
 import type { EditorCanvasScope } from "./editorCanvasTypes";
 
 function selectionMatches(actual: GraphSelection, expected: GraphSelection): boolean {
@@ -89,7 +89,7 @@ export function useCanvasInteraction({
     (type: CanvasGestureType, onCancel: () => void): CanvasGestureLease | null => {
       const target = captureTarget();
       if (!target) return null;
-      prepareEditorGroupForInteraction(groupId);
+      activateCurrentEditorPanel(groupId);
       if (!isEditorCommandTargetCurrent(target)) return null;
       startCanvasInteraction(graphPath, { type, session: { groupId, panelInstanceId } });
       const owner = useGraphInteractionStore.getState().interactions[graphPath];

@@ -7,19 +7,21 @@ export const WORKBENCH_EDGE_GROUP_IDS = {
   bottom: "border_bottom",
 } as const;
 export const WORKBENCH_EDGE_SIZES = { left: 280, right: 330, bottom: 240 } as const;
-export const WORKBENCH_HOME_EDGE = {
+export const WORKBENCH_HOME_LOCATION = {
   project: "left",
   nodes: "left",
   commands: "left",
   plugins: "left",
   details: "right",
   assistant: "right",
+  settings: "float",
   result: "right",
   logs: "bottom",
   output: "bottom",
   problems: "bottom",
 } as const;
 export const WORKBENCH_ACTIVITY_DEFAULT_ORDER = WORKBENCH_ACTIVITY_VIEW_IDS;
+export const SETTINGS_FLOAT_RECT = { x: 40, y: 40, width: 1000, height: 720 } as const;
 export const WORKBENCH_BOTTOM_DEFAULT_ORDER = ["problems", "output", "logs"] as const;
 export const WORKBENCH_RESET_BUCKET_ORDER = ["left", "top", "grid", "right", "bottom"] as const;
 export function createEmptyWorkbenchLayout(): IJsonModel {

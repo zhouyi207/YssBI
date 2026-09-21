@@ -10,9 +10,6 @@ import { isLayoutJson, isRecord } from "./layoutSerialization";
 
 export const LOGS_LAYOUT_COMPONENT_ID = "LogDomainPanel" as const;
 export const LOGS_LAYOUT_DEFAULT_GROUP_ID = "logs-domain-group";
-export interface LogsLayoutPanelParams {
-  readonly domain: LogDomainId;
-}
 
 export function createDefaultLogsLayout(): IJsonModel {
   return {

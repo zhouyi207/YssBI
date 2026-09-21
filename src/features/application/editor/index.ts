@@ -12,10 +12,7 @@ export { useEditorPanelCommands } from "./useEditorPanelCommands";
 export {
   activateEditorPanelAndSyncSession,
   activateCurrentEditorPanel,
-  focusEditorGroupSync,
-  hydrateEditorGroup,
 } from "./activateEditorPanelAndSyncSession";
-export { prepareEditorGroupForInteraction } from "./editorGroupInteraction";
 export {
   requestCloseEditorPanel,
   requestCloseEditorPanels,

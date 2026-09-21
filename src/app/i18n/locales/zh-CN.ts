@@ -1466,8 +1466,8 @@ export const zhCN = {
     catalogUnavailable: "更多插件目录尚未接入，暂不提供在线搜索与推荐。",
   },
   settings: {
-    title: "设置",
     close: "关闭设置",
+    title: "设置",
     applyHint: "更改后自动应用",
     noResults: "未找到匹配的设置分类",
     noResultsHint: "试试其他关键词，或清除搜索查看全部设置。",

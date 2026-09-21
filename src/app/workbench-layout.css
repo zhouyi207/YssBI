@@ -1,5 +1,7 @@
 /* FlexLayout owns tabs, borders, splitters and drop indicators. */
 .workbench-layout-host {
+  /* Native floats stay below application dialogs and their backdrops. */
+  isolation: isolate;
   --flexlayout-font-size: 12px;
   --flexlayout-splitter-size: 6px;
 }
@@ -121,4 +123,22 @@
 .workbench-layout-host .workbench-logs-layout .flexlayout__tab {
   border: 0;
   border-radius: 0;
+}
+
+/* The native float header owns dragging; its explicit content slot owns Settings chrome. */
+.workbench-layout-host .flexlayout__float_window:has(.settings-header) {
+  border: 1px solid var(--border);
+  > .flexlayout__float_window_header {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  > .flexlayout__float_window_content {
+    margin: 0;
+  }
+  .flexlayout__tabset,
+  .flexlayout__tab {
+    border: 0;
+    border-radius: 0;
+  }
 }

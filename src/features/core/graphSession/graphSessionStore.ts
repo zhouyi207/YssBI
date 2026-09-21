@@ -6,7 +6,7 @@ export type FocusedGraphSession = {
 };
 
 interface GraphSessionState {
-  /** Hydration bookkeeping only; active tabs and command targets come from FlexLayout. */
+  /** Focus bookkeeping only; active tabs and command targets come from FlexLayout. */
   focusedSession: FocusedGraphSession | null;
   setFocusedSession: (groupId: string, graphPath: string) => string | null;
   clearFocusedSession: (groupId: string) => void;
@@ -19,7 +19,9 @@ export const useGraphSessionStore = create<GraphSessionState>((set, get) => ({
   focusedSession: null,
 
   setFocusedSession: (groupId, graphPath) => {
-    const previous = get().focusedSession?.graphPath ?? null;
+    const focused = get().focusedSession;
+    const previous = focused?.graphPath ?? null;
+    if (focused?.groupId === groupId && focused.graphPath === graphPath) return previous;
     set({ focusedSession: { groupId, graphPath } });
     return previous;
   },

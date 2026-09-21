@@ -75,9 +75,13 @@ the controller and must not assemble application commands.
 
 ### Other consumers
 
-`editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session hydration bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
+`editorGroupContext` owns the shared native active Graph read. Problems, Output, Project sidebar and Assistant consume it; graph-session focus bookkeeping is not a UI selection authority. Session path remapping is committed by `projectPublicationSnapshot` with the authoritative resource snapshot.
 
-Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability and node creation use the shared active Graph read without subscribing to pane selections.
+Node selection synchronizes the existing Details context without opening another panel. Details owns node parameters, configuration, ports, diagnostics and documentation; explicit node-details commands reveal that same fixed panel. History availability subscribes to the active Graph. Node creation validates its captured target when invoked, without subscribing every mounted canvas to global tab selection; an unavailable canvas target cannot fall back to another panel.
+
+Activating a cached graph reuses its ready loading status and loaded document state instead of publishing duplicate updates. Graph panels subscribe to their own loading status; the broader project projection retains a stable selection when none of its fields changed.
+
+Focus synchronization is synchronous and never loads, retries or unloads graphs. Canvas gestures call the same focus coordinator directly. Visible panels and explicit data-dependent use cases call the same `ProjectIOStore.loadGraph` entry, which deduplicates in-flight loads and reuses cached graphs. Project restoration first ensures visible graphs, then synchronizes the active editor's focus. Cache cleanup follows successful loads and panel closure instead of every focus switch; the old activation/suspension queue and bootstrap retries are removed.
 
 Menus capture the native active central editor. Explicit canvas actions capture their own visible panel. Both revalidate identity before committing; the menu target also revalidates the central selection. Keyboard node commands resolve the owning panel from the DOM event path or focused element, while inputs, menus and modals retain their shortcuts. Execution controls use the canvas graph path and stay mounted while focus changes.
 
