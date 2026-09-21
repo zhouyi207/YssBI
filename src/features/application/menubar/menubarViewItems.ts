@@ -16,7 +16,6 @@ export interface MenubarViewState {
 export interface MenubarViewMenuActions {
   readonly toggleActivityGroup: () => void;
   readonly toggleAssistant: () => void;
-  readonly revealBottomPanel: (viewId: "problems" | "output" | "logs") => void;
   readonly resetLayout: () => void;
 }
 
@@ -39,11 +38,6 @@ export function buildViewMenuItems(
       checked: state.assistantOpen,
       onClick: actions.toggleAssistant,
     },
-    { label: "-", type: "separator" },
-    ...(["problems", "output", "logs"] as const).map((viewId) => ({
-      label: t("panel." + viewId),
-      onClick: () => actions.revealBottomPanel(viewId),
-    })),
     { label: "-", type: "separator" },
     {
       label: t("menubar.resetLayout"),

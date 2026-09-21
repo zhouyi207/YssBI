@@ -307,7 +307,7 @@ Editor mutation/selection/save shortcuts 必须先通过 `editorCommandFocus`：
 文件菜单提供事件图、函数和图表的新建入口；创建后打开对应编辑器。“保存”与 `Ctrl+S`
 共用当前物理激活 editor 的保存命令，仅保存该文件；无项目或非文件 panel 激活时禁用。
 “项目另存为”仍由项目状态决定是否可用。视图菜单提供 Activity、Assistant 的切换和
-布局重置；Problems、Output、Logs 可由底部原生 tab 切换，关闭后从视图菜单重新打开。
+布局重置；Problems、Output、Logs 由底部原生 tab 切换，不在视图菜单中提供入口。
 
 ## 7. Reveal、reset 与 project replacement
 

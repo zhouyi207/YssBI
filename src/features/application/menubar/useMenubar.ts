@@ -6,7 +6,6 @@ import {
   resetWorkbenchLayout,
   toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
-  revealWorkbenchView,
   WORKBENCH_ACTIVITY_GROUP_ID,
 } from "@/modules/workbench/public";
 import { openDatabaseEditorWindow, openLogsWindow } from "@/features/application/window";
@@ -84,9 +83,6 @@ export function useMenubar() {
   const handleResetLayout = useCallback(() => {
     void resetWorkbenchLayout();
   }, []);
-  const revealBottomPanel = useCallback((viewId: "problems" | "output" | "logs") => {
-    void revealWorkbenchView(viewId);
-  }, []);
 
   return {
     openSettings,
@@ -100,7 +96,6 @@ export function useMenubar() {
     viewActions: {
       toggleActivityGroup,
       toggleAssistant,
-      revealBottomPanel,
       resetLayout: handleResetLayout,
     },
   };
